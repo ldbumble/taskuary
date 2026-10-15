@@ -3,6 +3,11 @@ import { createRoot } from "react-dom/client";
 import TaskHubPage from "./TaskHubPage.jsx";
 import { startTracking } from "./demoTrack";
 import { needsLink, UNLINKED_LINE, UNLINKED_EVENT } from "./unlinked.js";
+import { record } from "./lastError.js";
+
+// a crash that draws no Assistant line still leaves its report ready behind the Help icon
+window.addEventListener("error", (e) => record(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => record(e.reason));
 
 // A page left open across a rebuild asks for chunk names that no longer exist ("Failed to fetch
 // dynamically imported module .../HubView-<old hash>.js", the owner, 2026-09-23, mid-walk). Vite
@@ -23,7 +28,7 @@ window.addEventListener("load", () => setTimeout(() => { try { sessionStorage.re
 class Boundary extends React.Component {
   state = { err: null };
   static getDerivedStateFromError(err) { return { err }; }
-  componentDidCatch(err, info) { console.error("render error:", err, info?.componentStack); }
+  componentDidCatch(err, info) { console.error("render error:", err, info?.componentStack); record(err); }
   render() {
     if (!this.state.err) return this.props.children;
     return (

@@ -24,6 +24,8 @@ import { dismissHandRaise, enqueueHandRaise, handRaiseWhat, isWatchingTask } fro
 import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView, { StageMode } from "./AssistantView.jsx";
 import { SearchBar, openSearch } from "./SearchEverything.jsx";
+import BugReportDialog from "./BugReportDialog.jsx";
+import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -112,6 +114,8 @@ function Bell({ onGo }) {
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
                 title="I have read this. It returns if it happens again."
                 onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
+              <Button size="small" sx={{ fontSize: 10.5, color: DIM, textTransform: "none", p: 0, minWidth: 0 }}
+                onClick={() => { setEl(null); openBugReport(bellError(p)); }}>Report this bug</Button>
             </Box>
           </Box>
         ))}
@@ -221,6 +225,9 @@ export default function TaskHubPage() {
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
   const [selectedTask, setSelectedTask] = useState(null);
+  // the one "Report this bug" popup: any screen asks for it through REPORT_EVENT (bugReportOpen.js)
+  const [bug, setBug] = useState(null);
+  useEffect(() => { const f = (e) => setBug({ error: e.detail || null }); window.addEventListener(REPORT_EVENT, f); return () => window.removeEventListener(REPORT_EVENT, f); }, []);
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
   // the counter, and the panel it opens
@@ -393,9 +400,8 @@ export default function TaskHubPage() {
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
           {!DEMO && !demo && <SetupChip state={setup} onOpen={openSetup} />}
-          <Tooltip title="Support — report a problem or attach screenshots on GitHub">
-            <IconButton component="a" href={SUPPORT_URL} target="_blank" rel="noopener noreferrer"
-              size="small" aria-label="Taskuary support and issue reporting">
+          <Tooltip title="Report a problem">
+            <IconButton onClick={() => openBugReport()} size="small" aria-label="Report a problem">
               <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
             </IconButton>
           </Tooltip>
@@ -443,6 +449,7 @@ export default function TaskHubPage() {
             bottom right corner anymore"). It was the same assistant the Assistant tab already is, and
             it sat on top of the work - over the browser pane's own Take over button, in full screen. */}
       </Box>
+      <BugReportDialog open={!!bug} onClose={() => setBug(null)} screen={tab} error={bug?.error} supportUrl={SUPPORT_URL} />
     </ThemeProvider>
   );
 }

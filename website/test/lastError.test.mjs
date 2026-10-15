@@ -45,3 +45,10 @@ test("an unserialisable detail does not throw", () => {
   const a = {}; a.a = a; record({ message: "m", response: { status: 500, data: { detail: a } } });
   assert.ok(last().message.startsWith("m"));
 });
+
+test("the popup's own calls are neither the last error nor an action", () => {
+  record(new Error("real one"));
+  record({ message: "Request failed", config: { url: "/api/bug-report/draft" }, response: { status: 422, data: { detail: "could not prepare" } } });
+  recordAction("POST", "/api/bug-report/draft"); recordAction("POST", "/api/open-url");
+  assert.equal(last().message, "real one"); assert.deepEqual(snapshot("x").actions, []);
+});

@@ -4,16 +4,19 @@ import axios from "axios";
 import demoApi, { DEMO } from "./demoApi.js";
 import { keepDetail } from "./apiError.js";
 import { staleToken, UNLINKED_EVENT } from "./unlinked.js";
+import { record, recordAction } from "./lastError.js";
 const api = axios.create({ baseURL: "" });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem("taskuary_token");
   if (t) c.headers["X-Taskuary-Token"] = t;
+  recordAction(c.method, c.url);         // the shape of each write, for "Report this bug" (lastError.js)
   return c;
 });
 // A string to render, and the structure to act on, both kept - see apiError.js for why one
 // without the other put a red banner over a refusal the app already knew how to absorb.
 api.interceptors.response.use(null, (e) => {
   if (staleToken(e, localStorage)) window.dispatchEvent(new Event(UNLINKED_EVENT));
+  record(e);
   return Promise.reject(keepDetail(e));
 });
 // taskuary.com/demo is this same bundle with no server behind it: every call is answered from

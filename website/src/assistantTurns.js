@@ -41,7 +41,9 @@ export function mergeDurableTurns(local = [], durable = []) {
       messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}),
                        ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
                        ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
-                       ...(bubble.role === "receipt" ? { role: "receipt", tid: bubble.tid, ref: bubble.ref, chips: bubble.chips } : {}) };
+                       // ...and its status: the durable turn has none, and an error receipt lost its "Report this bug" with it
+                       ...(bubble.role === "receipt" ? { role: "receipt", tid: bubble.tid, ref: bubble.ref, chips: bubble.chips,
+                                                         ...(bubble.status ? { status: bubble.status } : {}) } : {}) };
       claimed.add(at);
     } else {
       messages.push(turn);

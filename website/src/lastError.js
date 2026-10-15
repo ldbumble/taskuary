@@ -3,6 +3,8 @@
 // Only the SHAPE of a call is kept (ids normalised, query dropped) - the server scrubs the rest again.
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 let err = null, acts = [];
+// the popup's own calls: a refused draft recorded as "the last error" would be the next report's subject
+const SELF = /\/api\/(bug-report\/|open-url)/;
 
 // Ids, uuids, hashes and repo slugs identify someone's data; the verbs and nouns of the route are what a maintainer needs.
 const ID = /^(\d+|[0-9a-f]{8,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
@@ -14,12 +16,14 @@ export function normPath(u) {
 
 export function recordAction(method, url) {
   const m = String(method || "").toUpperCase();
-  if (!m || SAFE.has(m)) return;
+  if (!m || SAFE.has(m) || SELF.test(String(url || ""))) return;
   acts = [...acts, `${m} ${normPath(url)}`].slice(-5);
 }
 
 export function record(e) {
-  const url = e?.config?.url, status = e?.response?.status, d = e?.response?.data?.detail;
+  const url = e?.config?.url;
+  if (SELF.test(String(url || ""))) return;
+  const status = e?.response?.status, d = e?.response?.data?.detail;
   let message = typeof e === "string" ? e : e?.message || String(e);
   if (d) message += ` (${status ? status + ": " : ""}${typeof d === "string" ? d : jsonOr(d)})`;
   else if (status) message += ` (${status})`;

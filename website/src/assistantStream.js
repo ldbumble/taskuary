@@ -1,3 +1,5 @@
+import { record } from "./lastError.js";
+
 export async function* readNdjson(body) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -48,9 +50,13 @@ export async function* streamAssistant(taskId, body, signal) {
       const data = await response.json();
       message = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data);
     } catch { /* keep status */ }
-    throw new Error(message);
+    const e = new Error(message); record({ message, stack: e.stack, config: { url: `/api/tasks/${taskId}/assistant/stream` } });
+    throw e;
   }
-  yield* readNdjson(response.body);
+  for await (const ev of readNdjson(response.body)) {
+    if (ev?.type === "error") record({ message: String(ev.error || ev.message || "the answer stopped with an error"), config: { url: `/api/tasks/${taskId}/assistant/stream` } });
+    yield ev;
+  }
 }
 
 export const toolTarget = (args) => {

@@ -58,3 +58,18 @@ test("a cut never leaves half an emoji", () => {
   const p = fits(d.title, issueBody({ ...d, explanation: "😀".repeat(5000) }));
   assert.ok(!/[\ud800-\udbff]$/.test(p.get("body").split("\n")[1] ?? "")); assert.ok(!p.get("body").includes("\ufffd"));
 });
+
+test("the popup's two boxes join back into exactly the issue body", async () => {
+  const { techOf, joinBody } = await import("../src/bugReport.js");
+  assert.equal(joinBody(d.explanation, techOf(d)), issueBody(d));
+  assert.ok(techOf(d).startsWith("### Where") && !techOf(d).includes("### What happened"));
+  assert.ok(techOf({ ...d, actions: ["POST /api/tasks/:id/notes"] }).includes("Recent actions: POST /api/tasks/:id/notes\n\nline one"));
+});
+
+test("a ticked screenshot adds its own section, which a long explanation's cut leaves alone", async () => {
+  const { techOf, joinBody, SHOT } = await import("../src/bugReport.js");
+  assert.equal(SHOT, "Paste the screenshot here.");
+  assert.ok(!joinBody(d.explanation, techOf(d)).includes(SHOT));
+  const b = joinBody("y".repeat(9000), techOf(d), true), { url, cut } = issueUrl(d.title, b), body = new URL(url).searchParams.get("body");
+  assert.ok(cut && url.length <= 7500 && body.includes(`### Screenshot\n${SHOT}`) && body.indexOf("### Screenshot") > body.indexOf("### What happened"));
+});

@@ -53,3 +53,12 @@ export function issueUrl(title, body, max = 7500) {
   if (ok(title, b)) return done(title, b);
   return done(head(title, fit(title.length, (k) => ok(head(title, k), b))), b);
 }
+
+// The popup edits the explanation and the technical part apart; the technical part keeps its headings so issueUrl can still
+// cut by them. The screenshot line is its own section: inside "What happened" the explanation's cut could take it.
+export const SHOT = "Paste the screenshot here.";
+export const techOf = (d) => {
+  const log = d.actions?.length ? `Recent actions: ${d.actions.join(" · ")}\n\n${d.log}` : d.log, b = issueBody({ ...d, log, explanation: "" });
+  return b.slice(b.indexOf("### Where"));
+};
+export const joinBody = (explanation, tech, shot = false) => `### What happened\n${explanation}\n\n${shot ? `### Screenshot\n${SHOT}\n\n` : ""}${tech}`;

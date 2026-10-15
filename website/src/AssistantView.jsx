@@ -40,6 +40,7 @@ const AssistantMark = () => <TaskuaryMark size={24} />;
 import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
+import { ReportLink } from "./BugReportDialog.jsx";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
@@ -611,6 +612,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
       {last && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m)} busy={actions.busy} onChip={actions.chip} />}
+      {m.status === "error" && <ReportLink text={m.text} />}
     </div></div>);
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live coder displayed as
@@ -2184,7 +2186,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               </div>
             </div>
           )}
-          {err && <Typography sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}</Typography>}
+          {err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>}
           {hanging && <Typography sx={{ color: "#6e685f", fontSize: 12.5, mb: 1 }} data-tq-hanging="">Press <b>Next</b> below to continue.</Typography>}
         </div>
       </div>

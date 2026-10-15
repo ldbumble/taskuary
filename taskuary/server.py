@@ -6098,6 +6098,16 @@ def first_run_key(body: FirstRunKeyBody):
     if out.get('ok'): brain_arrived()
     return {**out, **firstrun.state(store)}
 
+class FirstRunConnBody(BaseModel): cid: int
+
+@app.post('/api/setup/first-run/connector')
+def first_run_connector(body: FirstRunConnBody):
+    """A card that signed in (ChatGPT): tested and made the brain everywhere - or the answer says what it said."""
+    from . import firstrun
+    out = firstrun.choose_connector(store, body.cid)
+    if out.get('ok'): brain_arrived()
+    return {**out, **firstrun.state(store)}
+
 @app.post('/api/setup/first-run/mail')
 def first_run_mail(body: FirstRunMailBody):
     """Gmail or any IMAP mailbox, switched on and read at once - Microsoft 365 signs in through /ms/signin instead."""

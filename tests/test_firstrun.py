@@ -19,8 +19,10 @@ def detect(**over): return mock.patch.object(clis, 'detect', return_value=[{**RO
 class ChooseAiTests(unittest.TestCase):
     def setUp(self):
         self.s, self.cfg = MemoryStore(), {}
+        # the CLI's own "am I signed in?" is asked only when a check fails; never the real one in a test
         self.p = [mock.patch('taskuary.config.save'), mock.patch('taskuary.cli_connections.sync'),
-                  mock.patch.object(agents, 'cli_agent_options', return_value=[])]
+                  mock.patch.object(agents, 'cli_agent_options', return_value=[]),
+                  mock.patch('taskuary.clisetup.signed_in', return_value=False)]
         for p in self.p: p.start()
 
     def tearDown(self):
@@ -30,7 +32,7 @@ class ChooseAiTests(unittest.TestCase):
         with detect(installed=False):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'install'))
-        self.assertIn("ChatGPT isn't on this computer yet", out['why']); self.assertIn('Press Install', out['why'])
+        self.assertIn("Codex isn't on this computer yet", out['why']); self.assertIn('Press Install', out['why'])
 
     def test_installed_but_silent_asks_for_the_sign_in_never_a_dead_end(self):
         with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
@@ -38,6 +40,17 @@ class ChooseAiTests(unittest.TestCase):
         self.assertEqual((out['ok'], out['fix']), (False, 'signin'))
         self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in below', out['why'])
         self.assertEqual(self.s.get_setting('triage_ai') or '', '', 'a brain that does not answer is never made the brain')
+
+    def test_signed_in_but_failing_never_sends_you_back_to_sign_in(self):
+        """The sign-in said "Successfully logged in", the check failed for another reason, and the card asked to sign in again - a loop
+        with no way out (the owner, 2026-10-15). The CLI says whether it is signed in; when it is, the real error is said and the moves
+        are the ones that can fix it: update it, try again, or report it."""
+        with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError("error: unexpected argument '--flag' found")),              mock.patch('taskuary.clisetup.signed_in', return_value=True):
+            out = firstrun.choose_cli(self.s, self.cfg, 'codex')
+        self.assertEqual((out['ok'], out['fix']), (False, 'update'))
+        self.assertIn('signed in', out['why']); self.assertNotIn('sign in once', out['why'])
+        fix = firstrun.state(self.s)['fix']
+        self.assertEqual((fix['fix'], fix['install']), ('update', 'codex')); self.assertIn("unexpected argument '--flag'", fix['detail'])
 
     def test_a_failed_pick_is_still_said_after_a_reload_and_cleared_when_it_works(self):
         """The NEXT line went back to "pick your AI" after a failed pick, and a reload lost the Sign in button too."""
@@ -240,3 +253,50 @@ class NodeFirstTests(unittest.TestCase):
             out = cliinstall.install('gemini', runner=lambda cmd, timeout=900: (1, 'No package found'))
         self.assertEqual(out['phase'], 'failed')
         self.assertIn('Install it from nodejs.org, then press Install again', out['detail'])
+
+
+class SignedInTests(unittest.TestCase):
+    """Asked of the CLI itself (its exit code), never guessed from an error's words."""
+    def run_status(self, name, code):
+        from taskuary import clisetup, cliinstall
+        done = mock.Mock(returncode=code)
+        with mock.patch.object(cliinstall, 'find', return_value=f'/bin/{name}'), mock.patch.object(cliinstall, 'working', return_value=(f'/bin/{name}', '')), \
+             mock.patch('subprocess.run', return_value=done) as ran:
+            return clisetup.signed_in(name), ran
+
+    def test_the_cli_answers_by_its_exit_code(self):
+        ok, ran = self.run_status('codex', 0)
+        self.assertIs(ok, True); self.assertEqual(ran.call_args[0][0], ['/bin/codex', 'login', 'status'])
+        self.assertIs(self.run_status('claude', 1)[0], False)
+
+    def test_a_cli_with_no_status_command_is_unknown(self):
+        self.assertIsNone(self.run_status('gemini', 0)[0])
+
+
+class ChatGptPlanTests(unittest.TestCase):
+    """ChatGPT is a browser sign-in, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
+    terminal??? ... it's a regular oauth setup"). Signed in on its card, it is tested and made the AI everywhere in one call."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.cid = self.s.get_connector_by_type('chatgpt')['ConnectorId']
+        self.s.save_connector({'ConnectorId': self.cid, 'Secret': 'refresh-token', 'Active': 1}, 'test')
+
+    def test_a_signed_in_plan_that_answers_becomes_the_ai_everywhere(self):
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True}):
+            out = firstrun.choose_connector(self.s, self.cid)
+        self.assertTrue(out['ok'])
+        for k in firstrun.BRAINS: self.assertEqual(self.s.get_setting(k), f'connector:{self.cid}')
+        self.assertIsNone(firstrun.state(self.s)['fix'])
+
+    def test_one_that_does_not_answer_says_what_it_said_and_survives_a_reload(self):
+        self.s.set_setting('triage_ai', f'connector:{self.cid}', 'owner')      # what the sign-in itself adopts (server.chatgpt_poll)
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': 'weekly cap reached'}):
+            out = firstrun.choose_connector(self.s, self.cid)
+        self.assertFalse(out['ok']); self.assertEqual(self.s.get_setting('triage_ai') or '', '')
+        fix = firstrun.state(self.s)['fix']
+        self.assertEqual((fix['key'], fix['fix'], fix['title']), (f'c{self.cid}', 'retry', 'ChatGPT'))
+        self.assertIn('weekly cap reached', fix['detail']); self.assertIn('signed in', fix['why'])
+
+    def test_codex_is_its_own_card_named_codex(self):
+        self.assertEqual(firstrun.PLAIN['codex'][0], 'Codex')
+

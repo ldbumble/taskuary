@@ -13,7 +13,8 @@ import api from "./api";
 import { DIM } from "./theme.jsx";
 import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.jsx";
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
-import { focusOf } from "./firstRunFocus.js";
+import { focusOf, signinUrl } from "./firstRunFocus.js";
+import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 
 const CHECK_MS = 90_000;            // a card test is a minute at most server-side; past this we say so instead of spinning
@@ -58,8 +59,29 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   const [busy, setBusy] = useState(""), [said, setSaid] = useState("");     // a pick in flight says so on the Advisor line
   const [open, setOpen] = useState(null);                                   // {id, simple}: a card's own setup, below its shelf
   const [browse, setBrowse] = useState(false);                              // "Pick a different AI": every card again
+  const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
+  const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
+  // BACK TO THE AI (the owner, 2026-10-15: "no back button?"): past step 1 the AI cards come back on Change; a new AI that works,
+  // or Keep, returns to where setup was
+  const [redo, setRedo] = useState(null);
+  const ran = useRef("");
+  useEffect(() => {                                 // a new AI that works ends the Change
+    const name = st?.brain?.name || "";
+    if (redo && ran.current && name && name !== ran.current) setRedo(null);
+    ran.current = name;
+  }, [st?.brain?.name, redo]);
   const { openSetup, opening, pane, setPane, note } = useCliSetup();
   const was = useRef("");
+  // THE SIGN-IN IS A STEP, NOT A TERMINAL (the owner, 2026-10-15: "terminal is broken display"): the login's link is read off its
+  // screen and offered as a link; the pane stays mounted, hidden, so its end still runs the check
+  useEffect(() => {
+    if (!pane?.sid) { setUrl(""); setDetails(false); return undefined; }
+    let on = true;
+    const read = () => api.get(`/api/terminals/${pane.sid}/screen`, { params: { lines: 60 } })
+      .then(({ data }) => { const u = signinUrl(data); if (on && u) setUrl(u); }).catch(() => {});
+    read(); const id = setInterval(read, 2000);
+    return () => { on = false; clearInterval(id); };
+  }, [pane?.sid]);
   const reload = useCallback(async () => {
     try {
       const [f, c, s] = await Promise.all([api.get("/api/setup/first-run", { timeout: 30_000 }), api.get("/api/connectors"), api.get("/api/sources")]);
@@ -89,8 +111,38 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     catch (e) { setBusy(""); setSaid(""); setErr(`${errText(e)} Click the card to try again.`); return; }
     setBusy(""); setSaid(""); reload();               // what happened is the server's line now - and it survives a reload
   };
-  const install = async (ai) => {
-    setBusy(ai.name); setSaid(`Installing ${ai.title}… this takes about a minute.`);
+  // CHATGPT IS A BROWSER SIGN-IN, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
+  // terminal??? no need for that. it's a regular oauth setup"): its card's own sign-in (chatgptauth), then tested and made the AI
+  const planSignin = async (c) => {
+    setErr(""); setOpen(null); setBrowse(false);
+    let flow;
+    try { flow = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/signin`)).data; }
+    catch (e) { setErr(`${errText(e)} Click ChatGPT to try again, or pick another AI.`); return; }
+    setSigning({ cid: c.ConnectorId, flow: flow.flow, url: flow.url });
+    window.open(flow.url, "_blank", "noopener");
+    for (const until = Date.now() + 10 * 60_000; Date.now() < until;) {
+      await new Promise((r) => setTimeout(r, 2000));
+      let d;
+      try { d = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/poll`, { flow: flow.flow })).data; } catch { continue; }
+      if (d.status === "pending") continue;
+      setSigning(null);
+      if (d.status !== "ok") { setErr(`The ChatGPT sign-in didn't finish: ${d.detail || "no reason given"}. Click ChatGPT to try again.`); return; }
+      return planCheck(c.ConnectorId);
+    }
+    setSigning(null); setErr("The ChatGPT sign-in took too long. Click ChatGPT to start it again.");
+  };
+  const planCheck = async (cid) => {
+    setBusy(`c${cid}`); setSaid("Checking ChatGPT works - this can take up to a minute…");
+    try { await api.post("/api/setup/first-run/connector", { cid }, { timeout: CHECK_MS }); }
+    catch (e) { setErr(`${errText(e)} Click ChatGPT to try again.`); }
+    setBusy(""); setSaid(""); reload();
+  };
+  const cancelSignin = () => {
+    if (signing) api.post(`/api/connectors/${signing.cid}/chatgpt/cancel`, { flow: signing.flow }).catch(() => {});
+    setSigning(null);
+  };
+  const install = async (ai, verb = "Installing") => {
+    setBusy(ai.name); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
     try {
       await api.post("/api/cli/install", { name: ai.install });
       const until = Date.now() + INSTALL_MS;
@@ -115,7 +167,8 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
   const fix = st.fix;
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
-    : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install" : "Not answering"]
+    : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install"
+      : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : "Not answering"]
     : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Connected"]
     : ["off", ai.installed ? "Not set up - on this computer" : "Not installed - click to install"]);
   const cliCards = st.ais.map((ai) => {
@@ -123,7 +176,15 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     return { key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
       state, plain: true, desc: `${words} · ${ai.sub}` };
   });
-  const ai = [...cliCards, ...byType(SETUP_AI).map((c) => card(c, true))];      // st.ais leads with the four most people pay for
+  // ChatGPT leads: the plan most people already pay for, signed in through the browser (planSignin) - not the Codex CLI's terminal
+  const plan = byType(["chatgpt"])[0], planKey = plan && `c${plan.ConnectorId}`;
+  const planBusy = busy && busy === planKey;
+  const planCard = plan && { ...card(plan, true), title: "ChatGPT", channel: "openai", plain: true,
+    state: signing || planBusy ? "on" : fix?.key === planKey ? "failing" : "off",
+    desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : fix?.key === planKey ? "Signed in · not answering" : "Not set up"}`
+      + " · sign in with your ChatGPT account",
+    go: busy || signing ? undefined : () => planSignin(plan) };
+  const ai = [...(planCard ? [planCard] : []), ...cliCards, ...byType(SETUP_AI).map((c) => card(c, true))];
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
   const other = byType(OTHER_TYPES).map((c) => card(c, false));
   const conn = open && conns.find((c) => c.ConnectorId === open.id);
@@ -133,20 +194,34 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
         onBack={() => { setOpen(null); reload(); }} onConnected={reload} />
     </Box>
   );
-  const q = st.step === "ai" ? "ai" : st.step === "email" ? "mail" : "other";
+  const q = redo || (st.step === "ai" ? "ai" : st.step === "email" ? "mail" : "other");
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
-  const focus = !open && focusOf(st, busy, browse);
+  const focus = !open && focusOf({ ...st, step: q === "ai" ? "ai" : st.step }, planBusy ? "" : busy, browse, signing ? `c${signing.cid}` : planBusy ? busy : null);
   const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
-  const check = () => fixed && pick(fixed);
+  const check = () => (fix?.key ? planCheck(Number(fix.key.slice(1))) : fixed && pick(fixed));
   // the login ended: check it, and if it still fails the Sign in button is back rather than a pane that has exited
   const ended = () => { setPane(null); check(); };
   const signin = q === "ai" && fix?.fix === "signin" && fix.setup;
+  // SIGNED IN AND STILL FAILING (firstrun: the CLI's own status said so): the sign-in is not the fix, so it is never offered -
+  // a "Successfully logged in" was sent straight back to Sign in (the owner, 2026-10-15). What it said, and the moves that can fix it.
+  const stuck = q === "ai" && ["update", "retry"].includes(fix?.fix);
+  const said_ = fix?.detail && <Typography sx={{ fontSize: 12.5, color: DIM, fontFamily: "monospace", whiteSpace: "pre-wrap", maxWidth: 760 }}>
+    What it said: {fix.detail}</Typography>;
   const cli = signin && { name: fix.name, setup: fix.setup, installed: true };
   const cliDetail = busy ? (
     <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
       <Typography sx={{ color: DIM, fontSize: 13.5 }}>Checking it works - this can take up to a minute.</Typography></Box>
+  ) : signing ? (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
+        <Typography sx={{ fontSize: 14 }}>Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done.</Typography></Box>
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <Button variant="outlined" href={signing.url} target="_blank" rel="noreferrer">Open the sign-in page</Button>
+        <Button size="small" sx={{ color: DIM }} onClick={cancelSignin}>Cancel</Button>
+      </Box>
+    </Box>
   ) : signin ? (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       {!pane?.sid ? <>
@@ -154,12 +229,29 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
         <Button variant="contained" disableElevation disabled={!!opening}
           onClick={() => openSetup({ ...cli, login: true })}>{opening ? "Opening…" : `Sign in to ${fix.title}`}</Button>
       </> : <>
-        <Typography sx={{ fontSize: 14 }}>Sign in below - a browser window may open; finish there. When the sign-in ends, Taskuary
-          checks {fix.title} by itself.</Typography>
-        <Box sx={{ width: "100%" }}><CliPane pane={pane} height="34vh" hint={false} onExit={ended} /></Box>
-        <Button size="small" onClick={check}>Check now</Button>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
+          <Typography sx={{ fontSize: 14 }}>A sign-in page opened in your browser - finish signing in there. Taskuary checks {fix.title} by
+            itself when you're done.</Typography></Box>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          {url && <Button variant="outlined" href={url} target="_blank" rel="noreferrer">Open the sign-in page</Button>}
+          <Button size="small" onClick={check}>Check now</Button>
+          <Button size="small" sx={{ color: DIM }} onClick={() => setDetails((v) => !v)}>{details ? "Hide details" : "Show details"}</Button>
+        </Box>
+        <Box sx={{ width: "100%", display: details ? "block" : "none" }}><CliPane pane={pane} height="34vh" hint={false} onExit={ended} /></Box>
       </>}
       {note?.bad && <Typography sx={{ fontSize: 13, color: "#9b2c2c" }}>{note.text} - try again, or pick a different AI.</Typography>}
+    </Box>
+  ) : stuck ? (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
+      {said_}
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        {fix.fix === "update" && fix.install && <Button variant="contained" disableElevation
+          onClick={() => install({ ...fixed, install: fix.install }, "Updating")}>Update {fix.title}</Button>}
+        <Button variant={fix.fix === "update" ? "outlined" : "contained"} disableElevation onClick={check}>Try again</Button>
+        <Button onClick={() => openBugReport({ message: `${fix.title} didn't answer the setup test
+${fix.detail || ""}`, screen: "Setup",
+          route: `first-run ${fix.name}` })}>Report this bug</Button>
+      </Box>
     </Box>
   ) : null;
   const shelf = (k, cards, more) => (revisit || q === k) && (
@@ -173,7 +265,14 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   );
   return (
     <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
-      <Ask text={said || err || st.next} />
+      <Ask text={said || err || (redo ? (fix?.why || "Which AI should Taskuary use instead? Click it below.") : st.next)} />
+      {st.step !== "ai" && st.brain?.name && !revisit && (
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center", ml: 0.5 }}>
+          <Typography sx={{ fontSize: 13, color: DIM }}>Your AI: {st.brain.name}</Typography>
+          {redo ? <Button size="small" onClick={() => { setRedo(null); setBrowse(false); }}>Keep {st.brain.name}</Button>
+            : <Button size="small" onClick={() => { setRedo("ai"); setBrowse(true); setOpen(null); }}>Change</Button>}
+        </Box>
+      )}
       {shelf("ai", ai, "More AI")}
       {shelf("mail", mail, "More email")}
       {shelf("other", other, "More connections")}

@@ -58,6 +58,20 @@ def tag(name: str) -> str: return f'cli:{name}'
 def command(name: str, login: bool = False) -> list: return argv(name) + (LOGIN.get(name, []) if login else [])
 
 
+# ...and whether it IS signed in, asked of the CLI itself: its status command's exit code. A check that failed for any reason
+# said "needs you to sign in", so a sign-in that had just said "Successfully logged in" was sent straight back to sign in
+# again (the owner, 2026-10-15). Never read off an error's words.
+STATUS = {'codex': ['login', 'status'], 'claude': ['auth', 'status']}
+
+
+def signed_in(name: str):
+    """True or False by the CLI's own answer; None when it has no status command or it would not run."""
+    if name not in STATUS: return None
+    from . import spawn
+    try: return spawn.run(argv(name) + STATUS[name], capture_output=True, timeout=30).returncode == 0
+    except Exception: return None
+
+
 def argv(name: str) -> list:
     """What to start, or ValueError. Just the CLI: it runs its own onboarding, and anything we
     added on top would be us guessing at a conversation it is about to have properly.

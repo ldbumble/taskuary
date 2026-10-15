@@ -16,7 +16,8 @@ from loguru import logger
 
 # the CLIs most people already pay for, always offered; any OTHER installed CLI joins them
 OFFERED = ('claude', 'codex', 'gemini', 'copilot')
-PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': ('ChatGPT', 'Codex - if you pay for ChatGPT'),
+# ChatGPT itself is the browser sign-in on its own card (choose_connector); Codex is ChatGPT's coding CLI, named as itself
+PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': ('Codex', "ChatGPT's coding CLI - if you pay for ChatGPT"),
          'gemini': ('Gemini', 'Gemini CLI - free with a Google account'), 'copilot': ('Copilot', 'GitHub Copilot CLI - if you pay for Copilot')}
 KEYS = (('anthropic', 'Claude API key', 'console.anthropic.com → API Keys'),
         ('openai', 'OpenAI API key', 'platform.openai.com → API keys'))
@@ -83,7 +84,8 @@ def state(store) -> dict:
     via = next((o['cli'] for o in agents.cli_agent_options(store) if f"cli:{o.get('value')}" == pick), '') if pick.startswith('cli:') else ''
     cli = via or next((k['name'] for k in found if k['name'] == raw or k['name'] in pick), '')
     name = PLAIN[cli][0] if cli in PLAIN else raw
-    fix = _fix(store) if step == 'ai' else None
+    # ...kept past step 1 too: Change brings the AI cards back, and a pick that fails there must still say why (2026-10-15)
+    fix = _fix(store)
     ask = "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
     nxt = {'ai': fix['why'] if fix else ask,
            'email': f"{name or 'Your AI'} is ready. What email do you have? Click it below - Microsoft 365 is one sign-in.",
@@ -115,7 +117,8 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     if not k: return {'ok': False, 'why': f'Taskuary does not know a CLI called {name}.', 'fix': ''}
     label = PLAIN.get(name, (k['label'],))[0]
     def failed(out):
-        store.set_setting(FIX, json.dumps({'name': name, 'title': label, 'fix': out['fix'], 'setup': k.get('setup') or '', 'why': out['why']}), 'owner')
+        store.set_setting(FIX, json.dumps({'name': name, 'title': label, 'fix': out['fix'], 'setup': k.get('setup') or '', 'why': out['why'],
+                                           'detail': out.get('detail') or '', 'install': k['install'] if k.get('installable') else ''}), 'owner')
         return out
     if not k['installed']:
         return failed({'ok': False, 'fix': 'install' if k.get('installable') else '',
@@ -130,6 +133,14 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     try: agents.run_cli({**conns[key], 'timeout': TEST_SECONDS}, 'Reply with exactly: ok', lambda *a: None)
     except Exception as e:
         logger.info(f'first run: {name} did not answer - {e}')
+        from . import clisetup
+        if clisetup.signed_in(name):
+            # signed in and still failing: the sign-in is not what is wrong, so it is never the move (clisetup.STATUS)
+            return failed({'ok': False, 'fix': 'update' if k.get('installable') else 'retry',
+                'why': f"{label} is signed in, but it didn't answer the test."
+                       + (f' What it said is below - update {label} or try again.' if k.get('installable')
+                          else ' Try again, or pick another AI.'),
+                'detail': str(e)[:400]})
         return failed({'ok': False, 'fix': 'signin' if k.get('setup') else '',
                 'why': f"{label} is installed but needs you to sign in once."
                        + (" Press Sign in below - Taskuary checks it by itself when you're done." if k.get('setup') else
@@ -163,6 +174,29 @@ def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = Non
     _everywhere(store, f"connector:{c['ConnectorId']}")
     store.set_setting(FIX, '', 'owner')
     return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort your mail."}
+
+
+def choose_connector(store, cid: int) -> dict:
+    """An AI card that signs in rather than taking a key - ChatGPT (chatgptauth): signed in on its card, then tested and made the
+    brain here, in one call. A plan that does not answer keeps its words for the card, and survives a reload (FIX)."""
+    from .channels import test_connector
+    c = store.get_connector(cid)
+    if not c: return {'ok': False, 'why': 'That card is not here any more.'}
+    title = 'ChatGPT' if c.get('Type') == 'chatgpt' else (c.get('Name') or c.get('Type'))
+    out = test_connector(store, cid)
+    if not out.get('ok'):
+        why = f"You're signed in to {title}, but it didn't answer the test. What it said is below - try again, or pick another AI."
+        # ...and the sign-in's own adoption undone (server.chatgpt_poll makes it the brain when none is chosen): a brain that does not
+        # answer moved setup on to email, and every mail after it failed
+        for k in BRAINS:
+            if store.get_setting(k) == f'connector:{cid}': store.set_setting(k, '', 'owner')
+        store.set_setting(FIX, json.dumps({'key': f'c{cid}', 'name': c.get('Type'), 'title': title, 'fix': 'retry', 'why': why,
+                                           'detail': str(out.get('detail') or 'no reason given')[:400], 'setup': '', 'install': ''}), 'owner')
+        return {'ok': False, 'why': why}
+    _everywhere(store, f'connector:{cid}')
+    store.audit('setting', 0, 'first_run_brain', 'owner', detail={'pick': f'connector:{cid}'})
+    store.set_setting(FIX, '', 'owner')
+    return {'ok': True, 'why': f'{title} works - it will sort your mail.'}
 
 
 def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:

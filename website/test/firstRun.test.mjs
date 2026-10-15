@@ -21,7 +21,7 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 // using the advisor ... like what ai do you have? what email do you have? any other connection you would like to setup"
 test("three questions on the Advisor's line, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
-  assert.match(fr, /<Ask text=\{said \|\| err \|\| st\.next\} \/>/, "the question is said on top, by the server");
+  assert.match(fr, /<Ask text=\{said \|\| err \|\| \(redo \?[\s\S]{0,120}: st\.next\)\} \/>/, "the question is said on top, by the server");
   assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");
   assert.match(fr, /import \{ CardGrid, ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
   assert.match(cv, /export const ConnCard = /); assert.match(cv, /export const connCardOf = /);

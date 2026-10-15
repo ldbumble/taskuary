@@ -109,7 +109,9 @@ const savedSize = () => {
 };
 // Leading has to come down WITH the size or the gain is thrown away: 1.15 line-height on 7px
 // text spends a fifth of the pane on whitespace between lines nobody is reading closely.
-const leading = (n) => (n <= 8 ? 1.0 : n <= 10 ? 1.08 : 1.15);
+// ...but never under the glyphs' own height: at 1.0-1.08 every row's tops were cut off - the sign-in URL and "Successfully logged
+// in" read as torn text (the owner, 2026-10-15: "terminal is broken display")
+export const leading = (n) => (n <= 8 ? 1.12 : 1.2);
 
 const wsUrl = (sid) => {
   const t = localStorage.getItem("taskuary_token");

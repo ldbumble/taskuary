@@ -464,8 +464,11 @@ def _header_marks(m: dict) -> dict:
     """What a Graph message's own headers say: an auto-reply (never triaged) and who sent it before a model has read it."""
     from .autoreply import from_headers, headers
     from .categories import header_class
-    from .mailauth import verdict
-    h, v = headers(m), verdict((m or {}).get('internetMessageHeaders'))
+    from . import mailauth
+    h = headers(m)
+    # a header the parser chokes on is no verdict, never a stalled poll
+    try: v = mailauth.verdict((m or {}).get('internetMessageHeaders'), internal=True)
+    except Exception as e: v = 'none'; logger.warning(f'mail auth unreadable on {(m or {}).get("id")}: {e}')
     return {**({'auto_reply': True} if from_headers(h) else {}), **({'sender_class': header_class(h)} if header_class(h) else {}),
             **({'auth': v} if v != 'none' else {})}
 

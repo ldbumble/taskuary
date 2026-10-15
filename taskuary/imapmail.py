@@ -370,8 +370,10 @@ def protocol_marks(msg) -> dict:
     out, sc = {}, header_class(msg)
     if from_headers(msg): out['auto_reply'] = True
     if sc: out['sender_class'] = sc
-    from .mailauth import verdict
-    if (v := verdict(msg)) != 'none': out['auth'] = v       # did the receiving server verify the From (senders.known)
+    from . import mailauth
+    try: v = mailauth.verdict(msg)                # did the receiving server verify the From (senders.known)
+    except Exception as e: v = 'none'; logger.warning(f'imap: mail auth unreadable - {e}')   # never a stuck UID
+    if v != 'none': out['auth'] = v
     if mime_invite(msg): out.update(invite=True, mail_meta={'invite': True})
     return out
 

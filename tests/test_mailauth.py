@@ -26,9 +26,10 @@ def test_aligned_dkim_fail_with_no_pass_is_a_fail():
     assert mailauth.verdict([FROM, AR('mx.northwind.example; dkim=fail (bad signature) header.d=northwind.example')]) == 'fail'
 
 def test_exchange_internal_mail_is_a_pass():
+    assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal', 'X-MS-Exchange-Organization-AuthSource': 'mx01.northwind.example'}, internal=True) == 'pass'
     assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal',
-                             'X-MS-Exchange-Organization-AuthSource': 'mx01.northwind.example'}) == 'pass'
-    assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Anonymous'}) == 'none'
+                             'X-MS-Exchange-Organization-AuthSource': 'mx01.northwind.example'}) == 'none'   # IMAP: just text
+    assert mailauth.verdict({'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Anonymous'}, internal=True) == 'none'
 
 def test_no_results_is_none():
     assert mailauth.verdict([FROM, ('Received', 'from mx.vendor.example')]) == 'none'
@@ -100,3 +101,32 @@ def test_an_imap_raw_message_records_its_verdict():
     ingest.ingest_message(s, file_only=True, llm=None, msg={'external_id': 'imap:i1', 'subject': 's', 'body': 'b', 'sent_at': '2026-10-01 09:00',
                                                             **_msg('erin@northwind.example'), **marks})
     assert _meta(s, 'imap:i1')['auth'] == 'pass'
+
+
+def test_exchange_compauth_pass_rescues_a_forwarded_mail_from_fail():
+    v = 'spf=fail smtp.mailfrom=northwind.example; dkim=fail (body hash did not verify) header.d=northwind.example; dmarc=fail action=none header.from=northwind.example; compauth=pass reason=130'
+    assert mailauth.verdict([FROM, AR(v)]) != 'fail'
+    for c in ('softpass reason=201', 'none reason=405', 'fail reason=000'):
+        assert mailauth.verdict([FROM, AR(v.replace('pass reason=130', c))]) == 'fail'
+
+def test_nested_parens_parse_in_linear_time():
+    import time
+    t = time.time(); mailauth.verdict([FROM, AR('mx.northwind.example; ' + '(' * 100_000 + ')' * 100_000 + ' dmarc=pass')])
+    assert time.time() - t < 0.5
+
+def test_a_forged_nameless_pass_below_exchange_s_own_result_is_not_trusted():
+    real = AR('spf=none smtp.mailfrom=vendor.example; dkim=none (message not signed); dmarc=none action=none header.from=northwind.example')
+    assert mailauth.verdict([FROM, real, AR('dmarc=pass header.from=northwind.example')]) == 'none'
+
+def test_exchange_internal_is_honoured_only_where_exchange_wrote_it():
+    hs = {'From': FROM[1], 'X-MS-Exchange-Organization-AuthAs': 'Internal'}
+    assert mailauth.verdict(hs, internal=True) == 'pass' and mailauth.verdict(hs) == 'none'
+    raw = b'X-MS-Exchange-Organization-AuthAs: Internal\r\nFrom: Erin Blake <erin@northwind.example>\r\nSubject: s\r\n\r\nb\r\n'
+    assert 'auth' not in imapmail.protocol_marks(email.message_from_bytes(raw))
+    assert _header_marks({'internetMessageHeaders': [{'name': 'From', 'value': FROM[1]},
+                                                     {'name': 'X-MS-Exchange-Organization-AuthAs', 'value': 'Internal'}]})['auth'] == 'pass'
+
+def test_a_header_that_breaks_the_parser_never_blocks_the_poll():
+    with mock.patch.object(mailauth, 'verdict', side_effect=RuntimeError('bad header')):
+        assert 'auth' not in _header_marks({'internetMessageHeaders': [{'name': 'From', 'value': FROM[1]}]})
+        assert 'auth' not in imapmail.protocol_marks(email.message_from_bytes(b'From: a@b.example\r\n\r\nx'))

@@ -24,6 +24,7 @@ import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue,
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
+import WorkflowEditor from "./WorkflowEditor.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -415,8 +416,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     { section: "Workflows" },
     { key: "workflows", label: "All workflows", n: workflowSources.length || null },
     ...workflowSources.map((s) => ({ key: s.SourceId, label: titleOf(s) })),
-    { key: "new-invoices", label: "+ Monthly invoices" },
-    { key: "new-agent", label: "+ AI agent" },
+    { key: "new-agent", label: "+ New workflow" },
   ];
   // the canvas keeps its own place: a section, then one report (or a new one) open in it
   const bucketNow = browse ? (browseState.open ?? browseState.section ?? "reports") : bucket;
@@ -483,7 +483,21 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const wizardNote = draft && !selectedSource ? draftNote : null;
   const carried = carry && carry.sid === openId ? carry : null;
   const saved = (then) => (sid, c) => { setDraft(null); setCarry(c ? { sid, ...c } : null); then(sid); };
-  const wizard = (onBack, onSaved) => invoiceOpen
+  // a workflow has its own page (WorkflowEditor): what it does, who, where, what it asks, when it is done, when it runs
+  const agentWorkflow = workflowOpen && !invoiceOpen;
+  const toInvoices = () => { setDraft(null); if (browse) onBrowseState?.({ section: "workflows", open: "new-invoices" }); else setBucket("new-invoices"); };
+  const wizard = (onBack, onSaved) => agentWorkflow
+    ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} draft={draft}
+        reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
+        lastRun={openId != null && lastRuns[openId] ? <LastRun r={lastRuns[openId]} sid={openId} flush /> : null}
+        composer={<>
+          <Composer kind="workflow" onDraft={onDraft} />
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
+            Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
+              sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
+          </Typography>
+        </>} />
+    : invoiceOpen
     ? <InvoiceWorkflowWizard key={String(bucketNow)} sourceId={openId} sources={sources}
         connectors={connectors} draft={selectedConfig} reload={load} onBack={onBack} onSaved={saved(onSaved)}
         note={wizardNote} carry={carried} onCarried={() => setCarry(null)} />
@@ -503,7 +517,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       title: "Reports", wide: true,
       summary: `${reportSources.length} report${reportSources.length === 1 ? "" : "s"} · ${workflowSources.length} workflow${workflowSources.length === 1 ? "" : "s"} · reports read and summarise, workflows write`,
       sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
-        { key: "new-report", label: "+ New report" }, { key: "new-invoices", label: "+ Monthly invoices" }, { key: "new-agent", label: "+ AI agent" }],
+        // one "+" per shelf, the shelf's own word on it ("new-invoices" is reached from the new workflow's page)
+        section === "workflows" ? { key: "new-agent", label: "+ New workflow" } : { key: "new-report", label: "+ New report" }],
       section,
       onSection: (key) => {
         setDraft(null);
@@ -520,9 +535,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             </Button>
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
-          <Composer kind={section === "workflows" ? "workflow" : "report"} onDraft={(config, meta) => {
+          {section !== "workflows" && <Composer kind="report" onDraft={(config, meta) => {
             onDraft(config, meta); onBrowseState?.({ section, open: "draft" });
-          }} />
+          }} />}
         </Box>
       ) : null,
       cards: sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
@@ -530,7 +545,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       onBack: back,
       openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
         : openSource ? `the report "${titleOf(openSource)}" (Reports), its editor open` : "",
-      empty: section === "workflows" ? "No workflows yet." : "No reports yet - + New report walks you through one.",
+      empty: section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }
@@ -551,18 +566,15 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Running…" : "Run due now"}
         </Button>
-        {workflowOverview ? <>
-          <Button size="small" variant="outlined" disableElevation sx={{ mr: 1 }}
-            onClick={() => { setQ(""); setDraft(null); setBucket("new-invoices"); }}>Monthly invoices</Button>
-          <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-            onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={{ background: GRADIENT }}>AI agent</Button>
-        </> : <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+        {workflowOverview ? <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+            onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={{ background: GRADIENT }}>New workflow</Button>
+        : <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
           onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ background: GRADIENT }}>New report</Button>}
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
-      <Composer kind={workflowOverview ? "workflow" : "report"} onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />
+      {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
       {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
-        ? "No workflows yet — describe one above, or start with Monthly invoices or an AI agent."
+        ? "No workflows yet — New workflow describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}
       </>)}
@@ -1679,8 +1691,8 @@ function Composer({ onDraft, kind = "report" }) {
       <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
         sx={{ bgcolor: "#fff" }}
         placeholder={kind === "workflow"
-          ? "On the first of each month, prepare Zoho invoices for Acme and Northwind and leave every send on the task."
-            + NL + "Every Monday, have the coder run /weekly-user-review and file what it finds."
+          ? "Every Monday at 8, check Intacct for active employees that share a name, and open a task for finance per pair."
+            + NL + "Every weekday at 7, read yesterday's failed imports and open a task for each one that did not retry."
           : "Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."
             + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
         onChange={(e) => setAsk(e.target.value)}

@@ -52,6 +52,15 @@ def runs_on(cfg: dict) -> str:
     return 'coding' if cfg.get('cwd') else 'general'
 
 
+def _names(store, ids) -> list:
+    out = []
+    for i in ids:
+        try: c = store.get_connector(int(i))
+        except (TypeError, ValueError): c = None
+        out.append(f"{c.get('Name') or c.get('Type')} (connection {i})" if c else str(i))
+    return out
+
+
 def definition(store, src) -> dict:
     """The workflow as data (PW-203), read from the source it has always been stored on."""
     cfg = cfg_of(src); sid = src.get('SourceId') if isinstance(src, dict) else None
@@ -65,10 +74,12 @@ def definition(store, src) -> dict:
             'objective': str(cfg.get('prompt') or cfg.get('objective') or '').strip(), 'skill': skill, 'steps': steps,
             'inputs': cfg.get('inputs') or {},
             'connections': list(cfg.get('uses') or ([cfg['connector_id']] if cfg.get('connector_id') else [])),
+            # ...said by name in the brief: "CONNECTIONS: 38" told the agent nothing
+            'connection_names': _names(store, cfg.get('uses') or ([cfg['connector_id']] if cfg.get('connector_id') else [])),
             'allowed_actions': ['write'] if cfg.get('access') == 'write' or cfg.get('type') == 'zoho_monthly_invoices' else ['read'],
             'approvals': str(cfg.get('ask_first') or cfg.get('approvals') or '').strip(), 'done_when': str(cfg.get('done_when') or '').strip(),
             'browser': bool(cfg.get('browser')),
-            'schedule': {k: cfg[k] for k in ('cron', 'every_minutes', 'every', 'on_startup', 'tz', 'at') if cfg.get(k) is not None},
+            'schedule': {k: cfg[k] for k in ('cron', 'daily_at', 'every_minutes', 'every', 'on_startup', 'tz', 'at') if cfg.get(k) is not None},
             'runs_on': runs_on(cfg), 'agent': cfg.get('agent') or None,
             'enabled': bool(src.get('Active', 1)) if isinstance(src, dict) else True}
 
@@ -87,7 +98,7 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
              'OBJECTIVE: ' + (defn['objective'] or (f"run the saved skill /{defn['skill']}" if defn['skill'] else '(none given)'))]
     if defn.get('inputs'): lines.append('INPUTS: ' + json.dumps(defn['inputs'], default=str))
     if context: lines.append('THIS RUN: ' + json.dumps(context, default=str))
-    if defn.get('connections'): lines.append('CONNECTIONS: ' + ', '.join(str(c) for c in defn['connections']))
+    if defn.get('connections'): lines.append('CONNECTIONS: ' + ', '.join(str(c) for c in defn.get('connection_names') or defn['connections']))
     if defn.get('steps'): lines.append('STEPS (the saved skill):\n' + defn['steps'].strip())
     lines.append('ALLOWED ACTIONS: ' + ("you may write to the connected systems this workflow names, through Taskuary's tools and proposals; "
                                         'anything outside them, and anything under ASK FIRST, waits for the owner'

@@ -161,14 +161,19 @@ WORKFLOW_SYSTEM = (
     '- An agent workflow must change data or state, and needs type, title, agent, and prompt and/or skill. Use an exact configured '
     'agent name. A skill is its slash-command name without requiring the leading slash. cwd and model '
     'are optional and must come from the owner, never be guessed.\n'
-    '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. If the owner gives '
-    'no schedule, use daily_at "08:00" for an agent or cron "0 9 1 * *" for monthly invoices and say so.\n'
+    '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. daily_at is EVERY day: a weekly, '
+    'weekday or monthly ask is cron ("every Monday at 8" is "0 8 * * 1"), and explain must say the same schedule the '
+    'config carries. If the owner gives no schedule, use daily_at "08:00" for an agent or cron "0 9 1 * *" for monthly '
+    'invoices and say so.\n'
+    '- An agent workflow also says, when the request does: "uses" - the ids of the connections it works in, only from '
+    'WORKFLOW OPTIONS connections; "ask_first" - what it must ask the owner before doing; "done_when" - what finished '
+    'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page.\n'
     '- Do not add report-only keys such as sources, ai_prompt, charts, triage, delivery, or alerts.')
 
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
-    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'access',
+    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'access', 'uses', 'ask_first', 'done_when', 'browser',
               'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
@@ -186,7 +191,10 @@ def workflow_catalog(store) -> dict:
             except Exception as e: item['error'] = str(e)[:300]
         zoho_cards.append(item)
     return {'zoho_monthly_invoices': zoho_cards,
-            'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')]}
+            'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')],
+            # what a workflow may work IN: the connections that are switched on, by id and name - never their settings
+            'connections': [{'id': c['ConnectorId'], 'name': c.get('Name') or c.get('Type'), 'type': c.get('Type')}
+                            for c in store.list_connectors() if c.get('Active')]}
 
 
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
@@ -214,6 +222,14 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             if not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
                 return {'error': 'the AI agent workflow needs a skill or a prompt'}
             if cfg.get('skill'): cfg['skill'] = str(cfg['skill']).strip().lstrip('/')
+            known = {x['id'] for x in options['connections']}
+            uses = [int(x) for x in (cfg.get('uses') or []) if str(x).isdigit()]
+            if any(x not in known for x in uses): return {'error': 'the workflow named a connection that is not switched on'}
+            if uses: cfg['uses'] = list(dict.fromkeys(uses))
+            else: cfg.pop('uses', None)
+            for k in ('ask_first', 'done_when'):
+                if not str(cfg.get(k) or '').strip(): cfg.pop(k, None)
+            if not cfg.get('browser'): cfg.pop('browser', None)
             # The workflow door is the owner's grant to write. `type: agent` alone remains a
             # read-only report, because the executor is not the product boundary.
             cfg['access'] = 'write'

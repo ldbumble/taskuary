@@ -10,8 +10,7 @@ test("Reports has separate report and workflow shelves", () => {
   const ui = read("ui.jsx");
   assert.match(view, /section: "Reports"/);
   assert.match(view, /section: "Workflows"/);
-  assert.match(view, /label: "\+ Monthly invoices"/);
-  assert.match(view, /label: "\+ AI agent"/);
+  assert.match(view, /label: "\+ New workflow"/);
   assert.match(ui, /if \(it\.section\)/);
 });
 
@@ -29,5 +28,5 @@ test("the workflow shelf has its own conversational AI builder", () => {
   const view = read("ReportsView.jsx");
   assert.match(view, /kind === "workflow" \? "\/api\/workflows\/compose"/);
   assert.match(view, /Describe the workflow you want/);
-  assert.match(view, /have the coder run \/weekly-user-review/);
+  assert.match(view, /check Intacct for active employees that share a name/);
 });

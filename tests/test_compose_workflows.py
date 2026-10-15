@@ -52,3 +52,34 @@ def test_workflow_composer_refuses_invented_agents_and_customers():
     bad_agent = compose.compose_workflow(store, 'do a thing', answering({
         'config': {'type': 'agent', 'title': 'Thing', 'agent': 'imaginary', 'prompt': 'Do it'}}))
     assert 'configured CLI agents' in bad_agent['error']
+
+
+def test_an_agent_workflow_carries_its_connections_what_it_asks_and_when_it_is_done():
+    """The run reads uses / ask_first / done_when / browser (workflows.definition); the composer could set none of them."""
+    store = MemoryStore()
+    store.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
+    on = next(c for c in store.list_connectors() if c.get('Type') == 'handbook')
+    store.save_connector({'ConnectorId': on['ConnectorId'], 'Active': True}, 'test')
+    off = next(c for c in store.list_connectors() if not c.get('Active'))
+    seen = {}
+    out = compose.compose_workflow(store, 'every Monday at 8 check for duplicates', answering({
+        'config': {'type': 'agent', 'title': 'Duplicate check', 'agent': 'ap', 'prompt': 'Find duplicates', 'cron': '0 8 * * 1',
+                   'uses': [on['ConnectorId']], 'ask_first': 'changing any record', 'done_when': 'all clear or one task per pair',
+                   'browser': False}}, seen))
+    assert out['config']['uses'] == [on['ConnectorId']] and out['config']['ask_first'] == 'changing any record'
+    assert out['config']['done_when'] == 'all clear or one task per pair' and 'browser' not in out['config']
+    assert {'id': on['ConnectorId'], 'name': on.get('Name') or on.get('Type'), 'type': on['Type']} in seen['user']['workflow_options']['connections']
+    assert 'daily_at is EVERY day' in seen['system']
+    bad = compose.compose_workflow(store, 'x', answering({'config': {'type': 'agent', 'title': 'X', 'agent': 'ap', 'prompt': 'p',
+                                                                      'uses': [off['ConnectorId']]}}))
+    assert 'not switched on' in bad['error']
+
+
+def test_the_definition_keeps_a_daily_time_and_names_its_connections():
+    from taskuary import workflows
+    store = MemoryStore()
+    c = next(c for c in store.list_connectors() if c.get('Type') == 'handbook')
+    d = workflows.definition(store, {'SourceId': 1, 'ConfigJson': json.dumps({'type': 'agent', 'title': 'T', 'prompt': 'p',
+                                                                              'access': 'write', 'daily_at': '07:30', 'uses': [c['ConnectorId']]})})
+    assert d['schedule'] == {'daily_at': '07:30'}
+    assert f"CONNECTIONS: {c.get('Name') or c['Type']} (connection {c['ConnectorId']})" in workflows.brief(d, 'manual', 'now')

@@ -2031,7 +2031,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // "Press Next below" over them read as a bug (README capture, 2026-10-08). What the owner can press is the test, not which card is up
   const rowVerbs = useRowVerbs();
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
-  const hanging = !!state && !old && !walk && shown.length > 0 && !busy && !starting && rowEmpty && (canAdvance || !!err);
+  // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
+  // as part of that page (the owner's workflow screenshot, 2026-10-15)
+  const hanging = !!state && !old && !walk && !browsing && shown.length > 0 && !busy && !starting && rowEmpty && (canAdvance || !!err);
   useVerbs("floor", [{ id: "floor:next", group: "next", label: "Next", tone: "p", title: "Bring the next one up",
     run: () => { setErr(""); surface(null, null); } }], hanging);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";

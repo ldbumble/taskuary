@@ -119,7 +119,7 @@ class FixPassTests(unittest.TestCase):
         s, settle = settled(); g = goal(s)
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'general', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), c, 'owner')
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()      # reads register once active
-        k = card(s, g); funnel.settle(s, k['key'], 'surfaced', read=True, shown={k['key']: k.get('view_revision')}); settle()
+        k = card(s, g); funnel.settle(s, k['key'], 'surfaced', read=True, shown={k['key']: k.get('view_revision')}, put_down=True); settle()
         k = card(s, g); self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
         later = datetime.now() + timedelta(hours=4)                         # past the quiet hours, with no news
         k = next(i for i in rail(s, include_read=True, now=later) if i.get('tid') == g)

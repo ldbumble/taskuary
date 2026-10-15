@@ -2201,6 +2201,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
     if selection is not None and key is not None:
         raise ValueError('a captured automatic selection cannot name a different item')
     put_down = (lambda: move_on(store, leaving, actor)) if leaving else (lambda: None)
+    # ...and the row being left is not the next one: the pile is read BEFORE Next puts it down, and a task merely opened stays
+    # walkable (processing_unread: actionable), so only this keeps Next from offering it straight back (the page sends it too)
+    if leaving and selection is None: exclude = exclude or leaving
     if bound_dock is not None and selection is None:
         raise ValueError('a bound dock is only valid with a captured selection')
     task = bound_dock if bound_dock is not None else general.dock_task(store, actor)[0]

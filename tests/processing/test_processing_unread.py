@@ -85,7 +85,7 @@ def test_words_said_about_a_task_do_not_make_it_unread_again_but_an_agents_do(st
     add(store, 'Please change the users', tid=tid, status='routed')
     _, unread = both(store)
     key = unread['items'][0]['key']
-    funnel.settle(store, key, 'surfaced', read=True)
+    funnel.settle(store, key, 'surfaced', read=True, put_down=True)          # Next (concierge.move_on)
     with store.processing_own_words(tid, 'Taskuary'):
         store.add_comment(tid, 'Taskuary', 'concierge_assistant', 'Your User changes task is still open.')
     _, after = both(store)

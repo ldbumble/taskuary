@@ -996,6 +996,22 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(True, False)])   # ...but it is on the rail, in Passed
         self.assertEqual(s.get_task(t)['Status'], 'open')
 
+    def test_a_task_opened_but_not_passed_is_still_walked_first(self):
+        """The owner, 2026-10-14: "it skipped the first task again in walk through" - a task opened from the rail is read, and a
+        read open task stays under On you without a Next mark; the walk took any read for a pass and began on the second row."""
+        from taskuary import processing_unread, funnel_selection
+        s, settle = self._canonical()
+        t = s.create_task({'Title': 'Simplify the export', 'Kind': 'task', 'Status': 'open'}, 'o')
+        mid = mail(s, 'Simplify the export', who='Erin', email='erin@northwind.example', hours=3, tid=t)
+        s.add_route(mid, t, 'route', 1.0, 'triage: task', [], 'triage')
+        settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            key = next(i['key'] for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t)
+            s.set_funnel_state(key, 'surfaced', read=True); settle()                 # opened: read, shown, no Next
+            card = next(i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t)
+            self.assertEqual((card['put_down'], card['actionable']), (False, True))
+            self.assertEqual(funnel_selection.capture_selection(s).selected['tid'], t)
+
     def test_next_on_a_task_back_from_its_quiet_hours_puts_it_down_again(self):
         """The owner, 2026-09-30: "i hit next why is this still showing in on you tasks?" - the receipt kept the FIRST read,
         so once that was three hours old the task was `back` for good: Next read it again, recorded nothing, and it stayed
@@ -1012,7 +1028,7 @@ class MemoryTests(unittest.TestCase):
             key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
             s._exec("UPDATE processing_read_receipt SET ReadAt=?", (ago(4),)); funnel.invalidate()   # that read was 4 hours ago
             self.assertEqual(card(), [(True, False, True)])                                       # ...so it is back on you
-            s.set_funnel_state(key, 'surfaced', read=True); funnel.invalidate()                     # Next, now
+            funnel.settle(s, key, 'surfaced', read=True, put_down=True); funnel.invalidate()       # Next, now (what move_on writes)
         self.assertEqual(card(), [(False, True, False)])                                          # put down again: For later
 
     def test_a_task_its_agent_finished_shows_once_as_a_result(self):

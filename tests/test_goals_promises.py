@@ -71,4 +71,17 @@ class PromiseContextTests(unittest.TestCase):
         t = s.promise_task(m1)
         self.assertIn('Gail', t['Summary']); self.assertIn('Revised budget', t['Summary'])
         self.assertEqual(t['Source'], 'email')
+
+    def test_a_promise_made_in_a_chat_says_no_empty_subject(self):
+        """The owner, 2026-10-14: "what is this text that looks weird??" - a WhatsApp promise read `re "" you would`."""
+        s = _store()
+        msg = lambda ext, who, mail, body, days, st: s.add_message({'ExternalId': ext, 'ConversationId': 'wa1', 'Channel': 'whatsapp', 'SourceName': ME,
+                                                                  'Subject': '', 'FromName': who, 'FromEmail': mail, 'SentAt': _ago(days),
+                                                                  'BodyText': body, 'Status': st})
+        msg('w0', 'Gail Moreno', GAIL, 'Can you run the tests?', 4, 'filed'); m1 = msg('w1', 'Alex Doyle', ME, "I'll run the tests", 3, 'context')
+        s.put_sent_verdict(m1, 'wa1', False, True, 'run the tests', None, 'test')
+        raised = assistant.followups(s, 24, want=('promise',))
+        self.assertEqual(len(raised), 1); self.assertNotIn('""', raised[0]['text'] + raised[0]['facts'])
+        t = s.get_task(s.task_for_promise(m1, 'run the tests', None))
+        self.assertEqual(t['Summary'], f"You told Gail Moreno on {_ago(3)[:10]} you would run the tests.")
         self.assertEqual(s.get_message(m1)['TaskId'], t['TaskId'])

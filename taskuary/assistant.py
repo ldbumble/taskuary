@@ -259,9 +259,9 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
             what, due = r.get('PromiseWhat') or _short(body, 70), r.get('PromiseDue')
             late = f" - it was due {due}" if due and due < datetime.now().strftime('%Y-%m-%d') else f" - due {due}" if due else ''
             out.append({'key': f"promise:{cid}", 'kind': 'promise', 'sig': _ts(r['SentAt']) + step,
-                        'facts': f"You told {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" - "
+                        'facts': f"You told {who} on {_ts(r['SentAt'])[:10]}" + (f" re \"{_short(r.get('Subject'), 70)}\"" if subj else '') + f": \"{_short(body, 160)}\" - "
                                  f"the promise: {what}{late}; made {days} day(s) ago, and nothing you have sent since delivers it.",
-                        'text': f"You told {who} you would {what}{late} - {days} day{'s' if days != 1 else ''} ago on \"{subj}\". Done?",
+                        'text': f"You told {who} you would {what}{late} - {days} day{'s' if days != 1 else ''} ago" + (f" on \"{subj}\"" if subj else '') + ". Done?",
                         'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
                         'who': who, 'what': what, 'due': due})
         else:

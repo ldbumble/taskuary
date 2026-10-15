@@ -563,7 +563,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                      and r.get('Key') in [card['key'], *card['aliases']]]
         if summaries:
             card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
-    card['actionable'] = bool(unread and not passed and not card['deferred'] and not card.get('settling')
+    # ...and the walk takes what the rail puts on you: a READ open task without a Next mark sits under On you, so `passed` alone
+    # (any read - opening it from the rail is one) let the walk start on the second row (the owner, 2026-10-14: "it skipped the
+    # first task again in walk through"). Only Next, Done or Remind me puts it down - shown-is-not-acted-on.
+    done = any(st and st.get('Status') == 'done' for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)])
+    card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
                               and card['lane'] != 'working' and not funnel._not_yet(card))
     return card
 

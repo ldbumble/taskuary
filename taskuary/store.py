@@ -2205,7 +2205,9 @@ class SQLiteStore:
         m = self.get_message(mid) or {}
         other = self.last_inbound_in(m['ConversationId']) if m.get('ConversationId') else None
         who = (other or {}).get('FromName') or (other or {}).get('FromEmail') or 'them'
-        summary = f"You told {who} on {str(m.get('SentAt') or '')[:10]} re \"{m.get('Subject') or ''}\" you would {what}."
+        # a chat message has no subject: no `re ""` (the owner, 2026-10-14: "what is this text that looks weird??")
+        subj = ' '.join(str(m.get('Subject') or '').split())
+        summary = f"You told {who} on {str(m.get('SentAt') or '')[:10]}" + (f" re \"{subj}\"" if subj else '') + f" you would {what}."
         tid = self.create_task({'Title': what[:1].upper() + what[1:], 'Summary': summary, 'Kind': 'task', 'Status': 'open', 'Assignee': 'owner',
                                 'Source': m.get('Channel') or 'email', 'SourceRef': f'promise:{mid}', 'DueAt': due or None}, 'promise')
         self._exec('UPDATE message SET TaskId=? WHERE MessageId=? AND TaskId IS NULL', (tid, mid))

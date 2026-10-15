@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Settings → Updates: which build is running, which is the latest release, and one button that
 // fetches it, swaps it in and comes back - with every connection and setting intact, because all
 // of that lives in the data folder and never beside the program (update.py explains the roads).
@@ -65,50 +66,40 @@ export default function UpdateCard() {
   // no width of its own: every settings page is as wide as the shell's column (2026-09-18)
   return (
     <Box>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5, lineHeight: 1.6 }}>
-        Everything you have set up — connections, tokens, the database, your documents and playbooks — lives in
-        the data folder, never beside the program. An update only swaps the program, so all of it is exactly
-        where you left it when the new build opens.
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5, lineHeight: 1.6 }}> {tx("Everything you have set up — connections, tokens, the database, your documents and playbooks — lives in the data folder, never beside the program. An update only swaps the program, so all of it is exactly where you left it when the new build opens.")} </Typography>
       <Box sx={{ p: 1.75, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: "#fff" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
           <SystemUpdateAltIcon sx={{ fontSize: 22, color: "#55697a" }} />
           <Box sx={{ flex: 1, minWidth: 220 }}>
-            <Typography sx={{ fontWeight: 600, color: INK, fontSize: 13.5 }}>
-              Running <Box component="span" sx={{ ...mono }}>v{info?.current || "…"}</Box>
+            <Typography sx={{ fontWeight: 600, color: INK, fontSize: 13.5 }}> {tx("Running")} <Box component="span" sx={{ ...mono }}>v{info?.current || "…"}</Box>
               {info?.latest && (
                 <Box component="span" sx={{ color: info.newer ? "#6b2733" : "#47654a", fontWeight: 600, ml: 1, fontSize: 12.5 }}>
                   {info.newer ? `· v${info.latest} is out` : "· this is the latest"}
                 </Box>
               )}
             </Typography>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}>
-              This is {HOW[how]}.
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.25 }}> {tx("This is")} {HOW[how]}.
             </Typography>
           </Box>
           <Button size="small" variant="outlined" disabled={!!busy} onClick={() => check(true)}
-            startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>Check now</Button>
+            startIcon={busy === "check" ? <CircularProgress size={12} /> : null}>{tx("Check now")}</Button>
           <Button size="small" variant="contained" disableElevation disabled={!canApply || !!busy} onClick={apply}
             startIcon={busy === "apply" || busy === "restarting" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
             title={how === "source" ? "a source checkout updates with git pull" : info?.newer ? `install v${info.latest} and reopen`
               : unknown ? "the check did not reach the release page - press Check now to try again" : "nothing newer to install"}>
             {busy === "restarting" ? "Reopening…" : busy === "apply" ? "Updating…" : info?.newer ? `Update to v${info.latest}`
-              : unknown ? "Couldn't check" : info ? "Up to date" : "Checking…"}
+              : unknown ? "Couldn't check" : info ? "Up to date" : tx("Checking…")}
           </Button>
         </Box>
         {info?.notes && info.newer && (
-          <Typography variant="caption" sx={{ display: "block", mt: 1, color: FAINT }}>
-            What changed:{" "}
-            <Box component="a" href={info.notes} target="_blank" rel="noopener" sx={{ color: "#55697a" }}>release notes</Box>
+          <Typography variant="caption" sx={{ display: "block", mt: 1, color: FAINT }}> {tx("What changed:")}{" "}
+            <Box component="a" href={info.notes} target="_blank" rel="noopener" sx={{ color: "#55697a" }}>{tx("release notes")}</Box>
           </Typography>
         )}
         {note && <Alert severity="info" sx={{ mt: 1.25, fontSize: 12.5 }}>{note}</Alert>}
         {(err || info?.error) && <Alert severity={err ? "error" : "warning"} sx={{ mt: 1.25, fontSize: 12.5 }}>{err || info.error}</Alert>}
       </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}>
-        Releases come from the project's GitHub page; the desktop build is the same file you would download there.
-        Any agent session that is open when you update is closed with the program — its transcript is kept on its task.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}> {tx("Releases come from the project's GitHub page; the desktop build is the same file you would download there. Any agent session that is open when you update is closed with the program — its transcript is kept on its task.")} </Typography>
     </Box>
   );
 }

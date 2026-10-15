@@ -540,7 +540,7 @@ PILE_BLIND_SETTINGS = (
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
 # draft. Both stop short of anything leaving the building - a draft waits for you to send it,
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
-DEFAULT_SETTINGS = {'attach_threshold': '0.42',
+DEFAULT_SETTINGS = {'locale': 'pt-BR', 'attach_threshold': '0.42',
                     'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
@@ -5003,7 +5003,15 @@ class SQLiteStore:
     def get_doc(self, name):
         """The document AS WRITTEN - placeholders and all. This is what the editor loads and saves;
         every consumer that feeds a doc to an AI wants `doc()` instead."""
-        r = self._one('SELECT Content FROM doc WHERE Name=?', (name,)); return r['Content'] if r else None
+        r = self._one('SELECT Content, UpdatedBy FROM doc WHERE Name=?', (name,))
+        if not r: return None
+        if r['UpdatedBy'] == 'template':
+            from . import i18n
+            canonical = i18n.template_path(name, 'en')
+            localized = i18n.template_path(name, i18n.locale(self))
+            if localized != canonical and canonical.is_file() and r['Content'] == canonical.read_text(encoding='utf-8'):
+                return localized.read_text(encoding='utf-8')
+        return r['Content']
     def doc_owner(self, name):
         """Who last wrote it - 'template' means nobody has, and the shipped text still flows in."""
         r = self._one('SELECT UpdatedBy FROM doc WHERE Name=?', (name,)); return r['UpdatedBy'] if r else None

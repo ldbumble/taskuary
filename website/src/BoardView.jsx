@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Board: the agent kanban - every task as a card in a status column. Some cards arrive
 // from triage, some you start yourself; click a card to open the task (where you can message the agent
 // working it). No drag-and-drop: dragging between columns changed status behind every other rule, so a
@@ -137,14 +138,12 @@ const NOTE_FIELDS = ["found", "did", "next"];
 const noteBody = (n) => String(n || "").replace(/^HANDOVER NOTE\s*/i, "").trim();
 
 const NoteChip = ({ onOpen }) => (
-  <Tooltip arrow title="what this agent left for whoever picks the task up next">
+  <Tooltip arrow title={tx("what this agent left for whoever picks the task up next")}>
     <Box onClick={(e) => { e.stopPropagation(); onOpen(); }}
       sx={{ display: "inline-flex", alignItems: "center", gap: 0.3, px: 0.6, height: 16,
         borderRadius: 0.75, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", cursor: "pointer",
         "&:hover": { bgcolor: "#d2d6cf" } }}>
-      <Typography sx={{ color: ROLES.working.ink, fontWeight: 600, fontSize: 8.5, letterSpacing: ".05em" }}>
-        ✎ NOTE
-      </Typography>
+      <Typography sx={{ color: ROLES.working.ink, fontWeight: 600, fontSize: 8.5, letterSpacing: ".05em" }}> {tx("✎ NOTE")} </Typography>
     </Box>
   </Tooltip>
 );
@@ -179,15 +178,12 @@ const NoteDialog = ({ open, task, onClose }) => {
       <DialogTitle sx={{ fontSize: 14.5, pb: 0.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography sx={{ ...mono, color: "#55697a", fontWeight: 600, fontSize: 12 }}>{task?.ref}</Typography>
-          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>the handover note</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>{tx("the handover note")}</Typography>
         </Box>
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
-          Written when this session paused — and this is the same text the next agent is seeded
-          with, so what you read here is what it will know.
-        </Typography>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}> {tx("Written when this session paused — and this is the same text the next agent is seeded with, so what you read here is what it will know.")} </Typography>
       </DialogTitle>
       <DialogContent sx={{ pb: 1 }}>
-        {!body && <Empty>No note on this task.</Empty>}
+        {!body && <Empty>{tx("No note on this task.")}</Empty>}
         {secs.length ? secs.map(([k, v]) => (
           <Box key={k} sx={{ mb: 1, px: 1.25, py: 0.9, bgcolor: SECTION[k].bg,
             border: `1px solid ${SECTION[k].bd}`, borderRadius: 2 }}>
@@ -204,9 +200,7 @@ const NoteDialog = ({ open, task, onClose }) => {
         {files.length > 0 && (
           <Box sx={{ mt: 1.5 }}>
             <Typography variant="caption" sx={{ color: ROLES.working.ink, fontWeight: 600, fontSize: 9.5,
-              letterSpacing: ".08em", display: "block", mb: 0.5 }}>
-              ✎ FILES IT TOUCHED — {files.length}, per git
-            </Typography>
+              letterSpacing: ".08em", display: "block", mb: 0.5 }}> {tx("✎ FILES IT TOUCHED —")} {files.length}{tx(", per git")} </Typography>
             <Box sx={{ maxHeight: 168, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
               {files.map((f, i) => (
                 <Box key={f.path} sx={{ display: "flex", gap: 1, alignItems: "baseline", px: 1, py: 0.45,
@@ -221,12 +215,10 @@ const NoteDialog = ({ open, task, onClose }) => {
           </Box>
         )}
         {proof && !files.length && (
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-            No file changes recorded yet — the agent may have only read, or not committed.
-          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}> {tx("No file changes recorded yet — the agent may have only read, or not committed.")} </Typography>
         )}
       </DialogContent>
-      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+      <DialogActions><Button onClick={onClose}>{tx("Close")}</Button></DialogActions>
     </Dialog>
   );
 };
@@ -369,16 +361,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
       {/* four things on one line is a laptop's worth of room; below that they wrap rather than
           push the page sideways */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 1.25, gap: 1.5, flexWrap: "wrap" }}>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: "1 1 auto" }}>Agent board</Typography>
-        {view === "notes" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          Short-lived task and checkout coordination — agents read it before starting; hard-earned reusable discoveries belong in the Hub.
-        </Typography>}
-        {view === "floor" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>
-          One desk per agent that can run at once — an empty desk is capacity you are not using.
-        </Typography>}
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: "1 1 auto" }}>{tx("Agent board")}</Typography>
+        {view === "notes" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}> {tx("Short-lived task and checkout coordination — agents read it before starting; hard-earned reusable discoveries belong in the Hub.")} </Typography>}
+        {view === "floor" && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}> {tx("One desk per agent that can run at once — an empty desk is capacity you are not using.")} </Typography>}
         {/* the same board, two ways to look at it - columns to move work, the floor to see how
             much of your capacity is actually busy */}
-        <Box role="tablist" aria-label="Board view"
+        <Box role="tablist" aria-label={tx("Board view")}
           sx={{ display: "flex", gap: 0.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 2, p: "3px" }}>
           {[{ k: "columns", label: "Columns", icon: <ViewKanbanIcon sx={{ fontSize: 14 }} /> },
             { k: "studio", label: "Studio", icon: <ViewInArIcon sx={{ fontSize: 14 }} /> },
@@ -397,15 +385,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
         </Box>
         {/* the funnel's front door, as big as the task button: pick the agent, paste the prompts */}
         <Button size="small" variant="outlined" disableElevation onClick={() => setFeedOpen(true)}
-          sx={{ color: "#6b5f45", borderColor: "#d8cfbe", bgcolor: "#f1ead9", "&:hover": { borderColor: "#8a7a5c", bgcolor: "#e9dfc5" } }}>✎ Feed the agent</Button>
+          sx={{ color: "#6b5f45", borderColor: "#d8cfbe", bgcolor: "#f1ead9", "&:hover": { borderColor: "#8a7a5c", bgcolor: "#e9dfc5" } }}>{tx("✎ Feed the agent")}</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>New task for the agent</Button>
+          onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>{tx("New task for the agent")}</Button>
       </Box>
       <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle sx={{ pb: 0.5 }}>Feed the agent
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
-            Queue prompts for an agent - one, or a whole list. They land one per stop, in order, never mid-turn.
-          </Typography>
+        <DialogTitle sx={{ pb: 0.5 }}>{tx("Feed the agent")} <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}> {tx("Queue prompts for an agent - one, or a whole list. They land one per stop, in order, never mid-turn.")} </Typography>
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mb: 1.25 }}>
@@ -419,11 +404,11 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 </Box>
               ))}
             {(tasks || []).filter((t) => t.Kind !== "reply" && t.Status !== "done" && t.Status !== "dropped").length === 0 && (
-              <Typography variant="caption" sx={{ color: FAINT }}>No open coding task yet - make one with New task for the agent, then feed it.</Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}>{tx("No open coding task yet - make one with New task for the agent, then feed it.")}</Typography>
             )}
           </Box>
           {feedTask ? <TellAgent taskId={feedTask} taskRef={(tasks || []).find((t) => t.TaskId === feedTask)?.ref} onQueued={load} />
-            : <Typography variant="caption" sx={{ color: FAINT }}>Pick the task above - ▮ marks one with an agent on it right now.</Typography>}
+            : <Typography variant="caption" sx={{ color: FAINT }}>{tx("Pick the task above - ▮ marks one with an agent on it right now.")}</Typography>}
         </DialogContent>
       </Dialog>
 
@@ -460,10 +445,8 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 <Chip size="small" label={cards.length} sx={{ height: 16, fontSize: 9.5, bgcolor: PANEL,
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
-              {col.key === "agentdone" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
-                Finished today, or a reply it drafted waiting for your yes — older finished work lives in Tasks.
-              </Typography>}
-              {!cards.length && <Empty>Nothing here.</Empty>}
+              {col.key === "agentdone" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}> {tx("Finished today, or a reply it drafted waiting for your yes — older finished work lives in Tasks.")} </Typography>}
+              {!cards.length && <Empty>{tx("Nothing here.")}</Empty>}
               {cards.map((t) => {
                 // a chat session reports its agent as the literal string "assistant" - the name of
                 // the thing that helps you run Taskuary, not of the agent working this task
@@ -515,14 +498,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   {t.Playbook && (
                     <Typography variant="caption" title={t.Playbook.uses?.length ? `uses ${t.Playbook.uses.join(", ")}` : ""}
                       sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5, fontWeight: 600,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      Playbook · {t.Playbook.title}
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}> {tx("Playbook ·")} {t.Playbook.title}
                     </Typography>
                   )}
                   {!t.Playbook && t.Source === "report" && t.SearchSources && (
                     <Typography variant="caption" sx={{ color: "#6b5f45", display: "block", mt: 0.35, fontSize: 9.5,
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      Report · {String(t.SearchSources).split(",")[0]}
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}> {tx("Report ·")} {String(t.SearchSources).split(",")[0]}
                     </Typography>
                   )}
                   {/* a held-back dispatch says so ON the card - who it waits for and why, readable
@@ -539,12 +520,12 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                     {t.Waiting > 0 && (
                       <Chip size="small" onClick={(e) => { e.stopPropagation(); setFeedTask(t.TaskId); setFeedOpen(true); }}
                         label={`✎ ${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"}`}
-                        title="waiting in the funnel - lands at the agent's next stop; click to add more"
+                        title={tx("waiting in the funnel - lands at the agent's next stop; click to add more")}
                         sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 600,
                           cursor: "pointer", "& .MuiChip-label": { px: 0.7 } }} />
                     )}
                     <Box sx={{ flex: 1 }} />
-                    <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>open →</Typography>
+                    <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 9.5 }}>{tx("open →")}</Typography>
                   </Box>
                 </Box>
                 );
@@ -556,41 +537,35 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
 
       {/* ── start a task for the agent ─────────────────────────────────── */}
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>New task for the agent</DialogTitle>
+        <DialogTitle>{tx("New task for the agent")}</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
-          <TextField label="Task name — how it reads on the board" value={nt.Title}
+          <TextField label={tx("Task name — how it reads on the board")} value={nt.Title}
             onChange={(e) => setNt({ ...nt, Title: e.target.value })} />
           <Box>
-            <TextField fullWidth label="Prompt — what you want the agent to do" multiline minRows={4} maxRows={12} value={nt.Summary}
-              placeholder="Exactly what to do, where to look, what done means. This text is sent to the agent as its instruction. Paste a screenshot to send it along."
+            <TextField fullWidth label={tx("Prompt — what you want the agent to do")} multiline minRows={4} maxRows={12} value={nt.Summary}
+              placeholder={tx("Exactly what to do, where to look, what done means. This text is sent to the agent as its instruction. Paste a screenshot to send it along.")}
               onChange={(e) => setNt({ ...nt, Summary: e.target.value })} onPaste={shots.onPaste} />
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
-              <Button size="small" component="label" startIcon={<AttachFileIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 10.5, color: DIM }}>
-                attach images
-                <input hidden multiple type="file" accept="image/*"
+              <Button size="small" component="label" startIcon={<AttachFileIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 10.5, color: DIM }}> {tx("attach images")} <input hidden multiple type="file" accept="image/*"
                   onChange={(e) => { shots.add(e.target.files); e.target.value = ""; }} />
               </Button>
-              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>or paste one straight into the prompt</Typography>
+              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>{tx("or paste one straight into the prompt")}</Typography>
             </Box>
             <PromptThumbs imgs={shots.imgs} onDrop={shots.drop} />
           </Box>
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              Repository — the issue lands here and the agent works in this context
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("Repository — the issue lands here and the agent works in this context")} </Typography>
             <Select fullWidth size="small" value={nt.repo} onChange={(e) => setNt({ ...nt, repo: e.target.value })}>
               {/* the choice here decides WHO works it: a repository means a CLI in that checkout,
                   General means the assistant's chat. Everything below this box follows from it. */}
               {repos.map((r) => <MenuItem key={r} value={r} sx={{ fontSize: 12.5 }}>{r}</MenuItem>)}
-              <MenuItem value={NO_REPO} sx={{ fontSize: 12.5 }}>General — no repository, just a question to answer</MenuItem>
+              <MenuItem value={NO_REPO} sx={{ fontSize: 12.5 }}>{tx("General — no repository, just a question to answer")}</MenuItem>
             </Select>
           </Box>
           {/* a general question is answered by an AI connector, not a CLI - unless the owner
               asked for a terminal below, in which case the CLI is exactly what matters */}
           <Box sx={{ display: plan.chat ? "none" : "block" }}>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              Which CLI works it — and which model that CLI runs
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("Which CLI works it — and which model that CLI runs")} </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
               <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={nt.brain || nt.agent} model={nt.model}
                 brains={brainList} brainModels={brainModels} brain={nt.brain || ""}
@@ -598,15 +573,11 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 onAgent={(a) => setNt({ ...nt, agent: a, model: "" })} onModel={(m) => setNt({ ...nt, model: m })} />
             </Box>
             {agents.length < 2 && (
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                Add more CLIs under Connections → AI CLI agents to choose between them here.
-              </Typography>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Add more CLIs under Connections → AI CLI agents to choose between them here.")} </Typography>
             )}
           </Box>
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-              How it gets worked — one agent, one way
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("How it gets worked — one agent, one way")} </Typography>
             <Select fullWidth size="small" value={nt.how} onChange={(e) => setNt({ ...nt, how: e.target.value })}
               renderValue={(v) => v === "file" ? "Just file it" : v === "terminal" ? `Start ${nt.brain || nt.agent} in a terminal`
                 : noRepo ? "Ask the assistant" : `Start ${nt.brain || nt.agent} on it`}>
@@ -614,18 +585,14 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 ? "Ask the assistant — opens the chat on the Tasks tab with your prompt as the first message"
                 : `Start ${nt.brain || nt.agent} on it — stays on the board with the prompt typed in`}</MenuItem>
               {/* a question you would rather work in a CLI: the old behaviour, now asked for */}
-              {noRepo && <MenuItem value="terminal" sx={{ fontSize: 12.5 }}>
-                Start {nt.brain || nt.agent} in a terminal instead — no repository, its own folder
-              </MenuItem>}
-              <MenuItem value="file" sx={{ fontSize: 12.5 }}>Just file it — nobody starts working yet</MenuItem>
+              {noRepo && <MenuItem value="terminal" sx={{ fontSize: 12.5 }}> {tx("Start")} {nt.brain || nt.agent} {tx("in a terminal instead — no repository, its own folder")} </MenuItem>}
+              <MenuItem value="file" sx={{ fontSize: 12.5 }}>{tx("Just file it — nobody starts working yet")}</MenuItem>
             </Select>
             {/* a portal with no API, a page behind a login: the session opens a browser with it,
                 you watch it beside the terminal, and you type the password yourself */}
             <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
               <Switch size="small" checked={!!nt.browser} onChange={(e) => setNt({ ...nt, browser: e.target.checked })} />
-              <Typography variant="caption" sx={{ color: nt.browser ? INK : DIM }}>
-                It needs a browser — one opens with the session, watched beside it, and you type any password
-              </Typography>
+              <Typography variant="caption" sx={{ color: nt.browser ? INK : DIM }}> {tx("It needs a browser — one opens with the session, watched beside it, and you type any password")} </Typography>
             </Box>
             {/* A terminal you start here is yours to end: the server marks the task the moment it opens
                 (selfclose.claim) - no switch to forget. */}
@@ -633,7 +600,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
           {newErr && <Alert severity="error" onClose={() => setNewErr("")} sx={{ mt: 1 }}>{newErr}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>Cancel</Button>
+          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>{tx("Cancel")}</Button>
           <Button variant="contained" disableElevation disabled={!nt.Title.trim() || creating} onClick={create}
             startIcon={creating ? <CircularProgress size={13} /> : null}>{creating ? "Creating…" : "Create"}</Button>
         </DialogActions>

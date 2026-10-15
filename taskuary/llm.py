@@ -253,7 +253,7 @@ def build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=None
     # the demo answers from a script: no key, no CLI, no request leaving the machine
     if demo.enabled(): return demo.brain()
     brain = _build_llm(store, pick, model, trace, cancel, resume, cli_tools, extra_env, research, fallback_user, gear, keep, task_id)
-    return _Scrubbed(brain) if brain else brain
+    return _Scrubbed(brain, store) if brain else brain
 
 
 def effective_pick(store, pick=None) -> str:
@@ -304,8 +304,12 @@ class _Scrubbed:
     It proxies attributes rather than copying them because `failover` sets `.session_id` and
     `.last_pick` DURING a call, and a resumed CLI thread is carried on exactly those.
     """
-    def __init__(self, brain): object.__setattr__(self, '_brain', brain)
+    def __init__(self, brain, store=None):
+        object.__setattr__(self, '_brain', brain)
+        object.__setattr__(self, '_store', store)
     def __call__(self, system, user, *a, **kw):
+        from . import i18n
+        system = system + i18n.output_instruction(i18n.locale(self._store))
         return self._brain(redact.scrub(system), redact.scrub(user), *a, **kw)
     def __getattr__(self, k): return getattr(object.__getattribute__(self, '_brain'), k)
     def __setattr__(self, k, v): setattr(object.__getattribute__(self, '_brain'), k, v)

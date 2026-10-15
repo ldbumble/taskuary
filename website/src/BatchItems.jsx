@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import { useState } from "react";
 import { Box, Button, Link, Typography } from "@mui/material";
 import api from "./api";
@@ -49,17 +50,16 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
                 <Typography variant="body2" sx={{ color: DIM, mt: 0.2, lineHeight: 1.5, overflowWrap: "anywhere" }}>
                   {i.State === "ended" ? i.EndedWhy : i.Result}</Typography>)}
               {i.Overlap && isOpen(i) && (
-                <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.2 }}>Overlaps: {i.Overlap}</Typography>)}
+                <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.2 }}>{tx("Overlaps:")} {i.Overlap}</Typography>)}
               {/* a stranger's item ranking judged dangerous (rank._order): ranked last and warned, in the same batch */}
               {i.Warn && (
-                <Typography variant="caption" sx={{ color: ALERT_INK, fontWeight: 600, display: "block", mt: 0.2 }}>
-                  ⚠ Judged dangerous: {i.Warn}. Ranked last; read it before anything runs.</Typography>)}
+                <Typography variant="caption" sx={{ color: ALERT_INK, fontWeight: 600, display: "block", mt: 0.2 }}> {tx("⚠ Judged dangerous:")} {i.Warn}{tx(". Ranked last; read it before anything runs.")}</Typography>)}
               {fixLine(i) && (
                 <Typography variant="caption" sx={{ color: i.Fix === "failed" ? ALERT_INK : DIM, display: "block", mt: 0.2 }}>
-                  {fixLine(i)}{i.FixLink && i.Fix === "failed" ? <> <Link href={i.FixLink} target="_blank" rel="noreferrer">Its run on GitHub</Link></> : null}
+                  {fixLine(i)}{i.FixLink && i.Fix === "failed" ? <> <Link href={i.FixLink} target="_blank" rel="noreferrer">{tx("Its run on GitHub")}</Link></> : null}
                 </Typography>)}
               {!i.Result && i.State === "waiting" && (
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.2 }}>The agent has not reached it yet.</Typography>)}
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.2 }}>{tx("The agent has not reached it yet.")}</Typography>)}
               <Box sx={{ display: "flex", gap: 0.75, mt: 0.5, flexWrap: "wrap" }}>
                 {actions(i).map((a) => (
                   <Button key={a.action} size="small" variant={a.primary ? "contained" : "outlined"} disableElevation
@@ -78,22 +78,22 @@ export default function BatchItems({ taskId, items = [], onChanged, bare = false
       })}
       {setup && (
         <Box sx={{ mt: 0.75, p: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px" }}>
-          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Fix outside pull requests on {setup.repo} in GitHub's cloud</Typography>
+          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{tx("Fix outside pull requests on")} {setup.repo} {tx("in GitHub's cloud")}</Typography>
           <Typography variant="body2" sx={{ color: DIM, mt: 0.3, lineHeight: 1.5 }}>
             {setup.workflow ? "The workflow is in place." : "Taskuary adds a workflow to the repository: the agent and the tests run on a machine GitHub throws away, never yours."}
-            {" "}{setup.secret === true ? "The secret is set." : <>It also needs a secret named <b>{setup.secret_name}</b>: run <code>claude setup-token</code> and paste the result <Link href={setup.secret_url} target="_blank" rel="noreferrer">on GitHub</Link>.</>}
+            {" "}{setup.secret === true ? "The secret is set." : <>{tx("It also needs a secret named")} <b>{setup.secret_name}</b>{tx(": run")} <code>claude setup-token</code> {tx("and paste the result")} <Link href={setup.secret_url} target="_blank" rel="noreferrer">{tx("on GitHub")}</Link>.</>}
           </Typography>
           <Box sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
             {!setup.workflow && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={install}
               sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5 }}>{busy === "setup" ? "…" : "Add the workflow"}</Button>}
             {setup.workflow && setup.secret !== false && <Button size="small" variant="contained" disableElevation disabled={!!busy}
-              onClick={() => press(setup.i, setup.a)} sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5 }}>Fix it now</Button>}
+              onClick={() => press(setup.i, setup.a)} sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5 }}>{tx("Fix it now")}</Button>}
             <Button size="small" variant="outlined" onClick={() => setSetup(null)}
-              sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5, color: INK, borderColor: BORDER }}>Not now</Button>
+              sx={{ textTransform: "none", py: 0, minHeight: 26, fontSize: 12.5, color: INK, borderColor: BORDER }}>{tx("Not now")}</Button>
           </Box>
         </Box>)}
       {err && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mt: 0.5 }}>{err}</Typography>}
-      <Confirm open={!!ask} title={ask ? `Merge ${ask.i.Title}?` : ""} confirmLabel="Merge on GitHub"
+      <Confirm open={!!ask} title={ask ? `Merge ${ask.i.Title}?` : ""} confirmLabel={tx("Merge on GitHub")}
         text="It merges the version the agent reviewed. If anything was pushed to it since, GitHub refuses and nothing is merged."
         onConfirm={() => press(ask.i, ask.a)} onClose={() => setAsk(null)} />
     </Box>

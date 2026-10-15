@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says } from "./laneSays.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -340,7 +341,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             {/* flexShrink: the pills would otherwise squeeze this until only half the + was
                 left on screen, and a clipped button reads as a rendering fault */}
             <Button size="small" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => setNewOpen(true)}
-              sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>New</Button>
+              sx={{ flexShrink: 0, minWidth: "auto", px: 1 }}>{tx("New")}</Button>
           </Box>
           {/* THE STATES OF WHAT IS IN PROGRESS, ON TOP (the owner, 2026-09-28: "don't see the filter on top of tasks") -
               the same pills as the row above, a count each, only when there is more than one state to tell apart */}
@@ -351,12 +352,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
             </Box>
           )}
           <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL2, flexShrink: 0 }}>
-            <TextField fullWidth size="small" placeholder="Search system, name, summary, PR…" value={query}
+            <TextField fullWidth size="small" placeholder={tx("Search system, name, summary, PR…")} value={query}
               onChange={(e) => setQuery(e.target.value)}
               inputProps={{ "aria-label": "Search all tasks" }}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: FAINT }} /></InputAdornment>,
-                endAdornment: query ? <InputAdornment position="end"><IconButton size="small" aria-label="Clear task search"
+                endAdornment: query ? <InputAdornment position="end"><IconButton size="small" aria-label={tx("Clear task search")}
                   onClick={() => setQuery("")}><CloseIcon sx={{ fontSize: 15 }} /></IconButton></InputAdornment> : null,
               }}
               sx={{ "& .MuiOutlinedInput-root": { bgcolor: "#fff", fontSize: 12.5 } }} />
@@ -409,7 +410,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                       fontVariantNumeric: "tabular-nums", letterSpacing: ".015em" }}>{task.ref}</Box>
                     {` · ${shortKind(task.Kind)}`}{worker ? ` · ${worker}` : ""}
                   </Typography>
-                  {task.Priority === "urgent" && <Chip size="small" label="urgent" sx={{ bgcolor: PILL_COLORS.red.bg,
+                  {task.Priority === "urgent" && <Chip size="small" label={tx("urgent")} sx={{ bgcolor: PILL_COLORS.red.bg,
                     color: PILL_COLORS.red.fg, height: 17, fontSize: 9.5, flexShrink: 0 }} />}
                   {/* the state says it once - "agent stopped" had its own chip beside it (T1) */}
                   <Box component="span" role="button" tabIndex={0} sx={{ cursor: "pointer", display: "inline-flex" }}
@@ -423,8 +424,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     stays two lines, so the rail does not pay for this everywhere */}
                 {/* A START THAT FAILED says so on the row, with the error (T10) - it said "starts by itself when it can" */}
                 {task.State === "queued" && task.Queued?.state === "failed" && (
-                  <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}>
-                    could not start{task.Queued.lastError ? ` - ${task.Queued.lastError}` : ""}
+                  <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}> {tx("could not start")}{task.Queued.lastError ? ` - ${task.Queued.lastError}` : ""}
                   </Typography>
                 )}
                 {(list.length > 0 || asked) && (
@@ -438,12 +438,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                     </Typography>
                   </Box>
                 )}
-                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
-                  Playbook · {task.Playbook.title}
+                {task.Playbook && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}> {tx("Playbook ·")} {task.Playbook.title}
                 </Typography>}
                 {!task.Playbook && task.Source === "report" && task.SearchSources
-                  && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
-                    Report · {String(task.SearchSources).split(",")[0]}
+                  && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}> {tx("Report ·")} {String(task.SearchSources).split(",")[0]}
                   </Typography>}
                 {search && <Typography variant="caption" noWrap sx={{ color: FAINT, display: "block", mt: 0.2 }}>
                   {[task.Source, task.SearchSources, task.Summary].filter(Boolean).join(" · ")}
@@ -466,10 +464,10 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
         onChanged={onChanged} autostart={autostart} onAutostarted={onAutostarted} onGoReports={onGoReports}
         active={active} openAct={openAct} onActOpened={onActOpened} />
       <Dialog open={newOpen} onClose={() => setNewOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>New task</DialogTitle>
+        <DialogTitle>{tx("New task")}</DialogTitle>
         <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: "8px !important" }}>
-          <TextField label="Title" value={nt.Title} onChange={(e) => setNt({ ...nt, Title: e.target.value })} autoFocus />
-          <TextField label="Summary" value={nt.Summary} multiline minRows={2} onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
+          <TextField label={tx("Title")} value={nt.Title} onChange={(e) => setNt({ ...nt, Title: e.target.value })} autoFocus />
+          <TextField label={tx("Summary")} value={nt.Summary} multiline minRows={2} onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
           <Box sx={{ display: "flex", gap: 1.5 }}>
             <Select fullWidth value={nt.Kind} renderValue={kindLabel} onChange={(e) => setNt({ ...nt, Kind: e.target.value })}>
               {KIND_OPTIONS.filter((o) => o.made !== false).map((o) => <MenuItem key={o.key} value={o.key} sx={{ py: 0.7 }}>
@@ -483,14 +481,12 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           </Box>
           {nt.Kind === "coding" && !!repos.length && (
             <Box>
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-                Repository — the agent works in this checkout
-              </Typography>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("Repository — the agent works in this checkout")} </Typography>
               <Select fullWidth size="small" value={nt.repo || ""} displayEmpty
                 onChange={(e) => setNt({ ...nt, repo: e.target.value })}>
                 {/* empty is not "none": it is "you decide", which is guess_repo reading the ask
                     against SOUL.md's repo map - the behaviour this box used to have unavoidably */}
-                <MenuItem value="" sx={{ fontSize: 12.5 }}>Let Taskuary pick from what I wrote</MenuItem>
+                <MenuItem value="" sx={{ fontSize: 12.5 }}>{tx("Let Taskuary pick from what I wrote")}</MenuItem>
                 {repos.map((r) => <MenuItem key={r} value={r} sx={{ fontSize: 12.5 }}>{r}</MenuItem>)}
               </Select>
             </Box>
@@ -499,7 +495,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           {newErr && <Alert severity="error" onClose={() => setNewErr("")}>{newErr}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>Cancel</Button>
+          <Button onClick={() => { setNewOpen(false); setNewErr(""); }}>{tx("Cancel")}</Button>
           <Button variant="contained" disabled={!nt.Title.trim() || creating} onClick={create}
             startIcon={creating ? <CircularProgress size={13} /> : null}>{creating ? "Creating…" : "Create"}</Button>
         </DialogActions>

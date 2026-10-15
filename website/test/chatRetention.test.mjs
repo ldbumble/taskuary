@@ -12,7 +12,7 @@ test("the chats panel pages with a cursor and offers earlier chats", () => {
   assert.match(view, /api\.get\("\/api\/concierge\/chats", \{ params: \{ limit: 25 \}, timeout: 10000 \}\)/);
   assert.match(view, /params: \{ limit: 25, before: chatsNext \}/);
   assert.match(view, /setChatsNext\(data\.next \|\| null\)/);
-  assert.match(view, />Earlier chats<\/button>/);
+  assert.match(view, />\{tx\("Earlier chats"\)\}<\/button>/);
   const newChat = view.slice(view.indexOf("const newChat = async"), view.indexOf("const openOld"));
   assert.match(newChat, /api\.post\("\/api\/assistant\/dock\/new"/);
   assert.doesNotMatch(newChat, /surface\(|turn\(\{ mode/);                     // a blank chat waits for the owner

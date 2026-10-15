@@ -10,12 +10,12 @@ const demo = fs.readFileSync(path.join(process.cwd(), "src", "demoApi.js"), "utf
 
 test("the Hub opens on its most valuable entries", () => {
   assert.match(hub, /const \[sort, setSort\] = useState\("top"\)/);
-  assert.match(hub, /<MenuItem value="top"[^>]*>most valuable<\/MenuItem>/);
+  assert.match(hub, /<MenuItem value="top"[^>]*>\{tx\("most valuable"\)\}<\/MenuItem>/);
 });
 
 test("every post names its vote score and exact comment count", () => {
   assert.match(hub, /const voteLabel =/);
-  assert.match(hub, /\{commentCount\} comment\{commentCount === 1 \? "" : "s"\}/);
+  assert.match(hub, /\{commentCount\} \{tx\("comment"\)\}\{commentCount === 1 \? "" : "s"\}/);
 });
 
 test("the demo uses discussion as the tie-breaker too", () => {

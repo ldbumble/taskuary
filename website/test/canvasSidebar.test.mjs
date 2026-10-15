@@ -54,6 +54,7 @@ test("the sync line fits: one count and the whole time at rest, no counts and wh
   assert.match(feed, /title=\{stats\.map\(\(x\) => `\$\{x\.n\} \$\{x\.label\}`\)\.join\(" · "\)\}/);
   assert.match(feed, /terse: !\(syncing \|\| bgSync\)/);
   const { syncFace } = await import("../src/syncTiming.js");
+  (await import("../src/i18n.js")).setLocale("en");   // English contract
   const at = new Date(2026, 8, 29, 22, 26);
   assert.equal(syncFace({ checked: true, started: true, lastAt: at, terse: true }), "started 10:26 PM");
   assert.equal(syncFace({ checked: true, lastAt: at, terse: true }), "checked 10:26 PM");

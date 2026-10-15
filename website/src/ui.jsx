@@ -1,3 +1,4 @@
+import { getLocale, t as tx } from "./i18n.js";
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
@@ -125,9 +126,9 @@ export const Confirm = ({ open, title, text, confirmLabel = "OK", onConfirm, onC
         {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button onClick={onClose} disabled={busy}>{tx("Cancel")}</Button>
         <Button variant="contained" disableElevation onClick={go} disabled={busy}>
-          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : confirmLabel}</Button>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx(confirmLabel)}</Button>
       </DialogActions>
     </Dialog>
   );
@@ -143,17 +144,17 @@ export const ConfirmDelete = ({ open, what, consequence, confirmLabel = "Delete"
   };
   return (
     <Dialog open={!!open} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>{title || `Delete ${what}?`}</DialogTitle>
+      <DialogTitle sx={{ fontSize: 15.5, fontWeight: 600, pb: 0.5 }}>{title || tx("Delete {what}?", { what })}</DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ fontSize: 13, color: DIM }}>
-          {consequence}{undoable ? "" : " This cannot be undone."}
+          {tx(consequence)}{undoable ? "" : tx(" This cannot be undone.")}
         </DialogContentText>
         {err && <Alert severity="error" sx={{ mt: 1.5, fontSize: 12.5 }}>{err}</Alert>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {/* Cancel is the default focus and sits where the eye lands: the safe one is not the
             one you hit by reflex */}
-        <Button onClick={onClose} disabled={busy} autoFocus sx={{ fontSize: 12.5 }}>Cancel</Button>
+        <Button onClick={onClose} disabled={busy} autoFocus sx={{ fontSize: 12.5 }}>{tx("Cancel")}</Button>
         <Button onClick={go} disabled={busy} color="error" variant="contained" disableElevation
           sx={{ fontSize: 12.5 }}>{busy ? "…" : confirmLabel}</Button>
       </DialogActions>
@@ -173,7 +174,7 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, categor
   if (working && taskStatus !== "done" && reviewStatus !== "pending") {
     // "agent", not the agent's name: the name is whichever CLI happens to be configured (claude,
     // codex, a wrapper) and reads as a brand on a status chip; the tooltip still says who
-    return <Chip size="small" label="agent working" title={`${working} has this task open in a live session right now`}
+    return <Chip size="small" label={tx("agent working")} title={`${working} has this task open in a live session right now`}
       sx={{ bgcolor: ROLES.working.tint, color: ROLES.working.ink, height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // a category that is NOT a review state (info, promo, ignored…) is the whole story - a
@@ -184,19 +185,19 @@ export const ActionChip = ({ action, reviewStatus, taskStatus, needsYou, categor
   }
   // A finished task outranks everything else the chip could say.
   if (taskStatus === "done" && reviewStatus !== "pending") {
-    return <Chip size="small" label="done" sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 600 }} />;
+    return <Chip size="small" label={tx("done")} sx={{ bgcolor: "#dfeade", color: "#47654a", height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // and "nobody is moving this" outranks the verdict: what happened to it matters less
   // than whether it is sitting on you right now
   if (needsYou) {
-    return <Chip size="small" label="needs you" sx={{ bgcolor: ALERT, color: "#fffdfb",
+    return <Chip size="small" label={tx("needs you")} sx={{ bgcolor: ALERT, color: "#fffdfb",
       height: 19, fontSize: 10.5, fontWeight: 600 }} />;
   }
   // What actually matters to the reader: current state, not just the original verdict.
   // 'report' and 'feed' are NOT verdicts - nothing judged those items; they are here to be
   // read. Only 'ignored' means a policy actually rejected something.
   if (action === "triaging") {                     // decided in seconds: the pill breathes until then
-    return <Chip size="small" label="triaging…" sx={{ bgcolor: "#e6e0d5", color: "#6f6960", height: 19, fontSize: 10.5, fontWeight: 600,
+    return <Chip size="small" label={tx("triaging…")} sx={{ bgcolor: "#e6e0d5", color: "#6f6960", height: 19, fontSize: 10.5, fontWeight: 600,
       "@keyframes tqBreathe": { "50%": { opacity: 0.45 } }, animation: "tqBreathe 1.4s ease-in-out infinite" }} />;
   }
   const key = ["report", "feed", "filed"].includes(action) ? action
@@ -255,8 +256,8 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
             {`${ci.kind === "pr" ? `PR #${ci.number}` : `${ci.branch} @ ${ci.sha}`} · CI ${ci.checks?.state || "unchecked"}`}
           </Pill>
         )}
-        {p.seconds != null && <Pill>{mins(p.seconds)} elapsed</Pill>}
-        {p.attempts?.length > 1 && <Pill tone="wait">{p.attempts.length} attempts</Pill>}
+        {p.seconds != null && <Pill>{mins(p.seconds)} {tx("elapsed")}</Pill>}
+        {p.attempts?.length > 1 && <Pill tone="wait">{p.attempts.length} {tx("attempts")}</Pill>}
       </Box>
       {t.ran && t.line && (
         <Typography variant="caption" sx={{ ...mono, color: DIM, display: "block", fontSize: 10.5 }}>{t.line}</Typography>
@@ -282,8 +283,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         </Box>
       )}
       {p.gaps?.length > 0 && (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-          Not evidenced: {p.gaps.join(" · ")}
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Not evidenced:")} {p.gaps.join(" · ")}
         </Typography>
       )}
       <Box sx={{ display: "flex", gap: 1.25, mt: 0.75, alignItems: "center", flexWrap: "wrap" }}>
@@ -310,7 +310,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
               {busy === "land" ? "landing…" : p.flow === "direct" ? "push straight to the branch" : "open a draft PR"}
             </Box>
             <Box component="span" onClick={() => !busy && act(`land?flow=${p.flow === "direct" ? "pr" : "direct"}`)}
-              title="just this once, the other way"
+              title={tx("just this once, the other way")}
               sx={{ fontSize: 11, color: busy ? FAINT : FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }}>
               {p.flow === "direct" ? "or a draft PR" : "or push direct"}
             </Box>
@@ -318,7 +318,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
         )}
         {onOpenTask && (
           <Box component="span" onClick={() => onOpenTask(taskId)}
-            sx={{ fontSize: 11, fontWeight: 600, color: "#55697a", cursor: "pointer" }}>the whole session</Box>
+            sx={{ fontSize: 11, fontWeight: 600, color: "#55697a", cursor: "pointer" }}>{tx("the whole session")}</Box>
         )}
       </Box>
       {p.error && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{p.error}</Typography>}
@@ -334,9 +334,7 @@ export const StatusDot = ({ ok, warn }) => (
 // Expandable "prompt sent to agent" block inside a run trace - collapsed by default.
 export const PromptBlock = ({ text }) => (
   <Box component="details" sx={{ my: 0.5 }}>
-    <Box component="summary" sx={{ ...mono, cursor: "pointer", color: ACCENT2, fontSize: 10.5 }}>
-      ▸ prompt sent to agent · {(text || "").length.toLocaleString()} chars — click to expand
-    </Box>
+    <Box component="summary" sx={{ ...mono, cursor: "pointer", color: ACCENT2, fontSize: 10.5 }}> {tx("▸ prompt sent to agent ·")} {(text || "").length.toLocaleString(getLocale())} {tx("chars — click to expand")} </Box>
     <Box component="pre" sx={{ ...mono, whiteSpace: "pre-wrap", bgcolor: PANEL2, borderRadius: 1.5,
       p: 1, mt: 0.5, fontSize: 10.5, lineHeight: 1.45, maxHeight: 320, overflow: "auto", color: DIM }}>
       {text}
@@ -373,9 +371,7 @@ export const RunTrace = ({ traceJson, running }) => {
         ))}
         {running && tail && (
           <Typography variant="caption" sx={{ ...mono, color: CATPPUCCIN.cyan, fontSize: 10.5,
-            "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}>
-            ▮ agent working…
-          </Typography>
+            "@keyframes tqBlink": { "50%": { opacity: 0.25 } }, animation: "tqBlink 1.1s step-end infinite" }}> {tx("▮ agent working…")} </Typography>
         )}
       </Box>
     );
@@ -416,7 +412,7 @@ export const DiffBlock = ({ text }) => {
 export const DiffFiles = ({ files, cwd, branch }) => {
   const [open, setOpen] = React.useState(() => new Set(files.length === 1 ? [0] : []));
   const flip = (i) => setOpen((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
-  if (!files.length) return <Empty>Nothing to push — no commits waiting, and the working tree is clean.</Empty>;
+  if (!files.length) return <Empty>{tx("Nothing to push — no commits waiting, and the working tree is clean.")}</Empty>;
   return (
     <Box>
       <Typography variant="caption" sx={{ ...mono, color: FAINT, display: "block", mb: 0.75, wordBreak: "break-all" }}>
@@ -438,9 +434,9 @@ export const DiffFiles = ({ files, cwd, branch }) => {
             <Typography sx={{ ...mono, fontSize: 11, color: "#6b2733", fontVariantNumeric: "tabular-nums" }}>−{f.removed}</Typography>
           </Box>
           {open.has(i) && (f.binary
-            ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>Binary file — git reports it changed, there is no text to show.</Typography>
+            ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>{tx("Binary file — git reports it changed, there is no text to show.")}</Typography>
             : f.truncated
-              ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>Too large to render here — open it in your editor.</Typography>
+              ? <Typography variant="caption" sx={{ color: FAINT, display: "block", px: 1.5, py: 1 }}>{tx("Too large to render here — open it in your editor.")}</Typography>
               : <DiffBlock text={f.patch} />)}
         </Box>
       ))}
@@ -585,7 +581,7 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
       {words && <Box sx={{ fontSize: 13, color: INK }}><Md text={words} /></Box>}
       {since && since !== said && (
         <Box sx={{ mt: 1.2, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-          <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: DIM, mb: 0.4 }}>Latest session</Typography>
+          <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: DIM, mb: 0.4 }}>{tx("Latest session")}</Typography>
           <Box sx={{ fontSize: 13, color: INK }}><Md text={since} /></Box>
         </Box>
       )}
@@ -695,7 +691,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
         <Select size="small" displayEmpty value={pick || ""} onChange={(e) => { onPick(e.target.value); onModel(""); }}
           sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 150 }}>
           <MenuItem value="" sx={{ fontSize: 12.5 }}>
-            {generalBrains.length ? "the brain it runs on" : "No AI connected"}
+            {generalBrains.length ? "the brain it runs on" : tx("No AI connected")}
           </MenuItem>
           {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}</MenuItem>)}
         </Select>
@@ -752,55 +748,47 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
   };
   if (saved) return (
     <Box sx={row ? { px: 1.25, py: 1 } : undefined}>
-      <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, display: "block" }}>
-        ✓ noted — triage will apply this to{" "}
-        {saved.scope === "global" ? "every sender" : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
-        {" "}from now on
-      </Typography>
+      <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600, display: "block" }}> {tx("✓ noted — triage will apply this to")}{" "}
+        {saved.scope === "global" ? tx("every sender") : saved.scope === "subject" ? `any mail about “${saved.scopeKey}”` : saved.scopeKey}
+        {" "}{tx("from now on")} </Typography>
       {/* the verdict works from here on; tasks opened BEFORE it are still sitting there, and
           saying nothing about them is how a fix reads as "still not learning" */}
       {!!saved.alsoCovered?.length && (
         <Typography variant="caption" sx={{ color: "#55697a", display: "block", mt: 0.25 }}>
-          {saved.alsoCovered.length} open task{saved.alsoCovered.length === 1 ? "" : "s"} already match it
-          ({saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
-          {saved.alsoCovered.length > 4 ? ", …" : ""}) — close them the same way if they are not yours either.
-        </Typography>
+          {saved.alsoCovered.length} {tx("open task")}{saved.alsoCovered.length === 1 ? "" : "s"} {tx("already match it (")}{saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
+          {saved.alsoCovered.length > 4 ? ", …" : ""}{tx(") — close them the same way if they are not yours either.")} </Typography>
       )}
     </Box>
   );
   if (!open && compact) return (
     <Button size="small" disableElevation startIcon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
-      onClick={() => setOpen(true)} title="Not our responsibility — explain why once so triage remembers"
+      onClick={() => setOpen(true)} title={tx("Not our responsibility — explain why once so triage remembers")}
       sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
         textTransform: "none", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap", boxShadow: "none",
         color: "#5a3e83", bgcolor: "#f8f5fc", border: "1px solid #d9cbea",
-        "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8", boxShadow: "none" } }}>
-      Not ours
-      <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
+        "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8", boxShadow: "none" } }}> {tx("Not ours")} <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
         bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7,
-        lineHeight: 1.5 }}>MEMORY</Box>
+        lineHeight: 1.5 }}>{tx("MEMORY")}</Box>
     </Button>
   );
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e9e3d8" onClick={() => setOpen(true)}
       icon={<BlockIcon sx={{ fontSize: 15, color: "#867f74" }} />}
-      label="Not our task" hint="say why once — triage remembers it for this topic, or this sender" />
+      label={tx("Not our task")} hint={tx("say why once — triage remembers it for this topic, or this sender")} />
   ) : (
     <Button size="small" sx={{ color: "#867f74", fontSize: 11 }} onClick={() => setOpen(true)}
-      title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
+      title={tx("Not our responsibility — and remember why, so triage learns it")}>{tx("Not our task")}</Button>
   );
   return (
     <Box sx={{ width: "100%", flexBasis: compact ? "100%" : "auto", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
       border: row ? "none" : `1px solid ${BORDER}`, borderRadius: row ? 0 : 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>
-        Not our task — what should triage remember?
-      </Typography>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}> {tx("Not our task — what should triage remember?")} </Typography>
       {/* WHAT the verdict is about, in the owner's words. Trimming the subject guesses at the
           standing part ("resident refund request") and drops the changing one (the resident);
           being told beats guessing, and a topic keyed too narrowly is a verdict that fires once. */}
       {scope === "subject" && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
-          <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}>mail about</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}>{tx("mail about")}</Typography>
           <TextField fullWidth size="small" value={topic} sx={{ bgcolor: "#fff" }}
             inputProps={{ style: { fontSize: 12.5, padding: "4px 8px" } }}
             onChange={(e) => { setTopicEdited(true); setTopic(e.target.value); }} />
@@ -813,24 +801,23 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
           sx={{ fontSize: 11.5, height: 26, bgcolor: "#fff" }}>
           {/* the topic first, because a verdict is usually about a KIND OF WORK and whoever
               happens to send it next is not the point */}
-          {topic && <MenuItem value="subject" sx={{ fontSize: 12 }}>any mail about this</MenuItem>}
-          <MenuItem value="sender" sx={{ fontSize: 12 }}>this sender</MenuItem>
-          <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>everyone at their domain</MenuItem>
-          <MenuItem value="global" sx={{ fontSize: 12 }}>every sender</MenuItem>
+          {topic && <MenuItem value="subject" sx={{ fontSize: 12 }}>{tx("any mail about this")}</MenuItem>}
+          <MenuItem value="sender" sx={{ fontSize: 12 }}>{tx("this sender")}</MenuItem>
+          <MenuItem value="sender_domain" sx={{ fontSize: 12 }}>{tx("everyone at their domain")}</MenuItem>
+          <MenuItem value="global" sx={{ fontSize: 12 }}>{tx("every sender")}</MenuItem>
         </Select>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 120 }}>
           {scope === "subject" && topic
             ? `Matches any mail about “${topic}”, whoever sends it — the changing part of the subject is ignored.`
             : "Their mail keeps arriving — only the verdict is learned."}
         </Typography>
-        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>
+        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>{tx("cancel")}</Button>
         <Button size="small" variant="contained" disableElevation
           disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
           sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: ROLES.bad.ink, fontWeight: 600, display: "block", mt: 0.75 }}>
-        {err} — your note is still here.
-      </Typography>}
+        {err} {tx("— your note is still here.")} </Typography>}
     </Box>
   );
 };
@@ -870,10 +857,10 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   };
   if (repoAsk) return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>Which repository should the coding agent use?</Typography>
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>{tx("Which repository should the coding agent use?")}</Typography>
       <RepoPicker taskId={repoAsk.taskId} agent={repoAsk.agent}
         onDone={(data) => { if (data?.repo) { setRepoAsk(null); send(); } }} />
-      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setRepoAsk(null)}>Not now - nothing was started</Button>
+      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setRepoAsk(null)}>{tx("Not now - nothing was started")}</Button>
     </Box>
   );
   if (sent) return (
@@ -882,29 +869,27 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>
         {sent.outcome?.text || `${sent.agent || "The agent"} is on it in a live session — ${sent.ref}`}
       </Typography>
-      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>watch it live →</Button>
-      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>send another</Button>
+      <Button size="small" sx={{ fontSize: 11 }} onClick={() => onOpenTask?.(sent.taskId)}>{tx("watch it live →")}</Button>
+      <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setSent(null)}>{tx("send another")}</Button>
     </Box>
   );
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e3e6e1" onClick={() => setOpen(true)}
       icon={<TaskuaryMark size={17} />}
-      label="Send to agent…" hint="choose a coding agent or a regular agent" />
+      label={tx("Send to agent…")} hint={tx("choose a coding agent or a regular agent")} />
   ) : (
     <Button size="small" disableElevation startIcon={<TaskuaryMark size={15} />}
       onClick={() => setOpen(true)}
       sx={{ width: 190, height: 34, px: 1.5, borderRadius: 2, textTransform: "none", fontSize: 12,
         justifyContent: "flex-start", fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
         border: `1px solid ${BORDER}`, boxShadow: "none",
-        "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}>
-      Send to agent…
-    </Button>
+        "&:hover": { color: INK, bgcolor: PANEL, borderColor: "#d8cfbe", boxShadow: "none" } }}> {tx("Send to agent…")} </Button>
   );
   return (
     <Box sx={{ mt: 1, p: 1.25, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
         <TaskuaryMark size={17} />
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Which kind of agent?</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>{tx("Which kind of agent?")}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
         {coding && <AgentPicker agents={agents} models={models} agent={agent} model={model} coding
           brains={brainList} brainModels={brainModels} brain={brain} onBrain={(b) => { setBrain(b); setModel(""); }}
@@ -912,27 +897,23 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       </Box>
       <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>
         <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("coding")}>Coding agent</Button>
+          onClick={() => setAgentKind("coding")}>{tx("Coding agent")}</Button>
         <Button size="small" variant={agentKind === "general" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("general")}>Regular agent</Button>
+          onClick={() => setAgentKind("general")}>{tx("Regular agent")}</Button>
       </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: agentKind ? 0.5 : 0 }}>
-        Triage tagged this {suggestedKind}; your choice here is what actually runs.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: agentKind ? 0.5 : 0 }}> {tx("Triage tagged this")} {suggestedKind}{tx("; your choice here is what actually runs.")} </Typography>
       {agentKind && <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={coding ? `What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`
             : "What should the regular agent do with this?"}
           sx={{ bgcolor: "#fff" }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
-        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
-          it gets the full message{subject ? ` “${subject}”` : ""} + your operator docs as context
-        </Typography>
-        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
+        <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap> {tx("it gets the full message")}{subject ? ` “${subject}”` : ""} {tx("+ your operator docs as context")} </Typography>
+        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>{tx("cancel")}</Button>
         <Button size="small" variant="contained" disableElevation disabled={busy || !agentKind} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-          {busy ? "sending…" : "Send"}
+          {busy ? "sending…" : tx("Send")}
         </Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{err}</Typography>}
@@ -1115,14 +1096,14 @@ export const asUtc = (s) => {
 export const tzLabel = () => {
   if (!TZ) return "";
   try {
-    return new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "short" })
+    return new Intl.DateTimeFormat(getLocale(), { timeZone: TZ, timeZoneName: "short" })
       .formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || "";
   } catch { return ""; }
 };
 const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
 export const fmtTime12 = (s) => {
   const d = s ? asUtc(s) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
+  return d && Number.isFinite(d.getTime()) ? d.toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
 };
 export const tsMs = (s) => {
   const n = s ? asUtc(s).getTime() : 0;
@@ -1132,7 +1113,7 @@ export const fmtDateTime = (s) => {
   if (!s) return "";
   const d = asUtc(s);
   if (!Number.isFinite(d.getTime())) return "";
-  const base = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });
+  const base = d.toLocaleString(getLocale(), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });
   const z = tzLabel();
   return z ? `${base} ${z}` : base;
 };
@@ -1146,7 +1127,7 @@ export const Crumb = ({ section, onBack, title }) => (
   <Box sx={{ mb: 2.5 }}>
     <Typography variant="caption" onClick={onBack}
       sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-      {section}
+      {tx(section)}
     </Typography>
     <Typography sx={{ color: "#2b2a26", fontWeight: 600, fontSize: 20, lineHeight: 1.2, mt: 0.25 }}>{title}</Typography>
   </Box>
@@ -1172,7 +1153,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
           <Typography key={`section-${it.section}`} variant="overline"
             sx={{ display: "block", color: ACCENT2, letterSpacing: 1.35, fontWeight: 600,
               fontSize: 9.5, px: 1.25, mt: it.first ? 0 : 1.6, mb: 0.3 }}>
-            {it.section}
+            {tx(it.section)}
           </Typography>
         );
         const key = it.key ?? it, on = !q && value === key;
@@ -1183,7 +1164,7 @@ export const SideRail = ({ title, note, items, value, onChange, q, setQ, placeho
               color: on ? "#41525f" : DIM, bgcolor: on ? "#eae4d8" : "transparent",
               "&:hover": { bgcolor: on ? "#eae4d8" : "#f4f1ec" } }}>
             <Box sx={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {it.label ?? it}
+              {tx(it.label ?? it)}
             </Box>
             {it.n != null && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{it.n}</Typography>}
           </Box>
@@ -1203,7 +1184,7 @@ export const UnderTabs = ({ tabs, value, onChange }) => (
           color: value === t ? "#55697a" : DIM,
           borderBottom: `2px solid ${value === t ? "#55697a" : "transparent"}`,
           "&:hover": { color: "#2b2a26" } }}>
-        {t}
+        {tx(t)}
       </Box>
     ))}
   </Box>
@@ -1282,7 +1263,7 @@ export const PromptThumbs = ({ imgs, onDrop, h = 40, note = true }) => !imgs.len
     {imgs.map((im) => (
       <Box key={im.id} sx={{ position: "relative" }}>
         <Box component="img" src={im.url} alt="" sx={{ height: h, borderRadius: 0.75, border: "1px solid #ddd2b9", display: "block" }} />
-        <Box component="button" type="button" onClick={() => onDrop(im.id)} aria-label="Remove this image" sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
+        <Box component="button" type="button" onClick={() => onDrop(im.id)} aria-label={tx("Remove this image")} sx={{ position: "absolute", top: -5, right: -5, width: 14, height: 14, borderRadius: 99,
           bgcolor: "#6b5f45", color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", cursor: "pointer", border: 0, p: 0 }}>×</Box>
       </Box>
     ))}
@@ -1367,7 +1348,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           <Typography variant="caption" onClick={async () => {
               try { await api.delete(`/api/tasks/${taskId}/waitroom/${w.WId}`); } catch { failed("Couldn't withdraw it - it may already have gone in."); }
               load(); }}
-            sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>withdraw</Typography>
+            sx={{ color: FAINT, cursor: "pointer", fontSize: 10, "&:hover": { color: "#8a3646" } }}>{tx("withdraw")}</Typography>
         </Box>
   ));
   // The full task page keeps the durable queue list open. The Wall gets the same list only as a
@@ -1435,8 +1416,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
   return (
     <Box sx={{ bgcolor: "#f1ead9", border: "1px solid #ddd2b9", borderRadius: 2, p: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>
-          ✎ TELL THE AGENT{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} waiting to go in` : ""}
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}> {tx("✎ TELL THE AGENT")}{taskRef ? ` · ${taskRef}` : ""}{pending.length ? ` · ${pending.length} waiting to go in` : ""}
         </Typography>
         <Box sx={{ flex: 1 }} />
         {stateLine && <Typography variant="caption" sx={{ color: "#6b5f45", fontSize: 10.5 }}>{stateLine}</Typography>}
@@ -1458,8 +1438,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
       {queued}
       {wait.data.some((w) => w.DeliveredAt) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-          {wait.data.filter((w) => w.DeliveredAt).length} earlier note{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} already typed in.
-        </Typography>
+          {wait.data.filter((w) => w.DeliveredAt).length} {tx("earlier note")}{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} {tx("already typed in.")} </Typography>
       )}
     </Box>
   );
@@ -1473,14 +1452,14 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
   return (
     <>
       {small ? (
-        <Box component="span" onClick={show} title="Tell the agent something — queued until it stops"
+        <Box component="span" onClick={show} title={tx("Tell the agent something — queued until it stops")}
           sx={{ display: "inline-flex", alignItems: "center", gap: 0.4, px: 0.6, py: 0.15, borderRadius: 99, cursor: "pointer",
             bgcolor: "#f1ead9", color: "#6b5f45", border: "1px solid #ddd2b9", fontSize: 9.5, fontWeight: 600, whiteSpace: "nowrap",
             "&:hover": { bgcolor: "#e9dfc5" } }}>
           ✎ {label}
         </Box>
       ) : (
-        <Button size="small" disableElevation onClick={show} title="Tell the agent something — queued until it stops"
+        <Button size="small" disableElevation onClick={show} title={tx("Tell the agent something — queued until it stops")}
           startIcon={<Box component="span" aria-hidden sx={{ fontSize: 13, lineHeight: 1 }}>✎</Box>}
           sx={{ width: 190, height: 34, px: 1.5, justifyContent: "flex-start", borderRadius: 2,
             textTransform: "none", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", color: DIM, bgcolor: PANEL,
@@ -1562,10 +1541,10 @@ export const WorkPane = ({ run, onOpen }) => {
       {!!todos.length && (
         <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.35 }}>
           {fin ? (
-            <Box sx={{ color: CATPPUCCIN.green }}>✓ {work.n_done} of {work.n_todos} done{work.said ? <Box component="span" sx={{ color: CATPPUCCIN.faint }}> · {work.said.slice(0, 60)}</Box> : null}</Box>
+            <Box sx={{ color: CATPPUCCIN.green }}>✓ {work.n_done} {tx("of")} {work.n_todos} {tx("done")}{work.said ? <Box component="span" sx={{ color: CATPPUCCIN.faint }}> · {work.said.slice(0, 60)}</Box> : null}</Box>
           ) : (
             <>
-              {before > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>✓ {before} done</Box>}
+              {before > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>✓ {before} {tx("done")}</Box>}
               {rows.map((t, i) => (
                 <Box key={i} sx={{ display: "grid", gridTemplateColumns: "12px 1fr auto", gap: "0 6px", whiteSpace: "nowrap", overflow: "hidden",
                   color: t.status === "now" ? CATPPUCCIN.fg : CATPPUCCIN.faint, opacity: t.status === "todo" ? 0.8 : 1 }}>
@@ -1574,14 +1553,14 @@ export const WorkPane = ({ run, onOpen }) => {
                   <Box component="span" sx={{ color: CATPPUCCIN.faint, fontSize: 9 }}>{t.status === "now" ? `${work.n_done + 1}/${work.n_todos}` : ""}</Box>
                 </Box>
               ))}
-              {hidden - (before || 0) > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>+{hidden - (before || 0)} more</Box>}
+              {hidden - (before || 0) > 0 && <Box sx={{ color: CATPPUCCIN.faint }}>+{hidden - (before || 0)} {tx("more")}</Box>}
             </>
           )}
         </Box>
       )}
       {!!files.length && (
         <Box sx={{ borderTop: `1px dashed ${CATPPUCCIN.surface}`, mt: 0.4, pt: 0.4, display: "flex", flexWrap: "wrap", gap: "3px 4px", alignItems: "center" }}>
-          <Box component="span" sx={{ color: CATPPUCCIN.faint, mr: 0.25 }}>{fin ? "touched" : "holding"}</Box>
+          <Box component="span" sx={{ color: CATPPUCCIN.faint, mr: 0.25 }}>{fin ? tx("touched") : "holding"}</Box>
           {files.map((f) => (
             <Tooltip key={f.path} title={f.path} arrow>
               <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, px: 0.6, borderRadius: 0.75, lineHeight: 1.5,
@@ -1620,7 +1599,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
    inferred). Provenance pills say where the task came from and who worked it - facts the audit
    chain already held and the card never showed. Polls only while the session is alive. */
 const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 600, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
-const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" }) : "";
 export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed = false }) => {
   // The terminal list already carries current witness/provenance data. Paint that immediately;
   // the richer /work response (diff counts, exact audit provenance) replaces it in the background.
@@ -1664,8 +1643,8 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
   if (!d) return failed ? (
     <Box sx={{ mb: 0.75, border: `1px solid ${ROLES.you.bd}`, borderRadius: 2, bgcolor: ROLES.you.tint,
       px: 1.5, py: 0.65, display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, color: ROLES.you.ink }}>agent activity unavailable</Typography>
-      <Typography variant="caption" sx={{ color: DIM }}>the terminal is unaffected · {live ? "retrying" : "reload to retry"}</Typography>
+      <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, color: ROLES.you.ink }}>{tx("agent activity unavailable")}</Typography>
+      <Typography variant="caption" sx={{ color: DIM }}>{tx("the terminal is unaffected ·")} {live ? "retrying" : "reload to retry"}</Typography>
     </Box>
   ) : null;
   const todos = w?.todos || [], files = (d.files || []).slice(0, 12);
@@ -1681,7 +1660,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
       <Box onClick={toggle} title={open ? "Fold the detail away" : "Open: the agent's list beside the files it wrote"}
         sx={{ px: 1.5, py: 0.5, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", cursor: "pointer", borderBottom: open ? `1px solid ${BORDER}` : 0, "&:hover": { bgcolor: "#faf8f5" } }}>
         <Typography component="span" sx={{ ...mono, fontSize: 10, color: FAINT, width: 12 }}>{open ? "▾" : "▸"}</Typography>
-        <Typography component="span" sx={{ ...mono, fontSize: 9.5, color: DIM, fontWeight: 600, letterSpacing: ".06em", mr: 0.25 }}>AGENT ACTIVITY</Typography>
+        <Typography component="span" sx={{ ...mono, fontSize: 9.5, color: DIM, fontWeight: 600, letterSpacing: ".06em", mr: 0.25 }}>{tx("AGENT ACTIVITY")}</Typography>
         {d.prov?.from && <Chip size="small" label={`from: ${d.prov.from}`} sx={pillSx("muted")} />}
         {d.prov?.kind && <Chip size="small" label={`kind: ${d.prov.kind}`} sx={pillSx("working")} />}
         {d.prov?.by && <Chip size="small" label={`by: ${who}`} sx={pillSx("working")} />}
@@ -1696,7 +1675,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
       {open && <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" } }}>
         <Box sx={{ px: 1.5, py: 1, borderRight: { md: `1px solid ${BORDER}` } }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>said it would</Typography>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>{tx("said it would")}</Typography>
             <Typography variant="caption" sx={{ color: DIM }}>{todos.length ? `the agent's own list · ${w.n_done} of ${w.n_todos}` : w?.source ? "no list reported by this agent" : "no signal from this CLI - files only"}</Typography>
           </Box>
           {todos.map((t, i) => (
@@ -1707,12 +1686,12 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
               <span>{t.text}</span>
             </Box>
           ))}
-          {!todos.length && w?.said && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>last said: “{w.said.slice(0, 200)}”</Typography>}
+          {!todos.length && w?.said && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>{tx("last said: “")}{w.said.slice(0, 200)}”</Typography>}
         </Box>
         <Box sx={{ px: 1.5, py: 1 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
-            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>touched</Typography>
-            <Typography variant="caption" sx={{ color: DIM }}>{files.length} file{files.length === 1 ? "" : "s"}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
+            <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>{tx("touched")}</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{files.length} {tx("file")}{files.length === 1 ? "" : "s"}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
           </Box>
           {files.map((f) => {
             const top = Math.max(1, ...files.map((x) => x.n || 1));
@@ -1728,7 +1707,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
               </Box>
             );
           })}
-          {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>nothing written yet</Typography>}
+          {!files.length && <Typography variant="caption" sx={{ color: FAINT }}>{tx("nothing written yet")}</Typography>}
         </Box>
       </Box>}
       {open && !!(w?.flags || []).length && (
@@ -1754,7 +1733,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
   const files = run?.files || [];
   const who = run?.AgentName || agent || "agent";
   return (
-    <Box onClick={onOpen} title="Open the task - the real terminal"
+    <Box onClick={onOpen} title={tx("Open the task - the real terminal")}
       sx={{ bgcolor: CATPPUCCIN.bg, border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, px: 1.25, py: 0.9, cursor: onOpen ? "pointer" : "default",
         ...(fill ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } : {}),
         "&:hover": onOpen ? { borderColor: CATPPUCCIN.overlay } : {} }}>
@@ -1769,7 +1748,7 @@ export const LiveConsole = ({ run, agent, lines = 5, onOpen, fill }) => {
             {String(f).split(/[\\/]/).pop()}
           </Typography>
         ))}
-        {onOpen && <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: CATPPUCCIN.faint }}>open ↗</Typography>}
+        {onOpen && <Typography variant="caption" sx={{ ...mono, fontSize: 9.5, color: CATPPUCCIN.faint }}>{tx("open ↗")}</Typography>}
       </Box>
       <Box sx={fill ? { flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end" } : {}}>
       {tail.map((l, i, all) => (
@@ -1804,7 +1783,7 @@ export const FilterPills = ({ options, value, onChange }) => (
             border: `1px solid ${on ? c.bd : "transparent"}`,
             boxShadow: on ? "0 1px 2px rgba(30,50,38,.08)" : "none",
             transition: "all .15s", "&:hover": on ? {} : { bgcolor: "#eae5dd", color: "#2b2a26" } }}>
-          {o.label ?? (o || "all")}
+          {o.label ?? (o || tx("all"))}
           {/* the count is a BADGE, not the last word of the label - glued on with a space,
               "needs you 2" reads as one phrase and the number disappears into the name */}
           {o.n != null && (
@@ -1888,18 +1867,17 @@ export const ToRow = ({ to, onSave, disabled }) => {
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.75, flexWrap: "wrap", minWidth: 0 }}>
-      <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
+      <Typography sx={{ ...label, flexShrink: 0 }}>{tx("To")}</Typography>
       {open ? (
         <ContactPicker people={people} value={text} onChange={setText} onPick={save} autoFocus
-          placeholder="name or email address" sx={{ width: 300 }}
+          placeholder={tx("name or email address")} sx={{ width: 300 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(text); }
                               if (e.key === "Escape") { setOpen(false); setErr(""); } }} />
       ) : (
         <>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
           {!disabled && <Typography onClick={() => setOpen(true)} data-tq-to-change
-            sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
-            change</Typography>}
+            sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}> {tx("change")}</Typography>}
         </>
       )}
       {!!err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
@@ -1932,7 +1910,7 @@ export const CcRow = ({ cc, setCc, channel }) => {
       ))}
       {open ? (
         <ContactPicker people={people} value={text} onChange={setText} onPick={add} autoFocus
-          placeholder="name or email address" sx={{ width: 260 }}
+          placeholder={tx("name or email address")} sx={{ width: 260 }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
                               if (e.key === "Escape") setOpen(false); }} />
       ) : (

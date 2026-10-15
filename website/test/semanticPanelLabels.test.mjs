@@ -9,9 +9,9 @@ import { fileURLToPath } from "node:url";
 const panel = readFileSync(fileURLToPath(new URL("../src/SemanticPanel.jsx", import.meta.url)), "utf8");
 
 test("the known-numbers panel labels start with a capital letter", () => {
-  assert.match(panel, />Add known number<\/Button>/);
-  assert.match(panel, /busy === "run it" \? "Running…" : "Run it once"/);
-  assert.match(panel, /busy === "check it" \? "Checking…" : "Check every known number"/);
+  assert.match(panel, />\{tx\("Add known number"\)\}<\/Button>/);
+  assert.match(panel, /busy === "run it" \? tx\("Running…"\) : tx\("Run it once"\)/);
+  assert.match(panel, /busy === "check it" \? tx\("Checking…"\) : tx\("Check every known number"\)/);
 });
 
 test("no lowercase label is left behind, in a label or an attribute", () => {

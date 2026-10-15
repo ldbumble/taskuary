@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // BROWSING THE APP IN THE CANVAS (the canvas redesign, docs/superpowers/specs/2026-09-29-assistant-canvas-redesign-design.md):
 // Connections, Settings, Reports and Hub are walked by clicks that never wait on a model. One pattern for all four:
 //   1. SECTIONS - the sidebar button posts a card of section chips;
@@ -37,7 +38,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
   // an earlier browse card is one line, and clicking it browses there again (a new card, at the bottom)
   if (!live) return (
     <button type="button" className="tq-fold" onClick={onReopen || undefined} title={`Browse ${title} again`}>
-      <b>{title}</b><span className="grow" /><span className="again">open again</span>
+      <b>{title}</b><span className="grow" /><span className="again">{tx("open again")}</span>
     </button>
   );
   return (
@@ -58,7 +59,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
             {sections.map((s) => (
               <Box key={s.key} component="button" type="button" data-tq-browse-chip={s.key} aria-pressed={section === s.key}
                 onClick={() => onSection(s.key)} sx={chipSx(section === s.key)}>
-                {s.label}{s.n != null ? ` · ${s.n}` : ""}
+                {tx(s.label)}{s.n != null ? ` · ${s.n}` : ""}
               </Box>
             ))}
           </Box>
@@ -72,7 +73,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
             <Box component="button" type="button" data-tq-browse-back="" onClick={onBack}
               sx={{ display: "flex", alignItems: "center", gap: 0.5, height: 32, pl: 1, pr: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`,
                 bgcolor: PANEL, color: "#41525f", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-              <ArrowBackIosNewIcon sx={{ fontSize: 12 }} />{sectionLabel || title}
+              <ArrowBackIosNewIcon sx={{ fontSize: 12 }} />{tx(sectionLabel || title)}
             </Box>
             <Typography sx={{ fontSize: 12, color: DIM, flex: 1, minWidth: 0 }} noWrap>
               {cards.length > 1 ? `the other ${cards.length - 1} ${sectionLabel && sectionLabel !== "everything" ? `${sectionLabel.toLowerCase()} ` : ""}cards are hidden while this one is open` : ""}

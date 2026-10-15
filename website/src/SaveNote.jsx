@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // THE ANSWER TO "DID THAT TAKE?" A switch that flips, a box you leave, a rule you save - each of these
 // used to post and say nothing either way, so a refusal looked exactly like a success and the owner
 // found out a week later that the setting never stuck. One small notice, bottom-left, for both: a
@@ -19,7 +20,7 @@ export function useSaveNote() {
       autoHideDuration={note?.bad ? 9000 : note?.undo ? 7000 : 2200} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       message={note?.text}
       ContentProps={{ sx: note?.bad ? { borderLeft: "4px solid #6b2733" } : {} }}
-      action={note?.undo ? <Button size="small" onClick={() => { const u = note.undo; setNote(null); u(); }}>Undo</Button> : null} />
+      action={note?.undo ? <Button size="small" onClick={() => { const u = note.undo; setNote(null); u(); }}>{tx("Undo")}</Button> : null} />
   );
   return { run, say, note: el };
 }

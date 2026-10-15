@@ -1,3 +1,4 @@
+import { getLocale, t as tx } from "./i18n.js";
 // Scheduled reports - the pipeline builder: pick a source (a connection from the
 // Connections tab, or an inline one), write the query, optionally an AI summary prompt,
 // preview the whole pipeline, schedule it - results land on the Timeline. Connections
@@ -400,7 +401,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err
-    ? <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={retry}>Try again</Button>}>{err}</Alert>
+    ? <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={retry}>{tx("Try again")}</Button>}>{err}</Alert>
     : <CircularProgress size={22} sx={{ m: 4 }} />;
 
   /* Reports and workflows use the same durable scheduler rows, but they are not the same
@@ -457,18 +458,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
                 {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
-              {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
-                No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
+              {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}> {tx("No schedule — it only runs when you press Run now. Give it one in step 3.")}</Typography>}
             </Box>
             {c.ai_prompt && <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, px: 1, py: 0.25, borderRadius: 99,
               bgcolor: "#eae4d8", border: "1px solid #d8cfbe" }}>
               <AutoAwesomeIcon sx={{ fontSize: 12, color: "#55697a" }} />
-              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10 }}>AI summary</Typography>
+              <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10 }}>{tx("AI summary")}</Typography>
             </Box>}
             <Button size="small" disabled={running === s.SourceId}
               startIcon={running === s.SourceId ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 14 }} />}
-              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? "Running…" : "Run now"}</Button>
-            <Button size="small" onClick={() => openOne(s.SourceId)}>Edit</Button>
+              onClick={(e) => { e.stopPropagation(); runNow(s.SourceId); }}>{running === s.SourceId ? tx("Running…") : "Run now"}</Button>
+            <Button size="small" onClick={() => openOne(s.SourceId)}>{tx("Edit")}</Button>
             <Switch checked={!!s.Active} onClick={(e) => e.stopPropagation()}
               onChange={async () => {
                 try { await api.post("/api/sources", { SourceId: s.SourceId, Active: !s.Active }); }
@@ -492,9 +492,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         lastRun={openId != null && lastRuns[openId] ? <LastRun r={lastRuns[openId]} sid={openId} flush /> : null}
         composer={<>
           <Composer kind="workflow" onDraft={onDraft} />
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
-            Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
-              sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}> {tx("Monthly Zoho invoices have a form of their own —")} <Box component="span" onClick={toInvoices}
+              sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>{tx("open it")}</Box>.
           </Typography>
         </>} />
     : invoiceOpen
@@ -532,7 +531,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing}
               startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
-              {syncing ? "Running…" : "Run due now"}
+              {syncing ? tx("Running…") : "Run due now"}
             </Button>
             {note && <Typography variant="body2" sx={{ fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
           </Box>
@@ -552,7 +551,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   }
 
   return (
-    <SideRail title="Reports & workflows" q={q} setQ={setQ} placeholder="Search reports and workflows…"
+    <SideRail title={tx("Reports & workflows")} q={q} setQ={setQ} placeholder={tx("Search reports and workflows…")}
       items={railItems} value={bucket} onChange={setBucket}
       note="Reports only read data and summarize it. Workflows write data or keep state. Their connections live on the Connections tab.">
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
@@ -565,17 +564,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         </Typography>
         <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing} sx={{ mr: 1 }}
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
-          {syncing ? "Running…" : "Run due now"}
+          {syncing ? tx("Running…") : "Run due now"}
         </Button>
         {/* both, whichever list is open - the open one's is the filled button */}
         <Button size="small" variant={workflowOverview ? "outlined" : "contained"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ mr: 1, ...(workflowOverview ? {} : { background: GRADIENT }) }}>New report</Button>
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ mr: 1, ...(workflowOverview ? {} : { background: GRADIENT }) }}>{tx("New report")}</Button>
         <Button size="small" variant={workflowOverview ? "contained" : "outlined"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New workflow</Button>
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>{tx("New workflow")}</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
-      {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
+      {!list.length && <Empty>{q ? tx("Nothing here.") : workflowOverview
         ? "No workflows yet — New workflow describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}
@@ -609,16 +608,14 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
   return (
     <>
       {inbox.length > 0 && (
-        <Typography variant="caption" sx={{ flexBasis: "100%", order: 99, color: "#9b2c2c", fontWeight: 600, fontSize: 11.5 }}>
-          Not sent: Taskuary reads {named(inbox[0])} as an inbox, so nothing is ever posted there. Pick your own chat.
-        </Typography>
+        <Typography variant="caption" sx={{ flexBasis: "100%", order: 99, color: "#9b2c2c", fontWeight: 600, fontSize: 11.5 }}> {tx("Not sent: Taskuary reads")} {named(inbox[0])} {tx("as an inbox, so nothing is ever posted there. Pick your own chat.")} </Typography>
       )}
       <Select size="small" value={ch} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 130 }} displayEmpty
         onChange={(e) => onChange({ channel: e.target.value, to: "" })}>
         {(!ch || chans.includes(ch) ? chans : [...chans, ch]).map((c) => (
           <MenuItem key={c} value={c} sx={{ fontSize: 12 }}>{c}{chans.includes(c) ? "" : " — not set up"}</MenuItem>
         ))}
-        {!chans.length && <MenuItem value="" sx={{ fontSize: 12, color: FAINT }}>nothing can send yet</MenuItem>}
+        {!chans.length && <MenuItem value="" sx={{ fontSize: 12, color: FAINT }}>{tx("nothing can send yet")}</MenuItem>}
       </Select>
       {ch === "email" ? (
         <Autocomplete multiple freeSolo size="small" sx={{ flex: 1, minWidth: 240 }} options={opts.map((o) => o.to)}
@@ -626,7 +623,7 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
           renderOption={(props, o) => (
             <li {...props} style={{ fontSize: 12.5 }}>{named(o)}{named(o) !== o && <span style={{ color: FAINT }}>&nbsp;&middot; {o}</span>}</li>
           )}
-          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — who gets it"
+          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label={tx("to — who gets it")}
             placeholder={picked.length ? "" : "pick, or type an address"} />} />
       ) : (
         /* A paired WhatsApp account knows every group its owner is in - around forty here - and a
@@ -644,14 +641,14 @@ function Destination({ dest, onChange, targets, inboxes = {} }) {
             <li {...props} key={o.to} style={{ display: "block", paddingTop: 4, paddingBottom: 4 }}>
               <Typography variant="body2" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>
                 {o.name}
-                {o.mine && <Chip size="small" label="yours" sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
+                {o.mine && <Chip size="small" label={tx("yours")} sx={{ ml: 0.75, height: 16, fontSize: 9.5 }} />}
               </Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>
                 {[o.name === o.to ? "" : o.to, o.hint].filter(Boolean).join(" · ")}
               </Typography>
             </li>
           )}
-          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label="to — the chat it lands in"
+          renderInput={(params) => <TextField {...params} sx={{ bgcolor: "#fff" }} label={tx("to — the chat it lands in")}
             placeholder={opts.length ? "type to search your chats" : empty} />} />
       )}
     </>
@@ -682,8 +679,7 @@ function SavedReportSummary({ source, workflow = false }) {
           {source.Active ? `Enabled ${workflow ? "workflow" : "report"}` : `Disabled ${workflow ? "workflow" : "report"}`}
         </Typography>
       </Box>
-      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}>
-        Reads {reads}. Runs {reportSchedule(c)}.
+      <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55, fontSize: 12.5 }}> {tx("Reads")} {reads}{tx(". Runs")} {reportSchedule(c)}.
       </Typography>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.45, lineHeight: 1.5 }}>
         {c.ai_prompt ? "AI writes the summary. " : "Uses the source result as-is. "}
@@ -765,21 +761,21 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
       <Crumb section="Workflows" onBack={onBack} title={cur ? cfg.title : "New monthly invoice workflow"} />
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
       <Box sx={{ ...card, p: 2, mb: 2 }}>
-        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>WORKFLOW SETUP</Typography>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>Monthly invoices → Zoho drafts → Review</Typography>
-        <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.</Typography>
+        <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>{tx("WORKFLOW SETUP")}</Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, mb: 0.4 }}>{tx("Monthly invoices → Zoho drafts → Review")}</Typography>
+        <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{tx("The schedule starts a monthly checklist. You confirm amounts; Prepare creates drafts; approving each Review card sends it.")}</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(240px,1fr) 250px 220px" }, gap: 1 }}>
-          <TextField size="small" label="workflow title" value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
+          <TextField size="small" label={tx("workflow title")} value={cfg.title || ""} onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
           <Select size="small" displayEmpty value={cfg.connector_id || ""} onChange={(e) => setCfg({ ...cfg, connector_id: e.target.value, customers: [] })}>
-            <MenuItem value="" disabled>Zoho Invoice connection</MenuItem>
+            <MenuItem value="" disabled>{tx("Zoho Invoice connection")}</MenuItem>
             {zohoCards.map((c) => <MenuItem key={c.ConnectorId} value={c.ConnectorId}>{c.Name}{c.Active ? "" : " — off"}</MenuItem>)}
           </Select>
-          <TextField size="small" label="monthly cron" value={cfg.cron || ""} helperText={cronText(cfg.cron || "0 9 1 * *")}
+          <TextField size="small" label={tx("monthly cron")} value={cfg.cron || ""} helperText={cronText(cfg.cron || "0 9 1 * *")}
             onChange={(e) => setCfg({ ...cfg, cron: e.target.value })} />
         </Box>
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>Customers included each month</Typography>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>{tx("Customers included each month")}</Typography>
         <Box sx={{ maxHeight: 210, overflowY: "auto", border: `1px solid ${BORDER}`, borderRadius: 1.5, mt: 0.5, bgcolor: "#fff" }}>
-          {!customers.length && <Typography variant="body2" sx={{ color: DIM, p: 1.5 }}>No customers loaded. Save and connect the Zoho card, then return here.</Typography>}
+          {!customers.length && <Typography variant="body2" sx={{ color: DIM, p: 1.5 }}>{tx("No customers loaded. Save and connect the Zoho card, then return here.")}</Typography>}
           {customers.map((c) => <Box key={c.customer_id} onClick={() => toggle(c)} sx={{ display: "flex", alignItems: "center", px: 1, borderBottom: `1px solid ${BORDER}`, cursor: "pointer" }}>
             <Checkbox size="small" checked={picked.has(String(c.customer_id))} />
             <Typography sx={{ fontSize: 13, color: INK, flex: 1 }}>{c.customer_name}</Typography>
@@ -788,12 +784,12 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
         </Box>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.25 }}>
           <Button variant="contained" disableElevation disabled={!!busy} onClick={save}>{busy === "save" ? "Saving…" : cur ? "Save workflow" : "Save workflow"}</Button>
-          <Typography variant="caption" sx={{ color: DIM }}>{cfg.customers.length} selected · no automatic sending</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{cfg.customers.length} {tx("selected · no automatic sending")}</Typography>
         </Box>
       </Box>
       {cur && <Box sx={{ ...card, p: 2 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5 }}>
-          <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>MONTHLY BATCH</Typography>
+          <Box sx={{ flex: 1 }}><Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.4, fontSize: 10 }}>{tx("MONTHLY BATCH")}</Typography>
             <Typography sx={{ fontWeight: 600, color: INK }}>{batch ? `${batch.Period} · ${String(batch.Status).replaceAll("_", " ")}` : "No batch opened yet"}</Typography></Box>
           {batches.length > 1 && <Select size="small" value={batch?.BatchId || ""} onChange={async (e) => setBatch((await api.get(`/api/invoice-batches/${e.target.value}`)).data)}>
             {batches.map((b) => <MenuItem key={b.BatchId} value={b.BatchId}>{b.Period} · {String(b.Status).replaceAll("_", " ")}</MenuItem>)}</Select>}
@@ -802,18 +798,18 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
         {batch?.items?.map((item) => <Box key={item.ItemId} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(170px,1fr) 110px 130px minmax(180px,1fr) 140px" }, gap: 1, alignItems: "center", py: 1, borderTop: `1px solid ${BORDER}` }}>
           <Box><Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{item.CustomerName}</Typography>
             <Typography variant="caption" sx={{ color: item.Error ? "#6b2733" : FAINT }}>{item.Error || "copied from the latest prior invoice"}</Typography></Box>
-          <Typography variant="caption" sx={{ color: DIM }}>last: {item.PreviousAmount == null ? "—" : `${item.Currency} ${Number(item.PreviousAmount).toFixed(2)}`}</Typography>
-          <TextField size="small" type="number" label="this month" value={item.Amount ?? ""} disabled={["review_ready", "sent"].includes(item.Status)}
+          <Typography variant="caption" sx={{ color: DIM }}>{tx("last:")} {item.PreviousAmount == null ? "—" : `${item.Currency} ${Number(item.PreviousAmount).toFixed(2)}`}</Typography>
+          <TextField size="small" type="number" label={tx("this month")} value={item.Amount ?? ""} disabled={["review_ready", "sent"].includes(item.Status)}
             onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Amount: e.target.value } : x) })}
             onBlur={(e) => e.target.value && patchItem(item, { Amount: e.target.value })} />
-          <TextField size="small" label="send to" value={item.Recipient || ""} disabled={["review_ready", "sent"].includes(item.Status)}
+          <TextField size="small" label={tx("send to")} value={item.Recipient || ""} disabled={["review_ready", "sent"].includes(item.Status)}
             onChange={(e) => setBatch({ ...batch, items: batch.items.map((x) => x.ItemId === item.ItemId ? { ...x, Recipient: e.target.value } : x) })}
             onBlur={(e) => patchItem(item, { Recipient: e.target.value })} />
           <Typography variant="caption" sx={{ color: item.Status === "sent" ? "#47654a" : DIM, fontWeight: 600 }}>{String(item.Status || "").replaceAll("_", " ")}{item.InvoiceNumber ? ` · ${item.InvoiceNumber}` : ""}</Typography>
         </Box>)}
         {batch?.items?.length > 0 && <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Button variant="contained" disableElevation disabled={!!busy || batch.Status === "done"} onClick={prepare}>{busy === "prepare" ? "Preparing…" : "Prepare Zoho drafts"}</Button>
-          <Typography variant="caption" sx={{ color: DIM }}>Each prepared customer becomes a separate approval on the task.</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{tx("Each prepared customer becomes a separate approval on the task.")}</Typography>
         </Box>}
       </Box>}
       {msg && <Alert severity={/failed|could not|need attention|Choose|No /.test(msg) ? "warning" : "success"} sx={{ mt: 1.5 }}>{msg}</Alert>}
@@ -883,15 +879,15 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
     <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720, bgcolor: "#fffdf7", borderColor: "#d8cfbe" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
         <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
-        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
+        <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, flex: 1 }}>{tx("ONE PROMPT THAT ROUTES EACH RUN")}</Typography>
       </Box>
       {/* WHETHER A RUN IS WORK IS TRIAGE'S CALL, on every run that worked (the owner, 2026-09-28): the work
           line is gone, and its sentence is the brief triage reads the run against (reports.work_brief) */}
       <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>Make it a task when…</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>triage reads every run; blank = it judges on your triage rules alone</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>{tx("Make it a task when…")}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{tx("triage reads every run; blank = it judges on your triage rules alone")}</Typography>
         <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
-          placeholder="any error at all, or a job that did not run when it should have"
+          placeholder={tx("any error at all, or a job that did not run when it should have")}
           value={cfg.watch_for || ""} onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })} />
       </Box>
       {shown.map((line) => {
@@ -906,9 +902,9 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
               </Box>
               <Select size="small" value={how} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 150 }}
                 onChange={(e) => set(line, { how: e.target.value, ...(e.target.value === "rule" && !r.rule ? { rule: "something_came_back" } : {}) })}>
-                <MenuItem value="always" sx={{ fontSize: 12 }}>every run</MenuItem>
-                <MenuItem value="ai" sx={{ fontSize: 12 }}>ask the AI</MenuItem>
-                <MenuItem value="rule" sx={{ fontSize: 12 }}>when a rule trips</MenuItem>
+                <MenuItem value="always" sx={{ fontSize: 12 }}>{tx("every run")}</MenuItem>
+                <MenuItem value="ai" sx={{ fontSize: 12 }}>{tx("ask the AI")}</MenuItem>
+                <MenuItem value="rule" sx={{ fontSize: 12 }}>{tx("when a rule trips")}</MenuItem>
                 <MenuItem value="never" sx={{ fontSize: 12 }} disabled={line === "timeline" && !canSilenceTimeline}>
                   {line === "timeline" && !canSilenceTimeline ? "never — needs a destination under “Send it somewhere”" : "never"}</MenuItem>
               </Select>
@@ -926,30 +922,26 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
                   {RULES.map((o) => <MenuItem key={o.v} value={o.v} sx={{ fontSize: 12 }}>{o.label}</MenuItem>)}
                 </Select>
                 {RULES.find((o) => o.v === r.rule)?.count && (
-                  <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label="how many"
+                  <TextField size="small" type="number" sx={{ bgcolor: "#fff", width: 120 }} label={tx("how many")}
                     value={r.count ?? ""} onChange={(e) => set(line, { count: e.target.value === "" ? "" : Number(e.target.value) })} />
                 )}
                 {RULES.find((o) => o.v === r.rule)?.text && (
-                  <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label="the words"
+                  <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} label={tx("the words")}
                     value={r.text || ""} onChange={(e) => set(line, { text: e.target.value })} />
                 )}
               </Box>
             )}
             {how === "ai" && blank(when) && (
-              <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}>
-                Say what to look for — until you do, this line happens on every run.
-              </Typography>
+              <Typography variant="caption" sx={{ color: "#8c6d3b", display: "block", mt: 0.5 }}> {tx("Say what to look for — until you do, this line happens on every run.")} </Typography>
             )}
             {line === "timeline" && how === "never" && (
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back on your Timeline.
-              </Typography>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back on your Timeline.")} </Typography>
             )}
             {line === "alert" && how !== "never" && (
               <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap" }}>
                 <Destination dest={cfg.alert?.to ? cfg.alert : { ...firstDest() }} targets={targets} inboxes={inboxes}
                   onChange={(d) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), ...firstDest(), ...d } })} />
-                <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }} label="what to say (optional)"
+                <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }} label={tx("what to say (optional)")}
                   value={cfg.alert?.note || ""} onChange={(e) => setCfg({ ...cfg, alert: { ...(cfg.alert || {}), note: e.target.value } })} />
               </Box>
             )}
@@ -966,8 +958,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography variant="body2" sx={{ fontSize: 12.5 }}>
-              <b>{judgeWords(judge, cfg, brains)[0]}</b> decides where each run goes
-            </Typography>
+              <b>{judgeWords(judge, cfg, brains)[0]}</b> {tx("decides where each run goes")} </Typography>
             <Button size="small" onClick={() => { window.location.hash = JUDGE_HASH; }} sx={{ fontSize: 12, color: INK }}>
               {judge?.value ? "change the judge" : "pick one judge for every report"}</Button>
             <Button size="small" onClick={() => setShowPrompt(!showPrompt)} sx={{ fontSize: 12, color: INK }}>
@@ -991,17 +982,13 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
           )}
         </Box>
       ) : (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-          No AI is asked — this report routes itself, and a run costs nothing but the query.
-        </Typography>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}> {tx("No AI is asked — this report routes itself, and a run costs nothing but the query.")} </Typography>
       )}
       {replay && (
         <Box sx={{ mt: 1.2, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}>
-            ON THE LAST RUNS THIS WOULD HAVE
-          </Typography>
+          <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, display: "block" }}> {tx("ON THE LAST RUNS THIS WOULD HAVE")} </Typography>
           {replay.error ? <Typography variant="caption" sx={{ color: "#8c3b3b" }}>{replay.error}</Typography>
-            : !replay.data?.length ? <Typography variant="caption" sx={{ color: FAINT }}>This report has not run yet — there is nothing to replay.</Typography>
+            : !replay.data?.length ? <Typography variant="caption" sx={{ color: FAINT }}>{tx("This report has not run yet — there is nothing to replay.")}</Typography>
               : replay.data.map((r) => {
                 const went = ROUTE_LINES.filter((l) => r[l] && (l !== "send" || cfg.deliver?.to)).map((l) => LINE_CHIP[l]);
                 return (
@@ -1208,16 +1195,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
         </Box>
         {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setConfirmDel(true)} sx={{ mt: 0.25, flexShrink: 0 }}>
-          Delete {workflow ? "workflow" : "report"}
+          onClick={() => setConfirmDel(true)} sx={{ mt: 0.25, flexShrink: 0 }}> {tx("Delete")} {workflow ? "workflow" : "report"}
         </Button>}
       </Box>
       {/* the bell's "Open the report" lands here: the failure it rang for is the first thing on the page */}
       {cur && lastRun?.failed && (
-        <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>
-          Its last run failed{lastRun.error ? `: ${String(lastRun.error).slice(0, 400)}` : "."} Fix it below and Preview it in step 2 —
-          that runs it without filing anything. The next run that works clears the bell.
-          <LastRun r={lastRun} sid={cur.SourceId} flush />
+        <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}> {tx("Its last run failed")}{lastRun.error ? `: ${String(lastRun.error).slice(0, 400)}` : "."} {tx("Fix it below and Preview it in step 2 — that runs it without filing anything. The next run that works clears the bell.")} <LastRun r={lastRun} sid={cur.SourceId} flush />
         </Alert>
       )}
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
@@ -1232,20 +1215,18 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Advisor and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
-            <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
+            <TextField required label={tx("title — becomes the Timeline headline")} value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
 
             {isAssistant && (
               <Box sx={{ ...card, p: 1.5, mb: 1.5, maxWidth: 720, bgcolor: PANEL2 }}>
-                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, mb: 0.4 }}>What it reads</Typography>
-                <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-                  Taskuary's own tables (the Taskuary cards) and anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Every card has a Test that shows its data; the prompt can place a card where it talks about it (Insert source, under the prompt). This check reads only the sources below.
-                </Typography>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, mb: 0.4 }}>{tx("What it reads")}</Typography>
+                <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}> {tx("Taskuary's own tables (the Taskuary cards) and anything a report can read — Intacct queries, databases, REST or MCP tools, cloud systems, files, agent skills. Every card has a Test that shows its data; the prompt can place a card where it talks about it (Insert source, under the prompt). This check reads only the sources below.")} </Typography>
                 {/* "I don't know what fields off hand Intacct has set up" - so this step cannot be a
                     form. Describe what the Advisor should keep an eye on and the composer adds
                     the cards for it: only systems that are actually connected, field names read off
                     the real schema, and a question back rather than a guessed filter. */}
-                <SourceComposer hint="Describe what the Advisor should keep an eye on"
+                <SourceComposer hint={tx("Describe what the Advisor should keep an eye on")}
                   placeholder={"AP bills from Intacct due in the next 30 days, and the cash balance by entity."
                     + NL + "Anything unpaid over 10k, this week's failed sign-ins, and yesterday's census by site."}
                   onSources={(list, prompt) => {
@@ -1261,10 +1242,10 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     scrolls sideways rather than folding into a column (the owner, 2026-09-20). */}
                 {stripOverflows && (
                   <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 0.25, mb: 0.25 }}>
-                    <Typography variant="caption" sx={{ color: FAINT, mr: 0.5 }}>{watchSrcs.length} sources, left to right</Typography>
-                    <IconButton size="small" aria-label="scroll the sources left" sx={{ p: 0.3 }}
+                    <Typography variant="caption" sx={{ color: FAINT, mr: 0.5 }}>{watchSrcs.length} {tx("sources, left to right")}</Typography>
+                    <IconButton size="small" aria-label={tx("scroll the sources left")} sx={{ p: 0.3 }}
                       onClick={() => stripRef.current?.scrollBy({ left: -372, behavior: "smooth" })}><ChevronLeftIcon sx={{ fontSize: 18 }} /></IconButton>
-                    <IconButton size="small" aria-label="scroll the sources right" sx={{ p: 0.3 }}
+                    <IconButton size="small" aria-label={tx("scroll the sources right")} sx={{ p: 0.3 }}
                       onClick={() => stripRef.current?.scrollBy({ left: 372, behavior: "smooth" })}><ChevronRightIcon sx={{ fontSize: 18 }} /></IconButton>
                   </Box>
                 )}
@@ -1285,26 +1266,21 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                       justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed", bgcolor: "#fff",
                       color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                     <AddIcon sx={{ fontSize: 20 }} />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>add a data source</Typography>
-                    <Typography variant="caption" sx={{ color: FAINT }}>no saved report needed</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{tx("add a data source")}</Typography>
+                    <Typography variant="caption" sx={{ color: FAINT }}>{tx("no saved report needed")}</Typography>
                   </Box>
                 </Box>
                 {/* what the Taskuary cards in the list cost, priced by the server from the same choice the run reads */}
                 {!!cards.length && blockRows && (
                   <Box sx={{ mb: 1.25, mt: -0.5 }}>
-                    <Typography sx={{ ...mono, fontSize: 11, color: DIM }}>
-                      Taskuary cards: {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
+                    <Typography sx={{ ...mono, fontSize: 11, color: DIM }}> {tx("Taskuary cards:")} {costLine(blockRows.total_tokens, blockRows.runs_per_day, blockRows.cost)}
                     </Typography>
                     {!!blockRows.unpriced?.length && (
-                      <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.3 }}>
-                        not in that total: {blockRows.unpriced.map((u) => u.label.toLowerCase()).join(", ")} — read live when the check runs
-                      </Typography>
+                      <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, mt: 0.3 }}> {tx("not in that total:")} {blockRows.unpriced.map((u) => u.label.toLowerCase()).join(", ")} {tx("— read live when the check runs")} </Typography>
                     )}
                   </Box>
                 )}
-                <Typography variant="caption" sx={{ color: INK, fontWeight: 600, display: "block", mb: 0.5 }}>
-                  …and pull these saved data views too (optional)
-                </Typography>
+                <Typography variant="caption" sx={{ color: INK, fontWeight: 600, display: "block", mb: 0.5 }}> {tx("…and pull these saved data views too (optional)")} </Typography>
                 <Autocomplete multiple options={watchChoices} value={watchChoices.filter((o) => watchedIds.includes(o.id))}
                   getOptionLabel={(o) => o.title || ""} isOptionEqualToValue={(o, v) => o.id === v.id}
                   onChange={(_e, values) => setCfg({ ...cfg, watch_source_ids: values.map((o) => o.id) })}
@@ -1316,9 +1292,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   )}
                   renderInput={(params) => <TextField {...params} size="small" sx={{ bgcolor: "#fff" }}
                     placeholder={watchChoices.length ? "Choose views…" : "Create another report/data view first"} />} />
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-                  A view may stay disabled as a standalone report and still be pulled here. Its query and credentials remain owned by that view and its connector.
-                </Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("A view may stay disabled as a standalone report and still be pulled here. Its query and credentials remain owned by that view and its connector.")} </Typography>
               </Box>
             )}
 
@@ -1344,7 +1318,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                   justifyContent: "center", gap: 0.5, cursor: "pointer", borderStyle: "dashed",
                   color: DIM, "&:hover": { borderColor: "#d8cfbe", color: "#55697a" } }}>
                 <AddIcon sx={{ fontSize: 20 }} />
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>add a source</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{tx("add a source")}</Typography>
               </Box>}
             </Box>
 
@@ -1371,8 +1345,8 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 const opts = promptSources({ sources: (isAssistant ? watchSrcs : srcs).map(toShape).filter((x) => x.type) });
                 return !!opts.length && (
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.6, flexWrap: "wrap" }}>
-                    <Button size="small" variant="outlined" onClick={(e) => setInsertAt(e.currentTarget)} sx={{ fontSize: 11.5, py: 0.1 }}>Insert source</Button>
-                    <Typography variant="caption" sx={{ color: FAINT }}>puts that source's rows where the cursor is — the rest follow the prompt</Typography>
+                    <Button size="small" variant="outlined" onClick={(e) => setInsertAt(e.currentTarget)} sx={{ fontSize: 11.5, py: 0.1 }}>{tx("Insert source")}</Button>
+                    <Typography variant="caption" sx={{ color: FAINT }}>{tx("puts that source's rows where the cursor is — the rest follow the prompt")}</Typography>
                     <Menu open={!!insertAt} anchorEl={insertAt} onClose={() => setInsertAt(null)}>
                       {opts.map((o) => (
                         <MenuItem key={o.key} sx={{ fontSize: 12.5 }} onClick={() => insertToken(o.key)}>
@@ -1387,7 +1361,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                   <Select size="small" displayEmpty value={cfg.ai_brain || ""} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 230 }}
                     onChange={(e) => setCfg({ ...cfg, ai_brain: e.target.value })}>
-                    <MenuItem value="" sx={{ fontSize: 12 }}>the triage brain (default)</MenuItem>
+                    <MenuItem value="" sx={{ fontSize: 12 }}>{tx("the triage brain (default)")}</MenuItem>
                     {/* only brains that can actually answer: a connector with no key saved is
                         not a choice, it is a trap. A saved pick that lost its key stays
                         visible - disabled - instead of silently vanishing. Labels are worded
@@ -1398,8 +1372,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     {cfg.ai_brain && !brains.some((b) => b.value === cfg.ai_brain && b.ready) && (
                       <MenuItem value={cfg.ai_brain} disabled sx={{ fontSize: 12 }}>
                         {cfg.ai_brain.startsWith("cli:") ? cfg.ai_brain.slice(4)
-                          : (brains.find((b) => b.value === cfg.ai_brain) || {}).label || cfg.ai_brain} — not connected
-                      </MenuItem>
+                          : (brains.find((b) => b.value === cfg.ai_brain) || {}).label || cfg.ai_brain} {tx("— not connected")} </MenuItem>
                     )}
                   </Select>
                   {/* the chosen brain knows its models - a dropdown, free typing for the rest */}
@@ -1409,7 +1382,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     onChange={(_e, v) => setCfg({ ...cfg, ai_model: v || "" })}
                     onInputChange={(_e, v, why) => { if (why === "input") setCfg({ ...cfg, ai_model: v }); }}
                     renderInput={(params) => (
-                      <TextField {...params} label="model (optional — the brain's default)" sx={{ bgcolor: "#fff" }} />
+                      <TextField {...params} label={tx("model (optional — the brain's default)")} sx={{ bgcolor: "#fff" }} />
                     )} />
                   <Typography variant="caption" sx={{ color: FAINT }}>
                     {isAssistant ? "which AI performs the proactive cross-system check" : "which AI writes this summary — a heavier model for the weekly review, the cheap tier for pings"}
@@ -1417,9 +1390,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 </Box>
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
-                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}>
-                  ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connections → AI).
-                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}> {tx("⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connections → AI).")} </Typography>
               )}
               {!cfg.ai_prompt && (
                 <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
@@ -1433,33 +1404,27 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 somebody the first time you saved it would be the worst kind of surprise. */}
             <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  SEND IT SOMEWHERE (OPTIONAL)
-                </Typography>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}> {tx("SEND IT SOMEWHERE (OPTIONAL)")} </Typography>
                 <Switch size="small" checked={!!cfg.deliver}
                   onChange={(e) => setCfg({ ...cfg, deliver: e.target.checked ? { ...firstDest(), gate: "review" } : undefined })} />
               </Box>
               {!cfg.deliver ? (
-                <Typography variant="caption" sx={{ color: FAINT }}>
-                  Off — the report lands on your Timeline and goes nowhere else.
-                </Typography>
+                <Typography variant="caption" sx={{ color: FAINT }}> {tx("Off — the report lands on your Timeline and goes nowhere else.")} </Typography>
               ) : (
                 <>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
                     <Destination dest={cfg.deliver} targets={targets} inboxes={inboxes}
                       onChange={(d) => setCfg({ ...cfg, deliver: { ...cfg.deliver, ...d } })} />
                     <TextField size="small" sx={{ bgcolor: "#fff", flex: 1, minWidth: 180 }}
-                      label="subject (blank = the report's headline)" value={cfg.deliver.subject || ""}
+                      label={tx("subject (blank = the report's headline)")} value={cfg.deliver.subject || ""}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, subject: e.target.value } })} />
                   </Box>
-                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}>
-                    Whether a given run actually goes out is one of the lines under “one prompt that routes each run”, below.
-                  </Typography>
+                  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.8 }}> {tx("Whether a given run actually goes out is one of the lines under “one prompt that routes each run”, below.")} </Typography>
                   <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
                     <Select size="small" value={cfg.deliver.gate || "review"} sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
                       onChange={(e) => setCfg({ ...cfg, deliver: { ...cfg.deliver, gate: e.target.value } })}>
-                      <MenuItem value="review" sx={{ fontSize: 12 }}>wait for me to approve it (Review)</MenuItem>
-                      <MenuItem value="auto" sx={{ fontSize: 12 }}>send it without asking</MenuItem>
+                      <MenuItem value="review" sx={{ fontSize: 12 }}>{tx("wait for me to approve it (Review)")}</MenuItem>
+                      <MenuItem value="auto" sx={{ fontSize: 12 }}>{tx("send it without asking")}</MenuItem>
                     </Select>
                     <Typography variant="caption" sx={{ color: (cfg.deliver.gate === "auto") ? "#55697a" : FAINT, flex: 1, minWidth: 200 }}>
                       {cfg.deliver.gate === "auto"
@@ -1480,9 +1445,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 and its chart. On by default; the run that became WORK is never retired. */}
             <Box sx={{ mt: 2, ...card, p: 1.5, maxWidth: 720 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}>
-                  RETIRE THE PREVIOUS RUN
-                </Typography>
+                <Typography variant="overline" sx={{ color: ACCENT2, letterSpacing: 1.5, fontSize: 10, flex: 1 }}> {tx("RETIRE THE PREVIOUS RUN")} </Typography>
                 <Switch size="small" checked={cfg.expire !== false}
                   onChange={(e) => setCfg({ ...cfg, expire: e.target.checked })} />
               </Box>
@@ -1499,24 +1462,22 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 A new report still has nowhere to save to until it has a title, so it only advances. */}
             <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
               <Button variant="contained" disableElevation onClick={async () => { if (cur && !(await save())) return; setStep(1); }}>
-                {cur ? "Save & continue" : "Continue"}</Button>
+                {cur ? tx("Save & continue") : tx("Continue")}</Button>
               {saveErr && <Typography variant="body2" sx={{ color: "#6b2733" }}>{saveErr}</Typography>}
               {savedMsg && <Typography variant="body2" sx={{ color: "#47654a" }}>{savedMsg}</Typography>}
             </Box>
           </StepContent>
         </Step>
         <Step completed={!!test?.ok || !!preview?.ok}>
-          <StepButton onClick={() => setStep(1)}>Test & preview</StepButton>
+          <StepButton onClick={() => setStep(1)}>{tx("Test & preview")}</StepButton>
           <StepContent>
-            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1 }}>
-              Test checks the source; Preview runs the whole pipeline — query + AI — exactly like a scheduled run, without filing anything.
-            </Typography>
+            <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1 }}> {tx("Test checks the source; Preview runs the whole pipeline — query + AI — exactly like a scheduled run, without filing anything.")} </Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
               <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
-                startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test source</Button>
+                startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>{tx("Test source")}</Button>
               <Button variant="outlined" disabled={busy === "preview"} onClick={runPreview}
-                startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>Preview pipeline</Button>
-              <Button onClick={() => setStep(2)}>Continue</Button>
+                startIcon={busy === "preview" ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>{tx("Preview pipeline")}</Button>
+              <Button onClick={() => setStep(2)}>{tx("Continue")}</Button>
             </Box>
             {test && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>{test.ok ? "✓" : "✗"} {test.detail}</Typography>}
             {preview && (preview.ok ? (
@@ -1528,8 +1489,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                     rendered in memory server-side, since a preview files no message to attach it to */}
                 {preview.chart && (
                   <Box sx={{ mt: 1 }}>
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-                      The chart this report will hand back, from {preview.rows} row{preview.rows === 1 ? "" : "s"}:
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("The chart this report will hand back, from")} {preview.rows} {tx("row")}{preview.rows === 1 ? "" : "s"}:
                     </Typography>
                     <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "auto", bgcolor: "#fff" }}
                       dangerouslySetInnerHTML={{ __html: preview.chart }} />
@@ -1540,49 +1500,43 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           </StepContent>
         </Step>
         <Step completed={!!cur}>
-          <StepButton onClick={() => setStep(2)}>Schedule & save</StepButton>
+          <StepButton onClick={() => setStep(2)}>{tx("Schedule & save")}</StepButton>
           <StepContent>
             <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 140 }}
+              <TextField label={tx("every N minutes")} type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 140 }}
                 onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", cron: "", on_startup: false })} />
-              <TextField label="daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 140 }}
+              <TextField label={tx("daily at HH:MM")} value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 140 }}
                 onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", cron: "", on_startup: false })} />
               <TextField label="cron" value={cfg.cron || ""} sx={{ bgcolor: "#fff", width: 190 }}
                 helperText={cfg.cron ? cronText(cfg.cron) : ""}
                 placeholder="0 8 * * 1-5"
-                title="Standard 5-field cron. A slot missed while the app was closed fires once on reopen."
+                title={tx("Standard 5-field cron. A slot missed while the app was closed fires once on reopen.")}
                 onChange={(e) => setCfg({ ...cfg, cron: e.target.value, every_minutes: "", daily_at: "", on_startup: false })} />
               <Box sx={{ display: "flex", alignItems: "center" }}
-                title="It's local — opening the app IS a schedule. Runs once per launch, after the startup catch-up.">
+                title={tx("It's local — opening the app IS a schedule. Runs once per launch, after the startup catch-up.")}>
                 <Switch checked={!!cfg.on_startup}
                   onChange={(e) => setCfg({ ...cfg, on_startup: e.target.checked,
                     ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
-                <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
+                <Typography variant="caption" sx={{ color: DIM }}>{tx("or on app startup")}</Typography>
               </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
-                title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>Save {workflow ? "workflow" : "report"}</Button>
+                title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>{tx("Save")} {workflow ? "workflow" : "report"}</Button>
             </Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-              Pick one. Everything blank = it only runs when you press Run now.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Pick one. Everything blank = it only runs when you press Run now.")} </Typography>
             {!!cfg.watch_for && (
               <Box sx={{ mt: 1.25 }}>
                 <Box sx={{ display: "flex", gap: 1, mt: 1.25, flexWrap: "wrap", alignItems: "center" }}>
                   <TextField size="small" value={(cfg.deliver_findings || {}).to || ""}
                     onChange={(e) => setCfg({ ...cfg, deliver_findings: { ...(cfg.deliver_findings || { channel: "email" }), to: e.target.value } })}
-                    label="Send the findings to (optional)" placeholder="nobody — findings stay on the Timeline"
+                    label={tx("Send the findings to (optional)")} placeholder={tx("nobody — findings stay on the Timeline")}
                     sx={{ minWidth: 280, "& .MuiInputBase-root": { fontSize: 13 } }} />
-                  <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
-                    Still drafted for your approval first — nothing about a report makes a send automatic.
-                  </Typography>
+                  <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}> {tx("Still drafted for your approval first — nothing about a report makes a send automatic.")} </Typography>
                 </Box>
               </Box>
             )}
             {!cfg.title && (
-              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#55697a", fontWeight: 600 }}>
-                No title yet — <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
-                  onClick={() => setStep(0)}>add one in step 1</Box> and this button wakes up.
-              </Typography>
+              <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "#55697a", fontWeight: 600 }}> {tx("No title yet —")} <Box component="span" sx={{ textDecoration: "underline", cursor: "pointer" }}
+                  onClick={() => setStep(0)}>{tx("add one in step 1")}</Box> {tx("and this button wakes up.")} </Typography>
             )}
             {saveErr && <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }}>{saveErr}</Alert>}
             {savedMsg && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#47654a" }}>✓ {savedMsg}</Typography>}
@@ -1705,9 +1659,7 @@ function Composer({ onDraft, kind = "report" }) {
           onClick={() => go()} startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
           {busy ? "Working it out…" : "Build it"}
         </Button>
-        <Typography sx={{ fontSize: 11, color: FAINT }}>
-          It can only use connections you have set up — and it will ask rather than guess.
-        </Typography>
+        <Typography sx={{ fontSize: 11, color: FAINT }}> {tx("It can only use connections you have set up — and it will ask rather than guess.")} </Typography>
       </Box>
 
       {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{out.error}</Alert>}
@@ -1715,15 +1667,13 @@ function Composer({ onDraft, kind = "report" }) {
       {/* it did not know something. Better here than as a silently wrong WHERE clause. */}
       {out?.questions?.length > 0 && (
         <Box sx={{ mt: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography sx={{ fontSize: 11.5, color: DIM, fontWeight: 600 }}>
-            A couple of things it will not guess at:
-          </Typography>
+          <Typography sx={{ fontSize: 11.5, color: DIM, fontWeight: 600 }}> {tx("A couple of things it will not guess at:")} </Typography>
           {out.questions.map((qq) => (
             <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
               value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
           ))}
           <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
-            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer & build</Button>
+            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>{tx("Answer & build")}</Button>
         </Box>
       )}
     </Box>
@@ -1766,7 +1716,7 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
   if (!open) {
     return (
       <Button size="small" onClick={() => setOpen(true)} startIcon={<AutoAwesomeIcon sx={{ fontSize: 14 }} />}
-        sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>let AI fill this in</Button>
+        sx={{ fontSize: 11.5, alignSelf: "flex-start" }}>{tx("let AI fill this in")}</Button>
     );
   }
   return (
@@ -1787,9 +1737,7 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
           startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
           {busy ? "Reading the schema…" : one ? "Write this card" : "Point it at them"}
         </Button>
-        <Typography sx={{ fontSize: 10.5, color: FAINT }}>
-          It reads the real schema first, and asks rather than guessing a field name.
-        </Typography>
+        <Typography sx={{ fontSize: 10.5, color: FAINT }}> {tx("It reads the real schema first, and asks rather than guessing a field name.")} </Typography>
       </Box>
       {out?.error && <Alert severity="warning" sx={{ mt: 1, fontSize: 12 }}>{out.error}</Alert>}
       {out?.done && <Typography sx={{ mt: 0.9, fontSize: 11.5, color: "#47654a", fontWeight: 600 }}>✓ {out.done}</Typography>}
@@ -1797,13 +1745,13 @@ function SourceComposer({ typeHint, one, hint, placeholder, onSources }) {
       {/* it did not know something. Better here than as a silently wrong filter. */}
       {out?.questions?.length > 0 && (
         <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.9 }}>
-          <Typography sx={{ fontSize: 11, color: DIM, fontWeight: 600 }}>A couple of things it will not guess at:</Typography>
+          <Typography sx={{ fontSize: 11, color: DIM, fontWeight: 600 }}>{tx("A couple of things it will not guess at:")}</Typography>
           {out.questions.map((qq) => (
             <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
               value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
           ))}
           <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
-            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer &amp; write it</Button>
+            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>{tx("Answer & write it")}</Button>
         </Box>
       )}
     </Box>
@@ -1841,10 +1789,9 @@ function IntacctFields({ object, connectorId, onPick }) {
           {!rows && !err && <CircularProgress size={20} sx={{ m: 2 }} />}
           {rows && (
             <>
-              <TextField size="small" fullWidth autoFocus placeholder="filter…" value={q}
+              <TextField size="small" fullWidth autoFocus placeholder={tx("filter…")} value={q}
                 onChange={(e) => setQ(e.target.value)} sx={{ bgcolor: "#fff", mb: 1 }} />
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-                straight from Sage, custom fields included{onPick ? " — click one to add it to this card" : ""}
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}> {tx("straight from Sage, custom fields included")}{onPick ? " — click one to add it to this card" : ""}
               </Typography>
               <Box sx={{ maxHeight: 420, overflow: "auto" }}>
                 {shown.map((f) => (
@@ -1856,7 +1803,7 @@ function IntacctFields({ object, connectorId, onPick }) {
                     <Typography variant="caption" sx={{ ...mono, color: FAINT }}>{f.DATATYPE}</Typography>
                   </Box>
                 ))}
-                {!shown.length && <Typography sx={{ fontSize: 12, color: FAINT, py: 1 }}>nothing matches that.</Typography>}
+                {!shown.length && <Typography sx={{ fontSize: 12, color: FAINT, py: 1 }}>{tx("nothing matches that.")}</Typography>}
               </Box>
             </>
           )}
@@ -1892,8 +1839,7 @@ function SourceTest({ src }) {
         <DialogContent>
           {out?.ok ? (
             <>
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-                exactly what a scheduled run would hand the prompt{out.rows ? ` — ${out.rows} rows` : ""}
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}> {tx("exactly what a scheduled run would hand the prompt")}{out.rows ? ` — ${out.rows} rows` : ""}
               </Typography>
               <Box component="pre" sx={{ ...mono, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word",
                 bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1, p: 1, m: 0, maxHeight: 460, overflow: "auto" }}>
@@ -1946,8 +1892,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}
         {/* ...and the name the prompt calls it by, so "source 3 of 5" and [taskuary.work] read as one card */}
         <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          title={`name it in the prompt as ${tokenOf(sourceKey(src, index + 1))}`}>
-          source {index + 1} of {count}{src.type && src.type !== "assistant" && (src.type !== "taskuary" || src.card) ? ` · ${tokenOf(sourceKey(src, index + 1))}` : ""}
+          title={`name it in the prompt as ${tokenOf(sourceKey(src, index + 1))}`}> {tx("source")} {index + 1} {tx("of")} {count}{src.type && src.type !== "assistant" && (src.type !== "taskuary" || src.card) ? ` · ${tokenOf(sourceKey(src, index + 1))}` : ""}
         </Typography>
         <ContentCopyIcon onClick={onCopy} titleAccess="Duplicate — same connection, different query"
           sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
@@ -1993,12 +1938,12 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           </Typography>
         </>
       )}
-      {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
+      {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint={tx("say what you want out of it")}
         placeholder={PLACEHOLDER_FOR[src.type] || "the rows this card should return"}
         onSources={(list) => onFill(list[0])} />}
       {(count > 1 || removable) && (
-        <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
-          placeholder="cash balances" onChange={(e) => onChange({ label: e.target.value })} />
+        <TextField size="small" label={tx("label")} value={src.label || ""} sx={{ bgcolor: "#fff" }}
+          placeholder={tx("cash balances")} onChange={(e) => onChange({ label: e.target.value })} />
       )}
       {/* "I just want log history" should not require knowing a boto3 operation name. The generic
           AWS call is the escape hatch for anything unusual; there is a purpose-built type for the
@@ -2006,7 +1951,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       {src.type === "aws" && ["logs", "s3"].includes(src.service) && (
         <Alert severity="info" sx={{ fontSize: 11.5, py: 0, "& .MuiAlert-message": { py: 0.75 } }}
           action={<Button size="small" sx={{ fontSize: 11 }}
-            onClick={() => onRetype(src.service === "logs" ? "cloudwatch_logs" : "s3_object")}>switch</Button>}>
+            onClick={() => onRetype(src.service === "logs" ? "cloudwatch_logs" : "s3_object")}>{tx("switch")}</Button>}>
           {src.service === "logs" ? "For log history there is a simpler source: pick a log group and hours back."
             : "For reading or listing a bucket there is a simpler source: pick the bucket."}
         </Alert>
@@ -2023,7 +1968,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
               <Select size="small" displayEmpty value={src.card || ""} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
                 inputProps={{ "aria-label": "which of Taskuary's tables" }}
                 onChange={(e) => onChange({ card: e.target.value, label: src.label || cardLabel(e.target.value) })}>
-                <MenuItem value="" sx={{ fontSize: 12 }} disabled>choose what it reads…</MenuItem>
+                <MenuItem value="" sx={{ fontSize: 12 }} disabled>{tx("choose what it reads…")}</MenuItem>
                 {TASKUARY_CARDS.map((c) => (
                   <MenuItem key={c.id} value={c.id} sx={{ fontSize: 12.5, display: "block", maxWidth: 420, whiteSpace: "normal" }}>
                     <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{c.label}</Typography>
@@ -2047,8 +1992,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           return (
             <Select key={key} size="small" value={src.pick || "newest"} sx={{ fontSize: 12.5, bgcolor: "#fff" }}
               onChange={(e) => onChange({ pick: e.target.value })}>
-              <MenuItem value="newest" sx={{ fontSize: 12 }}>the one that changed most recently</MenuItem>
-              <MenuItem value="name" sx={{ fontSize: 12 }}>the highest name (sales-2026-08-25 beats -08-01)</MenuItem>
+              <MenuItem value="newest" sx={{ fontSize: 12 }}>{tx("the one that changed most recently")}</MenuItem>
+              <MenuItem value="name" sx={{ fontSize: 12 }}>{tx("the highest name (sales-2026-08-25 beats -08-01)")}</MenuItem>
             </Select>
           );
         }
@@ -2076,8 +2021,8 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           nothing at all when it comes back as one object - which the Test below makes obvious. */}
       {/* width:300 on a 300-wide card with padding on both sides: it hung out over the edge.
           Full width of whatever the card gives it, and a one-line hint instead of three. */}
-      {src.type !== "taskuary" && <TextField size="small" label="max rows" type="number" placeholder="200" value={src.max_rows ?? ""}
-        helperText="blank = 200, and only for list results"
+      {src.type !== "taskuary" && <TextField size="small" label={tx("max rows")} type="number" placeholder="200" value={src.max_rows ?? ""}
+        helperText={tx("blank = 200, and only for list results")}
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
         sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />}
       <SourceTest src={src} />
@@ -2105,7 +2050,7 @@ function LastRun({ r, sid, embedded, flush }) {
     <Box sx={{ pl: embedded || flush ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded || flush ? 0 : 1.25, mt: embedded ? 0 : flush ? 0.5 : -0.5 }}>
       {!embedded && (
       <Typography variant="caption" sx={{ color: r.failed ? "#8a3646" : FAINT, display: "block", lineHeight: 1.5 }}>
-        <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "#8a3646" : DIM }}>last run</Box>
+        <Box component="span" sx={{ fontWeight: 600, color: r.failed ? "#8a3646" : DIM }}>{tx("last run")}</Box>
         {` · ${timeAgo(r.at)}${r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""} · ${outcome}`}
         {rv && ` · read ${read.slice(0, 2).join(", ")}`}
         <Box component="span" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
@@ -2115,21 +2060,21 @@ function LastRun({ r, sid, embedded, flush }) {
         {/* every run, not only the last: what each one read and why it said what it said (the owner, 2026-08-30) */}
         {sid != null && (
           <Box component="span" onClick={(e) => { e.stopPropagation(); setHist(true); }}
-            sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>history ↗</Box>
+            sx={{ ml: 1, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>{tx("history ↗")}</Box>
         )}
       </Typography>
       )}
       {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
       {open && !!r.lines?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
-          <Typography variant="caption" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>what it said, and why</Typography>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{tx("what it said, and why")}</Typography>
           {r.lines.map((l) => (
             <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: `1px solid ${ASSISTANT.bd}`, bgcolor: ASSISTANT.tint }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
                 <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
               </Typography>
               {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
+                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{tx("why ·")} </Box>{l.why}</Typography>}
             </Box>
           ))}
         </Box>
@@ -2138,18 +2083,18 @@ function LastRun({ r, sid, embedded, flush }) {
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           {rv && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>{read.join(" · ")}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("what it reviewed ·")} </Box>{read.join(" · ")}
               {rv.model === false ? " · no model — the facts in the hub's own words" : ""}
             </Typography>
           )}
           {rv?.notes && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mt: 0.4 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("note to its next check ·")} </Box>{rv.notes}
             </Typography>
           )}
           {!!rv?.skipped?.length && (
             <Box sx={{ mt: 0.4 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("looked at and let go ·")} {rv.skipped.length}</Typography>
               {rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
                   <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
@@ -2159,14 +2104,14 @@ function LastRun({ r, sid, embedded, flush }) {
           )}
           {r.summary && r.type !== "assistant" && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", whiteSpace: "pre-wrap", mt: 0.4, maxHeight: 220, overflowY: "auto" }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it filed · </Box>{r.summary}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("what it filed ·")} </Box>{r.summary}
             </Typography>
           )}
           {r.inputs && (
             <Box sx={{ mt: 0.6 }}>
               <Typography variant="caption" onClick={() => setShowInputs((v) => !v)}
                 sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-                {showInputs ? "hide" : "show"} exactly what it read — {r.inputs.length.toLocaleString()} chars {showInputs ? "↑" : "↓"}
+                {showInputs ? "hide" : tx("show")} {tx("exactly what it read —")} {r.inputs.length.toLocaleString(getLocale())} {tx("chars")} {showInputs ? "↑" : "↓"}
               </Typography>
               {showInputs && (
                 <Box component="pre" sx={{ ...mono, fontSize: 11, lineHeight: 1.45, color: INK, whiteSpace: "pre-wrap", m: 0, mt: 0.5, p: 1,
@@ -2206,23 +2151,21 @@ function RunHistory({ sid, title, onClose }) {
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 15 }}>
-        {title || "Report"} — run history
-        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : lost ? "" : "loading…"}</Typography>
+        {title || tx("Report")} {tx("— run history")} <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : lost ? "" : "loading…"}</Typography>
         <Box sx={{ flex: 1 }} />
-        <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>Close</Button>
+        <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>{tx("Close")}</Button>
       </DialogTitle>
       <DialogContent sx={{ display: "flex", gap: 1.5, minHeight: 420 }}>
         <Box sx={{ width: 260, flexShrink: 0, borderRight: `1px solid ${BORDER}`, pr: 1, overflowY: "auto", maxHeight: "70vh" }}>
-          {lost && <Alert severity="warning" sx={{ fontSize: 12 }} action={<Button color="inherit" size="small" onClick={() => setTries((n) => n + 1)}>Try again</Button>}>
-            The run history could not be loaded.</Alert>}
-          {!lost && runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
+          {lost && <Alert severity="warning" sx={{ fontSize: 12 }} action={<Button color="inherit" size="small" onClick={() => setTries((n) => n + 1)}>{tx("Try again")}</Button>}> {tx("The run history could not be loaded.")}</Alert>}
+          {!lost && runs && !runs.length && <Empty>{tx("No runs kept yet — the history starts with the next run.")}</Empty>}
           {(runs || []).map((r) => (
             <Box key={r.runId} onClick={() => setPick(r.runId)}
               sx={{ px: 1, py: 0.6, mb: 0.4, borderRadius: 1, cursor: "pointer", bgcolor: pick === r.runId ? "#eef3ea" : "transparent",
                 border: `1px solid ${pick === r.runId ? "#cfd8c8" : "transparent"}`, "&:hover": { bgcolor: "#f4f3ef" } }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, fontWeight: 600, lineHeight: 1.4 }}>{(r.at || "").slice(0, 16)}</Typography>
               <Typography variant="caption" sx={{ display: "block", color: r.failed ? "#8a3646" : DIM, lineHeight: 1.4 }}>
-                {outcome(r)}{r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}{r.inputChars ? ` · read ${r.inputChars.toLocaleString()} chars` : ""}
+                {outcome(r)}{r.ms != null ? ` · ${(r.ms / 1000).toFixed(1)}s` : ""}{r.inputChars ? ` · read ${r.inputChars.toLocaleString(getLocale())} chars` : ""}
               </Typography>
             </Box>
           ))}
@@ -2234,11 +2177,11 @@ function RunHistory({ sid, title, onClose }) {
                 {cur.at} · {outcome(cur)}{cur.error ? ` — ${cur.error}` : ""}{cur.subject && cur.type !== "assistant" ? ` · ${cur.subject}` : ""}
               </Typography>
               {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded />
-                : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
-                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>Try again</Box></Typography>
+                : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>{tx("This run's details could not be loaded.")}{" "}
+                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>{tx("Try again")}</Box></Typography>
                   : <CircularProgress size={16} />}
             </>
-          ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}
+          ) : <Typography variant="caption" sx={{ color: FAINT }}>{tx("Pick a run on the left.")}</Typography>}
         </Box>
       </DialogContent>
     </Dialog>

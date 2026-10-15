@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import config
+from . import config, i18n
 from . import store as store_mod
 from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
@@ -221,6 +221,12 @@ async def _lifespan(_app):
         instance.release()           # the next start in this process (a test, a restart) takes the folder again
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
+@app.exception_handler(HTTPException)
+async def localized_http_error(request, exc):
+    # Localized detail only. Status, headers and machine-readable fields stay unchanged.
+    detail = i18n.text(exc.detail, i18n.locale(store)) if isinstance(exc.detail, str) else exc.detail
+    return JSONResponse({'detail': detail}, status_code=exc.status_code, headers=exc.headers)
+
 ACTOR = 'owner'
 # Attaching a terminal repaints it: the rendered replay, then the one-column wiggle's full redraw.
 # That output is ours, not the agent's, so idle() must not count it (Term.quiet_for).
@@ -284,8 +290,7 @@ async def token_gate(request: Request, call_next):
     elif (request.url.path.startswith('/api') and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback')
           and not guard.origin_ok(request.headers)):
         logger.warning(f'refused {request.method} {request.url.path} from origin {request.headers.get("origin")!r}')
-        return JSONResponse({'detail': 'this request came from another site. Taskuary answers its own '
-                                       'pages only.'}, status_code=403)
+        return JSONResponse({'detail': i18n.text('this request came from another site. Taskuary answers its own pages only.', i18n.locale(store))}, status_code=403)
     tok = cfg['server'].get('token')
     presented = request.headers.get('X-Taskuary-Token')
     if tok and request.url.path.startswith('/api') and not guard.token_matches(presented, tok, cfg['server'].get('agent_token')) \
@@ -301,7 +306,7 @@ async def token_gate(request: Request, call_next):
             # was open across a token change answered every click with whichever screen's generic
             # "that did not work" fallback happened to be nearest (2026-09-10 audit).
             # ...and not "reload": a reload no longer re-seeds the token (R29). The page drops the stale one on this code.
-            return JSONResponse({'detail': 'This page is signed in with an out-of-date token. Open Taskuary from its app, or run `taskuary --link`.',
+            return JSONResponse({'detail': i18n.text('This page is signed in with an out-of-date token. Open Taskuary from its app, or run `taskuary --link`.', i18n.locale(store)),
                                  'code': 'unauthorized'}, status_code=401)
     # WHAT AN AGENT MAY NOT DO, before a handler exists to be talked round (guard.py). A session
     # runs with the agent token in its environment, and the routes that SEND - approve a reply,
@@ -6573,7 +6578,7 @@ def how_it_works():
     Shipped with the app (templates/how-it-works.md) and read-only - it describes what the code does,
     so it is not an operator document to edit and never becomes a `doc` row."""
     from pathlib import Path
-    f = Path(__file__).parent / 'templates' / 'how-it-works.md'
+    f = i18n.template_path('how-it-works', i18n.locale(store))
     if not f.exists(): raise HTTPException(404, 'the reference page is missing from this build')
     return {'text': f.read_text(encoding='utf-8')}
 
@@ -8283,7 +8288,7 @@ def build():
 def connectors_catalog():
     """Every card, working or planned, from the one catalogue file both the tab and the report read."""
     from . import connectorcatalog
-    return {'data': connectorcatalog.cards()}
+    return {'data': connectorcatalog.cards(i18n.locale(store))}
 
 
 @app.get('/api/assistant/blocks')
@@ -8363,7 +8368,7 @@ def settings():
 @app.patch('/api/settings')
 def set_setting(body: SettingBody):
     from . import settings_schema
-    if why := settings_schema.refuse(body.name, body.value): raise HTTPException(422, why)
+    if why := settings_schema.refuse(body.name, body.value, i18n.locale(store)): raise HTTPException(422, why)
     store.set_setting(body.name, body.value, ACTOR)
     return {'ok': True}
 

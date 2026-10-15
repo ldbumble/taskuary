@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -121,12 +122,12 @@ const AgentBand = ({ name, provider, work, since }) => {
     <div className="tq-aui-band" role="status" aria-live="polite">
       <div className="tq-aui-band-head">
         <span className="tq-aui-band-dot" />
-        <b>{name}</b><span>is working</span>
+        <b>{name}</b><span>{tx("is working")}</span>
         <em>{since ? elapsedText(now - since) : provider || ""}</em>
       </div>
       <div className="tq-aui-band-now">
         {doing || (provider ? `${provider} is thinking…` : "Thinking…")}
-        {work.steps.length > 1 && <span className="tq-aui-band-step"> — step {work.steps.length}</span>}
+        {work.steps.length > 1 && <span className="tq-aui-band-step"> {tx("— step")} {work.steps.length}</span>}
       </div>
       {/* one segment per step it has actually taken. No total: the agent never declares a plan, and
           a made-up denominator is a confident number that is wrong. */}
@@ -140,8 +141,8 @@ const AgentBand = ({ name, provider, work, since }) => {
           but that it is holding real sources on the right subject, before it has finished. */}
       {!!work.sources.length && (
         <div className="tq-aui-band-so">
-          <span>what it has so far</span>
-          <div>{work.sources.length} source{work.sources.length === 1 ? "" : "s"} —{" "}
+          <span>{tx("what it has so far")}</span>
+          <div>{work.sources.length} {tx("source")}{work.sources.length === 1 ? "" : "s"} —{" "}
             {work.sources.map((src) => <em key={src}>{src}</em>)}</div>
         </div>
       )}
@@ -157,7 +158,7 @@ const AgentNameCtx = React.createContext("Taskuary");
 const AssistantText = ({ text }) => <Md text={text} />;
 const AssistantReasoning = ({ text: raw }) => { const text = forScreen(raw); return text ? (
   <details className="tq-aui-progress" open>
-    <summary>Agent progress</summary>
+    <summary>{tx("Agent progress")}</summary>
     <div>{text}</div>
   </details>
 ) : null; };
@@ -173,7 +174,7 @@ const AssistantTool = ({ toolName, args, result, isError }) => {
 };
 const UserMessage = () => (
   <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
-    <div className="tq-aui-role">you</div>
+    <div className="tq-aui-role">{tx("you")}</div>
     <div className="tq-aui-user-bubble"><MessagePrimitive.Parts /></div>
   </MessagePrimitive.Root>
 );
@@ -294,12 +295,12 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   return (
     <div className={`tq-dock-actions${expanded ? " tq-dock-actions-expanded" : ""}`}>
       <div className="tq-dock-action-kicker">
-        <span>Action</span>
-        {!!ordered.length && !focusedTask && <em>{cursor + 1} of {ordered.length}</em>}
+        <span>{tx("Action")}</span>
+        {!!ordered.length && !focusedTask && <em>{cursor + 1} {tx("of")} {ordered.length}</em>}
         <div className="tq-dock-action-nav">
           {ordered.length > 1 && !focusedTask && <>
-            <IconButton size="small" aria-label="Previous action" onClick={() => setCursor((n) => (n - 1 + ordered.length) % ordered.length)}><ChevronLeftIcon /></IconButton>
-            <IconButton size="small" aria-label="Next action" onClick={() => setCursor((n) => (n + 1) % ordered.length)}><ChevronRightIcon /></IconButton>
+            <IconButton size="small" aria-label={tx("Previous action")} onClick={() => setCursor((n) => (n - 1 + ordered.length) % ordered.length)}><ChevronLeftIcon /></IconButton>
+            <IconButton size="small" aria-label={tx("Next action")} onClick={() => setCursor((n) => (n + 1) % ordered.length)}><ChevronRightIcon /></IconButton>
           </>}
         </div>
       </div>
@@ -311,18 +312,18 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
             <b>{review.Subject || review.Title || (review.Kind === "action" ? "Proposed action" : "Reply ready")}</b>
             <span>{review.Kind === "action" ? "Review what will run" : `To ${reviewTarget(review)}`}</span>
           </div>
-          {review.TaskId && <Button size="small" onClick={() => openTask(review.TaskId)}>Open task</Button>}
+          {review.TaskId && <Button size="small" onClick={() => openTask(review.TaskId)}>{tx("Open task")}</Button>}
         </div>
         <TextField fullWidth multiline minRows={expanded ? 3 : 2} maxRows={expanded ? 10 : 5}
           value={edits[review.ReviewId] ?? reviewDraft(review)}
           onChange={(e) => setEdits((old) => ({ ...old, [review.ReviewId]: e.target.value }))}
-          placeholder="No draft yet — choose Draft with AI"
+          placeholder={tx("No draft yet — choose Draft with AI")}
           sx={{ mt: 0.75, "& textarea": { fontSize: 12.5, lineHeight: 1.48 } }} />
         <div className="tq-dock-action-buttons">
           {review.Kind === "action" ? <>
             <Button size="small" variant="contained" disabled={!!busy} startIcon={<DoneRoundedIcon />}
               onClick={() => decide(review, "approve")}>{busy ? "Working…" : "Run action"}</Button>
-            <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>Dismiss</Button>
+            <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>{tx("Dismiss")}</Button>
           </> : <>
             {review.CanSend === false ? null : (
               <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewDraft(review)).trim()}
@@ -331,24 +332,24 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
               </Button>
             )}
             <Button size="small" variant="outlined" disabled={!!busy} startIcon={<RefreshRoundedIcon />}
-              onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? "Redraft" : "Draft with AI"}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title="Marks the task done without sending this draft" onClick={() => decide(review, "no_reply")}>Mark done</Button>
+              onClick={() => redraft(review)}>{busy.includes("redraft") ? tx("Drafting…") : review.DraftText ? "Redraft" : "Draft with AI"}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title={tx("Marks the task done without sending this draft")} onClick={() => decide(review, "no_reply")}>{tx("Mark done")}</Button>
           </>}
           <Box sx={{ flex: 1 }} />
-          <Button size="small" onClick={() => onNavigate?.("Assistant")}>All that needs you</Button>
+          <Button size="small" onClick={() => onNavigate?.("Assistant")}>{tx("All that needs you")}</Button>
         </div>
       </>}
       {focusedTask && <>
         <div className="tq-dock-action-head">
           <div><b>{focusedTask.ref || `TQ-${String(focusedTask.TaskId).padStart(4, "0")}`} · {focusedTask.Title}</b>
-            <span>{focusedTask.Status} · {focusedTask.Priority || "normal"} priority</span></div>
+            <span>{focusedTask.Status} · {focusedTask.Priority || "normal"} {tx("priority")}</span></div>
         </div>
         <div className="tq-dock-action-buttons">
-          <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>Open task</Button>
+          <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>{tx("Open task")}</Button>
           <Button size="small" variant="outlined" disabled={!!busy} startIcon={<DoneRoundedIcon />}
             onClick={() => settleTask(focusedTask, "done")}>{busy.includes("done") ? "Completing…" : "Complete"}</Button>
           <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }}
-            onClick={() => settleTask(focusedTask, "dropped")}>Dismiss</Button>
+            onClick={() => settleTask(focusedTask, "dropped")}>{tx("Dismiss")}</Button>
         </div>
       </>}
     </div>
@@ -519,7 +520,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {!dock && <PublishedPages pages={published} />}
           {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
-              <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
+              <div><b>{tx("Worth running again?")}</b><span>{tx("Creates a daily report from this workflow; adjust its cadence in Reports.")}</span></div>
               <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}
                 disabled={reportBusy} onClick={onReport}>{reportBusy ? "Creating…" : "Make recurring report"}</Button>
             </div>
@@ -537,10 +538,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             )}
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
-            {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              This task is closed. Reopen it, then continue the session, to pick the conversation back up.</div> : <>
+            {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}> {tx("This task is closed. Reopen it, then continue the session, to pick the conversation back up.")}</div> : <>
             <ComposerPrimitive.Root className="tq-aui-composer">
-              <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
+              <IconButton size="small" onClick={onAttach} title={tx("Attach an image")} className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />
               </IconButton>
               <ComposerPrimitive.Input
@@ -556,11 +556,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               }} />
               {/* stopping is an ACT: closing this page is not one. The button tells the server
                   to stop the run; abandoning the tab just detaches from it (server.py). */}
-              <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label="Stop response"
+              <ComposerPrimitive.Cancel className="tq-aui-cancel" aria-label={tx("Stop response")}
                 onClick={onStop}><CloseIcon fontSize="small" /></ComposerPrimitive.Cancel>
-              <ComposerPrimitive.Send className="tq-aui-send" aria-label="Send"><SendIcon fontSize="small" /></ComposerPrimitive.Send>
+              <ComposerPrimitive.Send className="tq-aui-send" aria-label={tx("Send")}><SendIcon fontSize="small" /></ComposerPrimitive.Send>
             </ComposerPrimitive.Root>
-            <div className="tq-aui-hint">Enter sends · Shift+Enter adds a line · paste or attach an image</div></>}
+            <div className="tq-aui-hint">{tx("Enter sends · Shift+Enter adds a line · paste or attach an image")}</div></>}
           </div>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
@@ -761,10 +761,10 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           updateProvider(e.target.value, provider?.model || "");
         }}
           sx={{ height: 27, fontSize: 11.5, minWidth: 130, bgcolor: PANEL2, flexShrink: 0 }}>
-          {!data?.providers?.length && <MenuItem value="">No agent connected</MenuItem>}
+          {!data?.providers?.length && <MenuItem value="">{tx("No agent connected")}</MenuItem>}
           {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>{p.label}</MenuItem>)}
         </Select>
-        <TextField size="small" value={model} placeholder="provider default" onChange={(e) => setModel(e.target.value)}
+        <TextField size="small" value={model} placeholder={tx("provider default")} onChange={(e) => setModel(e.target.value)}
           onBlur={() => connectorId && updateProvider(connectorId, model)} sx={{ width: 150, flexShrink: 0, "& input": { py: 0.55, fontSize: 11.5 } }} />
         <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
           title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
@@ -774,13 +774,13 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       </Box>}
       {dock && <Box sx={{ px: 1, py: 0.55, display: "flex", alignItems: "center", gap: 0.65,
         flexWrap: "wrap", bgcolor: PANEL, borderBottom: `1px solid ${BORDER}` }}>
-        <Typography sx={{ ...mono, color: FAINT, fontSize: 9.5, textTransform: "uppercase" }}>AI</Typography>
+        <Typography sx={{ ...mono, color: FAINT, fontSize: 9.5, textTransform: "uppercase" }}>{tx("AI")}</Typography>
         <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
           const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
           updateProvider(e.target.value, provider?.model || "");
         }} MenuProps={{ sx: { zIndex: 1600 } }}
           sx={{ height: 26, minWidth: 155, maxWidth: 225, flex: 1, fontSize: 10.5, bgcolor: PANEL2 }}>
-          {!data?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
+          {!data?.providers?.length && <MenuItem value="">{tx("No AI connected")}</MenuItem>}
           {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>
             {p.label}{p.type === "cli" ? " · tool-capable" : " · fast"}
           </MenuItem>)}
@@ -793,24 +793,22 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           sx={{ minWidth: 118, maxWidth: 190, fontSize: 10.5, bgcolor: PANEL2 }} />
         <Button size="small" variant="outlined" startIcon={<AddCommentOutlinedIcon sx={{ fontSize: 14 }} />}
           disabled={busy || newChatBusy || !shownMessages.length} onClick={() => setConfirmNewChat(true)}
-          title="Archive this conversation and start a fresh Taskuary chat"
+          title={tx("Archive this conversation and start a fresh Taskuary chat")}
           sx={{ minWidth: 0, px: 0.8, whiteSpace: "nowrap", textTransform: "none", fontSize: 10.5 }}>
-          {newChatBusy ? "Starting…" : "New chat"}
+          {newChatBusy ? tx("Starting…") : tx("New chat")}
         </Button>
       </Box>}
       {dock && confirmNewChat && (
-        <Box role="group" aria-label="Confirm new chat" sx={{ display: "flex", alignItems: "center", gap: 0.75,
+        <Box role="group" aria-label={tx("Confirm new chat")} sx={{ display: "flex", alignItems: "center", gap: 0.75,
           px: 1.15, py: 0.8, flexWrap: "wrap", bgcolor: "#f8f5ee", borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 210 }}>
-            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>Start a new chat?</Typography>
-            <Typography sx={{ color: DIM, fontSize: 10.5 }}>
-              This conversation is archived. Tasks, reviews, and action cards stay.
-            </Typography>
+            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>{tx("Start a new chat?")}</Typography>
+            <Typography sx={{ color: DIM, fontSize: 10.5 }}> {tx("This conversation is archived. Tasks, reviews, and action cards stay.")} </Typography>
           </Box>
           <Button size="small" onClick={() => setConfirmNewChat(false)}
-            sx={{ textTransform: "none", fontSize: 10.5 }}>Keep this chat</Button>
+            sx={{ textTransform: "none", fontSize: 10.5 }}>{tx("Keep this chat")}</Button>
           <Button size="small" variant="contained" disableElevation onClick={startNewChat}
-            sx={{ textTransform: "none", fontSize: 10.5 }}>Start new chat</Button>
+            sx={{ textTransform: "none", fontSize: 10.5 }}>{tx("Start new chat")}</Button>
         </Box>
       )}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
@@ -819,15 +817,13 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.5, bgcolor: PANEL2,
           borderBottom: `1px solid ${BORDER}` }}>
           <CircularProgress size={11} />
-          <Typography variant="caption" sx={{ color: DIM }}>
-            still working on your last message — it keeps going whether or not this is open
-          </Typography>
+          <Typography variant="caption" sx={{ color: DIM }}> {tx("still working on your last message — it keeps going whether or not this is open")} </Typography>
         </Box>
       )}
-      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Add a CLI agent under Connections → AI CLI agents to run this work. API providers are optional.</Alert>}
+      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>{tx("Add a CLI agent under Connections → AI CLI agents to run this work. API providers are optional.")}</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
-      {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}
+      {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>{tx("Attaching image…")}</Box>}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {/* ALWAYS inside the pane, session or not: a session that arrives mid-turn (`started`) must not
             change the tree around the thread, or the answer streaming into it is remounted away */}

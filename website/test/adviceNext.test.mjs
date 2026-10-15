@@ -50,7 +50,7 @@ test("the next step sits over the row and the box is plain: no ghost text, no pi
 
 test("while the NEXT strip stands, the task's own Open again line is hidden - only on the canvas", () => {
   const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
-  assert.match(page, /<Typography className="tq-news"[^>]*>Open again: \{news\.line\}/);
+  assert.match(page, /<Typography className="tq-news"[^>]*>\{tx\("Open again:"\)\} \{news\.line\}/);
   assert.match(src, /className=\{shownAdvice \? "tq-asst-col advising" : "tq-asst-col"\}/);
   assert.match(css, /\.tq-asst-col\.advising \.tq-news \{ display: none; \}/);
 });
@@ -67,7 +67,7 @@ test("the strip has no NEXT tag and no button of its own - the buttons are the r
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.doesNotMatch(strip, /NEXT|className="tq-ab/);
   assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
-  assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
+  assert.match(strip, /className="tq-next-why"[^>]*>\{tx\("Why\?"\)\}<\/button>/);
   assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);
   assert.match(strip, /<Popover open=\{!!at\}/);
 });

@@ -19,7 +19,7 @@ test("the card shows the report's facts, not the raw config, and offers a dry ru
 test("preview and the link after the click are wired through the shared card", () => {
   const card = read("ProposalCard.jsx");
   assert.match(card, /onPreview\?\.\(p\)/);
-  assert.match(card, />\{peek\?\.busy \? "Running…" : "Preview"\}<\/button>/);
+  assert.match(card, />\{peek\?\.busy \? tx\("Running…"\) : tx\("Preview"\)\}<\/button>/);
   assert.match(card, /p\.status === "done" && p\.outcome\?\.link && <div[^>]*><a href=\{p\.outcome\.link\}/);
   const view = read("AssistantView.jsx");
   assert.match(view, /api\.post\(`\/api\/operations\/\$\{p\.id\}\/preview`\)/);

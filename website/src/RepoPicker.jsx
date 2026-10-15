@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Which checkout does this task belong in? Taskuary decides it (the `repo:` tag, else the ask
 // matched against the SOUL.md repo map) - but it can be wrong, and a wrong answer means an agent
 // editing the wrong tree in good faith. So the decision is visible on the task, with its reason,
@@ -48,24 +49,17 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       bgcolor: general ? "#eae4d8" : PANEL, px: 1.1, py: 0.7, mb: 0.6 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <AccountTreeIcon sx={{ fontSize: 14, color: general ? "#55697a" : FAINT }} />
-        <Typography variant="caption" sx={{ fontWeight: 600, color: general ? "#55697a" : INK, flex: 1, minWidth: 0 }} noWrap>
-          General — no repository
-        </Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: general ? "#55697a" : INK, flex: 1, minWidth: 0 }} noWrap> {tx("General — no repository")} </Typography>
         {general ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
           : <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.75 }} disabled={busy}
-              onClick={() => choose({ repo: NO_REPO, has_path: true })}>use this</Button>}
+              onClick={() => choose({ repo: NO_REPO, has_path: true })}>{tx("use this")}</Button>}
       </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", pl: 2.6, lineHeight: 1.35 }}>
-        A question to answer, not code to change — the session opens in the agent's own folder and is told so.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", pl: 2.6, lineHeight: 1.35 }}> {tx("A question to answer, not code to change — the session opens in the agent's own folder and is told so.")} </Typography>
     </Box>
   );
   if (!rows.length) return (
     <Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        No code repositories connected yet. Connect GitHub under Connections and Taskuary can work in one - or, if this
-        isn't code work, use the non-coding agent.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}> {tx("No code repositories connected yet. Connect GitHub under Connections and Taskuary can work in one - or, if this isn't code work, use the non-coding agent.")} </Typography>
       {noRepoRow}
     </Box>
   );
@@ -73,10 +67,9 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
     <Box>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
         {general ? "No repository — this one is a general question, and the agent is told so."
-          : picked ? <>Working in <b style={mono}>{picked}</b>{why ? ` — ${why}` : ""}.</>
+          : picked ? <>{tx("Working in")} <b style={mono}>{picked}</b>{why ? ` — ${why}` : ""}.</>
             : "No checkout chosen — the session opens in the agent's own folder."}
-        {" "}Pick another and the session restarts there with the prompt rewritten.
-      </Typography>
+        {" "}{tx("Pick another and the session restarts there with the prompt rewritten.")} </Typography>
       {rows.map((r) => {
         const on = r.repo === picked;
         return (
@@ -86,14 +79,14 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
               <AccountTreeIcon sx={{ fontSize: 14, color: on ? "#55697a" : FAINT }} />
               <Typography variant="caption" sx={{ ...mono, fontWeight: 600, color: on ? "#55697a" : INK,
                 flex: 1, minWidth: 0 }} noWrap>{r.repo}</Typography>
-              {r.tagged && <Chip size="small" label="pinned" sx={{ height: 16, fontSize: 9, bgcolor: "#eae4d8", color: "#55697a" }} />}
+              {r.tagged && <Chip size="small" label={tx("pinned")} sx={{ height: 16, fontSize: 9, bgcolor: "#eae4d8", color: "#55697a" }} />}
               {!r.has_path && (
-                <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label="no local path"
+                <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label={tx("no local path")}
                   sx={{ height: 16, fontSize: 9, bgcolor: "#dfeade", color: "#55697a" }} />
               )}
               {on && r.has_path ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
                 : <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.75 }} disabled={busy}
-                    onClick={() => choose(r)}>{on ? "set path" : "use this"}</Button>}
+                    onClick={() => choose(r)}>{on ? tx("set path") : tx("use this")}</Button>}
             </Box>
             {r.what && (
               <Typography variant="caption" sx={{ color: FAINT, display: "block", pl: 2.6, lineHeight: 1.35 }} noWrap>
@@ -122,8 +115,8 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                       "aria-label": "Folder where this repository is checked out",
                        style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
                   <Button size="small" variant="contained" disableElevation disabled={busy || !path.trim()}
-                    onClick={() => choose(r, path.trim())}>Save</Button>
-                  <Button size="small" sx={{ color: DIM }} onClick={() => setOpen(null)}>cancel</Button>
+                    onClick={() => choose(r, path.trim())}>{tx("Save")}</Button>
+                  <Button size="small" sx={{ color: DIM }} onClick={() => setOpen(null)}>{tx("cancel")}</Button>
                 </Box>
               </Box>
             )}
@@ -132,15 +125,10 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       })}
       {noRepoRow}
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>{err}</Typography>}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-        Paths saved here land on the agent — its repo → folder map (cwd_map) in config.toml, the
-        one place to edit them in bulk.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Paths saved here land on the agent — its repo → folder map (cwd_map) in config.toml, the one place to edit them in bulk.")} </Typography>
       {picked && (
         <Button size="small" sx={{ fontSize: 10.5, color: DIM }} disabled={busy}
-          onClick={async () => { setBusy(true); await api.put(`/api/tasks/${taskId}/repo`, { repo: null, agent }); setBusy(false); load(); onDone?.({}); }}>
-          unpin — let Taskuary choose again
-        </Button>
+          onClick={async () => { setBusy(true); await api.put(`/api/tasks/${taskId}/repo`, { repo: null, agent }); setBusy(false); load(); onDone?.({}); }}> {tx("unpin — let Taskuary choose again")} </Button>
       )}
     </Box>
   );
@@ -171,10 +159,10 @@ export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, o
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
       <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>repository</Typography>
-      <select className="tq-start-repo" aria-label="repository" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>{tx("repository")}</Typography>
+      <select className="tq-start-repo" aria-label={tx("repository")} value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
         style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 220 }}>
-        {!value && <option value="">choose a repository…</option>}
+        {!value && <option value="">{tx("choose a repository…")}</option>}
         {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : " (no local folder)"}</option>)}
       </select>
       <Typography variant="caption" sx={{ color: FAINT }}>

@@ -103,7 +103,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   // the completion control rides on the folded strip too, so it is there whether the card is open
   // or folded - the strip is the Task card's whole presence when the agent or reply has the focus
   const folded = source.slice(source.indexOf('stage !== "task" && ('), source.indexOf('{stage === "task" && <>'));
-  assert.ok(folded.includes('"Mark done"}</Button>'), "the folded Task strip must carry the done control");
+  assert.ok(folded.includes('tx("Mark done")}</Button>'), "the folded Task strip must carry the done control");
   assert.ok(folded.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
   assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action \}\)/);
   // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)
@@ -111,7 +111,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   assert.match(source, /conversation: generalStarted/);
   // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
   // ...ONE name for the write-up, live or ended (2026-10-02: "Save result" and "Save and end session" were one button twice)
-  assert.ok(source.includes("onClick={wrapUp}>Save and end session</Button>}"), "the finished chat needs its own close-out");
+  assert.ok(source.includes('onClick={wrapUp}>{tx("Save and end session")}</Button>}'), "the finished chat needs its own close-out");
   assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
   assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
   // interrupted work says so on the task page, not only in the list row

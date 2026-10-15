@@ -146,7 +146,7 @@ test("a failed act's way on runs from the chat: Try again, GitHub's own buttons,
 
 test("a locked card says where the walk is, and the tab follows a hand-off started elsewhere", () => {
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
-  assert.match(view, /The walk is in \{actions\.handedTo\}/);
+  assert.match(view, /\{tx\("The walk is in"\)\} \{actions\.handedTo\}/);
   assert.match(view, /\{ \.\.\.s, handoff: st\.handoff \|\| null \}/);
 });
 

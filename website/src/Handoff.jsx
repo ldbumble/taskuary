@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Some work is not ours to do: hand it to the person whose job it is, with the AI writing
 // the forward message out of the task's own context (systems, ids, errors) so you are not
 // retyping the thread into an email. Its own module because two places offer it: the Tasks
@@ -46,8 +47,7 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
     setBusy("");
   };
   if (sent) return (
-    <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
-      ✓ sent to {(sent.to || []).join(", ") || "the chat"} by {sent.channel}
+    <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}> {tx("✓ sent to")} {(sent.to || []).join(", ") || "the chat"} {tx("by")} {sent.channel}
     </Typography>
   );
   return (
@@ -56,24 +56,24 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
         {/* whatever this install can actually send on, not a hardcoded two. "teams" with nobody
             named still posts into the task's OWN chat, which is why it stays listed separately. */}
         <Select size="small" value={channel} onChange={(e) => setChannel(e.target.value)} sx={{ ...selSx, minWidth: 110 }}>
-          <MenuItem value="email" sx={{ fontSize: 12.5 }}>email</MenuItem>
-          <MenuItem value="teams" sx={{ fontSize: 12.5 }}>Teams chat</MenuItem>
+          <MenuItem value="email" sx={{ fontSize: 12.5 }}>{tx("email")}</MenuItem>
+          <MenuItem value="teams" sx={{ fontSize: 12.5 }}>{tx("Teams chat")}</MenuItem>
           {targets.filter((x) => !["email", "teams"].includes(x)).map((x) => (
             <MenuItem key={x} value={x} sx={{ fontSize: 12.5 }}>{x}</MenuItem>
           ))}
         </Select>
         <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo}
-          placeholder="who should own this — name or email" sx={{ flex: 1, minWidth: 220 }} />
+          placeholder={tx("who should own this — name or email")} sx={{ flex: 1, minWidth: 220 }} />
         <Button size="small" onClick={draft} disabled={!!busy}>
           {busy === "draft" ? <CircularProgress size={12} /> : text ? "Rewrite" : "Draft with AI"}
         </Button>
       </Box>
       <TextField multiline minRows={4} size="small" value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="What they need to know. Draft with AI writes it from this task's own context — you edit before it goes." />
+        placeholder={tx("What they need to know. Draft with AI writes it from this task's own context — you edit before it goes.")} />
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
         <Button size="small" variant="contained" disableElevation disabled={!!busy || !to.trim() || !text.trim()}
           startIcon={busy === "send" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-          onClick={send}>Send it</Button>
+          onClick={send}>{tx("Send it")}</Button>
         {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
       </Box>
     </Box>

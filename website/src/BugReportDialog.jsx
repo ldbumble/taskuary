@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // "Report this bug": the draft the server scrubbed, shown whole and editable, sent by opening GitHub's new-issue page.
 // Nothing leaves without the person pressing Send, and what leaves is exactly what the boxes hold.
 import React, { useEffect, useState } from "react";
@@ -69,34 +70,34 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
 
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="bug-report-title"
     PaperProps={{ sx: { maxHeight: "90vh" } }}>
-    <DialogTitle id="bug-report-title">Report this bug</DialogTitle>
+    <DialogTitle id="bug-report-title">{tx("Report this bug")}</DialogTitle>
     <DialogContent>
       {refused ? <Typography sx={{ fontSize: 13.5 }}>{refused}</Typography>
-        : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />Preparing the report…</Box>
+        : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />{tx("Preparing the report…")}</Box>
         : <>
-          <Typography sx={{ color: DIM, fontSize: 13, mb: 2 }}>This goes to a public GitHub page. Check it before you submit.</Typography>
-          <TextField fullWidth size="small" label="Title" value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} sx={{ mb: 2 }} />
-          <TextField fullWidth multiline minRows={3} label="What happened" value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
+          <Typography sx={{ color: DIM, fontSize: 13, mb: 2 }}>{tx("This goes to a public GitHub page. Check it before you submit.")}</Typography>
+          <TextField fullWidth size="small" label={tx("Title")} value={title} disabled={busy} onChange={(e) => setTitle(e.target.value)} sx={{ mb: 2 }} />
+          <TextField fullWidth multiline minRows={3} label={tx("What happened")} value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />
           <Button size="small" onClick={() => setShowTech(!showTech)} aria-expanded={showTech}
             sx={{ mt: 1.5, px: 0, color: DIM, textTransform: "none" }}>{showTech ? "Hide technical details" : "Technical details"}</Button>
           {showTech && <TextField fullWidth multiline minRows={6} maxRows={16} value={tech} disabled={busy} onChange={(e) => setTech(e.target.value)}
             inputProps={{ "aria-label": "Technical details", style: { fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 } }} />}
-          <FormControlLabel sx={{ display: "flex", mt: 1 }} label={<Typography sx={{ fontSize: 13 }}>Add a screenshot</Typography>}
+          <FormControlLabel sx={{ display: "flex", mt: 1 }} label={<Typography sx={{ fontSize: 13 }}>{tx("Add a screenshot")}</Typography>}
             control={<Checkbox size="small" checked={!!shot} disabled={busy} onChange={(e) => takeShot(e.target.checked)} />} />
-          {shot && <Typography sx={{ color: FAINT, fontSize: 12 }}>Every word in it is blanked out. Only the layout shows.</Typography>}
+          {shot && <Typography sx={{ color: FAINT, fontSize: 12 }}>{tx("Every word in it is blanked out. Only the layout shows.")}</Typography>}
         </>}
       {note && <Typography sx={{ color: DIM, fontSize: 12.5, mt: 1.5 }} role="status">{note}</Typography>}
     </DialogContent>
     <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>
-      {supportUrl && <Button href={supportUrl} target="_blank" rel="noopener noreferrer" sx={{ mr: "auto", color: DIM, textTransform: "none" }}>Open GitHub</Button>}
+      {supportUrl && <Button href={supportUrl} target="_blank" rel="noopener noreferrer" sx={{ mr: "auto", color: DIM, textTransform: "none" }}>{tx("Open GitHub")}</Button>}
       {refused ? <>
-        <Button onClick={() => copyText(rawError(req), "Copied.")}>Copy the error</Button>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={() => copyText(rawError(req), "Copied.")}>{tx("Copy the error")}</Button>
+        <Button onClick={onClose}>{tx("Close")}</Button>
       </> : <>
-        {!draft && <Button onClick={onClose}>Close</Button>}
-        {shot && !shotOnClip && <Button onClick={() => say(copyShot(shot), SHOT_ON, true)}>Copy the screenshot</Button>}
-        <Button onClick={() => copyText(fullReport(title, body()), "Copied.")} disabled={!draft || busy}>Copy full report</Button>
-        <Button variant="contained" onClick={send} disabled={!draft || busy || !title.trim()}>{busy ? "Opening…" : "Send"}</Button>
+        {!draft && <Button onClick={onClose}>{tx("Close")}</Button>}
+        {shot && !shotOnClip && <Button onClick={() => say(copyShot(shot), SHOT_ON, true)}>{tx("Copy the screenshot")}</Button>}
+        <Button onClick={() => copyText(fullReport(title, body()), "Copied.")} disabled={!draft || busy}>{tx("Copy full report")}</Button>
+        <Button variant="contained" onClick={send} disabled={!draft || busy || !title.trim()}>{busy ? "Opening…" : tx("Send")}</Button>
       </>}
     </DialogActions>
   </Dialog>;
@@ -104,5 +105,4 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
 
 // the quiet link under an error the page drew: small, dim, no icon - an offer, not an alarm
 export const ReportLink = ({ text, style }) => <button type="button" onClick={() => openBugReport(shownError(text))}
-  style={{ display: "block", marginTop: 4, padding: 0, border: 0, background: "none", color: DIM, fontSize: 11.5, cursor: "pointer", textDecoration: "underline", ...style }}>
-  Report this bug</button>;
+  style={{ display: "block", marginTop: 4, padding: 0, border: 0, background: "none", color: DIM, fontSize: 11.5, cursor: "pointer", textDecoration: "underline", ...style }}> {tx("Report this bug")}</button>;

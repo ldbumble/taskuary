@@ -17,7 +17,7 @@ test("only a connected card shows its command; the rest offer Connect", () => {
 });
 
 test("a connected card disconnects, and the dialog says it can be undone", () => {
-  assert.match(src, /setConfirmDel\(cli\.name\)\}>Disconnect<\/Button>/);
-  assert.match(src, /confirmLabel="Disconnect" undoable/);
+  assert.match(src, /setConfirmDel\(cli\.name\)\}>\{tx\("Disconnect"\)\}<\/Button>/);
+  assert.match(src, /confirmLabel=\{tx\("Disconnect"\)\} undoable/);
   assert.doesNotMatch(src, /Set it up connects it again/);
 });

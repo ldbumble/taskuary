@@ -23,7 +23,7 @@ test("a running turn says so, whichever backend is answering", () => {
 
 test("the band reports the turn, and never invents a total it was not told", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /work\.steps\.length > 1 && <span className="tq-aui-band-step"> — step \{work\.steps\.length\}/);
+  assert.match(view, /work\.steps\.length > 1 && <span className="tq-aui-band-step"> \{tx\("— step"\)\} \{work\.steps\.length\}/);
   assert.doesNotMatch(view, /of about/);                                            // no made-up denominator
   assert.match(view, /elapsedText\(now - since\)/);                                 // the turn's clock
   assert.match(view, /what it has so far/);

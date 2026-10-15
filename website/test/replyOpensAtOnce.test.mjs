@@ -52,7 +52,7 @@ test("the Game's Reply presses open at once too, and its draft box says Drafting
   assert.equal((game.match(/openReply\(api, item\.mid\)/g) || []).length, 3, "Draft a reply, Reply from this, the reply chip");
   const draft = game.slice(game.indexOf("function Draft("), game.indexOf("export function Moves("));
   assert.match(draft, /useDraftJob\(item\.rid\)/);
-  assert.match(draft, /drafting \? "Drafting…"/);
+  assert.match(draft, /drafting \? (?:tx\()?"Drafting…"/);
 });
 
 test("every Reply press opens at once, and both views of a draft show Drafting while it is written", () => {
@@ -62,6 +62,6 @@ test("every Reply press opens at once, and both views of a draft show Drafting w
   assert.match(view, /if \(verb === "reply" && mid\) \{\n\s+const data = await openReply\(api, mid, d\.text \|\| null, d\.cc \|\| null\);/);
   assert.match(page, /await \(generate \? draftReply\(api, replyMessage\.MessageId\)/);   // the import, renamed: the page's own openReply shadowed it
   for (const src of [cards, dec]) assert.match(src, /useDraftJob\(/);
-  assert.match(dec, /drafting \? "Drafting…"/);
-  assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? "Drafting…"/);
+  assert.match(dec, /drafting \? (?:tx\()?"Drafting…"/);
+  assert.match(cards.slice(cards.indexOf("export function ReplyCard"), cards.indexOf("export function MeetingCard")), /drafting \? (?:tx\()?"Drafting…"/);
 });

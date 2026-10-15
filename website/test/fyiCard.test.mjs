@@ -20,7 +20,7 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /const folded = items\.length > FOLD_AT/);
   assert.doesNotMatch(fyis, /tq-fyi-doors/);                                         // no door on every line (2026-09-23)
   assert.match(fyis, /<button type="button" className="tq-fyi-line" onClick=\{\(\) => setOpen/);   // the line IS the control
-  for (const label of ["Reply", "Make task", "Coding agent", "Regular agent", "Talk about it"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
+  for (const label of ["Reply", "Make task", "Coding agent", "Regular agent", "Talk about it"]) assert.match(fyis, new RegExp(`>\\{tx\\("${label}"\\)\\}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coder", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)
@@ -37,7 +37,7 @@ test("the grouped context, the task summary and the checklist stay renderable - 
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
   assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /className="tq-task-focus"/);
   assert.match(combined, /items\.map/); assert.match(combined, /tq-task-focus-item/);
-  assert.match(combined, /Email context · \{messages\.length\} messages combined by triage/);
+  assert.match(combined, /\{tx\("Email context ·"\)\} \{messages\.length\} \{tx\("messages combined by triage"\)\}/);
   // the walk's cards lead with who wants what and link to the task; the checklist lives on the task
   // (the owner, 2026-09-23: "let's keep the detail task list on the actual task tab")
   assert.match(combined, /const task = list && /);
@@ -52,7 +52,7 @@ test("a box means an item you can tick, and the job is not said twice", () => {
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
   const label = /<div className="tq-task-focus-label">([\s\S]*?)<\/div>/.exec(combined)[1];
   assert.doesNotMatch(label, /tq-task-box/, "the header keeps the word and loses the box");
-  assert.match(label, /\{items\.length \? "Task list" : "Task"\}/);
+  assert.match(label, /\{items\.length \? tx\("Task list"\) : tx\("Task"\)\}/);
   // the summary stands in only when there is no list to read instead
   assert.match(combined, /\{!items\.length && taskText && <div className="tq-task-focus-text">/);
   // ...and every remaining box belongs to one item

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { syncFace, syncStatusDelay } from "../src/syncTiming.js";
+import { setLocale } from "../src/i18n.js";
+
+setLocale("en");   // English contract below; pt-BR face is pinned in its own test
 
 test("sync status checks quietly when the scheduled refresh is far away", () => {
   assert.equal(syncStatusDelay({ nextAt: 600_000, now: 0 }), 30_000);
@@ -32,4 +35,13 @@ test("a running sync and a disabled one say so in both faces", () => {
 
 test("no poll yet never invents a time", () => {
   assert.equal(syncFace({ every: 10, lastAt: null, nextIn: null }), "synced —");
+});
+
+test("the sync clock follows the pt-BR locale", () => {
+  setLocale("pt-BR");
+  try {
+    assert.equal(syncFace({ every: 10, lastAt: new Date(2026, 8, 3, 10, 42), nextIn: 271, failed: ["Outlook"] }),
+      "sincronizado 10:42 · próxima em 4:31 · falha em Outlook");
+    assert.equal(syncFace({ every: 0 }), "sincronização em segundo plano desligada");
+  } finally { setLocale("en"); }
 });

@@ -24,7 +24,7 @@ test("a failed report run offers Try again as a real button, not a span", () => 
   // Anchor on setMissed: other Box components exist in the same file.
   const source = read("ReportsView.jsx");
   const retry = source.match(
-    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?setMissed\(null\)(?:(?!<Box)[\s\S])*?)>Try again<\/Box>/
+    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?setMissed\(null\)(?:(?!<Box)[\s\S])*?)>\{tx\("Try again"\)\}<\/Box>/
   );
   assert.ok(retry, "Try again control exists in ReportsView.jsx");
   assert.equal(retry[1], "button");
@@ -76,7 +76,7 @@ test("pasted screenshot thumbnails offer Remove as a real button", () => {
   assert.ok(remove, "Remove control exists in ui.jsx PromptThumbs");
   assert.equal(remove[1], "button");
   assert.match(remove[2], /type="button"/);
-  assert.match(remove[2], /aria-label="Remove this image"/);
+  assert.match(remove[2], /aria-label=\{tx\("Remove this image"\)\}/);
   assert.match(remove[2], /border: 0/);
 });
 

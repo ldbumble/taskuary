@@ -1,3 +1,5 @@
+import { getLocale, loadLocale, subscribeLocale, t as tx } from "./i18n.js";
+import api from "./api.js";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import TaskHubPage from "./TaskHubPage.jsx";
@@ -36,30 +38,20 @@ class Boundary extends React.Component {
     return (
       <div style={{ maxWidth: 720, margin: "80px auto", padding: 24, fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif",
         background: "#fff", border: "1px solid #f3d1d1", borderRadius: 12 }}>
-        <div style={{ fontWeight: 600, fontSize: 16, color: "#6b2733", marginBottom: 8 }}>
-          Something in this view failed to draw
-        </div>
-        <div style={{ fontSize: 13, color: "#1f2430", marginBottom: 12 }}>
-          Your data and any running agent sessions are untouched — they live on the server, not in this page.
-        </div>
+        <div style={{ fontWeight: 600, fontSize: 16, color: "#6b2733", marginBottom: 8 }}> {tx("Something in this view failed to draw")} </div>
+        <div style={{ fontSize: 13, color: "#1f2430", marginBottom: 12 }}> {tx("Your data and any running agent sessions are untouched — they live on the server, not in this page.")} </div>
         <pre style={{ fontSize: 11.5, background: "#f4f1ec", border: "1px solid #e1dcd5", borderRadius: 8,
           padding: 12, whiteSpace: "pre-wrap", color: "#5e685f", maxHeight: 180, overflow: "auto" }}>
           {String(this.state.err?.stack || this.state.err)}
         </pre>
         <button onClick={() => this.setState({ err: null, report: null })}
           style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid #d8cfbe", background: "#eae4d8",
-            color: "#55697a", fontWeight: 600, cursor: "pointer" }}>
-          Try again
-        </button>
+            color: "#55697a", fontWeight: 600, cursor: "pointer" }}> {tx("Try again")} </button>
         <button onClick={() => location.reload()}
           style={{ marginLeft: 8, padding: "6px 16px", borderRadius: 8, border: "1px solid #e1dcd5",
-            background: "#fff", color: "#1f2430", cursor: "pointer" }}>
-          Reload the app
-        </button>
+            background: "#fff", color: "#1f2430", cursor: "pointer" }}> {tx("Reload the app")} </button>
         <button type="button" onClick={() => this.setState({ report: { message: String(this.state.err?.message || this.state.err), stack: this.state.err?.stack } })}
-          style={{ marginLeft: 12, padding: 0, border: 0, background: "none", color: "#4d4a43", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-          Report this bug
-        </button>
+          style={{ marginLeft: 12, padding: 0, border: 0, background: "none", color: "#4d4a43", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}> {tx("Report this bug")} </button>
         <BugReportDialog open={!!this.state.report} onClose={() => this.setState({ report: null })} screen="crash" error={this.state.report} />
       </div>
     );
@@ -69,7 +61,14 @@ class Boundary extends React.Component {
 const unlinked = needsLink(document, typeof localStorage === "undefined" ? null : localStorage);
 const Unlinked = () => <div style={{ margin: "80px auto", maxWidth: 560, fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif", fontSize: 14, color: "#5e685f" }}>{UNLINKED_LINE}</div>;
 const root = createRoot(document.getElementById("root"));
-root.render(unlinked ? <Unlinked /> : <Boundary><TaskHubPage /></Boundary>);
+// Locale changes re-render React state; text is never translated by mutating the DOM.
+function LocalizedApp() {
+  const locale = React.useSyncExternalStore(subscribeLocale, getLocale, getLocale);
+  React.useEffect(() => { document.documentElement.lang = locale; }, [locale]);
+  return <Boundary><TaskHubPage /></Boundary>;
+}
+root.render(unlinked ? <Unlinked /> : <LocalizedApp />);
+if (!unlinked) loadLocale(api).catch(() => {});
 // the token went stale under an open page (unlinked.staleToken): every call would meet 401 from here on
 window.addEventListener(UNLINKED_EVENT, () => root.render(<Unlinked />), { once: true });
 

@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // LEARNED.md as a picture (discussion #27). Left: what SOUL.md says (it outranks). Right: the
 // learned lines by status - live, proposed, still hypotheses, died. Open a line and its
 // evidence FANS OUT underneath it: a compact grid of the verdicts that fed it, a short thread
@@ -33,7 +34,7 @@ const Score = ({ s, eff, color }) => (
 const Ledger = ({ line, promoteAt }) => {
   const steps = line.steps || [];
   const dated = steps.filter((s) => s.date);
-  if (!dated.length) return <Typography variant="caption" sx={{ color: FAINT }}>No dated evidence yet — this line has a score but nothing to draw it from.</Typography>;
+  if (!dated.length) return <Typography variant="caption" sx={{ color: FAINT }}>{tx("No dated evidence yet — this line has a score but nothing to draw it from.")}</Typography>;
   const W = 720, H = 96, L = 30, R = 14, T = 12, B = 22;
   const t0 = new Date(dated[0].date.replace(" ", "T")).getTime(), t1 = Math.max(Date.now(), new Date(dated[dated.length - 1].date.replace(" ", "T")).getTime());
   const maxS = Math.max(promoteAt + 1, ...steps.map((s) => s.score));
@@ -48,7 +49,7 @@ const Ledger = ({ line, promoteAt }) => {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: W }}>
       <line x1={L} y1={Y(promoteAt)} x2={W - R} y2={Y(promoteAt)} stroke={ROLES.handled.bd} strokeDasharray="3 3" />
-      <text x={W - R} y={Y(promoteAt) - 4} fontSize="9" fill={ROLES.handled.solid} textAnchor="end" fontFamily="IBM Plex Mono, monospace">s:{promoteAt} · live from here</text>
+      <text x={W - R} y={Y(promoteAt) - 4} fontSize="9" fill={ROLES.handled.solid} textAnchor="end" fontFamily="IBM Plex Mono, monospace">s:{promoteAt} {tx("· live from here")}</text>
       <path d={d} fill="none" stroke={col} strokeWidth="2" strokeDasharray={dead ? "5 3" : undefined} />
       {dated.map((s, i) => (
         <g key={i}>
@@ -57,7 +58,7 @@ const Ledger = ({ line, promoteAt }) => {
         </g>
       ))}
       <text x={L} y={H - 7} fontSize="9" fill={FAINT} fontFamily="IBM Plex Mono, monospace">{day(dated[0].date)}</text>
-      <text x={W - R} y={H - 7} fontSize="9" fill={FAINT} textAnchor="end" fontFamily="IBM Plex Mono, monospace">today</text>
+      <text x={W - R} y={H - 7} fontSize="9" fill={FAINT} textAnchor="end" fontFamily="IBM Plex Mono, monospace">{tx("today")}</text>
     </svg>
   );
 };
@@ -81,14 +82,13 @@ const Fan = ({ line, promoteAt }) => {
   const evs = [...(line.evidence || [])].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   return (
     <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px dashed ${BORDER}` }}>
-      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mb: 0.5 }}>THE LEDGER · every point gained or lost</Typography>
+      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mb: 0.5 }}>{tx("THE LEDGER · every point gained or lost")}</Typography>
       <Ledger line={line} promoteAt={promoteAt} />
-      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mt: 1.25, mb: 0.75 }}>
-        WHAT FED IT · {evs.length} verdict{evs.length === 1 ? "" : "s"}, oldest first{contraIds.size ? ` · ${contraIds.size} against` : ""}
+      <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mt: 1.25, mb: 0.75 }}> {tx("WHAT FED IT ·")} {evs.length} {tx("verdict")}{evs.length === 1 ? "" : "s"}{tx(", oldest first")}{contraIds.size ? ` · ${contraIds.size} against` : ""}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 0.75 }}>
         {evs.map((e) => <Evidence key={e.id} e={e} contra={contraIds.has(e.id)} innerRef={() => {}} />)}
-        {evs.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>no evidence ids on this line</Typography>}
+        {evs.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>{tx("no evidence ids on this line")}</Typography>}
       </Box>
     </Box>
   );
@@ -109,7 +109,7 @@ export default function LearnedView({ onChanged }) {
   }, []);
   useEffect(() => { load(); }, [load]);
   if (err) return <Typography variant="body2" sx={{ color: RED_INK }}>{err}</Typography>;
-  if (!g) return <Typography variant="caption" sx={{ color: FAINT }}>Reading LEARNED.md…</Typography>;
+  if (!g) return <Typography variant="caption" sx={{ color: FAINT }}>{tx("Reading LEARNED.md…")}</Typography>;
   const lines = g.lines || [];
   const adopt = async (key) => { await api.post("/api/learn/adopt", { key }); await load(); onChanged?.(); };
   const groups = ["live", "proposed", "hypothesis"].map((s) => [s, lines.filter((l) => l.status === s)]);
@@ -125,15 +125,15 @@ export default function LearnedView({ onChanged }) {
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.4 }}>
             <Score s={l.score} eff={l.effective} color={st.color} />
             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
-              title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
+              title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>{tx("seen")} {l.seen}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>
-              {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
+              {isOpen ? "▾" : "▸"} {l.evidence.length} {tx("verdict")}{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
             </Typography>
             <Box sx={{ flex: 1 }} />
-            {l.eligible && l.status === "hypothesis" && <Chip size="small" label="earned it" sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
+            {l.eligible && l.status === "hypothesis" && <Chip size="small" label={tx("earned it")} sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
             {l.status !== "live" && (
               <Button size="small" onClick={(e) => { e.stopPropagation(); adopt(l.key); }} sx={{ fontSize: 10.5, py: 0, minWidth: 0 }}
-                title="Move this line into the live section — it rides into every prompt from now on">Adopt</Button>
+                title={tx("Move this line into the live section — it rides into every prompt from now on")}>{tx("Adopt")}</Button>
             )}
           </Box>
           <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.4, color: INK }}>{l.text}</Typography>
@@ -146,33 +146,30 @@ export default function LearnedView({ onChanged }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, p: 2, bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2 }}>
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>WHAT DRIVES WHAT · </b>
-        every line shows how many of your verdicts fed it. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.
-        {g.history_since ? "" : " History records from now; today's ledgers are reconstructed from the evidence dates."}
+        <b style={{ ...mono, fontSize: 10, letterSpacing: 1, color: FAINT }}>{tx("WHAT DRIVES WHAT ·")} </b> {tx("every line shows how many of your verdicts fed it. Point at one and they fan out underneath — red where one contradicted — with the line's ledger: every point it gained or lost, on one clock. Click to keep it open.")} {g.history_since ? "" : " History records from now; today's ledgers are reconstructed from the evidence dates."}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 3, alignItems: "start" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600 }}>SOUL.md · OUTRANKS</Typography>
+          <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600 }}>{tx("SOUL.md · OUTRANKS")}</Typography>
           {(g.soul || []).map((r, i) => (
             <Box key={i} sx={{ p: 1, borderRadius: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, fontSize: 11, color: DIM, lineHeight: 1.4 }}>{r.text}</Box>
           ))}
-          <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>A learned line never overrides these; where they disagree, SOUL wins.</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{tx("A learned line never overrides these; where they disagree, SOUL wins.")}</Typography>
         </Box>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           {groups.map(([status, ls]) => (
             <Box key={status} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
               <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: status === "proposed" ? RED : FAINT, fontWeight: 600 }}>{STATUS[status].label}</Typography>
-              {ls.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>nothing here yet</Typography>}
+              {ls.length === 0 && <Typography variant="caption" sx={{ color: FAINT }}>{tx("nothing here yet")}</Typography>}
               {ls.map((l) => <Card key={l.key} l={l} />)}
             </Box>
           ))}
           {(g.deleted || []).length > 0 && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: RED, fontWeight: 600 }}>DIED · contradicted until s:0</Typography>
+              <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: RED, fontWeight: 600 }}>{tx("DIED · contradicted until s:0")}</Typography>
               {g.deleted.map((l) => (
                 <Box key={l.key} sx={{ p: 1.1, borderRadius: 2, bgcolor: RED_TINT, border: `1px dashed ${RED_BD}`, color: RED_INK, opacity: .85 }}>
-                  <Typography variant="caption" sx={{ ...mono, fontSize: 10 }}>
-                    deleted {day(l.deleted_at)} · {l.contradictions.length} contradiction{l.contradictions.length === 1 ? "" : "s"}
+                  <Typography variant="caption" sx={{ ...mono, fontSize: 10 }}> {tx("deleted")} {day(l.deleted_at)} · {l.contradictions.length} {tx("contradiction")}{l.contradictions.length === 1 ? "" : "s"}
                     {l.contradictions.length ? " · " + l.contradictions.map((c) => `${day(c.date)}${c.ev ? " (" + c.ev + ")" : ""}`).join(", ") : ""}
                   </Typography>
                   <Typography variant="body2" sx={{ fontSize: 12.5, textDecoration: "line-through" }}>{l.text}</Typography>
@@ -185,14 +182,14 @@ export default function LearnedView({ onChanged }) {
               <Typography component="button" type="button" aria-expanded={looseOpen} onClick={() => setLooseOpen((o) => !o)}
                 sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, cursor: "pointer",
                   appearance: "none", border: 0, bgcolor: "transparent", p: 0, textAlign: "left", display: "block" }}>
-                {looseOpen ? "▾" : "▸"} VERDICTS NOT YET IN ANY LINE · {loose.length}
+                {looseOpen ? "▾" : "▸"} {tx("VERDICTS NOT YET IN ANY LINE ·")} {loose.length}
               </Typography>
               {looseOpen && (
                 <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 0.75, mt: 0.75 }}>
                   {loose.map((e) => <Evidence key={e.id} e={e} contra={false} innerRef={() => {}} />)}
                 </Box>
               )}
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>The next reflection reads these; a pattern two or more of them share becomes a hypothesis.</Typography>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{tx("The next reflection reads these; a pattern two or more of them share becomes a hypothesis.")}</Typography>
             </Box>
           )}
         </Box>

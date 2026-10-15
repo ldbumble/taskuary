@@ -8,9 +8,9 @@ const fr = readFileSync(new URL("../src/FirstRun.jsx", import.meta.url), "utf8")
 
 test("signed in and failing shows the error and Update / Try again / Report this bug, not Sign in", () => {
   assert.match(fr, /const stuck = q === "ai" && \["update", "retry"\]\.includes\(fix\?\.fix\)/);
-  assert.match(fr, /What it said: \{fix\.detail\}/);
-  assert.match(fr, />Update \{fix\.title\}</);
-  assert.match(fr, />Try again</);
-  assert.match(fr, />Report this bug</);
+  assert.match(fr, /\{tx\("What it said:"\)\} \{fix\.detail\}/);
+  assert.match(fr, />\{tx\("Update"\)\} \{fix\.title\}</);
+  assert.match(fr, />\{tx\("Try again"\)\}</);
+  assert.match(fr, />\{tx\("Report this bug"\)\}</);
   assert.match(fr, /"Signed in · not answering"/);
 });

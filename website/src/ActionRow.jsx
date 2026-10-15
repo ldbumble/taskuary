@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most (the decision; Next only when there is no decision), and a greyed decision says why it is greyed.
@@ -27,17 +28,17 @@ export function AdvisorNext({ advice }) {
   return (
     <div className="tq-next" role="status" data-tq-advice="">
       <div className="tq-next-txt">{suggestion(advice.line, advice.label, advice.verb)}</div>
-      <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={why}>Why?</button>
+      <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={why}>{tx("Why?")}</button>
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
-        <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{onRow.label}</b> - the dark button below</div>
+        <div className="tq-next-pop" role="dialog" aria-label={tx("Why the Advisor suggests this")}>
+          <div className="pick">{tx("Suggested:")} <b>{onRow.label}</b> {tx("- the dark button below")}</div>
           <div className="said">{advice.line}</div>
-          {m >= 2 && <div className="fact">You chose {advice.label} {n} of {m} times in a moment like this.</div>}
-          {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).length > 0 && (
-            <div className="rests"><div className="head">What it rests on</div>
+          {m >= 2 && <div className="fact">{tx("You chose")} {advice.label} {n} {tx("of")} {m} {tx("times in a moment like this.")}</div>}
+          {note === null ? <div className="fact">{tx("Reading its notes…")}</div> : (note.evidence || []).length > 0 && (
+            <div className="rests"><div className="head">{tx("What it rests on")}</div>
               <ul>{note.evidence.map((e) => <li key={e.id}>{e.label || e.id}</li>)}</ul></div>)}
-          {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}{note.model ? ` · ${note.model}` : ""}</div>}
+          {note?.at && <div className="when">{tx("Judged")} {String(note.at).slice(0, 16)}{note.model ? ` · ${note.model}` : ""}</div>}
         </div>
       </Popover>
     </div>
@@ -86,7 +87,7 @@ export default function ActionRow({ inline = false, advised = null }) {
   return (
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
       <div className="tq-arow-verbs">
-        {next && <div className="tq-cl" role="group" aria-label="Move on">
+        {next && <div className="tq-cl" role="group" aria-label={tx("Move on")}>
           <div className="tq-cl-b"><button type="button" className={`tq-ab ${next.tone} next`} data-tq-next="" title={next.title || undefined} disabled={next.disabled}
             onClick={(e) => press(next.id, e, e.currentTarget)}>{next.label}</button></div></div>}
         {clustersOf(row).map((g) => <Cluster key={g.type} g={g} btn={btn} />)}

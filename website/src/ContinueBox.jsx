@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useState } from "react";
 import { Box, Button, Popover, TextField, Typography } from "@mui/material";
 import api from "./api.js";
@@ -28,8 +29,8 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Continue session{taskRef ? ` · ${taskRef}` : ""}</Typography>
-      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="Anything to tell it as it picks up? (optional) - paste or drop a picture too"
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{tx("Continue session")}{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder={tx("Anything to tell it as it picks up? (optional) - paste or drop a picture too")}
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
         InputProps={{ endAdornment: (
@@ -42,7 +43,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
       <Box sx={{ display: "flex", gap: 0.75 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || pics.busy} onClick={go}>
           {busy ? "Continuing…" : said ? "Continue with this" : "Continue as is"}</Button>
-        <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button size="small" disabled={busy} onClick={onClose}>{tx("Cancel")}</Button>
       </Box>
       {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}
     </Box>

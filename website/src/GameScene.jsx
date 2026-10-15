@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import * as THREE from "three";
@@ -1057,14 +1058,10 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
     <Box ref={hostRef} data-studio-scene="three" sx={{ position: "absolute", inset: 0, overflow: "hidden",
       "& canvas": { display: "block", width: "100%", height: "100%", outline: "none", cursor: "grab" } }}>
       {!ready && !failed && (
-        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}>
-          Opening the office…
-        </Box>
+        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}> {tx("Opening the office…")} </Box>
       )}
       {failed && (
-        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}>
-          The 3D office needs WebGL enabled.
-        </Box>
+        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}> {tx("The 3D office needs WebGL enabled.")} </Box>
       )}
       {seats.map((descriptor, index) => (
         <Box key={descriptor?.task?.TaskId || `free-${index}`} ref={(node) => { labelRefs.current[index] = node; }}
@@ -1121,19 +1118,19 @@ export default function GameScene({ seats, selectedId, onSelect, focus = "all", 
 
       <Box ref={tagRef("near")} sx={{ ...pinned, transform: "translate(-50%, 10px)", pointerEvents: "none", px: 1, py: 0.3, borderRadius: "7px", bgcolor: "#1c1f24",
         color: "#f0c05a", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", border: "1px solid #f0c05a", zIndex: 5 }} />
-      <Box ref={tagRef("door")} onClick={() => onExit?.()} title="Walk out through the door (or click) - back to the Assistant's chat"
+      <Box ref={tagRef("door")} onClick={() => onExit?.()} title={tx("Walk out through the door (or click) - back to the Assistant's chat")}
         sx={{ ...pinned, px: 1, py: 0.35, borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap", bgcolor: "#1c1f24", color: "#f3f1ec",
-          fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>🚪 Back to chat</Box>
+          fontSize: 11, fontWeight: 600, border: "1px solid rgba(255,255,255,.25)", "&:hover": { borderColor: "#f0c05a", color: "#f0c05a" } }}>{tx("🚪 Back to chat")}</Box>
       <Box ref={tagRef("you")} sx={{ ...pinned, pointerEvents: "none", px: 0.8, py: 0.15, borderRadius: 99, bgcolor: "#f0c05a",
-        color: "#1c1f24", fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>YOU</Box>
+        color: "#1c1f24", fontSize: 10, fontWeight: 600, letterSpacing: 1 }}>{tx("YOU")}</Box>
 
       <Box sx={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", zIndex: 4,
         display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1, px: 1.2, py: 0.65, borderRadius: "8px",
         bgcolor: "rgba(24,28,34,.78)", backdropFilter: "blur(7px)" }}>
-        <Typography sx={{ fontSize: 10.5, color: "#cfd5dc" }}>WASD walk · E talk · N next · 1-6 jump · Esc out</Typography>
+        <Typography sx={{ fontSize: 10.5, color: "#cfd5dc" }}>{tx("WASD walk · E talk · N next · 1-6 jump · Esc out")}</Typography>
         <Box component="button" type="button" onClick={() => sceneApi.current?.reset()}
           sx={{ border: 0, bgcolor: "transparent", color: "#f0c05a", fontSize: 10.5, fontWeight: 600,
-            cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>Reset view</Box>
+            cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>{tx("Reset view")}</Box>
       </Box>
     </Box>
   );

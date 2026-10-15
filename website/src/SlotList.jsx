@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import { useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import ReviewDecision from "./ReviewDecision.jsx";
@@ -44,7 +45,7 @@ export default function SlotList({ taskId, checklist = [], reviews = [], onChang
                 : `${i.out.name || named} · ${i.out.kind}`}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{slotState(i, rv)}{i.out.by === "agent" ? " · added by the agent" : ""}
                 {i.out.candidates?.length ? ` · could be ${i.out.candidates.slice(0, 3).join(" or ")}` : ""}</Typography>
-              {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>Drop</Button>}
+              {!i.done && rv?.Status !== "pending" && <Button size="small" disabled={busy} onClick={() => drop(i)}>{tx("Drop")}</Button>}
             </Box>
             {rv?.Status === "pending" && <ReviewDecision review={rv} onChanged={onChanged} onDrop={() => drop(i)} />}
           </Box>

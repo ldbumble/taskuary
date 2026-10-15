@@ -43,7 +43,7 @@ test("it compares the words, not the whitespace or the case", () => {
 test("the line opens its message, and talking about it is one of the opened line's actions", () => {
   const card = read("assistantCards.jsx");
   assert.match(card, /title=\{open === i\.key \? "Fold it" : "Read it here"\}/);
-  assert.match(card, /onSurface\?\.\(i\.key\)\} sx=\{faint\}>Talk about it</);
+  assert.match(card, /onSurface\?\.\(i\.key\)\} sx=\{faint\}>\{tx\("Talk about it"\)\}</);
   assert.doesNotMatch(card, />Dig in</);
   assert.doesNotMatch(card, /\? "Fold" : "Read"/);
 });

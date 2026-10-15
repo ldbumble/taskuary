@@ -54,6 +54,7 @@
     "meeting_grace_minutes": "5",
     "fyi_batch": "4",
     "chat_keep_days": "15",
-    "feed_days": "14"
+    "feed_days": "14",
+    "locale": "pt-BR"
   }
 }

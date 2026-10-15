@@ -455,6 +455,11 @@ is what you see if those cards cannot load.</li>
 <p><code>feed_days</code> · type: number · default: <code>14</code></p>
 <p>How many days back the Work rail reads. Display only — nothing is deleted.</p>
 <p>Purely the rail&#39;s window. Older messages stay in the database, in task histories, and in search.</p>
+<h3 id="language">Language<a class="anchor" href="#language" aria-label="Link to this section">#</a></h3>
+<p><code>locale</code> · type: select · default: <code>pt-BR</code></p>
+<p>Language for Taskuary presentation and owner-facing AI output.</p>
+<p>Options: <code>pt-BR</code>, <code>en</code></p>
+<p>Default pt-BR. English is the fallback for untranslated text. Keys, commands, source evidence and outgoing reply language remain unchanged.</p>
 <h2 id="routing-policies">Routing policies<a class="anchor" href="#routing-policies" aria-label="Link to this section">#</a></h2>
 <p>Rules evaluated <strong>before</strong> any AI touches a message; no model confidence overrides them.
 Precedence runs <code>ignore</code> → <code>escalate</code> → <code>auto_answer</code> → <code>draft</code> → <code>task_only</code>, and within one

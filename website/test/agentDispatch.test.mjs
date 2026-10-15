@@ -12,7 +12,7 @@ test("the assistant offers ONE Send to agent, and the card asks coding or not", 
   // ...no BUTTON per kind. The story's agent step names what an agent is ("Coding agent · researcher", 2026-09-28) -
   // a label, not a verb
   assert.doesNotMatch(cards, /<Button[^>]*>[^<{]*(Coding|Regular) agent[^<]*<\/Button>/);
-  assert.doesNotMatch(cards, /"Regular agent"/);
+  assert.doesNotMatch(cards, /(?<!tx\()"Regular agent"/);
   const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
   // one button (the owner, 2026-09-25) - and still two separate roads, never one guessed kind: the card's own
   // question offers both, triage's pick first (concierge.ALTS)
@@ -49,7 +49,7 @@ test("every live agent ends the same way, and never without being written up", (
   // Three controls all ended the session and differed only in what they wrote down - a result, a
   // handover note, or nothing - which is unreadable as three labels (the owner, 2026-09-16: "save
   // result vs end session vs stop session???"). One ending now, and it writes up either way.
-  assert.match(controls, />Save and end session<\/Button>/);
+  assert.match(controls, />\{tx\("Save and end session"\)\}<\/Button>/);
   // and NO way to end one without that write-up (the owner: "meaning no stop without saving")
   assert.doesNotMatch(controls, />Stop session<\/Button>/);
   assert.doesNotMatch(controls, /handover<\/Button>/);

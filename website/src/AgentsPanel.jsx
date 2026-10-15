@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 ﻿// Connections own commands; profiles reference a connection and choose a model.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, FormControlLabel, MenuItem, Switch, TextField, Typography } from "@mui/material";
@@ -73,12 +74,12 @@ export const CliConnectionsPage = ({ onBack }) => {
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
   };
   return <Box sx={{ maxWidth: 980, mx: "auto" }}>
-    <Crumb section="Connections" title="AI CLI agents" onBack={onBack} />
+    <Crumb section="Connections" title={tx("AI CLI agents")} onBack={onBack} />
     <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
-      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every profile that chooses it.</Typography>
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>Add CLI connection</Button>
+      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>{tx("Configure each CLI once. Its command and arguments are shared by every profile that chooses it.")}</Typography>
+      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>{tx("Add CLI connection")}</Button>
     </Box>
-    <Button size="small" onClick={() => { window.location.hash = "profiles"; }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
+    <Button size="small" onClick={() => { window.location.hash = "profiles"; }} sx={{ mb: 2 }}>{tx("Manage profiles in Docs")}</Button>
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     {!clis && !err && <CircularProgress size={22} />}
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
@@ -100,14 +101,14 @@ export const CliConnectionsPage = ({ onBack }) => {
           ? <Typography sx={{ ...mono, fontSize: 12, overflowWrap: "anywhere", mb: 1 }}>{cli.config.cmd} {(cli.config.args || []).join(" ")}</Typography>
           : <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{cli.installed ? "On this computer. Taskuary does not use it until you connect it." : "Taskuary does not use it."}</Typography>}
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-          {cli.configured ? <Button size="small" onClick={() => edit(cli)}>Edit command</Button>
+          {cli.configured ? <Button size="small" onClick={() => edit(cli)}>{tx("Edit command")}</Button>
             : cli.installed && <Button size="small" variant="outlined" disabled={!!connecting} onClick={() => connect(cli)}>{connecting === cli.name ? "Connecting…" : "Connect"}</Button>}
-          {cli.configured && <Button size="small" disabled={tests[cli.name]?.busy} onClick={() => runTest(cli.name)}>{tests[cli.name]?.busy ? "Testing..." : "Test"}</Button>}
+          {cli.configured && <Button size="small" disabled={tests[cli.name]?.busy} onClick={() => runTest(cli.name)}>{tests[cli.name]?.busy ? "Testing..." : tx("Test")}</Button>}
           {cli.installed ? <>
             <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
             <UpdateLine cli={cli} busy={busy} onUpdate={async () => { if (await update(cli)) await load(); }} />
           </> : <InstallLine cli={cli} busy={busy} onInstall={async () => { if (await install(cli)) await load(); }} />}
-          {cli.configured && <Button size="small" color="error" onClick={() => setConfirmDel(cli.name)}>Disconnect</Button>}
+          {cli.configured && <Button size="small" color="error" onClick={() => setConfirmDel(cli.name)}>{tx("Disconnect")}</Button>}
         </Box>
         {tests[cli.name] && !tests[cli.name].busy && <Alert severity={tests[cli.name].ok ? "success" : "error"} sx={{ mt: 1 }}>{tests[cli.name].ok ? tests[cli.name].result || "Connection works" : tests[cli.name].error}</Alert>}
       </Box>)}
@@ -115,36 +116,36 @@ export const CliConnectionsPage = ({ onBack }) => {
     {[note, setupNote].filter(Boolean).map((message, i) => <Alert key={i} severity={message.bad ? "error" : "success"} sx={{ mt: 2 }}>{message.text}</Alert>)}
     {installPane && <Box ref={installerRef} sx={{ mt: 2, ...card, p: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-        <Typography sx={{ flex: 1, fontWeight: 600 }}>{installPane.verb === "update" ? "Update" : "Install"} {installPane.name} — terminal</Typography>
+        <Typography sx={{ flex: 1, fontWeight: 600 }}>{installPane.verb === "update" ? tx("Update") : tx("Install")} {installPane.name} — terminal</Typography>
         <Button size="small" onClick={async () => {
           try { await api.post(`/api/terminals/${encodeURIComponent(installPane.sid)}/wrap`, { task_id: installPane.taskId, close: true }); setInstallPane(null); await load(); }
           catch (e) { setErr(failure(e)); }
-        }}>Close terminal</Button>
+        }}>{tx("Close terminal")}</Button>
       </Box>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Watch the commands and answer installer prompts here. Closing the terminal stops any command still running.</Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{tx("Watch the commands and answer installer prompts here. Closing the terminal stops any command still running.")}</Typography>
       <CliPane pane={installPane} />
     </Box>}
     {pane && <Box sx={{ mt: 2 }}><CliPane pane={pane} /></Box>}
     {draft && <Dialog open fullWidth maxWidth="sm" onClose={() => !saving && setDraft(null)}>
-      <DialogTitle>{draft.existing ? `CLI connection: ${draft.name}` : "Add CLI connection"}</DialogTitle>
+      <DialogTitle>{draft.existing ? `CLI connection: ${draft.name}` : tx("Add CLI connection")}</DialogTitle>
       <DialogContent><Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
         {err && <Alert severity="error">{err}</Alert>}
-        <TextField autoFocus label="Connection name" disabled={draft.existing} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <TextField label="Command" value={draft.cmd} onChange={(e) => setDraft({ ...draft, cmd: e.target.value })} />
-        <TextField label="Arguments (one per line)" multiline minRows={3} value={draft.args} onChange={(e) => setDraft({ ...draft, args: e.target.value })} />
-        <TextField label="Resume arguments (one per line)" multiline value={draft.resumeArgs}
-          helperText="How this CLI reopens a saved conversation. Write {id} where the session id goes — needed when the flag takes it joined, like --resume={id}. Without it the id is added as the next argument."
+        <TextField autoFocus label={tx("Connection name")} disabled={draft.existing} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        <TextField label={tx("Command")} value={draft.cmd} onChange={(e) => setDraft({ ...draft, cmd: e.target.value })} />
+        <TextField label={tx("Arguments (one per line)")} multiline minRows={3} value={draft.args} onChange={(e) => setDraft({ ...draft, args: e.target.value })} />
+        <TextField label={tx("Resume arguments (one per line)")} multiline value={draft.resumeArgs}
+          helperText={tx("How this CLI reopens a saved conversation. Write {id} where the session id goes — needed when the flag takes it joined, like --resume={id}. Without it the id is added as the next argument.")}
           onChange={(e) => setDraft({ ...draft, resumeArgs: e.target.value })} />
-        <TextField label="Timeout (seconds)" type="number" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
-        <TextField label="Model flag (optional)" helperText="Leave blank to use this CLI's standard model flag." value={draft.modelArg} onChange={(e) => setDraft({ ...draft, modelArg: e.target.value })} />
-        <Typography variant="caption" sx={{ color: DIM }}>Changes apply to every profile using this connection on its next run.</Typography>
-        <Box><Button variant="contained" disabled={saving || !draft.name.trim() || !draft.cmd.trim() || !(Number(draft.timeout) > 0)} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
+        <TextField label={tx("Timeout (seconds)")} type="number" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
+        <TextField label={tx("Model flag (optional)")} helperText={tx("Leave blank to use this CLI's standard model flag.")} value={draft.modelArg} onChange={(e) => setDraft({ ...draft, modelArg: e.target.value })} />
+        <Typography variant="caption" sx={{ color: DIM }}>{tx("Changes apply to every profile using this connection on its next run.")}</Typography>
+        <Box><Button variant="contained" disabled={saving || !draft.name.trim() || !draft.cmd.trim() || !(Number(draft.timeout) > 0)} onClick={save}>{tx("Save")}</Button><Button onClick={() => setDraft(null)}>{tx("Cancel")}</Button></Box>
       </Box></DialogContent>
     </Dialog>}
     {/* REMOVE REMOVES (the owner, 2026-10-06: "can't remove the claude cli install"): the profiles on it are named here and
         left with no CLI until one is picked for them - never moved onto another CLI behind the owner's back */}
     <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`} title={`Disconnect ${(clis || []).find((c) => c.name === confirmDel)?.label || confirmDel}?`}
-      confirmLabel="Disconnect" undoable
+      confirmLabel={tx("Disconnect")} undoable
       consequence={(() => { const used = (clis || []).find((c) => c.name === confirmDel)?.used_by || [];
         return (used.length ? `${used.join(", ")} ${used.length === 1 ? "uses" : "use"} it and will have no CLI until you pick one for ${used.length === 1 ? "it" : "them"}. ` : "")
           + "Taskuary stops using it. The program stays installed on this computer, and Connect brings it back."; })()}
@@ -192,21 +193,21 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
     <Crumb section={section} title={title} onBack={onBack} />
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Give each worker a purpose and instructions, then choose its provider and model. Triage uses the purpose to assign new tasks.</Typography>
+      <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>{tx("Give each worker a purpose and instructions, then choose its provider and model. Triage uses the purpose to assign new tasks.")}</Typography>
       {/* the two roads to a new worker, side by side and named as a choice: this screen IS the one
           door, so Docs sends you here rather than offering either of them again (2026-09-17) */}
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>Add profile manually</Button>
-      <Button variant="outlined" onClick={() => setImportSkills(true)} title="Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile">Import skills</Button>
+      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_PROFILE })}>{tx("Add profile manually")}</Button>
+      <Button variant="outlined" onClick={() => setImportSkills(true)} title={tx("Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile")}>{tx("Import skills")}</Button>
     </Box>
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={load} />}
     {!agents && !err && <CircularProgress size={22} />}
-    {agents && !Object.keys(agents).length && <Empty>Add a profile to create your first worker.</Empty>}
+    {agents && !Object.keys(agents).length && <Empty>{tx("Add a profile to create your first worker.")}</Empty>}
     {Object.entries(agents || {}).map(([name, a]) => <Box key={name} data-profile={name} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <Chip size="small" label={name} /><Typography variant="body2" sx={{ flex: 1 }}>{providerLabel(a.provider)} · {a.model || "Provider default model"}</Typography>
-        {a.triage_enabled === false && <Chip size="small" label="Manual only" />}
-        {onRules && <Button size="small" onClick={() => onRules(a.rules_doc || name)}>Instructions</Button>}
-        <Button size="small" onClick={() => edit(name)}>Edit</Button><Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
+        {a.triage_enabled === false && <Chip size="small" label={tx("Manual only")} />}
+        {onRules && <Button size="small" onClick={() => onRules(a.rules_doc || name)}>{tx("Instructions")}</Button>}
+        <Button size="small" onClick={() => edit(name)}>{tx("Edit")}</Button><Button size="small" color="error" onClick={() => setConfirmDel(name)}>{tx("Delete")}</Button>
       </Box>
       <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>{a.purpose || "Add a purpose so triage knows when to choose this profile."}</Typography>
     </Box>)}
@@ -214,30 +215,30 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
       <DialogTitle>{draft.existing ? `Edit profile · ${draft.name}` : "Add profile"}</DialogTitle>
       <DialogContent><Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
         {err && <Alert severity="error">{err}</Alert>}
-        <TextField autoFocus label="Profile name" disabled={draft.existing} value={draft.name}
+        <TextField autoFocus label={tx("Profile name")} disabled={draft.existing} value={draft.name}
           error={!draft.existing && !!agents?.[draft.name.trim()]} helperText={!draft.existing && agents?.[draft.name.trim()] ? "A profile already uses this name." : ""}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        <TextField label="Purpose — when should triage choose this profile?" multiline minRows={2} value={draft.purpose} onChange={(e) => setDraft({ ...draft, purpose: e.target.value })} />
-        <TextField select label="Model provider" SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.provider} onChange={(e) => setDraft({ ...draft, provider: e.target.value, model: "" })}>
-          <MenuItem value="">Choose a CLI connection</MenuItem>
+        <TextField label={tx("Purpose — when should triage choose this profile?")} multiline minRows={2} value={draft.purpose} onChange={(e) => setDraft({ ...draft, purpose: e.target.value })} />
+        <TextField select label={tx("Model provider")} SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.provider} onChange={(e) => setDraft({ ...draft, provider: e.target.value, model: "" })}>
+          <MenuItem value="">{tx("Choose a CLI connection")}</MenuItem>
           {connections.map((c) => <MenuItem key={c.name} value={`cli:${c.name}`}>{c.label}</MenuItem>)}
-          {draft.provider && !connections.some((c) => `cli:${c.name}` === draft.provider) && <MenuItem value={draft.provider}>{draft.provider} (unavailable)</MenuItem>}
+          {draft.provider && !connections.some((c) => `cli:${c.name}` === draft.provider) && <MenuItem value={draft.provider}>{draft.provider} {tx("(unavailable)")}</MenuItem>}
         </TextField>
-        {!connections.length && <Alert severity="info">Configure a CLI under Connections → AI CLI agents first.</Alert>}
+        {!connections.length && <Alert severity="info">{tx("Configure a CLI under Connections → AI CLI agents first.")}</Alert>}
         <Autocomplete freeSolo options={modelOptions} inputValue={draft.model} onInputChange={(_, model) => setDraft((d) => ({ ...d, model }))}
-          renderInput={(params) => <TextField {...params} label="Model name" helperText="Choose a model or type its name. Leave blank for the provider default." />} />
-        <TextField select label="Type of work" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
+          renderInput={(params) => <TextField {...params} label={tx("Model name")} helperText={tx("Choose a model or type its name. Leave blank for the provider default.")} />} />
+        <TextField select label={tx("Type of work")} value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>
           {[...new Set([...PROFILE_KINDS, draft.kind])].map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
         </TextField>
-        <TextField select label="Instructions document" SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.rulesDoc} onChange={(e) => setDraft({ ...draft, rulesDoc: e.target.value })}>
+        <TextField select label={tx("Instructions document")} SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.rulesDoc} onChange={(e) => setDraft({ ...draft, rulesDoc: e.target.value })}>
           <MenuItem value="">{draft.kind === "coding" ? "Shared CODER.md" : "Own document with starter instructions"}</MenuItem>
           {[...new Set(["coder", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
         </TextField>
-        <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label="Available to triage for new tasks" />
-        <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
+        <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label={tx("Available to triage for new tasks")} />
+        <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>{tx("Save")}</Button><Button onClick={() => setDraft(null)}>{tx("Cancel")}</Button></Box>
       </Box></DialogContent>
     </Dialog>}
-    <ConfirmDelete open={!!confirmDel} what={`the profile "${confirmDel}"`} consequence="Existing sessions are kept. Tasks fall back to the default profile."
+    <ConfirmDelete open={!!confirmDel} what={`the profile "${confirmDel}"`} consequence={tx("Existing sessions are kept. Tasks fall back to the default profile.")}
       onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/agents/${encodeURIComponent(confirmDel)}`); await load(); } catch (e) { setErr(failure(e)); } }} />
   </Box>;
 };

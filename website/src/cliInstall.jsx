@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The Install button for a coding CLI, shared by the setup wizard and the AI CLI agents page.
 // Both had the same dead end: "not installed on this machine", and nothing to press.
 //
@@ -87,8 +88,7 @@ export const InstallLine = ({ cli, busy, onInstall, sx = {} }) => {
   // this OS). Naming it beats "cannot install this one for you", which left the owner unable
   // to tell a missing dependency from an unsupported platform.
   if (!cli.installable) {
-    return <Typography variant="caption" sx={{ color: FAINT, ...sx }}>
-      not on this machine — {cli.why_not || "Taskuary cannot install this one for you"}
+    return <Typography variant="caption" sx={{ color: FAINT, ...sx }}> {tx("not on this machine —")} {cli.why_not || "Taskuary cannot install this one for you"}
     </Typography>;
   }
   return (
@@ -96,7 +96,7 @@ export const InstallLine = ({ cli, busy, onInstall, sx = {} }) => {
       startIcon={<DownloadIcon sx={{ fontSize: 14 }} />}
       title={`Download and install ${cli.label} on this machine, and put it on your PATH`}
       sx={{ fontSize: 11.5, whiteSpace: "nowrap", ...sx }}>
-      {busy === recipeOf(cli) ? "installing…" : "Install"}
+      {busy === recipeOf(cli) ? tx("installing…") : tx("Install")}
     </Button>
   );
 };
@@ -114,7 +114,7 @@ export const UpdateLine = ({ cli, busy, onUpdate, sx = {} }) => {
       startIcon={<UpgradeIcon sx={{ fontSize: 15 }} />}
       title={`Run ${cli.label}'s own updater on this machine. A CLI too old for the model it is configured with fails every run.`}
       sx={{ fontSize: 11.5, whiteSpace: "nowrap", color: FAINT, ...sx }}>
-      {busy === recipeOf(cli) ? "updating…" : "Update"}
+      {busy === recipeOf(cli) ? tx("updating…") : tx("Update")}
     </Button>
   );
 };

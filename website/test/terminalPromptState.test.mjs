@@ -8,7 +8,7 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 test("an accepted Devin prompt says it is waiting for the first response instead of looking frozen", () => {
   const terminal = read("TerminalView.jsx");
   assert.match(terminal, /typeof m\.promptPending === "boolean"/);
-  assert.match(terminal, /Task sent to \{promptState\.cli/);
+  assert.match(terminal, /\{tx\("Task sent to"\)\} \{promptState\.cli/);
   assert.match(terminal, /waiting for first response/);
 
   // The same fact appears on every compact live-work surface, even before a witness has emitted

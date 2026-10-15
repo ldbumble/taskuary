@@ -38,7 +38,7 @@ test("leaving puts down the WALK, never the task or its session", () => {
   const leave = view.slice(view.indexOf("const leaveWalk = ()"), view.indexOf("const leaveWalk = ()") + 300);
   assert.match(leave, /setWalk\(null\)/);
   assert.doesNotMatch(leave, /api\.(post|delete|patch)/, "leaving asks the server for nothing");
-  assert.match(view, /onClick=\{leaveWalk\}>Leave the walk</);
+  assert.match(view, /onClick=\{leaveWalk\}>\{tx\("Leave the walk"\)\}</);
 });
 
 test("a reload asks the task whether the walk is still one - a stale key restores nothing", () => {

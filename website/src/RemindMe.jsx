@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useState } from "react";
 import { Box, Button, IconButton, Popover, Tooltip, Typography } from "@mui/material";
 import EventIcon from "@mui/icons-material/Event";
@@ -41,8 +42,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
         <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>
           {away ? `Away until ${remindDay(task.RemindAt)}` : "Bring it back on…"}</Typography>
         {live && !away ? (
-          <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}>
-            An agent session is still open on this task. Save and end session first, then put it away.</Typography>
+          <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}> {tx("An agent session is still open on this task. Save and end session first, then put it away.")}</Typography>
         ) : <>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
             {QUICK.map(([label, until]) => (
@@ -51,20 +51,16 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
             ))}
           </Box>
           {/* later TODAY, at a time (2026-10-06: only tomorrow could be picked); the server refuses a time already gone */}
-          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
-            Later today
-            <input type="time" id={`remind-time-${task.TaskId}`} disabled={busy}
+          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}> {tx("Later today")} <input type="time" id={`remind-time-${task.TaskId}`} disabled={busy}
               onBlur={(e) => e.target.value && set(`today ${e.target.value}`)}
               style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid #d8d1c5" }} />
           </Box>
-          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}>
-            Or pick a day
-            <input type="date" id={`remind-${task.TaskId}`} min={iso(tomorrow)} disabled={busy}
+          <Box component="label" sx={{ display: "grid", gap: 0.4, fontSize: 11.5, color: "#6b6459" }}> {tx("Or pick a day")} <input type="date" id={`remind-${task.TaskId}`} min={iso(tomorrow)} disabled={busy}
               onChange={(e) => e.target.value && set(e.target.value)}
               style={{ font: "inherit", fontSize: 13, padding: "4px 6px", borderRadius: 6, border: "1px solid #d8d1c5" }} />
           </Box>
         </>}
-        {away && <Button size="small" disabled={busy} onClick={() => set("none")} sx={{ justifySelf: "start", fontSize: 11 }}>Bring it back now</Button>}
+        {away && <Button size="small" disabled={busy} onClick={() => set("none")} sx={{ justifySelf: "start", fontSize: 11 }}>{tx("Bring it back now")}</Button>}
         {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}
       </Box>
     </Popover>
@@ -82,7 +78,7 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
         ? <Tooltip title={title}><IconButton size="small" sx={{ color: "#55697a", ...sx }} onClick={(e) => setAt(e.currentTarget)}>
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         : <Button size="small" variant="outlined" sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-            onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : "Remind me"}</Button>}
+            onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : tx("Remind me")}</Button>}
       <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} />
     </>
   );

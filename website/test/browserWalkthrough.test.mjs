@@ -16,7 +16,7 @@ test("a new walkthrough is offered as a link and never yanks the tab", () => {
   assert.match(branch, /ref: p\.ref/);
   assert.doesNotMatch(view, /onNavigate\("Board"/);
   const card = read("assistantCards.jsx");
-  assert.match(card, />Open walkthrough<\/Button>/);
+  assert.match(card, />\{tx\("Open walkthrough"\)\}<\/Button>/);
   assert.doesNotMatch(card.slice(card.indexOf("export function SetupCard")), /Hand it to the coding agent/);
 });
 

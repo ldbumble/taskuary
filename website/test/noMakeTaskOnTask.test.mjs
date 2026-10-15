@@ -18,7 +18,7 @@ test("an opened fyi line offers Make task and the agents' tasks only when it has
 
 test("the Timeline tray makes a task only for a message with none", () => {
   const feed = read("FeedView.jsx");
-  const tray = feed.slice(feed.indexOf("WORK ON IT</TrayGroupLabel>"), feed.indexOf("CLEAR FROM TIMELINE"));
+  const tray = feed.slice(feed.indexOf('{tx("WORK ON IT")}</TrayGroupLabel>'), feed.indexOf("CLEAR FROM TIMELINE"));
   assert.match(tray, /\{sel\.TaskId \? \(/);
   assert.ok(tray.indexOf("/mine`") > tray.indexOf(") : ("), "Add to my tasks is the no-task branch");
 });

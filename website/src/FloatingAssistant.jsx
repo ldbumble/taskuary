@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Alert, Box, Button, CircularProgress, IconButton, Tooltip, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -121,7 +122,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
                 {expanded ? <CloseFullscreenIcon sx={{ fontSize: 17 }} /> : <OpenInFullIcon sx={{ fontSize: 17 }} />}
               </IconButton>
             </Tooltip>
-            <IconButton size="small" aria-label="Close Taskuary" onClick={() => setOpen(false)} sx={{ color: "white" }}>
+            <IconButton size="small" aria-label={tx("Close Taskuary")} onClick={() => setOpen(false)} sx={{ color: "white" }}>
               <CloseIcon sx={{ fontSize: 19 }} />
             </IconButton>
           </Box>
@@ -150,11 +151,11 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
                   sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>{label}</Button>
               )) : <>
                 <Button size="small" variant="outlined" onClick={addTask}
-                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Task</Button>
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>{tx("Task")}</Button>
                 <Button size="small" variant="outlined" onClick={addReport}
-                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Report</Button>
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>{tx("Report")}</Button>
                 <Button size="small" variant="outlined" onClick={() => go("Connections")}
-                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>Connection</Button>
+                  sx={{ minHeight: 25, px: 0.8, py: 0.2, fontSize: 10.5, textTransform: "none" }}>{tx("Connection")}</Button>
               </>}
             </Box>
           )}

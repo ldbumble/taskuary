@@ -43,5 +43,5 @@ test("Reports offers New report and New workflow together, whichever list is ope
   const view = read("ReportsView.jsx");
   assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-agent", label: "\+ New workflow" \}\]/);
   assert.doesNotMatch(view, /section === "workflows" \? \{ key: "new-agent"/);
-  assert.ok(view.includes(">New report</Button>") && view.includes(">New workflow</Button>"));
+  assert.ok(view.includes('>{tx("New report")}</Button>') && view.includes('>{tx("New workflow")}</Button>'));
 });

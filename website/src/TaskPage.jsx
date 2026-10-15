@@ -1,3 +1,4 @@
+import { getLocale, t as tx } from "./i18n.js";
 // THE TASK VIEW (the canvas redesign, docs/superpowers/specs/2026-09-29-assistant-canvas-redesign-design.md): one task's
 // three stages - Task, Agent work, Close out - with their bars, chips and the agent's pane. It was the right half of the
 // Tasks tab; it is its own component now so the assistant canvas can show the very same view for the item on its table.
@@ -206,15 +207,15 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   const done = steps.filter((s) => s.done).length;
   return (
     <Box sx={{ mt: 0.85, maxWidth: 900 }}>
-      <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Done when</Typography>
+      <Typography sx={{ ...label, display: "block", mb: 0.25 }}>{tx("Done when")}</Typography>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: FAINT }}>{steps.length ? `${done} of ${steps.length} steps done` : "no steps yet"}</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{tx("by")}</Typography>
         <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
           inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
         <Button size="small" variant="text" onClick={replan} disabled={replanning} sx={{ fontSize: 11, textTransform: "none", ml: "auto" }}
-          title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
+          title={tx("The AI writes the steps again from what done looks like; a step already started keeps its place")}>{replanning ? "Planning…" : "Re-plan"}</Button>
       </Box>
       {steps.map((s, k) => (
         <Box key={s.id} sx={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -226,19 +227,19 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
           {s.ref
             ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
-            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
+            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>{tx("Start")}</Button>}
         </Box>
         {/* the mail triage said served this step (store.step_arrivals) - who sent what, under the step it moved */}
         {(s.arrivals || []).map((a) => (
-          <Typography key={a.mid} variant="caption" sx={{ color: FAINT, pl: 4.5, pb: 0.3, display: "block" }}>↳ {a.who} sent "{a.subject}" · {String(a.at || "").slice(0, 16)}</Typography>
+          <Typography key={a.mid} variant="caption" sx={{ color: FAINT, pl: 4.5, pb: 0.3, display: "block" }}>↳ {tx("{who} sent “{subject}”", { who: a.who, subject: a.subject })} · {String(a.at || "").slice(0, 16)}</Typography>
         ))}
         </Box>
       ))}
       <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", mt: 0.6 }}>
-        <TextField size="small" fullWidth placeholder="Add a step" value={draft} onChange={(e) => setDraft(e.target.value)}
+        <TextField size="small" fullWidth placeholder={tx("Add a step")} value={draft} onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} inputProps={{ "aria-label": "Add a step" }}
           sx={{ "& .MuiInputBase-root": { fontSize: 12 } }} />
-        <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>Add</Button>
+        <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>{tx("Add")}</Button>
       </Box>
     </Box>
   );
@@ -954,19 +955,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={(e) => setContinueAt(e.currentTarget)}>
-        {startingAgent === "resume" ? "Continuing…" : "Continue session"}</Button>}
+        {startingAgent === "resume" ? "Continuing…" : tx("Continue session")}</Button>}
       {canSave && <Button size="small" variant={barContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
-        title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>Save and end session</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
+        title={tx("Writes up what this session did and files it as the task's result. The task stays open until you press Mark done.")}
+        onClick={wrapUp}>{tx("Save and end session")}</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
           sx={canContinue || canSave ? barBtn : primaryBtn}
           startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
-          title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
-          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+          title={tx("A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation.")}
+          onClick={() => setRestartOpen(true)}>{tx("Run another agent")}</Button>
       </>}
     </Box>
   );
@@ -1065,9 +1066,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
-                        <Typography variant="caption" sx={{ color: FAINT }}>
-                          This run receives the task, messages, attachments, and the latest saved result.
-                        </Typography>
+                        <Typography variant="caption" sx={{ color: FAINT }}> {tx("This run receives the task, messages, attachments, and the latest saved result.")} </Typography>
                       </Box>
                       <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
                         onChange={(e) => { const v = e.target.value; setRun((r) => ({ ...r, instruction: v })); }}
@@ -1087,34 +1086,34 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
-                          {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
+                          {startingAgent === "coding" ? tx("Starting…") : detail?.transcript ? "Start new coding session" : "Start coding session"}
                         </Button>}
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
                             the pick resumes this start - the same road a start that ran into the question takes */}
                         {!handOff && startRepo === "" && <>
-                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
+                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>{tx("Pick a repo first")}</Typography>
                           <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
                             startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                            title="Which checkout the session works in - the session starts once you pick"
-                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>pick a repo</Button>
+                            title={tx("Which checkout the session works in - the session starts once you pick")}
+                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>{tx("pick a repo")}</Button>
                         </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
-                          title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
+                          title={tx("Saves the stopped session's result and report. The task stays open.")}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>{tx("Save and end session")}</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
-                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Use non-coding agent</Button>}
+                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{tx("Use non-coding agent")}</Button>}
                         {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
-                          {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
+                          {startingAgent === "general" ? tx("Starting…") : "Send to non-coding agent"}
                         </Button>}
                         {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
-                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
+                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{tx("Back to coding")}</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
-                          onClick={() => setRestartOpen(false)}>Cancel</Button>}
+                          onClick={() => setRestartOpen(false)}>{tx("Cancel")}</Button>}
                       </Box>
                     </Box>
   );
@@ -1142,7 +1141,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1, flexShrink: 0 }}>{err}</Alert>}
           {!t ? (
             <Box sx={{ height: "100%", display: "grid", placeItems: "center" }}>
-              {selected ? <CircularProgress size={20} /> : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
+              {selected ? <CircularProgress size={20} /> : <Empty>{tx("The task you open will show here — its messages, its session, its history.")}</Empty>}
             </Box>
           ) : (
             <>
@@ -1173,8 +1172,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {t.Title}
                   </Typography>
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
-                  {interruptedTask && <Chip size="small" label="agent stopped"
-                    title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
+                  {interruptedTask && <Chip size="small" label={tx("agent stopped")}
+                    title={tx("Taskuary closed while an agent was working this. Nothing restarts until you choose one.")}
                     sx={{ height: 17, fontSize: 9.5, bgcolor: "#eee7d6", color: "#7a5c1e", flexShrink: 0 }} />}
                   {/* A LIVE SESSION HIDES THE TASK CARD ENTIRELY (the gate is !term?.alive below), so
                       with the card goes every task control - and the owner wants the session to keep
@@ -1186,17 +1185,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title={markDoneHint}
-                        disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                      <Tooltip title="Not a task — delete it and teach Taskuary why">
+                        disabled={finishing} onClick={askFinish}>{finishing ? tx("Marking done…") : tx("Mark done")}</Button>
+                      <Tooltip title={tx("Not a task — delete it and teach Taskuary why")}>
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
-                      <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
+                      <Tooltip title={tx("Hand it to a person — the AI writes the forward, you send it")}>
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
-                      <Tooltip title="Split or merge — break it in two, or fold it into the task it repeats">
+                      <Tooltip title={tx("Split or merge — break it in two, or fold it into the task it repeats")}>
                         <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
                           <CallSplitIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
@@ -1242,7 +1241,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
                   <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
                     <Box onClick={() => setReportOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ ...label }}>The report</Typography>
+                      <Typography sx={{ ...label }}>{tx("The report")}</Typography>
                       <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>
                         {sourceMessage.SourceName || sourceMessage.Subject} · {fmtDateTime(sourceMessage.SentAt)}</Typography>
                       <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: reportOpen ? "rotate(180deg)" : "none" }} />
@@ -1260,7 +1259,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {sessionView && detail?.batch && (
                   <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
                     <Box onClick={() => setItemsOpen((v) => !v)} sx={{ display: "flex", alignItems: "center", gap: 0.85, cursor: "pointer" }}>
-                      <Typography sx={{ ...label }}>The items</Typography>
+                      <Typography sx={{ ...label }}>{tx("The items")}</Typography>
                       <Typography noWrap sx={{ color: DIM, fontSize: 11.5, flex: 1, minWidth: 0 }}>{batchProgress(detail.batch)}</Typography>
                       <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, transition: "transform .15s", transform: itemsOpen ? "rotate(180deg)" : "none" }} />
                     </Box>
@@ -1282,25 +1281,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             was a small-caps "Task" label with no number, beside a (1) still up in the header */}
                         <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: PALETTE.slate, color: "#fff",
                           display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
-                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3, flexShrink: 0 }}>Task</Typography>
+                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3, flexShrink: 0 }}>{tx("Task")}</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
                         {!inRow && !["done", "dropped"].includes(t.Status) && (
                           <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
                             <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               title={markDoneHint}
-                              disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                            <Tooltip title="Not a task — delete it and teach Taskuary why">
+                              disabled={finishing} onClick={askFinish}>{finishing ? tx("Marking done…") : tx("Mark done")}</Button>
+                            <Tooltip title={tx("Not a task — delete it and teach Taskuary why")}>
                               <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                                 <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
                             <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                             <Divider orientation="vertical" flexItem sx={{ mx: 0.25, my: 0.5, borderColor: BORDER }} />
-                            <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
+                            <Tooltip title={tx("Hand it to a person — the AI writes the forward, you send it")}>
                               <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                                 <ForwardToInboxIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
-                            <Tooltip title="Split or merge — break it in two, or fold it into the task it repeats">
+                            <Tooltip title={tx("Split or merge — break it in two, or fold it into the task it repeats")}>
                               <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
                                 <CallSplitIcon sx={{ fontSize: 16 }} /></IconButton>
                             </Tooltip>
@@ -1318,26 +1317,26 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
                           sx={primaryBtn}
                           title={markDoneHint}
-                          disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
+                          disabled={finishing} onClick={askFinish}>{finishing ? tx("Marking done…") : tx("Mark done")}</Button>
                         <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                           sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
-                          title="Delete it and teach Taskuary why — the sender keeps writing to you."
-                          onClick={() => setConfirmNAT(true)}>Not a task</Button>
+                          title={tx("Delete it and teach Taskuary why — the sender keeps writing to you.")}
+                          onClick={() => setConfirmNAT(true)}>{tx("Not a task")}</Button>
                         <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                         <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                         <Button size="small" variant="outlined" sx={barBtn}
                           startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-                          title="Not ours to do — the AI writes the forward, you send it."
-                          onClick={() => setHandoff(true)}>Hand it to a person</Button>
+                          title={tx("Not ours to do — the AI writes the forward, you send it.")}
+                          onClick={() => setHandoff(true)}>{tx("Hand it to a person")}</Button>
                         <Button size="small" variant="outlined" sx={barBtn}
                           startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
-                          title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
-                          onClick={() => setReshape(true)}>Split or merge</Button>
+                          title={tx("Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats.")}
+                          onClick={() => setReshape(true)}>{tx("Split or merge")}</Button>
                       </Box>
                     ) : (
                       <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                        title="Reopens the task only. No agent starts until you choose one."
-                        onClick={reopen}>Reopen task</Button>
+                        title={tx("Reopens the task only. No agent starts until you choose one.")}
+                        onClick={reopen}>{tx("Reopen task")}</Button>
                     )}
                     {!inRow && <Divider sx={{ my: 1.4, borderColor: BORDER }} />}
                     {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
@@ -1346,8 +1345,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                             session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
                             strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
-                        {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>Open again: {news.line}</Typography>}
-                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
+                        {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>{tx("Open again:")} {news.line}</Typography>}
+                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>{tx("What needs doing")}</Typography>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
                             the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}
                         {detail?.repeats?.line && (
@@ -1365,15 +1364,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               onClick={async () => {
                                 try { await api.post(`/api/tasks/${selected}/trust`); loadDetail(selected); loadTasks(); onChanged?.(); }
                                 catch (e) { console.error("trust this task failed", e); }
-                              }}>
-                              Trust this task
-                            </Link>
+                              }}> {tx("Trust this task")} </Link>
                           </Typography>
                         )}
                         {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}
                         {strangerLine(detail)?.danger && (
-                          <Typography variant="body2" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}>
-                            ⚠ Reads as an attempt to steer the agent: {strangerLine(detail).danger}
+                          <Typography variant="body2" sx={{ color: ALERT, mt: 0.3, fontSize: 12.5, overflowWrap: "anywhere" }}> {tx("⚠ Reads as an attempt to steer the agent:")} {strangerLine(detail).danger}
                           </Typography>
                         )}
                         {taskAsk && (
@@ -1444,9 +1440,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={<AltRouteIcon sx={{ fontSize: 15 }} />}
                             endIcon={<ExpandMoreIcon sx={{ fontSize: 16, transition: "transform .15s",
                               transform: sourceOpen ? "rotate(180deg)" : "none" }} />}
-                            sx={{ minHeight: 26, py: 0, px: 1, fontSize: 11.5, color: DIM, borderColor: BORDER }}>
-                            Where this came from
-                          </Button>
+                            sx={{ minHeight: 26, py: 0, px: 1, fontSize: 11.5, color: DIM, borderColor: BORDER }}> {tx("Where this came from")} </Button>
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
@@ -1469,7 +1463,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                       {m.SentAt ? `· ${fmtDateTime(m.SentAt)}` : ""}
                                     </Typography>
                                     {m.SourceLink && <Link href={m.SourceLink} target="_blank"
-                                      rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
+                                      rel="noopener" sx={{ fontSize: 11 }}>{tx("open the original")}</Link>}
                                   </Box>
                                   {m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
                                     {m.Subject}</Typography>}
@@ -1491,7 +1485,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 <AltRouteIcon sx={{ fontSize: 16, color: ACCENT2, mt: 0.3 }} />
                                 <Box sx={{ minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
-                                    <Typography sx={{ ...label }}>Triage</Typography>
+                                    <Typography sx={{ ...label }}>{tx("Triage")}</Typography>
                                     <Chip size="small" label={sourceRoute.Decision}
                                       sx={{ height: 17, fontSize: 9.5, fontWeight: 600, bgcolor: "#e4e9ee", color: "#41525f" }} />
                                   </Box>
@@ -1503,7 +1497,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Box sx={{ p: 1.1, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.1, alignItems: "center" }}>
                               <DoneAllIcon sx={{ fontSize: 16, color: "#55697a" }} />
                               <Typography variant="caption" sx={{ color: FAINT }}>
-                                {detail.ref} · from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
+                                {detail.ref} {tx("· from")} {t.Source || "manual"} {tx("· created")} {timeAgo(t.CreatedAt)} {tx("by")} {t.CreatedBy}
                                 {detail.comments?.length ? ` · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}` : ""}
                               </Typography>
                             </Box>
@@ -1516,7 +1510,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       mt: 1.4, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
                       {!["done", "dropped"].includes(t.Status) && <>
                         <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={chipSel}
-                          renderValue={kindLabel} title="What kind of work this task contains">
+                          renderValue={kindLabel} title={tx("What kind of work this task contains")}>
                           {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
                             : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
                             <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
@@ -1527,16 +1521,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* no Status box: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12). A hand-set
                             "in progress" was read as an agent's at the next restart, and the list ignored it */}
                         <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })}
-                          sx={chipSel} title="Priority" renderValue={(v) => `${v} priority`}>
+                          sx={chipSel} title={tx("Priority")} renderValue={(v) => `${v} priority`}>
                           {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
                         </Select>
                         <Select value={t.Assignee || ""} onChange={(e) => {
                           const assignee = e.target.value, worker = assignedAgent(assignee);
                           patch({ Assignee: assignee });
                           if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
-                        }} sx={chipSel} title="Who works it" displayEmpty renderValue={(v) => (v ? assigneeLabel(v) : "nobody on it")}>
-                          <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
-                          <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
+                        }} sx={chipSel} title={tx("Who works it")} displayEmpty renderValue={(v) => (v ? assigneeLabel(v) : "nobody on it")}>
+                          <MenuItem value="" sx={{ fontSize: 12 }}>{tx("unassigned")}</MenuItem>
+                          <MenuItem value="owner" sx={{ fontSize: 12 }}>{tx("you")}</MenuItem>
                           {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
                             <TaskuaryMark size={12} />&nbsp; {name}
                           </MenuItem>)}
@@ -1546,8 +1540,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                           startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                           title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
-                          onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
-                        {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
+                          onClick={pickRepo}>{repoOf(t) || tx("pick a repo")}</Button>}
+                        {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>{tx("not started - pick a repo")}</Typography>}
                       </>}
                       {/* a finished task still says what it WAS - the settings read as the record,
                           not as controls. Reopen is the only thing you can do to it, and it lives
@@ -1606,14 +1600,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
                               title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
-                              onClick={(e) => setContinueAt(e.currentTarget)}>Continue session</Button>
+                              onClick={(e) => setContinueAt(e.currentTarget)}>{tx("Continue session")}</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
-                              title="Opens the agent step so you can choose a harness, a model and a prompt."
+                              title={tx("Opens the agent step so you can choose a harness, a model and a prompt.")}
                               onClick={() => setOpenStage("agent")}>
-                              {report || detail?.transcript ? "Run another agent" : startLabel(story, agentName(t), false) || "Start an agent"}</Button>
+                              {report || detail?.transcript ? tx("Run another agent") : startLabel(story, agentName(t), false) || "Start an agent"}</Button>
                           )}
                         </Box>
                       : null} />
@@ -1635,8 +1629,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           While an agent is working the next move is typing, so nothing here is filled;
                           the notification stays on the chip and beside the waiting room. */}
                       {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 13 }} />}
-                        title="A viewer of the agent's diff. Nothing is approved or committed here."
-                        onClick={() => setDiffOpen(true)}>Review changes</Button>}
+                        title={tx("A viewer of the agent's diff. Nothing is approved or committed here.")}
+                        onClick={() => setDiffOpen(true)}>{tx("Review changes")}</Button>}
                       {/* ONE ENDING. Three buttons all ended the session and differed only in what they
                           wrote down - a result, a handover note, or nothing - and the labels buried the
                           half they shared (the owner, 2026-09-16: "save result vs end session vs stop
@@ -1645,14 +1639,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           what the handover note was for.
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
                       <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
-                        title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
-                        onClick={wrapUp}>Save and end session</Button>
+                        title={tx("Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it.")}
+                        onClick={wrapUp}>{tx("Save and end session")}</Button>
                       {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
                           the way on is another agent - startCodingAgent pauses this one and files its handover first */}
                       {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (
                         <Button size="small" variant="contained" disableElevation sx={liveCtl} startIcon={<RefreshIcon sx={{ fontSize: 13 }} />}
-                          title="Pauses this one (its notes are kept) and starts a fresh agent - you choose which."
-                          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+                          title={tx("Pauses this one (its notes are kept) and starts a fresh agent - you choose which.")}
+                          onClick={() => setRestartOpen(true)}>{tx("Run another agent")}</Button>
                       )}
                     </Box>
                   )}
@@ -1684,7 +1678,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!inRow && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                         startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                         onClick={startGeneralAgent}>
-                        {startingAgent === "general" ? "Starting…" : "Send to agent"}
+                        {startingAgent === "general" ? tx("Starting…") : "Send to agent"}
                       </Button>}
                       <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
                         {inRow ? "Send to agent starts it with these choices, this task and its messages."
@@ -1700,18 +1694,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
-                      {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
+                      {runRole && <Box sx={{ ...chipBtnStatic }} title={tx("The role: which document this worker follows. Every coding task's role is `coder`.")}>
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>{tx("role")}</Box>&nbsp;{runRole}</Box>}
                       {brainPill && <Box sx={{ ...chipBtnStatic }}
                         title={brainPill === detail?.ranOn?.brain
                           ? `What ran this session${detail.ranOn.model ? `, on ${detail.ranOn.model}` : ""}. A brain is chosen on Settings → Triage & agents, or by this role's override — not per task.`
                           : "The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task."}>
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>{tx("brain")}</Box>&nbsp;{brainPill}</Box>}
                       {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
-                        onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
-                      {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
+                        onClick={pickRepo}>{repoOf(t) || tx("pick a repo")}</Button>}
+                      {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>{tx("not started - pick a repo")}</Typography>}
                     </Box>
                   )}
                   </>}
@@ -1720,10 +1714,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                       <AccountTreeIcon sx={{ fontSize: 16, color: "#55697a" }} />
-                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}>
-                        Which repository is this about?
-                      </Typography>
-                      <IconButton aria-label="Close repository picker" size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+                      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}> {tx("Which repository is this about?")} </Typography>
+                      <IconButton aria-label={tx("Close repository picker")} size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>
                     <RepoPicker taskId={selected} agent={term?.agent || run.agent || "coder"}
                       hasSession={!!term?.alive}
@@ -1773,10 +1765,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     border: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: "#6f8a6e", flexShrink: 0 }} />
                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0, color: INK, fontSize: 12.5 }} noWrap>
-                      {agentState === AGENT.waiting ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} in its session — it keeps running while you read the task.
-                    </Typography>
+                      {agentState === AGENT.waiting ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} {tx("in its session — it keeps running while you read the task.")} </Typography>
                     <Button size="small" variant="contained" disableElevation sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                      onClick={() => setPeek(false)}>Back to the session</Button>
+                      onClick={() => setPeek(false)}>{tx("Back to the session")}</Button>
                   </Box>
                 ) : workspaceMode === "live" ? (
                   <>
@@ -1787,7 +1778,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0 }} noWrap>
                         {term.cmd} · {term.cwd}
                       </Typography>
-                      <Chip size="small" label="exited — its output is still here"
+                      <Chip size="small" label={tx("exited — its output is still here")}
                         sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, border: `1px solid ${BORDER}`, color: DIM }} />
                     </Box>}
                     {/* A live coding session is the primary workspace, not a preview squeezed by
@@ -1808,9 +1799,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         respond in chat"): the asks box and the type-in-for-later line said again what the rail's mark and the
                         terminal already say. Answer in the terminal, or in the chat - the Assistant draws a question's options. */}
                     {wrapping && (
-                      <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
-                        Closing the session and writing up what is on screen — the agent is not asked anything.
-                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}> {tx("Closing the session and writing up what is on screen — the agent is not asked anything.")} </Typography>
                     )}
                   </>
                 ) : null}
@@ -1818,7 +1807,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!sessionView && <Box sx={{ ...card, ...step, mt: 0, p: 1.5, py: stage === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
-                  <WorkflowHeading number="3" title="Close out"
+                  <WorkflowHeading number="3" title={tx("Close out")}
                     description={term?.alive
                       ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : closeoutRv
@@ -1841,8 +1830,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
-                            {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          <Tooltip title="Ask sender — a question waits on the task for your approval">
+                            {openingReply ? tx("Drafting…") : replyPrimary}</Button>
+                          <Tooltip title={tx("Ask sender — a question waits on the task for your approval")}>
                             <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
                           </Tooltip>
@@ -1867,13 +1856,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Button size="small" variant="contained" disableElevation disabled={!!openingReply}
                               sx={primaryBtn}
                               startIcon={openingReply ? <CircularProgress size={12} /> : <ForwardToInboxIcon sx={{ fontSize: 16 }} />}
-                              title="Drafts the reply here, from this task's own context. Nothing is sent until you approve it."
-                              onClick={() => openReply(true)}>{openingReply ? "Drafting…" : replyPrimary}</Button>
+                              title={tx("Drafts the reply here, from this task's own context. Nothing is sent until you approve it.")}
+                              onClick={() => openReply(true)}>{openingReply ? tx("Drafting…") : replyPrimary}</Button>
                           )}
                           {!inRow && <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
-                            title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
-                            onClick={() => setAskSenderOpen(true)}>Ask sender</Button>}
+                            title={tx("Drafts a question to the sender. It waits here for your approval; nothing is sent now.")}
+                            onClick={() => setAskSenderOpen(true)}>{tx("Ask sender")}</Button>}
                           <Box sx={{ flex: 1, minWidth: 12 }} />
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
@@ -1897,7 +1886,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               nothing (the owner, 2026-10-12: "i hit read the draft and nothing is there anyway?") */}
                           {ended && (
                             <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                              <Typography sx={{ ...label, flexShrink: 0 }}>Ended</Typography>
+                              <Typography sx={{ ...label, flexShrink: 0 }}>{tx("Ended")}</Typography>
                               <Typography variant="body2" sx={{ color: INK, flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{ended.text}</Typography>
                               {ended.at && <Typography variant="caption" sx={{ color: FAINT, flexShrink: 0 }}>{fmtDateTime(ended.at)}</Typography>}
                             </Box>
@@ -1906,13 +1895,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               date pushed off the right edge (the owner, 2026-10-14: "you need time and date when each one was sent") */}
                           {newestFirst(sentOutside).map((m) => (
                             <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
-                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
-                                Sent by you{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
+                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}> {tx("Sent by you")}{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
                               </Typography>
                               <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
                                 display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                                 {cleanText(m.OwnText || m.BodyText)}</Typography>
-                              {m.SourceLink && <Button size="small" sx={{ mt: 0.3, fontSize: 11, minHeight: 0, p: 0 }} href={m.SourceLink} target="_blank" rel="noreferrer">Open where it was sent</Button>}
+                              {m.SourceLink && <Button size="small" sx={{ mt: 0.3, fontSize: 11, minHeight: 0, p: 0 }} href={m.SourceLink} target="_blank" rel="noreferrer">{tx("Open where it was sent")}</Button>}
                             </Box>
                           ))}
                           {/* THE ENVELOPE over what was sent, read from the same Deliver blob
@@ -1921,7 +1909,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               once the item has ended, where it named a sender nothing is going to */}
                           {(replyMessage || sentReview) && (!ended || sentReview || unsentReview) && (
                           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mt: 1.1, minWidth: 0 }}>
-                            <Typography sx={{ ...label, flexShrink: 0 }}>To</Typography>
+                            <Typography sx={{ ...label, flexShrink: 0 }}>{tx("To")}</Typography>
                             <Typography variant="body2" noWrap sx={{ color: INK, fontWeight: 600 }}>
                               {replyContext(sentReview || sourceMessage)}
                             </Typography>
@@ -1949,8 +1937,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               mail that had said something else (2026-10-13) */}
                           {(sentReview?.FinalText || sentReview?.DraftText) && (
                             <Box sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
-                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
-                                What was sent{sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}</Typography>
+                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}> {tx("What was sent")}{sentReview.DecidedAt ? ` · ${fmtDateTime(sentReview.DecidedAt)}` : ""}</Typography>
                               <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
                                 overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4,
                                 WebkitBoxOrient: "vertical", overflow: "hidden" }}>
@@ -1961,7 +1948,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {unsentReview && (
                             <Box sx={{ bgcolor: PANEL2, border: `1px dashed ${BORDER}`, borderRadius: 1.25,
                               px: 1.1, py: 0.85, mt: 0.9 }}>
-                              <Typography sx={{ ...label, display: "block" }}>Not sent - closed without sending</Typography>
+                              <Typography sx={{ ...label, display: "block" }}>{tx("Not sent - closed without sending")}</Typography>
                               <Typography variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                                 {unsentReview.DraftText}</Typography>
                               {/* ...and it can still go: the draft comes back to send, the task done or not (T11) */}
@@ -1971,7 +1958,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   api.post(`/api/reviews/${unsentReview.ReviewId}/reopen`)
                                     .then(() => { if (!stale(id)) { loadDetail(id); setOpenStage("reply"); } })
                                     .catch((e) => { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not bring the draft back"); });
-                                }}>Bring it back to send</Button>
+                                }}>{tx("Bring it back to send")}</Button>
                               )}
                             </Box>
                           )}
@@ -1993,14 +1980,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       )}
                     </Box>
                   ) : (
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.9 }}>
-                      Nothing is waiting on you here, and no inbound sender is attached to this task.
-                    </Typography>
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.9 }}> {tx("Nothing is waiting on you here, and no inbound sender is attached to this task.")} </Typography>
                   ))}
                 </Box>}
 
                 {!sessionView && <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
-                  <Typography sx={{ ...label, display: "block", mb: 0.65 }}>Messages</Typography>
+                  <Typography sx={{ ...label, display: "block", mb: 0.65 }}>{tx("Messages")}</Typography>
                   {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
                     const mine = m.Status === "context" || m.Direction === "out";
@@ -2015,10 +2000,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <Chip size="small" label={m.ReviewSent ? "sent reply" : mine ? "your reply" : "inbound"}
                             sx={{ height: 17, fontSize: 9.5, fontWeight: 600,
                               bgcolor: mine ? "#f1ead9" : "#edf3ea", color: mine ? "#6b5f45" : "#47654a" }} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{mine ? "you" : m.FromName || m.FromEmail}</Typography>
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{mine ? tx("you") : m.FromName || m.FromEmail}</Typography>
                           {m.SourceName && <Typography variant="caption" sx={{ color: FAINT }}>· {m.SourceName}</Typography>}
                           <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(m.SentAt)}</Typography>
-                          {m.SourceLink && <Link href={m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>source</Link>}
+                          {m.SourceLink && <Link href={m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>{tx("source")}</Link>}
                           <Box sx={{ flex: 1 }} />
                           {route && (
                             <Typography variant="caption" sx={{ color: "#6f8a6e", display: "flex", alignItems: "center", gap: 0.4 }}>
@@ -2038,17 +2023,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Box>
                     );
                   })}
-                  {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
+                  {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>{tx("Manually created — no source messages.")}</Typography>}
                   <Divider sx={{ my: 1.2, borderColor: BORDER }} />
-                  <Typography sx={{ ...label, display: "block", mb: 0.35 }}>Notes & activity</Typography>
+                  <Typography sx={{ ...label, display: "block", mb: 0.35 }}>{tx("Notes & activity")}</Typography>
                   <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
                     <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
                   </Box>
-                  {!detail.comments.length && <Typography variant="caption" sx={{ color: FAINT }}>No notes yet.</Typography>}
+                  {!detail.comments.length && <Typography variant="caption" sx={{ color: FAINT }}>{tx("No notes yet.")}</Typography>}
                   <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
+                    <TextField fullWidth placeholder={tx("Add a note (humans only)")} value={comment}
                       onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
-                    <Button size="small" disabled={posting} onClick={post}>{posting ? "Posting…" : "Post"}</Button>
+                    <Button size="small" disabled={posting} onClick={post}>{posting ? "Posting…" : tx("Post")}</Button>
                   </Box>
                 </Fold>}
 
@@ -2059,9 +2044,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Box key={r.RunId} sx={{ mb: 0.75, p: 1, bgcolor: r.Status === "running" ? "#dfeade" : PANEL2, borderRadius: 1.5, border: `1px solid ${BORDER}` }}>
                         <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                           <TaskuaryMark size={13} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>run {r.RunId} · {r.AgentName} · {r.Status}</Typography>
+                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{tx("run")} {r.RunId} · {r.AgentName} · {r.Status}</Typography>
                           {r.Status === "running" && <CircularProgress size={11} />}
-                          <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} · by {r.DispatchedBy}</Typography>
+                          <Typography variant="caption" sx={{ color: FAINT }}>· {timeAgo(r.StartedAt)} {tx("· by")} {r.DispatchedBy}</Typography>
                         </Box>
                         <RunTrace traceJson={r.TraceJson} running={r.Status === "running"} />
                         {r.Result && <Typography variant="caption" sx={{ mt: 0.25, whiteSpace: "pre-wrap", color: "#47654a", display: "block" }}>{r.Result}</Typography>}
@@ -2083,18 +2068,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 760 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <DifferenceIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
-          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>{tx("What has it changed?")}</Typography>
           {diff && !!diff.files?.length && (
             <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
-              {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
+              {diff.files.length} {tx("file")}{diff.files.length === 1 ? "" : "s"}
               <Box component="span" sx={{ color: "#47654a", ml: 1 }}>+{diff.added}</Box>
               <Box component="span" sx={{ color: "#6b2733", ml: 0.75 }}>−{diff.removed}</Box>
             </Typography>
           )}
-          <Tooltip title="Ask git again — the agent may have written more since you opened this">
+          <Tooltip title={tx("Ask git again — the agent may have written more since you opened this")}>
             <IconButton size="small" onClick={() => loadDiff(selected)}><RefreshIcon sx={{ fontSize: 16 }} /></IconButton>
           </Tooltip>
-          <IconButton aria-label="Close changes" size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <IconButton aria-label={tx("Close changes")} size="small" onClick={() => setDiffOpen(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {diff?.scope === "pr" ? `the pull request's own diff — ${diff.pr?.repo}#${diff.pr?.number}, what is being reviewed`
@@ -2126,8 +2111,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <ForwardToInboxIcon sx={{ fontSize: 18, color: "#55697a" }} />
-          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
-          <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>{tx("Hand this to a person")}</Typography>
+          <IconButton aria-label={tx("Close handoff")} size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
@@ -2143,8 +2128,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
           <CallSplitIcon sx={{ fontSize: 18, color: "#6f8a6e" }} />
-          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
-          <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+          <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>{tx("Is this one job?")}</Typography>
+          <IconButton aria-label={tx("Close split or merge")} size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
         </Box>
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
           {detail?.ref} · {t?.Title}
@@ -2156,18 +2141,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       {/* ── new task dialog ───────────────────────────────────────────── */}
       <Dialog open={askSenderOpen} onClose={() => !askingSender && setAskSenderOpen(false)} fullWidth maxWidth="sm"
         PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle>Ask the sender · {detail?.ref}</DialogTitle>
+        <DialogTitle>{tx("Ask the sender ·")} {detail?.ref}</DialogTitle>
         <DialogContent sx={{ pt: "8px !important" }}>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-            Write the one fact the agent or task needs. This becomes a clarification draft on the task; it is not sent until you approve it.
-            The task stays open while you wait for the sender's answer.
-          </Typography>
-          <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
+          <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}> {tx("Write the one fact the agent or task needs. This becomes a clarification draft on the task; it is not sent until you approve it. The task stays open while you wait for the sender's answer.")} </Typography>
+          <TextField autoFocus fullWidth multiline minRows={3} label={tx("Question for the sender")}
             value={senderQuestion} onChange={(e) => setSenderQuestion(e.target.value)}
-            placeholder="Which distribution spreadsheet and which dashboard should I use?" />
+            placeholder={tx("Which distribution spreadsheet and which dashboard should I use?")} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>
+          <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>{tx("Cancel")}</Button>
           <Button variant="contained" disableElevation onClick={askSender}
             disabled={askingSender || !senderQuestion.trim()}>
             {askingSender ? <CircularProgress size={15} /> : "Put it on the task"}
@@ -2181,9 +2163,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
-      <Confirm open={confirmDone} title="Stop the agent and mark done?"
+      <Confirm open={confirmDone} title={tx("Stop the agent and mark done?")}
         text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
-        confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}
+        confirmLabel={tx("Stop it and mark done")} onClose={() => setConfirmDone(false)}
         onConfirm={stopAndFinish} />
       <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
         consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
@@ -2225,7 +2207,7 @@ const CommentRow = ({ c }) => {
         </Typography>
         {long && (
           <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10.5 }}>
-            {open ? "less ↑" : `${body.length.toLocaleString()} chars ↓`}
+            {open ? "less ↑" : `${body.length.toLocaleString(getLocale())} chars ↓`}
           </Typography>
         )}
       </Box>

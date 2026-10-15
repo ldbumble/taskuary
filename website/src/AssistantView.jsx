@@ -1,3 +1,4 @@
+import { getLocale, t as tx } from "./i18n.js";
 // The Assistant page IS the Timeline now. The RAIL on the left is the Timeline's own rail (FeedView),
 // with the PIPE at its top: what has not been looked at yet, ranked (funnel.py), next-out FIRST -
 // triage moves the important things to the top, new things fall in and slide to their slot, and the
@@ -172,22 +173,22 @@ function SinceBlock({ onOpen, onReading }) {
       </div>}
       {/* WHAT WAS LEARNED - the memory - always its own line, never squeezed out of the cards (2026-10-08: "did you remove the memory section?") */}
       {d?.learned?.line && <div className="tq-since-digest" data-tq-learned="">
-        <span className="tag" style={{ color: "#6e685f" }}>MEMORY</span>
+        <span className="tag" style={{ color: "#6e685f" }}>{tx("MEMORY")}</span>
         <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
-        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button>
+        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>{tx("See what changed")}</button>
       </div>}
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
-        <span className="tag">MORNING DIGEST</span>{spin("Writing today's digest…")}
+        <span className="tag">{tx("MORNING DIGEST")}</span>{spin("Writing today's digest…")}
       </div>}
       {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
-        <span className="tag">MORNING DIGEST</span>
-        {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
+        <span className="tag">{tx("MORNING DIGEST")}</span>
+        {dg.at ? <span>{tx("written")} {agoText(dg.at)}</span> : <span>{tx("not written yet today")}</span>}
         {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
         <span className="sep">|</span>
         {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
         {writing.startsWith("Writing")
           ? spin(writing)
-          : <button type="button" className="tq-linkish" onClick={fresh}>Write a fresh one</button>}
+          : <button type="button" className="tq-linkish" onClick={fresh}>{tx("Write a fresh one")}</button>}
         {writing && !writing.startsWith("Writing") && <span>{writing}</span>}
       </div>}
       {open && dg.text && <div className="tq-since-body"><DigestText text={dg.text} sourceId={dg.source_id} /></div>}
@@ -360,18 +361,18 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
            as the tab stayed open while the server had answered 500 twenty minutes earlier - and the
            owner, on a fresh install on another machine, had nothing to read anywhere (2026-09-22). */
         <div className="tq-pile-empty" role="alert">
-          <span className="mark">!</span><b>The timeline did not load</b>{error}
-          <button type="button" className="tq-pile-retry" onClick={() => onRetry?.()}>Try again</button>
+          <span className="mark">!</span><b>{tx("The timeline did not load")}</b>{error}
+          <button type="button" className="tq-pile-retry" onClick={() => onRetry?.()}>{tx("Try again")}</button>
         </div>
       ) : (
-        <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
+        <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>{tx("Loading timeline")}</b>{tx("Reading what arrived and what still needs you.")}</div>
       )
       ) : !drawn.length && settingUp ? (
         // a first run has nothing here because nothing is CONNECTED yet - "All done" read as finished (fresh-install shot, 2026-10-14)
         // ...and says what is next in the first run's own words (firstrun.state's `todo`), not a step count of its own (2026-10-15)
-        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Setup: {settingUp}. What comes in is then sorted into this list.</div>
+        <div className="tq-pile-empty" data-tq-pile-setup=""><b>{tx("Your mail shows up here")}</b>{tx("Setup:")} {settingUp}{tx(". What comes in is then sorted into this list.")}</div>
       ) : !drawn.length ? (
-        <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
+        <div className="tq-pile-empty"><span className="mark">✓</span><b>{tx("All done")}</b>{tx("Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.")}</div>
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const cap = open ? rows.length : (caps[level] ?? rows.length);
@@ -440,7 +441,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
             <div className="tq-pile-stack" style={{ height: stackHeight }}>
               {bracket && (
                 <div className="tq-pile-batch" style={{ top: bracket.top, height: bracket.height }}>
-                  <b>on the table · {mem.length} fyi</b>
+                  <b>{tx("on the table ·")} {mem.length} {tx("fyi")}</b>
                 </div>
               )}
               {positioned.map(({ item: i, top }) => {
@@ -483,7 +484,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                         {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
                         {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
-                        {i.settling && <span className="tq-pile-tag">reading…</span>}
+                        {i.settling && <span className="tq-pile-tag">{tx("reading…")}</span>}
                         {!!word && (
                           <span className="tq-pile-word"
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
@@ -498,16 +499,15 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                         (the owner, 2026-09-17: "isn't there a current word on the border around
                         chosen task by the assistant?"). It is a sibling of the card, not a child:
                         the card clips its overflow so the title can ellipse. */}
-                    {isCur && <b className="tq-pile-now">on the table</b>}
+                    {isCur && <b className="tq-pile-now">{tx("on the table")}</b>}
                   </div>
                 );
               })}
               {moreTops.map(({ top, mark }) => (
                 <button key={mark.key} type="button" className="tq-pile-more" style={{ position: "absolute", top }}
-                  title="Ranked and waiting to be read - one is read each time you finish one above"
+                  title={tx("Ranked and waiting to be read - one is read each time you finish one above")}
                   onClick={() => setOpenChannel((c) => (c === mark.channel ? "" : mark.channel))}>
-                  {mark.count} more
-                </button>
+                  {mark.count} {tx("more")} </button>
               ))}
             </div>
             {moreTops.length > 0 && openChannel && (
@@ -520,27 +520,26 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                     <span className="why">{[w.who, w.why].filter(Boolean).join(" \u00b7 ")}</span>
                   </div>
                 ))}
-                {!waiting && <div className="tq-pile-waitrow"><span className="why">Reading the list\u2026</span></div>}
+                {!waiting && <div className="tq-pile-waitrow"><span className="why">{tx("Reading the list\\u2026")}</span></div>}
                 {waiting && (waiting.items || []).filter((w) => w.channel === openChannel).length > 20 && (
                   <div className="tq-pile-waitrow"><span className="why">
-                    {(waiting.items || []).filter((w) => w.channel === openChannel).length - 20} more below these
-                  </span></div>
+                    {(waiting.items || []).filter((w) => w.channel === openChannel).length - 20} {tx("more below these")} </span></div>
                 )}
               </div>
             )}
             {hidden > 0 && (
               <button type="button" className="tq-pile-more"
                 onClick={() => setOpened((cur) => new Set(cur).add(level))}>
-                {hidden} more {level === "reports" ? "report" : level === "ideas" ? "idea" : "fyi"}{hidden > 1 && level !== "fyi" ? "s" : ""}
+                {hidden} {tx("more")} {level === "reports" ? "report" : level === "ideas" ? "idea" : tx("fyi")}{hidden > 1 && level !== "fyi" ? "s" : ""}
               </button>
             )}
           </div>
         );
       })}
       {!!cheer && <div className="tq-pile-cheer">{cheer}</div>}
-      {!!pile?.hidden && <div className="tq-pile-note">+{pile.hidden} more wait behind these</div>}
+      {!!pile?.hidden && <div className="tq-pile-note">+{pile.hidden} {tx("more wait behind these")}</div>}
       {/* nothing disappears silently: what the owner's own standing rules held back is said here */}
-      {!!pile?.muted && <div className="tq-pile-note" title={`Your standing rules:\n${(pile.rules || []).join("\n")}\n\nThey are still on the Timeline (all).`}>{pile.muted} filed by your rules</div>}
+      {!!pile?.muted && <div className="tq-pile-note" title={`Your standing rules:\n${(pile.rules || []).join("\n")}\n\nThey are still on the Timeline (all).`}>{pile.muted} {tx("filed by your rules")}</div>}
     </div>
   );
 }
@@ -549,10 +548,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
 export const StageMode = ({ mode, onMode, game = false, onGame }) => {
   const pick = (m) => () => { onMode(m); if (game) onGame(false); };
   return (
-    <div className="tq-stage-mode" title="What a click on a row does">
-      <button type="button" className={!game && mode === "chat" ? "on" : ""} onClick={pick("chat")} title="Rows go to the conversation - Taskuary walks you through them">Chat</button>
-      <button type="button" className={!game && mode === "task" ? "on" : ""} onClick={pick("task")} title="Rows open here on their own - the message, the triage, the agent's work, the draft">Task</button>
-      {onGame && <button type="button" className={game ? "on" : ""} onClick={() => onGame(true)} title="The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move">Game</button>}
+    <div className="tq-stage-mode" title={tx("What a click on a row does")}>
+      <button type="button" className={!game && mode === "chat" ? "on" : ""} onClick={pick("chat")} title={tx("Rows go to the conversation - Taskuary walks you through them")}>{tx("Chat")}</button>
+      <button type="button" className={!game && mode === "task" ? "on" : ""} onClick={pick("task")} title={tx("Rows open here on their own - the message, the triage, the agent's work, the draft")}>{tx("Task")}</button>
+      {onGame && <button type="button" className={game ? "on" : ""} onClick={() => onGame(true)} title={tx("The same items as an office you walk around - people in the lobby, fyi's in the coffee room, points for every move")}>{tx("Game")}</button>}
     </div>
   );
 };
@@ -609,7 +608,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   );
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
-      {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
+      {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>{tx("Open")} {m.ref || "the task"}</button>}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
       {last && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m)} busy={actions.busy} onChip={actions.chip} />}
@@ -715,7 +714,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               first half (the owner, 2026-09-24: "if there is box don't show it again") */}
           {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} /> : text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
           {passed && (
-            <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
+            <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} {tx("of")} {m.card.total}</b>
               <span>·</span>{m.card.title}</div>
           )}
           {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE, and clicking it puts it back on the table (the canvas redesign) */}
@@ -727,14 +726,14 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
-              <span className="grow" />{!!m.card.key && <span className="again">open again</span>}
+              <span className="grow" />{!!m.card.key && <span className="again">{tx("open again")}</span>}
             </button>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
               at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
           {last && card && actions.handedTo && (
-            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press Take it back below to use these buttons here.</div>
+            <div className="tq-card-excerpt">{tx("The walk is in")} {actions.handedTo} {tx("- answer it there, or press Take it back below to use these buttons here.")}</div>
           )}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
@@ -760,9 +759,9 @@ function AdvisorNotes({ keyOnTable }) {
   }, [keyOnTable]);
   return (
     <div className="tq-advisor-notes">
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, px: 1.5, pt: 1.25 }}>Advisor's notes on this one</Typography>
-      {rows === null && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Reading…</Typography>}
-      {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Nothing judged on it yet.</Typography>}
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, px: 1.5, pt: 1.25 }}>{tx("Advisor's notes on this one")}</Typography>
+      {rows === null && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>{tx("Reading…")}</Typography>}
+      {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>{tx("Nothing judged on it yet.")}</Typography>}
       {(rows || []).map((r, i) => (
         <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
           <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[ageText(r.at), r.event, r.tier > 1 ? "the bigger read" : ""].filter(Boolean).join(" · ")}</Typography>
@@ -1961,36 +1960,34 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
           person talking"), and the whole day fits one screen without scrolling */}
       <div className="tq-welcome-head"><b>{greeting()}</b>
-        <span>{new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
+        <span>{new Date().toLocaleDateString(getLocale(), { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString(getLocale(), { hour: "numeric", minute: "2-digit" })}</span></div>
       {/* what came in while they were away - welcome.arrive counted it and the card dropped it, so a week away opened like any morning (B5) */}
       {m?.card?.away && <span className="tq-welcome-away" data-tq-away="">{m.card.away}</span>}
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
       <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
-      {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+      {!items.length && <span>{tx("Nothing is waiting on you - ask me anything, or set something up.")}</span>}
       {/* greyed with no reason read as broken: say why, and where the rows are */}
-      {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
-        Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
+      {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why"> {tx("Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.")}</span>}
       <div className="tq-modes">
         <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
-          title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
+          title={tx("Everything waiting, most important first - mail, reports, agents, meetings")}>{starting ? "Getting your first one..." : tx("Walk me through my tasks")}</button>
         {/* the same walk the header chip opens. It lives here as well because the header
             hides its chip on a phone, and this block is what a phone shows - without it the
             one door to the set-up guidance was absent on the device it is most needed on. */}
         <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={setup}
-          title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
+          title={tx("A walk through every part of Taskuary — one step at a time, no AI needed")}>{tx("Set up Taskuary")}</button>
         {/* RUN, not set up: setting things up is Set up Taskuary's job; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
         <button type="button" className="tq-chip" disabled={resetting} onClick={() => onNavigate?.("Reports")}
-          title="Your reports and workflows - run one now, or see what each found">Run a report or workflow</button>
+          title={tx("Your reports and workflows - run one now, or see what each found")}>{tx("Run a report or workflow")}</button>
         {/* the same walk, on your phone - offered only for a chat that is already connected and
             names an Assistant chat, because this talks to the assistant, it does not set one up */}
         {(state?.doorways || []).map((d) => (
           <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
             onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
-            <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
-            Walk me through them in {d.label}
+            <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} /> {tx("Walk me through them in")} {d.label}
           </button>
         ))}
       </div>
@@ -2090,14 +2087,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     <div className={shownAdvice ? "tq-asst-col advising" : "tq-asst-col"} style={{ position: "relative", flex: 1, minHeight: 0 }}>
       <div className="tq-chat-head">
         {/* no mark here: the top bar already carries the logo (the owner, 2026-10-06: "don't need it on top of the assistant") */}
-        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>An earlier chat · {fmtDateTime(old.at)}</span>}</div>
+        <div className="who" style={{ minWidth: 0 }}><b>Taskuary</b>{old && <span>{tx("An earlier chat ·")} {fmtDateTime(old.at)}</span>}</div>
         <div className="grow" />
-        <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title={tx("Your work")}><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
         {/* no AI to name before the first run picked one - it said "Claude Code · coder" over the question asking which (2026-10-15) */}
         {!firstRun && <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
-        <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
-        <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title={tx("Past chats")}><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        <Tooltip title={tx("New chat — archives this one")}><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
         onDone={(out) => {
@@ -2112,20 +2109,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           ? "Every thread, Timeline post, and reply here is invented and runs locally in this page. No AI, agent, mailbox, or outside system is connected."
           : "Your coding tool's AI is the default, on its fastest setting - it can read, rerun reports and run tools. An AI connected by key answers faster but cannot act. The agents doing the actual work are chosen elsewhere."}</Typography>
         <Select size="small" fullWidth value={state?.pick || ""} displayEmpty disabled={!!state?.scripted} onChange={(e) => pickAi(e.target.value)} sx={{ fontSize: 12 }}>
-          {!state?.providers?.length && <MenuItem value="">No AI connected</MenuItem>}
+          {!state?.providers?.length && <MenuItem value="">{tx("No AI connected")}</MenuItem>}
           {(state?.providers || []).map((p) => <MenuItem key={p.pick} value={p.pick} sx={{ fontSize: 12 }}>{p.label}{p.type === "demo" ? " · local fixture" : p.type === "cli" ? " · can act (default)" : " · fast, talk only"}</MenuItem>)}
         </Select>
       </Popover>
-      {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}
+      {old && <div className="tq-old-banner"><span>{tx("You are reading an earlier chat.")}</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>{tx("Back to today")}</button></div>}
       {chatsOpen && (
         <div className="tq-chats">
-          <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
+          <div className="tq-chats-head">{tx("Chats")}<span style={{ flex: 1 }} /><IconButton aria-label={tx("Close past chats")} size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>
           <div className="tq-chats-list">
             {current && <AdvisorNotes keyOnTable={current} />}
-            {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
+            {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>{tx("Loading past chats…")}</Typography>}
             {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
-              <button type="button" className="tq-chip" onClick={openChats}>Try again</button></Typography>}
-            {!chatsLoading && !chatsErr && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
+              <button type="button" className="tq-chip" onClick={openChats}>{tx("Try again")}</button></Typography>}
+            {!chatsLoading && !chatsErr && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>{tx("No earlier chats yet.")}</Typography>}
             {chats.map((c) => (
               <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
                 {c.open ? <i /> : <span style={{ width: 7 }} />}<b>{c.title}</b>
@@ -2133,7 +2130,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                 <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
               </div>
             ))}
-            {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>Earlier chats</button>}
+            {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>{tx("Earlier chats")}</button>}
           </div>
         </div>
       )}
@@ -2144,9 +2141,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <>
           <div className="tq-handed" role="status">
             <TaskuaryMark size={17} />
-            <div className="txt"><b>Walking you through {walk.ref}</b>
-              <span>{walk.title}. Nothing is built and no repository is touched; its browser opens beside this conversation.</span></div>
-            <button type="button" className="tq-chip" onClick={leaveWalk}>Leave the walk</button>
+            <div className="txt"><b>{tx("Walking you through")} {walk.ref}</b>
+              <span>{walk.title}{tx(". Nothing is built and no repository is touched; its browser opens beside this conversation.")}</span></div>
+            <button type="button" className="tq-chip" onClick={leaveWalk}>{tx("Leave the walk")}</button>
           </div>
           <div className="tq-walk"><GeneralWorkspace task={walk.task} compact /></div>
         </>
@@ -2190,15 +2187,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
                 {busy && answering.current && !DEMO && (
-                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."
-                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>Stop</button>
+                  <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title={tx("Stops the answer being written and gives you the chat back.")}
+                    onClick={() => { api.post("/api/concierge/stop").catch(() => {}); stopRef.current?.abort(); }}>{tx("Stop")}</button>
                 )}
                 {!!work.length && <div className="tq-work">{work.map((w, i) => <div key={i}>{w}</div>)}</div>}
               </div>
             </div>
           )}
           {err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>}
-          {hanging && <Typography sx={{ color: "#6e685f", fontSize: 12.5, mb: 1 }} data-tq-hanging="">Press <b>Next</b> below to continue.</Typography>}
+          {hanging && <Typography sx={{ color: "#6e685f", fontSize: 12.5, mb: 1 }} data-tq-hanging="">{tx("Press")} <b>{tx("Next")}</b> {tx("below to continue.")}</Typography>}
         </div>
       </div>
       )}
@@ -2212,9 +2209,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {!old && handoff && (
         <div className="tq-handed" role="status">
           <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
-          <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
-            <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
-          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>Take it back</button>
+          <div className="txt"><b>{tx("The walk is in")} {handedTo?.label || handoff.channel}</b>
+            <span>{tx("Answer me there and I keep going. This chat waits so the same thing is not answered twice.")}</span></div>
+          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>{tx("Take it back")}</button>
         </div>
       )}
       {!old && !handoff && !walk && (
@@ -2231,8 +2228,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <div className="tq-compose-box">
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
-            <Tooltip title="Send an emoji response">
-              <IconButton size="small" aria-label="Choose an emoji response" disabled={busy || resetting}
+            <Tooltip title={tx("Send an emoji response")}>
+              <IconButton size="small" aria-label={tx("Choose an emoji response")} disabled={busy || resetting}
                 onClick={(e) => setEmojiEl(e.currentTarget)} sx={{ width: 34, height: 34, p: 0, color: DIM }}>
                 <SentimentSatisfiedAltIcon sx={{ fontSize: 18 }} />
               </IconButton>
@@ -2243,13 +2240,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               placeholder={(phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
                 : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
+            <button type="button" className="tq-send" aria-label={tx("Send")} disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
           </div>
           </div>
           <Popover open={!!emojiEl} anchorEl={emojiEl} onClose={() => setEmojiEl(null)}
             anchorOrigin={{ vertical: "top", horizontal: "left" }} transformOrigin={{ vertical: "bottom", horizontal: "left" }}
             slotProps={{ paper: { sx: { p: 1.1, borderRadius: 2.5 } } }}>
-            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, px: 0.4, pb: 0.75 }}>Send a quick response</Typography>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: INK, px: 0.4, pb: 0.75 }}>{tx("Send a quick response")}</Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "repeat(6, 36px)", gap: 0.4 }}>
               {EMOJI_REPLIES.map(([emoji, label]) => (
                 <Box key={emoji} component="button" type="button" aria-label={`Send ${label}`} title={label}
@@ -2260,7 +2257,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                 </Box>
               ))}
             </Box>
-            {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>Added to your draft; press send when ready.</Typography>}
+            {!!text.trim() && <Typography sx={{ fontSize: 10.5, color: FAINT, px: 0.4, pt: 0.75 }}>{tx("Added to your draft; press send when ready.")}</Typography>}
           </Popover>
         </div>
       )}
@@ -2271,11 +2268,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const placeholder = (
     <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", gap: 1, px: 4, textAlign: "center" }}>
-      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>Pick anything on the left</Typography>
-      <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}>
-        Hovering a row opens it here; clicking pins it. You get the message that arrived, why Taskuary sorted it
-        where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
-      </Typography>
+      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>{tx("Pick anything on the left")}</Typography>
+      <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}> {tx("Hovering a row opens it here; clicking pins it. You get the message that arrived, why Taskuary sorted it where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.")} </Typography>
     </Box>
   );
 

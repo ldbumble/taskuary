@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // What the assistant is allowed to state as fact about the company's own numbers.
 //
 // This company's Intacct is customised, so a query the AI writes itself is plausible and wrong.
@@ -48,7 +49,7 @@ const Fixture = ({ f, onDrop }) => {
       <Box component="td" sx={{ py: 0.4 }}><Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }} noWrap>{f.Source || ""}</Typography></Box>
       <Box component="td" sx={{ py: 0.4, textAlign: "right" }}>
         <Typography variant="caption" onClick={() => onDrop(f.FixtureId)}
-          sx={{ color: FAINT, fontSize: 10, cursor: "pointer", "&:hover": { color: "#8a3646" } }}>remove</Typography>
+          sx={{ color: FAINT, fontSize: 10, cursor: "pointer", "&:hover": { color: "#8a3646" } }}>{tx("remove")}</Typography>
       </Box>
     </Box>
   );
@@ -89,20 +90,18 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
         <Typography variant="caption" sx={{ color: DIM, flex: 1, minWidth: 0 }} noWrap>{m.Label || m.Definition || ""}</Typography>
         <Chip size="small" label={s.label} sx={{ height: 16, fontSize: 9, bgcolor: s.c.bg, color: s.c.fg, border: `1px solid ${s.c.bd}` }} />
         <Typography variant="caption" sx={{ ...mono, fontSize: 10, color: FAINT, whiteSpace: "nowrap" }}>
-          {passing}/{fixtures.length} match{fixtures.length < minFixtures ? ` · needs ${minFixtures}` : ""}
+          {passing}/{fixtures.length} {tx("match")}{fixtures.length < minFixtures ? ` · needs ${minFixtures}` : ""}
         </Typography>
       </Box>
       {open && (
         <Box sx={{ px: 1.1, pb: 1, display: "flex", flexDirection: "column", gap: 0.9 }}>
           {m.Definition && <Typography variant="body2" sx={{ color: INK, fontSize: 12, lineHeight: 1.5 }}>{m.Definition}</Typography>}
-          {m.Grain && <Typography variant="caption" sx={{ color: FAINT }}>One row is: {m.Grain}</Typography>}
+          {m.Grain && <Typography variant="caption" sx={{ color: FAINT }}>{tx("One row is:")} {m.Grain}</Typography>}
           {m.LastCheckNote && <Typography variant="caption" sx={{ color: m.Status === "verified" ? "#47654a" : "#8a3646" }}>{m.LastCheckNote}</Typography>}
 
           {/* the proof, or the absence of it */}
           <Box>
-            <Typography sx={{ ...mono, fontSize: 9, letterSpacing: 1, color: "#6b5f45", fontWeight: 600, mb: 0.3 }}>
-              KNOWN NUMBERS IT MUST MATCH
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 9, letterSpacing: 1, color: "#6b5f45", fontWeight: 600, mb: 0.3 }}> {tx("KNOWN NUMBERS IT MUST MATCH")} </Typography>
             {fixtures.length ? (
               <Box component="table" sx={{ width: "100%", borderCollapse: "collapse" }}>
                 <Box component="thead"><Box component="tr">
@@ -114,35 +113,33 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
                 <Box component="tbody">{fixtures.map((f) => <Fixture key={f.FixtureId} f={f} onDrop={dropFixture} />)}</Box>
               </Box>
             ) : (
-              <Typography variant="caption" sx={{ color: FAINT }}>
-                None yet — it cannot be trusted until it matches numbers you already know are right.
-              </Typography>
+              <Typography variant="caption" sx={{ color: FAINT }}> {tx("None yet — it cannot be trusted until it matches numbers you already know are right.")} </Typography>
             )}
             <Box sx={{ display: "flex", gap: 0.5, mt: 0.6, flexWrap: "wrap", alignItems: "center" }}>
               {[["Scope", "what names one row", 130], ["Period", "2026-07", 90], ["Expected", "the right number", 130], ["Source", "where it came from", 150]].map(([k, ph, w]) => (
                 <TextField key={k} size="small" placeholder={ph} value={nf[k]} onChange={(e) => setNf({ ...nf, [k]: e.target.value })}
                   sx={{ width: w, bgcolor: PANEL2, "& input": { fontSize: 11, py: 0.5 } }} />
               ))}
-              <Button size="small" disabled={!!busy || !nf.Expected} onClick={addFixture} sx={{ fontSize: 10.5 }}>Add known number</Button>
+              <Button size="small" disabled={!!busy || !nf.Expected} onClick={addFixture} sx={{ fontSize: 10.5 }}>{tx("Add known number")}</Button>
             </Box>
           </Box>
 
           {/* try it without recording anything - the step where a definition gets fixed */}
           <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", flexWrap: "wrap" }}>
-            <TextField size="small" placeholder="scope" value={t.scope} onChange={(e) => setT({ ...t, scope: e.target.value })}
+            <TextField size="small" placeholder={tx("scope")} value={t.scope} onChange={(e) => setT({ ...t, scope: e.target.value })}
               sx={{ width: 110, bgcolor: PANEL2, "& input": { fontSize: 11, py: 0.5 } }} />
             <TextField size="small" placeholder="2026-07" value={t.period} onChange={(e) => setT({ ...t, period: e.target.value })}
               sx={{ width: 90, bgcolor: PANEL2, "& input": { fontSize: 11, py: 0.5 } }} />
             <Button size="small" disabled={!!busy} onClick={tryIt} sx={{ fontSize: 10.5 }}>
-              {busy === "run it" ? "Running…" : "Run it once"}
+              {busy === "run it" ? tx("Running…") : tx("Run it once")}
             </Button>
             {tried && <Typography variant="caption" sx={{ ...mono, color: INK }}>
-              {num(tried.value)} <Typography component="span" variant="caption" sx={{ color: FAINT }}>from {tried.rows} row(s), {tried.ms}ms</Typography>
+              {num(tried.value)} <Typography component="span" variant="caption" sx={{ color: FAINT }}>{tx("from")} {tried.rows} {tx("row(s),")} {tried.ms}ms</Typography>
             </Typography>}
             <Box sx={{ flex: 1 }} />
             <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={check}
               sx={{ fontSize: 10.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-              {busy === "check it" ? "Checking…" : "Check every known number"}
+              {busy === "check it" ? tx("Checking…") : tx("Check every known number")}
             </Button>
           </Box>
 
@@ -151,7 +148,7 @@ const Metric = ({ m, minFixtures, open, onOpen, onChanged }) => {
             {JSON.stringify(m.Spec || {}, null, 2)}
           </Box>
           {m.Notes && <Typography variant="caption" sx={{ color: DIM, whiteSpace: "pre-wrap" }}>{m.Notes}</Typography>}
-          {m.Skill && <Typography variant="caption" sx={{ color: FAINT }}>Frozen as skill <b style={mono}>{m.Skill}</b> — every later run uses it.</Typography>}
+          {m.Skill && <Typography variant="caption" sx={{ color: FAINT }}>{tx("Frozen as skill")} <b style={mono}>{m.Skill}</b> {tx("— every later run uses it.")}</Typography>}
           {err && <Typography variant="caption" sx={{ color: "#8a3646" }}>{err}</Typography>}
         </Box>
       )}
@@ -173,27 +170,17 @@ export default function SemanticPanel() {
   const by = (s) => rows.filter((m) => m.Status === s).length;
   return (
     <Box sx={{ p: 1.25, overflowY: "auto", height: "100%" }}>
-      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.5 }}>
-        What the assistant may state as fact about our own numbers. Every system is configured differently,
-        so a query written from the API alone is plausible and wrong — a definition here is only certified
-        while it still matches {minFixtures} or more numbers you already knew were right. Work them out in the
-        chat; this is where you see what it now believes.
-      </Typography>
+      <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1, lineHeight: 1.5 }}> {tx("What the assistant may state as fact about our own numbers. Every system is configured differently, so a query written from the API alone is plausible and wrong — a definition here is only certified while it still matches")} {minFixtures} {tx("or more numbers you already knew were right. Work them out in the chat; this is where you see what it now believes.")} </Typography>
       {err && <Alert severity="error" sx={{ mb: 1, py: 0 }}>{err}</Alert>}
       {!rows.length ? (
         <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 1.5, p: 2, textAlign: "center" }}>
-          <Typography variant="body2" sx={{ color: DIM }}>No number has been proved yet.</Typography>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-            Ask the assistant for one in the chat — name a figure you already report on and the period you
-            want it for. It will look at the real schema, propose a definition, and ask you for a few cases
-            whose numbers you already know. Once they reconcile, the metric appears here and every later
-            run uses it.
-          </Typography>
+          <Typography variant="body2" sx={{ color: DIM }}>{tx("No number has been proved yet.")}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Ask the assistant for one in the chat — name a figure you already report on and the period you want it for. It will look at the real schema, propose a definition, and ask you for a few cases whose numbers you already know. Once they reconcile, the metric appears here and every later run uses it.")} </Typography>
         </Box>
       ) : (
         <>
           <Typography sx={{ ...mono, fontSize: 10, color: "#6b5f45", fontWeight: 600, mb: 0.6 }}>
-            {by("verified")} CERTIFIED · {by("draft")} BEING PROVED{by("broken") ? ` · ${by("broken")} STOPPED MATCHING` : ""}
+            {by("verified")} {tx("CERTIFIED ·")} {by("draft")} {tx("BEING PROVED")}{by("broken") ? ` · ${by("broken")} STOPPED MATCHING` : ""}
           </Typography>
           {rows.map((m) => (
             <Metric key={m.MetricId} m={m} minFixtures={minFixtures} open={open === m.MetricId}

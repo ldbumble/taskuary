@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Real terminals in the app: xterm.js over a websocket over a pty. A session belongs to the
 // task it is working, and it is shown where that task is worked: the task page, and - for a
 // "Get AI to set it up" session - the connector card whose guide it is following (still a task
@@ -550,7 +551,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         {/* one step smaller is a couple more rows of the run without touching the layout -
             far cheaper than scrolling back for what just went past */}
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.max(0, SIZES.indexOf(n) - 1)])}
-          disabled={size === SIZES[0]} title="smaller text — more of the run on screen"
+          disabled={size === SIZES[0]} title={tx("smaller text — more of the run on screen")}
           sx={{ ...mono, fontSize: 11, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#867f74",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
             "&:hover:not(:disabled)": { color: "#e1dcd5" } }}>A−</Box>
@@ -559,7 +560,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         <Typography sx={{ ...mono, fontSize: 9.5, color: "#867f74", minWidth: 16, textAlign: "center",
           fontVariantNumeric: "tabular-nums" }}>{size}</Typography>
         <Box component="button" onClick={() => setSize((n) => SIZES[Math.min(SIZES.length - 1, SIZES.indexOf(n) + 1)])}
-          disabled={size === SIZES[SIZES.length - 1]} title="bigger text"
+          disabled={size === SIZES[SIZES.length - 1]} title={tx("bigger text")}
           sx={{ ...mono, fontSize: 13, lineHeight: 1, px: 0.5, py: 0.25, bgcolor: "transparent", color: "#867f74",
             border: "none", cursor: "pointer", "&:disabled": { opacity: 0.3, cursor: "default" },
             "&:hover:not(:disabled)": { color: "#e1dcd5" } }}>A+</Box>
@@ -568,7 +569,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         <MicButton size={15} sx={{ color: "#867f74", p: 0.25, "&:hover": { color: "#e1dcd5" } }}
           onText={(t) => { sendRef.current?.({ type: "in", data: t }); termRef.current?.focus(); }} />
         <Box component="select" value={themeName} onChange={(e) => setThemeName(e.target.value)}
-          title="terminal palette"
+          title={tx("terminal palette")}
           sx={{ ...mono, fontSize: 10, bgcolor: "transparent", color: "#867f74", border: "none",
             outline: "none", cursor: "pointer" }}>
           {[["Light", true], ["Dark", false]].map(([g, light]) => (
@@ -610,9 +611,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
         <Box sx={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center",
           justifyContent: "center", gap: 1, bgcolor: THEMES[themeName].background, pointerEvents: "none" }}>
           <CircularProgress size={13} sx={{ color: CATPPUCCIN.yellow }} />
-          <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.yellow }}>
-            restoring the session…
-          </Typography>
+          <Typography variant="caption" sx={{ ...mono, fontSize: 10.5, color: CATPPUCCIN.yellow }}> {tx("restoring the session…")} </Typography>
         </Box>
       )}
       {!restoring && promptState.pending && (
@@ -620,9 +619,7 @@ const TermOnly = ({ sid, height = "70vh", onExit, readOnly = false, autoFocus = 
           display: "flex", alignItems: "center", gap: 0.75, px: 1, py: 0.35, borderRadius: 99,
           bgcolor: "rgba(24,24,37,.92)", border: `1px solid ${CATPPUCCIN.surface}`, pointerEvents: "none" }}>
           <CircularProgress size={10} sx={{ color: CATPPUCCIN.yellow }} />
-          <Typography noWrap variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.yellow }}>
-            Task sent to {promptState.cli === "devin" ? "Devin" : promptState.cli} · waiting for first response…
-          </Typography>
+          <Typography noWrap variant="caption" sx={{ ...mono, fontSize: 10, color: CATPPUCCIN.yellow }}> {tx("Task sent to")} {promptState.cli === "devin" ? "Devin" : promptState.cli} {tx("· waiting for first response…")} </Typography>
         </Box>
       )}
       {readOnly && state !== "live" && (
@@ -651,7 +648,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
   return (
     <Box onClick={onOpen} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined}
       onKeyDown={(e) => { if (onOpen && (e.key === "Enter" || e.key === " ")) onOpen(); }}
-      title="Open the live session"
+      title={tx("Open the live session")}
       sx={{ height, boxSizing: "border-box", bgcolor: CATPPUCCIN.bg,
         border: `1px solid ${CATPPUCCIN.surface}`, borderRadius: 1.5, overflow: "hidden",
         cursor: onOpen ? "pointer" : "default", position: "relative",
@@ -660,7 +657,7 @@ export const TerminalPreview = ({ sid, height = 280, onOpen }) => {
         <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: shot?.alive === false ? CATPPUCCIN.dim : CATPPUCCIN.green }} />
         <Typography sx={{ ...mono, fontSize: 9, color: CATPPUCCIN.faint }}>{shot?.promptPending ? "prompt sent · waiting for response…" : shot ? "live terminal · open ↗" : "reading terminal…"}</Typography>
       </Box>
-      <Box component="pre" aria-label="Live terminal screen" sx={{ m: 0, p: "22px 10px 10px", height: "100%",
+      <Box component="pre" aria-label={tx("Live terminal screen")} sx={{ m: 0, p: "22px 10px 10px", height: "100%",
         boxSizing: "border-box", overflow: "hidden", whiteSpace: "pre", color: CATPPUCCIN.fg,
         fontFamily: TERM_FONT, fontSize: 8.5, lineHeight: 1.15, letterSpacing: 0 }}>
         {(shot?.lines || ["Reading the live terminal…"]).join("\n")}
@@ -767,7 +764,7 @@ export const SessionPane = ({ sid, height = "70vh", onExit, children, autoFocus 
       </Box>
       {layout === "split" && (
         <>
-          <Box onMouseDown={startDrag} title="drag to resize"
+          <Box onMouseDown={startDrag} title={tx("drag to resize")}
             sx={{ flex: "0 0 8px", cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center",
               "&:hover > *": { bgcolor: "#6b655c" } }}>
             <Box sx={{ width: 2, height: 36, borderRadius: 99, bgcolor: BORDER, transition: "background .15s" }} />
@@ -805,16 +802,7 @@ TerminalPane.displayName = "TerminalPane";
 // exists: nobody finds a discreet control they were never told about. `cli` narrows it to one
 // row - Claude's line is noise under a codex pane, which paints with the terminal's palette.
 export const ThemeHint = ({ cli = "" }) => (
-  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}>
-    The session's top-right corner holds both knobs: A− / A+ set the text size, 7px to 14px with
-    the current one shown between them (7 fits roughly twice the run on screen — the leading
-    tightens with it, so the rows are gained rather than spent on whitespace), and the picker switches the terminal
-    palette — light ones first (GitHub Light is the default; Catppuccin Latte, Solarized Light, One Light), then the
-    dark ones (Catppuccin Mocha, Dracula, Tokyo Night, Gruvbox, One Dark). That restyles codex and any other CLI,
-    since a TUI paints with the terminal's colors.
-    {(!cli || cli === "claude") && <>
-      {" "}Claude Code paints its own colours, so the next Claude session you start opens in its light or dark theme to
-      match — one already running keeps the theme it opened with. A custom theme you chose with /theme is left alone.
-    </>}
+  <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.5 }}> {tx("The session's top-right corner holds both knobs: A− / A+ set the text size, 7px to 14px with the current one shown between them (7 fits roughly twice the run on screen — the leading tightens with it, so the rows are gained rather than spent on whitespace), and the picker switches the terminal palette — light ones first (GitHub Light is the default; Catppuccin Latte, Solarized Light, One Light), then the dark ones (Catppuccin Mocha, Dracula, Tokyo Night, Gruvbox, One Dark). That restyles codex and any other CLI, since a TUI paints with the terminal's colors.")} {(!cli || cli === "claude") && <>
+      {" "}{tx("Claude Code paints its own colours, so the next Claude session you start opens in its light or dark theme to match — one already running keeps the theme it opened with. A custom theme you chose with /theme is left alone.")} </>}
   </Typography>
 );

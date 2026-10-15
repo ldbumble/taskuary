@@ -49,7 +49,7 @@ test("on the setup screen the same cards say their state in plain words; Connect
 
 test("the rail and the top bar's chip say what is next from the first run's own state", () => {
   const view = read("AssistantView.jsx"), chip = read("SetupWizard.jsx");
-  assert.match(view, /Setup: \{settingUp\}/);
+  assert.match(view, /\{tx\("Setup:"\)\} \{settingUp\}/);
   assert.match(view, /setSetupTodo\(data\?\.todo/);
   assert.match(chip, /`Setup: \$\{state\.first_todo\}`/);
   assert.doesNotMatch(view + chip, /two setup steps|Set up · \$\{left\} step/);

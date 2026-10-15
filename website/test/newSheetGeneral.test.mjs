@@ -10,7 +10,7 @@ const ns = readFileSync(new URL("../src/NewSheet.jsx", import.meta.url), "utf8")
 
 test("the second door is a general agent, not the assistant's thread", () => {
   assert.doesNotMatch(ns, /Just talk it through|Ask the assistant/);
-  assert.match(ns, /title="A general agent"/);
+  assert.match(ns, /title=\{tx\("A general agent"\)\}/);
 });
 
 test("it asks the hand-off's three questions and dispatches them as general work", () => {

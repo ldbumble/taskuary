@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // FIRST RUN, on the assistant canvas: three plain questions - what AI do you have, what email do you have, any other
 // connection - each answered by clicking one of the Connections page's own cards.
 //
@@ -207,19 +208,18 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   // SIGNED IN AND STILL FAILING (firstrun: the CLI's own status said so): the sign-in is not the fix, so it is never offered -
   // a "Successfully logged in" was sent straight back to Sign in (the owner, 2026-10-15). What it said, and the moves that can fix it.
   const stuck = q === "ai" && ["update", "retry"].includes(fix?.fix);
-  const said_ = fix?.detail && <Typography sx={{ fontSize: 12.5, color: DIM, fontFamily: "monospace", whiteSpace: "pre-wrap", maxWidth: 760 }}>
-    What it said: {fix.detail}</Typography>;
+  const said_ = fix?.detail && <Typography sx={{ fontSize: 12.5, color: DIM, fontFamily: "monospace", whiteSpace: "pre-wrap", maxWidth: 760 }}> {tx("What it said:")} {fix.detail}</Typography>;
   const cli = signin && { name: fix.name, setup: fix.setup, installed: true };
   const cliDetail = busy ? (
     <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-      <Typography sx={{ color: DIM, fontSize: 13.5 }}>Checking it works - this can take up to a minute.</Typography></Box>
+      <Typography sx={{ color: DIM, fontSize: 13.5 }}>{tx("Checking it works - this can take up to a minute.")}</Typography></Box>
   ) : signing ? (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-        <Typography sx={{ fontSize: 14 }}>Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done.</Typography></Box>
+        <Typography sx={{ fontSize: 14 }}>{tx("Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done.")}</Typography></Box>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <Button variant="outlined" href={signing.url} target="_blank" rel="noreferrer">Open the sign-in page</Button>
-        <Button size="small" sx={{ color: DIM }} onClick={cancelSignin}>Cancel</Button>
+        <Button variant="outlined" href={signing.url} target="_blank" rel="noreferrer">{tx("Open the sign-in page")}</Button>
+        <Button size="small" sx={{ color: DIM }} onClick={cancelSignin}>{tx("Cancel")}</Button>
       </Box>
     </Box>
   ) : signin ? (
@@ -230,27 +230,26 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
           onClick={() => openSetup({ ...cli, login: true })}>{opening ? "Opening…" : `Sign in to ${fix.title}`}</Button>
       </> : <>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-          <Typography sx={{ fontSize: 14 }}>A sign-in page opened in your browser - finish signing in there. Taskuary checks {fix.title} by
-            itself when you're done.</Typography></Box>
+          <Typography sx={{ fontSize: 14 }}>{tx("A sign-in page opened in your browser - finish signing in there. Taskuary checks")} {fix.title} {tx("by itself when you're done.")}</Typography></Box>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-          {url && <Button variant="outlined" href={url} target="_blank" rel="noreferrer">Open the sign-in page</Button>}
-          <Button size="small" onClick={check}>Check now</Button>
+          {url && <Button variant="outlined" href={url} target="_blank" rel="noreferrer">{tx("Open the sign-in page")}</Button>}
+          <Button size="small" onClick={check}>{tx("Check now")}</Button>
           <Button size="small" sx={{ color: DIM }} onClick={() => setDetails((v) => !v)}>{details ? "Hide details" : "Show details"}</Button>
         </Box>
         <Box sx={{ width: "100%", display: details ? "block" : "none" }}><CliPane pane={pane} height="34vh" hint={false} onExit={ended} /></Box>
       </>}
-      {note?.bad && <Typography sx={{ fontSize: 13, color: "#9b2c2c" }}>{note.text} - try again, or pick a different AI.</Typography>}
+      {note?.bad && <Typography sx={{ fontSize: 13, color: "#9b2c2c" }}>{note.text} {tx("- try again, or pick a different AI.")}</Typography>}
     </Box>
   ) : stuck ? (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       {said_}
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
         {fix.fix === "update" && fix.install && <Button variant="contained" disableElevation
-          onClick={() => install({ ...fixed, install: fix.install }, "Updating")}>Update {fix.title}</Button>}
-        <Button variant={fix.fix === "update" ? "outlined" : "contained"} disableElevation onClick={check}>Try again</Button>
+          onClick={() => install({ ...fixed, install: fix.install }, "Updating")}>{tx("Update")} {fix.title}</Button>}
+        <Button variant={fix.fix === "update" ? "outlined" : "contained"} disableElevation onClick={check}>{tx("Try again")}</Button>
         <Button onClick={() => openBugReport({ message: `${fix.title} didn't answer the setup test
 ${fix.detail || ""}`, screen: "Setup",
-          route: `first-run ${fix.name}` })}>Report this bug</Button>
+          route: `first-run ${fix.name}` })}>{tx("Report this bug")}</Button>
       </Box>
     </Box>
   ) : null;
@@ -268,9 +267,9 @@ ${fix.detail || ""}`, screen: "Setup",
       <Ask text={said || err || (redo ? (fix?.why || "Which AI should Taskuary use instead? Click it below.") : st.next)} />
       {st.step !== "ai" && st.brain?.name && !revisit && (
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", ml: 0.5 }}>
-          <Typography sx={{ fontSize: 13, color: DIM }}>Your AI: {st.brain.name}</Typography>
-          {redo ? <Button size="small" onClick={() => { setRedo(null); setBrowse(false); }}>Keep {st.brain.name}</Button>
-            : <Button size="small" onClick={() => { setRedo("ai"); setBrowse(true); setOpen(null); }}>Change</Button>}
+          <Typography sx={{ fontSize: 13, color: DIM }}>{tx("Your AI:")} {st.brain.name}</Typography>
+          {redo ? <Button size="small" onClick={() => { setRedo(null); setBrowse(false); }}>{tx("Keep")} {st.brain.name}</Button>
+            : <Button size="small" onClick={() => { setRedo("ai"); setBrowse(true); setOpen(null); }}>{tx("Change")}</Button>}
         </Box>
       )}
       {shelf("ai", ai, "More AI")}
@@ -280,7 +279,7 @@ ${fix.detail || ""}`, screen: "Setup",
         <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
           {st.step === "reading" && <><CircularProgress size={16} /><Typography sx={{ color: DIM }}>
             {st.sorting ? `Sorting ${st.sorting} email${st.sorting === 1 ? "" : "s"}…` : "Reading your mail…"}</Typography></>}
-          <Button variant="contained" disableElevation disabled={st.step !== "done"} onClick={onWalk}>Walk me through my tasks</Button>
+          <Button variant="contained" disableElevation disabled={st.step !== "done"} onClick={onWalk}>{tx("Walk me through my tasks")}</Button>
         </Box>
       )}
     </Box>

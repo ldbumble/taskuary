@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // THE AGENT WORK CARD: everything a session did and thought, in one shape for every CLI and the general agent (the owner,
 // 2026-10-10: "make sure the agent work section carries enough info to let user know everything the agent did and thought
 // about. You can do short the long version with more button maybe but make sure it's full and complete record but don't
@@ -31,10 +32,10 @@ const Step = ({ s }) => {
     </Box>);
   if (s.k === "plan") return (
     <Box sx={{ fontSize: 12, color: DIM }}>
-      <Box component="span" sx={{ fontWeight: 600 }}>Plan</Box>
+      <Box component="span" sx={{ fontWeight: 600 }}>{tx("Plan")}</Box>
       {s.items.map((i, n) => <Box key={n} sx={{ pl: 1 }}>{i.status === "completed" ? "✓" : i.status === "in_progress" ? "▸" : "○"} {i.text}</Box>)}
     </Box>);
-  if (s.k === "result") return <Typography sx={{ fontSize: 12, color: FAINT, fontStyle: "italic" }}>Its answer — shown above.</Typography>;
+  if (s.k === "result") return <Typography sx={{ fontSize: 12, color: FAINT, fontStyle: "italic" }}>{tx("Its answer — shown above.")}</Typography>;
   if (s.k === "error") return <Typography sx={{ fontSize: 12, color: "#8a3646" }}>⚠ {s.text}</Typography>;
   if (s.k === "gap") return <Typography sx={{ fontSize: 11.5, color: FAINT }}>… {s.text}</Typography>;
   if (s.k === "screen") return (
@@ -58,8 +59,8 @@ const Steps = ({ s }) => {
   const steps = recordSteps(s);
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2 }}>
-      {!!s.plan?.length && <Box><Typography sx={head}>Its plan</Typography><Step s={{ k: "plan", items: s.plan }} /></Box>}
-      {!!s.refused?.length && <Box><Typography sx={head}>Refused by the floor</Typography>
+      {!!s.plan?.length && <Box><Typography sx={head}>{tx("Its plan")}</Typography><Step s={{ k: "plan", items: s.plan }} /></Box>}
+      {!!s.refused?.length && <Box><Typography sx={head}>{tx("Refused by the floor")}</Typography>
         {s.refused.map((r, i) => <Typography key={i} sx={{ fontSize: 12, color: DIM, overflowWrap: "anywhere" }}>{r.text}</Typography>)}</Box>}
       {!!steps.length && <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, maxHeight: 640, overflow: "auto", pr: 0.5 }}>
         {steps.map((x, i) => <Step key={i} s={x} />)}
@@ -82,37 +83,37 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
   return (
     <Box>
       <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 0.5 }}>{recordFacts(s).join(" · ")}</Typography>
-      {inChat ? null : lead ? <Box><Typography sx={head}>What happened</Typography><Box sx={{ fontSize: 14, lineHeight: 1.45, color: INK }}><Md text={lead} /></Box></Box>
-        : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result{parts.length ? " - More has what it did." : "."}</Typography>}
+      {inChat ? null : lead ? <Box><Typography sx={head}>{tx("What happened")}</Typography><Box sx={{ fontSize: 14, lineHeight: 1.45, color: INK }}><Md text={lead} /></Box></Box>
+        : <Typography sx={{ fontSize: 12.5, color: DIM }}>{tx("It ended without a written result")}{parts.length ? " - More has what it did." : "."}</Typography>}
       {!!rows.length && <Box sx={rowsSx}>{rows.map(([k, v]) => <React.Fragment key={k}><Box>{k}</Box><Box><Md text={v} /></Box></React.Fragment>)}</Box>}
       {/* what it made to be LOOKED AT belongs with what happened (the owner, 2026-10-10: "it's important to see it") */}
       {!!pages.length && <Box sx={{ mt: 0.9 }}><PublishedPages pages={pages} /></Box>}
       {!!parts.length && <Box sx={sec}>
-        <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setMore(!more)}>More · {parts.join(", ")} {more ? "▾" : "▸"}</Button>
+        <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setMore(!more)}>{tx("More ·")} {parts.join(", ")} {more ? "▾" : "▸"}</Button>
         {more && <Box sx={{ display: "flex", flexDirection: "column", gap: 1.3, mt: 1 }}>
           {message && <Box>
-            <Typography sx={head}>Its last message{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · the reply it drafted, also in Close out</Box>}</Typography>
+            <Typography sx={head}>{tx("Its last message")}{isReply && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> {tx("· the reply it drafted, also in Close out")}</Box>}</Typography>
             <Box sx={{ fontSize: 13, color: INK }}><Md text={message} /></Box>
           </Box>}
           {s.files?.length > 0 && <Box>
-            <Typography sx={head}>Files it saved</Typography>
+            <Typography sx={head}>{tx("Files it saved")}</Typography>
             {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
             {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: mine.length ? 0.4 : 0 }}>
-              {mine.length ? "and " : ""}{other.length} scratch file{other.length === 1 ? "" : "s"} it used while working</Typography>}
+              {mine.length ? "and " : ""}{other.length} {tx("scratch file")}{other.length === 1 ? "" : "s"} {tx("it used while working")}</Typography>}
           </Box>}
-          {!!timeline.length && <Box><Typography sx={head}>The run</Typography><Timeline steps={timeline} /></Box>}
+          {!!timeline.length && <Box><Typography sx={head}>{tx("The run")}</Typography><Timeline steps={timeline} /></Box>}
           {/* what ended it upstream (a merge, a close) - ADDED to what the agent did, never in its place (the owner, 2026-10-12) */}
           {since?.text && <Box>
-            <Typography sx={head}>Since then{since.at && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {String(since.at).slice(0, 16)}</Box>}</Typography>
+            <Typography sx={head}>{tx("Since then")}{since.at && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {String(since.at).slice(0, 16)}</Box>}</Typography>
             <Typography sx={{ fontSize: 12.5, color: INK }}>{since.text}</Typography>
           </Box>}
           {hasMore(s) && <Box>
             <Typography sx={head}>{s.source === "conversation" ? "The working behind its answers" : "Every step"}
-              {s.source && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · from {sourceLabel(s.source)}</Box>}</Typography>
+              {s.source && <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> {tx("· from")} {sourceLabel(s.source)}</Box>}</Typography>
             <Steps s={s} />
           </Box>}
           {!!earlier.length && <Box>
-            <Typography sx={head}>Earlier sessions · {earlier.length}</Typography>
+            <Typography sx={head}>{tx("Earlier sessions ·")} {earlier.length}</Typography>
             {earlier.map((x) => <Earlier key={x.sid} s={x} />)}
           </Box>}
         </Box>}

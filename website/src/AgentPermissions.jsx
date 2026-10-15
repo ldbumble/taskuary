@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, MenuItem, Select, Typography } from "@mui/material";
 import api from "./api";
@@ -28,10 +29,7 @@ export default function AgentPermissions({ onLoaded }) {
   const live = (rows || []).filter((c) => c.Active);
   return (
     <Box sx={{ mb: 2 }} data-tq-agent-permissions>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-        What agents may do in each connected system. Every connection starts at full authority; narrow the ones you want. Read only: they look, and any change becomes a proposal you approve on
-        the task. Read and write: they make the change themselves. A connection agents cannot use at all is off for them.
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}> {tx("What agents may do in each connected system. Every connection starts at full authority; narrow the ones you want. Read only: they look, and any change becomes a proposal you approve on the task. Read and write: they make the change themselves. A connection agents cannot use at all is off for them.")} </Typography>
       {live.map((c) => {
         const tool = rolesOf(c).has("tool");
         const level = String(c.Scope || "").toLowerCase() || String(c.ScopeDefault || "read").toLowerCase();
@@ -50,19 +48,19 @@ export default function AgentPermissions({ onLoaded }) {
                   ))}
                 </Select>
                 <Button size="small" disabled={busy === c.ConnectorId} sx={{ fontSize: 11.5 }}
-                  onClick={() => save(c, { Roles: [...rolesOf(c)].filter((r) => r !== "tool").join(",") })}>Off for agents</Button>
+                  onClick={() => save(c, { Roles: [...rolesOf(c)].filter((r) => r !== "tool").join(",") })}>{tx("Off for agents")}</Button>
               </>
             ) : (
               <>
-                <Typography variant="body2" sx={{ color: DIM, minWidth: 170 }}>off for agents</Typography>
+                <Typography variant="body2" sx={{ color: DIM, minWidth: 170 }}>{tx("off for agents")}</Typography>
                 <Button size="small" disabled={busy === c.ConnectorId} sx={{ fontSize: 11.5 }}
-                  onClick={() => save(c, { Roles: [...rolesOf(c), "tool"].join(",") })}>Let agents use it</Button>
+                  onClick={() => save(c, { Roles: [...rolesOf(c), "tool"].join(",") })}>{tx("Let agents use it")}</Button>
               </>
             )}
           </Box>
         );
       })}
-      {rows && !live.length && <Typography variant="body2" sx={{ color: DIM }}>No connection is switched on yet — add one under Connections.</Typography>}
+      {rows && !live.length && <Typography variant="body2" sx={{ color: DIM }}>{tx("No connection is switched on yet — add one under Connections.")}</Typography>}
       {err && <Typography variant="body2" sx={{ color: "#7a2f3c", mt: 1 }}>{err}</Typography>}
     </Box>
   );

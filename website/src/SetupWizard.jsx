@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Getting started, pointed at the places that do it.
 //
 // A fresh install opens on an empty Timeline that looks exactly like a working install on a quiet
@@ -63,7 +64,7 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
-          {two ? (state.first_todo ? `Setup: ${state.first_todo}` : "Set up") : `${left} left`}
+          {two ? (state.first_todo ? `Setup: ${state.first_todo}` : tx("Set up")) : `${left} left`}
         </Typography>
       </Box>
     </Tooltip>
@@ -107,12 +108,10 @@ export const FirstSync = ({ enabled, ready, firstItems = [], onSaved, onNavigate
     onNavigate?.("Assistant");
   };
   return <Box sx={{ mt: 1 }}>
-    {!ready && !enabled && <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-      Add your name, one AI and one work source first.
-    </Typography>}
+    {!ready && !enabled && <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}> {tx("Add your name, one AI and one work source first.")} </Typography>}
     <Button size="small" variant="contained" disableElevation disabled={starting || busy || !enabled} onClick={start}
       startIcon={starting || busy ? <CircularProgress size={12} color="inherit" /> : null}>
-      {starting || busy ? "Reading…" : ready || result?.phase === "ready" ? "Read again" : "Read first items"}
+      {starting || busy ? tx("Reading…") : ready || result?.phase === "ready" ? "Read again" : "Read first items"}
     </Button>
     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }} aria-live="polite">
       {result?.message || (ready ? "Open one of your first items to review its verdict or draft." : "We will show up to five recent results here; sources keep their normal import scope.")}
@@ -165,7 +164,7 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
         </Box>
         {!s.done && !open && Form && (
           <Button size="small" variant="outlined" onClick={onOpen}
-            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>Set up</Button>
+            sx={{ alignSelf: "center", whiteSpace: "nowrap", fontSize: 12 }}>{tx("Set up")}</Button>
         )}
         {!s.done && !Form && s.action !== "sync" && (
           /* what it OPENS, not which tab it lives on: two rows both read "Connections" and went to
@@ -180,9 +179,9 @@ const Step = ({ s, n, open, onOpen, onGo, onDone, firstItems }) => {
         )}
         {s.done && s.action !== "sync" && (Form
           ? <Typography variant="caption" onClick={onOpen}
-              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>{tx("change")}</Typography>
           : <Typography variant="caption" onClick={() => onGo(s.goto)}
-              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>change</Typography>)}
+              sx={{ color: FAINT, cursor: "pointer", whiteSpace: "nowrap", "&:hover": { color: "#55697a" } }}>{tx("change")}</Typography>)}
       </Box>
       {/* A reopened DONE step puts its form UNDER the row, indented to the text column - inside the
           header row it overflowed its track and sat on the step's own title (owner, 2026-09-02). */}
@@ -236,9 +235,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
           ))}
         </Box>
 
-        <Button size="small" sx={{ mt: 1, color: DIM }} onClick={() => go({ tab: "Settings", hash: "settings=config&group=Triage%20%26%20agents" })}>
-          Optional: review models and agents
-        </Button>
+        <Button size="small" sx={{ mt: 1, color: DIM }} onClick={() => go({ tab: "Settings", hash: "settings=config&group=Triage%20%26%20agents" })}> {tx("Optional: review models and agents")} </Button>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
           <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
@@ -252,7 +249,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
             </Button>
           )}
           <Button size="small" variant="contained" disableElevation onClick={onClose} sx={{ fontSize: 12 }}>
-            {state.complete ? "Done" : "Close"}
+            {state.complete ? "Done" : tx("Close")}
           </Button>
         </Box>
       </DialogContent>

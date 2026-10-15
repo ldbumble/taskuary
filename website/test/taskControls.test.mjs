@@ -14,7 +14,7 @@ test("each control carries the caption that names its effect on task versus agen
   for (const [label, title] of [
     // ...and while the close runs it greys out and says "Marking done…" (2026-09-25)
     // ...and says only what it does HERE: the session part when one is live, the kept draft when one waits (T11)
-    ['{finishing ? "Marking done…" : "Mark done"}', "title={markDoneHint}"],
+    ['{finishing ? tx("Marking done…") : tx("Mark done")}', "title={markDoneHint}"],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
@@ -23,14 +23,14 @@ test("each control carries the caption that names its effect on task versus agen
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
     // ...and while the AI writes it the label says "Drafting…" (2026-09-24)
-    ['{openingReply ? "Drafting…" : replyPrimary}', "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
+    ['{openingReply ? tx("Drafting…") : replyPrimary}', "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
     ["Ask sender", "nothing is sent now."],
     ["Review changes", "Nothing is approved or committed here."],
   ]) {
     // one name can sit on several buttons (every ending is "Save and end session", 2026-09-25): each
     // caption must be on one of them
     const ats = [];
-    for (let at = tasks.indexOf(`>${label}</Button>`); at !== -1; at = tasks.indexOf(`>${label}</Button>`, at + 1)) ats.push(at);
+    for (let at = tasks.indexOf(`>${label.startsWith("{") ? label : `{tx(${JSON.stringify(label)})}`}</Button>`); at !== -1; at = tasks.indexOf(`>${label.startsWith("{") ? label : `{tx(${JSON.stringify(label)})}`}</Button>`, at + 1)) ats.push(at);
     assert.ok(ats.length, `${label} button`);
     assert.ok(ats.some((at) => tasks.slice(tasks.lastIndexOf("<Button", at), at).includes(title)), `${label}: caption "${title}"`);
   }
@@ -86,7 +86,7 @@ test("the agent card names the role and the brain, and offers no model", () => {
   const at = tasks.indexOf("{runRole && <Box");
   assert.notEqual(at, -1, "the role pill must be rendered");
   const row = tasks.slice(at, at + 1400);
-  assert.ok(row.includes(">role</Box>") && row.includes(">brain</Box>"), "both pills are labelled");
+  assert.ok(row.includes('>{tx("role")}</Box>') && row.includes('>{tx("brain")}</Box>'), "both pills are labelled");
   assert.ok(row.includes("{brainPill &&"), "the brain pill renders brainPill, not runBrain");
   assert.ok(!/>model</.test(row), "and there is no model pill - the model is not the task's");
 });
@@ -181,7 +181,7 @@ test("a draft that cannot be sent says why on the card, not in a tooltip", () =>
   // shows it; the task page kept it in the hover of the button that replaced Send
   const decision = fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8");
   assert.match(decision, /r\.CanSend === false && \(/);
-  assert.match(decision, /No reply can be sent from here — \{r\.SendBlock/);
+  assert.match(decision, /\{tx\("No reply can be sent from here —"\)\} \{r\.SendBlock/);
   assert.match(decision, /The draft stays for you to use/);
 });
 

@@ -402,6 +402,8 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
     rules = term.with_fence_rule(brief.rules(store, 'agent', term.AGENT_CHARS))      # the titles above are fenced
     if rules: parts.append(f'RULES (AGENT.md - every worker): {term.no_emails(rules)}')
+    from . import i18n
+    parts.append(i18n.output_instruction(i18n.locale(store)).strip())
     return term.paragraphs('\n\n'.join(parts))
 
 

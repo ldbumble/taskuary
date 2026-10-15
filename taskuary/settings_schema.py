@@ -13,7 +13,10 @@ _PATH = Path(__file__).with_name('settings_schema.json')
 def _load() -> dict: return json.loads(_PATH.read_text(encoding='utf-8'))
 
 
-def knobs() -> dict: return _load()['knobs']
+def knobs(language=None) -> dict:
+    if language is None: return _load()['knobs']
+    from . import i18n
+    return {k: i18n.presentation(v, language) for k, v in _load()['knobs'].items()}
 def panel_owned() -> list: return _load()['panel_owned']
 GROUPS = _load()['groups']
 
@@ -24,21 +27,26 @@ def _word(meta: dict, value) -> str:
     return v or '(blank)'
 
 
-def describe(key: str, value) -> str:
+def describe(key: str, value, language=None) -> str:
     """'Triage brain (Triage & agents): connector:80' - the label, the group, the value as the schema
     says it. An unknown key is said plainly rather than dressed up."""
-    meta = knobs().get(key)
+    meta = knobs(language).get(key)
     if not meta: return f'{key}: {value}'
     return f"{meta['label']} ({meta['group']}): {_word(meta, value)}"
 
 
-def refuse(key: str, value) -> str:
+def refuse(key: str, value, language=None) -> str:
     """'' when `value` may be stored under `key`, else the sentence why not. A number knob takes 0 or more, or blank for its
     default: -5 days of Timeline said Saved and emptied the Timeline (the 2026-10-07 click-through)."""
-    meta = knobs().get(key)
+    if key == 'locale':
+        from . import i18n
+        return '' if value in i18n.LOCALES else i18n.text('locale must be pt-BR or en', language)
+    meta = knobs(language).get(key)
     if not meta or meta.get('type') != 'number': return ''
     v = str('' if value is None else value).strip()
     if not v: return ''
     try: n = float(v)
     except ValueError: n = None
-    return '' if n is not None and math.isfinite(n) and n >= 0 else f"{meta['label']} takes a number, 0 or more - not {v!r}"
+    if n is not None and math.isfinite(n) and n >= 0: return ''
+    from . import i18n
+    return i18n.text('{label} takes a number, 0 or more - not {value}', language, label=meta['label'], value=repr(v))

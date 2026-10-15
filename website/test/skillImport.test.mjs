@@ -24,7 +24,7 @@ test("looking is free and the cap is on what you tick", () => {
   // (the owner, 2026-09-18: a 252-skill repository was refused outright)
   assert.match(wizard, /"\/api\/skills\/list", \{ url: target \}/);
   assert.match(wizard, /rows_\.length <= \(data\.max \|\| 10\)/);        // small enough: no picker at all
-  assert.match(wizard, /choose up to \{max\} to bring in/);
+  assert.match(wizard, /\{tx\("skills there - choose up to"\)\} \{max\} \{tx\("to bring in"\)\}/);
   assert.match(wizard, /disabled=\{!on && pickCount >= max\}/);           // the cap is visible, not silent
   assert.doesNotMatch(wizard, /point at a folder with at most/);          // the old refusal is gone
 });
@@ -40,14 +40,14 @@ test("you choose which ones: one skill starts chosen, a catalogue starts unchose
   assert.deepEqual(chosen([{ include: true, imported: true }, { include: true, imported: false }]).length, 1);
   // the markup: a tick per row, select all / none, Next needs at least one chosen
   assert.match(wizard, /<Checkbox checked=\{!!r\.include\}/);
-  assert.match(wizard, /Select all/); assert.match(wizard, />None</);
+  assert.match(wizard, /Select all/); assert.match(wizard, />\{tx\("None"\)\}</);
   assert.match(wizard, /disabled=\{busy \|\| !pending\.length \|\| !allNamed\}/);
   assert.match(wizard, /rows\.map\(\(r, i\) => r\.include && \(/);     // step 3 lists only the chosen
 });
 
 test("Manage profiles names both roads to a new worker", () => {
   assert.match(agents, /import SkillImport from "\.\/SkillImport\.jsx"/);
-  assert.match(agents, /Add profile manually<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
+  assert.match(agents, /\{tx\("Add profile manually"\)\}<\/Button>\s*<Button variant="outlined" onClick=\{\(\) => setImportSkills\(true\)\}/);
   assert.match(agents, /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\} onImported=\{load\} \/>/);
 });
 
@@ -75,7 +75,7 @@ test("a name clash offers a rename or a confirmed overwrite, and neither is sile
   assert.match(wizard, /Overwrite it/);
   // Overwrite ASKS FIRST: a rules document has no history, so a mis-click is unrecoverable. The button
   // opens the confirm; only the confirm's onConfirm flags the row.
-  assert.match(wizard, /onClick=\{\(\) => setOverwrite\(i\)\}>Overwrite it/);
+  assert.match(wizard, /onClick=\{\(\) => setOverwrite\(i\)\}>\{tx\("Overwrite it"\)\}/);
   assert.match(wizard, /<Confirm open=\{overwrite !== null\}/);
   assert.match(wizard, /onConfirm=\{\(\) => \{ setRow\(overwrite, \{ replace: true, clash: null \}\); \}\}/);
   assert.doesNotMatch(wizard, /onClick=\{\(\) => setRow\(i, \{ replace: true/);   // no unconfirmed road left
@@ -105,7 +105,7 @@ test("the size warning is the seed's own cut, reported by the server - not a byt
 
 test("the wizard names both doors - a link or a path - and the field takes either", () => {
   assert.match(wizard, /Paste a link/);
-  assert.match(wizard, /label="Link or path"/);
+  assert.match(wizard, /label=\{tx\("Link or path"\)\}/);
   assert.doesNotMatch(wizard, /fetched from a link/);   // the old copy promised a door before it existed
 });
 
@@ -114,7 +114,7 @@ test("the wizard names both doors - a link or a path - and the field takes eithe
 // clear buttons .. make it look normal"). Both roads to a new worker now live on the screen
 // those buttons open, so importing is reachable from exactly one place instead of two.
 test("Docs sends you to the one screen that holds both roads", () => {
-  assert.match(docs, />Manage profiles<\/Button>/);
+  assert.match(docs, />\{tx\("Manage profiles"\)\}<\/Button>/);
   assert.doesNotMatch(docs, /setImportSkills\(true\)/);
   assert.match(read("AgentsPanel.jsx"), /<SkillImport onClose=\{\(\) => setImportSkills\(false\)\}/);
 });

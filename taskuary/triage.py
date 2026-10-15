@@ -79,7 +79,7 @@ SHIPPED = re.sub(r'<!--.*?-->', '', (_Path(__file__).parent / 'templates' / 'tri
 
 
 JOB_CHARS = 2500             # triage's cut of JOB.md; the assistant and the chat read it whole (job_doc)
-_JOB_TEMPLATE = re.compile(r'^.*(not generated yet|Write it here).*$', re.M)
+_JOB_TEMPLATE = re.compile(r'^.*(not generated yet|Write it here|ainda não gerado|Descreva suas responsabilidades).*$', re.M)
 
 
 def job_doc(store, limit: int = None) -> str:

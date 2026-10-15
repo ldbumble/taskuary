@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Your name and email, in the two places that ask for them: the setup checklist's first row and the
 // walk's first stop.
 //
@@ -32,10 +33,10 @@ export default function OwnerForm({ onDone }) {
   };
   return (
     <Box sx={{ display: "flex", gap: 1, mt: 1, flexWrap: "wrap" }}>
-      <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
-      <Field label="Email" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
+      <Field label={tx("Your name")} value={name} onChange={(e) => setName(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
+      <Field label={tx("Email")} value={email} onChange={(e) => setEmail(e.target.value)} sx={{ bgcolor: "#fff", flex: 1, minWidth: 160 }} />
       <Button variant="contained" disableElevation size="small" disabled={busy || !name.trim()} onClick={save}>
-        {busy ? "…" : "Save"}
+        {busy ? "…" : tx("Save")}
       </Button>
       {err && <Alert severity="error" sx={{ width: "100%", fontSize: 12.5 }}>{err}</Alert>}
     </Box>

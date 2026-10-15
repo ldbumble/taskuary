@@ -1,3 +1,4 @@
+import { localized, t as tx } from "./i18n.js";
 // Connectors, Stripe-style like Settings: a searchable landing of grouped category cards
 // (AI · Messaging · Developer · Local & data), each drilling into a detail page with a
 // setup WIZARD (stepper) plus Sources/management. All connectors live here - channel
@@ -25,7 +26,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, 
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { plannedFor } from "./connectorCatalog.js";
+import { catalogGroupLabel, plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
@@ -60,12 +61,12 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
     <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
       <TerminalIcon sx={{ fontSize: 18, color: FAINT }} />
       <Box sx={{ flex: 1, minWidth: 240 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up — needs an AI app on this computer</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Get AI to set it up — needs an AI app on this computer")}</Typography>
         <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
           {ready.why || "Set one up under Connections > AI CLI agents, or follow the Guide tab and fill the card yourself."}
         </Typography>
       </Box>
-      {openAgents && <Button size="small" variant="outlined" onClick={openAgents}>Set up an AI app</Button>}
+      {openAgents && <Button size="small" variant="outlined" onClick={openAgents}>{tx("Set up an AI app")}</Button>}
     </Box>
   );
   const start = async () => {
@@ -87,21 +88,18 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
         <TerminalIcon sx={{ fontSize: 18, color: DIM }} />
         <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
-            Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this
-            card and runs Test until it passes. It sits on the Board as a task while it works.
-          </Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Get AI to set it up")}</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}> {tx("Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this card and runs Test until it passes. It sits on the Board as a task while it works.")} </Typography>
         </Box>
         {sess ? (
           <>
-            <Typography variant="caption" sx={{ color: FAINT }}>{ref} on the Board</Typography>
-            <Button size="small" variant="outlined" onClick={done}>Done — close the session</Button>
+            <Typography variant="caption" sx={{ color: FAINT }}>{ref} {tx("on the Board")}</Typography>
+            <Button size="small" variant="outlined" onClick={done}>{tx("Done — close the session")}</Button>
           </>
         ) : (
           <Button variant="contained" disableElevation disabled={busy} onClick={start}
             startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
-            {busy ? "starting…" : "Get AI to set it up"}
+            {busy ? "starting…" : tx("Get AI to set it up")}
           </Button>
         )}
       </Box>
@@ -1255,13 +1253,13 @@ function KbSearch({ conn }) {
   };
   return (
     <Box sx={{ mt: 2, maxWidth: 560 }}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: INK, mb: 0.75 }}>Ask the knowledge base</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600, color: INK, mb: 0.75 }}>{tx("Ask the knowledge base")}</Typography>
       <Box sx={{ display: "flex", gap: 1 }}>
-        <TextField size="small" fullWidth placeholder="e.g. what is our resident refund policy" value={q} sx={{ bgcolor: "#fff" }}
+        <TextField size="small" fullWidth placeholder={tx("e.g. what is our resident refund policy")} value={q} sx={{ bgcolor: "#fff" }}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} />
-        <Button variant="outlined" disabled={busy || !q.trim()} onClick={go}>{busy ? <CircularProgress size={14} /> : "Search"}</Button>
+        <Button variant="outlined" disabled={busy || !q.trim()} onClick={go}>{busy ? <CircularProgress size={14} /> : tx("Search")}</Button>
       </Box>
-      {hits && hits.length === 0 && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>nothing matched — is anything indexed yet?</Typography>}
+      {hits && hits.length === 0 && <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 1 }}>{tx("nothing matched — is anything indexed yet?")}</Typography>}
       {(hits || []).map((h) => (
         <Box key={`${h.doc_id}-${h.seq}`} sx={{ mt: 1, p: 1, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: PANEL2 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{h.name} <Typography component="span" variant="caption" sx={{ color: DIM }}>· {h.source}/{h.path} · {(h.modified || "").slice(0, 10)}</Typography></Typography>
@@ -1355,10 +1353,10 @@ export const ConnCard = ({ c }) => {
           {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
             : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
         </Box>
-        <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
+        <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{localized(c, "title")}</Typography>
         {connState(c) === "on" && !c.plain && (
           <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
-            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>Connected</Box>
+            lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>{tx("Connected")}</Box>
         )}
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: connDot(c), flexShrink: 0 }} />
       </Box>
@@ -1471,15 +1469,11 @@ const VoiceVocabulary = ({ onBack }) => {
   };
   return (
     <Box sx={{ maxWidth: 760, mx: "auto" }}>
-      <Crumb section="Connections" onBack={onBack} title="Shared voice vocabulary" />
-      <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}>
-        One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms;
-        each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript.
-        Generate from history reads who writes to you and what about, and adds the names a recogniser would get wrong - your own lines stay.
-      </Typography>
+      <Crumb section="Connections" onBack={onBack} title={tx("Shared voice vocabulary")} />
+      <Typography variant="body2" sx={{ color: DIM, mb: 2, lineHeight: 1.7 }}> {tx("One list for every AI voice connector, browser mic and voice note. Add unusual names, acronyms, products and internal system terms; each active provider receives the same hints automatically. Hints improve recognition but never force words into a transcript. Generate from history reads who writes to you and what about, and adds the names a recogniser would get wrong - your own lines stay.")} </Typography>
       <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL, p: 2 }}>
         <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy || genBusy}
-          label="Words and phrases" placeholder={"Taskuary\nNorthwind\nPayworth\nTQ-0243"}
+          label={tx("Words and phrases")} placeholder={"Taskuary\nNorthwind\nPayworth\nTQ-0243"}
           helperText={`One term or phrase per line · up to ${limit} · 50 characters and 5 words per entry`} />
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5 }}>
           <Typography variant="caption" sx={{ color: terms.length > limit ? "error.main" : FAINT }}>{terms.length}/{limit}</Typography>
@@ -1487,7 +1481,7 @@ const VoiceVocabulary = ({ onBack }) => {
           <Button size="small" variant="outlined" onClick={generate} disabled={busy || genBusy || terms.length > limit}
             sx={{ fontSize: 11.5, textTransform: "none" }}
             startIcon={genBusy ? <CircularProgress size={12} /> : null}
-            title="Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.">
+            title={tx("Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.")}>
             {genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}
           </Button>
           <Button variant="contained" disableElevation onClick={save} disabled={busy || genBusy || terms.length > limit || text === onServer}>
@@ -1499,7 +1493,7 @@ const VoiceVocabulary = ({ onBack }) => {
         {/* the receipts: what history was read and counted, so every added name traces back to your own mail */}
         {genEv?.length > 0 && (
           <Box sx={{ mt: 1.5, p: 1.25, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>What it read</Typography>
+            <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "block", mb: 0.5 }}>{tx("What it read")}</Typography>
             {genEv.map((l, i) => (
               <Typography key={i} variant="caption" component="div" sx={{ color: l.startsWith("  ") ? FAINT : DIM, whiteSpace: "pre-wrap", fontFamily: l.startsWith("  ") ? "monospace" : "inherit", fontSize: 11 }}>{l}</Typography>
             ))}
@@ -1540,38 +1534,30 @@ function AlchemyWalletGuide({ onBack, onData }) {
     border: `1px solid ${BORDER}`, borderRadius: 1.5, overflowX: "auto", fontSize: 12 }}>{value}</Box>;
   return <Box sx={{ maxWidth: 850, mx: "auto" }}>
     <Crumb section="Connections" onBack={onBack} title="Alchemy Agent Wallet" />
-    <Typography variant="body2" sx={{ color: DIM, mb: 2 }}>
-      Create the wallet in Alchemy’s Dashboard, then approve a CLI session for this computer. The session can be revoked in the Dashboard and does not put a private key in Taskuary.
-    </Typography>
+    <Typography variant="body2" sx={{ color: DIM, mb: 2 }}> {tx("Create the wallet in Alchemy’s Dashboard, then approve a CLI session for this computer. The session can be revoked in the Dashboard and does not put a private key in Taskuary.")} </Typography>
     <Button variant="contained" disabled={busy || !!sid} onClick={start} startIcon={<TerminalIcon sx={{ fontSize: 16 }} />}>
       {busy ? "Opening terminal…" : sid ? "Terminal open below" : "Set it up in terminal"}
     </Button>
     {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
     {sid && <Box sx={{ mt: 2, mb: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 0.7 }}>
-        <Typography sx={{ fontWeight: 600, flex: 1 }}>Alchemy setup terminal</Typography>
-        <Button size="small" onClick={close}>Close terminal</Button>
+        <Typography sx={{ fontWeight: 600, flex: 1 }}>{tx("Alchemy setup terminal")}</Typography>
+        <Button size="small" onClick={close}>{tx("Close terminal")}</Button>
       </Box>
       <TerminalPane sid={sid} height={420} />
     </Box>}
-    <Typography variant="body2" sx={{ color: DIM, mt: 2, mb: 1 }}>
-      Run these commands in the terminal above. Installation and wallet creation start only when you enter their commands.
-    </Typography>
-    <Typography sx={{ fontWeight: 600, color: INK }}>1. Install the CLI (Node.js 22 or newer)</Typography>
+    <Typography variant="body2" sx={{ color: DIM, mt: 2, mb: 1 }}> {tx("Run these commands in the terminal above. Installation and wallet creation start only when you enter their commands.")} </Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>{tx("1. Install the CLI (Node.js 22 or newer)")}</Typography>
     {command("npm i -g @alchemy/cli@latest")}
-    <Typography sx={{ fontWeight: 600, color: INK }}>2. Sign in to Alchemy</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>{tx("2. Sign in to Alchemy")}</Typography>
     {command("alchemy auth login --device-code")}
-    <Typography sx={{ fontWeight: 600, color: INK }}>3. Create an Agent Wallet and approve this computer</Typography>
-    <Typography variant="body2" sx={{ color: DIM }}>
-      Create the wallet in the <a href="https://dashboard.alchemy.com/products/agent-wallet/evm-wallet" target="_blank" rel="noreferrer">Alchemy Agent Wallets Dashboard</a>, then run:
-    </Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>{tx("3. Create an Agent Wallet and approve this computer")}</Typography>
+    <Typography variant="body2" sx={{ color: DIM }}> {tx("Create the wallet in the")} <a href="https://dashboard.alchemy.com/products/agent-wallet/evm-wallet" target="_blank" rel="noreferrer">{tx("Alchemy Agent Wallets Dashboard")}</a>{tx(", then run:")} </Typography>
     {command("alchemy wallet connect --mode session --instance-name taskuary")}
-    <Typography sx={{ fontWeight: 600, color: INK }}>4. Check the session and wallet address</Typography>
+    <Typography sx={{ fontWeight: 600, color: INK }}>{tx("4. Check the session and wallet address")}</Typography>
     {command("alchemy --json --no-interactive wallet status --verify\nalchemy --json --no-interactive wallet address")}
-    <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>
-      To create local EVM and Solana key files instead, run <code>alchemy wallet connect --mode local</code>. Keep the generated key files private and backed up; this path stores signing keys on this computer.
-    </Typography>
-    <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={onData}>Open Alchemy data connection</Button>
+    <Typography variant="body2" sx={{ color: DIM, mt: 1 }}> {tx("To create local EVM and Solana key files instead, run")} <code>alchemy wallet connect --mode local</code>{tx(". Keep the generated key files private and backed up; this path stores signing keys on this computer.")} </Typography>
+    <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={onData}>{tx("Open Alchemy data connection")}</Button>
   </Box>;
 }
 
@@ -1677,7 +1663,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     .map((t) => ({ key: `p${t}`, title: PLANNED_TITLES[t] || t.replace(/_/g, " "), desc: "planned",
       channel: t, haystack: `${t} planned`, planned: true }));
   const catalogCards = (category) => plannedFor(category).map((c) => ({
-    key: `catalog-${c.type}`, title: c.title, desc: `planned — ${c.desc}`, channel: c.type,
+    key: `catalog-${c.type}`, title: localized(c, "title"), desc: `${tx("planned")} — ${tx(c.desc)}`, channel: c.type,
     haystack: `${c.type} ${c.title} ${c.desc} planned`, planned: true,
   }));
 
@@ -1779,9 +1765,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const openCard = all.find((c) => c.key === browseState.open);
     const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
     return browse({
-      title: "Connections",
-      summary: `${connected} connected · ${all.filter((c) => c.planned).length} more in the catalogue · pick a section`,
-      sections: groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null })),
+      title: tx("Connections"),
+      summary: tx("{connected} connected · {more} more in the catalogue · pick a section", { connected, more: all.filter((c) => c.planned).length }),
+      sections: groups.map((g) => ({ key: g.title, label: catalogGroupLabel(g.title), n: g.cards.length || null })),
       section: q ? "" : browseState.section ?? null,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
       note: err || (q ? "" : groups.find((g) => g.title === browseState.section)?.note || ""),
@@ -1789,35 +1775,35 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       detail, onBack: back,
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
-        <Box component="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search connectors…"
-          aria-label="Search connectors" data-tq-browse-search=""
+        <Box component="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={tx("Search connectors…")}
+          aria-label={tx("Search connectors")} data-tq-browse-search=""
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
-      empty: q ? `Nothing matches “${q}”.` : "Nothing in this section yet.",
+      empty: q ? tx("Nothing matches “{q}”.", { q }) : tx("Nothing in this section yet."),
     });
   }
 
   return (
-    <SideRail title="Connections" q={q} setQ={setQ}
-      placeholder="Search connectors…"
-      items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
+    <SideRail title={tx("Connections")} q={q} setQ={setQ}
+      placeholder={tx("Search connectors…")}
+      items={groups.map((g) => ({ key: g.title, label: catalogGroupLabel(g.title), n: g.cards.length || null }))}
       value={group} onChange={setGroup}
-      note="Keys and connection settings are stored locally, in the same SQLite file as your tasks.">
+      note={tx("Keys and connection settings are stored locally, in the same SQLite file as your tasks.")}>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15, flex: 1, minWidth: 0 }} noWrap>
-          {q ? `Matches for “${q}”` : shown.title}
+          {q ? tx("Matches for “{q}”", { q }) : catalogGroupLabel(shown.title)}
         </Typography>
         <Button size="small" variant="contained" disableElevation onClick={syncNow} disabled={syncing}
           startIcon={syncing ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
-          {syncing ? "Syncing…" : "Sync now"}
+          {syncing ? tx("Syncing…") : tx("Sync now")}
         </Button>
       </Box>
 
       {q ? (
         <Box>
-          {!hits.length ? <Empty>Nothing matches “{q}”. Try a product, channel, or connection name.</Empty> : (
+          {!hits.length ? <Empty>{tx("Nothing matches “")}{q}{tx("”. Try a product, channel, or connection name.")}</Empty> : (
             <>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
                 {hits.length} {hits.length === 1 ? "result" : "results"}
@@ -1867,20 +1853,20 @@ function ConnectorIdentity({ conn, reload, onCreated }) {
   };
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5, maxWidth: 720 }}>
-      <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
+      <TextField size="small" label={tx("Connection name")} value={name} onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
       <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
         onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
       {!adding ? (
-        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another</Button>
+        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>{tx("Add another")}</Button>
       ) : (
         <>
           <TextField size="small" autoFocus label={`New ${conn.Type} connection name`} value={newName}
             onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }}
             sx={{ bgcolor: "#fff", minWidth: 240 }} />
           <Button size="small" variant="contained" disableElevation disabled={busy === "add" || !newName.trim()}
-            onClick={add}>{busy === "add" ? "Adding…" : "Add"}</Button>
-          <Button size="small" onClick={() => { setAdding(false); setNewName(""); setErr(""); }}>Cancel</Button>
+            onClick={add}>{busy === "add" ? "Adding…" : tx("Add")}</Button>
+          <Button size="small" onClick={() => { setAdding(false); setNewName(""); setErr(""); }}>{tx("Cancel")}</Button>
         </>
       )}
       {err && <Alert severity="error" sx={{ width: "100%", py: 0 }}>{err}</Alert>}
@@ -1904,24 +1890,18 @@ function CardPlaybooks({ type }) {
   const go = (slug) => { window.location.hash = `playbook=${slug}`; };
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
-      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
-        PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US
-      </Typography>
+      <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}> {tx("PLAYBOOKS — WHAT THIS CONNECTION DOES FOR US")} </Typography>
       {books.length === 0 && (
-        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-          No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it on the task and the next such job runs on it.
-        </Typography>
+        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}> {tx("No playbook names this connection yet. One is drafted for you the first time an agent finishes a job with it; approve it on the task and the next such job runs on it.")} </Typography>
       )}
       {books.map((b) => (
         <Box key={b.slug} onClick={() => go(b.slug)} sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.5, cursor: "pointer",
           "&:hover .pb-t": { textDecoration: "underline" } }}>
           <Typography className="pb-t" variant="body2" sx={{ color: INK, fontWeight: 600, whiteSpace: "nowrap" }}>{b.title}</Typography>
-          <Typography variant="caption" sx={{ color: FAINT }} noWrap>when: {b.when}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }} noWrap>{tx("when:")} {b.when}</Typography>
         </Box>
       ))}
-      <Button size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => go(`new:${type}`)} sx={{ mt: 0.5 }}>
-        New playbook for this connection
-      </Button>
+      <Button size="small" variant="text" startIcon={<AddIcon sx={{ fontSize: 15 }} />} onClick={() => go(`new:${type}`)} sx={{ mt: 0.5 }}> {tx("New playbook for this connection")} </Button>
     </Box>
   );
 }
@@ -1937,9 +1917,9 @@ function RemoveConnection({ conn, reload, onBack }) {
   return (
     <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
       <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
-        onClick={() => setConfirm(true)}>Remove connection</Button>
-      <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
-        consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
+        onClick={() => setConfirm(true)}>{tx("Remove connection")}</Button>
+      <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel={tx("Remove")}
+        consequence={tx("Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch.")}
         onClose={() => setConfirm(false)} onConfirm={remove} />
     </Box>
   );
@@ -1996,32 +1976,25 @@ function MacPermissions({ conn, test, busy, runTest }) {
   );
   return (
     <Box sx={{ mt: 1, maxWidth: 760 }}>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        Apple Messages stays on this Mac. Reading the history macOS already keeps needs <b>Full Disk Access</b>;
-        asking Messages.app to send a reply needs <b>Automation</b>. macOS controls both — Taskuary cannot grant or
-        bypass them, and both are granted to <b>{host}</b>, not to "Taskuary".
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}> {tx("Apple Messages stays on this Mac. Reading the history macOS already keeps needs")} <b>{tx("Full Disk Access")}</b>{tx("; asking Messages.app to send a reply needs")} <b>{tx("Automation")}</b>{tx(". macOS controls both — Taskuary cannot grant or bypass them, and both are granted to")} <b>{host}</b>{tx(", not to \"Taskuary\".")} </Typography>
       {notMac ? (
         <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {test.detail}</Typography>
       ) : (
         <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
-          <Card title="Read Messages" sub="Full Disk Access" ok={readOk}>
-            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-              Opens the local Messages database read-only so new messages and context can enter Taskuary.
-            </Typography>
+          <Card title={tx("Read Messages")} sub="Full Disk Access" ok={readOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}> {tx("Opens the local Messages database read-only so new messages and context can enter Taskuary.")} </Typography>
             {(setup.host_name || setup.host_path) && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
-                <Typography variant="caption" sx={{ color: FAINT }}>grant to:</Typography>
+                <Typography variant="caption" sx={{ color: FAINT }}>{tx("grant to:")}</Typography>
                 <Typography sx={{ ...mono, fontSize: 12, color: INK }} noWrap>{setup.host_name || setup.host_path}</Typography>
-                {setup.host_path && <IconButton size="small" onClick={() => copy(setup.host_path)} title="copy path"><ContentCopyIcon sx={{ fontSize: 13 }} /></IconButton>}
+                {setup.host_path && <IconButton size="small" onClick={() => copy(setup.host_path)} title={tx("copy path")}><ContentCopyIcon sx={{ fontSize: 13 }} /></IconButton>}
               </Box>
             )}
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-              {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}>
-                Open Full Disk Access</Button>}
+              {fdaPane && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("full_disk_access")}> {tx("Open Full Disk Access")}</Button>}
               <Button size="small" variant="contained" disableElevation disabled={busy === "test"} onClick={() => { setOpenErr((o) => ({ ...o, full_disk_access: "" })); runTest(); }}
                 startIcon={busy === "test" ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
-                {!test ? "Test" : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
+                {!test ? tx("Test") : readNeeds ? "I enabled it — test again" : "Test again"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               {fdaPane ? (setup.breadcrumb || "System Settings → Privacy & Security → Full Disk Access") : "not a permission problem - see the message below"}
@@ -2032,20 +2005,15 @@ function MacPermissions({ conn, test, busy, runTest }) {
             <TestLine test={test} mt={1} />
             {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
           </Card>
-          <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
-            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-              Lets Taskuary ask Messages.app to send a reply. Testing this makes macOS ask whether {host} may control
-              Messages — allow it. <b>The test sends nothing.</b> Skip it and macOS asks on the first real reply instead.
-            </Typography>
+          <Card title={tx("Send Messages")} sub="Automation: Messages" ok={sendOk}>
+            <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}> {tx("Lets Taskuary ask Messages.app to send a reply. Testing this makes macOS ask whether")} {host} {tx("may control Messages — allow it.")} <b>{tx("The test sends nothing.")}</b> {tx("Skip it and macOS asks on the first real reply instead.")} </Typography>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
               <Button size="small" variant="contained" disableElevation disabled={probing} onClick={runProbe}
                 startIcon={probing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 14 }} />}>
                 {probe ? "Test again" : "Test Automation"}</Button>
-              {sendDenied && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("automation")}>
-                Open Automation settings</Button>}
+              {sendDenied && <Button size="small" variant="outlined" startIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />} onClick={() => openPane("automation")}> {tx("Open Automation settings")}</Button>}
             </Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              System Settings → Privacy & Security → Automation → {host} → Messages
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("System Settings → Privacy & Security → Automation →")} {host} → Messages
               {opened === "automation" && " · Settings opened"}
               {openErr.automation && ` · ${openErr.automation}`}
             </Typography>
@@ -2064,9 +2032,9 @@ const SIMPLE_FIELDS = { gmail: ["address"], imap: ["address", "imap_host"] };
 // the simple card's one hint under the password, in words a first-time owner has: the full card's Guide says "under Credentials"
 // and "the imap->smtp pattern", which this screen has neither of (a fresh-home run, 2026-10-15)
 const SIMPLE_HINT = {
-  gmail: <>Not your normal password: Google makes a 16-letter App Password at{" "}
+  gmail: <>{tx("Not your normal password: Google makes a 16-letter App Password at")}{" "}
     <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>
-    {" "}- 2-Step Verification has to be on first.</>,
+    {" "}{tx("- 2-Step Verification has to be on first.")}</>,
   imap: "Usually your normal email password. Yahoo and iCloud want an app password from their account page instead.",
 };
 
@@ -2144,14 +2112,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {conn.Type === "outlook" && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
-            sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
-            Admin? Use a tenant app registration instead →
-          </Button>
+            sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}> {tx("Admin? Use a tenant app registration instead →")} </Button>
         )}
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
-          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
-            Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
-          </Typography>
+          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}> {tx("Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.")} </Typography>
         )}
         {adminFields && (
           <>
@@ -2163,11 +2127,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             {m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
                 value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-                helperText="Write-only: stored server-side, never returned to the browser." />
+                helperText={tx("Write-only: stored server-side, never returned to the browser.")} />
             )}
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button variant="contained" disableElevation disabled={busy === "save"} onClick={saveCreds}>
-                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
+                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Save & continue")}</Button>
               {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
             </Box>
           </>
@@ -2178,9 +2142,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       <MacPermissions conn={conn} test={test} busy={busy} runTest={runTest} />
     ) : (
       <Box sx={{ mt: 1 }}>
-        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
+        <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>{tx("Live probe — token / model / channel read, for real.")}</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
-          startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+          startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>{tx("Test")}</Button>
         <TestLine test={test} mt={1} />
         {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
       </Box>
@@ -2188,26 +2152,17 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
       <Box sx={{ mt: 1 }}>
         {conn.Type === "github" && (
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-            The repos this connection reaches — discovery fills the list from the PAT. What each
-            repo's issues and PRs <b>do</b> (become tasks, show as feed, stay ignored) is decided in
-            one place: the <b>Inbound — what becomes work</b> step below.
-          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("The repos this connection reaches — discovery fills the list from the PAT. What each repo's issues and PRs")} <b>{tx("do")}</b> {tx("(become tasks, show as feed, stay ignored) is decided in one place: the")} <b>{tx("Inbound — what becomes work")}</b> {tx("step below.")} </Typography>
         )}
         {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} />}
         {conn.Type === "telegram" && (
           <>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
-              No chat id to type: <b>message your bot</b> (or add it to a group), hit <b>Sync now</b>, and the
-              chat appears below with its id — switched off. Flip on the chats that are yours; every other
-              chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only
-              for an id you already know.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}> {tx("No chat id to type:")} <b>{tx("message your bot")}</b> {tx("(or add it to a group), hit")} <b>{tx("Sync now")}</b>{tx(", and the chat appears below with its id — switched off. Flip on the chats that are yours; every other chat stays out, because a public bot can be messaged by anyone. The field at the bottom is only for an id you already know.")} </Typography>
             {/* one line at any width: wrapped on a phone, it shrank to one line as "Syncing…" and the list under it jumped */}
             <Button size="small" variant="outlined" onClick={syncHere} disabled={srcSync} sx={{ mb: 1, maxWidth: "100%" }}
               startIcon={srcSync ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
               <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {srcSync ? "Syncing…" : "Sync now — pull in chats that messaged the bot"}</Box>
+                {srcSync ? tx("Syncing…") : "Sync now — pull in chats that messaged the bot"}</Box>
             </Button>
           </>
         )}
@@ -2222,20 +2177,20 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
               </Typography>
             )}
             <Box sx={{ flex: 1 }} />
-            {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
+            {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>{tx("polled")} {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
-            <IconButton size="small" title="Remove it for good (off keeps it listed)" onClick={() => setDelSrc(s)}>
+            <IconButton size="small" title={tx("Remove it for good (off keeps it listed)")} onClick={() => setDelSrc(s)}>
               <DeleteOutlineIcon sx={{ fontSize: 16, color: "#867f74" }} />
             </IconButton>
           </Box>
         ))}
-        <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel="Remove"
-          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived stays on the Timeline."
+        <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel={tx("Remove")}
+          consequence={tx("It is removed from this connection - nothing from it comes in until you add it again. What already arrived stays on the Timeline.")}
           onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
           <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setNewSrc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSource()} />
-          <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
+          <Button variant="contained" disableElevation onClick={addSource}>{tx("Add")}</Button>
         </Box>
       </Box>
     )}] : []),
@@ -2259,7 +2214,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Active && !isAI && (
           <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
             startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now — see it on the Timeline"}</Button>
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? tx("Syncing…") : "Sync now — see it on the Timeline"}</Button>
         )}
       </Box>
     )},
@@ -2289,8 +2244,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     return (
       <Box data-tq-simple-mail={conn.Type} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 520 }}>
         {conn.Type === "imap" && /@(outlook|hotmail|live|msn)\.|office365|outlook\.office/i.test(`${cfg.address || ""} ${cfg.imap_host || ""}`) && (
-          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
-            That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.</Typography>
+          <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}> {tx("That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.")}</Typography>
         )}
         {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph]) => (
           <TextField key={key} size="small" label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
@@ -2351,9 +2305,7 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}> {tx("The connection only — build the scheduled reports (query + AI summary) on the Reports tab.")} </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
@@ -2394,39 +2346,39 @@ function MssqlConnection({ conn, drivers, reload }) {
   return (
     <Stepper nonLinear activeStep={step} orientation="vertical" sx={{ "& .MuiStepLabel-label": { fontSize: 13.5, fontWeight: 600 } }}>
       <Step completed={!!(cfg.server || conn.LastSyncAt)}>
-        <StepButton onClick={() => setStep(0)}>Connection</StepButton>
+        <StepButton onClick={() => setStep(0)}>{tx("Connection")}</StepButton>
         <StepContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-            <TextField label="server" placeholder="localhost  ·  localhost\SQLEXPRESS  ·  HOST\INSTANCE" value={cfg.server || ""}
+            <TextField label={tx("server")} placeholder="localhost  ·  localhost\SQLEXPRESS  ·  HOST\INSTANCE" value={cfg.server || ""}
               sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, server: e.target.value })} />
-            <TextField label="database" placeholder="master" value={cfg.database || ""}
+            <TextField label={tx("database")} placeholder="master" value={cfg.database || ""}
               sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, database: e.target.value })} />
             <Select value={cfg.auth || "windows"} sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, auth: e.target.value })}>
-              <MenuItem value="windows" sx={{ fontSize: 12.5 }}>Windows auth (local, trusted)</MenuItem>
-              <MenuItem value="sql" sx={{ fontSize: 12.5 }}>SQL login</MenuItem>
+              <MenuItem value="windows" sx={{ fontSize: 12.5 }}>{tx("Windows auth (local, trusted)")}</MenuItem>
+              <MenuItem value="sql" sx={{ fontSize: 12.5 }}>{tx("SQL login")}</MenuItem>
             </Select>
-            {sqlAuth && <TextField label="username" value={cfg.username || ""} sx={{ bgcolor: "#fff" }}
+            {sqlAuth && <TextField label={tx("username")} value={cfg.username || ""} sx={{ bgcolor: "#fff" }}
               onChange={(e) => setCfg({ ...cfg, username: e.target.value })} />}
             {sqlAuth && <TextField label={conn.HasSecret ? "password (saved — type to replace)" : "password"} type="password"
               value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }} />}
             <Select value={cfg.driver || ""} displayEmpty sx={{ bgcolor: "#fff" }} onChange={(e) => setCfg({ ...cfg, driver: e.target.value })}>
-              <MenuItem value="" sx={{ fontSize: 12.5 }}>(auto — newest installed driver)</MenuItem>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>{tx("(auto — newest installed driver)")}</MenuItem>
               {drivers.map((d) => <MenuItem key={d} value={d} sx={{ fontSize: 12.5 }}>{d}</MenuItem>)}
             </Select>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
               <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
+                {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Save & continue")}</Button>
               {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
             </Box>
           </Box>
         </StepContent>
       </Step>
       <Step completed={!!(conn.LastSyncAt && !conn.LastError)}>
-        <StepButton onClick={() => setStep(1)}>Test connection</StepButton>
+        <StepButton onClick={() => setStep(1)}>{tx("Test connection")}</StepButton>
         <StepContent>
-          <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>Connects for real and reports the server version — every scheduled report inherits this connection.</Typography>
+          <Typography variant="body2" sx={{ color: DIM, mb: 1, mt: 0.5 }}>{tx("Connects for real and reports the server version — every scheduled report inherits this connection.")}</Typography>
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
-            startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+            startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>{tx("Test")}</Button>
           <TestLine test={test} mt={1} />
           {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
         </StepContent>
@@ -2464,22 +2416,19 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
-        build the scheduled reports on the Reports tab.
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}> {tx("Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only; build the scheduled reports on the Reports tab.")} </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
       {tab === "Agent" && <AgentTab steps={WINRM_AGENT} />}
       {tab === "Connection" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-          <TextField label="machine name" placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
+          <TextField label={tx("machine name")} placeholder="AZWEB01" value={cfg.host || ""} sx={{ bgcolor: "#fff" }}
             onChange={(e) => setCfg({ ...cfg, host: e.target.value })} />
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
+              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Save")}</Button>
             <Button variant="outlined" disabled={busy === "test" || !cfg.host} onClick={runTest}
-              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
+              startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>{tx("Test")}</Button>
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           <TestLine test={test} mt={0} />
@@ -2551,24 +2500,18 @@ function CloudObjects({ conn, meta, objects, reload }) {
   };
   return (
     <Box sx={{ mt: 3, maxWidth: 760 }}>
-      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>
-        What you have access to — and what each one does
-      </Typography>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 1 }}>
-        Discovery asks your {meta.title.includes("Azure") ? "app registration" : "keys"} what they can see and lists
-        it here. Everything arrives as <b>report only</b>: available to the Reports tab, nothing polled. Switch one
-        to <b>feed</b> or <b>tasks</b> and Taskuary starts watching it on every sync.
-      </Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}> {tx("What you have access to — and what each one does")} </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 1 }}> {tx("Discovery asks your")} {meta.title.includes("Azure") ? "app registration" : "keys"} {tx("what they can see and lists it here. Everything arrives as")} <b>{tx("report only")}</b>{tx(": available to the Reports tab, nothing polled. Switch one to")} <b>feed</b> {tx("or")} <b>{tx("tasks")}</b> {tx("and Taskuary starts watching it on every sync.")} </Typography>
       <Button size="small" variant="outlined" onClick={rediscover} disabled={busy} sx={{ mb: 1.5 }}
         startIcon={busy ? <CircularProgress size={11} /> : <SyncIcon sx={{ fontSize: 14 }} />}>
         {busy ? "Discovering…" : objects.length ? "Re-run discovery" : "Discover what I can access"}
       </Button>
       {!objects.length ? (
-        <Empty>Nothing discovered yet — save the credentials above and press Discover.</Empty>
+        <Empty>{tx("Nothing discovered yet — save the credentials above and press Discover.")}</Empty>
       ) : (
         <>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 1 }}>
-            <TextField size="small" placeholder="search by name…" value={q}
+            <TextField size="small" placeholder={tx("search by name…")} value={q}
               onChange={(e) => { setQ(e.target.value); setLimit(PAGE_OBJ); }}
               sx={{ bgcolor: "#fff", width: 230 }}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 16, color: FAINT }} /></InputAdornment> }} />
@@ -2590,7 +2533,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
             </Typography>
             {shown.length > 0 && shown.length < objects.length && (
               <>
-                <Typography variant="caption" sx={{ color: FAINT }}>· set all {shown.length} shown to</Typography>
+                <Typography variant="caption" sx={{ color: FAINT }}>{tx("· set all")} {shown.length} {tx("shown to")}</Typography>
                 {CLOUD_MODES.map(([v, label]) => (
                   <Box key={v} component="span" title={label}
                     onClick={() => !bulk && setAllShown(v)}
@@ -2602,7 +2545,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
               </>
             )}
           </Box>
-          {!shown.length && <Empty>Nothing matches that search.</Empty>}
+          {!shown.length && <Empty>{tx("Nothing matches that search.")}</Empty>}
           {shown.slice(0, limit).map((s) => (
             <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
               <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -2624,17 +2567,13 @@ function CloudObjects({ conn, meta, objects, reload }) {
             </Box>
           ))}
           {shown.length > limit && (
-            <Button size="small" onClick={() => setLimit(limit + PAGE_OBJ * 2)} sx={{ mt: 1 }}>
-              show {Math.min(PAGE_OBJ * 2, shown.length - limit)} more of {shown.length - limit}
+            <Button size="small" onClick={() => setLimit(limit + PAGE_OBJ * 2)} sx={{ mt: 1 }}> {tx("show")} {Math.min(PAGE_OBJ * 2, shown.length - limit)} {tx("more of")} {shown.length - limit}
             </Button>
           )}
         </>
       )}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        <b>feed</b> and <b>tasks</b> watch for what is NEW since the last sync: a bucket reports each new object, a
-        log group batches the matching lines into one item, a workspace runs its saved query. An object nothing
-        discovered can still be typed in by hand as a report source on the Reports tab.
-      </Typography>
+        <b>feed</b> {tx("and")} <b>{tx("tasks")}</b> {tx("watch for what is NEW since the last sync: a bucket reports each new object, a log group batches the matching lines into one item, a workspace runs its saved query. An object nothing discovered can still be typed in by hand as a report source on the Reports tab.")} </Typography>
     </Box>
   );
 }
@@ -2708,7 +2647,7 @@ function OAuthConnect({ conn, meta, reload }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         {meta.connect.widget === "token" && (
           <TextField size="small" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy}
-            placeholder="setup token from your SimpleFIN account" sx={{ bgcolor: "#fff", minWidth: 260, flex: 1 }}
+            placeholder={tx("setup token from your SimpleFIN account")} sx={{ bgcolor: "#fff", minWidth: 260, flex: 1 }}
             inputProps={{ spellCheck: false, autoComplete: "off", style: { fontSize: 12.5 } }} />
         )}
         <Button variant="contained" disableElevation onClick={go}
@@ -2717,26 +2656,21 @@ function OAuthConnect({ conn, meta, reload }) {
           {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
-          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
+          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ Connected")}{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
         {busy && url && !st?.connected && (
-          <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}>
-            Finish in the tab that opened — this box turns green by itself.
-            <a href={url} target="_blank" rel="noreferrer">Open it again</a>
-            <Button size="small" onClick={() => { setBusy(false); setUrl(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+          <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}> {tx("Finish in the tab that opened — this box turns green by itself.")} <a href={url} target="_blank" rel="noreferrer">{tx("Open it again")}</a>
+            <Button size="small" onClick={() => { setBusy(false); setUrl(""); }} sx={{ fontSize: 11.5, color: DIM }}>{tx("Cancel")}</Button>
           </Typography>
         )}
       </Box>
       {st?.bridge && !st?.connected && (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
-          Link your banks and get the token at <Box component="a" href={st.bridge} target="_blank" rel="noopener" sx={{ color: INK }}>{st.bridge.replace(/^https:\/\//, "")}</Box> \u2014 My Accounts \u2192 Apps \u2192 Get a setup token.
-        </Typography>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}> {tx("Link your banks and get the token at")} <Box component="a" href={st.bridge} target="_blank" rel="noopener" sx={{ color: INK }}>{st.bridge.replace(/^https:\/\//, "")}</Box> {tx("\\u2014 My Accounts \\u2192 Apps \\u2192 Get a setup token.")} </Typography>
       )}
       {st?.redirect_uri && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75, lineHeight: 1.6 }}>
           {/* named from the card, not hardcoded: three providers share this box now, and it told
-              a Zoho owner their INTUIT app needed the URI. */}
-          The {meta.title} app must list this redirect URL, exactly: <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
+              a Zoho owner their INTUIT app needed the URI. */} {tx("The")} {meta.title} {tx("app must list this redirect URL, exactly:")} <Box component="code" sx={{ ...mono, fontSize: 11, color: INK, bgcolor: "#fff", px: 0.6, borderRadius: 0.75, border: `1px solid ${BORDER}` }}>{st.redirect_uri}</Box>
         </Typography>
       )}
       {err && <Typography variant="body2" sx={{ color: "#6b2733", mt: 0.75 }}>✗ {err}</Typography>}
@@ -2796,8 +2730,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        {meta.desc} The connection only — build the scheduled reports on the Reports tab.
-      </Typography>
+        {meta.desc} {tx("The connection only — build the scheduled reports on the Reports tab.")} </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}
       {tab === "Agent" && <AgentTab steps={meta.agent} />}
@@ -2807,7 +2740,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
               <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{meta.reuse.title}</Typography>
               <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5, mb: 0.75 }}>{meta.reuse.text}</Typography>
-              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>Use it — save and test</Button>
+              <Button size="small" variant="outlined" disabled={!!busy} onClick={useShared}>{tx("Use it — save and test")}</Button>
             </Box>
           )}
           {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
@@ -2818,13 +2751,13 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           ))}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />}
+            helperText={tx("Write-only: stored server-side, never returned to the browser.")} />}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
-              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
+              {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Save")}</Button>
             <Button variant="outlined" disabled={busy === "test"} onClick={runTest}
               startIcon={busy === "test" ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
-              {meta.discovers ? "Test & discover" : "Test"}</Button>
+              {meta.discovers ? "Test & discover" : tx("Test")}</Button>
             {/* a card's own verbs (the knowledge base's Reindex): one POST, the answer said in a line */}
             {(meta.actions || []).map((a) => (
               <Button key={a.label} variant="outlined" disabled={!!busy} onClick={async () => {
@@ -2882,10 +2815,7 @@ const GithubPerms = ({ conn, reload }) => {
   };
   return (
     <Box sx={{ mt: 1, maxWidth: 620 }}>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-        OUTBOUND — what the coding agent may do <b>on GitHub</b> while it works your tasks. Unrelated
-        to the <b>Inbound</b> step above, which only controls what comes <b>in</b> to your timeline.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("OUTBOUND — what the coding agent may do")} <b>{tx("on GitHub")}</b> {tx("while it works your tasks. Unrelated to the")} <b>{tx("Inbound")}</b> {tx("step above, which only controls what comes")} <b>{tx("in")}</b> {tx("to your timeline.")} </Typography>
       {GITHUB_PERMS.map(([key, label, desc]) => (
         <Box key={key} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1.25, borderBottom: `1px solid ${BORDER}` }}>
           <Switch checked={!!cfg[key]} onChange={() => toggle(key)} sx={{ mt: -0.5 }} />
@@ -2895,11 +2825,7 @@ const GithubPerms = ({ conn, reload }) => {
           </Box>
         </Box>
       ))}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
-        Both land in the instruction every agent session is seeded with, and in the SOUL.md line
-        describing this connection. A task whose ask explicitly says "open an issue" or "push"
-        may always do so, whatever these say.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}> {tx("Both land in the instruction every agent session is seeded with, and in the SOUL.md line describing this connection. A task whose ask explicitly says \"open an issue\" or \"push\" may always do so, whatever these say.")} </Typography>
     </Box>
   );
 };
@@ -2952,11 +2878,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
   );
   return (
     <Box sx={{ mt: 1, maxWidth: 640 }}>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-        What <b>Close out</b> does on GitHub when a task an agent finished comes to you. These are your choices; what each
-        repository <b>requires</b> (branch protection, required checks and reviews) is read from GitHub for every pull request,
-        and the card only offers what it allows.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}> {tx("What")} <b>{tx("Close out")}</b> {tx("does on GitHub when a task an agent finished comes to you. These are your choices; what each repository")} <b>{tx("requires")}</b> {tx("(branch protection, required checks and reviews) is read from GitHub for every pull request, and the card only offers what it allows.")} </Typography>
       {CLOSEOUT_PICKS.map(([key, label, options, hint]) => (
         <Box key={key} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -2977,7 +2899,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
       ))}
       {mine.filter((s) => s.Active).length > 0 && (
         <Box sx={{ mt: 1.5 }}>
-          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>PER REPOSITORY — WHERE ONE DIFFERS</Typography>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>{tx("PER REPOSITORY — WHERE ONE DIFFERS")}</Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const own = JSON.parse(s.ConfigJson || "{}").closeout || {};
             const val = (k) => (own[k] === undefined ? "" : k === "anyway" ? (own[k] ? "on" : "off") : own[k]);
@@ -2994,7 +2916,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
       )}
       <Box sx={{ mt: 1.5, display: "flex", alignItems: "center", gap: 1 }}>
         <Button size="small" variant="outlined" disabled={busy} onClick={runCheck}>{busy ? "Asking GitHub…" : "Check the token"}</Button>
-        <Typography variant="caption" sx={{ color: FAINT }}>Whether the token may do what these settings turn on, per repository.</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{tx("Whether the token may do what these settings turn on, per repository.")}</Typography>
       </Box>
       {check && check.map((row) => (
         <Box key={row.repo || "err"} sx={{ mt: 1, px: 1.25, py: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
@@ -3061,11 +2983,8 @@ const AuthorityRow = ({ conn, reload }) => {
   };
   return (
     <Box sx={{ pt: 1.5 }}>
-      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>Authority — how far the agents may reach</Typography>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>
-        Only bites when this is an agent tool. An action nobody has classified counts as write,
-        so a read-only connection stays read-only even for a verb we have never seen.
-      </Typography>
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{tx("Authority — how far the agents may reach")}</Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1 }}> {tx("Only bites when this is an agent tool. An action nobody has classified counts as write, so a read-only connection stays read-only even for a verb we have never seen.")} </Typography>
       {SCOPE_KEYS.map((s) => (
         <Box key={s} sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
           <Radio checked={(current || fallback) === s} disabled={busy} onChange={() => set(s)} sx={{ mt: -0.75 }} />
@@ -3137,23 +3056,12 @@ const inboundDone = (conn, mine) => {
 // the whole idea is a paragraph, and a paragraph belongs next to the switch it explains.
 const BULK_HELP = (
   <Box sx={{ p: 1.75, maxWidth: 380 }}>
-    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>Bulk processing</Typography>
+    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>{tx("Bulk processing")}</Typography>
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55, mb: 1 }}>
-      <b>clear</b> — every task from here is worked in arrival order until the queue is empty. Right when the
-      inbox <i>is</i> the job.
-    </Typography>
+      <b>{tx("clear")}</b> {tx("— every task from here is worked in arrival order until the queue is empty. Right when the inbox")} <i>{tx("is")}</i> {tx("the job.")} </Typography>
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55, mb: 1 }}>
-      <b>rank</b> — tasks from here join one value-ordered queue instead of racing for a session. The top
-      <i> K</i> are worked (<i>K</i> = <b>Agents at once</b> in Settings); when one finishes, the most valuable
-      waiting task slides in, and a new arrival re-ranks the queue rather than joining its tail. Nothing is
-      dropped — a low value waits.
-    </Typography>
-    <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
-      Value is <b>words first</b>: addressed to you or merely cc’d, how many people, whether a colleague has
-      already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
-      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline’s funnel
-      bar and can pin any card to the top or push it back.
-    </Typography>
+      <b>{tx("rank")}</b> {tx("— tasks from here join one value-ordered queue instead of racing for a session. The top")} <i> K</i> {tx("are worked (")}<i>K</i> = <b>{tx("Agents at once")}</b> {tx("in Settings); when one finishes, the most valuable waiting task slides in, and a new arrival re-ranks the queue rather than joining its tail. Nothing is dropped — a low value waits.")} </Typography>
+    <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}> {tx("Value is")} <b>{tx("words first")}</b>{tx(": addressed to you or merely cc’d, how many people, whether a colleague has already replied, urgency, who the author is on a code host. With two or more waiting, one call to the triage brain orders the head of the queue and adds its own reason. You see it on the Timeline’s funnel bar and can pin any card to the top or push it back.")} </Typography>
   </Box>
 );
 
@@ -3241,11 +3149,9 @@ const WaPair = ({ conn, reload }) => {
   if (!st) return null;
   if (st.unreachable) return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Pair with your phone")}</Typography>
       <Typography variant="body2" sx={{ color: DIM, mt: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
-        <CircularProgress size={11} sx={{ color: DIM }} />
-        Couldn't read the pairing status just now. This box tries again by itself every few seconds — if it stays like this, restart Taskuary.
-      </Typography>
+        <CircularProgress size={11} sx={{ color: DIM }} /> {tx("Couldn't read the pairing status just now. This box tries again by itself every few seconds — if it stays like this, restart Taskuary.")} </Typography>
     </Box>
   );
   const phase = st.manager?.phase, busy = ["installing", "starting"].includes(phase);
@@ -3263,12 +3169,12 @@ const WaPair = ({ conn, reload }) => {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", gap: 2, alignItems: "flex-start", flexWrap: "wrap" }}>
       <Box sx={{ flex: 1, minWidth: 240 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Pair with your phone")}</Typography>
         {!st.connected && (
           <Box sx={{ mb: 1 }}>
-            <StepLine n={1} label="Node 18+ on this machine" state={stateOf(1)} />
+            <StepLine n={1} label={tx("Node 18+ on this machine")} state={stateOf(1)} />
             <StepLine n={2} label={phase === "installing" ? "Fetching the bridge (a minute or two, first time only)" : "The bridge is running"} state={stateOf(2)} />
-            <StepLine n={3} label="Scan the QR from your phone" state={stateOf(3)} />
+            <StepLine n={3} label={tx("Scan the QR from your phone")} state={stateOf(3)} />
           </Box>
         )}
         {/* the bridge's own controls, whatever state it is in. A bridge that wedged, or one started before
@@ -3277,32 +3183,24 @@ const WaPair = ({ conn, reload }) => {
             the auth folder, not the process. */}
         <Box sx={{ display: "flex", gap: 1, mt: 0.75, mb: 0.75, flexWrap: "wrap", alignItems: "center" }}>
           <Button size="small" variant="outlined" startIcon={<RestartAltIcon sx={{ fontSize: 15 }} />} disabled={busy}
-            title="Stop the running bridge (ours, or one started by hand - found by its port) and start it again from the code on disk. You stay paired."
-            onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}>
-            Restart bridge
-          </Button>
+            title={tx("Stop the running bridge (ours, or one started by hand - found by its port) and start it again from the code on disk. You stay paired.")}
+            onClick={async () => { try { await api.post(`/api/connectors/${conn.ConnectorId}/wa/bridge/restart`); } catch { /* status polling shows the outcome */ } }}> {tx("Restart bridge")} </Button>
           {st.bridge === false && st.node && !busy && phase !== "failed" && (
-            <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Start bridge</Button>
+            <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>{tx("Start bridge")}</Button>
           )}
           <Typography variant="caption" sx={{ color: FAINT }}>
             {st.connected ? "connected" : reconnect.paused ? "automatic reconnect paused" : st.bridge === false ? "bridge not running" : "bridge up, not connected"}{st.manager?.phase ? ` · ${st.manager.phase}` : ""}
           </Typography>
         </Box>
         {reconnect.paused && reconnect.reason !== "logged out" && (
-          <Alert severity="warning" sx={{ mb: 1, fontSize: 12.5 }}>
-            The WhatsApp connection kept dropping, so Taskuary stopped retrying before WhatsApp could flood your phone with linked-device sync notices. Check the network, then click Restart bridge once.
-          </Alert>
+          <Alert severity="warning" sx={{ mb: 1, fontSize: 12.5 }}> {tx("The WhatsApp connection kept dropping, so Taskuary stopped retrying before WhatsApp could flood your phone with linked-device sync notices. Check the network, then click Restart bridge once.")} </Alert>
         )}
         {st.connected ? (
           <Box sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Paired{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} — the bridge is connected. Test, then enable.</Typography>
+            <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ Paired")}{st.me ? ` as ${st.me}` : ""}{st.phone ? ` · ${st.phone}` : ""} {tx("— the bridge is connected. Test, then enable.")}</Typography>
           </Box>
         ) : st.bridge === false && !st.node ? (
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}>
-            Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:
-            <Box component="code" sx={{ ...mono, display: "block", my: 0.5, p: 0.75, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, fontSize: 12 }}>winget install OpenJS.NodeJS.LTS</Box>
-            (or download the LTS from nodejs.org and run the installer). This box re-checks every few seconds and moves on by itself once Node is there.
-          </Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.6, display: "block" }}> {tx("Node is not installed here, and it is the one thing Taskuary cannot install for you. In a terminal:")} <Box component="code" sx={{ ...mono, display: "block", my: 0.5, p: 0.75, bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1, fontSize: 12 }}>winget install OpenJS.NodeJS.LTS</Box> {tx("(or download the LTS from nodejs.org and run the installer). This box re-checks every few seconds and moves on by itself once Node is there.")} </Typography>
         ) : st.bridge === false ? (
           <Box>
             <Typography variant="caption" sx={{ color: phase === "failed" ? "#a33" : DIM, lineHeight: 1.5, display: "block", mb: 0.75 }}>
@@ -3311,23 +3209,18 @@ const WaPair = ({ conn, reload }) => {
                 : "Starting the bridge…"}
             </Typography>
             {phase === "failed" && (
-              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Try again</Button>
+              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>{tx("Try again")}</Button>
             )}
           </Box>
         ) : st.pairing_code ? (
-          <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}>
-            Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:
-            <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 600, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
+          <Typography variant="body2" sx={{ color: INK, mt: 0.5 }}> {tx("Enter this code on your phone — WhatsApp → Linked devices → Link a device → Link with phone number:")} <Box component="span" sx={{ ...mono, fontSize: 22, fontWeight: 600, letterSpacing: 3, display: "block", mt: 0.5 }}>{st.pairing_code}</Box>
           </Typography>
         ) : (
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}>
-            On your phone: <b>WhatsApp → Linked devices → Link a device</b>, and scan this. It refreshes by itself as WhatsApp rotates it;
-            this box turns green the moment the phone accepts. Nothing to type, no phone number to share.
-          </Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block", mt: 0.5 }}> {tx("On your phone:")} <b>{tx("WhatsApp → Linked devices → Link a device")}</b>{tx(", and scan this. It refreshes by itself as WhatsApp rotates it; this box turns green the moment the phone accepts. Nothing to type, no phone number to share.")} </Typography>
         )}
       </Box>
       {!st.connected && st.qr_svg && (
-        <Box component="img" src={st.qr_svg} alt="WhatsApp pairing QR" sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "#fff", border: `1px solid ${BORDER}` }} />
+        <Box component="img" src={st.qr_svg} alt={tx("WhatsApp pairing QR")} sx={{ width: 220, height: 220, borderRadius: 1, bgcolor: "#fff", border: `1px solid ${BORDER}` }} />
       )}
     </Box>
   );
@@ -3402,27 +3295,22 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
           genuinely the connector's: the pairing, and what comes in (the owner, 2026-09-17). */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25, py: 0.6, px: 0.8, flexWrap: "wrap",
         border: `1px solid ${guideJid ? "#c3d2c5" : BORDER}`, borderRadius: 1, bgcolor: guideJid ? "#f2f7f2" : "transparent" }}>
-        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Assistant chat</Typography>
+        <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>{tx("Assistant chat")}</Typography>
         <Typography variant="caption" sx={{ ...mono, color: guideJid ? INK : FAINT, flex: 1, minWidth: 180, fontSize: 10.5 }} noWrap>
           {guideJid || "not connected"}
         </Typography>
         <Button size="small" sx={{ fontSize: 11 }} onClick={() => {
           window.location.hash = `settings=config&group=${encodeURIComponent("Assistant on your phone")}`;
           onNavigate?.("Settings");
-        }}>Settings → Assistant on your phone</Button>
+        }}>{tx("Settings → Assistant on your phone")}</Button>
       </Box>
-      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 600, display: "block" }}>
-        WHAT COMES IN
-      </Typography>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the
-        bridge has seen them. A <b>group</b> joins the funnel only when you add it here.
-        <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
+      <Typography variant="overline" sx={{ color: DIM, letterSpacing: 1.4, fontSize: 10, fontWeight: 600, display: "block" }}> {tx("WHAT COMES IN")} </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}> {tx("Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the bridge has seen them. A")} <b>{tx("group")}</b> {tx("joins the funnel only when you add it here.")} <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>{tx("refresh")}</Button>
       </Typography>
       <TextField size="small" fullWidth value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 0.75, bgcolor: "#fff" }}
-        placeholder="search your chats by name or number" />
+        placeholder={tx("search your chats by name or number")} />
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
-      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
+      {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>{tx("no reachable chats loaded yet — refresh, or send a message in a direct chat")}</Typography>}
       {shown.map((r) => (
         <Box key={r.jid} sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.5, borderBottom: `1px solid ${BORDER}` }}>
           {/* the help text above promises "the row marked Myself" - it used to say "group", because
@@ -3433,18 +3321,16 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{r.name || r.jid}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
-          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}
-          {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
-            : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
+          {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ assistant chat")}</Typography>}
+          {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ source")}</Typography>
+            : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>{tx("Add as source")}</Button>}
         </Box>
       ))}
       {!needle && !all && ranked.length > SHOWN && (
-        <Button size="small" onClick={() => setAll(true)} sx={{ fontSize: 11.5, mt: 0.5 }}>
-          show the other {ranked.length - SHOWN} chats
-        </Button>
+        <Button size="small" onClick={() => setAll(true)} sx={{ fontSize: 11.5, mt: 0.5 }}> {tx("show the other")} {ranked.length - SHOWN} {tx("chats")} </Button>
       )}
       {needle && !ranked.length && rows?.length ? (
-        <Typography variant="caption" sx={{ color: FAINT }}>no chat matches “{q}”</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{tx("no chat matches “")}{q}”</Typography>
       ) : null}
     </Box>
   );
@@ -3495,27 +3381,24 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
   const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState("ok"); setDetail("Signed out."); reload(); };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
-      <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-        Your own ChatGPT account and plan - no API key. Calls count against your ChatGPT allowance, under a weekly cap you set in ChatGPT.
-      </Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Sign in with ChatGPT")}</Typography>
+      <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}> {tx("Your own ChatGPT account and plan - no API key. Calls count against your ChatGPT allowance, under a weekly cap you set in ChatGPT.")} </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
-          <Confirm open={askOut} title="Sign out of ChatGPT?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ Signed in as")} {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>{tx("Sign out")}</Button>
+          <Confirm open={askOut} title={tx("Sign out of ChatGPT?")} confirmLabel={tx("Sign out")} onConfirm={signout} onClose={() => setAskOut(false)}
             text="Anything set to run on your ChatGPT account stops until you sign in again." />
         </Box>
       ) : flow ? (
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-          <CircularProgress size={11} /> Finish in the browser tab that opened - this page completes by itself.
-          <a href={flow.url} target="_blank" rel="noreferrer">Open it again</a>
+          <CircularProgress size={11} /> {tx("Finish in the browser tab that opened - this page completes by itself.")} <a href={flow.url} target="_blank" rel="noreferrer">{tx("Open it again")}</a>
           <Button size="small" onClick={() => { api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/cancel`, { flow: flow.flow }).catch(() => {});
-            setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+            setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>{tx("Cancel")}</Button>
         </Typography>
       ) : (
         <Box><Button variant="contained" disableElevation disabled={busy} onClick={start}>
-          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Sign in with ChatGPT"}</Button></Box>
+          {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Sign in with ChatGPT")}</Button></Box>
       )}
       {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
@@ -3575,53 +3458,46 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>{tx("Sign in with Microsoft")}</Typography>
       {/* the first-run card says it for someone who has never heard of a tenant (FirstRun.jsx) */}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         {plain ? "Press the button, then type the code it shows on Microsoft's page and sign in as usual. This page finishes by itself."
-          : <>Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
-        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.</>}
+          : <>{tx("Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret; work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.")}</>}
       </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
-          <Confirm open={askOut} title="Sign out of Microsoft?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
+          <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{tx("✓ Signed in as")} {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
+          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>{tx("Sign out")}</Button>
+          <Confirm open={askOut} title={tx("Sign out of Microsoft?")} confirmLabel={tx("Sign out")} onConfirm={signout} onClose={() => setAskOut(false)}
             text={`Mail and calendar${cfg.account ? ` for ${cfg.account}` : ""} stop syncing until you sign in again. Nothing already here is lost.`} />
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
-          <Typography variant="body2" sx={{ color: INK }}>
-            1. Open <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace("https://", "")}</a> and enter this code:
-          </Typography>
+          <Typography variant="body2" sx={{ color: INK }}> {tx("1. Open")} <a href={flow.verification_uri} target="_blank" rel="noreferrer">{String(flow.verification_uri).replace("https://", "")}</a> {tx("and enter this code:")} </Typography>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography sx={{ ...mono, fontSize: 26, fontWeight: 600, letterSpacing: 3, color: INK, px: 1.5, py: 0.5,
               bgcolor: "#fff", border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>{flow.user_code}</Typography>
-            <IconButton size="small" onClick={() => copy(flow.user_code)} title="copy the code"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" onClick={() => copy(flow.user_code)} title={tx("copy the code")}><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
             <Button size="small" variant="contained" disableElevation component="a" href={flow.verification_uri} target="_blank" rel="noreferrer"
-              endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>Open the sign-in page</Button>
+              endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}>{tx("Open the sign-in page")}</Button>
           </Box>
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75 }}>
-            <CircularProgress size={11} /> 2. Sign in with your Microsoft account and accept — this page finishes by itself.
-            <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>Cancel</Button>
+            <CircularProgress size={11} /> {tx("2. Sign in with your Microsoft account and accept — this page finishes by itself.")} <Button size="small" onClick={() => { setFlow(null); setState(""); setDetail(""); }} sx={{ fontSize: 11.5, color: DIM }}>{tx("Cancel")}</Button>
           </Typography>
         </Box>
       ) : (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           {signedOut && (
-            <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flexBasis: "100%" }}>
-              Microsoft signed you out{cfg.account ? ` of ${cfg.account}` : ""}. I can't see your mail until you sign in again —
-              nothing is lost, and I'll catch up on everything that came in.
-            </Typography>
+            <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flexBasis: "100%" }}> {tx("Microsoft signed you out")}{cfg.account ? ` of ${cfg.account}` : ""}{tx(". I can't see your mail until you sign in again — nothing is lost, and I'll catch up on everything that came in.")} </Typography>
           )}
           <Button variant="contained" disableElevation disabled={busy} onClick={start}>
-            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut ? "Sign in again" : "Sign in with Microsoft"}</Button>
+            {busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : signedOut ? tx("Sign in again") : tx("Sign in with Microsoft")}</Button>
           {/* the QUESTION is not the button. Asked and answered in one 48-character control, it was
               the widest thing on the card and read as a sentence somebody had made clickable. */}
           {!adminUrl && !signedOut && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-              <Typography variant="caption" sx={{ color: DIM }}>Does IT have to approve apps?</Typography>
-              <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, color: DIM }}>Get the admin link</Button>
+              <Typography variant="caption" sx={{ color: DIM }}>{tx("Does IT have to approve apps?")}</Typography>
+              <Button size="small" onClick={adminLink} sx={{ fontSize: 11.5, color: DIM }}>{tx("Get the admin link")}</Button>
             </Box>
           )}
         </Box>
@@ -3630,15 +3506,12 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
       {adminUrl && !signedIn && (
         <Box sx={{ p: 1.25, border: `1px dashed ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", display: "flex", flexDirection: "column", gap: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>Approval link for your Microsoft 365 admin</Typography>
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
-            Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can
-            sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.
-          </Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: INK }}>{tx("Approval link for your Microsoft 365 admin")}</Typography>
+          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}> {tx("Forward this to whoever runs your Microsoft 365. They sign in, click Accept once, and everyone in your organisation can sign in above. It is a consent grant, not an app registration - nothing to build on their side. Then click Sign in with Microsoft again.")} </Typography>
           <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
             <Typography sx={{ ...mono, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adminUrl}</Typography>
-            <IconButton size="small" onClick={() => copy(adminUrl)} title="copy the link"><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
-            <IconButton size="small" component="a" href={adminUrl} target="_blank" rel="noreferrer" title="open it (if you are the admin)"><OpenInNewIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" onClick={() => copy(adminUrl)} title={tx("copy the link")}><ContentCopyIcon sx={{ fontSize: 15 }} /></IconButton>
+            <IconButton size="small" component="a" href={adminUrl} target="_blank" rel="noreferrer" title={tx("open it (if you are the admin)")}><OpenInNewIcon sx={{ fontSize: 15 }} /></IconButton>
           </Box>
         </Box>
       )}
@@ -3675,9 +3548,8 @@ const ProcessingStep = ({ conn, reload, n }) => {
     <Box sx={{ mt: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-          {n} · PROCESSING — ONE BY ONE, OR RANKED TOGETHER
-        </Typography>
-        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} title="How the two modes work" sx={{ p: 0.25 }}>
+          {n} {tx("· PROCESSING — ONE BY ONE, OR RANKED TOGETHER")} </Typography>
+        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)} title={tx("How the two modes work")} sx={{ p: 0.25 }}>
           <InfoOutlinedIcon sx={{ fontSize: 14, color: FAINT }} />
         </IconButton>
         <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)}
@@ -3685,9 +3557,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
           {BULK_HELP}
         </Popover>
       </Box>
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}>
-        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline’s funnel bar and the Board’s Queued lane follow it.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}> {tx("How tasks from this connection reach the agents. Applies to every task it creates; the Timeline’s funnel bar and the Board’s Queued lane follow it.")} </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 1 }}>
         {MODES.map(([v, title, desc]) => (
           <Box key={v} onClick={() => set(v)}
@@ -3697,7 +3567,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               <Radio size="small" checked={mode === v} sx={{ p: 0 }} />
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13 }}>{title}</Typography>
-              {v === "clear" && <Typography variant="caption" sx={{ color: FAINT }}>default</Typography>}
+              {v === "clear" && <Typography variant="caption" sx={{ color: FAINT }}>{tx("default")}</Typography>}
             </Box>
             <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.5, lineHeight: 1.5 }}>{desc}</Typography>
             {v === "rank" && mode === "rank" && (
@@ -3734,9 +3604,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
   return (
     <Box sx={{ mt: 1, maxWidth: 640 }}>
       {/* 1 — the switch: does this connection create work at all */}
-      <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-        1 · DOES IT CREATE WORK
-      </Typography>
+      <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}> {tx("1 · DOES IT CREATE WORK")} </Typography>
       {["trigger", "feed"].map((key) => (
         <RoleRow key={key} on={roles.has(key)} onToggle={() => toggle(key)}
           label={ROLE_META[key][0]} desc={ROLE_META[key][1]} />
@@ -3745,23 +3613,15 @@ const InboundStep = ({ conn, m, mine, reload }) => {
       {/* 2 — github only: what each repo's items do, overriding the switch per repo */}
       {gh && (
         <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-            2 · PER REPO — WHAT ISSUES AND PRS DO
-          </Typography>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}> {tx("2 · PER REPO — WHAT ISSUES AND PRS DO")} </Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
-            <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>replies</b> (issues) = the issues
-            themselves are ignored but a person commenting on one goes through triage, <b>off</b> = ignored.
-            The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
-            owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
-            <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.
-            A picker set here pulls that repo whatever the switches above say; nothing changes until you press Save below.
-          </Typography>
+            <b>{tx("tasks")}</b> {tx("= through triage,")} <b>feed</b> {tx("= shown on the Timeline only,")} <b>{tx("replies")}</b> {tx("(issues) = the issues themselves are ignored but a person commenting on one goes through triage,")} <b>{tx("off")}</b> {tx("= ignored. The third picker says")} <b>{tx("whose")}</b> {tx("items may start a coding agent by themselves:")} <b>{tx("team")}</b> {tx("= owners, members and collaborators;")} <b>{tx("contributors")}</b> {tx("adds anyone who has had a change merged;")} <b>{tx("anyone")}</b> {tx("= every author. Everyone else’s items still become tasks for you to promote. A picker set here pulls that repo whatever the switches above say; nothing changes until you press Save below.")} </Typography>
           {mine.filter((s) => s.Active).map((s) => {
             const gc = parse(s.ConfigJson);
             return (
               <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}` }}>
                 <Typography sx={{ ...mono, color: INK, flex: 1, fontSize: 13 }} noWrap>{s.Address}</Typography>
-                {gc.private === false && <Chip size="small" label="public" sx={{ height: 18, fontSize: 9.5, bgcolor: "#f1e1da", color: "#6b2733" }} />}
+                {gc.private === false && <Chip size="small" label={tx("public")} sx={{ height: 18, fontSize: 9.5, bgcolor: "#f1e1da", color: "#6b2733" }} />}
                 {["issues", "prs", "auto"].map((kind) => (
                   <Select key={kind} size="small" value={githubInboundValue(gc, roles, kind)}
                     sx={{ fontSize: 11.5, height: 26, ".MuiSelect-select": { py: 0.4 } }}
@@ -3799,8 +3659,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
       {prompts.length > 0 && (
         <Box sx={{ mt: 2, opacity: on ? 1 : 0.5 }}>
           <Typography variant="caption" sx={{ ...mono, color: FAINT, letterSpacing: 1, fontSize: 10 }}>
-            {gh ? "4" : "3"} · WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE
-            {on ? "" : " — turn inbound on above first"}
+            {gh ? "4" : "3"} {tx("· WHAT THE AGENT IS TOLD ABOUT WORK FROM HERE")} {on ? "" : " — turn inbound on above first"}
           </Typography>
           {prompts.map(([key, label, hint]) => (
             <TextField key={key} fullWidth multiline minRows={2} label={label} helperText={hint}
@@ -3818,10 +3677,7 @@ const InboundStep = ({ conn, m, mine, reload }) => {
    under the one standing rule the caption states. */
 const AgentTab = ({ steps }) => (
   <Box>
-    <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}>
-      What <b>Get AI to set it up</b> hands your coding agent, on top of one standing rule: anything on this machine —
-      installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone,
-      browser or admin console are yours to do. {steps?.length ? "These steps are written for the agent:" :
+    <Typography variant="body2" sx={{ color: DIM, mb: 1, maxWidth: 720, mx: "auto" }}> {tx("What")} <b>{tx("Get AI to set it up")}</b> {tx("hands your coding agent, on top of one standing rule: anything on this machine — installs, starting processes, commands, config, the API — is the agent's own job; only your accounts, phone, browser or admin console are yours to do.")} {steps?.length ? "These steps are written for the agent:" :
         "This connector has no agent-specific steps yet, so the agent works from the Guide under that rule."}
     </Typography>
     {!!steps?.length && <Steps steps={steps} />}

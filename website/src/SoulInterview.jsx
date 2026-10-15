@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // SOUL.md comes from a seven-turn conversation, not a fixed questionnaire. The assistant sees
 // every earlier answer before it asks the next question, so a teacher, an accountant, a founder,
 // and a developer get four different interviews rather than the same repository-shaped form.
@@ -57,11 +58,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
   const number = question?.number || answers.length + 1;
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ pb: 0.5 }}>
-        Shape SOUL.md with the assistant
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}>
-          Seven questions, one at a time. Each new question follows what you have already said.
-        </Typography>
+      <DialogTitle sx={{ pb: 0.5 }}> {tx("Shape SOUL.md with the assistant")} <Typography variant="caption" sx={{ color: FAINT, display: "block", fontWeight: 400, mt: 0.25 }}> {tx("Seven questions, one at a time. Each new question follows what you have already said.")} </Typography>
       </DialogTitle>
       <LinearProgress variant={question ? "determinate" : "indeterminate"}
         value={question ? Math.max(4, ((number - 1) / total) * 100) : undefined} />
@@ -69,12 +66,11 @@ export default function SoulInterview({ open, onClose, onWritten }) {
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 2 }}>{err}</Alert>}
         {!question && busy === "question" ? (
           <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", color: DIM, py: 4, justifyContent: "center" }}>
-            <CircularProgress size={18} /><Typography variant="body2">The assistant is choosing the first question…</Typography>
+            <CircularProgress size={18} /><Typography variant="body2">{tx("The assistant is choosing the first question…")}</Typography>
           </Box>
         ) : question && (
           <>
-            <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, letterSpacing: ".06em" }}>
-              QUESTION {number} OF {total}
+            <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, letterSpacing: ".06em" }}> {tx("QUESTION")} {number} {tx("OF")} {total}
             </Typography>
             <Typography sx={{ fontSize: 19, lineHeight: 1.35, fontWeight: 600, color: INK, mt: 0.75, mb: 1 }}>
               {question.q}
@@ -87,17 +83,15 @@ export default function SoulInterview({ open, onClose, onWritten }) {
               sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
             {!!answers.length && (
               <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
-                <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
-                  The assistant is carrying forward {answers.filter((row) => row.a).length} answer{answers.filter((row) => row.a).length === 1 ? "" : "s"} from the earlier questions.
-                </Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }}> {tx("The assistant is carrying forward")} {answers.filter((row) => row.a).length} {tx("answer")}{answers.filter((row) => row.a).length === 1 ? "" : "s"} {tx("from the earlier questions.")} </Typography>
               </Box>
             )}
           </>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={!!busy}>Cancel</Button>
-        {question && <Button onClick={() => advance(true)} disabled={!!busy}>Skip</Button>}
+        <Button onClick={onClose} disabled={!!busy}>{tx("Cancel")}</Button>
+        {question && <Button onClick={() => advance(true)} disabled={!!busy}>{tx("Skip")}</Button>}
         <Button variant="contained" disableElevation disabled={!!busy || !question || !answer.trim()}
           onClick={() => advance()} startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <AutoAwesomeIcon sx={{ fontSize: 15 }} />}>
           {busy === "write" ? "Writing…" : busy === "question" ? "Thinking…" : number >= total ? "Write SOUL.md" : "Next question"}

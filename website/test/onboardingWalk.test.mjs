@@ -155,7 +155,7 @@ test("a stop you have walked past is a numbered step, not a message", () => {
   assert.match(view, /const passed = !live && kind === "walk"/);
   assert.match(view, /\{!passed && !bare && <div className="avatar">/, "no second mark beside the card's own");
   assert.match(view, /tq-step-done/);
-  assert.match(view, /of \{m\.card\.total\}/, "it says which step of how many");
+  assert.match(view, /\{tx\("of"\)\} \{m\.card\.total\}/, "it says which step of how many");
   assert.match(read("assistantView.css"), /\.tq-step-done/);
 });
 

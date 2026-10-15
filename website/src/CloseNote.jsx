@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useState } from "react";
 import { Box, Button, Popover, TextField, Typography } from "@mui/material";
 import { MicButton } from "./ui.jsx";
@@ -20,8 +21,8 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 340 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Close out with a note{taskRef ? ` · ${taskRef}` : ""}</Typography>
-      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="What came of it - a call, a fix, a decision"
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{tx("Close out with a note")}{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder={tx("What came of it - a call, a fix, a decision")}
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
         InputProps={{ endAdornment: (
@@ -32,8 +33,8 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={go}>
           {busy ? "Closing…" : "Close task"}</Button>
-        <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
-        <Typography variant="caption" sx={{ color: "#8b857b", ml: "auto" }}>Kept on the task. Nothing is sent.</Typography>
+        <Button size="small" disabled={busy} onClick={onClose}>{tx("Cancel")}</Button>
+        <Typography variant="caption" sx={{ color: "#8b857b", ml: "auto" }}>{tx("Kept on the task. Nothing is sent.")}</Typography>
       </Box>
       {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}
     </Box>

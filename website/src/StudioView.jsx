@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The Board, drawn as the same little 3D world used on taskuary.com. Every visible
 // character is backed by a real task/run, every empty workstation is actual capacity,
 // and the list and room are two controls over the same selection.
@@ -86,9 +87,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
           borderBottom: `1px solid ${BORDER}` }}>
           <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: ROLES.working.solid,
             boxShadow: "0 0 0 4px rgba(111,138,110,.10)" }} />
-          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.3, color: FAINT, flex: 1 }}>
-            IN THE STUDIO
-          </Typography>
+          <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.3, color: FAINT, flex: 1 }}> {tx("IN THE STUDIO")} </Typography>
           <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{seated.length}/{desks.length}</Typography>
         </Box>
 
@@ -126,25 +125,19 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
                 {selected && (
                   <Typography onClick={(event) => { event.stopPropagation(); onOpenTask(task.TaskId); }}
                     sx={{ fontSize: 11.5, fontWeight: 600, color: ACCENT, pt: 0.6,
-                      "&:hover": { textDecoration: "underline" } }}>
-                    Open the task →
-                  </Typography>
+                      "&:hover": { textDecoration: "underline" } }}> {tx("Open the task →")} </Typography>
                 )}
               </Box>
             );
           })}
           {!seated.length && (
-            <Typography sx={{ px: 1.75, py: 1.5, fontSize: 12, color: FAINT, lineHeight: 1.55 }}>
-              The studio is quiet. New work will bring an agent to a desk.
-            </Typography>
+            <Typography sx={{ px: 1.75, py: 1.5, fontSize: 12, color: FAINT, lineHeight: 1.55 }}> {tx("The studio is quiet. New work will bring an agent to a desk.")} </Typography>
           )}
 
           {queue.length > 0 && (
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, pt: 1.15, pb: 0.85,
               bgcolor: "#f4f1ec", borderBottom: `1px solid ${BORDER}` }}>
-              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.15, color: FAINT, flex: 1 }}>
-                WAITING FOR A DESK
-              </Typography>
+              <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.15, color: FAINT, flex: 1 }}> {tx("WAITING FOR A DESK")} </Typography>
               <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT }}>{queue.length}</Typography>
             </Box>
           )}
@@ -160,16 +153,15 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
           ))}
           {queue.length > 6 && (
             <Typography sx={{ px: 1.75, py: 0.9, fontSize: 11, color: FAINT }}>
-              +{queue.length - 6} more waiting · Columns lists them all
-            </Typography>
+              +{queue.length - 6} {tx("more waiting · Columns lists them all")} </Typography>
           )}
         </Box>
 
         <Box sx={{ px: 1.75, pt: 1.1, pb: 1.3, borderTop: `1px solid ${BORDER}`, flexShrink: 0 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
-            <Typography sx={{ fontSize: 11, color: DIM, flex: 1 }}>Agents at once</Typography>
+            <Typography sx={{ fontSize: 11, color: DIM, flex: 1 }}>{tx("Agents at once")}</Typography>
             <Typography sx={{ ...mono, fontSize: 12.5, fontWeight: 600, color: INK }}>{cap ?? "—"}</Typography>
-            <Typography sx={{ fontSize: 11, color: FAINT }}>{free} free</Typography>
+            <Typography sx={{ fontSize: 11, color: FAINT }}>{free} {tx("free")}</Typography>
           </Box>
           <Slider size="small" min={1} max={8} step={1} marks value={cap ?? 4}
             onChange={(_, value) => setCap(value)}
@@ -181,9 +173,7 @@ export default function StudioView({ onOpenTask, refresh = 0, active = true }) {
       </Box>
 
       <Typography sx={{ position: "absolute", zIndex: 5, right: 16, bottom: 14, fontSize: 10.5,
-        color: FAINT, textAlign: "right", lineHeight: 1.6, pointerEvents: "none" }}>
-        Real tasks · real agents · live session output on each screen
-      </Typography>
+        color: FAINT, textAlign: "right", lineHeight: 1.6, pointerEvents: "none" }}> {tx("Real tasks · real agents · live session output on each screen")} </Typography>
     </Box>
   );
 }

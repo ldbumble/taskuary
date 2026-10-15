@@ -153,7 +153,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(page, /useState\("Assistant"\)/);           // the default, always
   assert.doesNotMatch(page, /<FloatingAssistant/);
   // ...and the way back from the Board wears Taskuary's star, drawn in the pill's own ink
-  assert.match(page, /<TaskuaryMark size=\{16\} \/>Assistant/);   // the real logo, not a second drawing of it (2026-10-06)
+  assert.match(page, /<TaskuaryMark size=\{16\} \/>\{tx\("Assistant"\)\}/);   // the real logo, not a second drawing of it (2026-10-06)
   const view = read("AssistantView.jsx");
   assert.match(view, /\/api\/funnel\/pile/);
   assert.match(view, /\/api\/concierge\/next/);
@@ -186,7 +186,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // ...and ONE item on the table says the same word on the same border. Both wear the identical
   // slate ring, so without it the ring on a single row had to be read rather than known (the
   // owner, 2026-09-17: "isn't there a current word on the border around chosen task?").
-  assert.match(view, /\{isCur && <b className="tq-pile-now">on the table<\/b>\}/);
+  assert.match(view, /\{isCur && <b className="tq-pile-now">\{tx\("on the table"\)\}<\/b>\}/);
   assert.match(read("assistantView.css"), /\.tq-pile-batch b, \.tq-pile-now \{/);
   assert.match(view, /const bands = bandsOf\(drawn\.map\(/);          // grouped by category, headings freeze
   // ...each band taking the room it has, less the extra height of the row on the table - which is

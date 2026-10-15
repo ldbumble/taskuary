@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import * as THREE from "three";
@@ -573,14 +574,10 @@ export default function StudioScene({ seats, selectedId, onSelect }) {
     <Box ref={hostRef} data-studio-scene="three" sx={{ position: "absolute", inset: 0, overflow: "hidden",
       "& canvas": { display: "block", width: "100%", height: "100%", outline: "none", cursor: "grab" } }}>
       {!ready && !failed && (
-        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}>
-          Opening the studio…
-        </Box>
+        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}> {tx("Opening the studio…")} </Box>
       )}
       {failed && (
-        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}>
-          The 3D studio needs WebGL enabled.
-        </Box>
+        <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: FAINT, fontSize: 12 }}> {tx("The 3D studio needs WebGL enabled.")} </Box>
       )}
       {seats.map((descriptor, index) => (
         <Box key={descriptor?.task?.TaskId || `free-${index}`} ref={(node) => { labelRefs.current[index] = node; }}
@@ -606,10 +603,10 @@ export default function StudioScene({ seats, selectedId, onSelect }) {
       <Box sx={{ position: "absolute", left: "50%", bottom: 12, transform: "translateX(-50%)", zIndex: 4,
         display: "flex", alignItems: "center", gap: 1, px: 1.2, py: 0.65, borderRadius: "8px",
         bgcolor: "rgba(255,253,249,.86)", border: `1px solid ${BORDER}`, backdropFilter: "blur(7px)" }}>
-        <Typography sx={{ fontSize: 10.5, color: FAINT }}>drag to turn · scroll to zoom · click an agent</Typography>
+        <Typography sx={{ fontSize: 10.5, color: FAINT }}>{tx("drag to turn · scroll to zoom · click an agent")}</Typography>
         <Box component="button" type="button" onClick={() => sceneApi.current?.reset()}
           sx={{ border: 0, bgcolor: "transparent", color: "#536b59", fontSize: 10.5, fontWeight: 600,
-            cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>Reset</Box>
+            cursor: "pointer", p: 0, "&:hover": { textDecoration: "underline" } }}>{tx("Reset")}</Box>
       </Box>
     </Box>
   );

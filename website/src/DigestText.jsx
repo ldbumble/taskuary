@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useState } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api.js";
@@ -22,8 +23,8 @@ function DigestWayOn({ sourceId }) {
   };
   return <Box sx={{ mt: 0.75 }}>
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-      <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? "Starting…" : "Try again"}</Button>
-      <Button size="small" component="a" href="#connector=">Check the AI connection</Button>
+      <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? tx("Starting…") : tx("Try again")}</Button>
+      <Button size="small" component="a" href="#connector=">{tx("Check the AI connection")}</Button>
     </Box>
     {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "#55697a" }}>{said}</Typography>}
   </Box>;
@@ -71,10 +72,10 @@ export default function DigestText({ text, sourceId = null }) {
     {digest.error && <Alert severity="error" variant="outlined" sx={{ mb: 1.25, alignItems: "flex-start",
       bgcolor: "#fff8f5", borderColor: "#e6bcb2", "& .MuiAlert-message": { width: "100%" } }}>
       <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.35 }}>{digest.plain}</Typography>
-      {digest.sections.length > 0 && <Typography sx={{ fontSize: 12.25, lineHeight: 1.5 }}>What it would have read is folded below, not yet summarised.</Typography>}
+      {digest.sections.length > 0 && <Typography sx={{ fontSize: 12.25, lineHeight: 1.5 }}>{tx("What it would have read is folded below, not yet summarised.")}</Typography>}
       {/* the AI's own words are the detail, never the headline */}
       <Box component="details" sx={{ mt: 0.4, "& summary": { cursor: "pointer", fontSize: 12, color: "#817b72" } }}>
-        <summary>What the AI said</summary>
+        <summary>{tx("What the AI said")}</summary>
         <Typography sx={{ fontSize: 12, color: "#817b72", whiteSpace: "pre-wrap" }}>{digest.error}</Typography>
       </Box>
       <DigestWayOn sourceId={sourceId} />
@@ -86,10 +87,8 @@ export default function DigestText({ text, sourceId = null }) {
     {digest.error && digest.sections.length > 0 && <Box component="details" sx={{ mt: 0.75,
       "& summary": { cursor: "pointer", color: "#65766a", fontSize: 12, fontWeight: 600, py: 0.5 },
       "&[open] summary": { mb: 0.75 } }}>
-      <summary>Show unreviewed source data</summary>
-      <Typography variant="caption" sx={{ display: "block", color: "#817b72", mb: 0.8 }}>
-        The AI did not judge or summarize these items. They are grouped only to make the source readable.
-      </Typography>
+      <summary>{tx("Show unreviewed source data")}</summary>
+      <Typography variant="caption" sx={{ display: "block", color: "#817b72", mb: 0.8 }}> {tx("The AI did not judge or summarize these items. They are grouped only to make the source readable.")} </Typography>
       <Sections sections={digest.sections} />
     </Box>}
   </Box>;

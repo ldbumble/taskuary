@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The agent's browser, live, beside its terminal. Frames come from agent-browser's screencast
 // through the server relay (/api/terminals/:sid/browser/ws) and are drawn on a canvas; the
 // owner can take the keyboard and mouse when a page asks for something an agent must never
@@ -195,8 +196,7 @@ export default function BrowserPane({ sid, taskId, url: url0 = "", open = true, 
         <Box title={live ? "live - frames are flowing" : "connecting…"}
           sx={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, bgcolor: live ? CATPPUCCIN.green : "#5a554d",
             boxShadow: live ? `0 0 0 3px ${CATPPUCCIN.green}33` : "none", transition: "background .3s" }} />
-        <Typography title="The agent opened this page itself - this pane is its browser, watched live.
-Take over to drive it yourself; close the session to close it."
+        <Typography title={tx("The agent opened this page itself - this pane is its browser, watched live.\nTake over to drive it yourself; close the session to close it.")}
           sx={{ ...mono, fontSize: 10.5, color: live ? "#c9c3b9" : FAINT, letterSpacing: 0.3, flexShrink: 0 }}>
           {live ? "LIVE" : "…"}
         </Typography>
@@ -220,9 +220,9 @@ Take over to drive it yourself; close the session to close it."
         <Box component="button" onClick={() => (driving ? setDriving(false) : takeOver())}
           title={driving ? "give the page back to the agent" : "drive the page yourself - for a password or a code the agent must not type"}
           sx={{ ...btn, ...(driving ? { color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow } : {}) }}>
-          {driving ? "Hand back" : "Take over"}
+          {driving ? "Hand back" : tx("Take over")}
         </Box>
-        <Box component="button" onClick={snapshot} title="keep this frame on the task as an attachment" sx={btn}>Snapshot</Box>
+        <Box component="button" onClick={snapshot} title={tx("keep this frame on the task as an attachment")} sx={btn}>{tx("Snapshot")}</Box>
         {onFold && <Box component="button" onClick={onFold} title={overlay ? "back to the terminal" : "fold the browser away - the browser chip above the terminal brings it back"} sx={btn}>{overlay ? "✕" : "›"}</Box>}
       </Box>
       {/* the page. tabIndex so keystrokes land here while driving; the canvas swallows the wheel
@@ -237,11 +237,8 @@ Take over to drive it yourself; close the session to close it."
         {attached === false && !live && (
           <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center", gap: 0.75, px: 3, textAlign: "center" }}>
-            <Typography sx={{ ...mono, fontSize: 11.5, color: "#c9c3b9" }}>the browser is running, with no page open</Typography>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, lineHeight: 1.6 }}>
-              Nothing has been navigated to yet, so there is nothing to show. Type an address up
-              there to open one — then take over to drive it yourself.
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "#c9c3b9" }}>{tx("the browser is running, with no page open")}</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, lineHeight: 1.6 }}> {tx("Nothing has been navigated to yet, so there is nothing to show. Type an address up there to open one — then take over to drive it yourself.")} </Typography>
           </Box>
         )}
         {/* THE EMPTY PAGE SAYS IT IS EMPTY. A session that asked for a browser gets one on
@@ -252,10 +249,8 @@ Take over to drive it yourself; close the session to close it."
         {live && (!url || url === "about:blank") && (
           <Box sx={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", pointerEvents: "none",
             alignItems: "center", justifyContent: "center", gap: 0.75, px: 3, textAlign: "center" }}>
-            <Typography sx={{ ...mono, fontSize: 11.5, color: "#867f74" }}>an empty tab, live</Typography>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: "#a8a196", lineHeight: 1.6 }}>
-              The agent opens its pages here. Or type an address above to open one yourself.
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: "#867f74" }}>{tx("an empty tab, live")}</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: "#a8a196", lineHeight: 1.6 }}> {tx("The agent opens its pages here. Or type an address above to open one yourself.")} </Typography>
           </Box>
         )}
         {driving && (
@@ -267,11 +262,9 @@ Take over to drive it yourself; close the session to close it."
         {asked && !driving && (
           <Box sx={{ position: "absolute", left: 8, right: 8, bottom: 6, display: "flex", alignItems: "center", gap: 1,
             bgcolor: "#000000cc", border: `1px solid ${CATPPUCCIN.yellow}66`, px: 1, py: 0.5, borderRadius: 1 }}>
-            <Typography sx={{ ...mono, fontSize: 10, color: "#e1dcd5", flex: 1 }}>
-              You are watching the agent's page — Take over to type on it.
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 10, color: "#e1dcd5", flex: 1 }}> {tx("You are watching the agent's page — Take over to type on it.")} </Typography>
             <Box component="button" onClick={takeOver}
-              sx={{ ...btn, color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow }}>Take over</Box>
+              sx={{ ...btn, color: CATPPUCCIN.yellow, borderColor: CATPPUCCIN.yellow }}>{tx("Take over")}</Box>
           </Box>
         )}
       </Box>

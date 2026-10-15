@@ -1,3 +1,4 @@
+import { getLocale, t as tx } from "./i18n.js";
 // The Assistant page's sidebar and stage: the buttons, the filter and the sync line over the Work rail (the
 // ranked pipe AssistantView draws), and beside it the stage where a row opens whole - the message, why triage
 // sent it where it did, the agent's work and the reply. A live socket pushes new rows in; the list is not on a
@@ -128,7 +129,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "left" }}
         slotProps={{ paper: { sx: { width: 320, maxHeight: 560, p: 1.25 } } }}>
-        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Kind</Typography>
+        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>{tx("Kind")}</Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6, mb: 1.25 }}>
           {CATEGORIES.map((o) => (
             <Chip key={o.key} size="small" label={o.label} data-tq-kind={o.key || "all"}
@@ -138,11 +139,11 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
                 border: `1px solid ${cat === o.key ? "#cbd4dc" : BORDER}` }} />
           ))}
         </Box>
-        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>Source</Typography>
-        <TextField fullWidth placeholder="search sources…" value={srcQ} onChange={(e) => setSrcQ(e.target.value)}
+        <Typography sx={{ fontSize: 9.5, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: FAINT, mb: 0.75 }}>{tx("Source")}</Typography>
+        <TextField fullWidth placeholder={tx("search sources…")} value={srcQ} onChange={(e) => setSrcQ(e.target.value)}
           sx={{ bgcolor: "#fff", mb: 0.5 }} inputProps={{ style: { fontSize: 12, padding: "5px 8px" } }} />
         <Box sx={{ maxHeight: 220, overflowY: "auto", mx: -0.5 }}>
-          <MenuItem selected={!pick} onClick={() => onChange(cat, "")} sx={{ fontSize: 12, borderRadius: 1 }}>all sources</MenuItem>
+          <MenuItem selected={!pick} onClick={() => onChange(cat, "")} sx={{ fontSize: 12, borderRadius: 1 }}>{tx("all sources")}</MenuItem>
           {/* 96 discovered buckets turned this into a page-long wall. It is a bounded, searchable
               list: type to narrow, and each channel shows a few with a count for the rest. */}
           {channels.flatMap((ch) => {
@@ -156,7 +157,7 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
                 {label}{all.length > shown.length ? ` \u00b7 ${all.length}` : ""}
               </ListSubheader>,
               <MenuItem key={`c${ch}`} selected={pick === `channel:${ch}`} onClick={() => onChange(cat, `channel:${ch}`)}
-                sx={{ fontSize: 12, borderRadius: 1 }}>all {label.toLowerCase()}</MenuItem>,
+                sx={{ fontSize: 12, borderRadius: 1 }}>{tx("all")} {label.toLowerCase()}</MenuItem>,
               ...shown.map((n) => (
                 <MenuItem key={`${ch}:${n}`} selected={pick === `src:${ch}:${n}`} onClick={() => onChange(cat, `src:${ch}:${n}`)}
                   sx={{ fontSize: 11.5, pl: 2.5, borderRadius: 1 }}>
@@ -165,14 +166,13 @@ function FilterButton({ cat, pick, channels, srcByChannel, srcQ, setSrcQ, onChan
               )),
               ...(all.length > shown.length ? [
                 <MenuItem key={`m${ch}`} disabled sx={{ fontSize: 10.5, pl: 2.5, color: FAINT, opacity: 1 }}>
-                  +{all.length - shown.length} more — type to find one
-                </MenuItem>] : []),
+                  +{all.length - shown.length} {tx("more — type to find one")} </MenuItem>] : []),
             ];
           })}
         </Box>
         {narrowed && (
           <Button size="small" onClick={() => { onChange("", ""); close(); }}
-            sx={{ mt: 0.75, fontSize: 11, textTransform: "none", color: ACCENT }}>Show everything</Button>
+            sx={{ mt: 0.75, fontSize: 11, textTransform: "none", color: ACCENT }}>{tx("Show everything")}</Button>
         )}
       </Popover>
     </>
@@ -856,14 +856,14 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {SIDE_NAV.map((n) => {
             const Icon = NAV_ICONS[n.key];
             return (
-              <Tooltip key={n.key} title={n.hint} placement="right">
+              <Tooltip key={n.key} title={tx(n.hint)} placement="right">
                 <Box component="button" type="button" data-tq-nav={n.key} aria-current={navOn === n.key ? "page" : undefined}
                   onClick={() => (n.key === "new" && !onGo ? setNewOpen(true) : onGo?.(n.go, n.key))}
                   sx={{ display: "flex", alignItems: "center", gap: 1.25, width: "100%", height: 30, px: 1.25, border: 0,
                     borderRadius: "8px", cursor: "pointer", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, textAlign: "left",
                     color: navOn === n.key ? INK : "#4d4a43", bgcolor: navOn === n.key ? "#e4e9ee" : "transparent",
                     "& svg": { fontSize: 16, color: "#6e685f" }, "&:hover": { bgcolor: navOn === n.key ? "#e4e9ee" : PANEL2 } }}>
-                  <Icon />{n.label}
+                  <Icon />{tx(n.label)}
                 </Box>
               </Tooltip>
             );
@@ -874,10 +874,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {Object.values(savedReplies).map((saved) => (
             <Box key={saved.reviewId} data-interrupted-reply={saved.reviewId} sx={{ fontSize: 11, color: DIM }}>
               <Box component="details">
-                <Box component="summary">Your unsent edit is saved · {saved.row?.Subject || "Reply"}</Box>
+                <Box component="summary">{tx("Your unsent edit is saved ·")} {saved.row?.Subject || tx("Reply")}</Box>
                 <Typography variant="caption" sx={{ whiteSpace: "pre-wrap" }}>{saved.yours}</Typography>
               </Box>
-              <Button size="small" disabled={recoveringReply} onClick={() => reviewInterrupted(saved)}>Review the update</Button>
+              <Button size="small" disabled={recoveringReply} onClick={() => reviewInterrupted(saved)}>{tx("Review the update")}</Button>
             </Box>
           ))}
 
@@ -922,7 +922,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{s2.label}</Typography>
               </Box>
             ))}
-            {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>Loading item counts…</Typography>}
+            {!rows && <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{tx("Loading item counts…")}</Typography>}
             <Typography variant="caption" noWrap sx={{ color: syncing || bgSync ? ACCENT : FAINT, fontSize: 10.5, flex: 1, minWidth: 0, textAlign: "right" }}>
               {syncUnknown ? "Sync status unavailable — rechecking"
                 : <NextIn atRef={nextAtRef} render={(nextIn) => syncFace({ busy: syncing || bgSync, what: syncWhat, every, lastAt: lastSync, nextIn, checked: true, started: syncStarted,
@@ -944,7 +944,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
                 "@keyframes tqSyncSpin": { to: { transform: "rotate(360deg)" } },
                 "&.Mui-disabled": { color: DIM, opacity: 1 },
                 "& .MuiButton-startIcon": { mr: 0.35 }, "&:hover": { bgcolor: PANEL2 } }}>
-              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : "Sync now"}
+              {syncUnknown ? "Check status" : syncing || bgSync ? syncPhaseLabel(syncPhase) : tx("Sync now")}
             </Button>
           </Box>
           {/* a brain that errors on every call used to look like slow triage: rows parked on
@@ -959,7 +959,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {err && (
             <Alert severity="error" variant="outlined" onClose={() => setErr("")}
               action={<Button size="small" color="error" onClick={() => { setErr(""); setRows(null); load(rowsLen.current); }}
-                sx={{ fontSize: 11 }}>Retry</Button>}
+                sx={{ fontSize: 11 }}>{tx("Retry")}</Button>}
               sx={{ py: 0, borderRadius: 2, bgcolor: PANEL, alignItems: "center",
                 "& .MuiAlert-message": { fontSize: 11.5, py: 0.5 }, "& .MuiAlert-action": { pt: 0, alignItems: "center" } }}>
               {err}
@@ -1005,17 +1005,11 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
             <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2,
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
               gap: 1, px: 4, textAlign: "center" }}>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>
-                Pick anything on the left
-              </Typography>
-              <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}>
-                Clicking a row opens it here. You get the message that arrived,
-                why triage sent it where it did, what the agent is doing about it, and the reply
-                waiting to go — each on its own tab.
-              </Typography>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}> {tx("Pick anything on the left")} </Typography>
+              <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}> {tx("Clicking a row opens it here. You get the message that arrived, why triage sent it where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.")} </Typography>
               <Button size="small" variant="outlined" startIcon={<AddIcon sx={{ fontSize: 15 }} />}
                 onClick={() => setNewOpen(true)}
-                sx={{ mt: 1, fontSize: 12, borderColor: BORDER, color: DIM }}>Start something instead</Button>
+                sx={{ mt: 1, fontSize: 12, borderColor: BORDER, color: DIM }}>{tx("Start something instead")}</Button>
             </Box>
           )}
       </Box>
@@ -1069,16 +1063,16 @@ const CanonicalDetail = ({ sel, detail, onOpenTask, onOpenMessage, onClose }) =>
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16 }}>{detail.title || sel.Subject || "Untitled item"}</Typography>
           {(detail.status || sel.MsgStatus) && <Typography variant="caption" sx={{ color: DIM }}>{detail.status || sel.MsgStatus}</Typography>}
         </Box>
-        <IconButton aria-label="Close detail" size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton aria-label={tx("Close detail")} size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </Box>
       <Box sx={{ p: 1.5 }}>
         {detail.body ? (
           looksMd(detail.body) ? <Md>{detail.body}</Md>
             : <Typography sx={{ whiteSpace: "pre-wrap", color: INK, fontSize: 13, lineHeight: 1.6 }}>{detail.body}</Typography>
-        ) : <Typography variant="caption" sx={{ color: FAINT }}>No body was recorded for this item.</Typography>}
+        ) : <Typography variant="caption" sx={{ color: FAINT }}>{tx("No body was recorded for this item.")}</Typography>}
         {!!checklist.length && (
           <Box sx={{ mt: 2 }}>
-            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>Checklist</Typography>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>{tx("Checklist")}</Typography>
             {checklist.map((entry, i) => {
               const words = typeof entry === "string" ? entry : entry.text || entry.label || JSON.stringify(entry);
               const done = typeof entry === "object" && !!(entry.done ?? entry.Done ?? entry.checked);
@@ -1089,7 +1083,7 @@ const CanonicalDetail = ({ sel, detail, onOpenTask, onOpenMessage, onClose }) =>
         )}
         {!!history.length && (
           <Box data-processing-detail-history sx={{ mt: 2 }}>
-            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>History</Typography>
+            <Typography variant="caption" sx={{ ...mono, color: FAINT, textTransform: "uppercase" }}>{tx("History")}</Typography>
             {history.map((entry, i) => (
               <Box key={`${entry.at || ""}-${i}`} sx={{ mt: 0.75 }}>
                 <Typography variant="caption" sx={{ color: FAINT }}>{entry.at || ""}{entry.actor ? ` · ${entry.actor}` : ""}</Typography>
@@ -1101,7 +1095,7 @@ const CanonicalDetail = ({ sel, detail, onOpenTask, onOpenMessage, onClose }) =>
         {(target.kind === "task" || actionLinks.length > 0) && (
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 2 }}>
             {target.kind === "task" && <Button size="small" variant="contained" disableElevation
-              onClick={() => onOpenTask?.(target.id)}>Open {ref(target.id)}</Button>}
+              onClick={() => onOpenTask?.(target.id)}>{tx("Open")} {ref(target.id)}</Button>}
             {actionLinks.map((link, i) => (
               <Button key={`${link.kind}:${link.id}:${i}`} size="small" variant="outlined"
                 onClick={() => link.kind === "task" ? onOpenTask?.(link.id) : onOpenMessage?.(link.id)}>
@@ -1176,7 +1170,7 @@ const TrayBtn = ({ tone = "plain", icon, children, teaches, ...rest }) => (
         that it meant this verdict changes later routing. */}
     {teaches && <Box component="span" aria-hidden
       sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8, bgcolor: "rgba(90,62,131,.1)",
-        fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7, lineHeight: 1.5 }}>MEMORY</Box>}
+        fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7, lineHeight: 1.5 }}>{tx("MEMORY")}</Box>}
   </Button>
 );
 
@@ -1247,7 +1241,7 @@ const StoryTimelineStep = ({ title, status, summary, bullets, lines = 2, onOpen,
               </Box>
             ))}
             {bullets.length > 6 && (
-              <Box sx={{ color: FAINT, fontSize: 10.5, mt: 0.15 }}>+{bullets.length - 6} more</Box>
+              <Box sx={{ color: FAINT, fontSize: 10.5, mt: 0.15 }}>+{bullets.length - 6} {tx("more")}</Box>
             )}
           </Box>
         )}
@@ -1450,10 +1444,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           tab, in the thread. */}
       {answeredOutside && !pending && (
         <Box sx={{ mb: 1.25 }}>
-          <Typography variant="caption" sx={{ color: DIM, display: "block" }}>
-            You answered this in {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
-            {" "}— nothing here sent it, and nothing is waiting on you.
-          </Typography>
+          <Typography variant="caption" sx={{ color: DIM, display: "block" }}> {tx("You answered this in")} {sel.Channel === "email" ? "your mailbox" : sel.Channel} · {fmtDateTime(sel.AnsweredAt || threadReply?.SentAt)}
+            {" "}{tx("— nothing here sent it, and nothing is waiting on you.")} </Typography>
           {/* your own words, quoted under the line that says where you said them. This used to be
               pushed right like a chat bubble, which on a left-aligned summary left a bald gutter
               beside it and read as a stray (the owner, 2026-09-07). It fills the column now, in the
@@ -1470,8 +1462,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
       )}
       {replied && (
         <Box sx={{ mb: 1.25 }}>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.65 }}>
-            Sent to {sel.FromName || sel.FromEmail || "the conversation"}
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.65 }}> {tx("Sent to")} {sel.FromName || sel.FromEmail || "the conversation"}
           </Typography>
           <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5,
             px: 1.25, py: 1, color: INK, fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
@@ -1493,14 +1484,12 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           onChanged={onRefresh} channel={sel.Channel} compare={compare} clearCompare={clearCompare} />
       )}
       {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-          Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
-        </Typography>
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}> {tx("Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.")} </Typography>
       ) : (
         <ChoiceRow tint={PANEL2} busy={opening} onClick={openReply}
           icon={<ForwardToInboxIcon sx={{ fontSize: 14, color: ACCENT }} />}
-          label="Write a reply" first
-          hint="the AI drafts it from the thread and the agent result; approving sends it" />
+          label={tx("Write a reply")} first
+          hint={tx("the AI drafts it from the thread and the agent result; approving sends it")} />
       ))}
     </>
   );
@@ -1572,7 +1561,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           </Box>
           <RefChip taskId={sel.TaskId} onClick={() => onOpenTask(sel.TaskId)} />
           <StateMark row={sel} state={st} size="md" />
-          <IconButton aria-label="Close item" size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton aria-label={tx("Close item")} size="small" onClick={onClose}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
         </Box>
 
         {/* a stranger's first message is the one state that needs answering before anything else
@@ -1581,22 +1570,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           <Box sx={{ mx: 2, mb: 1.5, px: 1.5, py: 1.25, borderRadius: 2,
             border: `1px solid ${ROLES.muted.bd}`, borderLeft: `2px solid ${ROLES.muted.solid}`, bgcolor: "#fcfaf7" }}>
             <Typography sx={{ fontSize: 12.5, color: INK, lineHeight: 1.6, mb: 1 }}>
-              <b>Nothing was started.</b> This is the first message from {sel.FromEmail || "this address"},
-              and an unvetted message is not allowed to open a session on this machine by itself.
-            </Typography>
+              <b>{tx("Nothing was started.")}</b> {tx("This is the first message from")} {sel.FromEmail || "this address"}{tx(", and an unvetted message is not allowed to open a session on this machine by itself.")} </Typography>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               <Button size="small" variant="contained" disableElevation disabled={releasing} onClick={release}
                 startIcon={releasing ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <TaskuaryMark size={15} />}
-                sx={{ fontSize: 12, background: GRADIENT }}>Release to the agent</Button>
-              <Typography variant="caption" sx={{ color: FAINT, alignSelf: "center" }}>
-                they are never held again after this
-              </Typography>
+                sx={{ fontSize: 12, background: GRADIENT }}>{tx("Release to the agent")}</Button>
+              <Typography variant="caption" sx={{ color: FAINT, alignSelf: "center" }}> {tx("they are never held again after this")} </Typography>
             </Box>
           </Box>
         )}
 
         {/* Summary is the fifth, default view. The original four stages remain full detail views. */}
-        <Box role="tablist" aria-label="Message workflow views"
+        <Box role="tablist" aria-label={tx("Message workflow views")}
           sx={{ display: "flex", gap: 0.25, px: 2, borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
             overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
           {tabs.map((item) => (
@@ -1633,10 +1618,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                 bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, mb: 1.25 }}>
                 <CircularProgress size={18} thickness={5} />
                 <Box>
-                  <Typography sx={{ color: INK, fontWeight: 600, fontSize: 12.5 }}>Triaging this message…</Typography>
-                  <Typography variant="caption" sx={{ color: FAINT }}>
-                    It is safely on the Timeline. The task, agent, and reply steps will appear when the decision lands.
-                  </Typography>
+                  <Typography sx={{ color: INK, fontWeight: 600, fontSize: 12.5 }}>{tx("Triaging this message…")}</Typography>
+                  <Typography variant="caption" sx={{ color: FAINT }}> {tx("It is safely on the Timeline. The task, agent, and reply steps will appear when the decision lands.")} </Typography>
                 </Box>
               </Box>
               <MessageBlock messages={detail?.messages} focusId={sel.MessageId} fallback={detail?.body || sel.Preview} threadTotal={detail?.thread_total} askIds={detail?.ask_ids} />
@@ -1644,16 +1627,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
           ) : (
             <>
               {tab === "summary" && (
-                <Box aria-label="Workflow summary" sx={{ width: "100%",
+                <Box aria-label={tx("Workflow summary")} sx={{ width: "100%",
                   px: 0.75, pt: 0.45, pb: 0.75 }}>
-                  <StoryTimelineStep title="Message" first state="done"
+                  <StoryTimelineStep title={tx("Message")} first state="done"
                     status={(detail?.messages || []).length > 1 ? `${detail.messages.length} messages` : "received"}
                     summary={messageBody.lead} bullets={messageBody.bullets} lines={10}
                     onOpen={() => setTab("msg")} />
-                  <StoryTimelineStep title="Triage" status={triageStatus} summary={roadLine}
+                  <StoryTimelineStep title={tx("Triage")} status={triageStatus} summary={roadLine}
                     state={failedTriage ? "current" : triageStatus !== "not routed" ? "done" : "idle"}
                     onOpen={() => setTab("why")} />
-                  <StoryTimelineStep title="Agent"
+                  <StoryTimelineStep title={tx("Agent")}
                     status={onIt ? (onIt.waiting ? AGENT.waiting : AGENT.working) : chatTask ? "assistant chat" : rep ? AGENT.saved : AGENT.idle}
                     summary={onIt ? (onIt.waiting ? `${onIt.agent} needs your answer.` : `${onIt.agent} is working in the live terminal.`)
                       : chatTask ? "The assistant conversation is available here."
@@ -1665,7 +1648,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                     onOpen={() => setTab("agent")} />
                   {/* the draft is IN the step now, so repeating it as a two-line summary above the
                       box it is already in was saying the same words twice */}
-                  <StoryTimelineStep title="Reply" last
+                  <StoryTimelineStep title={tx("Reply")} last
                     status={pending ? "waiting on you" : replied ? "sent from Taskuary" : answeredOutside ? "you replied" : opened ? "draft open" : "not drafted"}
                     summary={replied ? cleanText(sentReply)
                       : answeredOutside ? (cleanText(outsideReply) || `Answered in ${sel.Channel}.`) : ""}
@@ -1685,11 +1668,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                       off?"). 255 exactly is the cap, and so the signal that there IS more. */}
                   {envelopeOnly && (
                     <Box sx={{ mb: 1, px: 1.25, py: 0.9, borderRadius: 1.5, bgcolor: PANEL2,
-                      border: `1px solid ${BORDER}`, fontSize: 12, color: DIM, lineHeight: 1.6 }}>
-                      Only the first 255 characters were downloaded. A standing rule ignores this sender,
-                      so Taskuary never fetched the rest of the body.
-                      {sel.SourceLink && <> <Box component="a" href={sel.SourceLink} target="_blank" rel="noreferrer"
-                        sx={{ color: ACCENT }}>Open it in Outlook</Box> for the whole message.</>}
+                      border: `1px solid ${BORDER}`, fontSize: 12, color: DIM, lineHeight: 1.6 }}> {tx("Only the first 255 characters were downloaded. A standing rule ignores this sender, so Taskuary never fetched the rest of the body.")} {sel.SourceLink && <> <Box component="a" href={sel.SourceLink} target="_blank" rel="noreferrer"
+                        sx={{ color: ACCENT }}>{tx("Open it in Outlook")}</Box> {tx("for the whole message.")}</>}
                     </Box>
                   )}
                   {sel.Channel === "assistant" && <AssistantPost sel={sel} onOpenTask={onOpenTask} onChanged={() => onRefresh?.()} />}
@@ -1699,7 +1679,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   )}
                   {history.length > 0 && (
                     <>
-                      <PanelLabel>What happened to it</PanelLabel>
+                      <PanelLabel>{tx("What happened to it")}</PanelLabel>
                       <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                         {history.map((h, i) => (
                           <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.45 }}>
@@ -1741,21 +1721,18 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                             </Box>
                           )}
                           <Typography variant="caption" onClick={() => onOpenTask(sel.TaskId)}
-                            sx={{ color: FAINT, display: "block", mt: 0.5, cursor: "pointer", "&:hover": { color: INK } }}>
-                            open the task page ↗
-                          </Typography>
+                            sx={{ color: FAINT, display: "block", mt: 0.5, cursor: "pointer", "&:hover": { color: INK } }}> {tx("open the task page ↗")} </Typography>
                         </>
                       ) : <LiveConsole run={liveRow} agent={onIt.agent} lines={14} onOpen={() => onOpenTask(sel.TaskId)} />}
                     </>
                   )}
                   {rep && (
                     <>
-                      <PanelLabel>Agent result</PanelLabel>
+                      <PanelLabel>{tx("Agent result")}</PanelLabel>
                       <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
                         <CoderReport body={rep.Body} />
                       </Box>
-                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                        Finished by {rep.Actor || "the coding agent"}{rep.CreatedAt ? ` · ${fmtDateTime(rep.CreatedAt)}` : ""}
+                      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Finished by")} {rep.Actor || "the coding agent"}{rep.CreatedAt ? ` · ${fmtDateTime(rep.CreatedAt)}` : ""}
                       </Typography>
                     </>
                   )}
@@ -1763,23 +1740,16 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   {sel.TaskId && (rep || diffRun) && <Box sx={{ mt: 1 }}><ProofCard taskId={sel.TaskId} onOpenTask={onOpenTask} /></Box>}
                   {/* a session RAN and is gone: say that, rather than that none ever started */}
                   {!chatTask && !onIt && !rep && !diffRun && detail?.session_available === false && (
-                    <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-                      Live session status is unavailable. Open the task page for its persisted history.
-                    </Typography>
+                    <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}> {tx("Live session status is unavailable. Open the task page for its persisted history.")} </Typography>
                   )}
                   {!chatTask && !onIt && !rep && !diffRun && detail?.session_available !== false && detail?.transcript && (
                     <>
-                      <PanelLabel>The session that was working this has ended</PanelLabel>
+                      <PanelLabel>{tx("The session that was working this has ended")}</PanelLabel>
                       <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-                        {detail.transcript.agent || "an agent"} worked here
-                        {detail.transcript.cwd ? ` in ${detail.transcript.cwd}` : ""}
-                        {detail.transcript.at ? ` · ${fmtDateTime(detail.transcript.at)}` : ""}, and its terminal is gone.
-                        Nothing is working it now — the transcript it left is what closes it out.
-                      </Typography>
+                        {detail.transcript.agent || "an agent"} {tx("worked here")} {detail.transcript.cwd ? ` in ${detail.transcript.cwd}` : ""}
+                        {detail.transcript.at ? ` · ${fmtDateTime(detail.transcript.at)}` : ""}{tx(", and its terminal is gone. Nothing is working it now — the transcript it left is what closes it out.")} </Typography>
                       <Typography variant="caption" onClick={() => onOpenTask(sel.TaskId)}
-                        sx={{ color: "#55697a", display: "block", mt: 0.75, cursor: "pointer", fontWeight: 600 }}>
-                        open the task page to close it out ↗
-                      </Typography>
+                        sx={{ color: "#55697a", display: "block", mt: 0.75, cursor: "pointer", fontWeight: 600 }}> {tx("open the task page to close it out ↗")} </Typography>
                     </>
                   )}
                   {!chatTask && !onIt && !rep && !diffRun && detail?.session_available !== false && !detail?.transcript && (
@@ -1793,7 +1763,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               )}
 
               {tab === "discussion" && (
-                <Box aria-label="Assistant discussion" sx={{ display: "flex", flexDirection: "column", gap: 0.9, py: 0.5 }}>
+                <Box aria-label={tx("Assistant discussion")} sx={{ display: "flex", flexDirection: "column", gap: 0.9, py: 0.5 }}>
                   {assistantDiscussion.map((c) => {
                     const owner = ["concierge_user", "assistant_user"].includes(c.ActorType);
                     const body = cleanText(c.Body || "").replace(/\nOPTIONS:\s*.*$/s, "").trim();
@@ -1801,7 +1771,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                       <Box key={c.CommentId} sx={{ alignSelf: owner ? "flex-end" : "flex-start", maxWidth: "88%" }}>
                         <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.25,
                           textAlign: owner ? "right" : "left", fontSize: 10 }}>
-                          {owner ? "You" : "Taskuary"}{c.CreatedAt ? ` · ${fmtDateTime(c.CreatedAt)}` : ""}
+                          {owner ? tx("You") : "Taskuary"}{c.CreatedAt ? ` · ${fmtDateTime(c.CreatedAt)}` : ""}
                         </Typography>
                         <Box sx={{ bgcolor: owner ? "#e9e3d8" : "#f8f6f2", border: `1px solid ${BORDER}`,
                           borderRadius: owner ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
@@ -1822,11 +1792,11 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
             the bucket copy explains the consequence and MEMORY marks the choices that teach. */}
         {!loading && sel.Channel !== "assistant" && (
           <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, bgcolor: "#fcfaf7", px: 2, py: 1.35 }}>
-            <TrayGroupLabel note="open existing work, or choose who should handle it">WORK ON IT</TrayGroupLabel>
+            <TrayGroupLabel note="open existing work, or choose who should handle it">{tx("WORK ON IT")}</TrayGroupLabel>
             <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
               {sel.TaskId ? (
                 <TrayBtn tone="primary" onClick={() => onOpenTask(sel.TaskId)} icon={<OpenInFullIcon sx={{ fontSize: 15 }} />}>
-                  {onIt ? "Open the live session" : `Open ${ref(sel.TaskId)}`}</TrayBtn>
+                  {onIt ? tx("Open the live session") : `Open ${ref(sel.TaskId)}`}</TrayBtn>
               ) : (
                 <TrayBtn tone={sel.MsgStatus === "filed" ? "teach" : "plain"}
                   teaches={sel.MsgStatus === "filed"} disabled={!!mined} icon={<AssignmentIndIcon sx={{ fontSize: 15 }} />}
@@ -1843,17 +1813,17 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   it done was somewhere else. */}
               {sel.TaskId && !["done", "dropped"].includes(sel.TaskStatus) && (
                 <TrayBtn disabled={!!closed} icon={<CheckIcon sx={{ fontSize: 16 }} />}
-                  title="closes the task from here - the agent's report and the thread stay"
+                  title={tx("closes the task from here - the agent's report and the thread stay")}
                   onClick={async () => {
                     try {
                       await api.patch(`/api/tasks/${sel.TaskId}`, { Status: "done" });
                       setClosed("Closed"); onRefresh?.();
                     } catch { /* the row keeps its state */ }
-                  }}>{closed || "Mark done"}</TrayBtn>
+                  }}>{closed || tx("Mark done")}</TrayBtn>
               )}
               {onIt && sel.MessageId && (
                 <TrayBtn disabled={handed} onClick={handToAgent} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                  title="their message is typed into the live session, as if you relayed it">
+                  title={tx("their message is typed into the live session, as if you relayed it")}>
                   {handed ? "Typed into the session" : `Tell ${onIt.agent} this`}</TrayBtn>
               )}
               {onIt && sel.TaskId && <TellAgentButton taskId={sel.TaskId} />}
@@ -1867,27 +1837,26 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                 teaches={!sel.TaskId && sel.MsgStatus === "filed"} />}
               {sel.TaskId && (
                 <TrayBtn onClick={() => setHandoff(true)} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
-                  title="send the full task and its context to another person">
-                  Hand off</TrayBtn>
+                  title={tx("send the full task and its context to another person")}> {tx("Hand off")}</TrayBtn>
               )}
             </Box>
 
             <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-              <TrayGroupLabel note="choose whether this should change future routing">CLEAR FROM TIMELINE</TrayGroupLabel>
+              <TrayGroupLabel note="choose whether this should change future routing">{tx("CLEAR FROM TIMELINE")}</TrayGroupLabel>
               <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
                 <TrayBtn tone="quiet" disabled={!!filing} icon={<ArchiveOutlinedIcon sx={{ fontSize: 15 }} />}
-                  title="files this message only; nothing is added to Memory" onClick={() => fileMessage(false)}>
+                  title={tx("files this message only; nothing is added to Memory")} onClick={() => fileMessage(false)}>
                   {filing === "once" ? "Dismissing…" : "Dismiss once"}</TrayBtn>
                 <TrayBtn tone="teach" teaches disabled={!!filing} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
-                  title="files this message and adds one verdict to Memory for later triage" onClick={() => fileMessage(true)}>
+                  title={tx("files this message and adds one verdict to Memory for later triage")} onClick={() => fileMessage(true)}>
                   {filing === "learn" ? "Teaching triage…" : "Nothing to do"}</TrayBtn>
               </Box>
               {fileErr && <Typography variant="caption" sx={{ display: "block", color: ROLES.bad.ink,
-                fontWeight: 600, mt: 0.75 }}>{fileErr} — nothing changed.</Typography>}
+                fontWeight: 600, mt: 0.75 }}>{fileErr} {tx("— nothing changed.")}</Typography>}
             </Box>
 
             <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-              <TrayGroupLabel note="correct who owns it; MEMORY choices teach future triage">ROUTING</TrayGroupLabel>
+              <TrayGroupLabel note="correct who owns it; MEMORY choices teach future triage">{tx("ROUTING")}</TrayGroupLabel>
               {/* Saying it is yours only says where the work does NOT go. The one thing triage
                   cannot work out for itself is where it DOES - it only knows the repositories it
                   has code for, so a job that lives in ADP had no answer it could give. Asked here
@@ -1895,40 +1864,40 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               {mineAsk && sel.TaskId && (
                 <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mb: 0.9 }}>
                   <TextField size="small" autoFocus value={mineWhere} onChange={(e) => setMineWhere(e.target.value)}
-                    placeholder="Where does this really live? e.g. ADP (optional)"
+                    placeholder={tx("Where does this really live? e.g. ADP (optional)")}
                     onKeyDown={(e) => { if (e.key === "Enter") takeItMine(); }}
                     sx={{ flex: 1, minWidth: 210, "& .MuiInputBase-input": { fontSize: 12.5, py: 0.7 } }} />
                   <TrayBtn tone="teach" teaches disabled={mining} onClick={takeItMine}
                     icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}>
                     {mining ? "Teaching triage…" : "Put it on my list"}</TrayBtn>
-                  <TrayBtn tone="quiet" disabled={mining} onClick={() => { setMineAsk(false); setMineWhere(""); }}>Cancel</TrayBtn>
+                  <TrayBtn tone="quiet" disabled={mining} onClick={() => { setMineAsk(false); setMineWhere(""); }}>{tx("Cancel")}</TrayBtn>
                 </Box>
               )}
               <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", alignItems: "center" }}>
                 {sel.TaskId && (
                   <TrayBtn tone="teach" teaches disabled={notCoding} icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
-                    title="make this your task instead of agent work, and remember that choice"
+                    title={tx("make this your task instead of agent work, and remember that choice")}
                     onClick={() => { setRouteErr(""); setMineAsk(true); }}>
                     {notCoding ? "Now yours" : "Mine, not agent"}</TrayBtn>
                 )}
                 {sel.TaskId && (
                   <TrayBtn icon={<CallSplitIcon sx={{ fontSize: 15 }} />}
-                    title="separate two jobs, or mark this as a duplicate"
-                    onClick={() => setReshape(true)}>Split / merge</TrayBtn>
+                    title={tx("separate two jobs, or mark this as a duplicate")}
+                    onClick={() => setReshape(true)}>{tx("Split / merge")}</TrayBtn>
                 )}
                 <NotMine compact messageId={sel.MessageId} onDone={onSkipped} onLock={onLock} />
                 <SplitTask compact row={sel} onSplit={() => onRefresh?.()} />
               </Box>
-              {routeErr && <Typography variant="caption" sx={{ display: "block", color: ROLES.bad.ink, fontWeight: 600, mt: 0.75 }}>{routeErr} — nothing changed.</Typography>}
+              {routeErr && <Typography variant="caption" sx={{ display: "block", color: ROLES.bad.ink, fontWeight: 600, mt: 0.75 }}>{routeErr} {tx("— nothing changed.")}</Typography>}
 
               {sel.Channel === "email" && sel.FromEmail && (
                 <Box sx={{ mt: 1.1 }}>
-                  <TrayGroupLabel note="hide this address now and remember that rule">SENDER RULES</TrayGroupLabel>
+                  <TrayGroupLabel note="hide this address now and remember that rule">{tx("SENDER RULES")}</TrayGroupLabel>
                   <TrayBtn tone="teach" teaches disabled={skipped !== null} onClick={() => setSkipConfirm(true)}
                     icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}
                     title={`hide ${sel.FromEmail} and their past mail — undo in Settings`}>
                     {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip sender"}</TrayBtn>
-                  <Confirm open={skipConfirm} onClose={() => setSkipConfirm(false)} confirmLabel="Skip this sender"
+                  <Confirm open={skipConfirm} onClose={() => setSkipConfirm(false)} confirmLabel={tx("Skip this sender")}
                     title={`Skip everything from ${sel.FromEmail}?`}
                     text={"Their mail leaves the Timeline now - what they already sent, and everything after it. "
                       + "It is still received and kept; it just never shows here again. The rule lives under Settings → Routing policies, where it can be switched off."}
@@ -1946,8 +1915,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               PaperProps={{ sx: { width: { xs: "100%", sm: 460 }, p: 2, bgcolor: PANEL } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <ForwardToInboxIcon sx={{ fontSize: 18, color: ACCENT }} />
-                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Hand this to a person</Typography>
-                <IconButton aria-label="Close handoff" size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>{tx("Hand this to a person")}</Typography>
+                <IconButton aria-label={tx("Close handoff")} size="small" onClick={() => setHandoff(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
                 {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
@@ -1960,8 +1929,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
               PaperProps={{ sx: { width: { xs: "100%", sm: 480 }, p: 2, bgcolor: PANEL2 } }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
                 <CallSplitIcon sx={{ fontSize: 18, color: ACCENT2 }} />
-                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>Is this one job?</Typography>
-                <IconButton aria-label="Close split or merge" size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+                <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>{tx("Is this one job?")}</Typography>
+                <IconButton aria-label={tx("Close split or merge")} size="small" onClick={() => setReshape(false)}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1.5 }}>
                 {sel.TaskId ? ref(sel.TaskId) : ""} · {sel.Subject}
@@ -2078,23 +2047,21 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
           <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
             {exact ? "Triage's structured response" : "Saved triage result"}
           </Typography>
-          {!exact && <Typography variant="caption" sx={{ fontSize: 9.5, color: FAINT }}>limited saved response · reconstructed</Typography>}
+          {!exact && <Typography variant="caption" sx={{ fontSize: 9.5, color: FAINT }}>{tx("limited saved response · reconstructed")}</Typography>}
         </Box>
         <Box sx={{ display: "flex", gap: 0.65, flexWrap: "wrap" }}>
           <TriageFact label="Item" value={intentLabel(verdict.intent)} tone="intent" />
-          <TriageFact label="Goes to" value={destination} tone="kind" />
-          <TriageFact label="Worker" value={worker} tone="profile" />
-          <TriageFact label="Playbook" value={verdict.playbook} tone="profile" />
-          <TriageFact label="Thread" value={relationshipLabel(verdict.relationship)} tone="relation" />
+          <TriageFact label={tx("Goes to")} value={destination} tone="kind" />
+          <TriageFact label={tx("Worker")} value={worker} tone="profile" />
+          <TriageFact label={tx("Playbook")} value={verdict.playbook} tone="profile" />
+          <TriageFact label={tx("Thread")} value={relationshipLabel(verdict.relationship)} tone="relation" />
         </Box>
       </Box>
 
       <Box sx={{ px: 1.5, py: 1.35, display: "grid", gap: 1.25 }}>
         {(verdict.title || verdict.summary) && (
           <Box>
-            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              Work it pulled out
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}> {tx("Work it pulled out")} </Typography>
             {verdict.title && <Typography sx={{ mt: 0.35, fontSize: 14, fontWeight: 600, color: INK, lineHeight: 1.35 }}>
               {verdict.title}
             </Typography>}
@@ -2109,9 +2076,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
             bgcolor: TRIAGE_FACT_TONES.repo.bg, px: 1.15, py: 0.9 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
               <Box aria-hidden sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: TRIAGE_FACT_TONES.repo.dot }} />
-              <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".07em", textTransform: "uppercase" }}>
-                Repository
-              </Typography>
+              <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".07em", textTransform: "uppercase" }}> {tx("Repository")} </Typography>
               <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK }}>{repo || "None selected"}</Typography>
             </Box>
             {(verdict.repo_reason || repo === "Not applicable") && <Typography sx={{ mt: 0.45, ml: 1.7, fontSize: 11.5, color: DIM, lineHeight: 1.5 }}>
@@ -2122,9 +2087,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
 
         {!!verdict.intent && (
           <Box>
-            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              Task list
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}> {tx("Task list")} </Typography>
             {checklist.length ? (
               <Box component="ol" sx={{ listStyle: "none", p: 0, m: "7px 0 0", display: "grid", gap: 0.6 }}>
                 {checklist.map((item, i) => (
@@ -2146,16 +2109,12 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
         )}
 
         {!exact && (
-          <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.55 }}>
-            This route was saved without structured triage details. These fields come from its saved route and resulting task; details that were never stored are not invented.
-          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.55 }}> {tx("This route was saved without structured triage details. These fields come from its saved route and resulting task; details that were never stored are not invented.")} </Typography>
         )}
 
         {verdict.why && (
           <Box sx={{ borderTop: `1px solid ${BORDER}`, pt: 1.05 }}>
-            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}>
-              Why
-            </Typography>
+            <Typography sx={{ ...mono, fontSize: 9.5, color: FAINT, letterSpacing: ".08em", textTransform: "uppercase" }}> {tx("Why")} </Typography>
             <Typography sx={{ mt: 0.3, fontSize: 12.25, color: DIM, lineHeight: 1.6 }}>{verdict.why}</Typography>
           </Box>
         )}
@@ -2169,8 +2128,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
           </Typography>
         )}
         {(noteCount > 0 || verdict.notes_left > 0) && (
-          <Typography variant="caption" sx={{ color: FAINT }}>
-            Memory evidence considered: {noteCount}{verdict.notes_left ? ` shown, ${verdict.notes_left} more did not fit` : ""}
+          <Typography variant="caption" sx={{ color: FAINT }}> {tx("Memory evidence considered:")} {noteCount}{verdict.notes_left ? ` shown, ${verdict.notes_left} more did not fit` : ""}
           </Typography>
         )}
         {extras.length > 0 && (
@@ -2247,13 +2205,12 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
     routeReason: sel.RouteReason, routes: trail, task: detail?.task, checklist: detail?.checklist,
   });
   if (!sel.RouteReason && !road) return (
-    <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7 }}>
-      Nothing judged this. {watch ? "You wrote it." : "It is here to be read."}
+    <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7 }}> {tx("Nothing judged this.")} {watch ? "You wrote it." : "It is here to be read."}
     </Typography>
   );
   return (
     <>
-      <PanelLabel>Which road it took</PanelLabel>
+      <PanelLabel>{tx("Which road it took")}</PanelLabel>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.65, flexWrap: "wrap", mb: 1.5 }}>
         {ROADS.map((r) => {
           const on = road === r.key;
@@ -2279,7 +2236,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           {ROADS.find((r) => r.key === road)?.hint}
         </Typography>}
       </Box>
-      <PanelLabel>Full triage response</PanelLabel>
+      <PanelLabel>{tx("Full triage response")}</PanelLabel>
       {shownVerdict ? <TriageVerdictCard verdict={shownVerdict} exact={!!savedVerdict} /> : (
         <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 1.25, bgcolor: "#fcfaf7" }}>
           <Typography sx={{ fontSize: 13, color: INK, lineHeight: 1.65 }}>{why || sel.RouteReason}</Typography>
@@ -2292,13 +2249,12 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
       )}
       {diagnostic && (
         <>
-          <PanelLabel>What the triage AI returned</PanelLabel>
+          <PanelLabel>{tx("What the triage AI returned")}</PanelLabel>
           <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 1.25,
             bgcolor: "#f7f5f1", maxHeight: 300, overflowY: "auto", overflowX: "hidden" }}>
             {diagnostic.ParseError && (
               <Typography variant="caption" sx={{ color: ALERT_INK, display: "block", mb: 0.75,
-                overflowWrap: "anywhere" }}>
-                Parser: {diagnostic.ParseError}
+                overflowWrap: "anywhere" }}> {tx("Parser:")} {diagnostic.ParseError}
               </Typography>
             )}
             <Typography component="pre" sx={{ m: 0, ...mono, color: DIM, fontSize: 11,
@@ -2324,7 +2280,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
       )}
       {trail.length > 1 && (
         <>
-          <PanelLabel>How it got here</PanelLabel>
+          <PanelLabel>{tx("How it got here")}</PanelLabel>
           <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.5, py: 0.25, bgcolor: "#fcfaf7" }}>
             {trail.map((r, i) => {
               const mine = r.Decision === "ignore";
@@ -2349,10 +2305,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
           </Box>
         </>
       )}
-      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}>
-        Pick another road to correct it: the message goes down that road for real, and the verdict
-        lands in memory for the next message like this one, not as a rule about this sender.
-      </Typography>
+      <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1.25, lineHeight: 1.6 }}> {tx("Pick another road to correct it: the message goes down that road for real, and the verdict lands in memory for the next message like this one, not as a rule about this sender.")} </Typography>
       {fixNote && (
         <Typography variant="caption" sx={{ display: "block", mt: 0.5, lineHeight: 1.6,
           color: fixError ? ALERT_INK : "#47654a" }}>{fixNote}</Typography>
@@ -2407,7 +2360,7 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
   };
   if (!voice) return (
     <ChoiceRow tint="#e3e6e1" busy icon={<MicIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
-      label="Checking voice provider…" hint="the saved audio is ready to transcribe" />
+      label={tx("Checking voice provider…")} hint={tx("the saved audio is ready to transcribe")} />
   );
   return voice?.ready ? (
     <ChoiceRow tint="#e3e6e1" busy={busy} onClick={go} icon={<MicIcon sx={{ fontSize: 14, color: "#6f8a6e" }} />}
@@ -2415,8 +2368,8 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
       hint={`the audio is attached — ${voice.label || voice.provider} turns it into text right here`} />
   ) : (
     <ChoiceRow tint="#eee7d6" icon={<MicOffIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
-      label="Voice note — not transcribed: no AI voice connector"
-      hint="add one under Connections → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe" />
+      label={tx("Voice note — not transcribed: no AI voice connector")}
+      hint={tx("add one under Connections → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe")} />
   );
 };
 
@@ -2476,16 +2429,16 @@ const Bubble = ({ m, fallback, context }) => {
               bgcolor: you || own ? ROLES.working.tint : ROLES.muted.tint,
               color: you || own ? ROLES.working.ink : ROLES.muted.ink }} />
           <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
-            {you ? "you" : m.FromName || m.FromEmail || "unknown"}
+            {you ? tx("you") : m.FromName || m.FromEmail || "unknown"}
           </Typography>
           <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(m.SentAt)}</Typography>
-          {quoted && <Typography variant="caption" sx={{ color: FAINT }}>· replying on this thread</Typography>}
+          {quoted && <Typography variant="caption" sx={{ color: FAINT }}>{tx("· replying on this thread")}</Typography>}
         </Box>
       )}
       {m?.Channel === "report" ? ((m?.SourceName === "Morning digest" || /^Morning digest\b/i.test(m?.Subject || ""))
           ? <DigestText text={text} /> : looksMd(text) ? <Md text={text} /> : <SectionedText text={text} />)
         : own && (!text.trim() || text === "…")
-          ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>You started this yourself — there is no incoming message behind it.</Typography>
+          ? <Typography variant="body2" sx={{ color: FAINT, fontStyle: "italic" }}>{tx("You started this yourself — there is no incoming message behind it.")}</Typography>
         : <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", color: INK, textAlign: "left" }}>
             {shown}
           </Typography>}
@@ -2503,7 +2456,7 @@ const Bubble = ({ m, fallback, context }) => {
             onClick={() => setShowRaw(!showRaw)} sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
               color: DIM, font: "inherit", fontWeight: 600, textAlign: "left", cursor: "pointer",
               "&:hover": { color: "#55697a" } }}>
-            {showRaw ? "hide" : "show"} raw data — {raw.length.toLocaleString()} chars {showRaw ? "↑" : "↓"}
+            {showRaw ? "hide" : tx("show")} {tx("raw data —")} {raw.length.toLocaleString(getLocale())} {tx("chars")} {showRaw ? "↑" : "↓"}
           </Typography>
           {showRaw && (
             <Typography variant="body2" sx={{ ...mono, whiteSpace: "pre-wrap", color: DIM, mt: 0.5,
@@ -2520,7 +2473,7 @@ const Bubble = ({ m, fallback, context }) => {
             onClick={() => setShowQuoted(!showQuoted)} sx={{ appearance: "none", border: 0, bgcolor: "transparent", p: 0,
               color: DIM, font: "inherit", fontWeight: 600, textAlign: "left", cursor: "pointer",
               "&:hover": { color: "#55697a" } }}>
-            {showQuoted ? "hide" : "show"} quoted thread below it — {quoted.length.toLocaleString()} chars {showQuoted ? "↑" : "↓"}
+            {showQuoted ? "hide" : tx("show")} {tx("quoted thread below it —")} {quoted.length.toLocaleString(getLocale())} {tx("chars")} {showQuoted ? "↑" : "↓"}
           </Typography>
           {showQuoted && (
             <Typography variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap", color: FAINT, mt: 0.5,
@@ -2656,7 +2609,7 @@ const SectionHead = ({ mark, label, n }) => (
 // model asked to restate the open list is a model that eventually invents a task (assistant.in_flight)
 const InFlight = ({ rows, onOpenTask }) => !rows?.length ? null : (
   <>
-    <SectionHead mark="🚀" label="In flight" n={rows.length} />
+    <SectionHead mark="🚀" label={tx("In flight")} n={rows.length} />
     <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
       {rows.map((r, i) => (
         <Box key={r.tid} onClick={() => onOpenTask?.(r.tid)}
@@ -2742,25 +2695,24 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
                 message, never asked of the model - a line with no source says nothing rather than
                 guessing, which is the only reason this is worth reading at all. */}
             {a.source && (
-              <Typography variant="caption" sx={{ ...mono, display: "block", color: FAINT, mt: 0.35, fontSize: 10.5 }}>
-                from: {a.source.label || a.source.block}{a.source.window ? ` (${a.source.window})` : ""}
+              <Typography variant="caption" sx={{ ...mono, display: "block", color: FAINT, mt: 0.35, fontSize: 10.5 }}> {tx("from:")} {a.source.label || a.source.block}{a.source.window ? ` (${a.source.window})` : ""}
                 {a.source.rows?.length ? ` · ${a.source.rows.length} message${a.source.rows.length === 1 ? "" : "s"}` : ""}
               </Typography>
             )}
             {open ? (
               <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
                 <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                  title="A task on your own list - no agent starts" sx={{ ...btn, ...primary }}>
+                  title={tx("A task on your own list - no agent starts")} sx={{ ...btn, ...primary }}>
                   {busy === `${i.id}:task` ? "making…" : "Make a task"}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "agent")}
-                  title="An agent takes it - triage picks a coding or a non-coding one" sx={{ ...btn, ...quiet }}>
+                  title={tx("An agent takes it - triage picks a coding or a non-coding one")} sx={{ ...btn, ...quiet }}>
                   {busy === `${i.id}:agent` ? "sending…" : "Send to agent"}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={(e) => setRemindAt({ idea: i, anchor: e.currentTarget })}
-                  title="Put it away until a day - it comes back then" sx={{ ...btn, ...quiet }}>Remind me</Button>
+                  title={tx("Put it away until a day - it comes back then")} sx={{ ...btn, ...quiet }}>{tx("Remind me")}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "dismiss")}
-                  title="Put it down - the Advisor never raises it again" sx={{ ...btn, ...quiet }}>
-                  {busy === `${i.id}:dismiss` ? "…" : "Not ours"}</Button>
-                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+                  title={tx("Put it down - the Advisor never raises it again")} sx={{ ...btn, ...quiet }}>
+                  {busy === `${i.id}:dismiss` ? "…" : tx("Not ours")}</Button>
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>{tx("Open")} {ref(a.tid)}</Button>}
               </Box>
             ) : (
               // a settled idea still leads to the task it became, says which day a put-away one comes back, and never
@@ -2768,10 +2720,10 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.4, flexWrap: "wrap" }}>
                 <Typography variant="caption" sx={{ color: FAINT }}>
                   {answered ? `reply sent${answered.at ? ` · ${fmtDateTime(answered.at)}` : ""}`
-                    : i.status === "done" ? "done" : i.status === "dismissed" ? "not ours"
+                    : i.status === "done" ? tx("done") : i.status === "dismissed" ? "not ours"
                       : i.status === "snoozed" ? (i.until ? `put away until ${fmtDateTime(i.until)}` : "put away until its day") : "no longer open"}
                 </Typography>
-                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
+                {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>{tx("Open")} {ref(a.tid)}</Button>}
               </Box>
             )}
           </Box>
@@ -2785,7 +2737,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
     <Box sx={{ mb: 1.25 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1 }}>
         <TaskuaryMark size={15} />
-        <Typography sx={{ color: ASSISTANT.ink, fontWeight: 600, fontSize: 13 }}>Your assistant</Typography>
+        <Typography sx={{ color: ASSISTANT.ink, fontWeight: 600, fontSize: 13 }}>{tx("Your assistant")}</Typography>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>{fmtDateTime(sel.SentAt)}</Typography>
         {err && <Typography variant="caption" sx={{ color: ALERT_INK }}>{err}</Typography>}
       </Box>
@@ -2822,14 +2774,13 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           block it points at is the `rv` one; said unconditionally it ended the post pointing at
           nothing at all. Promise only what is actually there. */}
       {!ideas.length && !cleanText(sel.Preview) && (
-        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1, lineHeight: 1.7 }}>
-          Nothing worth saying this time — which is most checks.{rv ? " What it read is below." : ""}
+        <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1, lineHeight: 1.7 }}> {tx("Nothing worth saying this time — which is most checks.")}{rv ? " What it read is below." : ""}
         </Typography>
       )}
       {rv && (
         <Box sx={{ mt: 1.5, px: 1.25, py: 0.7, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
-            <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>
+            <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("what it reviewed ·")} </Box>
             {rv.scope === "sources" ? `${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only` : <>
               {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
               {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
@@ -2842,14 +2793,14 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           {/* what it left for its next check - so you can see what it will NOT research again */}
           {rv.notes && (
             <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45, mt: 0.3 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>note to its next check · </Box>{rv.notes}
+              <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("note to its next check ·")} </Box>{rv.notes}
             </Typography>
           )}
           {!!rv.skipped?.length && (
             <>
               <Typography variant="caption" onClick={() => setShowSkipped((v) => !v)}
                 sx={{ display: "block", mt: 0.3, color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>
-                {showSkipped ? "hide" : "show"} what it looked at and let go — {rv.skipped.length} {showSkipped ? "↑" : "↓"}</Typography>
+                {showSkipped ? "hide" : tx("show")} {tx("what it looked at and let go —")} {rv.skipped.length} {showSkipped ? "↑" : "↓"}</Typography>
               {showSkipped && rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, mt: 0.3, pl: 1, borderLeft: `2px solid ${BORDER}`, whiteSpace: "pre-wrap" }}>
                   <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KIND[c.kind] || c.kind} · </Box>{c.facts}</Typography>
@@ -2935,12 +2886,11 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
   };
   return (
   <Box>
-    {envelope && <Typography data-reply-recipients variant="caption" sx={{ display: "block", mb: 0.75 }}>
-      To: {envelope.to.join(", ") || "No recipient selected"}
+    {envelope && <Typography data-reply-recipients variant="caption" sx={{ display: "block", mb: 0.75 }}> {tx("To:")} {envelope.to.join(", ") || "No recipient selected"}
       {cc.length > 0 && <> · CC: {cc.join(", ")}</>}
     </Typography>}
     <CcRow cc={cc} setCc={setCc} channel={channel} />
-    <TextField fullWidth multiline minRows={3} size="small" placeholder="Type your reply, or generate a draft with AI"
+    <TextField fullWidth multiline minRows={3} size="small" placeholder={tx("Type your reply, or generate a draft with AI")}
       value={text} onChange={(e) => setEditText(e.target.value)} onBlur={(e) => save(e.target.value)} sx={{ mb: 1 }} />
     <ReplyFiles reviewId={reviewId} files={envelope?.attachments || []} text={text} channel={channel} onChanged={onChanged} />
     {drafting.line && (
@@ -2956,19 +2906,19 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
       {canSend === false ? (
         <Button size="small" variant="contained" disableElevation
           sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
-          title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — mark it done without sending"
-          onClick={() => decide(reviewId, "close_unsent")}>Mark done</Button>
+          title={tx("GitHub replies are off (GitHub card → Reply to issue/PR authors) — mark it done without sending")}
+          onClick={() => decide(reviewId, "close_unsent")}>{tx("Mark done")}</Button>
       ) : (
         <>
           <Button size="small" variant="contained" disabled={!text.trim() || (channel === "email" && !review) || (envelope && !envelope.to.length)}
             onClick={() => decide(reviewId, "approve", text, cc)}
-            title="Sends the text above on the channel it arrived on">
+            title={tx("Sends the text above on the channel it arrived on")}>
             {deliveryUnknown ? "Check delivery and retry"
               : [`Approve & send`, files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
                  cc.length ? `copying ${cc.length}` : ""].filter(Boolean).join(" · ")}</Button>
           {/* Mark done, not "No reply needed": one word for the one close (the owner, 2026-09-24) */}
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}
-            title="Marks the task done without sending this draft">Mark done</Button>
+            title={tx("Marks the task done without sending this draft")}>{tx("Mark done")}</Button>
         </>
       )}
       <Box sx={{ flex: 1 }} />
@@ -2979,14 +2929,12 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
     {draftErr && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setDraftErr("")}>{draftErr}</Alert>}
     {compare?.reviewId === reviewId && (
       <Box sx={{ mt: 1, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
-          Refreshed draft - written after the new message. Your edit stays in the box above.
-        </Typography>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}> {tx("Refreshed draft - written after the new message. Your edit stays in the box above.")} </Typography>
         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
         <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
           <Button size="small" variant="outlined" disabled={!compare.refreshed}
-            onClick={() => { setEditText(compare.refreshed); clearCompare?.(); }}>Use the refreshed draft</Button>
-          <Button size="small" onClick={() => clearCompare?.()}>Keep mine</Button>
+            onClick={() => { setEditText(compare.refreshed); clearCompare?.(); }}>{tx("Use the refreshed draft")}</Button>
+          <Button size="small" onClick={() => clearCompare?.()}>{tx("Keep mine")}</Button>
         </Box>
       </Box>
     )}

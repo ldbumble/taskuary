@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The one thing a Timeline row says about itself: a small mark, its word, and the colour its
 // card's left edge takes. See timelineState.js for WHY there is only one (three overlapping
 // controls used to answer the same question and could disagree).
@@ -29,7 +30,7 @@ export const StateMark = ({ row, state, size = "sm", showWord = true }) => {
         {/* the glyph is not decoration - it is the fastest-read half of the pair, so it gets
             its own line-height and never inherits the label's letter-spacing */}
         {s.mark === "spinner" ? <CircularProgress size={big ? 13 : 11.5} thickness={5}
-          aria-label="triage in progress" sx={{ color: "currentColor" }} />
+          aria-label={tx("triage in progress")} sx={{ color: "currentColor" }} />
           : s.mark === "taskuary" ? <TaskuaryMark size={big ? 13 : 12} /> : (
           <Box component="span" aria-hidden sx={{ fontSize: big ? 13 : 11.5, lineHeight: 1,
             filter: "saturate(.9)" }}>{s.mark}</Box>

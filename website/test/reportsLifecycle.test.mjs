@@ -16,7 +16,7 @@ test("Run now is owned by the server and survives leaving the Reports tab", () =
 test("an existing report has a visible top-level Delete button", () => {
   const wizard = source.slice(source.indexOf("function ReportWizard"));
   const header = wizard.slice(wizard.indexOf("return ("), wizard.indexOf("<Stepper"));
-  assert.match(header, /Delete \{workflow \? "workflow" : "report"\}/);
+  assert.match(header, /\{tx\("Delete"\)\} \{workflow \? "workflow" : "report"\}/);
   assert.match(header, /setConfirmDel\(true\)/);
   assert.match(wizard, /api\.delete\(`\/api\/sources\/\$\{cur\.SourceId\}`\)/);
 });
@@ -40,7 +40,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   assert.doesNotMatch(shownAs, /\.trim\(\)/);
   assert.match(card, /how === "ai" && blank\(when\) &&/);
   assert.match(card, /<AutoAwesomeIcon/);                                  // the same grammar as the summary prompt
-  assert.match(card, /<MenuItem value="ai"[^>]*>ask the AI<\/MenuItem>/);   // the control names who answers
+  assert.match(card, /<MenuItem value="ai"[^>]*>\{tx\("ask the AI"\)\}<\/MenuItem>/);   // the control names who answers
   assert.match(card, /see the prompt/);
   assert.match(card, /ON THE LAST RUNS THIS WOULD HAVE/);
   // ...and WHO answers is said, not picked a second time. One judge setting lives under Triage & agents
@@ -105,7 +105,7 @@ test("every report is the card - the page draws it and never re-derives old rule
   assert.match(source, /export const fullRoute = \(c\) =>/);
   assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", alert: "never" \}/);
   // ...a rule is arithmetic a model is not trusted with, and it is a line's fourth answer
-  assert.match(source, /<MenuItem value="rule"[^>]*>when a rule trips<\/MenuItem>/);
+  assert.match(source, /<MenuItem value="rule"[^>]*>\{tx\("when a rule trips"\)\}<\/MenuItem>/);
   // ...and what a saved report does is said in the server's words
   assert.match(source, /source\.RouteWords/);
   // the interruption is named for being immediate, not for a device (2026-09-17)
@@ -132,7 +132,7 @@ test("on an existing report the routing step's Continue saves before it advances
   const step = wizard.slice(at, wizard.indexOf("</StepContent>", at));
   // ...and only a save that worked moves on: a refused one stays on the step that says why
   assert.match(step, /onClick=\{async \(\) => \{ if \(cur && !\(await save\(\)\)\) return; setStep\(1\); \}\}/);
-  assert.match(step, /\{cur \? "Save & continue" : "Continue"\}/);
+  assert.match(step, /\{cur \? tx\("Save & continue"\) : tx\("Continue"\)\}/);
   assert.match(step, /\{saveErr && /, "a refused save must say so on the step where the button is");
 });
 

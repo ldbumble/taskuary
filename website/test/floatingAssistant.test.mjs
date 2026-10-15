@@ -17,9 +17,9 @@ test("the assistant header stays small and opens app-level walkthrough and add c
   assert.match(source, /\["Tasks"/);
   assert.match(source, /\["Agent work"/);
   assert.match(source, /\["Waiting on you"/);   // the walk is over what needs a yes, not over a tab
-  assert.match(source, />Task<\/Button>/);
-  assert.match(source, />Report<\/Button>/);
-  assert.match(source, />Connection<\/Button>/);
+  assert.match(source, />\{tx\("Task"\)\}<\/Button>/);
+  assert.match(source, />\{tx\("Report"\)\}<\/Button>/);
+  assert.match(source, />\{tx\("Connection"\)\}<\/Button>/);
 });
 
 test("add shortcuts open the native new-task and new-report surfaces", () => {
@@ -66,7 +66,7 @@ test("assistant commentary and owner actions are separate surfaces", () => {
   assert.match(source, /export function DockActions/);
   assert.match(source, /"Approve & send"/);
   assert.match(source, /"Redraft"/);
-  assert.match(source, />Dismiss<\/Button>/);
+  assert.match(source, />\{tx\("Dismiss"\)\}<\/Button>/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/decide/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/draft/);
   // The dock's turns are still spoken by Taskuary. The label is now the agent named on the task,
@@ -74,12 +74,12 @@ test("assistant commentary and owner actions are separate surfaces", () => {
   assert.match(source, /<div className="tq-aui-role">\{React\.useContext\(AgentNameCtx\)\}<\/div>/);
   assert.match(source, /const name = dock \? "Taskuary" : agentName\(task\)/);
   assert.match(source, /<AgentNameCtx\.Provider value=\{name\}>/);
-  assert.match(source, /newChatBusy \? "Starting…" : "New chat"/);
+  assert.match(source, /newChatBusy \? tx\("Starting…"\) : tx\("New chat"\)/);
   assert.match(source, /onDockNewChat/);
   assert.doesNotMatch(source, /window\.confirm/);
-  assert.match(source, />Keep this chat<\/Button>/);
-  assert.match(source, />Start new chat<\/Button>/);
-  assert.match(source, /aria-label="Confirm new chat"/);
+  assert.match(source, />\{tx\("Keep this chat"\)\}<\/Button>/);
+  assert.match(source, />\{tx\("Start new chat"\)\}<\/Button>/);
+  assert.match(source, /aria-label=\{tx\("Confirm new chat"\)\}/);
   const shell = read("FloatingAssistant.jsx");
   assert.match(shell, /<DockActions messages=\{\[\]\}/);
   assert.match(shell, /api\.post\("\/api\/assistant\/dock\/new"\)/);

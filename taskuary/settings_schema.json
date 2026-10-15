@@ -32,56 +32,96 @@
       "label": "Semantic search",
       "type": "switch",
       "desc": "Find documents by meaning, not only by their words: \"time off\" finds the leave policy.",
-      "help": "Off (the default): the knowledge base is searched by keywords, exactly as before, and nothing extra is installed or run.\n\nOn: each passage is turned into a vector by a small embedding model as it is indexed, and a search merges the nearest passages with the keyword hits. Needs an embedding model served at the address below (Ollama by default: `ollama pull nomic-embed-text`). Passages indexed before you switched this on are embedded by the next Reindex. If the model is unreachable, search quietly falls back to keywords.\n\nThe text of your documents goes to that address to be embedded. The default is this machine; point it at a remote server only if you are content for the documents to go there. `pip install taskuary[semantic]` (numpy) makes the scan faster on a large library."
+      "help": "Off (the default): the knowledge base is searched by keywords, exactly as before, and nothing extra is installed or run.\n\nOn: each passage is turned into a vector by a small embedding model as it is indexed, and a search merges the nearest passages with the keyword hits. Needs an embedding model served at the address below (Ollama by default: `ollama pull nomic-embed-text`). Passages indexed before you switched this on are embedded by the next Reindex. If the model is unreachable, search quietly falls back to keywords.\n\nThe text of your documents goes to that address to be embedded. The default is this machine; point it at a remote server only if you are content for the documents to go there. `pip install taskuary[semantic]` (numpy) makes the scan faster on a large library.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Busca semântica"
+        }
+      }
     },
     "kb_embed_url": {
       "group": "Assistant",
       "label": "Embedding server",
       "type": "text",
       "desc": "Address of a server that answers /v1/embeddings (Ollama, LM Studio, llama.cpp, vLLM).",
-      "help": "Default http://127.0.0.1:11434, Ollama on this machine. Any server speaking the OpenAI embeddings surface works."
+      "help": "Default http://127.0.0.1:11434, Ollama on this machine. Any server speaking the OpenAI embeddings surface works.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Servidor de embeddings"
+        }
+      }
     },
     "kb_embed_model": {
       "group": "Assistant",
       "label": "Embedding model",
       "type": "text",
       "desc": "The model that turns passages into vectors (default nomic-embed-text).",
-      "help": "Changing it re-embeds the library on the next Reindex; passages embedded with the old model are ignored meanwhile, so results fall back to keywords until then."
+      "help": "Changing it re-embeds the library on the next Reindex; passages embedded with the old model are ignored meanwhile, so results fall back to keywords until then.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Modelo de embeddings"
+        }
+      }
     },
     "kb_semantic_min": {
       "group": "Assistant",
       "label": "Least similarity (0-1)",
       "type": "number",
       "desc": "How close a passage must be in meaning to count as a hit.",
-      "help": "A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours."
+      "help": "A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Similaridade mínima (0–1)"
+        }
+      }
     },
     "intent_classify_enabled": {
       "group": "Triage & routing",
       "label": "Intent triage",
       "type": "switch",
       "desc": "Classify every new message: a task to DO, a question to ANSWER, or FYI to file.",
-      "help": "The heart of the funnel. Every inbound message is read (by the triage brain in Triage & agents, the section above, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself."
+      "help": "The heart of the funnel. Every inbound message is read (by the triage brain in Triage & agents, the section above, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Triagem de intenção"
+        }
+      }
     },
     "triage_ai": {
       "group": "Triage & agents",
       "label": "Triage brain",
       "type": "brain",
       "desc": "Which AI reads and classifies inbound messages.",
-      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
+      "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA de triagem"
+        }
+      }
     },
     "triage_backup_ai": {
       "group": "Triage & agents",
       "label": "Backup AI connections",
       "type": "brains",
       "desc": "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
-      "help": "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant."
+      "help": "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Conexões de IA de reserva"
+        }
+      }
     },
     "learn_enabled": {
       "group": "Triage & routing",
       "label": "Learn from your verdicts",
       "type": "switch",
       "desc": "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
-      "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected."
+      "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Aprender com seus vereditos"
+        }
+      }
     },
     "reply_channels": {
       "group": "Replies",
@@ -98,91 +138,156 @@
         "github"
       ],
       "desc": "Which channels get a drafted reply at all. Switch one off and its questions just file.",
-      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
+      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Preparar respostas em"
+        }
+      }
     },
     "calendar_enabled": {
       "group": "Replies",
       "label": "Check your calendar when a reply is about time",
       "type": "switch",
       "desc": "\"Tuesday at 1 works for me\" is only drafted if Tuesday at 1 is free. Reads the Outlook card's calendars (needs the Calendars.Read application permission) and a Google calendar if its OAuth fields are on the Gmail card.",
-      "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"."
+      "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\".",
+      "i18n": {
+        "pt-BR": {
+          "label": "Conferir agenda em respostas sobre horários"
+        }
+      }
     },
     "concierge_ai": {
       "group": "Triage & agents",
       "label": "Assistant tab brain",
       "type": "brain",
       "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.",
-      "help": "THREE DEFAULTS, side by side in Triage & agents: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
+      "help": "THREE DEFAULTS, side by side in Triage & agents: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA da aba Assistente"
+        }
+      }
     },
     "concierge_model": {
       "group": "Triage & agents",
       "label": "Assistant tab model",
       "type": "text",
       "desc": "A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
-      "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
+      "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Modelo da aba Assistente"
+        }
+      }
     },
     "assistant_ai": {
       "group": "Triage & agents",
       "label": "General agent brain",
       "type": "brain",
       "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.",
-      "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent."
+      "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA do agente geral"
+        }
+      }
     },
     "judge_ai": {
       "group": "Triage & agents",
       "label": "Where runs go",
       "type": "brain",
       "desc": "Which AI decides whether a finished report lands on your Timeline, your work rail, reaches you right away, or goes out.",
-      "help": "Normally set on the 'Where runs go' card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report's own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run."
+      "help": "Normally set on the 'Where runs go' card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report's own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Destino das execuções"
+        }
+      }
     },
     "assistant_model": {
       "group": "Triage & agents",
       "label": "General agent model",
       "type": "text",
       "desc": "Override the model for the brain above. Blank = the provider's own default.",
-      "help": "For an API connector this is its model or deployment name; for a CLI it is the profile's light model. Changing it starts a fresh CLI conversation."
+      "help": "For an API connector this is its model or deployment name; for a CLI it is the profile's light model. Changing it starts a fresh CLI conversation.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Modelo do agente geral"
+        }
+      }
     },
     "assistant_max_lines": {
       "group": "Advisor",
       "label": "Lines per post, at most",
       "type": "number",
       "desc": "The Advisor checks in every 30 minutes and on startup (the 'Advisor' report on the Reports tab — edit its prompt for what it watches for, change the cadence, delete it to turn it off) and posts only when it has something to say. How it SPEAKS is COUNSEL.md in Settings → Docs: edit that to change its voice, how bold it is, what it takes a position on. This caps how much one post says. 5 by default.",
-      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule."
+      "help": "One AI call per post, and none when there is nothing new. Every line has a key and a state, so it never says the same thing twice. Talk back under a suggestion to correct it or ask a follow-up; the answer and your correction stay with the idea and inform later checks. 'Follow up' drafts the chase in your voice onto the task — nothing is sent by itself; 'Make it a task' starts the agent. Voice: COUNSEL.md (Settings → Docs); what to watch for: the report's prompt. Without an AI connector the facts still post, in the hub's own words. 'Run now' on the Reports tab's Assistant row posts regardless of the schedule.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Máximo de linhas por publicação"
+        }
+      }
     },
     "assistant_followup_hours": {
       "group": "Advisor",
       "label": "Silence before a follow-up",
       "type": "number",
       "desc": "Hours after your last reply on a thread — one that asked for or promised something — before 'no answer yet, follow up?' appears. 24 by default.",
-      "help": "Only your own last word counts, and only when it asked or promised something ('could you send', 'by Friday', a question mark). A plain thanks that goes unanswered is not a follow-up. The chase itself is drafted only when you click."
+      "help": "Only your own last word counts, and only when it asked or promised something ('could you send', 'by Friday', a question mark). A plain thanks that goes unanswered is not a follow-up. The chase itself is drafted only when you click.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Silêncio antes de retomar contato"
+        }
+      }
     },
     "assistant_cold_days": {
       "group": "Advisor",
       "label": "Quiet days before a task has 'gone cold'",
       "type": "number",
       "desc": "Open work with no comment, message or run for this many days gets a line. 3 by default.",
-      "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you."
+      "help": "A task with a live agent on it is never cold. One with a draft waiting on the task is named as waiting on you.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Dias sem atividade até tarefa esfriar"
+        }
+      }
     },
     "slipped_default_days": {
       "group": "Advisor",
       "label": "Days of silence before a thread has slipped",
       "type": "number",
       "desc": "A thread you wrote on, or a step somebody owes, is 'slipped' - first on your rail, with Chase, Let it go, They answered elsewhere and Remind me - once it has been quiet this many days. For a person the outcome ledger has seen answer three times, their own usual day is used instead. 5 by default.",
-      "help": "Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail."
+      "help": "Someone whose auto-reply says they are away never slips. The day is read from the ledger, never from the mail.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Dias de silêncio até conversa atrasar"
+        }
+      }
     },
     "advisor_events": {
       "group": "Advisor",
       "label": "Advise on the item that changed",
       "type": "switch",
       "desc": "When an agent stops or asks, a reply arrives, a pull request opens, a task closes, a day is missed or a report lands, the Advisor runs one small prompt on the light model and leaves one line and one verb on that item: the ghost text in the prompt box and the pill where the send arrow sits. On by default.",
-      "help": "Never a row and never a change to the rail's order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule."
+      "help": "Never a row and never a change to the rail's order: the line attaches to the item and shows when the walk reaches it. The verb is one the item already carries; the number beside it is read from the outcome ledger. Off, the Advisor still runs on its schedule.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Orientar sobre item alterado"
+        }
+      }
     },
     "advisor_event_cap": {
       "group": "Advisor",
       "label": "Event judgements per hour, at most",
       "type": "number",
       "desc": "The small prompt runs once per item per change and never more than this many times an hour; past it, the change is noted as dropped and the item simply has no pill. 30 by default.",
-      "help": "The Advisor's notes on an item (the clock menu) say when a judgement was dropped for the cap."
+      "help": "The Advisor's notes on an item (the clock menu) say when a judgement was dropped for the cap.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Máximo de avaliações de eventos por hora"
+        }
+      }
     },
     "assistant_producers": {
       "group": "Advisor",
@@ -196,78 +301,154 @@
         "idea"
       ],
       "desc": "followup = your unanswered asks · promise = what you said you would do and have not · prep = meetings in the next two days, with what came before them · cold = tasks gone quiet · idea = the model's own thoughts from the day's mail, guided by the report's prompt.",
-      "help": "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words."
+      "help": "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words.",
+      "i18n": {
+        "pt-BR": {
+          "label": "O que procurar"
+        }
+      }
     },
     "default_brain": {
       "group": "Triage & agents",
       "label": "Default AI for agents",
       "type": "text",
       "desc": "Which AI program runs an agent's work when its role does not name one. A role (coder, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
-      "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both."
+      "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA padrão dos agentes"
+        }
+      }
     },
     "backup_brains": {
       "group": "Triage & agents",
       "label": "Fallback AI programs",
       "type": "text",
       "desc": "Tried in order when the first one has used up its allowance, is signed out, or will not start. * = every other one you have set up, in the order they are listed.",
-      "help": "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model."
+      "help": "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Programas de IA de reserva"
+        }
+      }
     },
     "profile_brains": {
       "group": "Triage & agents",
       "label": "A different AI for one role",
       "type": "text",
       "desc": "For a role that should run on a different AI from the default above. Written as JSON, e.g. {\"researcher\": \"codex\"}. Blank (the default) means every role uses the default.",
-      "help": "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker."
+      "help": "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA diferente para uma função"
+        }
+      }
     },
     "default_agent": {
       "group": "Triage & agents",
       "label": "Default coding CLI",
       "type": "agent",
       "desc": "The CLI agent that works tasks when nothing names one.",
-      "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
+      "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary.",
+      "i18n": {
+        "pt-BR": {
+          "label": "CLI de código padrão"
+        }
+      }
     },
     "default_profile": {
       "group": "Triage & routing",
       "label": "Your mail goes to",
       "type": "profile",
       "desc": "The worker that takes a non-coding task when triage names no specialist for it. Blank leaves it unassigned for you to pick.",
-      "help": "Set this to the role you do, and the mail you get lands on the worker built for it. An accounts-payable rep picks `ap`: a vendor asking where a payment is becomes a task for the AP worker, which looks it up in the ledger and drafts the answer for you to approve.\n\nTriage still names a specialist when one fits better (a researcher for outside information), and coding tasks always go to the coding agent. Docs → Profiles → Start from a role sets this for you."
+      "help": "Set this to the role you do, and the mail you get lands on the worker built for it. An accounts-payable rep picks `ap`: a vendor asking where a payment is becomes a task for the AP worker, which looks it up in the ledger and drafts the answer for you to approve.\n\nTriage still names a specialist when one fits better (a researcher for outside information), and coding tasks always go to the coding agent. Docs → Profiles → Start from a role sets this for you.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Destino dos seus e-mails"
+        }
+      }
     },
     "general_agent_hands": {
       "group": "Agent permissions",
       "label": "General agents can",
       "type": "select",
-      "options": ["cli", "look"],
-      "optionLabels": {"cli": "do what your CLI agent can", "look": "only look things up"},
+      "options": [
+        "cli",
+        "look"
+      ],
+      "optionLabels": {
+        "cli": "do what your CLI agent can",
+        "look": "only look things up"
+      },
       "desc": "What a general (non-coding) agent on a CLI may do. Same as the CLI agent = a shell, files and the connections below, each up to its Authority. Only look things up = read files and search the web, change nothing.",
-      "help": "A general agent used to be read-only by inheritance from the brain that reads incoming mail - not by a decision (2026-10-05). It now runs with your CLI agent's own permissions, in Taskuary's scratch folder, unless you choose 'only look things up'.\n\nWhat it may change in your other systems is each connection's Authority, in the table below. Every connection starts at full - what your CLI agent could already do with those credentials - and you narrow the ones you want: at read it can look, and any change becomes a proposal you approve on the task; at write it makes the change itself. A SQL query through a read-level connection is rolled back, whatever it contains.\n\nMail from someone you do not know never starts an agent by itself - general or coding - so these permissions are only used on work you or a trusted sender started."
+      "help": "A general agent used to be read-only by inheritance from the brain that reads incoming mail - not by a decision (2026-10-05). It now runs with your CLI agent's own permissions, in Taskuary's scratch folder, unless you choose 'only look things up'.\n\nWhat it may change in your other systems is each connection's Authority, in the table below. Every connection starts at full - what your CLI agent could already do with those credentials - and you narrow the ones you want: at read it can look, and any change becomes a proposal you approve on the task; at write it makes the change itself. A SQL query through a read-level connection is rolled back, whatever it contains.\n\nMail from someone you do not know never starts an agent by itself - general or coding - so these permissions are only used on work you or a trusted sender started.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Permissões dos agentes gerais"
+        }
+      }
     },
     "repo_trust_private": {
       "group": "Agent permissions",
       "label": "Private GitHub repositories",
       "type": "select",
-      "options": ["ours", "outside"],
-      "optionLabels": {"ours": "your own people - a normal agent", "outside": "treat as outside"},
+      "options": [
+        "ours",
+        "outside"
+      ],
+      "optionLabels": {
+        "ours": "your own people - a normal agent",
+        "outside": "treat as outside"
+      },
       "desc": "Who writes pull requests on a private repository. Your own people get an ordinary agent that starts by itself, no prompts.",
-      "help": "Only people you added can write to a private repository, so its pull requests are your own people's work: they batch together and an ordinary coding agent reviews them, started by itself, with no prompts.\n\nChoose \"treat as outside\" to give them the same protection as a stranger's pull request on a public repository."
+      "help": "Only people you added can write to a private repository, so its pull requests are your own people's work: they batch together and an ordinary coding agent reviews them, started by itself, with no prompts.\n\nChoose \"treat as outside\" to give them the same protection as a stranger's pull request on a public repository.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Repositórios GitHub privados"
+        }
+      }
     },
     "repo_trust_public": {
       "group": "Agent permissions",
       "label": "Public GitHub repositories - who is yours",
       "type": "select",
-      "options": ["writers", "nobody", "anyone"],
-      "optionLabels": {"writers": "people with write access", "nobody": "nobody - every PR is outside", "anyone": "anyone - no protection"},
+      "options": [
+        "writers",
+        "nobody",
+        "anyone"
+      ],
+      "optionLabels": {
+        "writers": "people with write access",
+        "nobody": "nobody - every PR is outside",
+        "anyone": "anyone - no protection"
+      },
       "desc": "On a public repository anyone can open a pull request. People with write access can push anyway, so trusting their pull requests adds nothing; everyone else's are outside.",
-      "help": "Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.\n\nAn outside pull request joins the same task as your own people's and runs with the agent's normal permissions. The triage first reads its text and its diff; one it judges dangerous - a prompt injection, or a change that reaches beyond the project - ranks last, batches apart and is reviewed read-only: everything beyond reading is refused, never asked."
+      "help": "Trust comes from the role GitHub reports for the author - owner, member or collaborator - which only you can grant and nobody can fake. Having had a pull request merged before does NOT count: one small good change would buy trust for the next.\n\nAn outside pull request joins the same task as your own people's and runs with the agent's normal permissions. The triage first reads its text and its diff; one it judges dangerous - a prompt injection, or a change that reaches beyond the project - ranks last, batches apart and is reviewed read-only: everything beyond reading is refused, never asked.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Repositórios GitHub públicos — quem é da equipe"
+        }
+      }
     },
     "outside_prs": {
       "group": "Agent permissions",
       "label": "Outside pull requests",
       "type": "select",
-      "options": ["review", "cloud"],
-      "optionLabels": {"review": "review and fix here", "cloud": "review here, fix in GitHub's cloud"},
+      "options": [
+        "review",
+        "cloud"
+      ],
+      "optionLabels": {
+        "review": "review and fix here",
+        "cloud": "review here, fix in GitHub's cloud"
+      },
       "desc": "What an outside contributor's pull request gets. Fix it in the cloud runs the agent and the tests on a machine GitHub throws away, never yours.",
-      "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
+      "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Pull requests externos"
+        }
+      }
     },
     "answer_to_agent": {
       "group": "Coder agent",
@@ -279,7 +460,12 @@
         "off"
       ],
       "desc": "An agent asks a question mid-task, Taskuary asks the person, and their reply lands back on the same task. This is what happens next. ask = the task offers one click, 'Type this into the agent's session'. auto = it is typed in the moment it arrives, as if you relayed it. off = it just sits on the task.",
-      "help": "Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so `auto` cannot lose anything.\n\nThe reason this is a choice rather than always-on: `auto` puts someone else's words into your agent's session without you reading them first. That is usually what you want on your own team's mail and rarely what you want from a stranger's reply, and Taskuary cannot tell the difference well enough to decide for you."
+      "help": "Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so `auto` cannot lose anything.\n\nThe reason this is a choice rather than always-on: `auto` puts someone else's words into your agent's session without you reading them first. That is usually what you want on your own team's mail and rarely what you want from a stranger's reply, and Taskuary cannot tell the difference well enough to decide for you.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Entregar respostas ao agente em execução"
+        }
+      }
     },
     "git_flow": {
       "group": "Coder agent",
@@ -290,7 +476,12 @@
         "direct"
       ],
       "desc": "A draft pull request, or the commits pushed straight onto the default branch.",
-      "help": "pr (default) = a DRAFT pull request from the task's branch; it merges only when you approve the task's close-out (Merge), or when you merge it on GitHub yourself. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed."
+      "help": "pr (default) = a DRAFT pull request from the task's branch; it merges only when you approve the task's close-out (Merge), or when you merge it on GitHub yourself. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Destino do trabalho concluído"
+        }
+      }
     },
     "ci_watch": {
       "group": "Coder agent",
@@ -302,35 +493,60 @@
         "watch"
       ],
       "desc": "A red build goes back to the agent that wrote the code, with the failing check named.",
-      "help": "Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.\n\nfeedback = a failing build is typed into the live session — 'these checks failed, fix the cause and push again, do not merge' — and recorded on the task; if no session is live the task returns to 'open' so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.\n\nEach distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts; a merge waits for your yes on the task's close-out."
+      "help": "Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.\n\nfeedback = a failing build is typed into the live session — 'these checks failed, fix the cause and push again, do not merge' — and recorded on the task; if no session is live the task returns to 'open' so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.\n\nEach distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts; a merge waits for your yes on the task's close-out.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Acompanhar CI do pull request da tarefa"
+        }
+      }
     },
     "proposals_enabled": {
       "group": "Coder agent",
       "label": "Agents may propose actions",
       "type": "switch",
       "desc": "An agent can ASK to open a PR, comment publicly, close an issue or run a tool — each waits for your approval.",
-      "help": "High-impact actions come off the auto-approve road entirely. Instead of doing them, the agent writes a typed proposal in its transcript (TASKUARY-PROPOSE {\"action\": \"open_pr\", …}); when the session wraps up, each valid one becomes a pending review saying what it wants and why. Approving RUNS it; rejecting does nothing.\n\nEvery proposal is re-validated at execution, so approving never grants a permission you have switched off — an open_pr proposal still needs 'Agents may push / deploy', a public comment still needs the GitHub card's reply switch. Malformed or unpermitted proposals are refused and recorded on the task rather than dropped silently."
+      "help": "High-impact actions come off the auto-approve road entirely. Instead of doing them, the agent writes a typed proposal in its transcript (TASKUARY-PROPOSE {\"action\": \"open_pr\", …}); when the session wraps up, each valid one becomes a pending review saying what it wants and why. Approving RUNS it; rejecting does nothing.\n\nEvery proposal is re-validated at execution, so approving never grants a permission you have switched off — an open_pr proposal still needs 'Agents may push / deploy', a public comment still needs the GitHub card's reply switch. Malformed or unpermitted proposals are refused and recorded on the task rather than dropped silently.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Agentes podem propor ações"
+        }
+      }
     },
     "waitroom_drip": {
       "group": "Coder agent",
       "label": "Tell-the-agent notes land one per stop",
       "type": "switch",
       "desc": "On: a queue of prompts drips in - each time the agent stops, the next one is typed in, the rest wait their turn. Off: everything queued goes in as one batch.",
-      "help": "The waiting room is a funnel: paste twenty prompts and each becomes its own note, in order. With the drip on, the agent gets one at a time with its full attention - it is told how many wait behind it and that the next comes when it stops again, so it never goes looking. Turn it off to hand over the whole list in one message instead."
+      "help": "The waiting room is a funnel: paste twenty prompts and each becomes its own note, in order. With the drip on, the agent gets one at a time with its full attention - it is told how many wait behind it and that the next comes when it stops again, so it never goes looking. Turn it off to hand over the whole list in one message instead.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Notas ao agente entregues uma por parada"
+        }
+      }
     },
     "coder_auto_enabled": {
       "group": "Coder agent",
       "label": "Auto-start the coding agent",
       "type": "switch",
       "desc": "Every new coding task immediately opens a live CLI session in its repository. Off: the task waits on the Board for you to send it.",
-      "help": "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way."
+      "help": "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Iniciar agente de código automaticamente"
+        }
+      }
     },
     "general_auto_enabled": {
       "group": "Coder agent",
       "label": "Auto-start the assistant on general tasks",
       "type": "switch",
       "desc": "Every new general task (research, a question to think through, a job with no keyboard) opens its own assistant session with the ask already put. Off: the task waits for you to open it.",
-      "help": "Both worker kinds start by themselves by default; each has its own switch. The same holds apply to both: a first-time sender waits for your click (release it from the task), a coding job whose repository is unclear waits for your choice, and a missing AI provider is said on the task instead of failing quietly. A hold never hides the task - it is still triaged and on the Board."
+      "help": "Both worker kinds start by themselves by default; each has its own switch. The same holds apply to both: a first-time sender waits for your click (release it from the task), a coding job whose repository is unclear waits for your choice, and a missing AI provider is said on the task instead of failing quietly. A hold never hides the task - it is still triaged and on the Board.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Iniciar assistente automaticamente em tarefas gerais"
+        }
+      }
     },
     "trust_own_domain": {
       "group": "Coder agent",
@@ -351,55 +567,95 @@
         }
       },
       "desc": "An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.",
-      "help": "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\npeople you talk with in chats — someone you have answered in a one-to-one chat, or vouched for by releasing or trusting their task. A group chat is not a room of people you trust. Taskuary sees your own lines in Teams, WhatsApp and iMessage; in Slack, Telegram, Discord and the chat servers it cannot, so there trust comes only from vouching.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start."
+      "help": "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\npeople you talk with in chats — someone you have answered in a one-to-one chat, or vouched for by releasing or trusting their task. A group chat is not a room of people you trust. Taskuary sees your own lines in Teams, WhatsApp and iMessage; in Slack, Telegram, Discord and the chat servers it cannot, so there trust comes only from vouching.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Quem pode iniciar agente sem você"
+        }
+      }
     },
     "coder_context_file": {
       "group": "Coder agent",
       "label": "Write the agent a context file",
       "type": "switch",
       "desc": "Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says 'read it first'.",
-      "help": "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written."
+      "help": "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Gravar arquivo de contexto do agente"
+        }
+      }
     },
     "agent_hooks": {
       "group": "Coder agent",
       "label": "Write Claude Code hooks into your checkouts",
       "type": "switch",
       "desc": "Taskuary adds four hook entries to .claude/settings.local.json in each repository a session opens, so the Board reads the agent's real tool calls instead of guessing from the screen. Switch it off to leave your checkouts untouched — the Board then falls back to reading the terminal.",
-      "help": "The decision here is whether Taskuary may WRITE to your repositories, not whether the Board should be accurate — it should, which is why this ships on.\n\nThe file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary's own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.\n\nCLAUDE CODE ONLY. The hook format is Claude's, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all — those sessions are read from the terminal whatever it says."
+      "help": "The decision here is whether Taskuary may WRITE to your repositories, not whether the Board should be accurate — it should, which is why this ships on.\n\nThe file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary's own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.\n\nCLAUDE CODE ONLY. The hook format is Claude's, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all — those sessions are read from the terminal whatever it says.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Gravar hooks do Claude Code nos checkouts"
+        }
+      }
     },
     "agent_self_close": {
       "group": "Coder agent",
       "label": "Let a finished agent close its own task",
       "type": "switch",
       "desc": "An agent that says it has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval. A session you opened yourself is yours to complete.",
-      "help": "Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.\n\nEvery session is told about one command in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves. A session that merely stops talking never closes anything.\n\nOne exception, and the task decides it: when you start or continue a session on a task yourself, the task is marked stay:open. There the command is refused - the agent's sentence is filed on the task and you mark it done.\n\nOff: the Done button, exactly as before."
+      "help": "Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.\n\nEvery session is told about one command in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves. A session that merely stops talking never closes anything.\n\nOne exception, and the task decides it: when you start or continue a session on a task yourself, the task is marked stay:open. There the command is refused - the agent's sentence is filed on the task and you mark it done.\n\nOff: the Done button, exactly as before.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Permitir que agente conclua sua própria tarefa"
+        }
+      }
     },
     "auto_sessions": {
       "group": "Coder agent",
       "label": "Agents at once",
       "type": "number",
       "desc": "How many unattended agent sessions may run together. The rest queue.",
-      "help": "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this."
+      "help": "The one number that decides how much work this machine takes on at once. Four is the default because four live CLI sessions in four checkouts is about what a laptop stays responsive under — each one is a real process with a real model behind it.\n\nPast the limit nothing is dropped: a dispatched task joins the queue and starts the moment a session ends, and the Board shows it waiting with the reason. The Board's floor view is drawn to this number, so raising it widens the room instead of crowding it.\n\nRaise it if the machine has headroom and your tasks rarely touch the same files; lower it to one if you would rather watch a single agent at a time. Sessions you start yourself are never blocked by this.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Agentes simultâneos"
+        }
+      }
     },
     "hand_sound": {
       "group": "Notifications",
       "label": "Sound when an agent raises its hand",
       "type": "sound",
       "desc": "A session that stops at its prompt, or asks you a question, plays this - from any tab. Off silences it.",
-      "help": "The moment worth a sound: the thing you delegated is now waiting on you. It fires once, on the transition from working to waiting, never while you already have the task open in front of you. Sounds are synthesised in the browser - nothing to download.\n\nThe desktop notification below is separate: it is the browser's own, so it reaches you when Taskuary is behind other windows, and the first time it asks for permission."
+      "help": "The moment worth a sound: the thing you delegated is now waiting on you. It fires once, on the transition from working to waiting, never while you already have the task open in front of you. Sounds are synthesised in the browser - nothing to download.\n\nThe desktop notification below is separate: it is the browser's own, so it reaches you when Taskuary is behind other windows, and the first time it asks for permission.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Som quando agente pede atenção"
+        }
+      }
     },
     "hand_desktop": {
       "group": "Notifications",
       "label": "Desktop notification when an agent raises its hand",
       "type": "switch",
-      "desc": "The browser's notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task."
+      "desc": "The browser's notification, so it reaches you when Taskuary is behind other windows. Click it to jump to the task.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Notificação quando agente pede atenção"
+        }
+      }
     },
     "phone_assistant": {
       "group": "Assistant on your phone",
       "label": "Chat with the assistant in WhatsApp or Telegram",
       "type": "switch",
       "desc": "The default for a channel that has never been asked. Each channel above answers for itself once you set it.",
-      "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before."
+      "help": "Name the Assistant chat on the WhatsApp or Telegram card under Connections first. Taskuary then listens only to messages you send in that exact private chat. Other people, other chats and groups cannot command it. This is separate from the Notifications role, so the Assistant chat is not subscribed to ordinary Taskuary alerts.\n\nIt is the SAME walk the Assistant tab runs, on the same conversation and the same pipe: the item on the table stays where it was, a reply you ask for is drafted, and a yes sends it. The choices arrive as a poll on WhatsApp and as buttons on Telegram; typing a choice's number works on both.\n\nThis switch is the standing permission. The Assistant tab's own \"in WhatsApp\" button hands the walk over for a session whether or not it is on, and locks the tab while the walk is there.\n\nBecause answers can contain private workspace information, use a chat only you can read — WhatsApp's Message yourself, or your own private chat with the Telegram bot. Off (default) leaves your messages ignored as before.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Conversar com assistente no WhatsApp ou Telegram"
+        }
+      }
     },
     "phone_walk_channel": {
       "group": "Assistant on your phone",
@@ -411,56 +667,96 @@
         "telegram"
       ],
       "desc": "The \"Walk me through them in ...\" button on the Assistant tab: WhatsApp, Telegram, or both.",
-      "help": "both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do."
+      "help": "both (default) = a button for each chat that is connected and has an Assistant chat named. whatsapp or telegram = only that one. A chat is offered only once its card under Connections names an Assistant chat, so choosing Telegram before setting it up shows no button until you do.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Conversa oferecida pela aba Assistente"
+        }
+      }
     },
     "phone_morning_line": {
       "group": "Assistant on your phone",
       "label": "A morning line in the chat",
       "type": "switch",
       "desc": "Once a day, the assistant's chat says what is waiting and offers the three ways in: walk me through my tasks, set up Taskuary, set up a report.",
-      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.\n\nOff: the chat speaks first only for a hand-off, a review ping or a report aimed at it."
+      "help": "Off by default: the chat says nothing until you write to it or press Walk me through them. On: the first check after 6:00 sends one line to the Assistant chat on every channel that has one - the count in the pipe and how many are on you, then the three scripts as numbered options, so one reply starts the walk there. Quiet on a day the pipe is empty; never twice in a day. Set-up is always offered: there is always more to set up, and from a chat it opens on what is connected.\n\nOff: the chat speaks first only for a hand-off, a review ping or a report aimed at it.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Mensagem matinal na conversa"
+        }
+      }
     },
     "vision_enabled": {
       "group": "Attachments & images",
       "label": "AI reads attached images",
       "type": "switch",
       "desc": "Screenshots go to the triage AI — \"see below\" mail is read, not guessed at.",
-      "help": "Half of \"see below\" mail says nothing in its body: the screenshot IS the request. On: attached images (PNG/JPEG/GIF/WebP, up to 4 per message, 5MB each) ride along into triage when the model has vision, and coding sessions get the local file paths to open themselves.\n\nOff: only text is ever sent to the AI — the setting to use if your model lacks vision or images must never leave the machine. The panel still displays attachments either way."
+      "help": "Half of \"see below\" mail says nothing in its body: the screenshot IS the request. On: attached images (PNG/JPEG/GIF/WebP, up to 4 per message, 5MB each) ride along into triage when the model has vision, and coding sessions get the local file paths to open themselves.\n\nOff: only text is ever sent to the AI — the setting to use if your model lacks vision or images must never leave the machine. The panel still displays attachments either way.",
+      "i18n": {
+        "pt-BR": {
+          "label": "IA lê imagens anexadas"
+        }
+      }
     },
     "report_images_enabled": {
       "group": "Attachments & images",
       "label": "Charts on reports",
       "type": "switch",
       "desc": "Reports hand back a bar chart alongside the spreadsheet.",
-      "help": "A report's rows always come back as an .xlsx; with this on they also become an .svg bar chart drawn in the panel — and the summarizing model, which just read every row, picks which column to plot (better than a heuristic grabbing the id column). Off: spreadsheet only."
+      "help": "A report's rows always come back as an .xlsx; with this on they also become an .svg bar chart drawn in the panel — and the summarizing model, which just read every row, picks which column to plot (better than a heuristic grabbing the id column). Off: spreadsheet only.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Gráficos nos relatórios"
+        }
+      }
     },
     "poll_minutes": {
       "group": "Sync & startup",
       "label": "Background sync (minutes)",
       "type": "number",
       "desc": "How often the app checks your connections while it is open. 0 turns it off.",
-      "help": "The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.\n\nIt used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.\n\n10 is the default. Lower it if you want mail sooner and do not mind the API calls; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.\n\nChat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available."
+      "help": "The server keeps this clock, so it runs whichever tab you are on and whether or not you are looking at the app - it is also what makes a SCHEDULED REPORT fire on time, since reports are checked on the same pass.\n\nIt used to live in the Timeline tab instead: the countdown died the moment you opened Board or Tasks, restarted itself every time you changed a filter, and with the window closed nothing polled at all - so a report set for 8am Monday only ran if somebody happened to be sitting on the Timeline at 8am on Monday.\n\n10 is the default. Lower it if you want mail sooner and do not mind the API calls; 0 turns recurring background polling off. Sync now, startup catch-up, and an action that must refresh chat context can still fetch.\n\nChat connectors (Teams, Slack, Telegram, WhatsApp, iMessage, Discord) also have a separate recurring fast clock - every 30 seconds unless their card says otherwise. 0 here disables both recurring clocks; manual Sync now, startup catch-up, and action-time refreshes remain available.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Sincronização em segundo plano (minutos)"
+        }
+      }
     },
     "startup_sync_days": {
       "group": "Sync & startup",
       "label": "Catch-up window (days)",
       "type": "number",
       "desc": "How far back the app reaches when it opens, for what arrived while it was closed.",
-      "help": "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup."
+      "help": "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Janela de recuperação (dias)"
+        }
+      }
     },
     "mark_read_enabled": {
       "group": "Sync & startup",
       "label": "Mark items read at the source",
       "type": "switch",
       "desc": "Once the funnel has taken a message in, mark it read where it came from — the mail seen, the chat read.",
-      "help": "Off (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. On: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.\n\nWHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \\Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).\n\nWHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. The switch is simply a no-op for them.\n\nMarking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest."
+      "help": "Off (default): Taskuary is a pure reader — your inbox still shows every message bold, so nothing about your mailbox changes because you connected it. On: anything the funnel ingests is marked read at the source, so the bold rows left over are exactly the ones the hub never saw.\n\nWHERE IT APPLIES: Outlook mail (needs the Mail.ReadWrite consent), Gmail/IMAP mailboxes (the \\Seen flag), Slack channels (the read cursor moves to the newest line taken), Teams (Graph marks the whole CHAT read — there is no per-message read state there) and WhatsApp (blue ticks, via the bridge).\n\nWHERE IT CANNOT: Telegram and Discord bots have no read state to set, and the trackers — Jira, Linear, GitHub, Sentry and friends — have nothing to mark. The switch is simply a no-op for them.\n\nMarking always runs AFTER the message is safely stored and is best-effort: a refused permission is logged and never costs you the ingest.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Marcar itens como lidos na origem"
+        }
+      }
     },
     "timezone": {
       "group": "Display",
       "label": "Timezone",
       "type": "timezone",
       "desc": "The zone the app's clock speaks. Blank = this machine's local time.",
-      "help": "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load."
+      "help": "Timestamps are stored in the server machine's local time. Name that zone here and every displayed time wears its label (2:44 PM EDT) — and a browser opened from another timezone still reads the stamps correctly instead of silently reinterpreting them in its own zone.\n\nUse an IANA name (America/New_York, Europe/London, Asia/Jerusalem). Takes effect on the next page load.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Fuso horário"
+        }
+      }
     },
     "timeline_fade": {
       "group": "Display",
@@ -473,62 +769,163 @@
         "sharp"
       ],
       "desc": "How tall the soft fade is at the bottom edge of the Timeline viewport.",
-      "help": "Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed."
+      "help": "Rows are never dimmed because they are old. A row only gets lighter while it passes through the bottom edge, then returns to full contrast as you scroll it upward. Gentle, normal, and sharp change the height of that band; off removes it. Purely visual - nothing is hidden or removed.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Suavizar base da linha do tempo"
+        }
+      }
     },
-    "concierge_fast": {"group": "Assistant", "label": "Fast mode", "type": "select", "options": ["auto", "on", "off"], "optionLabels": {"auto": "on for Codex, off for Claude", "on": "on", "off": "off"}, "desc": "Runs the Assistant's CLI on its provider's fast tier: Codex's fast service tier, Claude Code's fast mode. By default on for Codex and off for Claude.", "help": "Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan's credits faster. Coding and general agents are not changed."},
+    "concierge_fast": {
+      "group": "Assistant",
+      "label": "Fast mode",
+      "type": "select",
+      "options": [
+        "auto",
+        "on",
+        "off"
+      ],
+      "optionLabels": {
+        "auto": "on for Codex, off for Claude",
+        "on": "on",
+        "off": "off"
+      },
+      "desc": "Runs the Assistant's CLI on its provider's fast tier: Codex's fast service tier, Claude Code's fast mode. By default on for Codex and off for Claude.",
+      "help": "Claude bills fast mode as extra usage, outside your subscription, and runs it only when extra usage is turned on in your Claude account; Codex spends your plan's credits faster. Coding and general agents are not changed.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Modo rápido"
+        }
+      }
+    },
     "funnel_hours": {
       "group": "Assistant",
       "label": "The pipe reaches back (hours)",
       "type": "number",
       "desc": "How far back ordinary mail, reports and fyi enter the pipe the assistant walks you through. Drafts waiting for your yes and agents waiting on you always enter.",
-      "help": "A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend."
+      "help": "A first launch must not surface a year of never-triaged mail. Twelve hours is a working day; set it to 48 after a long weekend.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Alcance do fluxo (horas)"
+        }
+      }
     },
     "funnel_max": {
       "group": "Assistant",
       "label": "The pipe holds at most",
       "type": "number",
       "desc": "How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.",
-      "help": "Order is kept: an agent waiting on you or a draft for your yes is never the one held back."
+      "help": "Order is kept: an agent waiting on you or a draft for your yes is never the one held back.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Máximo de itens no fluxo"
+        }
+      }
     },
     "task_return_minutes": {
       "group": "Assistant",
       "label": "Passed work comes back after (minutes)",
       "type": "number",
       "desc": "How long something you passed with Next - an agent waiting, a task ready to close out, a task nobody is on - waits in Passed before it is back in Your task and the walk. 180 (three hours) by default. To put a task away until a date, use Remind me on the task.",
-      "help": "Next does not close anything - the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date."
+      "help": "Next does not close anything - the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Retorno de trabalho adiado (minutos)"
+        }
+      }
     },
     "meeting_grace_minutes": {
       "group": "Assistant",
       "label": "A meeting stays on the rail after it starts (minutes)",
       "type": "number",
-      "desc": "How long a meeting that has started stays on the work rail. 5 by default."
+      "desc": "How long a meeting that has started stays on the work rail. 5 by default.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Permanência de reunião após início (minutos)"
+        }
+      }
     },
     "rail_hide_noise": {
       "group": "Assistant",
       "label": "Hide auto-replies and answered threads",
       "type": "switch",
-      "desc": "Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default."
+      "desc": "Keeps withdrawn messages, out-of-office auto-replies and threads where yours is the last word off the work rail. On by default.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Ocultar respostas automáticas e conversas respondidas"
+        }
+      }
     },
     "fyi_batch": {
       "group": "Assistant",
       "label": "FYI read together",
       "type": "number",
       "desc": "How many fyi the assistant puts in front of you at once. 1 to 10; four by default.",
-      "help": "An fyi needs no action, so they come in a batch rather than one at a time. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely."
+      "help": "An fyi needs no action, so they come in a batch rather than one at a time. At 1 they arrive singly, which is the slow read-everything walk; at 10 you clear the noise in one card. Anything outside 1-10 is clamped - a 0 would take the fyi lane out of the walk entirely.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Informativos lidos juntos"
+        }
+      }
     },
     "chat_keep_days": {
       "group": "Assistant",
       "label": "Keep past chats (days)",
       "type": "number",
       "desc": "Archived assistant chats older than this are removed once a day. Fifteen by default.",
-      "help": "Only the chat transcript goes. What a chat said about a task stays on the task, and memories, rules and correction evidence are never touched."
+      "help": "Only the chat transcript goes. What a chat said about a task stays on the task, and memories, rules and correction evidence are never touched.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Manter conversas anteriores (dias)"
+        }
+      }
     },
     "feed_days": {
       "group": "Display",
       "label": "Work rail lookback (days)",
       "type": "number",
       "desc": "How many days back the Work rail reads. Display only — nothing is deleted.",
-      "help": "Purely the rail's window. Older messages stay in the database, in task histories, and in search."
+      "help": "Purely the rail's window. Older messages stay in the database, in task histories, and in search.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Histórico da lista de trabalho (dias)"
+        }
+      }
+    },
+    "locale": {
+      "group": "Display",
+      "label": "Language",
+      "type": "select",
+      "options": [
+        "pt-BR",
+        "en"
+      ],
+      "desc": "Language for Taskuary presentation and owner-facing AI output.",
+      "help": "Default pt-BR. English is the fallback for untranslated text. Keys, commands, source evidence and outgoing reply language remain unchanged.",
+      "i18n": {
+        "pt-BR": {
+          "label": "Idioma",
+          "desc": "Idioma da interface e das respostas da IA para você.",
+          "help": "Padrão pt-BR. Textos sem tradução usam inglês. Chaves, comandos, evidências originais e idioma de respostas enviadas permanecem intactos."
+        }
+      }
+    }
+  },
+  "group_labels": {
+    "pt-BR": {
+      "Triage & agents": "Triagem e agentes",
+      "Triage & routing": "Triagem e roteamento",
+      "Replies": "Respostas",
+      "Assistant": "Assistente",
+      "Assistant on your phone": "Assistente no celular",
+      "Advisor": "Consultor",
+      "Coder agent": "Agente de código",
+      "Agent permissions": "Permissões dos agentes",
+      "Notifications": "Notificações",
+      "Attachments & images": "Anexos e imagens",
+      "Sync & startup": "Sincronização e inicialização",
+      "Display": "Exibição",
+      "Other": "Outros"
     }
   }
 }

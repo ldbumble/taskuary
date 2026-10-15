@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // A QUEUED START, said the same way wherever the task shows (T10, the owner, 2026-09-25). It read "starts by itself
 // when it can" on a start that had already failed, and neither page offered the Retry or Cancel the server has had
 // since PW-087. What it waits for, or why it could not start - and the two moves.
@@ -37,9 +38,9 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
       </Typography>
       <Box sx={{ display: "flex", gap: 0.75, mt: 0.6 }}>
         {failed && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={(e) => act(e, "retry")}
-          sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "retry" ? "Starting…" : "Start now"}</Button>}
+          sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "retry" ? tx("Starting…") : "Start now"}</Button>}
         <Button size="small" disabled={!!busy} onClick={(e) => act(e, "cancel")}
-          sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "cancel" ? "Cancelling…" : "Cancel"}</Button>
+          sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "cancel" ? "Cancelling…" : tx("Cancel")}</Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: ALERT, display: "block", mt: 0.4 }}>{err}</Typography>}
     </Box>

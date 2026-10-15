@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Pages the agent published with Claude Code's Artifact tool (claude_artifacts.py), and files a chat chose to SHOW the owner
 // (selfclose.SHOW_LINE: a chart, a picture, a table or a small page, only when it makes the answer easier to understand).
 // The link opens a published page on claude.ai; the preview draws the copy the task kept, in place - claude.ai refuses to be
@@ -69,11 +70,11 @@ export default function PublishedPages({ pages, open: openAll = false }) {
               <b>{p.name}</b><span>{label(p)}{p.url ? (isOpen(p) ? " · hide" : " · show here") : ""}</span>
             </button>
             {p.url && (
-              <Button size="small" href={attUrl(p, true)} title="Save a copy">Download</Button>
+              <Button size="small" href={attUrl(p, true)} title={tx("Save a copy")}>{tx("Download")}</Button>
             )}
             {p.external_url && (
               <Button size="small" variant="outlined" href={p.external_url} target="_blank" rel="noopener noreferrer"
-                endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}>Open on claude.ai</Button>
+                endIcon={<OpenInNewIcon sx={{ fontSize: 13 }} />}>{tx("Open on claude.ai")}</Button>
             )}
           </div>
           {isOpen(p) && p.url && <Preview page={p} />}

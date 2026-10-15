@@ -25,7 +25,7 @@ test("the button is drawn only over a road that exists", () => {
   const src = read("cliInstall.jsx");
   assert.match(src, /export const UpdateLine = /);
   assert.match(src, /if \(!cli\?\.updatable\) return null;/);   // the server decides, not the page
-  assert.match(src, /busy === recipeOf\(cli\) \? "updating…" : "Update"/);
+  assert.match(src, /busy === recipeOf\(cli\) \? tx\("updating…"\) : tx\("Update"\)/);
 });
 
 test("an installed CLI on the AI CLI agents page can be updated in place", () => {

@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // ONE PAGE FOR A WORKFLOW (the owner, 2026-10-15: "there are a lot of buttons in weird places in workflows"). A workflow wore
 // the report wizard - Pipeline, Test & preview, Schedule & save - whose steps are about rows and a summary prompt; a workflow
 // has none of those. It is what workflows.definition reads: what to do, who does it, the connections it works in, what it
@@ -121,13 +122,13 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
         </Typography>
         {cur && <Box sx={{ display: "flex", alignItems: "center" }}>
           <Switch size="small" checked={!!cur.Active} onChange={toggle} />
-          <Typography variant="caption" sx={{ color: DIM }}>{cur.Active ? "on" : "off"}</Typography>
+          <Typography variant="caption" sx={{ color: DIM }}>{cur.Active ? "on" : tx("off")}</Typography>
         </Box>}
         <Button variant="outlined" size="small" disabled={!!busy} onClick={runNow}
           startIcon={busy === "run" ? <CircularProgress size={12} /> : <PlayArrowIcon sx={{ fontSize: 16 }} />}>
           {cur ? "Run now" : "Save & run now"}</Button>
         <Button variant="contained" size="small" disableElevation disabled={!!busy} onClick={save}>
-          {busy === "save" ? "Saving…" : "Save"}</Button>
+          {busy === "save" ? "Saving…" : tx("Save")}</Button>
       </Box>
       {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}>{msg.text}</Alert>}
       {lastRun}
@@ -135,23 +136,23 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
 
       <Box sx={{ ...card, p: 2.5 }}>
-        <Field label="Name" hint="the headline each run's task carries">
-          <TextField size="small" fullWidth value={cfg.title || ""} placeholder="Weekly duplicate employee check"
+        <Field label={tx("Name")} hint={tx("the headline each run's task carries")}>
+          <TextField size="small" fullWidth value={cfg.title || ""} placeholder={tx("Weekly duplicate employee check")}
             onChange={(e) => set("title", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="What it does" hint="the job, in plain words - the agent reads exactly this on every run">
+        <Field label={tx("What it does")} hint={tx("the job, in plain words - the agent reads exactly this on every run")}>
           <TextField size="small" fullWidth multiline minRows={3} value={cfg.prompt || ""}
-            placeholder="Check Intacct for active employees that share a name or SSN last four, and open a task for finance per pair."
+            placeholder={tx("Check Intacct for active employees that share a name or SSN last four, and open a task for finance per pair.")}
             onChange={(e) => set("prompt", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="Who does it" hint="the profile whose rules it works by; which AI runs it is your default brain">
+        <Field label={tx("Who does it")} hint={tx("the profile whose rules it works by; which AI runs it is your default brain")}>
           <Select size="small" displayEmpty value={roles.includes(cfg.agent) ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
             sx={{ minWidth: 220, bgcolor: "#fff", fontSize: 13 }}>
             <MenuItem value="" sx={{ fontSize: 13 }}>{roles.includes("assistant") ? "assistant (the default)" : "the default"}</MenuItem>
             {roles.filter((a) => a !== "assistant").map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 13 }}>{a}</MenuItem>)}
           </Select>
         </Field>
-        <Field label="Works in" hint="the connections it may read and change - nothing outside them without asking">
+        <Field label={tx("Works in")} hint={tx("the connections it may read and change - nothing outside them without asking")}>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {live.map((c) => {
               const on = uses.includes(c.ConnectorId);
@@ -159,66 +160,66 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
                 color={on ? "primary" : "default"}
                 onClick={() => set("uses", on ? uses.filter((x) => x !== c.ConnectorId) : [...uses, c.ConnectorId])} />;
             })}
-            {!live.length && <Typography variant="caption" sx={{ color: FAINT }}>No connections are switched on - Connections tab.</Typography>}
+            {!live.length && <Typography variant="caption" sx={{ color: FAINT }}>{tx("No connections are switched on - Connections tab.")}</Typography>}
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", mt: 1 }}>
             <Switch size="small" checked={!!cfg.browser} onChange={(e) => set("browser", e.target.checked)} />
-            <Typography variant="caption" sx={{ color: DIM }}>works on web pages, in a browser you can watch</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{tx("works on web pages, in a browser you can watch")}</Typography>
           </Box>
         </Field>
-        <Field label="Ask me before" hint="what it stops and asks you about, every run">
-          <TextField size="small" fullWidth value={cfg.ask_first || ""} placeholder="changing or deleting any Intacct record"
+        <Field label={tx("Ask me before")} hint={tx("what it stops and asks you about, every run")}>
+          <TextField size="small" fullWidth value={cfg.ask_first || ""} placeholder={tx("changing or deleting any Intacct record")}
             onChange={(e) => set("ask_first", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="Done when" hint="what a finished run looks like - and what it says when there was nothing to do">
-          <TextField size="small" fullWidth value={cfg.done_when || ""} placeholder='one finance task per duplicate pair; "all clear" when there are none'
+        <Field label={tx("Done when")} hint={tx("what a finished run looks like - and what it says when there was nothing to do")}>
+          <TextField size="small" fullWidth value={cfg.done_when || ""} placeholder={tx("one finance task per duplicate pair; \"all clear\" when there are none")}
             onChange={(e) => set("done_when", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="When it runs">
+        <Field label={tx("When it runs")}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
             <Select size="small" value={sched.mode} onChange={(e) => setSched((s) => ({ at: s.at || "08:00", days: s.days || [1], day: s.day || 1,
               minutes: s.minutes || 60, cron: s.cron || cfg.cron || "", mode: e.target.value }))} sx={{ minWidth: 190, bgcolor: "#fff", fontSize: 13 }}>
-              <MenuItem value="manual" sx={{ fontSize: 13 }}>Only when I press Run now</MenuItem>
-              <MenuItem value="daily" sx={{ fontSize: 13 }}>Every day</MenuItem>
-              <MenuItem value="weekly" sx={{ fontSize: 13 }}>Every week</MenuItem>
-              <MenuItem value="monthly" sx={{ fontSize: 13 }}>Every month</MenuItem>
-              <MenuItem value="every" sx={{ fontSize: 13 }}>Every few minutes</MenuItem>
-              <MenuItem value="cron" sx={{ fontSize: 13 }}>Custom (cron)</MenuItem>
+              <MenuItem value="manual" sx={{ fontSize: 13 }}>{tx("Only when I press Run now")}</MenuItem>
+              <MenuItem value="daily" sx={{ fontSize: 13 }}>{tx("Every day")}</MenuItem>
+              <MenuItem value="weekly" sx={{ fontSize: 13 }}>{tx("Every week")}</MenuItem>
+              <MenuItem value="monthly" sx={{ fontSize: 13 }}>{tx("Every month")}</MenuItem>
+              <MenuItem value="every" sx={{ fontSize: 13 }}>{tx("Every few minutes")}</MenuItem>
+              <MenuItem value="cron" sx={{ fontSize: 13 }}>{tx("Custom (cron)")}</MenuItem>
             </Select>
             {sched.mode === "weekly" && DAYS.map((d, i) => {
               const on = (sched.days || []).includes(i);
               return <Chip key={d} size="small" label={d} variant={on ? "filled" : "outlined"} color={on ? "primary" : "default"}
                 onClick={() => setSched((s) => ({ ...s, days: on ? s.days.filter((x) => x !== i) : [...(s.days || []), i] }))} />;
             })}
-            {sched.mode === "monthly" && <TextField size="small" type="number" label="day" value={sched.day}
+            {sched.mode === "monthly" && <TextField size="small" type="number" label={tx("day")} value={sched.day}
               inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "#fff" }}
               onChange={(e) => setSched((s) => ({ ...s, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) }))} />}
-            {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label="at" value={sched.at}
+            {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label={tx("at")} value={sched.at}
               sx={{ width: 120, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
-            {sched.mode === "every" && <TextField size="small" type="number" label="minutes" value={sched.minutes}
+            {sched.mode === "every" && <TextField size="small" type="number" label={tx("minutes")} value={sched.minutes}
               sx={{ width: 110, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
             {sched.mode === "cron" && <TextField size="small" label="cron" value={sched.cron} placeholder="0 8 * * 1"
               sx={{ width: 160, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, cron: e.target.value }))} />}
           </Box>
         </Field>
         <Box component="details" sx={{ mt: 1, borderTop: `1px solid ${BORDER}`, pt: 1.5 }}>
-          <Box component="summary" sx={{ cursor: "pointer", color: DIM, fontSize: 12.5, fontWeight: 600 }}>More</Box>
+          <Box component="summary" sx={{ cursor: "pointer", color: DIM, fontSize: 12.5, fontWeight: 600 }}>{tx("More")}</Box>
           <Box sx={{ mt: 1.5 }}>
-            <Field label="Saved skill" hint="a slash command with the steps written down, run before the words above (optional)">
+            <Field label={tx("Saved skill")} hint={tx("a slash command with the steps written down, run before the words above (optional)")}>
               <TextField size="small" value={cfg.skill || ""} placeholder="weekly-user-review"
                 onChange={(e) => set("skill", e.target.value.replace(/^\//, ""))} sx={{ bgcolor: "#fff", width: 280 }} />
             </Field>
-            <Field label="Repository folder" hint="only for work on code: the run is a coding session in this checkout">
+            <Field label={tx("Repository folder")} hint={tx("only for work on code: the run is a coding session in this checkout")}>
               <TextField size="small" fullWidth value={cfg.cwd || ""} placeholder="C:/work/census"
                 onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "#fff" }} />
             </Field>
             {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-              onClick={() => setConfirmDel(true)}>Delete workflow</Button>}
+              onClick={() => setConfirmDel(true)}>{tx("Delete workflow")}</Button>}
           </Box>
         </Box>
       </Box>
       {cur && <ConfirmDelete open={confirmDel} what={`the workflow "${cfg.title || cur.Address || "untitled"}"`}
-        consequence="It stops running and leaves the Workflows list. The tasks its runs opened stay."
+        consequence={tx("It stops running and leaves the Workflows list. The tasks its runs opened stay.")}
         onClose={() => setConfirmDel(false)}
         onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />}
     </Box>

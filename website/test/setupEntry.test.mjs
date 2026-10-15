@@ -12,7 +12,7 @@ const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.ind
 
 test("the setup entry lives on the empty chat's welcome block, not the header, and it calls the chat's own setup()", () => {
   assert.equal(head.includes("Set up Taskuary"), false, "the header no longer carries a setup chip - the top bar's badge and the welcome block do");
-  const at = view.indexOf('title="A walk through every part of Taskuary');
+  const at = view.indexOf('title={tx("A walk through every part of Taskuary');
   const button = view.slice(view.lastIndexOf("<button", at), at);
   assert.ok(button.includes("onClick={setup}"), "the welcome entry runs the same setup() the chat uses");
 });

@@ -174,7 +174,7 @@ test("every connector card is the same size: a 1px border with the live weight d
   assert.doesNotMatch(card, /\$\{CARD_STATE\[connState\(c\)\]\.width\}px solid/, "no border that grows with the state");
   assert.match(card, /inset 0 0 0 \$\{extra\}px/);
   assert.match(card, /minHeight: "3em"/);
-  assert.match(card, /data-tq-conn-pill[\s\S]{0,200}>Connected<\/Box>/);   // one word: the CLI card is on only when one is connected (cliCard.js)
+  assert.match(card, /data-tq-conn-pill[\s\S]{0,200}>\{tx\("Connected"\)\}<\/Box>/);   // one word: the CLI card is on only when one is connected (cliCard.js)
 });
 
 test("on the canvas the task view SHRINKS to its box - no percentage height, so it can never draw over the next line (2026-10-01)", () => {

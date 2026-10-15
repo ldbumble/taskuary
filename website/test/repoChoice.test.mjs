@@ -23,7 +23,7 @@ test("the Assistant card asks for a repo and retries dispatch after the choice",
 test("a selected repository with no local checkout still offers path setup", () => {
   const picker = src("RepoPicker.jsx");
   assert.match(picker, /on && r\.has_path/);
-  assert.match(picker, /on \? "set path" : "use this"/);
+  assert.match(picker, /on \? tx\("set path"\) : tx\("use this"\)/);
 });
 
 test("the task page's Start button asks which repo instead of printing the refusal", () => {

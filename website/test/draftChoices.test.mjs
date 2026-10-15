@@ -36,10 +36,10 @@ test("the row draws Mark done once: the decision's, with the task's own left out
 test("the Timeline's reply box and the dock's reply are Send, Mark done and Redraft - no Reject", () => {
   const feed = read("FeedView.jsx");
   assert.doesNotMatch(feed, />Reject<\/Button>/);
-  assert.match(feed, /decide\(reviewId, "no_reply"\)[^\n]*\n?[^\n]*>Mark done<\/Button>/);
+  assert.match(feed, /decide\(reviewId, "no_reply"\)[^\n]*\n?[^\n]*>\{tx\("Mark done"\)\}<\/Button>/);
   const dock = read("GeneralWorkspace.jsx");
-  assert.match(dock, /decide\(review, "no_reply"\)\}>Mark done<\/Button>/, "the no-reply close says what it does");
-  assert.match(dock, /decide\(review, "reject"\)\}>Dismiss<\/Button>/, "an agent's proposed action is still dismissed");
+  assert.match(dock, /decide\(review, "no_reply"\)\}>\{tx\("Mark done"\)\}<\/Button>/, "the no-reply close says what it does");
+  assert.match(dock, /decide\(review, "reject"\)\}>\{tx\("Dismiss"\)\}<\/Button>/, "an agent's proposed action is still dismissed");
 });
 
 test("the walk's reply card offers Redraft over a draft it has", () => {

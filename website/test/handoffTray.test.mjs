@@ -7,7 +7,7 @@ const feed = readFileSync(fileURLToPath(new URL("../src/FeedView.jsx", import.me
 const review = feed.slice(feed.indexOf("const ReviewCanvas"), feed.indexOf("const TalkItThrough"));
 
 test("the Timeline keeps handoff behind one action instead of an always-open form", () => {
-  assert.match(review, /<TrayBtn onClick=\{\(\) => setHandoff\(true\)\}[\s\S]*?>\s*Hand off<\/TrayBtn>/);
+  assert.match(review, /<TrayBtn onClick=\{\(\) => setHandoff\(true\)\}[\s\S]*?>\s*\{tx\("Hand off"\)\}<\/TrayBtn>/);
   assert.match(review, /<Drawer[^>]+open=\{handoff === true && !!sel\.TaskId\}/);   // "sending" is the hand-off put down at the press
   assert.match(review, /\{handoff && sel\.TaskId && <Handoff/);
   assert.doesNotMatch(review, /<TrayGroupLabel[^>]*>HAND OFF<\/TrayGroupLabel>/);

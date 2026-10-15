@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // PICTURES WITH A PROMPT (the owner, 2026-09-30: "can't attach images ... to write this prompt?"). One picker for every box that
 // writes to an agent - the New box, the chat line, Continue: paste, drop, or the paperclip. Each image is saved by the server
 // (/api/prompt-image, the waitroom's bytes-as-body contract) and the prompt carries its PATH - a CLI agent reads a picture from a
@@ -49,7 +50,7 @@ export function AttachImage({ pics, size = 18, sx }) {
   return (
     <>
       <Tooltip title={pics.busy ? "Uploading…" : "Attach an image - or paste or drop one here"}>
-        <span><IconButton size="small" aria-label="Attach an image" disabled={pics.busy} onClick={() => input.current?.click()}
+        <span><IconButton size="small" aria-label={tx("Attach an image")} disabled={pics.busy} onClick={() => input.current?.click()}
           sx={{ width: 34, height: 34, p: 0, color: "#6e685f", ...sx }}><AttachFileIcon sx={{ fontSize: size }} /></IconButton></span>
       </Tooltip>
       <input ref={input} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple
@@ -72,7 +73,7 @@ export function ImageTray({ pics, sx }) {
               "&:hover": { bgcolor: "rgba(38,37,33,.9)" } }}><CloseIcon sx={{ fontSize: 12 }} /></IconButton>
         </Box>
       ))}
-      {pics.busy && <Box sx={{ fontSize: 11, color: "#a09889" }}>uploading…</Box>}
+      {pics.busy && <Box sx={{ fontSize: 11, color: "#a09889" }}>{tx("uploading…")}</Box>}
       {!!pics.err && <Box sx={{ fontSize: 11, color: "#7a2f3c" }}>{pics.err}</Box>}
     </Box>
   );

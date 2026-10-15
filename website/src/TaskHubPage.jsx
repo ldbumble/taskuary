@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Task Hub shell - clean light enterprise workspace, compact: slim top bar, pill tabs,
 // content underneath. The Assistant (the Timeline's rail + Taskuary's chat) in the middle,
 // Board, Tasks and Reports to its left, Hub, Connections and Settings to its right.
@@ -97,7 +98,7 @@ function Bell({ onGo }) {
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { width: 440, p: 1.5, mt: 0.5 } } }}>
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: n ? 0.25 : 0.5 }}>{n ? "Failing right now" : "Nothing is failing"}</Typography>
-        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>Nothing has failed in the last few hours: connections, the triage brain and reports. Anything you dismissed comes back if it happens again.</Typography>}
+        {!n && <Typography variant="caption" sx={{ color: DIM, display: "block" }}>{tx("Nothing has failed in the last few hours: connections, the triage brain and reports. Anything you dismissed comes back if it happens again.")}</Typography>}
         {items.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -112,15 +113,15 @@ function Bell({ onGo }) {
               {/* Reading it, not fixing it. It comes back the moment the same thing fails again
                   (problems.signature), so this quiets something you have decided to live with. */}
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
-                title="I have read this. It returns if it happens again."
-                onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
+                title={tx("I have read this. It returns if it happens again.")}
+                onClick={() => put(p)}>{busy === p.key ? "…" : tx("Dismiss")}</Button>
               <Button size="small" sx={{ fontSize: 10.5, color: DIM, textTransform: "none", p: 0, minWidth: 0 }}
-                onClick={() => { setEl(null); openBugReport(bellError(p)); }}>Report this bug</Button>
+                onClick={() => { setEl(null); openBugReport(bellError(p)); }}>{tx("Report this bug")}</Button>
             </Box>
           </Box>
         ))}
         {news.length > 0 && (
-          <Typography sx={{ fontWeight: 600, fontSize: 12, color: DIM, mt: n ? 1 : 0, mb: 0.25 }}>Back to normal</Typography>
+          <Typography sx={{ fontWeight: 600, fontSize: 12, color: DIM, mt: n ? 1 : 0, mb: 0.25 }}>{tx("Back to normal")}</Typography>
         )}
         {news.map((p) => (
           <Box key={p.key} sx={{ py: 0.85, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.25, alignItems: "flex-start" }}>
@@ -133,7 +134,7 @@ function Bell({ onGo }) {
               <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
                 onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Show me"} →</Button>
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}
-                onClick={() => put(p)}>{busy === p.key ? "…" : "Got it"}</Button>
+                onClick={() => put(p)}>{busy === p.key ? "…" : tx("Got it")}</Button>
             </Box>
           </Box>
         ))}
@@ -166,7 +167,7 @@ function DemoBadge({ demo }) {
       <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.5, px: 0.9, py: 0.3, borderRadius: 99,
         flexShrink: 0, border: "1px solid #d8cfbe", bgcolor: "#f1ead9" }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#8a7a5c" }} />
-        <Typography variant="caption" noWrap sx={{ fontWeight: 600, color: "#6b5f45" }}>demo data</Typography>
+        <Typography variant="caption" noWrap sx={{ fontWeight: 600, color: "#6b5f45" }}>{tx("demo data")}</Typography>
       </Box>
     </Tooltip>
   );
@@ -355,7 +356,7 @@ export default function TaskHubPage() {
           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
           sx={{ mb: 8 }}
           message={raised ? `${raised.ref} · ${raised.what}${raised.title ? ` — ${raised.title}` : ""}` : ""}
-          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>Open</Button>} />
+          action={raised && <Button size="small" sx={{ color: ACCENT, fontWeight: 600 }} onClick={() => { openTask(raised.tid); setRaisedQueue(dismissHandRaise); }}>{tx("Open")}</Button>} />
         {/* ── slim top bar ───────────────────────────────────────────── */}
         {/* Full width, deliberately. Constraining this to the page column squeezed the tab strip
             until its overflowX put a horizontal SCROLLBAR under the nav - a slider you have to
@@ -381,12 +382,12 @@ export default function TaskHubPage() {
               back from it is the same place. Everything else is in the Assistant's sidebar and canvas. */}
           <Box component="button" type="button" data-tq-view-switch={tab === "Board" ? "assistant" : "board"}
             onClick={() => go(tab === "Board" ? "Assistant" : "Board")}
-            title={tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen"}
+            title={tx(tab === "Board" ? "Back to the Assistant" : "The Board - every agent and its session, full screen")}
             sx={{ display: "flex", alignItems: "center", gap: 0.75, height: 30, px: 1.4, ml: { xs: 0.25, md: 1 }, borderRadius: 99, cursor: "pointer",
               fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap",
               color: tab === "Board" ? "#fff" : INK, background: tab === "Board" ? BRAND.solid : PANEL,
               border: `1px solid ${tab === "Board" ? "transparent" : "#d8d1c5"}`, "&:hover": { borderColor: tab === "Board" ? "transparent" : BRAND.solid } }}>
-            {tab === "Board" ? <><TaskuaryMark size={16} />Assistant</> : <><GridViewIcon sx={{ fontSize: 15 }} />Board</>}
+            {tab === "Board" ? <><TaskuaryMark size={16} />{tx("Assistant")}</> : <><GridViewIcon sx={{ fontSize: 15 }} />{tx("Board")}</>}
           </Box>
           {tab === "Assistant" && <Box sx={{ ml: { xs: 0.25, md: 1 } }}><StageMode mode={stageMode} onMode={setStageMode} game={asstGame} onGame={pickAsstGame} /></Box>}
           {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
@@ -400,8 +401,8 @@ export default function TaskHubPage() {
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
           {!DEMO && !demo && <SetupChip state={setup} onOpen={openSetup} />}
-          <Tooltip title="Report a problem">
-            <IconButton onClick={() => openBugReport()} size="small" aria-label="Report a problem">
+          <Tooltip title={tx("Report a problem")}>
+            <IconButton onClick={() => openBugReport()} size="small" aria-label={tx("Report a problem")}>
               <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />
             </IconButton>
           </Tooltip>
@@ -411,7 +412,7 @@ export default function TaskHubPage() {
             if (p.report) { window.location.hash = `report=${p.report}`; return; }
             go(p.where || "Connections");
           }} />
-          <Tooltip title="Refresh">
+          <Tooltip title={tx("Refresh")}>
             <IconButton size="small" onClick={() => setTick(tick + 1)}><RefreshIcon sx={{ fontSize: 17, color: DIM }} /></IconButton>
           </Tooltip>
         </Box>

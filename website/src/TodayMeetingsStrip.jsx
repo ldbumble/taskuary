@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { useCalendarToday } from "./calendarToday.js";
@@ -32,8 +33,8 @@ export default function TodayMeetingsStrip() {
       "@keyframes tqSlide": { from: { opacity: 0, transform: "translateY(6px) scaleX(.6)" }, to: { opacity: 1, transform: "none" } },
       "@keyframes tqPulse": { "0%": { boxShadow: "0 0 0 0 rgba(138,54,70,.45)" }, "100%": { boxShadow: "0 0 0 8px rgba(138,54,70,0)" } } }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.75 }}>
-        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>📅 TODAY’S MEETINGS · {today.events.length}</Typography>
-        {allDay.map((event) => <Typography key={event.subject} variant="caption" sx={{ color: FAINT }}>· all day: {event.subject}</Typography>)}
+        <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: "#6b5f45", fontWeight: 600 }}>{tx("📅 TODAY’S MEETINGS ·")} {today.events.length}</Typography>
+        {allDay.map((event) => <Typography key={event.subject} variant="caption" sx={{ color: FAINT }}>{tx("· all day:")} {event.subject}</Typography>)}
       </Box>
       <Box sx={{ position: "relative", height: 44, borderTop: "1px solid #ddd2b9", borderBottom: "1px solid #ddd2b9" }}>
         {Array.from({ length: span + 1 }, (_, index) => H0 + index).map((hour) => (
@@ -69,7 +70,7 @@ export default function TodayMeetingsStrip() {
             <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10, minWidth: 16, textAlign: "right" }}>{index + 1}.</Box>
             <Box component="span" sx={{ ...mono, color: "#6b5f45", fontSize: 10.5, minWidth: 62 }}>{fmtTime12(event.start)}</Box>
             <Box component="span" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>{event.subject}</Box>
-            {!!(event.who || []).length && <Box component="span" sx={{ color: DIM }}>with {event.who.slice(0, 4).map((who) => who.split(" ")[0]).join(", ")}{event.who.length > 4 ? ` +${event.who.length - 4}` : ""}</Box>}
+            {!!(event.who || []).length && <Box component="span" sx={{ color: DIM }}>{tx("with")} {event.who.slice(0, 4).map((who) => who.split(" ")[0]).join(", ")}{event.who.length > 4 ? ` +${event.who.length - 4}` : ""}</Box>}
             {event.about && <Box component="span" sx={{ color: FAINT }}>— {event.about.length > 90 ? `${event.about.slice(0, 90)}…` : event.about}</Box>}
           </Typography>
         ))}

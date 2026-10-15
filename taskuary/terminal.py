@@ -1745,6 +1745,8 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if stranger:
         parts[0] = f"TASK {task_ref(tid)} - a stranger's task."
         parts.insert(1, _origin.SEED_LINE.format(path=_origin.stranger_file(store, tid, [f"TASK: {t.get('Title') or ''}\nSUMMARY: {t.get('Summary') or ''}", *theirs])))
+    from . import i18n
+    parts.append(i18n.output_instruction(i18n.locale(store)).strip())
     out = paragraphs('\n\n'.join(parts))
     # A command line has a hard limit (32767 on Windows) and the OS does not warn - it refuses
     # or clips. If we are over, the ASK is what gives, never the rules that keep an agent

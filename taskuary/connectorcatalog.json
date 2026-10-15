@@ -10,7 +10,12 @@
       "match": [
         "outlook mail",
         "outlook"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "E-mail do Outlook"
+        }
+      }
     },
     {
       "type": "teams",
@@ -97,7 +102,12 @@
       "match": [
         "local models (ollama)",
         "ollama"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Modelos locais (Ollama)"
+        }
+      }
     },
     {
       "type": "meta",
@@ -124,7 +134,12 @@
         "sign in with chatgpt",
         "plan",
         "openai"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "ChatGPT (seu plano)"
+        }
+      }
     },
     {
       "type": "typesafe",
@@ -138,7 +153,12 @@
         "jev",
         "decisions",
         "only"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "TypeSafe Jev (somente decisões)"
+        }
+      }
     },
     {
       "type": "mssql",
@@ -210,7 +230,12 @@
         "any",
         "mailbox",
         "imap"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Qualquer caixa de e-mail (IMAP)"
+        }
+      }
     },
     {
       "type": "winrm",
@@ -223,7 +248,12 @@
         "remote",
         "windows",
         "winrm"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Windows remoto (WinRM)"
+        }
+      }
     },
     {
       "type": "database",
@@ -237,7 +267,12 @@
         "database",
         "connection",
         "string"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Qualquer banco de dados (string de conexão)"
+        }
+      }
     },
     {
       "type": "robinhood",
@@ -250,7 +285,12 @@
         "robinhood",
         "agentic",
         "trading"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Robinhood (negociação por agentes)"
+        }
+      }
     },
     {
       "type": "aws",
@@ -311,7 +351,12 @@
         "file share",
         "fileshare",
         "smb"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Compartilhamento de arquivos de rede"
+        }
+      }
     },
     {
       "type": "sftp",
@@ -333,7 +378,12 @@
         "knowledge base",
         "knowledge",
         "base"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Base de conhecimento"
+        }
+      }
     },
     {
       "type": "handbook",
@@ -346,7 +396,12 @@
         "company",
         "hub",
         "handbook"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Central da empresa"
+        }
+      }
     },
     {
       "type": "jira",
@@ -537,7 +592,12 @@
         "card",
         "feed",
         "teller"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Contas bancárias e cartões (Teller)"
+        }
+      }
     },
     {
       "type": "simplefin",
@@ -551,7 +611,12 @@
         "card",
         "feed",
         "simplefin"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Contas bancárias e cartões (SimpleFIN)"
+        }
+      }
     },
     {
       "type": "coingecko",
@@ -564,7 +629,12 @@
         "crypto",
         "prices",
         "coingecko"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Preços de criptomoedas (CoinGecko)"
+        }
+      }
     },
     {
       "type": "frankfurter",
@@ -576,7 +646,12 @@
         "fx rates",
         "rates",
         "frankfurter"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Taxas de câmbio"
+        }
+      }
     },
     {
       "type": "yahoo",
@@ -590,7 +665,12 @@
         "finance",
         "best",
         "effort"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Yahoo Finance (sem garantia de disponibilidade)"
+        }
+      }
     },
     {
       "type": "sec_edgar",
@@ -604,7 +684,12 @@
         "filings",
         "edgar",
         "sec edgar"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Documentos da SEC (EDGAR)"
+        }
+      }
     },
     {
       "type": "twelvedata",
@@ -712,7 +797,12 @@
         "strategy screen",
         "strategy",
         "screen"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Filtro de estratégias"
+        }
+      }
     },
     {
       "type": "zoho_invoice",
@@ -795,7 +885,12 @@
         "gemini",
         "transcription",
         "gemini stt"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Transcrição do Google Gemini"
+        }
+      }
     },
     {
       "type": "groq_stt",
@@ -821,7 +916,12 @@
         "openai",
         "transcription",
         "openai stt"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Transcrição da OpenAI"
+        }
+      }
     },
     {
       "type": "deepgram",
@@ -857,7 +957,12 @@
         "any",
         "whisper",
         "stt server"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Qualquer servidor Whisper"
+        }
+      }
     },
     {
       "type": "local_whisper",
@@ -868,7 +973,12 @@
       "match": [
         "local whisper",
         "whisper"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Whisper local"
+        }
+      }
     },
     {
       "type": "openai_image",
@@ -880,7 +990,12 @@
         "openai images",
         "openai",
         "openai image"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Imagens da OpenAI"
+        }
+      }
     },
     {
       "type": "azure_openai_image",
@@ -893,7 +1008,12 @@
         "azure",
         "openai",
         "azure openai image"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Imagens do Azure OpenAI"
+        }
+      }
     },
     {
       "type": "gemini_image",
@@ -906,7 +1026,12 @@
         "google",
         "gemini",
         "gemini image"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Imagens do Google Gemini"
+        }
+      }
     },
     {
       "type": "stability_image",
@@ -930,7 +1055,12 @@
         "openrouter images",
         "openrouter",
         "openrouter image"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Imagens do OpenRouter"
+        }
+      }
     },
     {
       "type": "replicate_image",
@@ -954,7 +1084,12 @@
         "xai",
         "grok",
         "xai image"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Imagens do xAI Grok"
+        }
+      }
     },
     {
       "type": "image_server",
@@ -966,7 +1101,12 @@
         "any image server",
         "any",
         "image server"
-      ]
+      ],
+      "i18n": {
+        "pt-BR": {
+          "title": "Qualquer servidor de imagens"
+        }
+      }
     },
     {
       "type": "xai",
@@ -2406,5 +2546,19 @@
         "diffbot"
       ]
     }
-  ]
+  ],
+  "group_labels": {
+    "pt-BR": {
+      "Messaging": "Mensagens",
+      "Developer": "Desenvolvimento",
+      "AI — agents & models": "IA — agentes e modelos",
+      "Databases": "Bancos de dados",
+      "Cloud & infrastructure": "Nuvem e infraestrutura",
+      "Markets & finance": "Mercados e finanças",
+      "Files & sheets": "Arquivos e planilhas",
+      "Project management": "Gestão de projetos",
+      "Observability": "Observabilidade",
+      "Corporate systems": "Sistemas corporativos"
+    }
+  }
 }

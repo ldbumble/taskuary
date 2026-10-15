@@ -12,5 +12,5 @@ test("with nothing on the table the row's floor is Next, and the chat says to pr
   assert.match(view, /const rowEmpty = !rowVerbs\.list\.some\(\(v\) => !String\(v\.id\)\.startsWith\("floor:"\)\)/);
   assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canAdvance \|\| !!err\)/);
   assert.match(view, /useVerbs\("floor", \[\{ id: "floor:next", group: "next", label: "Next"/);
-  assert.match(view, /\{hanging && <Typography[^>]*data-tq-hanging="">Press <b>Next<\/b> below to continue\.<\/Typography>\}/);
+  assert.match(view, /\{hanging && <Typography[^>]*data-tq-hanging="">\{tx\("Press"\)\} <b>\{tx\("Next"\)\}<\/b> \{tx\("below to continue\."\)\}<\/Typography>\}/);
 });

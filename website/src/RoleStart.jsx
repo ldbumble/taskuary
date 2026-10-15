@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Start from a role: one click from "I do accounts payable" to the worker, its playbooks and its
 // mail. Everything it lays out (roles.py) already had its own page; nobody who is not technical
 // ever found all four, so the role is offered here, where the workers live, until it is taken.
@@ -40,29 +41,26 @@ export default function RoleStart({ onApplied }) {
       {offered.map((r) => (
         <Box key={r.name} sx={{ p: 1.25, mb: 0.75, border: "1px dashed #d8cfbe", borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>Start from a role: {r.title}</Typography>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>{tx("Start from a role:")} {r.title}</Typography>
             <Typography sx={{ fontSize: 11.5, color: FAINT }}>{r.blurb}</Typography>
           </Box>
-          <Button size="small" variant="outlined" sx={{ whiteSpace: "nowrap" }} onClick={() => { setOpen(r); setPortal(""); setErr(""); }}>Set up</Button>
+          <Button size="small" variant="outlined" sx={{ whiteSpace: "nowrap" }} onClick={() => { setOpen(r); setPortal(""); setErr(""); }}>{tx("Set up")}</Button>
         </Box>
       ))}
       <Dialog open={!!open} onClose={() => !busy && setOpen(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontSize: 16 }}>Set up for {open?.title.toLowerCase()}</DialogTitle>
+        <DialogTitle sx={{ fontSize: 16 }}>{tx("Set up for")} {open?.title.toLowerCase()}</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: 12.5, color: INK, mb: 1.5 }}>
-            Adds the {open?.profile.toUpperCase()}.md worker and its playbooks, and sends your mail to it when no other worker fits.
-            Nothing is posted to your ledger without your approval.
-          </Typography>
+          <Typography sx={{ fontSize: 12.5, color: INK, mb: 1.5 }}> {tx("Adds the")} {open?.profile.toUpperCase()}{tx(".md worker and its playbooks, and sends your mail to it when no other worker fits. Nothing is posted to your ledger without your approval.")} </Typography>
           {open?.portal_needed && (
-            <TextField size="small" fullWidth label="Bill-approval portal address (optional)" placeholder="https://"
+            <TextField size="small" fullWidth label={tx("Bill-approval portal address (optional)")} placeholder="https://"
               value={portal} onChange={(e) => setPortal(e.target.value)}
-              helperText="For the daily job that reads the portal's approved bills. You can add it later." />
+              helperText={tx("For the daily job that reads the portal's approved bills. You can add it later.")} />
           )}
           {err && <Typography sx={{ fontSize: 12, color: "#8a3324", mt: 1 }}>{err}</Typography>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(null)} disabled={busy}>Cancel</Button>
-          <Button variant="contained" onClick={apply} disabled={busy}>{busy ? "Setting up…" : "Set up"}</Button>
+          <Button onClick={() => setOpen(null)} disabled={busy}>{tx("Cancel")}</Button>
+          <Button variant="contained" onClick={apply} disabled={busy}>{busy ? "Setting up…" : tx("Set up")}</Button>
         </DialogActions>
       </Dialog>
     </Box>

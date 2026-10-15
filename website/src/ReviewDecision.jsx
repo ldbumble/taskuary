@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // ONE DECISION, WHEREVER IT IS SHOWN. What they wrote, what we would say back, and the verdict
 // buttons - extracted from the review queue so the task page can hold the decision instead of
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
@@ -29,7 +30,7 @@ const Inbound = ({ r }) => {
   return (
     <Box sx={{ mb: 1, px: 1.25, py: 0.85, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, borderLeft: "3px solid #6f8a6e" }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.25 }}>
-        {r.FromName || r.FromEmail || "they"} wrote{r.SentAt ? ` · ${timeAgo(r.SentAt)}` : ""}
+        {r.FromName || r.FromEmail || "they"} {tx("wrote")}{r.SentAt ? ` · ${timeAgo(r.SentAt)}` : ""}
       </Typography>
       <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", lineHeight: 1.5,
         ...(full || !long ? {} : { display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
@@ -50,7 +51,7 @@ export const InvoiceLine = ({ meta }) => (
     bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
     <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>{meta.customer}</Typography>
     <Typography variant="caption" sx={{ color: INK }}>${Number(meta.amount || 0).toFixed(2)}</Typography>
-    <Typography variant="caption" sx={{ color: DIM }}>last month: {meta.previous_amount == null ? "—" : `$${Number(meta.previous_amount).toFixed(2)}`}</Typography>
+    <Typography variant="caption" sx={{ color: DIM }}>{tx("last month:")} {meta.previous_amount == null ? "—" : `$${Number(meta.previous_amount).toFixed(2)}`}</Typography>
     {meta.invoice_number && <Typography variant="caption" sx={{ color: DIM }}>Zoho {meta.invoice_number}</Typography>}
   </Box>
 );
@@ -215,17 +216,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   if (r.Status === "held") {
     return (
       <Box sx={{ mt: 0.5, bgcolor: "#e3e6e1", border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75 }}>
-        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
-          Waiting on the agent working this task
-        </Typography>
-        <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}>
-          This reply was drafted from the message alone, before anyone had looked at the problem — so it
-          would be promising what nobody has checked yet. When the session is wrapped up, it comes back
-          here rewritten from what the agent actually found.
-        </Typography>
+        <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}> {tx("Waiting on the agent working this task")} </Typography>
+        <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.25 }}> {tx("This reply was drafted from the message alone, before anyone had looked at the problem — so it would be promising what nobody has checked yet. When the session is wrapped up, it comes back here rewritten from what the agent actually found.")} </Typography>
         <Box sx={{ display: "flex", gap: 0.75, mt: 0.75, alignItems: "center" }}>
-          <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={release}>Answer now anyway</Button>
-          {onOpenTask && <Button size="small" sx={{ color: DIM }} onClick={() => onOpenTask(r.TaskId)}>Open the task</Button>}
+          <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={release}>{tx("Answer now anyway")}</Button>
+          {onOpenTask && <Button size="small" sx={{ color: DIM }} onClick={() => onOpenTask(r.TaskId)}>{tx("Open the task")}</Button>}
         </Box>
         {r.DraftText && (
           <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", color: FAINT, display: "block", mt: 0.75 }}>
@@ -263,9 +258,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       )}
       {meta.kind === "zoho_invoice" && <InvoiceLine meta={meta} />}
       {/* !!: the task detail carries the raw row, where Stale is the NUMBER 0 - and React draws a 0 */}
-      {!!r.Stale && !delivery.frozen && <Alert severity="warning" sx={{ mb: 1 }}>
-        New messages arrived after this draft. Refresh the draft before sending it.
-        {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
+      {!!r.Stale && !delivery.frozen && <Alert severity="warning" sx={{ mb: 1 }}> {tx("New messages arrived after this draft. Refresh the draft before sending it.")} {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>{tx("Latest:")} {r.LatestPreview}</Box>}
       </Alert>}
       {!proposal && <Inbound r={r} />}
       {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not */}
@@ -274,7 +267,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
       ) : (
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
-        <Typography sx={{ ...label, flexShrink: 0 }}>{proposal?.destinationLabel || "To"}</Typography>
+        <Typography sx={{ ...label, flexShrink: 0 }}>{proposal?.destinationLabel || tx("To")}</Typography>
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>
           {proposal?.destination || replyContext(filedDelivery)}
         </Typography>
@@ -284,7 +277,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.8, mb: 0.75, minWidth: 0 }}>
           <Typography sx={{ ...label, flexShrink: 0 }}>{co.destinationLabel}</Typography>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{co.destination}</Typography>
-          <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
+          <Typography variant="caption" sx={{ color: FAINT }} noWrap>{tx("· first, then the reply goes out")}</Typography>
         </Box>
       )}
       {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
@@ -300,9 +293,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           answer with nowhere to go looked like a card that had simply lost its button. The draft is
           real and worth reading - a GitHub task with replies off is still answered, by hand. */}
       {!proposal && !carried && r.CanSend === false && (
-        <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>
-          No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
-        </Typography>
+        <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}> {tx("No reply can be sent from here —")} {r.SendBlock || tx("this channel cannot be replied to")}{tx(". The draft stays for you to use.")} </Typography>
       )}
       <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
         value={value} onChange={(e) => setText(e.target.value)}
@@ -310,14 +301,12 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         inputProps={{ readOnly: busy || delivery.frozen, style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>
-          <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}>
-            Refreshed draft - written after the new message. Your edit stays in the box above.
-          </Typography>
+          <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, display: "block" }}> {tx("Refreshed draft - written after the new message. Your edit stays in the box above.")} </Typography>
           <Typography variant="body2" sx={{ color: INK, whiteSpace: "pre-wrap", fontSize: 12.5, mt: 0.5 }}>{compare.refreshed || "(no refreshed draft - hit Redraft)"}</Typography>
           <Box sx={{ display: "flex", gap: 0.75, mt: 0.75 }}>
             <Button size="small" variant="outlined" disabled={busy || delivery.frozen || !compare.refreshed}
-              onClick={() => { setText(compare.refreshed); setCompare(null); }}>Use the refreshed draft</Button>
-            <Button size="small" sx={{ color: DIM }} onClick={() => setCompare(null)}>Keep mine</Button>
+              onClick={() => { setText(compare.refreshed); setCompare(null); }}>{tx("Use the refreshed draft")}</Button>
+            <Button size="small" sx={{ color: DIM }} onClick={() => setCompare(null)}>{tx("Keep mine")}</Button>
           </Box>
         </Box>
       )}
@@ -367,7 +356,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              send since there is warning? just reprocess it then"). Refreshing IS the primary
              action while the thread is ahead of the draft. */
           <Button size="small" variant="contained" disableElevation disabled={busy}
-            onClick={redraft} title="Rewrites the draft from the newest message, then you approve it">
+            onClick={redraft} title={tx("Rewrites the draft from the newest message, then you approve it")}>
             {busy ? "Refreshing…" : "Refresh the draft"}
           </Button>
         ) : (
@@ -382,15 +371,15 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
         {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy || drafting} onClick={redraft}
-          title="Writes the draft again from the thread as it is now; your edit is kept beside it until you choose">
-          {drafting ? "Drafting…" : redraftWord}</Button>}
+          title={tx("Writes the draft again from the thread as it is now; your edit is kept beside it until you choose")}>
+          {drafting ? tx("Drafting…") : redraftWord}</Button>}
         {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
-          title="Drop this email - the task closes when the rest are sent">Don't send</Button>}
+          title={tx("Drop this email - the task closes when the rest are sent")}>{tx("Don't send")}</Button>}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
-        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>Remind me</Button>}
+        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>{tx("Remind me")}</Button>}
         {/* a close-out card is Close out / Decline / Remind me and nothing else (the owner, 2026-09-28: "what does reject
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
@@ -413,11 +402,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             action={offers?.length ? <Box sx={{ display: "flex", gap: 0.5 }}>{offers.map((o) => (
               <Button key={o} size="small" color="inherit" disabled={busy || delivery.frozen} title={OFFER_HINT[o]} onClick={() => run(o)}>{OFFER_LABEL[o]}</Button>
             ))}</Box> : null}>
-            {coFail || blocked ? <b>Not now - nothing is merged or sent. </b> : null}{text}
+            {coFail || blocked ? <b>{tx("Not now - nothing is merged or sent.")} </b> : null}{text}
           </Alert>
         );
       })()}
-      {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}. Close out again once the checks pass.</Alert>}
+      {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}{tx(". Close out again once the checks pass.")}</Alert>}
       {sendErr && (
         <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr("")}>
           <b>{sendErr.unknown ? "Delivery has not been confirmed." : "The reply was not sent."}</b> {sendErr.message}

@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // ＋ New — the only door on the Timeline that starts something instead of reacting to it.
 //
 // Until now every row on the Timeline was something that HAPPENED to the owner. Sending a
@@ -257,8 +258,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   return (
     <Shell {...shell}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
-        <Box sx={{ flex: 1 }}>What are we starting?</Box>
-        <IconButton aria-label="Close new task" size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
+        <Box sx={{ flex: 1 }}>{tx("What are we starting?")}</Box>
+        <IconButton aria-label={tx("Close new task")} size="small" onClick={close}><CloseIcon sx={{ fontSize: 17 }} /></IconButton>
       </DialogTitle>
 
       {/* the kinds are tabs, not a select: three doors that all exist is the point of the sheet,
@@ -281,7 +282,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {kind === "send" && (
           <>
             <Box>
-              <Label>Channel</Label>
+              <Label>{tx("Channel")}</Label>
               <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
                 {targets.map((t) => (
                   <Box key={t.channel} onClick={() => { setChannel(t.channel); setTo(""); setEmailTo([]); setCc([]); }}
@@ -293,17 +294,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                   </Box>
                 ))}
                 {!targets.length && (
-                  <Typography variant="caption" sx={{ color: FAINT }}>
-                    No channel here can send yet — turn replies on for a mailbox or a chat in Connections.
-                  </Typography>
+                  <Typography variant="caption" sx={{ color: FAINT }}> {tx("No channel here can send yet — turn replies on for a mailbox or a chat in Connections.")} </Typography>
                 )}
               </Box>
             </Box>
             <Box>
-              <Label>To</Label>
+              <Label>{tx("To")}</Label>
               {channel === "email" ? (
                 <EmailRecipients value={emailTo} onChange={setEmailTo} options={chanTargets}
-                  placeholder="Search contacts or type any email address" />
+                  placeholder={tx("Search contacts or type any email address")} />
               ) : <Autocomplete key={channel} size="small" fullWidth openOnFocus autoHighlight
                 options={chanTargets}
                 value={chanTargets.find((target) => target.to === to) || null}
@@ -319,7 +318,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                   </Box>
                 )}
                 renderInput={(params) => (
-                  <TextField {...params} placeholder="Search people and conversations"
+                  <TextField {...params} placeholder={tx("Search people and conversations")}
                     sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
                 )} />}
             </Box>
@@ -327,10 +326,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
               <Box>
                 <Label>CC</Label>
                 <EmailRecipients value={cc} onChange={setCc} options={chanTargets}
-                  placeholder="Search contacts or type any email address" />
-                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-                  Drafts use STYLE.md. Docs → STYLE.md → Generate from history learns your recurring email signature.
-                </Typography>
+                  placeholder={tx("Search contacts or type any email address")} />
+                <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("Drafts use STYLE.md. Docs → STYLE.md → Generate from history learns your recurring email signature.")} </Typography>
               </Box>
             )}
           </>
@@ -343,17 +340,17 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 walked back - the exact mistake newTask.js was written to prevent. Both doors,
                 stated, and the choice made before anything is created. */}
             <Box>
-              <Label>Who works it</Label>
+              <Label>{tx("Who works it")}</Label>
               <Box sx={{ display: "flex", gap: 1 }}>
-                <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title="A live session"
-                  hint="a CLI agent on a keyboard, in a checkout — it edits, runs and reports back." />
-                <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title="A general agent"
-                  hint="a researcher, analyst or writer on its own — no repository. It looks things up, drafts and reports back." />
+                <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title={tx("A live session")}
+                  hint={tx("a CLI agent on a keyboard, in a checkout — it edits, runs and reports back.")} />
+                <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title={tx("A general agent")}
+                  hint={tx("a researcher, analyst or writer on its own — no repository. It looks things up, drafts and reports back.")} />
               </Box>
             </Box>
             {how === "general" && (
               <Box>
-                <Label>Agent</Label>
+                <Label>{tx("Agent")}</Label>
                 {/* the task page's hand-off, the same three questions: which profile, which brain, which model */}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} agent={role} model={model}
@@ -364,7 +361,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             )}
             {how === "terminal" && (
               <Box>
-                <Label>Agent</Label>
+                <Label>{tx("Agent")}</Label>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
                     brains={brainList} brainModels={brainModels} brain={brain}
@@ -383,16 +380,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
         {kind === "repeat" && (
           <Box>
-            <Label>Which kind</Label>
+            <Label>{tx("Which kind")}</Label>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Fork on={repeat === "workflow"} onClick={() => setRepeat("workflow")} title="A workflow"
-                hint="does the work on a schedule - checks, opens tasks, prepares drafts - and asks before it changes what you said it must not." />
-              <Fork on={repeat === "report"} onClick={() => setRepeat("report")} title="A report"
-                hint="reads your systems on a schedule and summarises what it finds. It changes nothing." />
+              <Fork on={repeat === "workflow"} onClick={() => setRepeat("workflow")} title={tx("A workflow")}
+                hint={tx("does the work on a schedule - checks, opens tasks, prepares drafts - and asks before it changes what you said it must not.")} />
+              <Fork on={repeat === "report"} onClick={() => setRepeat("report")} title={tx("A report")}
+                hint={tx("reads your systems on a schedule and summarises what it finds. It changes nothing.")} />
             </Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              It opens on Reports, where you describe it in your own words and it fills the form in.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("It opens on Reports, where you describe it in your own words and it fills the form in.")} </Typography>
           </Box>
         )}
 
@@ -402,20 +397,18 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             : "What do you want to remember"}</Label>
           <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} />
           {kind === "send" && (
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              Shorthand is fine — this is what you are telling the drafter, not what they read.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("Shorthand is fine — this is what you are telling the drafter, not what they read.")} </Typography>
           )}
         </Box>}
 
         {kind === "send" && (
           <Box>
-            <Label>And then</Label>
+            <Label>{tx("And then")}</Label>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Fork on={mode === "draft"} onClick={() => setMode("draft")} title="Draft it and show me"
-                hint="written in your voice from the thread. It lands on the Timeline as 🏁 ready to close out." />
-              <Fork on={mode === "task"} onClick={() => setMode("task")} title="Find out first"
-                hint="an agent researches it, then drafts the message from what it actually found." />
+              <Fork on={mode === "draft"} onClick={() => setMode("draft")} title={tx("Draft it and show me")}
+                hint={tx("written in your voice from the thread. It lands on the Timeline as 🏁 ready to close out.")} />
+              <Fork on={mode === "task"} onClick={() => setMode("task")} title={tx("Find out first")}
+                hint={tx("an agent researches it, then drafts the message from what it actually found.")} />
             </Box>
           </Box>
         )}
@@ -423,23 +416,23 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         {kind === "goal" && (
           <>
             <Box>
-              <Label>By</Label>
+              <Label>{tx("By")}</Label>
               <TextField type="date" size="small" value={by} onChange={(e) => setBy(e.target.value)} sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
-              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>The date is the goal's clock: it sits where the age goes on your rail.</Typography>
+              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>{tx("The date is the goal's clock: it sits where the age goes on your rail.")}</Typography>
             </Box>
             <Box>
-              <Label>Who is involved</Label>
-              <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coder"
+              <Label>{tx("Who is involved")}</Label>
+              <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder={tx("Ray Colton, Payworth (Marcus), the coder")}
                 sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
-              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>People it may chase and systems it may touch. Anyone else is a question to you first.</Typography>
+              <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>{tx("People it may chase and systems it may touch. Anyone else is a question to you first.")}</Typography>
             </Box>
             <Box>
-              <Label>And then</Label>
+              <Label>{tx("And then")}</Label>
               <Box sx={{ display: "flex", gap: 1 }}>
-                <Fork on={plan} onClick={() => setPlan(true)} title="Plan it and show me"
-                  hint="the AI proposes the steps from your words; you cut or add, then start the first one. It lands on the rail as a goal." />
-                <Fork on={!plan} onClick={() => setPlan(false)} title="Track it, I have the plan"
-                  hint="type the steps yourself on the task; it chases the people on them and reports against the date." />
+                <Fork on={plan} onClick={() => setPlan(true)} title={tx("Plan it and show me")}
+                  hint={tx("the AI proposes the steps from your words; you cut or add, then start the first one. It lands on the rail as a goal.")} />
+                <Fork on={!plan} onClick={() => setPlan(false)} title={tx("Track it, I have the plan")}
+                  hint={tx("type the steps yourself on the task; it chases the people on them and reports against the date.")} />
               </Box>
             </Box>
           </>
@@ -447,14 +440,12 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
         {kind === "note" && (
           <Box>
-            <Label>Come back to it</Label>
+            <Label>{tx("Come back to it")}</Label>
             {/* the note's row is stamped with WHEN IT IS FOR, so the Timeline's own clock is the
                 reminder: it sits in that day, out of the way until then (ownwork.note) */}
             <TextField type="datetime-local" size="small" value={when} onChange={(e) => setWhen(e.target.value)}
               sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              Leave it empty for now. A date puts the row in that day and it stays quiet until then.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("Leave it empty for now. A date puts the row in that day and it stays quiet until then.")} </Typography>
           </Box>
         )}
 
@@ -464,7 +455,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
-        <Button size="small" onClick={close} sx={{ color: DIM }}>Cancel</Button>
+        <Button size="small" onClick={close} sx={{ color: DIM }}>{tx("Cancel")}</Button>
         <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
           sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>

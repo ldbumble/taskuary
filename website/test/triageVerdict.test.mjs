@@ -59,7 +59,7 @@ test("the timeline draws the response as facts, repository, and a numbered task 
   const view = readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
   assert.ok(view.includes("Full triage response"));
   assert.ok(view.includes("Triage's structured response"));
-  assert.ok(view.includes('label="Goes to"'));
+  assert.ok(view.includes('label={tx("Goes to")}'));
   assert.ok(view.includes("Repository choice needed"));
   assert.ok(view.includes('component="ol"'));
   assert.ok(view.includes("No separate checklist was returned."));

@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 import React, { useState } from "react";
 import api from "./api.js";
 import { describe, pickingRepo } from "./proposalCard.js";
@@ -74,10 +75,10 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
       )}
       {picking && open && (
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "#6b6459", marginTop: 6 }}>
-          <span style={{ fontWeight: 600 }}>repository:</span>
+          <span style={{ fontWeight: 600 }}>{tx("repository:")}</span>
           <select className="tq-repo-pick" value={repo} onChange={(e) => setRepo(e.target.value)}
             style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid #d8d1c5", background: "#fff", color: "#3d4a55" }}>
-            {!repo && <option value="">choose a repository…</option>}
+            {!repo && <option value="">{tx("choose a repository…")}</option>}
             {p.repo_choices.map((r) => <option key={r} value={r}>{r}{r === p.params?.repo ? " (best guess)" : ""}</option>)}
           </select>
         </label>
@@ -87,17 +88,17 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
           {peek.error ? (peek.pick ? peek.error : `Dry run: ${peek.error}`) : `Dry run - ${peek.headline || ""}\n${peek.summary || ""}`}
         </div>
       )}
-      {p.status === "done" && p.outcome?.link && <div style={{ marginTop: 6 }}><a href={p.outcome.link} style={{ fontSize: 12, color: "#55697a" }}>Open it</a></div>}
+      {p.status === "done" && p.outcome?.link && <div style={{ marginTop: 6 }}><a href={p.outcome.link} style={{ fontSize: 12, color: "#55697a" }}>{tx("Open it")}</a></div>}
       {askRepo ? (
         <div style={{ marginTop: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 12, color: "#41525f" }}>Which repository should the coding agent use?</div>
+          <div style={{ fontWeight: 600, fontSize: 12, color: "#41525f" }}>{tx("Which repository should the coding agent use?")}</div>
           <RepoPicker taskId={p.repo.taskId} agent={p.repo.agent} onDone={(data) => { if (data?.repo) onConfirm?.(p); }} />
-          <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>Not now</button>
+          <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{tx("Not now")}</button>
         </div>
       ) : open && !(asks && !picking) ? (
         <div className="tq-options" style={{ marginTop: 8 }}>
           <button type="button" className="tq-chip primary" disabled={picking && !repo} onClick={confirm}>{d.confirm}</button>
-          {d.preview && <button type="button" className="tq-chip" disabled={!!peek?.busy} onClick={preview}>{peek?.busy ? "Running…" : "Preview"}</button>}
+          {d.preview && <button type="button" className="tq-chip" disabled={!!peek?.busy} onClick={preview}>{peek?.busy ? tx("Running…") : tx("Preview")}</button>}
           <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{d.cancel}</button>
         </div>
       ) : (state ? <div style={{ fontSize: 11.5, color: "#8a8276", marginTop: 6 }}>{state}</div> : null)}

@@ -125,7 +125,7 @@ COMPLETE_REPLY_TOKENS = 1200  # completed multi-item work must have room to answ
 # like a form letter. Belt and braces: the prompt says not to, and this takes it off anyway.
 _SIGNOFF = re.compile(r'^(best|thanks|thank you|regards|cheers|kind regards|best regards|sincerely)\b[\s,!.]*$', re.I)
 _COMMENT = re.compile(r'<!--.*?-->', re.S)
-_TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here).*$', re.M)
+_TEMPLATE_LINES = re.compile(r'^.*(not generated yet|Write your own rules here|ainda não gerado|Escreva suas regras de estilo aqui).*$', re.M)
 
 WRITING_SOURCE = 'writing'     # a memory note that is an explicit instruction about HOW to write (PW-060)
 OWNER_NOTES = '## Owner notes'

@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { observeSync } from '../src/syncObserver.js';
 import { syncFace, syncPhaseLabel } from '../src/syncTiming.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('en');   // English contract; pt-BR face pinned in syncTiming.test.mjs
 
 const flush = () => new Promise(setImmediate);
 function harness(read) {

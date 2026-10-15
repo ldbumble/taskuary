@@ -1,7 +1,7 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
 import argparse, os, socket, subprocess, threading, webbrowser
 import uvicorn
-from . import __version__, config, launchkey
+from . import __version__, config, launchkey, i18n
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
 try: import winreg as _winreg           # here, not in open_when_ready's thread, which must import nothing
@@ -18,7 +18,7 @@ def _session_headers(srv: dict) -> dict:
 
 def _port(value):
     try: return config.port_number(value)
-    except ValueError as e: raise argparse.ArgumentTypeError(str(e)) from None
+    except ValueError as e: raise argparse.ArgumentTypeError(i18n.text(str(e))) from None
 
 def public_url(host, port) -> str:
     """0.0.0.0 / :: are bind addresses, not a place a browser can go."""
@@ -167,19 +167,27 @@ def _post(path: str, body: dict, stranger, timeout: int = 60, hdr: dict = None):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog='taskuary', description='Your work, already underway - a personal AI assistant for your job.')
-    ap.add_argument('--host', help='override [server].host (0.0.0.0 to listen on all interfaces)')
-    ap.add_argument('--port', type=_port, help='override [server].port')
-    ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab when the server starts")
-    ap.add_argument('--link', action='store_true', help='print a one-time address that opens the running app signed in, for a browser you open yourself')
-    ap.add_argument('--debug', action='store_true', help='verbose console logging (requests, report runs, errors)')
+    import os
+    # Parse locale without opening the database: --help must not touch owner data.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument('--locale', choices=i18n.LOCALES)
+    chosen, _ = pre.parse_known_args()
+    if chosen.locale: os.environ['TASKUARY_LOCALE'] = chosen.locale
+    tr = i18n.text
+    ap = argparse.ArgumentParser(prog='taskuary', description=tr('Your work, already underway - a personal AI assistant for your job.'), add_help=False)
+    ap.add_argument('-h', '--help', action='help', help=tr('show this help message and exit'))
+    ap.add_argument('--locale', choices=i18n.LOCALES, help='Idioma / language: pt-BR, en')
+    ap._optionals.title = tr('options')
+    ap.add_argument('--host', help=tr('override [server].host (0.0.0.0 to listen on all interfaces)'))
+    ap.add_argument('--port', type=_port, help=tr('override [server].port'))
+    ap.add_argument('--no-browser', action='store_true', help=tr("don't open a browser tab when the server starts"))
+    ap.add_argument('--link', action='store_true', help=tr('print a one-time address that opens the running app signed in, for a browser you open yourself'))
+    ap.add_argument('--debug', action='store_true', help=tr('verbose console logging (requests, report runs, errors)'))
     ap.add_argument('--version', action='version', version=f'taskuary {__version__}')
     # "what is actually in the prompt?" had no answer short of reading the code that builds it,
     # which is not a reasonable thing to ask of the person whose judgement is being automated
     ap.add_argument('--prompts', nargs='?', const='', metavar='MESSAGE_ID',
-                    help='print the triage, reply and coding-agent prompts for a real item on '
-                         'this machine - every block labelled with the document or table it '
-                         'came from - then exit. Optionally for one message id.')
+                    help=tr('print the triage, reply and coding-agent prompts for a real item on this machine - every block labelled with the document or table it came from - then exit. Optionally for one message id.'))
     # "is the triage right?" is a rate, and nothing measured it: build the labelled cases out of
     # the owner's own verdicts, score the configured classifier over them, or export a set that
     # can leave the machine (people and prose removed) - see evalset.py
@@ -187,36 +195,30 @@ def main():
     # checkout and there is none to give it. They are the assistant's work now (ingest: no_repo), but
     # rows that arrived before that rule are still sitting on the board unstartable.
     ap.add_argument('--reroute-held', action='store_true',
-                    help='move open coding tasks that have no nameable repository to the agent that '
-                         'needs none, and start them; prints what moved, then exits')
+                    help=tr('move open coding tasks that have no nameable repository to the agent that needs none, and start them; prints what moved, then exits'))
     # the rows filed before triage was asked for a summary and a checklist: their ask is the raw
     # email, footer and quoted thread included, and they have no todos at all
     ap.add_argument('--backfill-asks', action='store_true',
-                    help='re-derive the ask and the todos for tasks whose summary is a copy of the '
-                         'email. Prints what it WOULD change and writes nothing unless --apply.')
-    ap.add_argument('--apply', action='store_true', help='with --backfill-asks: actually write the changes')
-    ap.add_argument('--include-closed', action='store_true', help='with --backfill-asks: closed tasks too')
+                    help=tr('re-derive the ask and the todos for tasks whose summary is a copy of the email. Prints what it WOULD change and writes nothing unless --apply.'))
+    ap.add_argument('--apply', action='store_true', help=tr('with --backfill-asks: actually write the changes'))
+    ap.add_argument('--include-closed', action='store_true', help=tr('with --backfill-asks: closed tasks too'))
     ap.add_argument('--evalset', choices=['build', 'share', 'evaluate', 'ablate', 'jev'], metavar='ACTION',
-                    help='triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), '
-                         'evaluate (score the configured AI over them), ablate (score with and without memory), '
-                         'share (anonymised copy for tests/data)')
+                    help=tr('triage dataset: build (labelled cases from your verdicts -> ~/.taskuary/eval), evaluate (score the configured AI over them), ablate (score with and without memory), share (anonymised copy for tests/data)'))
     # THE WALL (blackboard.py). An agent working in a terminal has a shell and no API token, so
     # this is how it talks to the next agent: two flags, no arguments it has to be told - the
     # session puts its own name, task and checkout in the environment.
     # try-it-out in one command: a throwaway home, a world of invented work, and every door
     # to the outside nailed shut (demo.py). This is what /demo on the website runs.
     ap.add_argument('--demo', action='store_true',
-                    help='run a DEMO instance: invented data, a scripted AI, replayed coding '
-                         'sessions, and nothing that can reach a real system')
+                    help=tr('run a DEMO instance: invented data, a scripted AI, replayed coding sessions, and nothing that can reach a real system'))
     ap.add_argument('--board', action='store_true',
-                    help='print the agent wall for this checkout - what the agents before you left here')
+                    help=tr('print the agent wall for this checkout - what the agents before you left here'))
     ap.add_argument('--all', action='store_true',
-                    help='with --board: the whole wall, including days already folded into a summary')
+                    help=tr('with --board: the whole wall, including days already folded into a summary'))
     ap.add_argument('--note', metavar='TEXT',
-                    help='leave a line on the wall for the next agent (see --kind)')
+                    help=tr('leave a line on the wall for the next agent (see --kind)'))
     ap.add_argument('--kind', default='note', metavar='KIND',
-                    help='wall: working | note | blocked | ready | done; Hub: new_idea | '
-                         'technical_solve | howto | gotcha | decision | system | people')
+                    help=tr('wall: working | note | blocked | ready | done; Hub: new_idea | technical_solve | howto | gotcha | decision | system | people'))
     # ...and how a session ENDS itself. The Done button was the only way a finished task ever
     # produced its report and its reply, so an agent that finished at 2am and a person who never
     # opened the tab left the sender with nothing (selfclose.py).
@@ -224,51 +226,39 @@ def main():
     # needs - and it is the difference between a company whose know-how lives in its people and
     # one a new agent can be plugged into.
     ap.add_argument('--learned', metavar='TEXT',
-                    help='write one hard-earned discovery or developed company idea into the Hub. '
-                         'Use only after substantial investigation/reasoning; never routine output or '
-                         'what you did. See --topic, --kind and --body.')
+                    help=tr('write one hard-earned discovery or developed company idea into the Hub. Use only after substantial investigation/reasoning; never routine output or what you did. See --topic, --kind and --body.'))
     ap.add_argument('--topic', default='', metavar='TOPIC',
-                    help='with --learned: which shelf it goes on - a repository, a system, a part of '
-                         'the business. Defaults to the checkout you are in.')
+                    help=tr('with --learned: which shelf it goes on - a repository, a system, a part of the business. Defaults to the checkout you are in.'))
     ap.add_argument('--body', default='', metavar='TEXT',
-                    help='with --learned: the two or three sentences under the title - the fact, why it '
-                         'is so, and what to do about it')
+                    help=tr('with --learned: the two or three sentences under the title - the fact, why it is so, and what to do about it'))
     ap.add_argument('--why-earned', default='', metavar='TEXT',
-                    help='with --learned: what substantial investigation, tests, comparison, or reasoning earned this Hub post')
+                    help=tr('with --learned: what substantial investigation, tests, comparison, or reasoning earned this Hub post'))
     # ...and how agents keep it honest: agree, disagree, add. One vote per agent per entry, and an
     # entry the room votes below zero leaves the Hub and every later seed prompt.
-    ap.add_argument('--upvote', type=int, metavar='ID', help='this Hub entry held up - agree with it (ids are in the FROM HUB block of your prompt)')
-    ap.add_argument('--downvote', type=int, metavar='ID', help='this Hub entry is wrong or stale - say why with --body')
-    ap.add_argument('--comment', type=int, metavar='ID', help='add to a Hub entry without re-posting it: the text goes in --body')
+    ap.add_argument('--upvote', type=int, metavar='ID', help=tr('this Hub entry held up - agree with it (ids are in the FROM HUB block of your prompt)'))
+    ap.add_argument('--downvote', type=int, metavar='ID', help=tr('this Hub entry is wrong or stale - say why with --body'))
+    ap.add_argument('--comment', type=int, metavar='ID', help=tr('add to a Hub entry without re-posting it: the text goes in --body'))
     ap.add_argument('--done', metavar='SUMMARY', nargs='?', const='',
-                    help='finish the task this session is working: close it, file the report from '
-                         'this transcript, and draft the reply the sender gets (you are not '
-                         'sending it - the owner approves it). Give one sentence on what you did '
-                         'or found. Do not run this while waiting on the owner.')
+                    help=tr('finish the task this session is working: close it, file the report from this transcript, and draft the reply the sender gets (you are not sending it - the owner approves it). Give one sentence on what you did or found. Do not run this while waiting on the owner.'))
     ap.add_argument('--no-reply', action='store_true',
-                    help='with --done: nobody should hear back (the owner said not to answer, or there is nothing '
-                         'for the sender) - the task closes with no reply drafted, and your sentence says why'),
+                    help=tr('with --done: nobody should hear back (the owner said not to answer, or there is nothing for the sender) - the task closes with no reply drafted, and your sentence says why')),
     ap.add_argument('--reply', metavar='TEXT',
-                    help="write the reply the person who asked will get, in your own words - it becomes this "
-                         "task's pending reply for the owner to approve (you are not sending it), and "
-                         "finishing keeps it instead of redrafting. Use - to read it from stdin.")
-    ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
+                    help=tr("write the reply the person who asked will get, in your own words - it becomes this task's pending reply for the owner to approve (you are not sending it), and finishing keeps it instead of redrafting. Use - to read it from stdin."))
+    ap.add_argument('--reply-file', metavar='PATH', help=tr('--reply, read from a file (for a long or multi-line reply)'))
     ap.add_argument('--attach', action='append', default=[], metavar='PATH',
-                    help='a file that goes with --reply or --draft (repeat for more). If your words say "attached", attach it - '
-                         'otherwise the mail goes out without it. Alone, it adds the file to the reply already saved.')
+                    help=tr('a file that goes with --reply or --draft (repeat for more). If your words say "attached", attach it - otherwise the mail goes out without it. Alone, it adds the file to the reply already saved.'))
     # ...and the emails that close a task (slots.py): its checklist lines marked "-> email to" name them
-    ap.add_argument('--draft', metavar='TEXT', help="write one of the emails that closes this task (its checklist names them) - "
-                                                    "pending for the owner to approve; use with --slot or --to. Use - for stdin.")
-    ap.add_argument('--draft-file', metavar='PATH', help='--draft, read from a file')
-    ap.add_argument('--slot', default='', help='the checklist slot this email fills (the id after --slot in your checklist)')
-    ap.add_argument('--to', default='', help='who it goes to, when no slot names them')
-    ap.add_argument('--subject', default='', help='the subject line')
+    ap.add_argument('--draft', metavar='TEXT', help=tr('write one of the emails that closes this task (its checklist names them) - pending for the owner to approve; use with --slot or --to. Use - for stdin.'))
+    ap.add_argument('--draft-file', metavar='PATH', help=tr('--draft, read from a file'))
+    ap.add_argument('--slot', default='', help=tr('the checklist slot this email fills (the id after --slot in your checklist)'))
+    ap.add_argument('--to', default='', help=tr('who it goes to, when no slot names them'))
+    ap.add_argument('--subject', default='', help=tr('the subject line'))
     # ...and a BATCH's items (batch.py): one finding per item, as the agent finishes each
-    ap.add_argument('--item', type=int, metavar='N', help='in a batch: report on item N (with --result, and --overlap/--settled)')
-    ap.add_argument('--result', default='', metavar='TEXT', help="with --item: what it is, whether it is right, what you propose")
-    ap.add_argument('--overlap', default='', metavar='TEXT', help='with --item: the other item it duplicates, conflicts with or needs')
-    ap.add_argument('--settled', action='store_true', help='with --item: nothing is left for the owner to do on it')
-    ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help='with --item: what should happen to it')
+    ap.add_argument('--item', type=int, metavar='N', help=tr('in a batch: report on item N (with --result, and --overlap/--settled)'))
+    ap.add_argument('--result', default='', metavar='TEXT', help=tr('with --item: what it is, whether it is right, what you propose'))
+    ap.add_argument('--overlap', default='', metavar='TEXT', help=tr('with --item: the other item it duplicates, conflicts with or needs'))
+    ap.add_argument('--settled', action='store_true', help=tr('with --item: nothing is left for the owner to do on it'))
+    ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help=tr('with --item: what should happen to it'))
     args = ap.parse_args()
     agent, stranger = session()
     if stranger is not None: _refuse_outside(args)
@@ -288,7 +278,7 @@ def main():
         except (AttributeError, OSError): pass
         tid = os.environ.get('TASKUARY_TASK')
         if not str(tid).isdigit():
-            print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to reply on')
+            print(i18n.text('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to reply on'))
             return
         drafting = args.draft is not None or bool(args.draft_file)
         path, flag = (args.draft_file, args.draft) if drafting else (args.reply_file, args.reply)
@@ -319,8 +309,8 @@ def main():
         try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         except (AttributeError, OSError): pass
         tid = os.environ.get('TASKUARY_TASK')
-        if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no batch to report on'); return
-        if not args.result.strip(): print('nothing reported - say what you found with --result'); return
+        if not str(tid).isdigit(): print(i18n.text('not in a Taskuary session - TASKUARY_TASK is not set, so there is no batch to report on')); return
+        if not args.result.strip(): print(i18n.text('nothing reported - say what you found with --result')); return
         got = _post('/api/agent/item', {'task_id': int(tid), 'item': args.item, 'result': args.result, 'overlap': args.overlap,
                                         'settled': bool(args.settled), 'propose': args.propose,
                                         'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger)
@@ -335,7 +325,7 @@ def main():
         except (AttributeError, OSError): pass
         tid = os.environ.get('TASKUARY_TASK')
         if not str(tid).isdigit():
-            print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to finish')
+            print(i18n.text('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to finish'))
             return
         got = _post('/api/agent/done', {'task_id': int(tid), 'summary': args.done, 'no_reply': bool(args.no_reply),
                                         'agent': os.environ.get('TASKUARY_AGENT') or 'agent'}, stranger, timeout=120)
@@ -346,8 +336,8 @@ def main():
                   + (' A reply to the sender is drafted and waiting on the owner.' if out.get('drafting')
                      else ' No reply drafted, as you said.' if args.no_reply else ' No reply was needed.'))
         elif out.get('held'):
-            print('noted, not closed: the owner opened this session to work in, so they end it. Your summary is on '
-                  'the task and they have been told; stay at the prompt in case they have more.')
+            print(i18n.text('noted, not closed: the owner opened this session to work in, so they end it. Your summary is on '
+                  'the task and they have been told; stay at the prompt in case they have more.'))
         else:
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
@@ -379,7 +369,7 @@ def main():
             lid = args.upvote or args.downvote or args.comment
             try:
                 if args.comment:
-                    if not args.body.strip(): print('nothing to add - put the text in --body'); return
+                    if not args.body.strip(): print(i18n.text('nothing to add - put the text in --body')); return
                     store.lore_comment(lid, args.body.strip()[:handbook.BODY_MAX], who)
                     print(f'added to #{lid}'); return
                 p = handbook.vote(store, lid, 1 if args.upvote else -1, who)
@@ -390,7 +380,7 @@ def main():
         if args.learned:
             from . import handbook
             if len(' '.join(args.why_earned.split())) < 20:
-                print('not filed: --why-earned must name the substantial investigation, tests, or reasoning behind this Hub post')
+                print(i18n.text('not filed: --why-earned must name the substantial investigation, tests, or reasoning behind this Hub post'))
                 return
             try: p = handbook.post(store, args.learned, args.body, args.topic, args.kind if args.kind in handbook.KINDS else 'howto',
                                    who, int(tid) if str(tid).isdigit() else None, cwd, why_earned=args.why_earned)
@@ -430,7 +420,7 @@ def main():
                 print(f'the live wall is unavailable for {cwd}: could not reach Taskuary at {base}: {e}')
                 return
         print(f'the wall - {cwd}' if rows else f'the wall is empty for {cwd} - you are first')
-        if not args.all and rows: print('  (older days are folded into [summary] lines; --board --all for every note)')
+        if not args.all and rows: print(i18n.text('  (older days are folded into [summary] lines; --board --all for every note)'))
         for r in reversed(rows):
             ref = f" {task_ref(r['TaskId'])}" if r.get('TaskId') else ''
             print(f"  [{r['Kind']}] {r['Agent']}{ref} {bb._ago(r['CreatedAt'])}: {r['Body']}")
@@ -454,8 +444,8 @@ def main():
         store = SQLiteStore(config.db_path())
         brain = _llm.build_llm(store)
         if not brain:
-            print('No AI brain configured, so the summaries will only be stripped of their footers '
-                  'and no todos can be drawn. Configure one under Settings > Triage & agents for the real thing.')
+            print(i18n.text('No AI brain configured, so the summaries will only be stripped of their footers '
+                  'and no todos can be drawn. Configure one under Settings > Triage & agents for the real thing.'))
         rows = ingest.backfill_asks(store, brain, dry_run=not args.apply, include_closed=args.include_closed)
         touched = [r for r in rows if r['action'] in ('rewrote', 'would rewrite')]
         for r in touched:
@@ -463,7 +453,7 @@ def main():
             print(f"    ask:  {(r.get('summary') or '')[:150]}")
             for i in r.get('checklist') or []: print(f"    todo: {i}")
         print(f"\n{len(touched)} of {len(rows)} task(s) {'rewritten' if args.apply else 'would be rewritten'}.")
-        if touched and not args.apply: print('Nothing was written. Re-run with --apply to write it.')
+        if touched and not args.apply: print(tr('Nothing was written. Re-run with --apply to write it.'))
         return
     if args.evalset:
         import sys
@@ -501,18 +491,18 @@ def main():
     url = public_url(host, port)
     if args.link:
         if _busy(host, port) and _is_taskuary(url): print(launchkey.remote_link(url, cfg['server'].get('token') or ''))
-        else: print(f'Taskuary is not running at {url} - start it with `taskuary`, then ask again.')
+        else: print(tr('Taskuary is not running at {url} - start it with `taskuary`, then ask again.', url=url))
         return
     if _busy(host, port):
         if _is_taskuary(url):
             # don't crash into 'address already in use' - reuse the running instance, signed in with a key it hands us
-            print(f'Taskuary is already running at {url} - opening it.')
+            print(tr('Taskuary is already running at {url} - opening it.', url=url))
             if not args.no_browser: _open_private(launchkey.remote_link(url, cfg['server'].get('token') or ''))
             return
         from .desktop import free_port
         old, port = port, free_port(host)
         url = public_url(host, port)
-        print(f'port {old} is in use by something else - using {port} instead')
+        print(tr('port {old} is in use by something else - using {port} instead', old=old, port=port))
     # ...and a port is not the data: one Taskuary per data folder, wherever it serves (instance.py)
     from . import instance
     if h := instance.holder():

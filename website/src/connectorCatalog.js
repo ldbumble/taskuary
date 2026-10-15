@@ -5,11 +5,18 @@
 // Keeping the roadmap in data rather than scattering one-off cards through ConnectorsView makes it
 // harder for a category to quietly become empty.
 import catalogue from "../../taskuary/connectorcatalog.json" with { type: "json" };
+import { groupLabel, localized } from "./i18n.js";
+
+export const catalogGroupLabel = (group) => groupLabel(catalogue, group);
+export const catalogTitle = (type, fallback) => {
+  const card = catalogue.cards.find((c) => c.type === type);
+  return card ? localized(card, "title") : fallback;
+};
 
 const grouped = {};
 for (const c of catalogue.cards) {
   if (!c.planned) continue;
-  (grouped[c.group] ||= []).push({ type: c.type, title: c.title, desc: c.desc });
+  (grouped[c.group] ||= []).push({ type: c.type, title: c.title, i18n: c.i18n, desc: c.desc });
 }
 export const PLANNED_CONNECTORS = Object.freeze(grouped);
 export const CATALOGUE = Object.freeze(catalogue.cards);

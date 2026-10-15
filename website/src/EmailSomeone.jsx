@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // SEND OUT RESULTS, from inside a task - whoever started it (the owner, 2026-10-09: "even though i started it from the new button
 // i want to be able to create email to send to someone and notify it's done ... choose sender/attachments/draft message with
 // ai"; then "add from mailbox picker and teams/chat too"). An email - From, To, CC, which of the task's files ride on it - or a
@@ -58,12 +59,9 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
   };
   return (
     <Dialog open={open} onClose={() => !busy && onClose?.()} fullWidth maxWidth="sm" PaperProps={{ sx: { borderRadius: 3 } }}>
-      <DialogTitle>Send out results · {detail?.ref || ""}</DialogTitle>
+      <DialogTitle>{tx("Send out results ·")} {detail?.ref || ""}</DialogTitle>
       <DialogContent sx={{ pt: "8px !important", display: "flex", flexDirection: "column", gap: 1.6 }}>
-        <Typography variant="body2" sx={{ color: DIM }}>
-          The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in Close out for you
-          to edit and approve - nothing is sent now - and the task closes once it is sent.
-        </Typography>
+        <Typography variant="body2" sx={{ color: DIM }}> {tx("The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in Close out for you to edit and approve - nothing is sent now - and the task closes once it is sent.")} </Typography>
         {targets.length > 1 && (
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>
             {targets.map((t) => (
@@ -79,7 +77,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
         )}
         {email && boxes.length > 1 && (
           <Box>
-            <Label>From</Label>
+            <Label>{tx("From")}</Label>
             <Select size="small" fullWidth value={from} onChange={(e) => setFrom(e.target.value)} sx={{ fontSize: 13, bgcolor: "#fcfaf7" }}>
               {boxes.map((b) => <MenuItem key={b.address} value={b.address} sx={{ fontSize: 13 }}>{b.address}
                 <Typography component="span" sx={{ ml: 1, fontSize: 11, color: FAINT }}>{b.card}</Typography></MenuItem>)}
@@ -87,10 +85,10 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
           </Box>
         )}
         <Box>
-          <Label>To</Label>
+          <Label>{tx("To")}</Label>
           {email
             // one person: each message the task owes goes to one recipient; copy anyone else in
-            ? <EmailRecipients value={to} onChange={(v) => setTo(v.slice(-1))} options={people} placeholder="Search contacts or type an email address" />
+            ? <EmailRecipients value={to} onChange={(v) => setTo(v.slice(-1))} options={people} placeholder={tx("Search contacts or type an email address")} />
             : <Autocomplete key={channel} size="small" fullWidth openOnFocus autoHighlight options={people} value={chat}
                 onChange={(_e, v) => setChat(v)} getOptionLabel={recipientLabel} isOptionEqualToValue={(o, v) => o.to === v.to}
                 filterOptions={(o, st) => recipientOptions(o, st.inputValue)}
@@ -101,34 +99,34 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
                     {t.hint && <Box sx={{ fontSize: 10.5, color: FAINT }}>{t.hint}</Box>}
                   </Box>
                 )}
-                renderInput={(params) => <TextField {...params} placeholder="Search people and conversations" sx={field} />} />}
+                renderInput={(params) => <TextField {...params} placeholder={tx("Search people and conversations")} sx={field} />} />}
         </Box>
         {email && (
           <Box>
             <Label>CC</Label>
-            <EmailRecipients value={cc} onChange={setCc} options={people} placeholder="Optional" />
+            <EmailRecipients value={cc} onChange={setCc} options={people} placeholder={tx("Optional")} />
           </Box>
         )}
         <Box>
-          <Label>Anything to add?</Label>
+          <Label>{tx("Anything to add?")}</Label>
           <TextField fullWidth multiline minRows={3} value={about} onChange={(e) => setAbout(e.target.value)}
-            placeholder="Optional - e.g. the template is attached; they can start using it Monday" sx={field} />
-          <Typography variant="caption" sx={{ color: FAINT }}>Left empty, it is just the results.</Typography>
+            placeholder={tx("Optional - e.g. the template is attached; they can start using it Monday")} sx={field} />
+          <Typography variant="caption" sx={{ color: FAINT }}>{tx("Left empty, it is just the results.")}</Typography>
         </Box>
         {email && (
           <Box>
-            <Label>Attach</Label>
+            <Label>{tx("Attach")}</Label>
             {files.length ? files.map((f) => (
               <FormControlLabel key={f.key} sx={{ display: "flex", m: 0, "& .MuiTypography-root": { fontSize: 12.5 } }}
                 control={<Checkbox size="small" checked={picked.has(f.key)} onChange={() => flip(f.key)} />} label={f.name} />
-            )) : <Typography variant="caption" sx={{ color: FAINT }}>No files on this task yet.</Typography>}
-            <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>Anything else: Attach a file on the draft.</Typography>
+            )) : <Typography variant="caption" sx={{ color: FAINT }}>{tx("No files on this task yet.")}</Typography>}
+            <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>{tx("Anything else: Attach a file on the draft.")}</Typography>
           </Box>
         )}
         {err && <Typography variant="body2" sx={{ color: "#a33b3b" }}>{err}</Typography>}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button onClick={onClose} disabled={busy}>{tx("Cancel")}</Button>
         <Button variant="contained" disableElevation onClick={go} disabled={busy || !ready}>
           {busy ? <CircularProgress size={15} /> : "Draft with AI"}
         </Button>

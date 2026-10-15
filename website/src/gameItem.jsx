@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The Assistant Game's item inspector: one thing from the pile, opened in the room it stands in, with
 // the same depth the chat's cards give it - the whole message or report, the agent's last words and
 // a way to answer them, the draft with a redraft instruction, meeting prep, the fix for a broken
@@ -70,7 +71,7 @@ function MessageText({ mid }) {
     api.get(`/api/messages/${mid}`).then(({ data }) => live && setDoc(data || {})).catch((e) => live && setDoc({ error: errText(e) }));
     return () => { live = false; };
   }, [mid]);
-  if (!doc) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>opening it…</Typography>;
+  if (!doc) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>{tx("opening it…")}</Typography>;
   if (doc.error) return <Typography sx={{ fontSize: 11.5, color: G.red, mt: 0.6 }}>{doc.error}</Typography>;
   const raw = cleanText(doc.BodyText || ""), read = doc.ReadText != null ? cleanText(doc.ReadText) : raw;
   const body = whole ? raw : read, cut = body.indexOf("\n--- raw data ---");
@@ -80,7 +81,7 @@ function MessageText({ mid }) {
       sx={{ border: 0, bgcolor: "transparent", color: G.faint, fontSize: 11, cursor: "pointer", p: 0, mt: 0.3 }}>
       {whole ? "Just what they wrote" : "Show the whole email"}</Box>}
     {doc.SourceLink && <Box component="a" href={doc.SourceLink} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-      sx={{ display: "block", fontSize: 11, color: G.mint, mt: 0.3 }}>open the original ↗</Box>}
+      sx={{ display: "block", fontSize: 11, color: G.mint, mt: 0.3 }}>{tx("open the original ↗")}</Box>}
   </>;
 }
 
@@ -92,7 +93,7 @@ function AgentSaid({ tid }) {
     api.get(`/api/tasks/${tid}/worker`).then(({ data }) => live && setSaid(String(data?.said || "").trim())).catch(() => live && setSaid(""));
     return () => { live = false; };
   }, [tid]);
-  return said ? <><Label>WHAT IT SAID LAST</Label><Reading text={said} cap={120} /></> : null;
+  return said ? <><Label>{tx("WHAT IT SAID LAST")}</Label><Reading text={said} cap={120} /></> : null;
 }
 
 // an agent's filed report, from the task's comments - what it found, in its own words
@@ -106,7 +107,7 @@ function FinalReport({ tid }) {
     }).catch((e) => live && setText(errText(e)));
     return () => { live = false; };
   }, [tid]);
-  return text == null ? null : <><Label>ITS FINAL REPORT</Label><Reading text={text} /></>;
+  return text == null ? null : <><Label>{tx("ITS FINAL REPORT")}</Label><Reading text={text} /></>;
 }
 
 // the draft behind "ready to close out": edit it, send it, or tell the assistant how to rewrite it
@@ -124,8 +125,8 @@ function Draft({ item, busy, play }) {
     if (job?.state === "done") setRv((r) => (r && !r.gone ? { ...r, DraftText: job.draft } : r));
     if (job?.state === "failed") setErr(`The draft could not be written - ${job.error}. Write it here, or redraft.`);
   }, [job]);
-  if (!rv) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>fetching the draft…</Typography>;
-  if (rv.gone) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>Already handled - nothing is waiting here.</Typography>;
+  if (!rv) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>{tx("fetching the draft…")}</Typography>;
+  if (rv.gone) return <Typography sx={{ fontSize: 11.5, color: G.faint, mt: 0.6 }}>{tx("Already handled - nothing is waiting here.")}</Typography>;
   const action = rv.Kind === "action";
   const co = closeoutOf(rv);
   const parsed = () => { try { const p = JSON.parse(rv.DraftText || ""); return p.text || `${p.action}${p.why ? ` — ${p.why}` : ""}`; } catch { return rv.DraftText || ""; } };
@@ -146,7 +147,7 @@ function Draft({ item, busy, play }) {
       <Label>{co ? "THE AGENT FINISHED - WHAT CLOSES IT" : action ? "WHAT THE AGENT WANTS TO DO" : `THE DRAFT TO ${who.toUpperCase()} - EDIT, THEN SEND`}</Label>
       <Box component="textarea" rows={5} value={value} readOnly={action} onChange={(e) => setText(e.target.value)}
         placeholder={drafting ? "Drafting… it fills in here when the AI is done - or type your own" : "No draft yet - rewrite it below, or type your own"} sx={field} />
-      {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>New messages came in after this draft - rewrite it before sending.</Typography>}
+      {!!(rv.Stale ?? item.stale) && <Typography sx={{ fontSize: 11.5, color: G.gold, mt: 0.4 }}>{tx("New messages came in after this draft - rewrite it before sending.")}</Typography>}
       <Row>
         <Btn kind="gold" disabled={!!busy || (!action && !value.trim())} onClick={send} title={co ? `${co.label} - ${co.then}` : action ? "Runs what the agent proposed" : `Sends it to ${who}`}>
           {co ? `✔ ${co.label} · +40` : action ? "▶ Run it · +40" : item.tid ? "✔ Send & close · +40" : "📨 Send it · +40"}</Btn>
@@ -159,9 +160,9 @@ function Draft({ item, busy, play }) {
       </Row>
       {!action && item.mid && <>
         <Box sx={{ display: "flex", gap: 0.5, mt: 0.8 }}>
-          <Box component="input" value={how} onChange={(e) => setHow(e.target.value)} placeholder="Rewrite it… (shorter, warmer, say no)"
+          <Box component="input" value={how} onChange={(e) => setHow(e.target.value)} placeholder={tx("Rewrite it… (shorter, warmer, say no)")}
             onKeyDown={(e) => { if (e.key === "Enter") redraft(); }} sx={{ ...field, py: 0.6 }} />
-          <Btn disabled={!!busy || drafting} onClick={redraft} title="The assistant rewrites the draft - nothing is sent">{drafting ? "Drafting…" : "✍ Redraft"}</Btn>
+          <Btn disabled={!!busy || drafting} onClick={redraft} title={tx("The assistant rewrites the draft - nothing is sent")}>{drafting ? tx("Drafting…") : "✍ Redraft"}</Btn>
         </Box>
       </>}
       {err && <Typography sx={{ fontSize: 11.5, color: G.red, mt: 0.5 }}>{err}</Typography>}
@@ -216,7 +217,7 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
   if (!shown.length && !prop) return null;
   return (
     <Box onClick={(e) => e.stopPropagation()}>
-      <Label>MORE MOVES</Label>
+      <Label>{tx("MORE MOVES")}</Label>
       <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
         {shown.map((c) => <Btn key={c.verb} disabled={!!busy || !!prop} onClick={(e) => pick(c, e?.currentTarget)} title={c.hint}>{c.label}</Btn>)}
       </Box>
@@ -227,8 +228,8 @@ export function Moves({ item, covers = [], busy, play, onRepo, given = null, ini
         <Box sx={{ mt: 0.8, p: 1, borderRadius: "9px", border: `1px dashed ${G.gold}`, bgcolor: "rgba(240,192,90,.07)" }}>
           <Typography sx={{ fontSize: 12, color: G.ink }}>{prop.say || prop.label}</Typography>
           <Row>
-            <Btn kind="gold" disabled={!!busy} onClick={() => run(prop)}>Confirm - {prop.label}</Btn>
-            <Btn onClick={() => { api.delete(`/api/operations/${prop.id}`).catch(() => {}); setProp(null); }}>Cancel</Btn>
+            <Btn kind="gold" disabled={!!busy} onClick={() => run(prop)}>{tx("Confirm -")} {prop.label}</Btn>
+            <Btn onClick={() => { api.delete(`/api/operations/${prop.id}`).catch(() => {}); setProp(null); }}>{tx("Cancel")}</Btn>
           </Row>
         </Box>
       )}
@@ -274,8 +275,8 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   if (item.kind === "connection") {
     body = <>
       {item.why && <Reading text={item.why} cap={80} />}
-      <Row><Btn kind="gold" onClick={() => { window.location.hash = `connector=${item.channel}`; onNavigate?.("Connections"); }}>🔌 Open the connection</Btn></Row>
-      <Typography sx={{ fontSize: 11, color: G.faint, mt: 0.5 }}>Once it answers again this clears by itself.</Typography>
+      <Row><Btn kind="gold" onClick={() => { window.location.hash = `connector=${item.channel}`; onNavigate?.("Connections"); }}>{tx("🔌 Open the connection")}</Btn></Row>
+      <Typography sx={{ fontSize: 11, color: G.faint, mt: 0.5 }}>{tx("Once it answers again this clears by itself.")}</Typography>
     </>;
   } else if (card === "reply") {
     covers = ["approve", "redraft"];
@@ -288,7 +289,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
         : working ? "Back at it - nothing for you until it stops." : item.why}</Typography>
       {item.tid && !working && <AgentSaid tid={item.tid} />}
       {!item.paused && !!item.request_id && (item.choices || []).length > 0 && <>
-        <Label>ITS QUESTION - PICK ONE</Label>
+        <Label>{tx("ITS QUESTION - PICK ONE")}</Label>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
           {item.choices.map((c) => <Btn key={c} kind="mint" disabled={!!busy}
             onClick={() => play("answer", item.key, () => api.post(`/api/tasks/${item.tid}/worker/answer`, { request_id: item.request_id, text: c }))}>{c} · +60</Btn>)}
@@ -297,11 +298,11 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {!item.paused && !working && item.tid && <Box sx={{ display: "flex", gap: 0.5, mt: 0.8 }} onClick={(e) => e.stopPropagation()}>
         <Box component="input" value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={item.asking ? "Or answer in your own words…" : "Tell it what to do next…"}
           onKeyDown={(e) => { if (e.key === "Enter" && answer.trim()) tell(); }} sx={{ ...field, py: 0.6 }} />
-        <Btn kind="gold" disabled={!!busy || !answer.trim()} onClick={tell}>Answer · +60</Btn>
+        <Btn kind="gold" disabled={!!busy || !answer.trim()} onClick={tell}>{tx("Answer · +60")}</Btn>
       </Box>}
       <Row>
-        {item.paused && <Btn kind="gold" disabled={!!busy} onClick={() => play("resume", item.key, () => api.post(`/api/tasks/${item.tid}/resume`)).then((ok) => ok && open(item.tid))}>▶ Continue session · +15</Btn>}
-        {item.tid && <Btn onClick={() => open(item.tid)}>⌨ Jump into the code space</Btn>}
+        {item.paused && <Btn kind="gold" disabled={!!busy} onClick={() => play("resume", item.key, () => api.post(`/api/tasks/${item.tid}/resume`)).then((ok) => ok && open(item.tid))}>{tx("▶ Continue session · +15")}</Btn>}
+        {item.tid && <Btn onClick={() => open(item.tid)}>{tx("⌨ Jump into the code space")}</Btn>}
       </Row>
     </>;
   } else if (card === "meeting") {
@@ -315,13 +316,13 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
           const { data } = await api.post("/api/calendar/prep", { ...e, instruction: "Get me ready for this meeting: who is in it, what came before it, what I should say." });
           if (data?.taskId) open(data.taskId);
           return data;
-        })}>🎯 Prep me · +20</Btn>
+        })}>{tx("🎯 Prep me · +20")}</Btn>
         {e.join && <Box component="a" href={e.join} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}
-          sx={{ px: 1.1, py: 0.55, borderRadius: "9px", bgcolor: G.mint, color: "#1c1f24", fontSize: 11.5, fontWeight: 600, textDecoration: "none" }}>Join ↗</Box>}
+          sx={{ px: 1.1, py: 0.55, borderRadius: "9px", bgcolor: G.mint, color: "#1c1f24", fontSize: 11.5, fontWeight: 600, textDecoration: "none" }}>{tx("Join ↗")}</Box>}
       </Row>
     </>;
   } else if (card === "report") {
-    body = <>{item.bad && <Typography sx={{ fontSize: 12, color: G.red, mt: 0.5 }}>The run failed - the cause is in the report.</Typography>}{item.mid && <MessageText mid={item.mid} />}</>;
+    body = <>{item.bad && <Typography sx={{ fontSize: 12, color: G.red, mt: 0.5 }}>{tx("The run failed - the cause is in the report.")}</Typography>}{item.mid && <MessageText mid={item.mid} />}</>;
   } else if (card === "agentdone" || card === "wrapup") {
     covers = card === "agentdone" && item.mid ? ["reply"] : [];
     body = <>
@@ -330,15 +331,15 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
       {item.tid && <FinalReport tid={item.tid} />}
       <Row>
         {card === "agentdone" && item.mid && <Btn kind="gold" disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}
-          title="Drafts an answer to the sender from what the agent found - nothing is sent">✍ Reply from this · +20</Btn>}
-        {item.tid && <Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn>}
+          title={tx("Drafts an answer to the sender from what the agent found - nothing is sent")}>{tx("✍ Reply from this · +20")}</Btn>}
+        {item.tid && <Btn onClick={() => open(item.tid)}>{tx("Open")} {item.ref}</Btn>}
       </Row>
     </>;
   } else if (card === "fyis") {
     covers = ["done"];
     body = <>
       {(item.items || []).map((x) => <Typography key={x.key} sx={{ fontSize: 12, color: G.dim, mt: 0.4 }}>• <b style={{ color: G.ink }}>{x.who}</b> - {x.title}{x.summary ? ` - ${x.summary}` : ""}</Typography>)}
-      <Row><Btn kind="mint" disabled={!!busy} onClick={() => play("read", item.key, () => api.post("/api/funnel/settle", { key: item.key, verb: "done" }))}>☕ All read · +8</Btn></Row>
+      <Row><Btn kind="mint" disabled={!!busy} onClick={() => play("read", item.key, () => api.post("/api/funnel/settle", { key: item.key, verb: "done" }))}>{tx("☕ All read · +8")}</Btn></Row>
     </>;
   } else if (card === "idea") {
     covers = [];
@@ -349,33 +350,32 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
     covers = ["reply", "coder", "regular_agent"];
     body = <>
       {item.mid ? <MessageText mid={item.mid} /> : item.preview && <Reading text={item.preview} cap={90} />}
-      {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>🔁 Try triage again · +10</Btn></Row>}
+      {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>{tx("🔁 Try triage again · +10")}</Btn></Row>}
       {asks && item.mid && <Row>
-        <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>✍ Draft a reply · +20</Btn>
+        <Btn kind={m.verb === "draft" ? "gold" : "ghost"} disabled={!!busy} onClick={() => play("draft", item.key, () => openReply(api, item.mid))}>{tx("✍ Draft a reply · +20")}</Btn>
         {/* not while an agent runs on it - its session is the way in (2026-10-01) */}
-        {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => dispatch(coding ? "coding" : "general")}>🤖 Hand to {coding ? "a coding agent" : "an agent"} · +45</Btn>}
-        <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>✎ Write it myself</Btn>
+        {!agentRuns(item) && <Btn kind={m.verb === "dispatch" ? "gold" : "ghost"} disabled={!!busy} onClick={() => dispatch(coding ? "coding" : "general")}>{tx("🤖 Hand to")} {coding ? "a coding agent" : "an agent"} · +45</Btn>}
+        <Btn disabled={!!busy} onClick={() => setMine((v) => v == null ? "" : null)}>{tx("✎ Write it myself")}</Btn>
       </Row>}
       {mine != null && <Box onClick={(e) => e.stopPropagation()}>
-        <Box component="textarea" rows={4} value={mine} onChange={(e) => setMine(e.target.value)} placeholder="Your reply, sent as you write it" sx={{ ...field, mt: 0.8 }} />
-        <Row><Btn kind="gold" disabled={!!busy || !mine.trim()} onClick={sendMine}>📨 Send mine · +40</Btn></Row>
+        <Box component="textarea" rows={4} value={mine} onChange={(e) => setMine(e.target.value)} placeholder={tx("Your reply, sent as you write it")} sx={{ ...field, mt: 0.8 }} />
+        <Row><Btn kind="gold" disabled={!!busy || !mine.trim()} onClick={sendMine}>{tx("📨 Send mine · +40")}</Btn></Row>
       </Box>}
-      {!item.mid && item.tid && <Row><Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn></Row>}
+      {!item.mid && item.tid && <Row><Btn onClick={() => open(item.tid)}>{tx("Open")} {item.ref}</Btn></Row>}
     </>;
   }
   return (
     <Box>
       {body}
       {repo && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 1, p: 1, borderRadius: "9px", bgcolor: "#f6f2ea", color: "#262521" }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>Which repository should the coding agent use?</Typography>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5 }}>{tx("Which repository should the coding agent use?")}</Typography>
         <RepoPicker taskId={repo.taskId} agent={repo.agent} onDone={(d) => { if (d?.repo) { setRepo(null); dispatch("coding"); } }} />
       </Box>}
       <Moves item={item} covers={covers} busy={busy} play={play} onRepo={setRepo} />
       <Row>
         {/* Next, as in the chat: it is read, and the next thing comes up - reading what only wanted knowing scores */}
-        {onNext && <Btn kind="mint" disabled={!!busy} onClick={() => onNext(item)} title="Read - on to the next thing (N)">
-          Next ▶ · +{(item.lane === "fyi" || item.lane === "report" || item.kind === "fyis") && !item.bad ? 8 : 2}</Btn>}
-        {item.tid && card !== "agent" && card !== "agentdone" && card !== "wrapup" && item.mid && <Btn onClick={() => open(item.tid)}>Open {item.ref}</Btn>}
+        {onNext && <Btn kind="mint" disabled={!!busy} onClick={() => onNext(item)} title={tx("Read - on to the next thing (N)")}> {tx("Next ▶ · +")}{(item.lane === "fyi" || item.lane === "report" || item.kind === "fyis") && !item.bad ? 8 : 2}</Btn>}
+        {item.tid && card !== "agent" && card !== "agentdone" && card !== "wrapup" && item.mid && <Btn onClick={() => open(item.tid)}>{tx("Open")} {item.ref}</Btn>}
       </Row>
     </Box>
   );

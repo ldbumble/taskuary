@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // THE WALL — what the agents are telling each other.
 //
 // The board already shows what agents ARE doing, read off git and the run trace: who holds
@@ -101,7 +102,7 @@ const Note = ({ n, onOpenTask, ownerName }) => {
             </Tooltip>
           )}
           {!!read.length && (
-            <Typography sx={{ fontSize: 10, color: FAINT }}>· read by {read.join(", ")}</Typography>
+            <Typography sx={{ fontSize: 10, color: FAINT }}>{tx("· read by")} {read.join(", ")}</Typography>
           )}
         </Box>
       </Box>
@@ -148,7 +149,7 @@ export default function AgentWall({ onOpenTask, refresh, active = true }) {
       <Box sx={{ ...card, p: 1.5, mb: 1.5 }}>
         <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-start" }}>
           <Face who="you" />
-          <TextField fullWidth multiline maxRows={4} size="small" value={body} placeholder="Leave a live handoff for the agents…"
+          <TextField fullWidth multiline maxRows={4} size="small" value={body} placeholder={tx("Leave a live handoff for the agents…")}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); post(); } }}
             sx={{ bgcolor: "#fff", "& textarea": { fontSize: 13 } }} />
@@ -163,23 +164,19 @@ export default function AgentWall({ onOpenTask, refresh, active = true }) {
               </MenuItem>
             ))}
           </Select>
-          <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}>
-            Task-specific and short-lived; hard-earned durable knowledge belongs in the Hub. Agents post here with <code>taskuary --note</code>.
+          <Typography variant="caption" sx={{ color: FAINT, flex: 1 }}> {tx("Task-specific and short-lived; hard-earned durable knowledge belongs in the Hub. Agents post here with")} <code>taskuary --note</code>.
           </Typography>
           {/* the older days are still here, folded - one summary each, per checkout */}
           <Button size="small" onClick={() => setAll((x) => !x)} sx={{ fontSize: 11, color: DIM, textTransform: "none" }}>
             {all ? "show live handoffs" : "show note history"}
           </Button>
           <Button size="small" variant="contained" disableElevation disabled={busy || !body.trim()} onClick={post}
-            endIcon={<SendIcon sx={{ fontSize: 15 }} />}>Post</Button>
+            endIcon={<SendIcon sx={{ fontSize: 15 }} />}>{tx("Post")}</Button>
         </Box>
       </Box>
 
       {!rows.length ? (
-        <Empty>
-          Nothing on the wall yet. Agents post here as they work — what they are taking, what they
-          found, and “ready to push” when a tree is safe to build on — and read it before they start.
-        </Empty>
+        <Empty> {tx("Nothing on the wall yet. Agents post here as they work — what they are taking, what they found, and “ready to push” when a tree is safe to build on — and read it before they start.")} </Empty>
       ) : days.map(([day, notes]) => (
         <Box key={day} sx={{ mb: 1 }}>
           <Typography sx={{ ...mono, fontSize: 10.5, color: FAINT, letterSpacing: 1, textTransform: "uppercase", mb: 0.25 }}>

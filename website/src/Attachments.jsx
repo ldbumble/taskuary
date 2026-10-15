@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // What rode along with the message. Half the time the screenshot IS the ask ("see below"),
 // so images are drawn right here in the panel rather than listed as filenames - and the
 // spreadsheet, the PDF, the invoice are one click from where you are reading about them.
@@ -100,7 +101,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
                 <GraphicEqIcon sx={{ fontSize: 13, color: "#6f8a6e" }} />
                 <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
-                <Box component="a" href={attUrl(a, true)} title="save the audio"
+                <Box component="a" href={attUrl(a, true)} title={tx("save the audio")}
                   sx={{ display: "inline-flex", color: FAINT, "&:hover": { color: INK } }}>
                   <DownloadIcon sx={{ fontSize: 14 }} />
                 </Box>
@@ -115,7 +116,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
       {files.length > 0 && (
         <Box sx={{ mt: imgs.length || clips.length ? 0.75 : 0, pt: 0.75, borderTop: `1px dashed ${BORDER}` }}>
           <Typography variant="caption" sx={{ color: DIM, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.3 }}>
-            <AttachFileIcon sx={{ fontSize: 12 }} /> Attached · {files.length}
+            <AttachFileIcon sx={{ fontSize: 12 }} /> {tx("Attached ·")} {files.length}
           </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
           {files.map((a) => (
@@ -141,7 +142,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
               <Typography variant="caption" sx={{ color: INK, fontWeight: 600, flex: 1 }}>{big.name}</Typography>
               <Typography variant="caption" sx={{ color: FAINT }}>{kb(big.size)}</Typography>
-              <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}>Save</Button>
+              <Button size="small" startIcon={<DownloadIcon sx={{ fontSize: 15 }} />} href={attUrl(big, true)}>{tx("Save")}</Button>
             </Box>
             <Box component="img" src={attUrl(big)} alt={big.name}
               sx={{ display: "block", maxWidth: "88vw", maxHeight: "82vh", objectFit: "contain" }} />

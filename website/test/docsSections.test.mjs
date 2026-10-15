@@ -26,10 +26,10 @@ test("a playbook deep link switches into the Playbooks section", () => {
 // unrelated things rather than as two choices (the owner, 2026-09-17: "just have 2 clear buttons ..
 // make them look like buttons.. make it look normal").
 test("the Profiles shelf offers two real buttons and one door to a new worker", () => {
-  const shelf = source.slice(source.indexOf('section === "profiles"'), source.indexOf("Used by "));
-  assert.ok(shelf.length > 200 && shelf.length < 4000, `the Profiles shelf slice looks wrong (${shelf.length} chars)`);
-  assert.match(shelf, /variant="contained"[\s\S]{0,140}>New profile</);
-  assert.match(shelf, /variant="outlined"[\s\S]{0,140}>Manage profiles</);
+  const shelf = source.slice(source.indexOf('section === "profiles"'), source.indexOf('{tx("Used by")}'));
+  assert.ok(shelf.length > 200 && shelf.length < 4200, `the Profiles shelf slice looks wrong (${shelf.length} chars)`);
+  assert.match(shelf, /variant="contained"[\s\S]{0,140}>\{tx\("New profile"\)\}</);
+  assert.match(shelf, /variant="outlined"[\s\S]{0,140}>\{tx\("Manage profiles"\)\}</);
   // ...and Import skills is not a third one here: it lives on the screen those buttons open
   assert.doesNotMatch(shelf, /setImportSkills\(true\)/);
   assert.doesNotMatch(shelf, /flexWrap: "wrap"/);
@@ -37,8 +37,8 @@ test("the Profiles shelf offers two real buttons and one door to a new worker", 
 
 test("the manage screen names both roads to a worker", () => {
   const panel = readFileSync(fileURLToPath(new URL("../src/AgentsPanel.jsx", import.meta.url)), "utf8");
-  assert.match(panel, />Add profile manually</);
-  assert.match(panel, />Import skills</);
+  assert.match(panel, />\{tx\("Add profile manually"\)\}</);
+  assert.match(panel, />\{tx\("Import skills"\)\}</);
 });
 
 // "not routed" was one word for four situations, and for the commonest it said the opposite of what

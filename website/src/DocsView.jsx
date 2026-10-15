@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Operator documents: the markdown the agents actually read. A list on the left, the file
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
@@ -58,11 +59,11 @@ function LearnedChanges() {
     return () => { live = false; };
   }, []);
   if (rows === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
-  if (!rows.length) return <Typography sx={{ color: FAINT, fontSize: 13, py: 3 }}>Nothing changed in the last 30 days.</Typography>;
+  if (!rows.length) return <Typography sx={{ color: FAINT, fontSize: 13, py: 3 }}>{tx("Nothing changed in the last 30 days.")}</Typography>;
   const day = (at) => new Date(String(at).replace(" ", "T")).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
     <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }} data-tq-learned-changes="">
-      <Typography sx={{ color: FAINT, fontSize: 12, mb: 1 }}>The last 30 days. Lines fade when nothing confirms them for a while; ones that say the same thing are merged.</Typography>
+      <Typography sx={{ color: FAINT, fontSize: 12, mb: 1 }}>{tx("The last 30 days. Lines fade when nothing confirms them for a while; ones that say the same thing are merged.")}</Typography>
       {rows.map((r, i) => (
         <Box key={i} sx={{ display: "grid", gridTemplateColumns: "56px 1fr", gap: 1.25, py: 0.85, borderTop: i ? "1px solid #eee8e0" : "none" }}>
           <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.2 }}>{day(r.at)}</Typography>
@@ -118,15 +119,15 @@ function SharedRulesChip() {
   const step = { fontSize: 11.5, color: FAINT };
   return (
     <Box data-tq-layers="" sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", pt: 0.75 }}>
-      <Typography component="span" sx={step}>Every task reads: SOUL.md + JOB.md →</Typography>
+      <Typography component="span" sx={step}>{tx("Every task reads: SOUL.md + JOB.md →")}</Typography>
       <Tooltip placement="bottom-start" enterDelay={150}
         componentsProps={{ tooltip: { sx: { maxWidth: 620, maxHeight: 440, overflow: "auto", bgcolor: "#fffdfb", color: INK,
           border: "1px solid #e1dcd5", boxShadow: "0 6px 24px rgba(30,40,30,.14)", p: 1.5 } } }}
         title={<Box component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 12, lineHeight: 1.5 }}>{text || "AGENT.md is empty."}</Box>}>
-        <Chip size="small" label="AGENT.md · shared rules" data-tq-agent-rules=""
+        <Chip size="small" label={tx("AGENT.md · shared rules")} data-tq-agent-rules=""
           sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", cursor: "help" }} />
       </Tooltip>
-      <Typography component="span" sx={step}>→ this profile</Typography>
+      <Typography component="span" sx={step}>{tx("→ this profile")}</Typography>
     </Box>
   );
 }
@@ -198,17 +199,14 @@ const OwnerCard = () => {
     <Box ref={box} sx={{ mb: 2.5, p: 1.75, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2,
       display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 260, flex: 1 }}>
-        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Who the documents speak for</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>
-          Set your identity once and Taskuary uses it everywhere it speaks for you — signatures,
-          escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.
-        </Typography>
+        <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{tx("Who the documents speak for")}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}> {tx("Set your identity once and Taskuary uses it everywhere it speaks for you — signatures, escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.")} </Typography>
       </Box>
-      <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}
+      <TextField size="small" label={tx("Your name")} value={name} onChange={(e) => setName(e.target.value)}
         sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
-      <TextField size="small" label="Email" value={email} onChange={(e) => setEmail(e.target.value)}
+      <TextField size="small" label={tx("Email")} value={email} onChange={(e) => setEmail(e.target.value)}
         sx={{ bgcolor: "#fff", flex: "1 1 200px", minWidth: 0 }} />
-      <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>Save</Button>
+      <Button size="small" variant="contained" disableElevation disabled={!name.trim()} onClick={save}>{tx("Save")}</Button>
       {msg && <Typography variant="caption" sx={{ color: msg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{msg}</Typography>}
     </Box>
   );
@@ -513,7 +511,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                  maxHeight: { xs: "none", md: "100%" } }}>
         {section === "profiles" ? (
           <>
-            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>Profiles</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>{tx("Profiles")}</Typography>
             {/* ONE door. Three buttons, two of them bare text, wrapped mid-label into something that
                 read as a menu of unrelated things (the owner, 2026-09-17: "just have 2 clear buttons
                 .. make them look like buttons.. make it look normal"). Adding a worker - by hand or
@@ -521,17 +519,14 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                 roads already live, so it is not a second entry point here. */}
             <Box sx={{ display: "flex", gap: 1, mb: 1, "& .MuiButton-root": { whiteSpace: "nowrap" } }}>
               <Button size="small" variant="contained" startIcon={<AddIcon />}
-                onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>New profile</Button>
+                onClick={() => { setCreateProfile(true); setManageProfiles(true); }}>{tx("New profile")}</Button>
               <Button size="small" variant="outlined"
-                onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>Manage profiles</Button>
+                onClick={() => { setCreateProfile(false); setManageProfiles(true); }}>{tx("Manage profiles")}</Button>
             </Box>
-            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}>
-              The workers. Triage picks one per task and its session is seeded with that worker’s rules.
-              Edit its instructions here, or manage its name, provider and model above.
-            </Typography>
+            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.5 }}> {tx("The workers. Triage picks one per task and its session is seeded with that worker’s rules. Edit its instructions here, or manage its name, provider and model above.")} </Typography>
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             <RoleStart onApplied={() => { loadProfs(); loadBooks(); }} />
-            {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>No profiles yet — use Manage profiles to add one.</Typography>}
+            {!profs.length && <Typography sx={{ fontSize: 12, color: FAINT }}>{tx("No profiles yet — use Manage profiles to add one.")}</Typography>}
             {profs.map((pr) => (
               <Box key={pr.name} onClick={() => openProf(pr.name)}
                 sx={{ p: 1.4, mb: 0.75, borderRadius: 2, cursor: "pointer",
@@ -549,18 +544,18 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                     sx={isRouted(pr) ? undefined : { color: ROLES.muted.ink, borderColor: ROLES.muted.bd }} />
                   {`prof:${pr.name}` === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>{tx("open")}</Box>
                   )}
                 </Box>
                 <Typography sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{pr.purpose || "no purpose set — triage cannot tell when to pick it"}</Typography>
-                <Typography sx={{ fontSize: 11, color: FAINT, pt: 0.5 }}>Used by {pr.members.join(", ")}</Typography>
+                <Typography sx={{ fontSize: 11, color: FAINT, pt: 0.5 }}>{tx("Used by")} {pr.members.join(", ")}</Typography>
               </Box>
             ))}
             </Box>
           </>
         ) : section === "documents" ? (
           <>
-            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5, flexShrink: 0 }}>Operator documents</Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 1.5, flexShrink: 0 }}>{tx("Operator documents")}</Typography>
             {/* the eight scroll; the identity card below them does not, so it is always on screen */}
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5, mr: -0.5 }}>
             {NAMES.map((n) => (
@@ -575,7 +570,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                   <Typography noWrap sx={{ ...mono, fontSize: 12, fontWeight: 600, color: INK, flex: 1, minWidth: 0 }}>{DOCS[n].label}</Typography>
                   {n === docName && (
                     <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>
+                      borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>{tx("open")}</Box>
                   )}
                 </Box>
                 <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{DOCS[n].blurb}</Typography>
@@ -586,16 +581,14 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           </>
         ) : (
           <>
-            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>Playbooks</Typography>
-            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}>
-              One per kind of job—how it is done here, and where the line is between “just do it” and “ask”.
-            </Typography>
+            <Typography sx={{ color: INK, fontWeight: 600, fontSize: 16, mb: 0.5 }}>{tx("Playbooks")}</Typography>
+            <Typography sx={{ fontSize: 11.5, color: FAINT, mb: 1.25, lineHeight: 1.5 }}> {tx("One per kind of job—how it is done here, and where the line is between “just do it” and “ask”.")} </Typography>
             <Box component="button" type="button" onClick={() => setNewPlaybook({ connectorType: "" })}
               sx={{ p: 1.1, mb: 1, borderRadius: 2, cursor: "pointer", display: "flex", alignItems: "center", gap: 1,
                 border: `1px dashed ${docName === "pb:new" ? "#d8cfbe" : "#e1dcd5"}`, bgcolor: docName === "pb:new" ? "#fff" : "transparent",
                 "&:hover": { bgcolor: "#f4f1ec" } }}>
               <AddIcon sx={{ fontSize: 17, color: "#55697a" }} />
-              <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>New playbook</Typography>
+              <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>{tx("New playbook")}</Typography>
             </Box>
             {books.length > 0 && <TextField size="small" fullWidth value={pbFilter} onChange={(e) => setPbFilter(e.target.value)}
               placeholder={`Search ${books.length} playbook${books.length === 1 ? "" : "s"}`}
@@ -612,15 +605,15 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                       <Box sx={{ display: "flex", opacity: on ? 1 : .65 }}><MenuBookIcon sx={{ fontSize: 19, color: "#55697a" }} /></Box>
                       <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK, flex: 1 }} noWrap>{b.title}</Typography>
                       {on && <Box component="span" sx={{ px: 0.7, height: 17, display: "inline-flex", alignItems: "center",
-                        borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>open</Box>}
+                        borderRadius: 1.25, bgcolor: "#55697a", color: "#fff", fontSize: 9.5, fontWeight: 600 }}>{tx("open")}</Box>}
                     </Box>
-                    <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>when: {b.when}</Typography>
-                    {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>uses {b.uses.join(" · ")}</Typography>}
+                    <Typography noWrap sx={{ fontSize: 11.5, color: FAINT, pt: 0.5 }}>{tx("when:")} {b.when}</Typography>
+                    {b.uses?.length > 0 && <Typography noWrap sx={{ ...mono, fontSize: 10.5, color: FAINT, pt: 0.25 }}>{tx("uses")} {b.uses.join(" · ")}</Typography>}
                   </Box>
                 );
               })}
               {books.length > 0 && !visibleBooks.length && (
-                <Typography sx={{ fontSize: 12, color: FAINT, py: 2, textAlign: "center" }}>No playbooks match “{pbFilter}”.</Typography>
+                <Typography sx={{ fontSize: 12, color: FAINT, py: 2, textAlign: "center" }}>{tx("No playbooks match “")}{pbFilter}”.</Typography>
               )}
             </Box>
           </>
@@ -643,8 +636,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                 profile's card in the shelf; the rail lists documents by name, so the fact that a
                 document governs `coder, codex` has to travel with the document itself. */}
             {isProf(docName) && cur?.members?.length > 0 && (
-              <Typography variant="caption" sx={{ color: FAINT, pt: 0.5, display: "block" }}>
-                Used by {cur.members.join(", ")} · {rosterChip(cur)}
+              <Typography variant="caption" sx={{ color: FAINT, pt: 0.5, display: "block" }}> {tx("Used by")} {cur.members.join(", ")} · {rosterChip(cur)}
               </Typography>
             )}
           </Box>
@@ -653,9 +645,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           {docName === "soul" && (
             <Button size="small" variant="outlined" onClick={() => setInterview(true)}
               sx={{ fontSize: 11.5, textTransform: "none" }}
-              title="Seven adaptive questions; each one follows your previous answers, then the assistant writes SOUL.md">
-              Write it from a few questions
-            </Button>
+              title={tx("Seven adaptive questions; each one follows your previous answers, then the assistant writes SOUL.md")}> {tx("Write it from a few questions")} </Button>
           )}
           {GEN[docName] && (
             <Button size="small" variant="outlined" disabled={genBusy} title={GEN[docName]}
@@ -684,20 +674,20 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             <Button size="small" variant="outlined" onClick={async () => {
               // consolidate now instead of waiting for the threshold; reload to show the rewrite
               try { await api.post("/api/learn/reflect"); await load(); } catch { /* no AI connected */ }
-            }}>Reflect now</Button>
+            }}>{tx("Reflect now")}</Button>
           )}
           {isProf(docName) && ownProfile && (
             <Button size="small" variant="outlined" color="error" onClick={() => setDeleteProf(cur.name)}
-              title="Delete this profile - triage stops offering it and its rules document goes with it">Delete</Button>
+              title={tx("Delete this profile - triage stops offering it and its rules document goes with it")}>{tx("Delete")}</Button>
           )}
           {isPb(docName) && (
             <Button size="small" variant="outlined" color="error" onClick={removePb}
               title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it and the cards stop listing it"}>
-              {docName === "pb:new" ? "Discard" : "Delete"}
+              {docName === "pb:new" ? tx("Discard") : tx("Delete")}
             </Button>
           )}
           <Button size="small" variant="contained" disableElevation disabled={docs[docName] === saved[docName]} onClick={save}>
-            {docs[docName] === saved[docName] ? "Saved" : "Save"}
+            {docs[docName] === saved[docName] ? "Saved" : tx("Save")}
           </Button>
         </Box>
         {/* the distinction the profiles rest on: the router reads ONE LINE per worker when it picks;
@@ -705,9 +695,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             truncated where the roster truncates it - or the reason there is none. */}
         {cur && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2, flexShrink: 0 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
-              WHAT TRIAGE SEES
-            </Typography>
+            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}> {tx("WHAT TRIAGE SEES")} </Typography>
             {cur.seen.filter((m) => m.line).map((m) => (
               <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>))}
             {/* members kept off for the same reason share one line - six coders is one fact, not six.
@@ -720,9 +708,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                   ? ": every coding task comes here — the router does not choose it, the kind does"
                   : `: not on the roster — ${why}`}
               </Typography>))}
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}>
-              The router reads this one line per worker when it picks. The session it picks is given the whole document below.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", pt: 0.75 }}> {tx("The router reads this one line per worker when it picks. The session it picks is given the whole document below.")} </Typography>
           </Box>
         )}
         {pbMsg && isPb(docName) && (
@@ -736,9 +722,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             block in the doc is traceable back to your own mail, not a vibe */}
         {genEv?.length > 0 && GEN[docName] && (
           <Box sx={{ mb: 1.5, p: 1.25, bgcolor: "#fff", border: "1px solid #e1dcd5", borderRadius: 2 }}>
-            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}>
-              WHAT IT READ — AND WHAT EACH LINE DID
-            </Typography>
+            <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.5 }}> {tx("WHAT IT READ — AND WHAT EACH LINE DID")} </Typography>
             <Box sx={{ maxHeight: 260, overflowY: "auto" }}>
               {genEv.map((l, i) => (
                 <Typography key={i} variant="caption" sx={{ display: "block", whiteSpace: "pre-wrap",
@@ -776,7 +760,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     )}
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={loadProfs} />}
     <ConfirmDelete open={!!deleteProf} what={`the profile "${deleteProf}"`} onClose={() => setDeleteProf(null)}
-      consequence="Triage stops offering it, its row goes, and its rules document goes with it - a document has no history to restore from."
+      consequence={tx("Triage stops offering it, its row goes, and its rules document goes with it - a document has no history to restore from.")}
       onConfirm={async () => {
         await api.delete(`/api/agents/${encodeURIComponent(deleteProf)}`);
         const left = (await loadProfs()) || [];
@@ -788,15 +772,13 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}
     <Dialog open={!!deletePlaybook} onClose={deleteBusy ? undefined : () => setDeletePlaybook(null)}
       fullWidth maxWidth="xs" aria-labelledby="delete-playbook-title" aria-describedby="delete-playbook-description">
-      <DialogTitle id="delete-playbook-title">Delete playbook?</DialogTitle>
+      <DialogTitle id="delete-playbook-title">{tx("Delete playbook?")}</DialogTitle>
       <DialogContent>
-        <DialogContentText id="delete-playbook-description">
-          Delete “{deletePlaybook?.title}”? New requests will no longer match this playbook, and it will be removed from your connector cards. This cannot be undone.
-        </DialogContentText>
+        <DialogContentText id="delete-playbook-description"> {tx("Delete “")}{deletePlaybook?.title}{tx("”? New requests will no longer match this playbook, and it will be removed from your connector cards. This cannot be undone.")} </DialogContentText>
         {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
       </DialogContent>
       <DialogActions>
-        <Button autoFocus disabled={deleteBusy} onClick={() => setDeletePlaybook(null)}>Cancel</Button>
+        <Button autoFocus disabled={deleteBusy} onClick={() => setDeletePlaybook(null)}>{tx("Cancel")}</Button>
         <Button variant="contained" color="error" disabled={deleteBusy} onClick={confirmDeletePb}>
           {deleteBusy ? "Deleting…" : "Delete playbook"}
         </Button>

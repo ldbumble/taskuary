@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // ONE SEARCH OVER EVERYTHING (the owner, 2026-10-13: "i want to be able to search for anything so search would bring up
 // tasks/emails/chats/pr etc etc with little pill on it for channel/task/email"). The rail's filter found a task by its
 // words and a source by its name, and a mail no task held was findable from nowhere. This is the one box: the bar at
@@ -53,14 +54,13 @@ export const OPEN_SEARCH = "tq-search-open";
 export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
 export function SearchBar({ onOpen }) {
   return (
-    <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label="Search everything (Ctrl+K)"
+    <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label={tx("Search everything (Ctrl+K)")}
       sx={{ display: "flex", alignItems: "center", gap: 0.9, width: "100%", height: 32, px: 1.1, cursor: "text",
         border: `1px solid ${BORDER}`, borderRadius: "9px", bgcolor: PANEL, fontFamily: "inherit", textAlign: "left",
         transition: "border-color .15s, box-shadow .15s",
         "&:hover": { borderColor: "#cfc7bb", boxShadow: "0 1px 3px rgba(30,50,38,.06)" } }}>
       <SearchIcon sx={{ fontSize: 16, color: FAINT }} />
-      <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        Search tasks, mail, chats, PRs…</Box>
+      <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}> {tx("Search tasks, mail, chats, PRs…")}</Box>
       <Kbd>Ctrl K</Kbd>
     </Box>
   );
@@ -80,7 +80,7 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
         <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75, minWidth: 0 }}>
           <Box sx={{ fontSize: 13, fontWeight: 600, color: closed ? DIM : INK, lineHeight: 1.35, minWidth: 0,
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Marked text={hit.title} words={words} /></Box>
-          {hit.more > 0 && <Box component="span" sx={{ fontSize: 10.5, color: FAINT, flexShrink: 0 }}>+{hit.more} in thread</Box>}
+          {hit.more > 0 && <Box component="span" sx={{ fontSize: 10.5, color: FAINT, flexShrink: 0 }}>+{hit.more} {tx("in thread")}</Box>}
         </Box>
         {(m.length > 0 || hit.when) && (
           <Box sx={{ fontSize: 11.5, color: FAINT, mt: 0.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -152,7 +152,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, height: 56, borderBottom: `1px solid ${BORDER}` }}>
         <SearchIcon sx={{ fontSize: 21, color: q ? INK : FAINT }} />
         <InputBase autoFocus fullWidth value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={key}
-          placeholder="Search tasks, mail, chats, pull requests, the Advisor…" inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
+          placeholder={tx("Search tasks, mail, chats, pull requests, the Advisor…")} inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
           sx={{ fontSize: 16, color: INK, "& input::placeholder": { color: FAINT, opacity: 1 } }} />
         <Kbd>Esc</Kbd>
       </Box>
@@ -177,12 +177,12 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
             <Box sx={{ display: "flex", justifyContent: "center", gap: 0.6, flexWrap: "wrap", mb: 1.25 }}>
               {["task", "email", "chat", "pr", "advisor", "report", "source"].map((t) => <Pill key={t} hit={{ type: t }} />)}
             </Box>
-            <Box sx={{ fontSize: 12.5, color: DIM }}>Every task, mail, chat line, pull request, Advisor post and source - open or closed.</Box>
+            <Box sx={{ fontSize: 12.5, color: DIM }}>{tx("Every task, mail, chat line, pull request, Advisor post and source - open or closed.")}</Box>
           </Box>
         )}
         {res && !hits.length && !busy && (
           <Box sx={{ px: 2.5, py: 3, textAlign: "center", fontSize: 12.5, color: DIM }}>
-            {res.failed ? "Search didn't answer - try again in a moment." : <>Nothing matches “{res.q}”.</>}</Box>
+            {res.failed ? "Search didn't answer - try again in a moment." : <>{tx("Nothing matches “")}{res.q}”.</>}</Box>
         )}
         {shown.groups.map((g) => (
           <Box key={g.group} sx={{ mb: 0.5 }}>
@@ -196,11 +196,11 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
       </Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, height: 36, borderTop: `1px solid ${BORDER}`, bgcolor: "#faf8f5",
         fontSize: 11, color: FAINT }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>move</Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>open</Box>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Tab</Kbd>kind</Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>{tx("move")}</Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>{tx("open")}</Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Tab</Kbd>{tx("kind")}</Box>
         <Box sx={{ flex: 1 }} />
-        {res && hits.length > 0 && <Box>{shown.flat.length} of {hits.length}</Box>}
+        {res && hits.length > 0 && <Box>{shown.flat.length} {tx("of")} {hits.length}</Box>}
       </Box>
     </Dialog>
   );

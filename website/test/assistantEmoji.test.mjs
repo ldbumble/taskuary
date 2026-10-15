@@ -7,7 +7,7 @@ const source = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", im
 const css = readFileSync(fileURLToPath(new URL("../src/assistantView.css", import.meta.url)), "utf8");
 
 test("the Assistant composer offers an accessible emoji response picker", () => {
-  assert.match(source, /aria-label="Choose an emoji response"/);
+  assert.match(source, /aria-label=\{tx\("Choose an emoji response"\)\}/);
   assert.match(source, /Send a quick response/);
   assert.match(source, /EMOJI_REPLIES\.map\(\(\[emoji, label\]\)/);
   assert.match(source, /aria-label=\{`Send \$\{label\}`\}/);

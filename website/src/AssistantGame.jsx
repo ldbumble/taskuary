@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The Assistant, played as a game: the same pile the chat walks you through, drawn as an office you
 // walk around. Every figure is a real task, message, fyi or Hub file, and every real move (send, hand
 // off, unblock, follow up) scores. Walk with WASD/arrows, E to talk to whoever you are next to, 1-5
@@ -334,9 +335,9 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
               fontWeight: 600, fontSize: 14, color: G.gold }}>{lv.level}</Box>
           </Box>
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 10, letterSpacing: 1.4, color: G.faint, fontWeight: 600, textTransform: "uppercase" }}>Assistant game</Typography>
+            <Typography sx={{ fontSize: 10, letterSpacing: 1.4, color: G.faint, fontWeight: 600, textTransform: "uppercase" }}>{tx("Assistant game")}</Typography>
             <Typography noWrap sx={{ fontSize: 14, fontWeight: 600, color: G.ink }}>{lv.title}</Typography>
-            <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim }}>{game.xp} XP · {lv.span - lv.into} to Lv {lv.level + 1}</Typography>
+            <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim }}>{game.xp} XP · {lv.span - lv.into} {tx("to Lv")} {lv.level + 1}</Typography>
           </Box>
         </Box>
 
@@ -351,7 +352,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
 
         <Box sx={{ flex: "1 1 220px", minWidth: 180 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-            <Typography sx={{ fontSize: 10, letterSpacing: 1.3, fontWeight: 600, color: G.red }}>INBOX BOSS</Typography>
+            <Typography sx={{ fontSize: 10, letterSpacing: 1.3, fontWeight: 600, color: G.red }}>{tx("INBOX BOSS")}</Typography>
             <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{hp ? `${hp} to the bottom` : "defeated ✦ you're at the bottom"}</Typography>
           </Box>
           <Box sx={{ height: 9, mt: 0.5, borderRadius: 5, bgcolor: "rgba(255,255,255,.08)", overflow: "hidden", border: `1px solid ${G.line}` }}>
@@ -376,13 +377,13 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Typography title="time since today's run started" sx={{ ...mono, fontSize: 12, color: G.dim, mr: 0.5 }}>
+          <Typography title={tx("time since today's run started")} sx={{ ...mono, fontSize: 12, color: G.dim, mr: 0.5 }}>
             ⏱ {Math.floor(runSecs / 3600) ? `${Math.floor(runSecs / 3600)}h ` : ""}{Math.floor((runSecs % 3600) / 60)}m
           </Typography>
-          <HudButton onClick={() => setTrophies((v) => !v)} title="Trophies">🏆 {game.got.length}/{ACHIEVEMENTS.length}</HudButton>
+          <HudButton onClick={() => setTrophies((v) => !v)} title={tx("Trophies")}>🏆 {game.got.length}/{ACHIEVEMENTS.length}</HudButton>
           <HudButton onClick={sound.toggle} title={sound.on ? "Sound on" : "Sound off"}>{sound.on ? "🔊" : "🔇"}</HudButton>
-          <HudButton onClick={share} title="Copy your run to share - counts only" gold>Share run</HudButton>
-          <HudButton onClick={onExit} title="Back to the Assistant's chat - the same items, as a conversation">💬 Back to chat</HudButton>
+          <HudButton onClick={share} title={tx("Copy your run to share - counts only")} gold>{tx("Share run")}</HudButton>
+          <HudButton onClick={onExit} title={tx("Back to the Assistant's chat - the same items, as a conversation")}>{tx("💬 Back to chat")}</HudButton>
         </Box>
       </Box>
 
@@ -446,8 +447,8 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       {trophies && (
         <Box sx={{ ...glass, position: "absolute", zIndex: 9, top: 84, left: { xs: 12, md: 180 }, width: 300, maxHeight: "calc(100% - 110px)", overflowY: "auto", p: 1.5 }}>
           <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <Typography sx={{ fontWeight: 600, flex: 1 }}>Trophies</Typography>
-            <HudButton onClick={() => setTrophies(false)}>Close</HudButton>
+            <Typography sx={{ fontWeight: 600, flex: 1 }}>{tx("Trophies")}</Typography>
+            <HudButton onClick={() => setTrophies(false)}>{tx("Close")}</HudButton>
           </Box>
           {ACHIEVEMENTS.map((a) => {
             const got = game.got.includes(a.key);
@@ -459,7 +460,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
               </Box>
             );
           })}
-          <Typography sx={{ ...mono, fontSize: 10.5, color: G.faint, mt: 1 }}>{game.moves} moves · best combo x{game.best} · {game.today} XP today</Typography>
+          <Typography sx={{ ...mono, fontSize: 10.5, color: G.faint, mt: 1 }}>{game.moves} {tx("moves · best combo x")}{game.best} · {game.today} {tx("XP today")}</Typography>
         </Box>
       )}
     </Box>
@@ -503,7 +504,7 @@ const Match = ({ item, agents }) => {
   const m = matchFor(item, agents);
   return (
     <Box sx={{ mt: 0.8, px: 1, py: 0.6, borderRadius: "8px", bgcolor: "rgba(127,209,198,.08)", border: "1px dashed rgba(127,209,198,.35)" }}>
-      <Typography sx={{ fontSize: 11, color: G.mint }}>✦ Best match: <b>{m.who}</b> — {m.why}</Typography>
+      <Typography sx={{ fontSize: 11, color: G.mint }}>{tx("✦ Best match:")} <b>{m.who}</b> — {m.why}</Typography>
     </Box>
   );
 };
@@ -545,11 +546,11 @@ function Briefing({ pile, agents, onGo, hp, passed }) {
     {hp > 0 ? <>
       {head(`⚔ NOT SEEN YET · ${hp} TO THE BOTTOM`, G.red)}
       {fresh.slice(0, 4).map((i) => row(i, G.red))}
-      {fresh.length > 4 && <Typography sx={{ fontSize: 11.5, color: G.faint, px: 0.5, mb: 1 }}>+{fresh.length - 4} more - press N on any of them to walk the lot</Typography>}
+      {fresh.length > 4 && <Typography sx={{ fontSize: 11.5, color: G.faint, px: 0.5, mb: 1 }}>+{fresh.length - 4} {tx("more - press N on any of them to walk the lot")}</Typography>}
     </> : (
       <Box sx={{ mb: 1, p: 1.1, borderRadius: "11px", bgcolor: "rgba(143,207,143,.1)", border: "1px solid rgba(143,207,143,.4)" }}>
-        <Typography sx={{ fontSize: 13, fontWeight: 600, color: G.green }}>⚔ You're at the bottom</Typography>
-        <Typography sx={{ fontSize: 11.5, color: G.dim }}>Everything has been seen. {onYou.length ? "What is left is still yours to settle:" : "Nothing is left on you."}</Typography>
+        <Typography sx={{ fontSize: 13, fontWeight: 600, color: G.green }}>{tx("⚔ You're at the bottom")}</Typography>
+        <Typography sx={{ fontSize: 11.5, color: G.dim }}>{tx("Everything has been seen.")} {onYou.length ? "What is left is still yours to settle:" : "Nothing is left on you."}</Typography>
       </Box>
     )}
     {onYou.length > 0 && <>
@@ -567,10 +568,10 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
   const byTid = Object.fromEntries(items.filter((i) => i.tid).map((i) => [i.tid, i]));
   return <>
     {calls.length > 0 && <>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>ON THE FLOOR FOR YOU · {calls.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.red, px: 0.5, mb: 0.6 }}>{tx("ON THE FLOOR FOR YOU ·")} {calls.length}</Typography>
       <ItemList items={calls} picked={picked} setPicked={setPicked} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} />
     </>}
-    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>AT THE DESKS · {seated.length}</Typography>
+    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6, mt: calls.length ? 1.2 : 0 }}>{tx("AT THE DESKS ·")} {seated.length}</Typography>
     {seated.map((task) => {
       const liveRow = live[task.TaskId];
       const state = studioTaskState(task, liveRow, agents, clock);
@@ -594,24 +595,24 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
           {liveRow?.files?.length > 0 && <Box sx={{ pt: 0.6 }}><FileChips files={liveRow.files} /></Box>}
           {selected && (item
             ? <ItemInspector item={item} agents={agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={onNavigate} onNext={onNext} />
-            : <Box sx={{ display: "flex", gap: 0.6, mt: 0.9 }}><Btn kind="gold" onClick={() => onJump(task.TaskId)}>⌨ Jump into the code space</Btn></Box>)}
+            : <Box sx={{ display: "flex", gap: 0.6, mt: 0.9 }}><Btn kind="gold" onClick={() => onJump(task.TaskId)}>{tx("⌨ Jump into the code space")}</Btn></Box>)}
         </Card>
       );
     })}
     {!seated.length && <Empty text="The desks are quiet. New work will bring an agent to one." />}
-    {queue.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mt: 1.2, mb: 0.6 }}>WAITING FOR A DESK · {queue.length}</Typography>}
+    {queue.length > 0 && <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mt: 1.2, mb: 0.6 }}>{tx("WAITING FOR A DESK ·")} {queue.length}</Typography>}
     {queue.slice(0, 6).map((task) => (
       <Card key={task.TaskId} onClick={() => onJump(task.TaskId)}>
         <Typography sx={{ ...mono, fontSize: 10.5, color: G.faint }}>{task.ref}{task.Waiting > 0 ? ` · ✎ ${task.Waiting}` : ""}</Typography>
         <Typography noWrap sx={{ fontSize: 12.5, color: G.dim }}>{task.Title}</Typography>
       </Card>
     ))}
-    {queue.length > 6 && <Typography sx={{ fontSize: 11, color: G.faint, px: 0.5 }}>+{queue.length - 6} more waiting</Typography>}
+    {queue.length > 6 && <Typography sx={{ fontSize: 11, color: G.faint, px: 0.5 }}>+{queue.length - 6} {tx("more waiting")}</Typography>}
     <Box sx={{ mt: 1.5, px: 0.5 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.75 }}>
-        <Typography sx={{ fontSize: 11.5, color: G.dim, flex: 1 }}>Desks (agents at once)</Typography>
+        <Typography sx={{ fontSize: 11.5, color: G.dim, flex: 1 }}>{tx("Desks (agents at once)")}</Typography>
         <Typography sx={{ ...mono, fontSize: 13, fontWeight: 600 }}>{cap ?? "—"}</Typography>
-        <Typography sx={{ fontSize: 11, color: G.faint }}>{free} free of {desks.length}</Typography>
+        <Typography sx={{ fontSize: 11, color: G.faint }}>{free} {tx("free of")} {desks.length}</Typography>
       </Box>
       <Slider size="small" min={1} max={8} step={1} marks value={cap ?? 4} onChange={(_, value) => setCap(value)}
         onChangeCommitted={(_, value) => api.patch("/api/settings", { name: "auto_sessions", value: String(value) }).catch(() => {})}
@@ -661,7 +662,7 @@ function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNe
       <Card key={g.key} on={on} onClick={() => setPicked(on ? null : g.key)} accent={g.item && needsYou(g.item) ? G.red : G.gold}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>
           <Typography sx={{ fontSize: 11, fontWeight: 600, color: G.gold }}>🏋 {ref}</Typography>
-          {list.length > 0 && <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{done}/{list.length} reps</Typography>}
+          {list.length > 0 && <Typography sx={{ ...mono, fontSize: 10.5, color: G.dim, ml: "auto" }}>{done}/{list.length} {tx("reps")}</Typography>}
         </Box>
         <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{title}</Typography>
         {list.length > 0 && (
@@ -685,8 +686,8 @@ function GymSpace({ gym, picked, setPicked, busy, play, reload, onOpenTask, onNe
           </Box>}
           {g.item && <ItemInspector item={g.item} agents={room.agents} busy={busy} play={play} onOpenTask={onOpenTask} onNavigate={room.onNavigate} onNext={onNext} />}
           <Box sx={{ display: "flex", gap: 0.5, mt: 0.9, flexWrap: "wrap" }}>
-            {g.task && <Btn kind="gold" disabled={!!busy} onClick={() => finish(g)} title="Closes the task - every box on it is ticked">🏁 Finish the set · +30</Btn>}
-            {(g.task || g.item?.tid) && <Btn onClick={() => onOpenTask((g.task || g.item).TaskId || g.item.tid)}>Open {ref}</Btn>}
+            {g.task && <Btn kind="gold" disabled={!!busy} onClick={() => finish(g)} title={tx("Closes the task - every box on it is ticked")}>{tx("🏁 Finish the set · +30")}</Btn>}
+            {(g.task || g.item?.tid) && <Btn onClick={() => onOpenTask((g.task || g.item).TaskId || g.item.tid)}>{tx("Open")} {ref}</Btn>}
           </Box>
         </Box>}
       </Card>
@@ -709,7 +710,7 @@ function CoffeeSpace({ items, onSettle, ...room }) {
   const broken = items.filter((i) => !knowOnly(i)).length;
   return <>
     {items.length > 1 && <Box sx={{ mb: 1 }}><Btn kind="mint" disabled={!!room.busy} onClick={drain}
-      title={broken ? `${broken} broken - set aside until its error changes, never marked fixed` : undefined}>☕ Drain the pot - all {items.length}</Btn></Box>}
+      title={broken ? `${broken} broken - set aside until its error changes, never marked fixed` : undefined}>{tx("☕ Drain the pot - all")} {items.length}</Btn></Box>}
     <ItemList {...room} items={items} accent={(i) => i.lane === "broken" || i.bad ? G.red : G.mint} />
   </>;
 }
@@ -734,21 +735,21 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, play, reload, ...r
     p: 0.9, fontSize: 12.5, fontFamily: "inherit", mb: 0.6 };
   return <>
     {ghosts.length > 0 && <>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>👻 GHOSTS · THREADS THAT SLIPPED · {ghosts.length}</Typography>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: "#b9c3ff", px: 0.5, mb: 0.6 }}>{tx("👻 GHOSTS · THREADS THAT SLIPPED ·")} {ghosts.length}</Typography>
       <ItemList {...room} items={ghosts} picked={picked} setPicked={setPicked} busy={busy} play={play} accent={() => "#b9c3ff"} />
     </>}
     <Box sx={{ display: "flex", alignItems: "center", px: 0.5, mt: ghosts.length ? 1.4 : 0, mb: 0.6 }}>
-      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, flex: 1 }}>🗄 FILING CABINETS · THE HUB · {hub.topics.length}</Typography>
-      <Btn kind="mint" onClick={() => setForm({ title: "", body: "", topic: topic || "" })}>+ File a lesson</Btn>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, flex: 1 }}>{tx("🗄 FILING CABINETS · THE HUB ·")} {hub.topics.length}</Typography>
+      <Btn kind="mint" onClick={() => setForm({ title: "", body: "", topic: topic || "" })}>{tx("+ File a lesson")}</Btn>
     </Box>
     {form && (
       <Card on>
-        <Box component="input" placeholder="What did we learn? (title)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} sx={input} />
-        <Box component="textarea" rows={4} placeholder="The lesson, so the next person (or agent) doesn't relearn it" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} sx={input} />
-        <Box component="input" placeholder="cabinet (topic)" value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} sx={input} />
+        <Box component="input" placeholder={tx("What did we learn? (title)")} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} sx={input} />
+        <Box component="textarea" rows={4} placeholder={tx("The lesson, so the next person (or agent) doesn't relearn it")} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} sx={input} />
+        <Box component="input" placeholder={tx("cabinet (topic)")} value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} sx={input} />
         <Box sx={{ display: "flex", gap: 0.6 }}>
-          <Btn kind="gold" disabled={!!busy || !form.title.trim() || !form.body.trim() || !form.topic.trim()} onClick={file}>🗂 File it · +25</Btn>
-          <Btn onClick={() => setForm(null)}>Cancel</Btn>
+          <Btn kind="gold" disabled={!!busy || !form.title.trim() || !form.body.trim() || !form.topic.trim()} onClick={file}>{tx("🗂 File it · +25")}</Btn>
+          <Btn onClick={() => setForm(null)}>{tx("Cancel")}</Btn>
         </Box>
       </Card>
     )}
@@ -769,7 +770,7 @@ function ArchiveSpace({ ghosts, hub, picked, setPicked, busy, play, reload, ...r
         <Typography sx={{ fontSize: 13, fontWeight: 600, mt: 0.3 }}>{f.Title}</Typography>
         <Typography sx={{ fontSize: 12, color: G.dim, mt: 0.4 }}>{f.Body}</Typography>
         <Box sx={{ mt: 0.7 }}>
-          <Btn disabled={voted.current.has(f.LoreId) || !!busy} onClick={() => vote(f)}>👍 Useful · +10</Btn>
+          <Btn disabled={voted.current.has(f.LoreId) || !!busy} onClick={() => vote(f)}>{tx("👍 Useful · +10")}</Btn>
         </Box>
       </Card>
     ))}
@@ -794,7 +795,7 @@ function CoreSpace({ chat, onAsk, busy, play, pile, agents, picked, onGo }) {
           </Box>
           {/* what came with the answer - the thing it pointed at, its choices, and the buttons for it, all live */}
           {m.who === "core" && n === chat.length - 1 && <Box sx={{ maxWidth: "94%", width: "100%" }}>
-            {m.item && <Box sx={{ mt: 0.5 }}><Btn kind="mint" onClick={() => onGo(m.item)}>Go to it → {m.item.title}</Btn></Box>}
+            {m.item && <Box sx={{ mt: 0.5 }}><Btn kind="mint" onClick={() => onGo(m.item)}>{tx("Go to it →")} {m.item.title}</Btn></Box>}
             {!!m.options?.length && <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
               {m.options.map((o) => <Btn key={o} disabled={!!busy} onClick={() => send(o)}>{o}</Btn>)}</Box>}
             {(!!m.chips?.length || m.proposal) && m.item?.key && (
@@ -803,20 +804,20 @@ function CoreSpace({ chat, onAsk, busy, play, pile, agents, picked, onGo }) {
           </Box>}
         </Box>
       ))}
-      {busy === "busy" && <Typography sx={{ fontSize: 11.5, color: G.mint, px: 0.5 }}>✦ thinking…</Typography>}
+      {busy === "busy" && <Typography sx={{ fontSize: 11.5, color: G.mint, px: 0.5 }}>{tx("✦ thinking…")}</Typography>}
       <div ref={end} />
     </Box>
-    {inHand && <Typography sx={{ fontSize: 11, color: G.faint, mb: 0.5 }}>Asking about: <b style={{ color: G.dim }}>{inHand.title}</b></Typography>}
+    {inHand && <Typography sx={{ fontSize: 11, color: G.faint, mb: 0.5 }}>{tx("Asking about:")} <b style={{ color: G.dim }}>{inHand.title}</b></Typography>}
     <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 0.8 }}>
       {["What should I do next?", "Who should take the top thing?", "What's slipping?"].map((q) =>
         <Btn key={q} disabled={!!busy} onClick={() => send(q)}>{q}</Btn>)}
     </Box>
     <Box component="form" onSubmit={(e) => { e.preventDefault(); if (text.trim()) send(text); }} sx={{ display: "flex", gap: 0.6, mb: 1.5 }}>
-      <Box component="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ask the core…"
+      <Box component="input" value={text} onChange={(e) => setText(e.target.value)} placeholder={tx("Ask the core…")}
         sx={{ flex: 1, bgcolor: "rgba(0,0,0,.25)", color: G.ink, border: `1px solid ${G.line}`, borderRadius: "9px", px: 1, py: 0.7, fontSize: 12.5, fontFamily: "inherit" }} />
-      <Btn kind="mint" disabled={!!busy || !text.trim()} onClick={() => send(text)}>Ask</Btn>
+      <Btn kind="mint" disabled={!!busy || !text.trim()} onClick={() => send(text)}>{tx("Ask")}</Btn>
     </Box>
-    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6 }}>✦ MATCHMAKER · WHO SHOULD TAKE WHAT</Typography>
+    <Typography sx={{ fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: G.faint, px: 0.5, mb: 0.6 }}>{tx("✦ MATCHMAKER · WHO SHOULD TAKE WHAT")}</Typography>
     {board.map((i) => {
       const m = matchFor(i, agents);
       return (

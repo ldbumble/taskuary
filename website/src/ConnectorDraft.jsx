@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The card's draft, the one save its controls go through, and the bar that lists and saves it (connectorDraft.js has
 // the rules). A control outside a card with a draft - there is none today, but a panel reused elsewhere - saves at once.
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -71,8 +72,7 @@ export function SaveBar({ draft, labels = {}, words = {} }) {
   const n = draft.pending.length;
   if (!n && draft.saved) return (
     <Box role="status" sx={{ position: "sticky", bottom: 12, zIndex: 5, mt: 2, px: 1.5, py: 1, bgcolor: PANEL, border: `1px solid ${BORDER}`,
-      borderLeft: "3px solid #47654a", borderRadius: 2, fontSize: 13, color: "#47654a", fontWeight: 600 }}>
-      ✓ Saved {draft.saved === 1 ? "your change" : `${draft.saved} changes`}
+      borderLeft: "3px solid #47654a", borderRadius: 2, fontSize: 13, color: "#47654a", fontWeight: 600 }}> {tx("✓ Saved")} {draft.saved === 1 ? "your change" : `${draft.saved} changes`}
     </Box>
   );
   if (!n) return null;
@@ -82,18 +82,18 @@ export function SaveBar({ draft, labels = {}, words = {} }) {
     return `${c.where ? `${c.where} · ` : ""}${label}${obj ? " changed" : `: ${say(c.from, c.key, words)} → ${say(c.to, c.key, words)}`}`;
   };
   return (
-    <Box className="tq-savebar" role="region" aria-label="Unsaved changes"
+    <Box className="tq-savebar" role="region" aria-label={tx("Unsaved changes")}
       sx={{ position: "sticky", bottom: 12, zIndex: 5, mt: 2, p: 1.5, bgcolor: PANEL, border: `1px solid ${BORDER}`,
         borderLeft: "3px solid #55697a", borderRadius: 2, boxShadow: "0 4px 16px rgba(30,40,50,.12)" }}>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: 0.5 }}>{n} unsaved change{n === 1 ? "" : "s"}</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: 0.5 }}>{n} {tx("unsaved change")}{n === 1 ? "" : "s"}</Typography>
       <Box component="ul" sx={{ m: 0, pl: 2.25, mb: 1, color: DIM, fontSize: 12.5, lineHeight: 1.6 }}>
         {draft.pending.map((c) => <li key={`${c.where}|${c.field}|${c.key}`}>{line(c)}</li>)}
       </Box>
       {draft.err && <Typography sx={{ color: "#8a3646", fontSize: 12, mb: 1 }}>{draft.err}</Typography>}
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
-        <Button size="small" onClick={draft.discard} disabled={draft.busy}>Discard</Button>
+        <Button size="small" onClick={draft.discard} disabled={draft.busy}>{tx("Discard")}</Button>
         <Button size="small" variant="contained" disableElevation onClick={draft.save} disabled={draft.busy}>
-          {draft.busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>
+          {draft.busy ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : tx("Save")}</Button>
       </Box>
     </Box>
   );

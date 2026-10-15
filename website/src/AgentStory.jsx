@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The agent step's account when nothing is live: the reason it never started, or - for a session that went - its last
 // message and the moments of the run, the cut in oxblood. Facts the worker recorded, no model (funnel.agent_story).
 // With a record to show it is only the record's first line and its timeline (AgentRecord); this whole block is for a
@@ -49,11 +50,11 @@ export default function AgentStory({ story, who, compact = false }) {
       {(said || steps.length > 0) && (
         <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
           {said && <>
-            <Typography sx={head}>Its last message{story.said_at ? <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {hhmm(story.said_at)}</Box> : ""}</Typography>
+            <Typography sx={head}>{tx("Its last message")}{story.said_at ? <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {hhmm(story.said_at)}</Box> : ""}</Typography>
             <Box sx={{ fontSize: 13, lineHeight: 1.5, color: INK, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{said}</Box>
           </>}
           {steps.length > 0 && <Box sx={{ mt: said ? 1 : 0 }}>
-            <Button size="small" sx={link} onClick={() => setMore(!more)}>More · the timeline {more ? "▾" : "▸"}</Button>
+            <Button size="small" sx={link} onClick={() => setMore(!more)}>{tx("More · the timeline")} {more ? "▾" : "▸"}</Button>
             {more && <Box sx={{ mt: 0.8 }}><Timeline steps={steps} /></Box>}
           </Box>}
         </Box>

@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // WHAT RIDES WITH THE REPLY.
 //
 // A draft read "Attached are the PTO accrual files for the 8/31 payroll" and the card showed
@@ -66,15 +67,12 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
           </Button>
         ) : (
           <Typography variant="caption" sx={{ color: DIM }}>
-            A {channel} message cannot carry a file — answer by email to attach one.
-          </Typography>
+            A {channel} {tx("message cannot carry a file — answer by email to attach one.")} </Typography>
         )}
         <input ref={pick} hidden type="file" multiple disabled={disabled} onChange={(e) => add(e.target.files)} />
       </Box>
       {missing && mail && (
-        <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: ALERT_INK }}>
-          This draft mentions an attachment and nothing is attached — it will send with the words only.
-        </Typography>
+        <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: ALERT_INK }}> {tx("This draft mentions an attachment and nothing is attached — it will send with the words only.")} </Typography>
       )}
       {err && <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: ALERT_INK }}>{err}</Typography>}
     </Box>

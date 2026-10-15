@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The wall: every live coding session as a real terminal, side by side, so you work several
 // agents at once the way you watch several screens. Each pane is one task - its ref on top, the
 // session in the middle, its prompt queue at the bottom. Choose how many across (1 / 2 / 3 / 4)
@@ -154,14 +155,11 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
     <Box>
       {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
       {wrapDone && <Alert severity="success" onClose={() => setWrapDone(null)} sx={{ mb: 1 }}
-        action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>Open {wrapDone.ref}</Button>}>
-        Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}
+        action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>{tx("Open")} {wrapDone.ref}</Button>}> {tx("Wrapped up")} {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}
       </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
-        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>The wall</Typography>
-        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}>
-          Every live session, side by side — code several agents at once. Drag a pane by its handle to rearrange; drag the bar under it to resize.
-        </Typography>
+        <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>{tx("The wall")}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5, flex: 1 }}> {tx("Every live session, side by side — code several agents at once. Drag a pane by its handle to rearrange; drag the bar under it to resize.")} </Typography>
         {!!panes.length && (
           <Box sx={{ display: "flex", gap: 0.25, bgcolor: "#e7eae2", borderRadius: 2, p: "3px" }}>
             {COLS.map((n) => (
@@ -178,10 +176,8 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
 
       {!panes.length ? (
         <Box sx={{ ...pane0, p: 4, textAlign: "center" }}>
-          <Typography variant="body2" sx={{ color: DIM }}>No agent is in a live session right now.</Typography>
-          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-            Start one from a task (Send to a coding agent), and it appears here as a terminal you can work in.
-          </Typography>
+          <Typography variant="body2" sx={{ color: DIM }}>{tx("No agent is in a live session right now.")}</Typography>
+          <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}> {tx("Start one from a task (Send to a coding agent), and it appears here as a terminal you can work in.")} </Typography>
         </Box>
       ) : (
         <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(${cols > 2 ? "260px" : "0px"}, 1fr))`,
@@ -208,7 +204,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                   <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.75, py: 0.35 }}>
                     <Box onPointerDown={(e) => startDrag(e, s.sid)}
                       role="button" aria-label={`Drag ${t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`} to reorder`} tabIndex={0}
-                      title="Drag to reorder this pane"
+                      title={tx("Drag to reorder this pane")}
                       sx={{ width: 24, height: 26, display: "flex", alignItems: "center", justifyContent: "center",
                         flexShrink: 0, borderRadius: 1, cursor: "grab", touchAction: "none", userSelect: "none",
                         "&:hover": { bgcolor: "#e7eae2" }, "&:active": { cursor: "grabbing" } }}>
@@ -217,8 +213,8 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     <Typography sx={{ ...mono, fontSize: 11, fontWeight: 600, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 600, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
-                    <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
-                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
+                    <Tooltip title={tx("Open the full task page")}><IconButton aria-label={tx("Open full task")} size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
+                    <Tooltip title={tx("Close session — stop the agent; keep the task and transcript")}><span><IconButton aria-label={tx("Close session")} size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>
                   {/* Always reserve the status row. A tool starting/stopping used to add/remove
                       this row, resize xterm, and make full-screen CLIs repaint in a visible jump. */}
@@ -227,20 +223,17 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     {wrapBusy ? (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
                         <CircularProgress size={10} />
-                        <Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.working.ink }}>
-                          closing session · writing report and reply draft…
-                        </Typography>
+                        <Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.working.ink }}> {tx("closing session · writing report and reply draft…")} </Typography>
                       </Box>
                     ) : wrapError ? (
-                      <Tooltip title={wrapError}><Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.bad.ink }}>
-                        could not finish · {wrapError}
+                      <Tooltip title={wrapError}><Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.bad.ink }}> {tx("could not finish ·")} {wrapError}
                       </Typography></Tooltip>
                     ) : (statusWork || waiting || l?.promptPending || s.promptPending) ? (
                       <WorkLine work={statusWork} who={who} waiting={waiting}
                         asking={l?.asking ?? s.asking} startedAt={l?.StartedAt || s.started}
                         promptPending={l?.promptPending ?? s.promptPending} />
                     ) : (
-                      <Typography noWrap sx={{ ...mono, fontSize: 10, color: FAINT }}>● {who} session</Typography>
+                      <Typography noWrap sx={{ ...mono, fontSize: 10, color: FAINT }}>● {who} {tx("session")}</Typography>
                     )}
                   </Box>
                 </Box>
@@ -257,7 +250,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                   <TellAgent taskId={s.taskId} taskRef={t.ref} compact onQueued={load} />
                 </Box>
                 {/* the grab bar: taller or shorter panes, all of them at once; double-click resets */}
-                <Box onPointerDown={onGrab} onDoubleClick={resetH} title="Drag to resize the panes — double-click for the default height"
+                <Box onPointerDown={onGrab} onDoubleClick={resetH} title={tx("Drag to resize the panes — double-click for the default height")}
                   sx={{ height: 10, flexShrink: 0, cursor: "ns-resize", touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center",
                     "&:hover > span, &:active > span": { bgcolor: DIM, width: 56 } }}>
                   <Box component="span" sx={{ width: 36, height: 3, borderRadius: 99, bgcolor: BORDER, transition: "all .15s" }} />
@@ -267,7 +260,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
           })}
         </Box>
       )}
-      <Confirm open={!!closing} title="Close this session?" confirmLabel="Close session"
+      <Confirm open={!!closing} title={tx("Close this session?")} confirmLabel={tx("Close session")}
         text={`This stops ${closing?.agent || cliName(closing?.cli || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
         onClose={() => setClosing(null)} onConfirm={closeSession} />
     </Box>

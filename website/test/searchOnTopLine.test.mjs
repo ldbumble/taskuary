@@ -34,5 +34,5 @@ test("every profile shows what an agent reads before it, with AGENT.md whole on 
   assert.match(d, /\{isProf\(docName\) && <SharedRulesChip \/>\}/);
   assert.match(d, /Every task reads: SOUL\.md \+ JOB\.md →/);
   assert.match(d, /api\.get\("\/api\/doc\/agent"\)/);
-  assert.match(d, /<Chip size="small" label="AGENT\.md · shared rules"/);
+  assert.match(d, /<Chip size="small" label=\{tx\("AGENT\.md · shared rules"\)\}/);
 });

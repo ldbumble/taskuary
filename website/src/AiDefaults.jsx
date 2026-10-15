@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // The AI defaults panel: who triages, who codes, who assists — and on WHICH MODEL, in one
 // place. Before this, Settings named a brain and stopped: the model that brain would actually
 // run lived on the connector's card, or on the CLI profile's light-model field, or in a plain
@@ -34,7 +35,7 @@ const Model = ({ slot, onSave }) => {
       onChange={(_e, next) => { setV(next || ""); commit(next || ""); }}
       onBlur={() => commit(v)}
       sx={{ minWidth: 260 }}
-      renderInput={(p) => <TextField {...p} label="model" placeholder={slot.default_hint || "provider default"}
+      renderInput={(p) => <TextField {...p} label={tx("model")} placeholder={slot.default_hint || "provider default"}
         sx={{ bgcolor: "#fff" }} />} />
   );
 };
@@ -77,14 +78,14 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
                 {o.label}{o.ready === false ? " — no key saved" : ""}
               </MenuItem>
             ))}
-            {!options.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>nothing configured yet</MenuItem>}
+            {!options.length && <MenuItem value="" disabled sx={{ fontSize: 12.5 }}>{tx("nothing configured yet")}</MenuItem>}
           </Select>
         </Box>
         {/* four yes/nos do not get better on a bigger model, and this slot owns no model setting
             to write one to - a box that saved nowhere would be worse than no box */}
         {!isJudge && (
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>model</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>{tx("model")}</Typography>
             <Model slot={slot} onSave={onSave} />
           </Box>
         )}
@@ -92,10 +93,10 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
             the CLIs whose flag we cannot spell, and a dead dropdown would imply otherwise */}
         {!!(slot.efforts || []).length && (
           <Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>effort</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.4, fontWeight: 600 }}>{tx("effort")}</Typography>
             <Select size="small" displayEmpty value={slot.effort || ""} onChange={(e) => onSave({ effort: e.target.value })}
               sx={{ minWidth: 150, fontSize: 12.5, bgcolor: "#fff" }}>
-              <MenuItem value="" sx={{ fontSize: 12.5 }}>default</MenuItem>
+              <MenuItem value="" sx={{ fontSize: 12.5 }}>{tx("default")}</MenuItem>
               {slot.efforts.map((eff) => <MenuItem key={eff} value={eff} sx={{ fontSize: 12.5 }}>{eff}</MenuItem>)}
             </Select>
           </Box>
@@ -104,18 +105,15 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
 
       <Box sx={{ mt: 1.5, pt: 1.25, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1,
         alignItems: "baseline", flexWrap: "wrap" }}>
-        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>RUNS</Typography>
+        <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600 }}>{tx("RUNS")}</Typography>
         <Typography sx={{ ...mono, fontSize: 12.5, color: INK, fontWeight: 600 }}>
           {picked ? picked.label : "—"}{slot.ready && runs ? ` · ${runs}` : ""}{slot.ready && slot.resolved ? ` → ${slot.resolved}` : ""}{slot.effort ? ` · ${slot.effort}` : ""}
         </Typography>
         {slot.owner && (
-          <Typography variant="caption" sx={{ color: FAINT }}>
-            saved on {slot.owner}
+          <Typography variant="caption" sx={{ color: FAINT }}> {tx("saved on")} {slot.owner}
             {slot.owner_link && (
               <Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}
-                sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", ml: 0.5, "&:hover": { textDecoration: "underline" } }}>
-                open →
-              </Typography>
+                sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", ml: 0.5, "&:hover": { textDecoration: "underline" } }}> {tx("open →")} </Typography>
             )}
           </Typography>
         )}
@@ -127,13 +125,10 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
           one is the sentence on the report's own card, which is why it is not repeated here. */}
       {isJudge && !!(slot.decides || []).length && (
         <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}>
-            ASKED OF IT, ONCE PER RUN
-          </Typography>
+          <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, display: "block", mb: 0.5 }}> {tx("ASKED OF IT, ONCE PER RUN")} </Typography>
           {slot.decides.map((d) => (
             <Typography key={d.line} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>
-              {d.line.toUpperCase()}: {d.says} <Typography component="span" sx={{ ...mono, fontSize: 11.5, color: FAINT }}>
-                but only if: the sentence you wrote on that report&rsquo;s card</Typography>
+              {d.line.toUpperCase()}: {d.says} <Typography component="span" sx={{ ...mono, fontSize: 11.5, color: FAINT }}> {tx("but only if: the sentence you wrote on that report’s card")}</Typography>
             </Typography>
           ))}
           {slot.evidence && <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{slot.evidence}</Typography>}
@@ -178,15 +173,11 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
   if (!state) return <CircularProgress size={20} sx={{ m: 2 }} />;
   return (
     <Box sx={{ mb: 1 }}>
-      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        Which AI does what, and on which model. Adding or signing into a CLI or an API key is
-        still <Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}
-          sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Connections</Typography>;
-        this page only chooses between what you have connected.
-      </Typography>
+      <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}> {tx("Which AI does what, and on which model. Adding or signing into a CLI or an API key is still")} <Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}
+          sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>{tx("Connections")}</Typography>{tx("; this page only chooses between what you have connected.")} </Typography>
       {err && (
         <Alert severity={stale ? "error" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }}>
-          {stale && <AlertTitle sx={{ fontSize: 13, fontWeight: 600 }}>Restart Taskuary to finish this update</AlertTitle>}
+          {stale && <AlertTitle sx={{ fontSize: 13, fontWeight: 600 }}>{tx("Restart Taskuary to finish this update")}</AlertTitle>}
           {err}
           {stale && " — until then the rows below are the older, plainer controls, and the model and effort pickers are not available."}
         </Alert>

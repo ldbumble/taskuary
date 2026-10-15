@@ -1,3 +1,4 @@
+import { t as tx } from "./i18n.js";
 // Triage drew the boundary in the wrong place: one task holding two jobs, or two tasks
 // holding one. Same drawer for both, because it is the same question - "is this one job?" -
 // and the answer is either "no, break it out" or "no, fold it in". Its own module because
@@ -73,14 +74,12 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
   };
   if (done) return (
     <Section>
-      <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
-        ✓ broken in two — the second job is {done}. Send it to an agent from its own task.
-      </Typography>
+      <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}> {tx("✓ broken in two — the second job is")} {done}{tx(". Send it to an agent from its own task.")} </Typography>
     </Section>
   );
   return (
     <Section>
-      <Head icon={<CallSplitIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title="Break it into two tasks"
+      <Head icon={<CallSplitIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title={tx("Break it into two tasks")}
         sub={`Two jobs filed as one. ${taskRef || "This task"} keeps its session, report and history — the second job starts clean.`} />
       <>
           <Typography variant="caption" sx={{ color: sug?.two ? "#6f8a6e" : FAINT, display: "block", mb: 1 }}>
@@ -89,18 +88,18 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
                         : `The AI reads this as one job${sug.why ? ` — ${sug.why}` : ""}. Split it anyway if you disagree.`
               : sug.why}
           </Typography>
-          <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>① STAYS HERE</Typography>
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>{tx("① STAYS HERE")}</Typography>
           <TextField fullWidth size="small" sx={{ mt: 0.25, mb: 1 }} value={first.title}
-            onChange={(e) => editFirst({ ...first, title: e.target.value })} placeholder="what this task is really about" />
-          <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>② BECOMES A NEW TASK</Typography>
+            onChange={(e) => editFirst({ ...first, title: e.target.value })} placeholder={tx("what this task is really about")} />
+          <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10 }}>{tx("② BECOMES A NEW TASK")}</Typography>
           <TextField fullWidth size="small" sx={{ mt: 0.25, mb: 0.75 }} value={second.title} autoFocus
-            onChange={(e) => editSecond({ ...second, title: e.target.value })} placeholder="the other job, in one line" />
+            onChange={(e) => editSecond({ ...second, title: e.target.value })} placeholder={tx("the other job, in one line")} />
           <TextField fullWidth multiline minRows={2} size="small" value={second.summary}
             onChange={(e) => editSecond({ ...second, summary: e.target.value })}
-            placeholder="the part of the ask that belongs to it — the agent reads this" />
+            placeholder={tx("the part of the ask that belongs to it — the agent reads this")} />
           {(sug?.messages || []).length > 0 && (
             <Box sx={{ mt: 1, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1, py: 0.5 }}>
-              <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>Messages that move with it</Typography>
+              <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>{tx("Messages that move with it")}</Typography>
               {sug.messages.map((m) => (
                 <Box key={m.message_id} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <Checkbox size="small" sx={{ p: 0.4 }} checked={move.includes(m.message_id)}
@@ -110,15 +109,13 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
                   </Typography>
                 </Box>
               ))}
-              <Typography variant="caption" sx={{ color: FAINT, display: "block", pb: 0.5 }}>
-                Tick nothing and the mail stays here — the new task carries the ask you wrote above.
-              </Typography>
+              <Typography variant="caption" sx={{ color: FAINT, display: "block", pb: 0.5 }}> {tx("Tick nothing and the mail stays here — the new task carries the ask you wrote above.")} </Typography>
             </Box>
           )}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.25 }}>
             <Button size="small" variant="contained" disableElevation disabled={busy || !second.title.trim()}
               startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <CallSplitIcon sx={{ fontSize: 15 }} />}
-              onClick={go}>Break it in two</Button>
+              onClick={go}>{tx("Break it in two")}</Button>
             {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
           </Box>
       </>
@@ -153,18 +150,16 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
   };
   if (done) return (
     <Section>
-      <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
-        ✓ folded together — {done.ref} carries the work now
-        {done.moved ? `, with ${done.moved} message${done.moved === 1 ? "" : "s"} moved over` : ""}.
+      <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}> {tx("✓ folded together —")} {done.ref} {tx("carries the work now")} {done.moved ? `, with ${done.moved} message${done.moved === 1 ? "" : "s"} moved over` : ""}.
       </Typography>
     </Section>
   );
   return (
     <Section>
-      <Head icon={<MergeIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title="Fold it into another task"
+      <Head icon={<MergeIcon sx={{ fontSize: 17, color: "#6f8a6e" }} />} title={tx("Fold it into another task")}
         sub="One job filed twice. The messages move to the survivor; the other is dropped with a pointer at it — never deleted." />
       {!cands ? <CircularProgress size={16} /> : !cands.length ? (
-        <Typography variant="caption" sx={{ color: FAINT }}>No other open task to fold into.</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{tx("No other open task to fold into.")}</Typography>
       ) : (
         <>
           <Autocomplete size="small" options={cands} value={pick} onChange={(_e, v) => setPick(v)}
@@ -173,13 +168,13 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
             renderOption={(props, o) => (
               <li {...props} style={{ display: "block", fontSize: 12.5 }}>
                 <span style={{ ...mono, color: "#55697a", fontWeight: 600 }}>{o.ref}</span> {o.title}
-                <div style={{ color: "#867f74", fontSize: 10.5 }}>{o.why} · match {o.score.toFixed(2)}</div>
+                <div style={{ color: "#867f74", fontSize: 10.5 }}>{o.why} {tx("· match")} {o.score.toFixed(2)}</div>
               </li>
             )}
-            renderInput={(params) => <TextField {...params} placeholder="the task this is really the same as" />} />
+            renderInput={(params) => <TextField {...params} placeholder={tx("the task this is really the same as")} />} />
           {pick && (
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 1, flexWrap: "wrap" }}>
-              <Typography variant="caption" sx={{ color: DIM }}>Which one survives?</Typography>
+              <Typography variant="caption" sx={{ color: DIM }}>{tx("Which one survives?")}</Typography>
               {[["other", `${pick.ref} — this one closes`], ["this", `${taskRef || "this task"} — ${pick.ref} closes`]].map(([k, label]) => (
                 <Chip key={k} size="small" label={label} onClick={() => setKeep(k)}
                   sx={{ height: 20, fontSize: 10.5, cursor: "pointer",
@@ -191,13 +186,11 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1.25 }}>
             <Button size="small" variant="contained" disableElevation disabled={busy || !pick}
               startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <MergeIcon sx={{ fontSize: 15 }} />}
-              onClick={go}>Fold them together</Button>
+              onClick={go}>{tx("Fold them together")}</Button>
             {err && <Typography variant="caption" sx={{ color: "#6b2733" }}>{err}</Typography>}
           </Box>
           {pick && (
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              A task an agent is working cannot be folded away underneath it — pause that session first.
-            </Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}> {tx("A task an agent is working cannot be folded away underneath it — pause that session first.")} </Typography>
           )}
         </>
       )}

@@ -7,7 +7,7 @@ import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../sr
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 // Close out, from its heading to the Context & history fold under it
 const closeOut = () => {
-  const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3" title="Close out"');
+  const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3" title={tx("Close out")}');
   return page.slice(at, page.indexOf("<Fold title={`Context & history", at));
 };
 
@@ -69,8 +69,8 @@ test("the emails on a task read newest first, each with who and when on its firs
   const page = read("TaskPage.jsx");
   assert.match(page, /export const newestFirst = /);
   assert.match(page, /newestFirst\(alsoSaid\)\.map\(/);
-  assert.match(page, /Sent by you\{m\.SourceName \? ` · \$\{m\.SourceName\}` : ""\}\{m\.SentAt \? ` · \$\{fmtDateTime\(m\.SentAt\)\}` : ""\}/);
-  assert.match(page, /What was sent\{sentReview\.DecidedAt \? ` · \$\{fmtDateTime\(sentReview\.DecidedAt\)\}` : ""\}/);
+  assert.match(page, /\{tx\("Sent by you"\)\}\{m\.SourceName \? ` · \$\{m\.SourceName\}` : ""\}\{m\.SentAt \? ` · \$\{fmtDateTime\(m\.SentAt\)\}` : ""\}/);
+  assert.match(page, /\{tx\("What was sent"\)\}\{sentReview\.DecidedAt \? ` · \$\{fmtDateTime\(sentReview\.DecidedAt\)\}` : ""\}/);
   const sort = (ms) => [...ms].sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
   assert.deepEqual(sort([{ SentAt: "2026-10-06 13:26:00" }, { SentAt: "2026-10-14 12:29:30" }, { SentAt: "2026-10-13 17:10:20" }]).map((m) => m.SentAt.slice(5, 10)),
     ["10-14", "10-13", "10-06"]);

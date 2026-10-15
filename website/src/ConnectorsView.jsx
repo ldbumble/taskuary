@@ -1337,7 +1337,7 @@ const TestLine = ({ test, mt = 1 }) => {
 // card the same size. check them all"): a connected card's 2px border and a one-line status against a two-line description made
 // three heights on one wall. The border is always 1px - a live or failing card's extra weight is drawn INSIDE it, taking no room -
 // the description always holds two lines, and being connected says so in a pill on the title line.
-const ConnCard = ({ c }) => {
+export const ConnCard = ({ c }) => {
   const st = CARD_STATE[connState(c)], extra = st.width - 1;
   const ring = extra > 0 ? `inset 0 0 0 ${extra}px ${st.border}` : "";
   return (
@@ -1366,6 +1366,34 @@ const ConnCard = ({ c }) => {
     </Box>
   );
 };
+
+// A connector's card as the catalogue draws it - its status line said one way, wherever the card is shown (the first run's
+// questions show these same cards: the owner, 2026-10-15, "Don't create new ui. keep the same as we have in connections")
+export const connCardOf = (c, sources, go) => {
+  const m = META[c.Type] || {};
+  const srcs = m.channel && m.channel !== "ai"
+    ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
+  // 'notify' is retired (2026-10-02): a card saved with it still loads, it is just not a role any more
+  const roles = String(c.Roles || "").split(",").filter((r) => r && r !== "notify");
+  const status = `${c.Active ? "on" : "off"}`
+    + (roles.length ? ` · ${roles.join(" + ")}` : "")
+    + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
+      : c.HasSecret ? " · key saved"
+        : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
+        : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
+    + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
+  // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
+  // or Jira and Linear both wearing 'boards', tells you nothing about which is which
+  return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
+    channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
+    haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`, go };
+};
+// the catalogue's wall of cards - one, two or three across
+export const CardGrid = ({ children }) => (
+  <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
+    {children}
+  </Box>
+);
 
 // The catalog's sections, named once: the rail reads them before `groups` is built (groups
 // needs the loaded connectors), and they must stay in step.
@@ -1610,26 +1638,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   }
 
   /* ── landing: searchable grouped catalog ── */
-  const chanCard = (c) => {
-    const m = META[c.Type] || {};
-    const srcs = m.channel && m.channel !== "ai"
-      ? sources.filter((s) => s.ConnectorId === c.ConnectorId) : null;   // owned, never channel-shared
-    // 'notify' is retired (2026-10-02): a card saved with it still loads, it is just not a role any more
-    const roles = String(c.Roles || "").split(",").filter((r) => r && r !== "notify");
-    const status = `${c.Active ? "on" : "off"}`
-      + (roles.length ? ` · ${roles.join(" + ")}` : "")
-      + (srcs ? ` · ${srcs.filter((s) => s.Active).length}/${srcs.length} ${(m.srcLabel || "sources").toLowerCase()}`
-        : c.HasSecret ? " · key saved"
-          : ["ollama", "local_whisper"].includes(c.Type) ? " · local — no key needed"
-          : c.Type === "stt_server" ? " · your server — key optional" : " · no key yet")
-      + (c.LastError ? " · last test failed" : c.LastSyncAt ? ` · ok ${timeAgo(c.LastSyncAt)}` : "");
-    // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
-    // or Jira and Linear both wearing 'boards', tells you nothing about which is which
-    return { key: `c${c.ConnectorId}`, title: c.Name, desc: status,
-      channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
-      haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`,
-      go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
-  };
+  const chanCard = (c) => connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId }));
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
     + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length} reports (built on the Reports tab)`;
@@ -1801,9 +1810,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
                 {hits.length} {hits.length === 1 ? "result" : "results"}
               </Typography>
-              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
-                {hits.map((r) => <ConnCard key={r.key} c={r} />)}
-              </Box>
+              <CardGrid>{hits.map((r) => <ConnCard key={r.key} c={r} />)}</CardGrid>
             </>
           )}
         </Box>
@@ -1812,9 +1819,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           {shown.note && (
             <Typography variant="body2" sx={{ color: DIM, mb: 1.5, maxWidth: 860, lineHeight: 1.55 }}>{shown.note}</Typography>
           )}
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(3, minmax(0, 1fr))" }, gap: 1.5 }}>
-            {shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}
-          </Box>
+          <CardGrid>{shown.cards.map((c) => <ConnCard key={c.key} c={c} />)}</CardGrid>
         </>
       )}
     </SideRail>
@@ -2044,6 +2049,14 @@ function MacPermissions({ conn, test, busy, runTest }) {
 /* ── channel / AI connector detail: setup wizard + sources ─────────────── */
 // what the SIMPLE card asks for (the first run): the address and the server, never the optional calendar or TLS fields
 const SIMPLE_FIELDS = { gmail: ["address"], imap: ["address", "imap_host"] };
+// the simple card's one hint under the password, in words a first-time owner has: the full card's Guide says "under Credentials"
+// and "the imap->smtp pattern", which this screen has neither of (a fresh-home run, 2026-10-15)
+const SIMPLE_HINT = {
+  gmail: <>Not your normal password: Google makes a 16-letter App Password at{" "}
+    <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>
+    {" "}- 2-Step Verification has to be on first.</>,
+  imap: "Usually your normal email password. Yahoo and iCloud want an app password from their account page instead.",
+};
 
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected }) {
   // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
@@ -2244,12 +2257,18 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // (firstrun.connect_mail) - for the first run, where the stepper, roles and tabs are more than anyone needs yet
   // (the owner, 2026-10-14: "it should show the settings page for email in connectors. reuse our component but make it simple")
   if (simple) {
-    const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1]);
+    // Microsoft is one sign-in, nothing to type; an AI card's key becomes the AI (firstrun.choose_key) - the same card either way
+    if (conn.Type === "outlook") return <MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={onConnected} plain />;
+    // an AI card asks only what it cannot run without - the model and base URL have defaults (Azure's endpoint has none)
+    const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1]).filter((k) => !isAI || !["model", "base_url"].includes(k));
+    const ready = isAI ? !!secret.trim() : !!(cfg.address || "").trim() && !!secret.trim();
     const connect = async () => {
       setBusy("save"); setTest(null);
       try {
-        const { data } = await api.post("/api/setup/first-run/mail",
-          { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
+        const { data } = isAI
+          ? await api.post("/api/setup/first-run/key", { type: conn.Type, key: secret, cid: conn.ConnectorId, config: cfg }, { timeout: 90000 })
+          : await api.post("/api/setup/first-run/mail",
+            { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
         setTest({ ok: data.ok, detail: data.why });
         if (data.ok) { setSecret(""); onConnected?.(); }
       } catch (e) { setTest({ ok: false, detail: `${e?.response?.data?.detail || e?.message || "That didn't work."} Press Connect to try again.` }); }
@@ -2266,8 +2285,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
         ))}
         {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={{ bgcolor: "#fff" }}
-          onChange={(e) => setSecret(e.target.value)} helperText={(m.howto || [])[1] || ""} />}
-        <Box><Button variant="contained" disableElevation disabled={busy === "save" || !(cfg.address || "").trim() || !secret.trim()} onClick={connect}>
+          onChange={(e) => setSecret(e.target.value)} helperText={SIMPLE_HINT[conn.Type] || (isAI ? (m.howto || [])[0] : (m.howto || [])[1]) || ""} />}
+        <Box><Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>
           {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button></Box>
         <TestLine test={test} mt={0} />
       </Box>

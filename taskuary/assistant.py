@@ -1707,7 +1707,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         return {'ran': True, 'said': 0, 'reads_nothing': True, 'summary': why, 'inputs': '',
                 'reviewed': {'notes': '', 'scope': 'nothing', 'systems': 0, 'why': why}}
     state = {i['Key']: i for i in store.list_ideas()}
-    if llm is None:
+    from .firstrun import unchosen
+    if llm is None and not unchosen(store):           # before the first run picks an AI there is none to ask - the facts stand
         from .llm import build_llm
         try: llm = build_llm(store)
         except Exception as e:

@@ -134,6 +134,13 @@ export const LOGOS = {
       <path fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" d="M12 6.4v3.2M12 14.4v3.2M6.9 9.2l2.8 1.6M14.3 13.2l2.8 1.6M6.9 14.8l2.8-1.6M14.3 10.8l2.8-1.6" />
     </S>
   ),
+  // the four-point star, in Google's blue-to-violet
+  gemini: (p) => (
+    <S {...p}>
+      <defs><linearGradient id="tq-gemini" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#4285F4" /><stop offset="1" stopColor="#9B72CB" /></linearGradient></defs>
+      <path fill="url(#tq-gemini)" d="M12 2c.6 5.2 4.8 9.4 10 10-5.2.6-9.4 4.8-10 10-.6-5.2-4.8-9.4-10-10 5.2-.6 9.4-4.8 10-10z" />
+    </S>
+  ),
   azure_openai: (p) => (
     <S {...p}>
       <rect x="2" y="2" width="20" height="20" rx="5" fill="#0078D4" />

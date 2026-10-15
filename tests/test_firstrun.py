@@ -39,6 +39,25 @@ class ChooseAiTests(unittest.TestCase):
         self.assertIn('needs you to sign in once', out['why']); self.assertIn('click the card again', out['why'])
         self.assertEqual(self.s.get_setting('triage_ai') or '', '', 'a brain that does not answer is never made the brain')
 
+    def test_a_failed_pick_is_still_said_after_a_reload_and_cleared_when_it_works(self):
+        """The NEXT line went back to "pick your AI" after a failed pick, and a reload lost the Sign in button too."""
+        with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
+            firstrun.choose_cli(self.s, self.cfg, 'codex')
+            st = firstrun.state(self.s)                           # what a reload reads
+        self.assertEqual((st['fix']['name'], st['fix']['fix'], st['fix']['setup']), ('codex', 'signin', 'codex'))
+        self.assertIn('sign in', st['next'])
+        with detect(), mock.patch.object(agents, 'run_cli', return_value=('ok', None, None)):
+            firstrun.choose_cli(self.s, self.cfg, 'codex')
+            self.assertIsNone(firstrun.state(self.s)['fix'])
+
+    def test_a_pick_that_works_closes_the_sign_in_task_it_left(self):
+        """Sign in opens the CLI on a "Set up" task; it stayed under On you after the AI worked."""
+        from taskuary import clisetup
+        tid = self.s.create_task({'Title': 'Set up codex', 'Kind': clisetup.KIND, 'Status': 'in_progress', 'Tags': clisetup.tag('codex')}, 'owner')
+        with detect(), mock.patch.object(agents, 'run_cli', return_value=('ok', None, None)):
+            firstrun.choose_cli(self.s, self.cfg, 'codex')
+        self.assertEqual(self.s.get_task(tid)['Status'], 'done')
+
     def test_a_working_cli_is_connected_and_becomes_the_brain_in_one_click(self):
         with detect(), mock.patch.object(agents, 'run_cli', return_value=('ok', None, None)) as ran:
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
@@ -87,6 +106,22 @@ class KeyAndMailTests(unittest.TestCase):
         self.assertFalse(s.get_connector_by_type('gmail')['Active'])
         self.assertIn('full email address', firstrun.connect_mail(s, 'gmail', 'alex', 'x')['why'])
 
+    def test_a_failure_that_already_says_what_to_check_is_said_once(self):
+        s = MemoryStore()
+        said = "The server's address could not be found. Check the host name for typos, and that this computer is online."
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': said}):
+            out = firstrun.connect_mail(s, 'imap', 'alex@northwind.example', 'pw', 'imap.northwind.invalid')
+        self.assertNotIn('..', out['why']); self.assertEqual(out['why'].count('Check'), 1, out['why'])
+
+    def test_any_ai_card_with_its_own_fields_can_be_the_brain(self):
+        """More AI shows every Connections AI card; one with an endpoint (Azure) saves its fields with the key."""
+        s = MemoryStore()
+        cid = s.get_connector_by_type('azure_openai')['ConnectorId']
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'ok'}):
+            out = firstrun.choose_key(s, 'azure_openai', 'azure-key-1234567890', cid=cid, config={'endpoint': 'https://northwind.example'})
+        self.assertTrue(out['ok'], out); self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}')
+        self.assertEqual(json.loads(s.get_connector(cid)['ConfigJson'])['endpoint'], 'https://northwind.example')
+
 
 class StateTests(unittest.TestCase):
     def test_step_one_is_a_choice_not_a_cli_that_happens_to_be_installed(self):
@@ -97,7 +132,36 @@ class StateTests(unittest.TestCase):
             self.assertEqual(firstrun.state(s)['step'], 'ai', 'installed is not chosen - it may never have signed in')
             s.set_setting('triage_ai', 'cli:coder', 'owner')
             st = firstrun.state(s)
-        self.assertEqual(st['step'], 'email'); self.assertTrue(st['next'].startswith('Step 2 of 2: Claude is ready'))
+        self.assertEqual(st['step'], 'email'); self.assertIn('What email do you have?', st['next']); self.assertIn('Claude is ready', st['next'])
+
+    def test_step_two_names_the_ai_not_the_profile_that_runs_it(self):
+        """A fresh install's brain is the `coder` profile on claude: step 2 said "coder is ready" (a fresh-home run, 2026-10-15)."""
+        s = MemoryStore(); s.set_setting('triage_ai', 'cli:coder', 'owner')
+        ready = {'ready': True, 'Name': 'coder (CLI)', 'pick': 'cli:coder', 'why': ''}
+        with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]),              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'),              mock.patch.object(agents, 'cli_agent_options', return_value=[{'value': 'coder', 'cli': 'claude'}]):
+            st = firstrun.state(s)
+        self.assertEqual(st['brain']['name'], 'Claude'); self.assertNotIn('coder', st['next'])
+
+    def test_each_step_is_a_plain_question(self):
+        s = MemoryStore()
+        def at(ready, inbound, items):
+            with mock.patch('taskuary.setup._ai', return_value={'ready': ready, 'Name': 'x', 'pick': ''}),                  mock.patch('taskuary.setup._inbound', return_value=inbound), mock.patch('taskuary.setup._first_items', return_value=items), detect():
+                return firstrun.state(s)
+        self.assertIn('What AI do you have?', at(False, [], [])['next'])
+        done = at(True, ['Work mail'], [{'MessageId': 1}])
+        self.assertIn('Any other connection', done['next']); self.assertIn('Walk me through my tasks', done['next'])
+
+    def test_no_report_asks_an_ai_nobody_picked_yet(self):
+        """The shipped Advisor report ran at the first start on the signed-out claude a blank brain falls to, and the bell
+        turned red over the question asking which AI (a fresh-home run, 2026-10-15)."""
+        from taskuary import assistant
+        s = MemoryStore()
+        with mock.patch('taskuary.llm.build_llm') as built, mock.patch('taskuary.setup._first_items', return_value=[]):
+            out = assistant._run(s, None, '', None, None)
+        built.assert_not_called(); self.assertFalse(out.get('failed'), out)
+        self.assertTrue(firstrun.unchosen(s))
+        s.set_setting('triage_ai', 'cli:codex', 'owner')
+        self.assertFalse(firstrun.unchosen(s))
 
     def test_an_install_already_sorting_mail_is_done_and_never_sees_setup_again(self):
         s = MemoryStore()

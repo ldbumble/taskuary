@@ -6079,7 +6079,7 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
 
 # ── first run: two steps on the assistant canvas (firstrun.py, FirstRun.jsx) ─────────────────────────────────────────────
 class FirstRunAiBody(BaseModel): name: str
-class FirstRunKeyBody(BaseModel): type: str; key: str
+class FirstRunKeyBody(BaseModel): type: str; key: str; cid: int | None = None; config: dict | None = None
 class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host: str = ''
 
 @app.get('/api/setup/first-run')
@@ -6099,7 +6099,7 @@ def first_run_ai(body: FirstRunAiBody):
 @app.post('/api/setup/first-run/key')
 def first_run_key(body: FirstRunKeyBody):
     from . import firstrun
-    out = firstrun.choose_key(store, body.type, body.key)
+    out = firstrun.choose_key(store, body.type, body.key, cid=body.cid, config=body.config)
     if out.get('ok'): brain_arrived()
     return {**out, **firstrun.state(store)}
 

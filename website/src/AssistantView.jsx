@@ -625,7 +625,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   // read as an item card they hid the sentence and drew an empty "asked you" box where the questions were
   // (the owner, 2026-09-24: "it should show ... like normal but no response??")
   const kind = NOTE_KINDS.has(c?.kind) ? null
-    : c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
+    // ...and Set up Taskuary's card is the setup itself: unrouted it fell to a message card - an empty "asked you" box (2026-10-15)
+    : c?.kind === "setup" ? "setup" : c?.kind === "walk" ? "walk" : c?.kind === "firstrun" ? "firstrun" : (m.proposal || c?.kind === "proposal") ? "proposal" : cardFor(c);
   // the short line only over a LIVE card, which shows the brief and the repository itself; one read back from
   // history carries only its heading, so there the sentence is still the only place the brief is written
   const text = kind === "proposal" ? proposalSay(m.proposal?.say_card || m.text, m.proposal || c, live) : m.text;
@@ -2086,7 +2087,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <div className="grow" />
         <Tooltip title="The Timeline"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
-        <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
+        {/* no AI to name before the first run picked one - it said "Claude Code · coder" over the question asking which (2026-10-15) */}
+        {!firstRun && <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>

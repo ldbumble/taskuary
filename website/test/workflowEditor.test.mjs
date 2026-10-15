@@ -38,3 +38,10 @@ test("Reports opens an agent workflow on its own page, with one way in to a new 
   assert.doesNotMatch(view, /label: "\+ Monthly invoices"/);
   assert.match(view, /Monthly Zoho invoices have a form of their own/);
 });
+
+test("Reports offers New report and New workflow together, whichever list is open", () => {
+  const view = read("ReportsView.jsx");
+  assert.match(view, /\{ key: "new-report", label: "\+ New report" \}, \{ key: "new-agent", label: "\+ New workflow" \}\]/);
+  assert.doesNotMatch(view, /section === "workflows" \? \{ key: "new-agent"/);
+  assert.ok(view.includes(">New report</Button>") && view.includes(">New workflow</Button>"));
+});

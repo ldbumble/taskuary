@@ -517,8 +517,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       title: "Reports", wide: true,
       summary: `${reportSources.length} report${reportSources.length === 1 ? "" : "s"} · ${workflowSources.length} workflow${workflowSources.length === 1 ? "" : "s"} · reports read and summarise, workflows write`,
       sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
-        // one "+" per shelf, the shelf's own word on it ("new-invoices" is reached from the new workflow's page)
-        section === "workflows" ? { key: "new-agent", label: "+ New workflow" } : { key: "new-report", label: "+ New report" }],
+        // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
+        // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
+        { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }],
       section,
       onSection: (key) => {
         setDraft(null);
@@ -566,10 +567,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
           {syncing ? "Running…" : "Run due now"}
         </Button>
-        {workflowOverview ? <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-            onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={{ background: GRADIENT }}>New workflow</Button>
-        : <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ background: GRADIENT }}>New report</Button>}
+        {/* both, whichever list is open - the open one's is the filled button */}
+        <Button size="small" variant={workflowOverview ? "outlined" : "contained"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-report"); }} sx={{ mr: 1, ...(workflowOverview ? {} : { background: GRADIENT }) }}>New report</Button>
+        <Button size="small" variant={workflowOverview ? "contained" : "outlined"} disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
+          onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New workflow</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}

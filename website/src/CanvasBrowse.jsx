@@ -74,9 +74,8 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
                 bgcolor: PANEL, color: "#41525f", fontFamily: "inherit", fontSize: 12.5, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
               <ArrowBackIosNewIcon sx={{ fontSize: 12 }} />{sectionLabel || title}
             </Box>
-            <Typography sx={{ fontSize: 12, color: DIM, flex: 1, minWidth: 0 }} noWrap>
-              {cards.length > 1 ? `the other ${cards.length - 1} ${sectionLabel && sectionLabel !== "everything" ? `${sectionLabel.toLowerCase()} ` : ""}cards are hidden while this one is open` : ""}
-            </Typography>
+            {/* the back button says where you are; "the other 5 reports cards are hidden while this one is open" said it again
+                (the owner, 2026-10-15: "too many steps") */}
           </Box>
           <Box sx={{ p: { xs: 1, sm: 1.75 } }}>{detail}</Box>
         </Box>

@@ -25,19 +25,20 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
+import Composer from "./Composer.jsx";
+import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
   { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "a live CLI session, or the assistant's own chat — the two doors triage picks between" },
   { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
   { key: "goal",   mark: "🎯", label: "Set a goal", hint: "an outcome with a date and steps — the steps are tasks, and it stays on your rail until it is done" },
-  // A JOB THAT REPEATS (the owner, 2026-10-15: "new should have this workflow/report option that would just take you to the
-  // same ui for reports/workflows"): no second form here - it opens the one Reports keeps, so a report or a workflow is set up
-  // in exactly one place
-  { key: "repeat", mark: "🔁", label: "Report or workflow", hint: "a job that runs on a schedule — a report reads and summarises, a workflow does the work" },
+  // A JOB THAT REPEATS, one tab each (the owner, 2026-10-15: "we need 2, one for reports and one for workflows"): say it in
+  // your words and Build it - the draft opens on Reports, filled in, to check and save. The same box Reports has (Composer)
+  { key: "report",   mark: "📊", label: "Report", hint: "reads your systems on a schedule and summarises what it finds — it changes nothing" },
+  { key: "workflow", mark: "🔁", label: "Workflow", hint: "does the work on a schedule — checks, opens tasks, prepares drafts — and asks before what you said it must not" },
 ];
-// where each one is set up (ReportsView reads the hash, on the tab and on the canvas alike)
-const REPEAT_TO = { report: "report=new", workflow: "report=new-agent" };
+const REPEATS = ["report", "workflow"];
 
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em",
@@ -161,7 +162,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [when, setWhen] = useState("");
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
-  const [repeat, setRepeat] = useState("workflow");
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); }, [open]);
   useEffect(() => {
@@ -183,7 +183,6 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const close = () => { if (!busy) onClose?.(); };
 
   const submit = useCallback(async () => {
-    if (kind === "repeat") { onClose?.(); window.location.hash = REPEAT_TO[repeat]; return; }
     setBusy(true); setErr(""); setOk("");
     const about = String(aboutRef.current?.value || "").trim();
     try {
@@ -241,10 +240,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, repeat, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, onDone, onOpenTask, onClose, pics]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, onDone, onOpenTask, onClose, pics]);
 
-  const canGo = kind === "repeat" || (hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim()))));
-  const verb = kind === "repeat" ? `Set up the ${repeat}` : kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
+  const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
+  const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
     : kind === "agent" ? (how === "general" ? "Start the agent" : "Start the session") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
@@ -381,22 +380,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           </>
         )}
 
-        {kind === "repeat" && (
-          <Box>
-            <Label>Which kind</Label>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Fork on={repeat === "workflow"} onClick={() => setRepeat("workflow")} title="A workflow"
-                hint="does the work on a schedule - checks, opens tasks, prepares drafts - and asks before it changes what you said it must not." />
-              <Fork on={repeat === "report"} onClick={() => setRepeat("report")} title="A report"
-                hint="reads your systems on a schedule and summarises what it finds. It changes nothing." />
-            </Box>
-            <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
-              It opens on Reports, where you describe it in your own words and it fills the form in.
-            </Typography>
-          </Box>
+        {REPEATS.includes(kind) && (
+          <Composer kind={kind} onDraft={(config, meta) => { handDraft(kind, config, meta); onClose?.(); window.location.hash = DRAFT_HASH[kind]; }} />
         )}
 
-        {kind !== "repeat" && <Box>
+        {!REPEATS.includes(kind) && <Box>
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
             : "What do you want to remember"}</Label>
@@ -465,9 +453,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end", px: 3, py: 1.75,
         borderTop: `1px solid ${BORDER}`, bgcolor: PANEL2 }}>
         <Button size="small" onClick={close} sx={{ color: DIM }}>Cancel</Button>
-        <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
+        {!REPEATS.includes(kind) && <Button size="small" variant="contained" disableElevation disabled={!canGo || busy} onClick={submit}
           startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : null}
-          sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>
+          sx={{ background: GRADIENT }}>{busy ? "Working…" : verb}</Button>}
       </Box>
     </Shell>
   );

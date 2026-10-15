@@ -25,7 +25,7 @@ test("read versus write decides the shelf, not whether an agent runs it", () => 
 });
 
 test("the workflow shelf has its own conversational AI builder", () => {
-  const view = read("ReportsView.jsx");
+  const view = read("Composer.jsx");     // the one describe box, shared by Reports and New
   assert.match(view, /kind === "workflow" \? "\/api\/workflows\/compose"/);
   assert.match(view, /Describe the workflow you want/);
   assert.match(view, /check Intacct for active employees that share a name/);

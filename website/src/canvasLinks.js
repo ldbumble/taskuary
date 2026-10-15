@@ -14,7 +14,9 @@ export function canvasRequestFromHash(hash, n = 0) {
   if (/^#new-task/.test(h)) return { kind: "new", n };
   if ((m = /^#report=([^&]+)/.exec(h))) {
     const v = decodeURIComponent(m[1]);
+    // a draft New built (draftHandoff): its kind's shelf, the draft open
     const state = v === "new" ? { section: "reports", open: "new-report" }
+      : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
       : v === "workflows" ? { section: "workflows", open: null }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
           : /^\d+$/.test(v) ? { section: "reports", open: Number(v) } : { section: "reports", open: null };

@@ -9,7 +9,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
-import { Crumb, ConfirmDelete, useAgents } from "./ui.jsx";
+import { ConfirmDelete, useAgents } from "./ui.jsx";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -113,7 +113,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
 
   return (
     <Box sx={{ maxWidth: 820, mx: "auto" }}>
-      <Crumb section="Workflows" onBack={onBack} title={cur ? (cfg.title || "Workflow") : "New workflow"} />
+      {/* the title alone: the back button above already says Workflows */}
+      <Typography sx={{ color: INK, fontWeight: 600, fontSize: 20, lineHeight: 1.2, mb: 1.5 }}>{cur ? (cfg.title || "Workflow") : "New workflow"}</Typography>
       {/* the actions, together: what it is doing now, and the three things you can do about it */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 2, mt: -1 }}>
         <Typography variant="body2" sx={{ color: DIM, flex: 1, minWidth: 200 }}>
@@ -131,7 +132,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
       </Box>
       {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}>{msg.text}</Alert>}
       {lastRun}
-      {!cur && composer}
+      {/* describing it is how a new one starts; a draft that arrived built (New, or this box) is already past that */}
+      {!cur && !draft && composer}
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
 
       <Box sx={{ ...card, p: 2.5 }}>

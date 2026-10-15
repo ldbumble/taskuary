@@ -25,6 +25,8 @@ import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mo
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 import WorkflowEditor from "./WorkflowEditor.jsx";
+import Composer from "./Composer.jsx";
+import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -358,11 +360,18 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const fromHash = () => {
       const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
       if (value === "new") { setQ(""); setDraft(null); setBucket("new-report"); }
+      else if (value === "draft" || value === "draft-workflow") { setQ(""); setBucket("draft"); }
       else if (["workflows", "new-invoices", "new-agent"].includes(value)) { setQ(""); setDraft(null); setBucket(value); }
       else if (/^\d+$/.test(value || "")) { setQ(""); setBucket(Number(value)); }
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+  // a draft New built (draftHandoff): taken when this view opens, or the moment it is handed if it is already open
+  useEffect(() => {
+    const take = () => { const p = takeDraft(); if (p) onDraftRef.current(p.config, p.meta); };
+    take();
+    return onDraftHanded(take);
   }, []);
   const runNow = async (sid) => {
     setRunning(sid); setNote(null);
@@ -390,13 +399,18 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   };
   const retry = () => { setErr(""); load(); };
   // the composer's word on a draft: a check it failed is a warning to fix before saving, never "Drafted."
+  const onDraftRef = useRef(null);
   const onDraft = (config, meta) => {
     setDraft(config);
     const low = meta.confidence === "low";
+    // a workflow's page has no steps: what it says is check it, then save (WorkflowEditor)
+    const wf = isWorkflowConfig(config) && config.type !== "zoho_monthly_invoices";
     setDraftNote(meta.error ? { severity: "warning", text: `It drafted this, but: ${meta.error}. Fix that below before you save — nothing is saved yet.` }
-      : { severity: low ? "warning" : "info", text: `${meta.explain || "Drafted."} ${low
-        ? "It is not confident about this one — preview it in step 2 before you save." : "Check it below and preview it in step 2 before you save."}` });
+      : { severity: low ? "warning" : "info", text: `${meta.explain || "Drafted."} ${wf
+        ? (low ? "It is not confident about this one — check every field below before you save." : "Check it below, then Save or Save & run now.")
+        : low ? "It is not confident about this one — preview it in step 2 before you save." : "Check it below and preview it in step 2 before you save."}` });
   };
+  onDraftRef.current = onDraft;
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err
@@ -1664,71 +1678,6 @@ function AwsPicker({ label, which, value, placeholder, service, onChange }) {
    DRAFT in the ordinary boxes: it is not saved, it has not run, and the next thing the owner
    does is preview it against the real system. Questions come back as questions rather than a
    guess, because a wrong filter on a finance report is silently wrong forever. */
-function Composer({ onDraft, kind = "report" }) {
-  const [ask, setAsk] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [out, setOut] = useState(null);
-  const [answers, setAnswers] = useState({});
-
-  const go = async (withAnswers) => {
-    setBusy(true);
-    try {
-      const endpoint = kind === "workflow" ? "/api/workflows/compose" : "/api/reports/compose";
-      const { data } = await api.post(endpoint, { ask, answers: withAnswers || undefined });
-      setOut(data);
-      if (data.config) { onDraft(data.config, data); setAsk(""); setAnswers({}); setOut(null); }
-    } catch (e) { setOut({ error: e?.response?.data?.detail || "the composer could not be reached" }); }
-    setBusy(false);
-  };
-
-  const answered = out?.questions?.length && out.questions.every((q) => String(answers[q] || "").trim());
-  return (
-    <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.6, mb: 0.9 }}>
-        <AutoAwesomeIcon sx={{ fontSize: 15, color: ACCENT2 }} />
-        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: INK }}>
-          {kind === "workflow" ? "Describe the workflow you want" : "Describe the report you want"}
-        </Typography>
-      </Box>
-      <TextField fullWidth size="small" multiline minRows={2} value={ask} disabled={busy}
-        sx={{ bgcolor: "#fff" }}
-        placeholder={kind === "workflow"
-          ? "Every Monday at 8, check Intacct for active employees that share a name, and open a task for finance per pair."
-            + NL + "Every weekday at 7, read yesterday's failed imports and open a task for each one that did not retry."
-          : "Read C:/exports/daily-*.csv every morning, total the units by site and flag anything under 70."
-            + NL + "Every Monday, list the AP bills from Intacct due in the next 30 days and call out anything over 10k."}
-        onChange={(e) => setAsk(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && ask.trim()) go(); }} />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.9 }}>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !ask.trim()}
-          sx={{ whiteSpace: "nowrap", flexShrink: 0 }}
-          onClick={() => go()} startIcon={busy ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />}>
-          {busy ? "Working it out…" : "Build it"}
-        </Button>
-        <Typography sx={{ fontSize: 11, color: FAINT }}>
-          It can only use connections you have set up — and it will ask rather than guess.
-        </Typography>
-      </Box>
-
-      {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{out.error}</Alert>}
-
-      {/* it did not know something. Better here than as a silently wrong WHERE clause. */}
-      {out?.questions?.length > 0 && (
-        <Box sx={{ mt: 1.25, display: "flex", flexDirection: "column", gap: 1 }}>
-          <Typography sx={{ fontSize: 11.5, color: DIM, fontWeight: 600 }}>
-            A couple of things it will not guess at:
-          </Typography>
-          {out.questions.map((qq) => (
-            <TextField key={qq} size="small" fullWidth label={qq} sx={{ bgcolor: "#fff" }}
-              value={answers[qq] || ""} onChange={(e) => setAnswers({ ...answers, [qq]: e.target.value })} />
-          ))}
-          <Button size="small" variant="contained" disableElevation disabled={busy || !answered}
-            onClick={() => go(answers)} sx={{ alignSelf: "flex-start" }}>Answer & build</Button>
-        </Box>
-      )}
-    </Box>
-  );
-}
 
 /* "I don't know what fields off hand Intacct has set up." Right - so a source card is not a form
    to fill in from memory. Say what you want out of the system and this writes the card: it may

@@ -10,7 +10,7 @@ import api from "./api";
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
-import { cardParts, hasMore, moreParts, plain, recordFacts, recordHead, recordSteps, sourceLabel, splitFiles } from "./agentRecord.js";
+import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
@@ -151,8 +151,33 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
       {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} who={who} /></Box>}
-      {s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
+      {s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
+          full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
+        : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />
         : <PublishedPages pages={pages} />}
+    </Box>);
+};
+
+// EVERY RUN BY ITS LAST WORDS (the owner, 2026-10-15: "you don't see the last message from the agent from prior runs ... it should
+// summary from run 1|2|3 ... the step by step thing should be hidden behind clear door of full script"): newest first, each run's
+// last message; what happened, files, the timeline and every step - the run's record as it was - behind one Full transcript.
+const RunSummaries = ({ sessions, pages, full }) => {
+  const [open, setOpen] = useState(false);
+  const runs = runsOf(sessions);
+  return (
+    <Box>
+      {runs.map(({ s, n, said }, i) => (
+        <Box key={s.sid || n} sx={i ? { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` } : undefined}>
+          <Typography sx={head}>Run {n}{i === 0 && runs.length > 1 ? " · latest" : ""}
+            <Box component="span" sx={{ textTransform: "none", fontWeight: 400 }}> · {recordFacts(s).slice(0, 2).join(" · ")}</Box></Typography>
+          {said ? <Box sx={{ fontSize: 13.5, lineHeight: 1.5, color: INK }}><Md text={said} /></Box>
+            : <Typography sx={{ fontSize: 12.5, color: DIM }}>It ended without a written result.</Typography>}
+        </Box>))}
+      {!!pages.length && <Box sx={{ mt: 1 }}><PublishedPages pages={pages} /></Box>}
+      <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+        <Button size="small" sx={{ ...link, textAlign: "left" }} onClick={() => setOpen(!open)}>Full transcript {open ? "▾" : "▸"}</Button>
+        {open && <Box sx={{ mt: 1 }}>{full}</Box>}
+      </Box>
     </Box>);
 };
 

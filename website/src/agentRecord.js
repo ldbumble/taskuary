@@ -71,3 +71,21 @@ export const recordHead = (story, ended) => story?.line ? { state: story, since:
 
 const SOURCES = { conversation: "the conversation", screen: "what was on screen" };
 export const sourceLabel = (src) => SOURCES[src] || src || "";
+
+// A RUN BY ITS LAST WORDS (the owner, 2026-10-15: "main thing is the last summary message from each model run"): its last message,
+// without the prompt box a screen-read log carries along with it ("▌▌ Work in a new folder..."), else its written summary
+// ...the last thing it SAID first: `result` is every message of the run strung together, and showed the whole run as its "last" one
+const lastSaid = (s) => [...(s?.steps || [])].reverse().find((x) => x.k === "said" && String(x.text || "").trim());
+export const lastWords = (s) => String(lastSaid(s)?.text || "").trim()
+  || String(s?.result || "").split("\n").filter((l) => !/^\s*▌/.test(l)).join("\n").trim()
+  || String(s?.report?.summary || "").trim();
+// every run, newest first, numbered from the first: Run 3 · latest, Run 2, Run 1
+// ...each by ITS OWN steps: runs that resumed one CLI conversation share its log, so every run's record carried all of it and Run 2
+// said Run 3's last words (2026-10-15). A run's `at` is when it ended: its steps are the ones after the run before it ended.
+const when = (t) => Date.parse(String(t || "").replace(" ", "T"));
+export const runsOf = (sessions) => (sessions || []).map((s, i, all) => {
+  const end = when(s.at), after = i + 1 < all.length ? when(all[i + 1].at) : -Infinity;
+  const timed = (s.steps || []).length && (s.steps || []).every((x) => !Number.isNaN(when(x.at)));
+  const own = timed && !Number.isNaN(end) ? { ...s, steps: s.steps.filter((x) => when(x.at) > after && when(x.at) <= end + 60_000), result: "" } : s;
+  return { s, n: all.length - i, said: lastWords(own) };
+});

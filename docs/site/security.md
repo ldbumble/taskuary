@@ -30,9 +30,19 @@ picked as the triage brain at all (Cursor, Copilot, Kimi, OpenCode and custom co
 
 **A stranger does not start an agent.** A message opens a task, but an agent starts on it by itself
 only when the sender passes **Settings → Coder agent → Who may start a worker without you**: your own
-domain, someone you have written to before, or a chat channel you connected. Everyone else's task waits
-for you to press Start. Earlier mail *from* someone never counts. A stranger's second message is still
-a stranger's.
+domain, someone you have written to before, or, in a chat you connected, someone you have talked with
+one-to-one or vouched for. Everyone else's task waits for you to press Start. Earlier mail *from*
+someone never counts. A stranger's second message is still a stranger's.
+
+**A forged address is not a familiar one.** Taskuary reads the receiving server's
+Authentication-Results. A From address that fails DMARC or DKIM is a stranger's, however familiar it
+looks. Mail your own Exchange passed on its composite check stays trusted, and mail with no verdict at
+all is judged by the rules above.
+
+**Chat is trusted per person, not per room.** A sender is known by the platform's own id, never a
+display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
+counts once the platform calls your conversation with them one-to-one and you have replied in it, or
+once you press **Trust this task** on a task they opened.
 
 **Nothing leaves without you.** Replies go out only after you approve them, and the agent cannot name
 the recipient. It answers the message on file. Pushes, pull requests and tool runs an agent
@@ -78,7 +88,10 @@ A stranger's task runs differently from yours:
 - **Their words are a file, not the prompt.** The agent's first prompt holds only Taskuary's own words
   and points at a file labelled as a stranger's. The reviewer reads the prompt as your intent, so a
   stranger's "run this script" never reaches it as yours.
-- **It runs with less of your environment.** Cloud keys and GitHub tokens are not passed to it.
+- **It runs with less of your environment.** Cloud keys and GitHub tokens are not passed to it. Its
+  token reads only its own task, it cannot write to the Hub, and its wall notes stay on its own task.
+- **What the floor refused is on the record.** Each refusal shows under the session's steps on the
+  task's Agent work card, whether or not the pane was open.
 - **You answer when the reviewer will not.** The request shows on the card with Allow and Deny, and the
   agent waits for you. Allow covers that one call.
 - **A stranger's words are never typed into a session started with full permissions.** It waits for
@@ -93,22 +106,20 @@ These are honest limits.
 - **Your own agents run as you.** A task of yours or a trusted sender's launches with full
   permissions. It can read the files your user account can read and use the logins it has, including
   Taskuary's own data folder.
-- **The sender's address is taken at its word.** Taskuary does not yet check whether an email really
-  came from the domain it claims (DKIM/DMARC). A forged address belonging to a colleague passes the
-  sender rule.
-- **Chat channels are trusted by default.** Anyone in a group you connected counts as a sender who may
-  start an agent.
+- **A trusted sender's text rides in the prompt.** Only a stranger's words are moved to a labelled
+  file. A trusted colleague's message is still part of the agent's first prompt, with nothing marking
+  it as data.
 - **Connections start at full permission.** An agent can use a connection marked *tool* to do anything
   that connection can do, unless you narrow it.
-- **Anything an agent writes for later can carry what it read.** Hub entries and wall notes from one
-  session are read by later sessions.
+- **Anything your own agents write for later can carry what they read.** Hub entries and wall notes
+  from one of your sessions are read by later sessions. A stranger's session writes none.
 
 ## What you can set today
 
 - **Narrow your connections.** Under **Settings → Agent permissions**, set each connection an agent
   should only read to *read*. Writes then become proposals you approve.
-- **Turn off chat trust** in **Who may start a worker without you** if you have chat groups with people
-  you would not let run commands on your machine.
+- **Turn off chat trust** in **Who may start a worker without you** to trust only your own lines in
+  every chat.
 - **Keep public repositories on the default.** A stranger's work waits for your Start.
 - **Use an API provider, Claude Code or Codex as the triage brain.** These are the CLIs whose tools
   Taskuary knows how to turn off.
@@ -119,6 +130,6 @@ These are honest limits.
 
 ## What comes next
 
-Sender verification (DKIM/DMARC), so a forged colleague's address stops counting as trusted; chat
-groups trusted per person rather than per room; and Hub and wall notes from a stranger's session kept
-apart until you have seen them.
+Marking the text in every prompt that someone else wrote, trusted or not, so the agent can tell it
+from Taskuary's own words; keeping the agent token off the hook command line; and one running
+Taskuary per data folder, so a second copy cannot take over the hooks of the first.

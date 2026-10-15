@@ -1692,7 +1692,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     // speech to text: voice notes on the chat channels arrive as text, and the prompt boxes get a mic
     { title: "AI — voice",
       // what happens with NO card here is not visible anywhere else, and it looked like something was missing
-      note: "Without a card here: the mic buttons still work through your browser's own recognition (Edge and Chrome ship one — free, live microphone only), and voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
+      note: "Without a card here the mic shows crossed out; pressing it offers your browser's own recognition instead (Edge and Chrome ship one — free, live microphone only), and voice notes on WhatsApp/Telegram land marked not transcribed, with a Transcribe button for later. A card is what transcribes a voice-note file on the server. Free choices: Groq (free tier) or Local Whisper (no key, on this machine). Edge's voices are text-to-speech — the other direction.",
       cards: [
         { key: "voice-vocabulary", title: "Shared voice vocabulary", channel: "ai",
           desc: "one system-wide list used by every voice connector and mic",

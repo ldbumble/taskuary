@@ -37,8 +37,10 @@ import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
 import StorageIcon from "@mui/icons-material/Storage";
 import MicIcon from "@mui/icons-material/Mic";
+import MicOffIcon from "@mui/icons-material/MicOff";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
-import { IconButton as MuiIconButton, Tooltip as MuiTooltip } from "@mui/material";
+import { IconButton as MuiIconButton, Popover, Tooltip as MuiTooltip } from "@mui/material";
+import { openAppLink } from "./appLinks.js";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
@@ -454,14 +456,17 @@ export const DiffFiles = ({ files, cwd, branch }) => {
 /* ── Voice into prompts. Is there a speech-to-text connector at all (Connections → AI — voice)?
    Asked once per mount; the mic explains itself when there is none. ── */
 export const useVoiceReady = () => {
-  const [v, setV] = React.useState(null);
+  const [v, setV] = React.useState(null), [n, setN] = React.useState(0);
   React.useEffect(() => {
     let alive = true;
     api.get("/api/voice/status").then(({ data }) => alive && setV(data)).catch(() => alive && setV({ ready: false }));
     return () => { alive = false; };
-  }, []);
-  return v;
+  }, [n]);
+  return v && { ...v, recheck: () => setN((x) => x + 1) };
 };
+// the owner picked the browser's own recogniser over a voice AI, once - remembered on this browser
+const BROWSER_VOICE = "tq-voice-browser";
+const browserVoice = () => { try { return localStorage.getItem(BROWSER_VOICE) === "1"; } catch { return false; } };
 
 // One mic. Press to record, press again to stop; the clip goes to /api/voice/transcribe as its
 // raw bytes and the text lands through onText - into a prompt box, or straight into a session.
@@ -470,12 +475,18 @@ export const MicButton = ({ onText, size = 18, sx }) => {
   const [rec, setRec] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
+  const [ask, setAsk] = React.useState(null), [byBrowser, setByBrowser] = React.useState(browserVoice);
   const flash = (s) => { setErr(s); setTimeout(() => setErr(""), 5000); };
-  // No voice connector? Edge and Chrome ship their own recogniser (the Web Speech API) - free,
-  // decent for dictation, nothing to set up. It cannot transcribe a voice-note FILE, so the
-  // connectors still matter for the funnel; here it means the mic always works.
+  // NO VOICE AI, NO LIVE MIC (the owner, 2026-10-15: "if there is no voice provider the mic icon ... should be crossed out with popup
+  // to configure voice ai before it will activate"): the mic shows crossed out and its press asks - set up a voice AI, or (Edge and
+  // Chrome ship their own recogniser, the Web Speech API, free) use the browser's. That one cannot transcribe a voice-note FILE, so
+  // the connectors still matter for the funnel.
   const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
-  const viaBrowser = !!(voice && !voice.ready && SR);
+  const viaBrowser = !!(voice && !voice.ready && SR && byBrowser);
+  const off = !!(voice && !voice.ready && !viaBrowser);
+  const press = (e) => { if (!off) return start(); setAsk(e.currentTarget); voice.recheck(); };
+  // set up in the meantime (the popup's own button, or another tab): the mic is live the moment the status says so
+  React.useEffect(() => { if (ask && voice?.ready) setAsk(null); }, [ask, voice?.ready]);
   const start = async () => {
     if (viaBrowser) {
       try {
@@ -516,16 +527,34 @@ export const MicButton = ({ onText, size = 18, sx }) => {
   const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
-    : viaBrowser ? "Dictate — your browser's own recogniser (free). Add an AI voice connector for voice notes and better accuracy."
-    : "Dictate — add an AI voice connector first (Connections → AI — voice; Groq is free)");
-  return (
-    <MuiTooltip title={title}><span>
-      <MuiIconButton size="small" onClick={rec ? stop : start} disabled={busy || (voice && !voice.ready && !viaBrowser)} sx={sx}
-        aria-label={rec ? "stop recording" : "dictate"}>
-        {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} /> : <MicIcon sx={{ fontSize: size }} />}
+    : viaBrowser ? "Dictate — your browser's own recogniser. A voice AI (Connections → AI — voice) is more accurate and reads voice notes."
+    : "Voice is off — no voice AI is set up yet");
+  const useBrowser = () => {
+    try { localStorage.setItem(BROWSER_VOICE, "1"); } catch { /* private window: this visit only */ }
+    setByBrowser(true); setAsk(null);
+  };
+  return (<>
+    <MuiTooltip title={ask ? "" : title}><span>
+      <MuiIconButton size="small" onClick={rec ? stop : press} disabled={busy || !voice} sx={sx} data-tq-mic={off ? "off" : "on"}
+        aria-label={rec ? "stop recording" : off ? "voice is off - set up a voice AI" : "dictate"}>
+        {busy ? <CircularProgress size={size - 4} /> : rec ? <StopCircleIcon sx={{ fontSize: size, color: "#8a3646" }} />
+          : off ? <MicOffIcon sx={{ fontSize: size, opacity: 0.7 }} /> : <MicIcon sx={{ fontSize: size }} />}
       </MuiIconButton>
     </span></MuiTooltip>
-  );
+    <Popover open={!!ask} anchorEl={ask} onClose={() => setAsk(null)} data-tq-voice-ask
+      anchorOrigin={{ vertical: "top", horizontal: "center" }} transformOrigin={{ vertical: "bottom", horizontal: "center" }}
+      slotProps={{ paper: { sx: { p: 1.75, maxWidth: 320, borderRadius: 2, mt: -0.75 } } }}>
+      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
+      <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
+        Pick a voice AI under Connections → AI — voice. Groq has a free tier; Local Whisper runs on this computer with no key.
+      </Typography>
+      <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
+        <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
+          onClick={() => { setAsk(null); openAppLink(`#connections=${encodeURIComponent("AI — voice")}`); }}>Set up voice AI</Button>
+        {SR && <Button size="small" sx={{ textTransform: "none" }} onClick={useBrowser}>Use this browser's own (free)</Button>}
+      </Box>
+    </Popover>
+  </>);
 };
 
 export const ChoiceRow = ({ icon, label, hint, tint = "#eae4d8", onClick, first, busy }) => (

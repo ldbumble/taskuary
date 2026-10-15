@@ -7955,7 +7955,9 @@ def _ws_ok(ws: WebSocket) -> bool:
 # that with xterm's windowsPty option, but only if it knows which pty it is watching.
 def geom_frame(t, owner):
     win = sys.platform == 'win32'
-    return {'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols), 'owner': bool(owner), 'conpty': win,
+    # `free`: nobody drives it - a pane on screen that is not the owner takes it (TerminalView: a geom frame with free)
+    return {'type': 'geom', 'rows': int(t.rows), 'cols': int(t.cols), 'owner': bool(owner), 'free': getattr(t, 'geom_owner', None) is None,
+            'conpty': win,
             'build': sys.getwindowsversion().build if win else None}   # ConPTY reflows only from 21376; xterm follows the build
 
 @app.websocket('/api/terminals/{sid}/ws')
@@ -8082,7 +8084,15 @@ async def terminal_ws(ws: WebSocket, sid: str):
             # A pane put out of sight stays connected so showing it again is instant - and must not keep the geometry while
             # it is away, or the surface you are looking at renders at the size of one you are not.
             elif m.get('type') == 'release':
-                if owns_geometry(): t.geom_owner = None
+                if owns_geometry():
+                    t.geom_owner = None
+                    # ...and every other pane is told it is free: the one on screen may have asked first and been refused, while
+                    # this one still held it (the owner, 2026-10-15: the Wall's pane kept the size after switching back to Chat,
+                    # and the task page drew Claude at the Wall cell's size - its input box below the pane)
+                    for loop, other in list(getattr(t, 'subs', []) or []):
+                        if other is q: continue
+                        try: loop.call_soon_threadsafe(other.put_nowait, hub_term.RESIZED)
+                        except RuntimeError: pass
             elif m.get('type') == 'resize':
                 rows, cols = m.get('rows') or 32, m.get('cols') or 110
                 # A free token is claimed by whoever asks next: close the task page and the Wall
@@ -8117,6 +8127,10 @@ async def terminal_ws(ws: WebSocket, sid: str):
                 t.resize(rows, cols)
                 # ...and the next session opens at this size instead of being grown into it
                 hub_term.remember_geometry(store, rows, cols)
+                # A real pty says it changed size (Term emits RESIZED, and every pane hears it); a general session and the demo's
+                # replay change theirs silently, so the pane that just took the geometry was never told it owns it and went on
+                # drawing at the old size (2026-10-15, Chat after the Wall). Say it to this pane directly.
+                if not isinstance(t, hub_term.Term): await send_frame(geom_frame(t, owns_geometry()))
     except (WebSocketDisconnect, RuntimeError, ValueError):
         pass
     finally:

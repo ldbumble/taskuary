@@ -37,7 +37,7 @@ test("only the owner tells the PTY a size", () => {
 test("the geom frame is handled, and taking ownership back re-sends the size", () => {
   const at = term.indexOf('else if (m.type === "geom")');
   assert.notEqual(at, -1, "the client must handle the server's geom frame");
-  const handler = term.slice(at, at + 900);
+  const handler = term.slice(at, at + 1400);       // the free-pty claim (2026-10-15) sits inside it too
   assert.ok(handler.includes('ownsGeometry = m.owner !== false && !!ui;'),
     "absent or true means this pane owns it - an older server sends no geom at all - unless it is put away");
   assert.ok(handler.includes("fitSafely();"), "the new geometry has to be applied at once");
@@ -53,7 +53,7 @@ test("a pane that comes back into view repaints from xterm's buffer", () => {
   // canvas showed whatever xterm last painted - often nothing - until the next byte arrived (the
   // owner, 2026-09-18: "can't see anything ... especially when I click away and come back").
   assert.match(term, /let wasHidden = false;/);
-  assert.match(term, /if \(!box \|\| !usableTerminalBox\(box\.width, box\.height\)\) \{ wasHidden = true; return; \}/);
+  assert.match(term, /if \(!box \|\| !usableTerminalBox\(box\.width, box\.height\)\) \{[\s\S]{0,200}wasHidden = true; return;\s*\}/);
   assert.match(term, /if \(wasHidden\) \{ wasHidden = false; term\.refresh\(0, Math\.max\(0, term\.rows - 1\)\); \}/);
   assert.match(term, /document\.addEventListener\("visibilitychange", onVisible\)/);
   assert.match(term, /document\.removeEventListener\("visibilitychange", onVisible\)/, "and it is taken down with the pane");
@@ -123,4 +123,13 @@ test("a pane shorter than the pty at its width keeps the pty's rows - coming bac
   assert.match(term, /ws\.readyState !== 1 \|\| !geomSeen\) return;/, "no size goes out before the pty's is known");
   assert.match(term, /if \(!wasHidden && holdTerminalHeight\(/, "the hold survives the layout observer, owner or not");
   assert.doesNotMatch(term, /ws\.onopen = \(\) => \{ show\.state\("live"\); sendSize\(\); \};/, "the first size waits for the geom frame");
+});
+
+// HIDDEN WHILE MOUNTED (the owner, 2026-10-15: Board's Wall, then Chat - Claude's input box was gone)
+test("a pane hidden behind another view gives the geometry back, and takes it again on screen", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync(new URL("../src/TerminalView.jsx", import.meta.url), "utf8");
+  assert.match(src, /if \(!away && !readOnly && geomSeen && ownsGeometry\) \{ send\(\{ type: "release" \}\); ownsGeometry = false; away = true; \}/);
+  assert.match(src, /if \(away\) \{ away = false; claim\(\); \}/);
+  assert.match(src, /if \(!ownsGeometry && m\.free && !first && !readOnly && ui && onScreen\(\)\) \{ claim\(\); \}/);
 });

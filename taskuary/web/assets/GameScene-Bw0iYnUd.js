@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-Bw0iYnUd.js
 import{r as Xe,k as be,C as Ke,af as $s,aJ as Dh,a6 as _c,aL as Zr,T as ci,ah as jr,I as vc}from"./index-Dsc9eCG_.js";import{z as xc}from"./AssistantGame-CIc8wVs7.js";/**
+========
+import{r as Xe,k as be,C as Ke,af as $s,aJ as Dh,a6 as _c,aL as Zr,T as ci,ah as jr,I as vc}from"./index-bxxC7GmI.js";import{z as xc}from"./AssistantGame-BAWCjCnb.js";/**
+>>>>>>>> 5c1c6d12 (A terminal hidden behind another view hands its size back, so Chat after the Wall draws at its own):taskuary/web/assets/GameScene-Bf8tg4rl.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

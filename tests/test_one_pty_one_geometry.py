@@ -141,19 +141,47 @@ class GeometryOwnerTests(unittest.TestCase):
         self.assertEqual((geom[0]['rows'], geom[0]['cols'], geom[0]['owner']), (30, 100, False))
 
 
-    def test_a_pane_back_on_screen_asking_for_the_size_it_already_has_is_answered(self):
-        """A kept pane coming back does not fit itself first - if another pane owns the geometry it would shrink to its
-        box and grow back, and that moves its rows (2026-10-01, on the Wall). It asks, and waits for the answer. When the
-        pty is already the size it asks for, silence would leave it believing it owns nothing."""
-        with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as kept:
-            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
-            _until_ready(kept)
-            kept.send_json({'type': 'release'})
-            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})          # back on screen, same size
+    def test_a_pane_back_on_screen_asking_for_the_size_it_already_has_is_answered(self):
+
+        """A kept pane coming back does not fit itself first - if another pane owns the geometry it would shrink to its
+
+        box and grow back, and that moves its rows (2026-10-01, on the Wall). It asks, and waits for the answer. When the
+
+        pty is already the size it asks for, silence would leave it believing it owns nothing."""
+
+        with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as kept:
+
+            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
+
+            _until_ready(kept)
+
+            kept.send_json({'type': 'release'})
+
+            kept.send_json({'type': 'resize', 'rows': 40, 'cols': 140})          # back on screen, same size
+
             # the pty's own late output can come first under load (the full suite, 2026-10-01): read to the answer
             geom = next(f for f in (kept.receive_json() for _ in range(12)) if f.get('type') == 'geom')
-        self.assertEqual((geom['type'], geom['rows'], geom['cols'], geom['owner']), ('geom', 40, 140, True))
-
-
+        self.assertEqual((geom['type'], geom['rows'], geom['cols'], geom['owner']), ('geom', 40, 140, True))
+
+
+
+
+    def test_a_release_tells_the_other_panes_the_pty_is_free(self):
+        """The owner, 2026-10-15: the Wall's pane, hidden behind Chat, still held the geometry, and the task page on screen had
+        asked first and been refused - so it drew Claude at the Wall cell's size, input box below the pane. A pane that lets
+        go now tells every other one the pty is free, and the one on screen takes it (TerminalView: geom with free)."""
+        with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as wall:
+            wall.send_json({'type': 'resize', 'rows': 40, 'cols': 140})
+            _until_ready(wall)
+            with c.websocket_connect(f'/api/terminals/{self.t.sid}/ws') as page:
+                page.send_json({'type': 'resize', 'rows': 30, 'cols': 190})          # refused: the Wall holds it
+                _until_ready(page)                                                   # the attach geom, the refusal, the curtain
+                wall.send_json({'type': 'release'})                                  # the Wall goes out of sight
+                frames = [page.receive_json() for _ in range(3)]
+        freed = [f for f in frames if f.get('type') == 'geom']
+        self.assertTrue(freed, f'the page never heard the pty was free: {frames}')
+        self.assertEqual((freed[0]['owner'], freed[0]['free']), (False, True))
+
+
 if __name__ == '__main__':
     unittest.main()

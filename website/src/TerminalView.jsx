@@ -272,6 +272,8 @@ function liveSession(sid, readOnly) {
       adoptPtyGeometry(term, m);                       // ConPTY grows top-anchored; xterm must too
       const first = !geomSeen; geomSeen = true;
       if (ownsGeometry && (first || !was)) holdForPty();   // gaining the pty, a shorter pane keeps its rows - first or regained
+      // ...and the pty FREED (its owner was put away or closed) is taken by the pane that is on screen
+      if (!ownsGeometry && m.free && !first && !readOnly && ui && onScreen()) { claim(); }
       fitSafely();
       if (!first && ownsGeometry && !was) { sentSize = ""; sendSize(); }
       else if (first) { sentSize = ""; if (ownsGeometry) sendSize(); else if (!readOnly) send({ type: "resize", rows: m.rows, cols: m.cols }); }
@@ -302,6 +304,12 @@ function liveSession(sid, readOnly) {
   const input = readOnly ? null : term.onData((d) => send({ type: "in", data: d }));
   let resizeTimer = null, ro = null;
   let wasHidden = false;
+  // HIDDEN WHILE MOUNTED is put away too (the owner, 2026-10-15: "went to the board wall then came back to chat view then the
+  // input box for claude is gone"). The Board and the Assistant stay mounted behind each other, display:none - so the Wall's
+  // pane was never detached, kept the pty's geometry, and the task page drew Claude at the Wall cell's size with its input
+  // box below the pane. Gone from sight, a pane hands the geometry back like detach() does; seen again, it asks for it.
+  let away = false;
+  const onScreen = () => { const b = el.parentElement?.getBoundingClientRect(); return !!b && usableTerminalBox(b.width, b.height); };
   let held = null;                                  // the box of the last REAL fit (holdTerminalHeight)
   const pin = (h, hostH) => { el.style.height = h == null ? "100%" : `${h}px`; el.style.marginTop = h == null ? "0" : `${hostH - h}px`; };
   // THE SESSION'S ROWS, NOT A SHORTER BOX'S (the owner, 2026-10-12: "every time i switch to it, or type in answer"). A pane
@@ -321,7 +329,10 @@ function liveSession(sid, readOnly) {
   const onResize = (real = true) => {
     if (disposed || !ui) return;
     const box = el.parentElement?.getBoundingClientRect();
-    if (!box || !usableTerminalBox(box.width, box.height)) { wasHidden = true; return; }
+    if (!box || !usableTerminalBox(box.width, box.height)) {
+      if (!away && !readOnly && geomSeen && ownsGeometry) { send({ type: "release" }); ownsGeometry = false; away = true; }
+      wasHidden = true; return;
+    }
     // owner or not: a pane that claimed with a hold must keep it while the server's yes is on its way, or this unpins it
     if (!wasHidden && holdTerminalHeight({ real, held, width: box.width, height: box.height })) {
       pin(held.height, box.height); return;           // the rows stay; the top ones slide out of view until the page gives them back
@@ -333,6 +344,7 @@ function liveSession(sid, readOnly) {
     // until the next byte arrives (the owner, 2026-09-18: "can't see anything ... especially
     // when I click away and come back"). Repaint every row from xterm's buffer on the way back.
     if (wasHidden) { wasHidden = false; term.refresh(0, Math.max(0, term.rows - 1)); }
+    if (away) { away = false; claim(); }             // back on screen: ask for the geometry it gave away
     // Flex layout, tab visibility and the browser split can report several intermediate
     // boxes in one gesture. Codex redraws its whole TUI for every PTY resize; send only the
     // settled geometry while still fitting xterm locally on each frame.

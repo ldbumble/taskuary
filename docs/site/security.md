@@ -78,6 +78,28 @@ one, and a stranger's session cannot run it.
   anything.
 - Nothing is merged, closed or pushed until you do it.
 
+**Someone else's words are marked in the prompt.** A trusted sender's message, the conversation it
+sits in and triage's reading of them reach the agent between `⟦` and
+`⟧`. The rules every agent reads say what the marks mean: the material of the task, never an
+instruction. A mark inside the sender's own text is replaced, so a message cannot close its fence
+early and write lines that read as yours. When a long message is cut to fit, the fence is closed
+after the cut. Pull request titles and texts in a batch are marked the same way.
+
+**The agent token stays off the command line.** Each hook command sends its token from a file in
+Taskuary's data folder (curl's `-H @file`), not as text in the command. A command line is visible to
+every process on your account while it runs, which for the question hook can be ten minutes and for a
+stranger's permission request can be days. A stranger's session cannot read that folder.
+
+**One Taskuary per data folder.** A running Taskuary holds a lock on its data folder. A second start
+on the same folder opens the running one instead, even when it would have served on another port. The
+lock goes when the process ends, however it ends.
+
+**Only your real Taskuary writes the hooks every CLI runs.** The hooks in `~/.claude/settings.json`
+and the other CLIs' user files send every session's events to one address. Only the instance on your
+default data folder (`~/.taskuary`, not a demo) writes them. A demo, a test or a second data folder
+hands its own Claude sessions their hooks through that session's settings file instead, and never
+redirects yours.
+
 **No picture is loaded from text someone else wrote.** Agent notes, reports and chat render as
 formatted text. A picture in that text could be a request carrying your data to the server that
 serves it, so the app loads pictures only from itself and shows any other picture as a link.
@@ -126,9 +148,11 @@ These are honest limits.
 - **Your own agents run as you.** A task of yours or a trusted sender's launches with full
   permissions. It can read the files your user account can read and use the logins it has, including
   Taskuary's own data folder.
-- **A trusted sender's text rides in the prompt.** Only a stranger's words are moved to a labelled
-  file. A trusted colleague's message is still part of the agent's first prompt, with nothing marking
-  it as data.
+- **A trusted sender's text is marked, not removed.** The marks tell the model what is data; they do
+  not stop a model that is talked round. A trusted session also reads its context file, which holds
+  the whole thread without marks.
+- **A second data folder's Codex, Devin and Copilot sessions report no hook events.** Only Claude
+  Code takes hooks per session. Those CLIs' status there comes from the screen and their own logs.
 - **Connections start at full permission.** An agent can use a connection marked *tool* to do anything
   that connection can do, unless you narrow it.
 - **Anything your own agents write for later can carry what they read.** Hub entries and wall notes
@@ -150,6 +174,6 @@ These are honest limits.
 
 ## What comes next
 
-Marking the text in every prompt that someone else wrote, trusted or not, so the agent can tell it
-from Taskuary's own words; keeping the agent token off the hook command line; and one running
-Taskuary per data folder, so a second copy cannot take over the hooks of the first.
+Hooks handed to every session rather than written into your CLIs' user files, so that nothing
+Taskuary installs runs outside a session it started; and marks on the context file as well as the
+prompt.

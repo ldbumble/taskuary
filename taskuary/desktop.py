@@ -246,6 +246,14 @@ def already_serving(host='127.0.0.1', port=None):
     return url if serving(url, secs=3) else ''      # something else on that port is not ours to open
 
 
+def held_elsewhere() -> str:
+    """The Taskuary serving THIS data folder from another port, or '': one per folder (instance.py), and the configured
+    port is only where it usually is - a start that found its port taken moved to a free one."""
+    from taskuary import instance
+    at = instance.holder().get('url') or ''
+    return at if at and serving(at, secs=3) else ''
+
+
 def start_server(host='127.0.0.1', port=None):
     """Run the app in a daemon thread; returns (server, url) once it accepts connections.
 
@@ -334,7 +342,7 @@ def main():
     # the app is ~8s cold before uvicorn exists at all, so the alternative is what the owner
     # actually saw: their own window telling them it could not connect, for 18 seconds.
     # ...and if one is already up, this window is a VIEW of it, not a second copy of the app.
-    running = already_serving()
+    running = already_serving() or held_elsewhere()
     held, booted = {}, threading.Event()
     # a view of another process's server: that server mints the key, asked with the owner token this install keeps
     view = launchkey.remote_link(running, config.load()['server'].get('token') or '') if running else None

@@ -513,6 +513,14 @@ def main():
         old, port = port, free_port(host)
         url = public_url(host, port)
         print(f'port {old} is in use by something else - using {port} instead')
+    # ...and a port is not the data: one Taskuary per data folder, wherever it serves (instance.py)
+    from . import instance
+    if h := instance.holder():
+        at = h.get('url') or ''
+        print(f'Taskuary is already running on {config.home()}{f" at {at}" if at else ""} - ' + ('opening it.' if at else 'quit it first.'))
+        if at and not args.no_browser: _open_private(launchkey.remote_link(at, cfg['server'].get('token') or ''))
+        return
+    instance.claim(url)
     print(f'Taskuary {__version__} - {url}  (data: {config.db_path()})')
     # the port actually bound, for anything in the server that has to name its own address (the
     # QuickBooks redirect URI): server.py reads config, and config reads this

@@ -115,6 +115,11 @@ def _walk_settled(timeout: float = WALK_WAIT) -> bool:
 @asynccontextmanager
 async def _lifespan(_app):
     live_bus.bind(asyncio.get_running_loop())
+    # ONE LIVE TASKUARY PER DATA FOLDER (instance.py): every way in - the CLI, the desktop, --server-only - comes through here
+    from . import instance, hooks as _hooks
+    if not instance.claim(_hooks.base_url()):
+        at = instance.holder().get('url')
+        raise RuntimeError(f"another Taskuary is already running on {config.home()}{f' at {at}' if at else ''} - open that one, or quit it first")
     is_demo = demo.enabled()
     if not is_demo:
         # Capture historical read results before startup catch-up, worker repair,
@@ -143,8 +148,10 @@ async def _lifespan(_app):
             from .processing_startup import initialize
             initialize(store, live_state=[])
         except Exception as e: logger.warning(f'demo seed failed: {e}')
-        async with processing_all.membership_lifecycle(store):
-            yield
+        try:
+            async with processing_all.membership_lifecycle(store):
+                yield
+        finally: instance.release()
         return
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
@@ -211,6 +218,7 @@ async def _lifespan(_app):
         from . import remote_assistant
         try: remote_assistant.promises_closing(store)
         except Exception as e: logger.warning(f'closing: the phone promises were not told - {e}')
+        instance.release()           # the next start in this process (a test, a restart) takes the folder again
 
 app = FastAPI(title='Taskuary', docs_url='/api/docs', lifespan=_lifespan)
 ACTOR = 'owner'

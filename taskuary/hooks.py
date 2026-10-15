@@ -158,6 +158,27 @@ def codex_command(spool: str) -> str:
     return f'cmd /c findstr . >> "{spool}"' if os.name == 'nt' else f'cat >> "{spool}"'
 
 
+def user_wide() -> bool:
+    """May THIS instance write the hooks every CLI on the machine runs? Only the owner's real one: its default data folder,
+    not a demo. A demo, a test server or a second home that wrote them took every Claude event on the machine - they
+    carry its URL - until the real one next launched a session (live check 2026-10-14: ~2 min of the owner's events went
+    to a test server). Any other instance hands its hooks to each session it launches instead (session_hooks)."""
+    from . import config
+    if os.environ.get('TASKUARY_DEMO'): return False
+    same = lambda a, b: os.path.normcase(os.path.realpath(str(a))) == os.path.normcase(os.path.realpath(str(b)))
+    return same(config.home(), Path.home() / '.taskuary')
+
+
+def session_hooks(token: str = None, base: str = None) -> dict:
+    """Claude's hooks for ONE session's --settings: the events and the ask hook, for an instance that may not write them
+    user-wide (user_wide). Claude ADDS a --settings file's hooks to the user's (origin.SETTINGS_HOOKS_MERGE)."""
+    base, token = base or base_url(), agent_token() if token is None else token
+    ev = {'type': 'command', 'command': command(base, token), 'timeout': 5}
+    d = {e: [{'hooks': [ev]}] for e in EVENTS}
+    d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]}]
+    return d
+
+
 def _merge(hooks: dict, events, entry: dict, mark: str) -> None:
     """Our entry under every event, replacing only entries carrying our mark. Everything else stays."""
     for ev in events:
@@ -185,6 +206,7 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     append to the spool. `home` overrides the user's home (tests). `cmd` names the CLI to read the
     version from; without it no version is read."""
     if cli not in HOOKED: return False
+    if home is None and not user_wide(): return False        # not the owner's real instance: its sessions carry their own
     home = home or os.path.expanduser('~')
     th = os.path.join(home, '.taskuary') if home != os.path.expanduser('~') else None      # Taskuary's home beside a test's user home
     if cli == 'copilot': return _install_copilot(Path(home), base or base_url(), agent_token() if token is None else token, th)

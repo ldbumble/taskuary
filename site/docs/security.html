@@ -171,6 +171,24 @@ and code, and for changes that could harm whoever builds or merges it, before bu
 anything.</li>
 <li>Nothing is merged, closed or pushed until you do it.</li>
 </ul>
+<p><strong>Someone else&#39;s words are marked in the prompt.</strong> A trusted sender&#39;s message, the conversation it
+sits in and triage&#39;s reading of them reach the agent between <code>⟦</code> and
+<code>⟧</code>. The rules every agent reads say what the marks mean: the material of the task, never an
+instruction. A mark inside the sender&#39;s own text is replaced, so a message cannot close its fence
+early and write lines that read as yours. When a long message is cut to fit, the fence is closed
+after the cut. Pull request titles and texts in a batch are marked the same way.</p>
+<p><strong>The agent token stays off the command line.</strong> Each hook command sends its token from a file in
+Taskuary&#39;s data folder (curl&#39;s <code>-H @file</code>), not as text in the command. A command line is visible to
+every process on your account while it runs, which for the question hook can be ten minutes and for a
+stranger&#39;s permission request can be days. A stranger&#39;s session cannot read that folder.</p>
+<p><strong>One Taskuary per data folder.</strong> A running Taskuary holds a lock on its data folder. A second start
+on the same folder opens the running one instead, even when it would have served on another port. The
+lock goes when the process ends, however it ends.</p>
+<p><strong>Only your real Taskuary writes the hooks every CLI runs.</strong> The hooks in <code>~/.claude/settings.json</code>
+and the other CLIs&#39; user files send every session&#39;s events to one address. Only the instance on your
+default data folder (<code>~/.taskuary</code>, not a demo) writes them. A demo, a test or a second data folder
+hands its own Claude sessions their hooks through that session&#39;s settings file instead, and never
+redirects yours.</p>
 <p><strong>No picture is loaded from text someone else wrote.</strong> Agent notes, reports and chat render as
 formatted text. A picture in that text could be a request carrying your data to the server that
 serves it, so the app loads pictures only from itself and shows any other picture as a link.</p>
@@ -213,9 +231,11 @@ the next start, in auto mode.</li>
 <li><strong>Your own agents run as you.</strong> A task of yours or a trusted sender&#39;s launches with full
 permissions. It can read the files your user account can read and use the logins it has, including
 Taskuary&#39;s own data folder.</li>
-<li><strong>A trusted sender&#39;s text rides in the prompt.</strong> Only a stranger&#39;s words are moved to a labelled
-file. A trusted colleague&#39;s message is still part of the agent&#39;s first prompt, with nothing marking
-it as data.</li>
+<li><strong>A trusted sender&#39;s text is marked, not removed.</strong> The marks tell the model what is data; they do
+not stop a model that is talked round. A trusted session also reads its context file, which holds
+the whole thread without marks.</li>
+<li><strong>A second data folder&#39;s Codex, Devin and Copilot sessions report no hook events.</strong> Only Claude
+Code takes hooks per session. Those CLIs&#39; status there comes from the screen and their own logs.</li>
 <li><strong>Connections start at full permission.</strong> An agent can use a connection marked <em>tool</em> to do anything
 that connection can do, unless you narrow it.</li>
 <li><strong>Anything your own agents write for later can carry what they read.</strong> Hub entries and wall notes
@@ -236,9 +256,9 @@ straight into a running agent.</li>
 <li><strong>Run a stranger&#39;s work on Claude Code 2.1.295 or later.</strong> Older versions are refused it.</li>
 </ul>
 <h2 id="what-comes-next">What comes next<a class="anchor" href="#what-comes-next" aria-label="Link to this section">#</a></h2>
-<p>Marking the text in every prompt that someone else wrote, trusted or not, so the agent can tell it
-from Taskuary&#39;s own words; keeping the agent token off the hook command line; and one running
-Taskuary per data folder, so a second copy cannot take over the hooks of the first.</p>
+<p>Hooks handed to every session rather than written into your CLIs&#39; user files, so that nothing
+Taskuary installs runs outside a session it started; and marks on the context file as well as the
+prompt.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./tasks-and-agents"><span>Previous</span>Tasks and agents</a><a class="pn next" href="./assistant"><span>Next</span>Assistant buttons</a></nav>

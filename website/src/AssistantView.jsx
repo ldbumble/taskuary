@@ -53,6 +53,7 @@ import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
 import FirstRun from "./FirstRun.jsx";
+import SetupSteps from "./SetupSteps.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
@@ -900,7 +901,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
   // "the task stayed open and popped back open before closing")
   const tableKey = currentItem?.key || null;
-  const shownAdvice = adviceShown(advice, currentItem, busy);      // the strip speaks only for the item on the table, at rest
+  // ...and never over setup: setupOn mirrors firstRun, which is declared below this line
+  const setupOn = useRef(false);
+  const shownAdvice = setupOn.current ? null : adviceShown(advice, currentItem, busy);      // the strip speaks only for the item on the table, at rest
   useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
   useEffect(() => {
@@ -1198,11 +1201,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [mailReading, setMailReading] = useState(false);
   // set up when the page opened? then the canvas IS the setup until its walk starts (FirstRun.jsx); never in the demo
   const [firstRun, setFirstRun] = useState(false), [setupTodo, setSetupTodo] = useState("");
+  setupOn.current = firstRun;
   const setupRef = useRef(null);
   useEffect(() => {
     if (DEMO) return;
     // ...only an install with nothing sorted yet opens ON it: one already reading mail opens on its day, and the cards are a press away
-    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.step !== "done" && !data.sorted) setFirstRun(true); }).catch(() => {});
+    // ...until the owner FINISHES it (Finish setup / Walk me through my tasks): it used to end itself on the first sorted email and
+    // leave a half-made day under a lone button (the owner, 2026-10-15). An install that was working before is finished (settle_existing),
+    // and a server that does not say (an older one) is never read as "not finished": only an explicit false opens setup
+    api.get("/api/setup/first-run").then(({ data }) => { if (data?.step && data.dismissed === false) setFirstRun(true); }).catch(() => {});
     const show = () => setupRef.current?.();                    // the top bar's setup chip asks for the cards
     // what is next, for the rail - read again whenever the first run moves a step (FirstRun fires tq-setup-changed)
     const todo = () => api.get("/api/setup/first-run").then(({ data }) => setSetupTodo(data?.todo || "")).catch(() => {});
@@ -1953,7 +1960,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // FIRST RUN (the owner, 2026-10-14: "first time you login the setup ... on the assistant canvas"): three questions in place of
     // the day, until the walk starts. The popup checklist is gone; this is the one road.
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
-    <div className="tq-welcome"><FirstRun onChanged={() => loadPile(true)} onWalk={() => { setFirstRun(false); start(null); }} /></div></div>
+    <div className="tq-welcome"><FirstRun onChanged={() => loadPile(true)} onWalk={() => { setFirstRun(false); start(null); }}
+      onFinish={() => { setFirstRun(false); loadPile(true); }} /></div></div>
   ) : (
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome">
@@ -1978,7 +1986,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         {/* the same walk the header chip opens. It lives here as well because the header
             hides its chip on a phone, and this block is what a phone shows - without it the
             one door to the set-up guidance was absent on the device it is most needed on. */}
-        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={setup}
+        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={() => setFirstRun(true)}
           title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
         {/* RUN, not set up: setting things up is Set up Taskuary's job; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
@@ -1996,7 +2004,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       </div>
     </div></div>
   );
-  setupRef.current = () => (firstRun || msgs.length ? setup() : setFirstRun(true));
+  // SETUP REOPENS THE SETUP, on the canvas (the owner, 2026-10-15: "restart the initial walk through from the button on top - not the
+  // pop up one"): every question open, the day back on Back to my day
+  setupRef.current = () => setFirstRun(true);
   const actions = { done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
@@ -2155,8 +2165,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       <div className={`tq-chat-body${expanded ? " expanded" : ""}`} ref={bodyRef}>
         <div className={`tq-chat-inner${expanded ? " expanded" : ""}`}>
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
-          {state && !shown.length && !busy && welcome()}
-          {shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
+          {/* SETUP MODE IS ITS OWN SCREEN (the owner, 2026-10-15: "it should be a distinct setup mode vs regular operations mode"):
+              setup alone on the canvas, never under the day's conversation */}
+          {firstRun ? state && welcome() : state && !shown.length && !busy && welcome()}
+          {!firstRun && shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
@@ -2225,10 +2237,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
-          <AdvisorNext advice={shownAdvice} />
+          {!firstRun && <AdvisorNext advice={shownAdvice} />}
           <ActionRow advised={shownAdvice} />
-          <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />
-          <div className="tq-compose-box">
+          {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
+          <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />
             <MicButton size={18} sx={{ width: 34, height: 34, p: 0, color: DIM }} onText={(t) => setText((v) => (v ? `${v} ${t}` : t))} />
             <Tooltip title="Send an emoji response">
@@ -2290,7 +2302,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         onSection={walkSection} onCurrent={() => setRailOpen(false)} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
-      railOnNarrow={railOpen} />
+      railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />
     </>
   );
 }

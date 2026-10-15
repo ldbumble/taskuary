@@ -14,6 +14,8 @@ import { DIM } from "./theme.jsx";
 import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.jsx";
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
 import { focusOf, signinUrl } from "./firstRunFocus.js";
+import FirstRunAbout from "./FirstRunAbout.jsx";
+import { useVerbs } from "./actionRow.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 
@@ -24,6 +26,9 @@ const errText = (e) => e?.response?.data?.detail || (e?.code === "ECONNABORTED" 
 // the logo each CLI wears is its maker's - the same mark as that maker's API card on Connections
 const CLI_LOGO = { claude: "anthropic", codex: "openai", gemini: "gemini", copilot: "github" };
 const MAIL_TYPES = ["outlook", "gmail", "imap"];
+// speech to text, Groq first: free to start and the quickest (voice.py). Offered once a chat that sends voice notes is connected
+const VOICE_TYPES = ["groq_stt", "openai_stt", "gemini_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"];
+const VOICE_CHATS = ["whatsapp", "telegram", "teams", "slack", "discord", "imessage", "google_chat"];
 const OTHER_TYPES = ["whatsapp", "teams", "slack", "telegram", "github", "imessage", "discord", "google_chat", "mattermost",
   "rocketchat", "matrix", "gitlab", "jira", "linear", "asana", "trello", "notion", "todoist", "clickup", "monday"];
 
@@ -53,7 +58,7 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all" }) {
 
 // `revisit`: opened from Set up Taskuary on an install that may be set up already - every question stays open, so the AI or
 // the mailbox can be changed from the same cards
-export default function FirstRun({ onWalk, onChanged, revisit = false }) {
+export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false }) {
   const [st, setSt] = useState(null), [err, setErr] = useState("");
   const [conns, setConns] = useState([]), [sources, setSources] = useState([]);
   const [busy, setBusy] = useState(""), [said, setSaid] = useState("");     // a pick in flight says so on the Advisor line
@@ -64,6 +69,16 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   // BACK TO THE AI (the owner, 2026-10-15: "no back button?"): past step 1 the AI cards come back on Change; a new AI that works,
   // or Keep, returns to where setup was
   const [redo, setRedo] = useState(null);
+  const redoRef = useRef(null); redoRef.current = redo;
+  const [aboutAgain, setAboutAgain] = useState(false);
+  useEffect(() => {
+    const go = (e) => {
+      const k = e.detail; setOpen(null); setAboutAgain(k === "about");
+      setRedo(k === "ai" || k === "mail" ? k : null); setBrowse(k === "ai");
+    };
+    window.addEventListener("tq-setup-go", go);
+    return () => window.removeEventListener("tq-setup-go", go);
+  }, []);
   const ran = useRef("");
   useEffect(() => {                                 // a new AI that works ends the Change
     const name = st?.brain?.name || "";
@@ -72,6 +87,21 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   }, [st?.brain?.name, redo]);
   const { openSetup, opening, pane, setPane, note } = useCliSetup();
   const was = useRef("");
+  // FINISH IS THE OWNER'S PRESS, in the row under the canvas like every other move (the owner, 2026-10-15: "we should be able to
+  // dismiss the walk through and then the morning digest screen will show up ... button should be on bottom like normal"): until
+  // then the canvas stays setup, never a half-finished day. Walking into the tasks finishes it too.
+  const finishThen = (go) => async () => {
+    try { await api.post("/api/setup/first-run/finish"); } catch { /* the canvas still moves on; the flag is set next time */ }
+    window.dispatchEvent(new Event("tq-setup-changed")); go?.();
+  };
+  const reopened = revisit || !!st?.dismissed;
+  const finishOn = !!st && !redoRef.current && (st.step === "reading" || st.step === "done") && (st.about_done || reopened);
+  useVerbs("setup", [
+    { id: "setup:walk", label: "Walk me through my tasks", group: "decide", tone: "p", disabled: st?.step !== "done",
+      why: "still sorting your mail", run: finishThen(onWalk), title: "Everything waiting, most important first" },
+    { id: "setup:finish", label: reopened ? "Back to my day" : "Finish setup", group: "decide", tone: "s", run: finishThen(onFinish),
+      title: "Setup is done - the canvas shows your day. Setup on the top bar opens this again." },
+  ], finishOn);
   // THE SIGN-IN IS A STEP, NOT A TERMINAL (the owner, 2026-10-15: "terminal is broken display"): the login's link is read off its
   // screen and offered as a link; the pane stays mounted, hidden, so its end still runs the check
   useEffect(() => {
@@ -195,6 +225,11 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     </Box>
   );
   const q = redo || (st.step === "ai" ? "ai" : st.step === "email" ? "mail" : "other");
+  // ABOUT YOUR WORK comes once the mail is in, before any other connection (FirstRunAbout); the voice offer once a chat is connected
+  const aboutDue = aboutAgain || (!reopened && !redo && (st.step === "reading" || st.step === "done") && !st.about_done);
+  const voice = byType(VOICE_TYPES).map((c) => card(c, true));
+  const voiceDue = !redo && !aboutDue && q === "other" && voice.length
+    && conns.some((c) => VOICE_CHATS.includes(c.Type) && c.Active) && !conns.some((c) => VOICE_TYPES.includes(c.Type) && c.Active);
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
@@ -255,9 +290,9 @@ ${fix.detail || ""}`, screen: "Setup",
       </Box>
     </Box>
   ) : null;
-  const shelf = (k, cards, more) => (revisit || q === k) && (
+  const shelf = (k, cards, more) => (reopened || q === k) && (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      {revisit && <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{
+      {reopened && <Typography sx={{ fontWeight: 600, fontSize: 15 }}>{
         { ai: "What AI do you have?", mail: "What email do you have?", other: "Any other connection you'd like to set up?" }[k]}</Typography>}
       <Shelf cards={cards} more={more} opened={(open && `c${open.id}`) || (k === "ai" && focus) || null}
         detail={open ? detail : cliDetail} allLabel={k === "ai" ? "Pick a different AI" : "Show all"}
@@ -266,23 +301,34 @@ ${fix.detail || ""}`, screen: "Setup",
   );
   return (
     <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
-      <Ask text={said || err || (redo ? (fix?.why || "Which AI should Taskuary use instead? Click it below.") : st.next)} />
-      {st.step !== "ai" && st.brain?.name && !revisit && (
+      <Ask text={said || err || (redo === "mail" ? "Which email should Taskuary read? Click it below." : redo ? (fix?.why || "Which AI should Taskuary use instead? Click it below.") : aboutDue
+        ? "Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything."
+        : reopened ? "Change anything below - your AI, email, what Taskuary knows about your work - then Back to my day." : st.next)} />
+      {st.step !== "ai" && st.brain?.name && !reopened && (
         <Box sx={{ display: "flex", gap: 1, alignItems: "center", ml: 0.5 }}>
           <Typography sx={{ fontSize: 13, color: DIM }}>Your AI: {st.brain.name}</Typography>
-          {redo ? <Button size="small" onClick={() => { setRedo(null); setBrowse(false); }}>Keep {st.brain.name}</Button>
+          {redo || aboutAgain ? <Button size="small" onClick={() => { setRedo(null); setBrowse(false); setAboutAgain(false); }}>
+            {redo === "ai" ? `Keep ${st.brain.name}` : "Back"}</Button>
             : <Button size="small" onClick={() => { setRedo("ai"); setBrowse(true); setOpen(null); }}>Change</Button>}
         </Box>
       )}
       {shelf("ai", ai, "More AI")}
       {shelf("mail", mail, "More email")}
-      {shelf("other", other, "More connections")}
-      {(st.step === "reading" || st.step === "done") && (
-        <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
-          {st.step === "reading" && !st.ai_error && <><CircularProgress size={16} /><Typography sx={{ color: DIM }}>
-            {st.sorting ? `Sorting ${st.sorting} email${st.sorting === 1 ? "" : "s"}…` : "Reading your mail…"}</Typography></>}
-          <Button variant="contained" disableElevation disabled={st.step !== "done"} onClick={onWalk}>Walk me through my tasks</Button>
-        </Box>
+      {aboutDue && <FirstRunAbout again={aboutAgain} onSaved={() => { setAboutAgain(false); reload(); }} />}
+      {reopened && <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 15 }}>About your work</Typography><FirstRunAbout again onSaved={reload} /></Box>}
+      {!aboutDue && shelf("other", other, "More connections")}
+      {/* VOICE NOTES AS TEXT, once a chat that sends them is connected (the owner, 2026-10-15: "offer them voice connector so whatsapp
+          voice will work"): a speech-to-text card of the Connections page's own, Groq first */}
+      {voiceDue && <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 15 }}>Want voice notes as text?</Typography>
+        <Typography sx={{ color: DIM, fontSize: 13 }}>Voice notes from your chats arrive as audio until a speech-to-text service is
+          connected. Groq is free to start; Local Whisper needs no key.</Typography>
+        <Shelf cards={voice} more="More voice" opened={open && `c${open.id}`} detail={detail} onAll={() => setOpen(null)} />
+      </Box>}
+      {(st.step === "reading" || st.step === "done") && !aboutDue && st.step === "reading" && !st.ai_error && (
+        <Box sx={{ display: "flex", gap: 1.25, alignItems: "center" }}><CircularProgress size={16} /><Typography sx={{ color: DIM }}>
+          {st.sorting ? `Sorting ${st.sorting} email${st.sorting === 1 ? "" : "s"}…` : "Reading your mail…"}</Typography></Box>
       )}
     </Box>
   );

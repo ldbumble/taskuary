@@ -41,7 +41,16 @@ export const SetupChip = ({ state, onOpen }) => {
   // the first run's own next step when the server says it (firstrun.py's `todo`), the old checklist's count otherwise - the chip
   // read "Set up · 2 steps" beside three questions (2026-10-15)
   const two = state && state.first_left != null;
-  if (!state || (two ? state.first_left === 0 : state.complete)) return null;
+  if (!state) return null;
+  // SET UP, ALWAYS ON THE TOP BAR once it is done: the way back into the setup canvas (the owner, 2026-10-15: "they should be able to
+  // restart the initial walk through from the button on top")
+  if (two ? state.first_left === 0 : state.complete) return (
+    <Tooltip title="Setup - your AI, email, connections and what Taskuary knows about your work">
+      <Box onClick={onOpen} data-tq-setup-open="" sx={{ cursor: "pointer", ml: 1, px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${BORDER}`,
+        "&:hover": { bgcolor: "#eae4d8" } }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: DIM }}>Setup</Typography>
+      </Box>
+    </Tooltip>);
   const left = two ? state.first_left : state.total - state.done;
   const pct = two ? ((2 - state.first_left) / 2) * 100 : state.total ? (state.done / state.total) * 100 : 0;
   return (

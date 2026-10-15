@@ -264,7 +264,7 @@ function NextIn({ atRef, render }) {
   return render(atRef.current ? Math.max(0, Math.round((atRef.current - Date.now()) / 1000)) : null);
 }
 
-export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "", openNew = 0 }) {
+export default function FeedView({ onOpenTask, onChanged, active = true, top = null, stage = null, rowMode = "task", onPull = null, railOnNarrow = false, onInventoryFilter = null, unreadInventory = null, onGo = null, navOn = "", openNew = 0, setupMode = false, setupRail = null }) {
   // below md there is no stage beside the rail; whatever is opened slides over it instead, so a
   // tap on a row is never a tap that did nothing
   const narrow = useMediaQuery("(max-width:899.95px)");
@@ -896,7 +896,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
 
           {/* THE FILTER TAKES THE ROW. Work | Timeline sat here; with the Timeline gone (the owner, 2026-10-15) the filter
               is the row's one control and says on its face what the rail is narrowed to. */}
-          <Box sx={{ display: "flex", alignItems: "center", minWidth: 0 }}>
+          <Box sx={{ display: setupMode ? "none" : "flex", alignItems: "center", minWidth: 0 }}>
             <FilterButton cat={cat} pick={pickerChannels.length ? pick : ""} channels={pickerChannels}
               srcByChannel={srcByChannel} srcQ={srcQ} setSrcQ={setSrcQ}
               onChange={(nextCat, nextPick) => {
@@ -911,7 +911,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               under it jumped with every sync (the owner, 2026-09-23: "it should stay in same place at all
               times"). The counts keep their size, the clock takes what is left and ellipses, and the button
               has one width whatever its label says, flush right under + New. */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "nowrap", minHeight: 20 }}>
+          <Box sx={{ display: setupMode ? "none" : "flex", alignItems: "center", gap: 1.25, flexWrap: "nowrap", minHeight: 20 }}>
             {/* THE NARROWED SIDEBAR (the owner, 2026-09-29: "make the full time fit ... might have to hide the 8 in today while
                 refreshing ... when it's not refreshing it should not have a ..."): at rest, the day's one count and the whole
                 time - the other counts ride its tooltip; while a sync runs, no counts, and the line says what it is reading */}
@@ -951,7 +951,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
               "triaging…" and nothing saying why. The last error stays until it answers again. */}
           {/* ...said the way the owner should hear it (problems.thinking), with the raw cause on hover only - and it stays
               while mail is still held, after the first good answer, saying "I'm catching up" in a quieter colour */}
-          {(thinking || triageErr) && (
+          {!setupMode && (thinking || triageErr) && (
             <Typography variant="caption" noWrap title={triageErr || thinking} sx={{ color: triageErr ? ALERT_INK : DIM, fontWeight: 600, fontSize: 10.5 }}>
               {thinking || "I'm having trouble thinking for a few minutes. Mail is still coming in and I'm holding all of it."}
             </Typography>
@@ -972,7 +972,8 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           sx={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
           // no top padding under the pipe: a sticky heading sticks at the padding edge, and rows showed through above it
           position: "relative", pl: "2px", pr: 1, pt: 0, pb: 3 }}>
-          {typeof top === "function" ? top({ openByMid, openByItem }) : top}
+          {setupRail}
+          {setupRail ? null : <>{typeof top === "function" ? top({ openByMid, openByItem }) : top}</>}
         </Box>
         {bottomFade && more && (
           <Box data-tq-bottom-fade={fade} aria-hidden sx={{

@@ -135,6 +135,9 @@ async def _lifespan(_app):
         from . import selfclose as _selfclose
         try: _selfclose.settle_legacy(store)          # 'ask' was a second mode that no longer differs
         except Exception as e: logger.warning(f'self-close setting upgrade skipped: {e}')
+        from . import firstrun as _firstrun
+        try: _firstrun.settle_existing(store)         # a working install is not sent back into setup by the new Finish button
+        except Exception as e: logger.warning(f'first-run finish flag not settled: {e}')
     if not _open_drain_workers(store):
         raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and
@@ -6100,6 +6103,40 @@ def first_run_key(body: FirstRunKeyBody):
 
 class FirstRunConnBody(BaseModel): cid: int
 
+
+class FirstRunAboutBody(BaseModel):
+    name: str = ''; role: str = ''; owns: str = ''; people: str = ''; systems: list = []
+
+# ABOUT YOUR WORK: five short answers for SOUL.md and JOB.md, suggested from the mail (firstrun.about / suggest_about / save_about)
+@app.get('/api/setup/first-run/about')
+def first_run_about():
+    from . import firstrun
+    return firstrun.about(store)
+
+@app.post('/api/setup/first-run/about/suggest')
+def first_run_about_suggest():
+    from . import firstrun
+    return firstrun.suggest_about(store)
+
+@app.post('/api/setup/first-run/about')
+def first_run_about_save(body: FirstRunAboutBody):
+    from . import firstrun
+    firstrun.save_about(store, body.model_dump())
+    return firstrun.state(store)
+
+@app.post('/api/setup/first-run/about/skip')
+def first_run_about_skip():
+    from . import firstrun
+    firstrun.skip_about(store)
+    return firstrun.state(store)
+
+@app.post('/api/setup/first-run/finish')
+def first_run_finish():
+    """Finish setup (or Walk me through my tasks): the canvas is the day from now on, until the top bar's Setup reopens it."""
+    from . import firstrun
+    firstrun.finish(store)
+    return firstrun.state(store)
+
 @app.post('/api/setup/first-run/connector')
 def first_run_connector(body: FirstRunConnBody):
     """A card that signed in (ChatGPT): tested and made the brain everywhere - or the answer says what it said."""
@@ -6779,25 +6816,8 @@ def put_owner(body: OwnerBody):
     {{owner}} token, so the documents convert themselves once and never drift again."""
     new = (body.name or '').strip()
     if not new: raise HTTPException(422, 'a name is required')
-    was = store.owner()
-    changed = []
-    # 'the owner' is the fallback when no name is known, and real prose says those words -
-    # retokenizing them would punch {{owner}} holes all over a doc that never had a name in it
-    if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
-        raw = store.get_doc(doc)
-        if not raw: continue
-        tokened = store_mod.retoken_doc(raw, was['owner'], was['owner_email'])
-        # a drifted doc holds BOTH names - the one you typed in and the template's John Smith
-        # the edit missed - so the shipped placeholder is always swept too
-        tokened = store_mod.retoken_doc(tokened, 'John Smith', 'john.smith@example.com')
-        if tokened != raw:
-            store.save_doc(doc, tokened, ACTOR)
-            changed.append(doc)
-    store.set_setting('owner_name', new, ACTOR)
-    if body.email is not None: store.set_setting('owner_email', body.email.strip(), ACTOR)
-    store.audit('doc', 0, 'set_owner', ACTOR, detail={'from': was['owner'], 'to': new, 'retokened': changed})
-    return {**store.owner(), 'retokened': changed}
+    return store_mod.set_owner(store, new, body.email, ACTOR)
+
 
 @app.get('/api/policies')
 def policies(): return {'data': store.list_policies(active_only=False)}

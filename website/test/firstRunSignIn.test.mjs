@@ -51,6 +51,6 @@ test("past the AI step it can be changed: the AI is named with Change, and Keep 
   // the owner, 2026-10-15: "do you not have the option to go back and change the ai method. meaning no back button?"
   assert.match(fr, /Your AI: \{st\.brain\.name\}/);
   assert.match(fr, />Change</);
-  assert.match(fr, /Keep \{st\.brain\.name\}/);
+  assert.match(fr, /Keep \$\{st\.brain\.name\}/);
   assert.match(fr, /const q = redo \|\| /);
 });

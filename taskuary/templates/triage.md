@@ -111,6 +111,7 @@ Each is a sign to weigh; an absent field is not evidence either way.
 - `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last.
 - `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you".
 - `open_work`, `recently_closed` - tasks this touches, open or closed lately, each with how it ended.
+- `meetings_today` - the owner's meetings today, each already on their rail at its time. A message that only announces, reminds of or links to one of them adds nothing the calendar does not already show; one that changes it, asks something about it or needs something done before it is judged on that.
 - `assistant_said` - what the Advisor already raised on this thread and what the owner did with it.
 - `sender_history` - how this sender's last asks were worked.
 - `idea_context` - present when the item is an Advisor idea: the report it came from, the task it names and whether a worker has it.

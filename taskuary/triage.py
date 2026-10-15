@@ -36,6 +36,8 @@ FIELDS = {
     'open_goals': "open_goals is the owner's OPEN GOALS, each with its tid, what done looks like and its steps (id, text, done, who holds it): "
                   "when this message serves one step - it delivers it, answers it, or is plainly about it - answer serves {task, step, done}, "
                   "done true only when the message completes that step; a message that serves no step answers serves null.",
+    'meetings_today': "meetings_today is the owner's meetings today, from their own calendar - each already shows on their work rail "
+                      "as its own row at its time.",
     'assistant_said': "assistant_said is what the Advisor already raised about this thread and what the owner did with it.",
 }
 

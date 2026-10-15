@@ -146,6 +146,26 @@ def recent_open(store, msg: dict, limit: int = RECENT) -> list:
     return [{k: v for k, v in r.items() if k != '_rank'} for r in out[:limit]]
 
 
+MEETINGS = 12            # a day's calendar, bounded so a packed one cannot crowd the mail out of the prompt
+
+def meetings_today_of(t: dict) -> list:
+    """calendar.today's events as triage reads them: when, what, with whom, what it is about."""
+    from .calendar import span
+    return [{'when': 'all day' if e.get('all_day') else span(e['start'], e.get('end') or ''), 'subject': e.get('subject') or '',
+             **({'with': list(e['who'])[:6]} if e.get('who') else {}), **({'about': _short(e['about'], 160)} if e.get('about') else {})}
+            for e in (t.get('events') or [])[:MEETINGS]]
+
+
+def meetings_today(store, msg: dict) -> list:
+    """Today's meetings, for a mail that arrived today. A meeting tool's "about to start" reminder opened an urgent
+    "Join the meeting" task beside the meeting's own calendar row: triage had never seen the calendar (2026-10-15).
+    Evidence, not a rule - what a mail about one of these is worth is the model's call. Mail read in a catch-up is
+    from another day, and today's calendar says nothing about it."""
+    if str(msg.get('sent_at') or '')[:10] not in ('', datetime.now().strftime('%Y-%m-%d')): return []
+    from . import calendar
+    return meetings_today_of(calendar.today(store))
+
+
 def open_goals(store, limit: int = 5) -> list:
     """The open GOALS with their steps, titles only, for triage's "which step does this serve" (spec 2026-10-12). Five goals of
     twelve steps at most: the prompt stays small, and a goal past that is the newest activity's to show."""

@@ -525,6 +525,11 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         theirs = taskcontext.sender_history(store, msg)
         if theirs: thread = {**thread, 'sender_history': theirs}
     except Exception as e: logger.debug(f'recent closures skipped: {e}')
+    # ...and today's meetings, so a mail about one can be seen to be about something already on the owner's calendar (2026-10-15)
+    try:
+        from . import context as taskcontext
+        if meet := taskcontext.meetings_today(store, msg): thread = {**thread, 'meetings_today': meet}
+    except Exception as e: logger.debug(f'calendar skipped for triage: {e}')
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line
     if msg.get('idea_context'): thread = {**thread, 'idea_context': msg['idea_context']}

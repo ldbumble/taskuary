@@ -1288,13 +1288,17 @@ class SQLiteStore:
                 sha = lambda t: hashlib.sha256(t.strip().encode()).hexdigest()
                 last = self.cx.execute("SELECT Value FROM setting WHERE Name='triage_guide_sha'").fetchone()
                 first = not self.cx.execute("SELECT 1 FROM setting WHERE Name='triage_guide_2026_10_09'").fetchone()
-                if (first or (last and sha(head) == last['Value'])) and sha(head) != sha(guide):
+                # ...and a guide the 10-09 migration wrote before the fingerprint was kept: no sha names it, so it froze for
+                # good (2026-10-15). Its last writer being the migration itself says nobody edited it since; histgen's name
+                # can sit over an owner's edit (it rewrites only the history block), so that one stays as it is.
+                tracks = first or (sha(head) == last['Value'] if last else row['UpdatedBy'] in ('migration', 'template'))
+                if tracks and sha(head) != sha(guide):
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedBy=?, UpdatedAt=? WHERE Name='triage'",
                                     (_splice(guide, hist, TITLES['triage']) if hist.strip() else guide,
                                      'migration' if hist.strip() else 'template', _now()))
                     logger.info('triage: TRIAGE.md follows the triage guide' + (' (your mail-history section kept)' if hist.strip() else ''))
                     head = guide
-                if first or (last and sha(head) == sha(guide)):
+                if tracks or sha(head) == sha(guide):
                     self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_sha', ?, 'migration') "
                                     "ON CONFLICT(Name) DO UPDATE SET Value=excluded.Value", (sha(guide),))
             self.cx.execute("INSERT OR IGNORE INTO setting (Name, Value, UpdatedBy) VALUES ('triage_guide_2026_10_09', '1', 'migration')")

@@ -40,6 +40,25 @@ class GuideTracksTests(unittest.TestCase):
         self.assertIn('My own way of triaging.', doc)
         self.assertNotIn('# How to triage what arrives', doc)
 
+    def _unprinted(self, by):
+        """A guide put there before the fingerprint was kept: the 2026-10-09 migration wrote it and recorded no sha."""
+        s = SQLiteStore(self.db); s._exec("DELETE FROM setting WHERE Name='triage_guide_sha'"); s.close()
+        s = SQLiteStore(self.db)
+        s._exec("UPDATE doc SET Content=?, UpdatedBy=? WHERE Name='triage'", (histgen._splice('A guide no fingerprint names.', HIST, histgen.TITLES['triage']), by))
+        s._exec("DELETE FROM setting WHERE Name='triage_guide_sha'"); s.close()
+        s = SQLiteStore(self.db); doc = s.doc('triage'); s.close()
+        return doc
+
+    def test_a_guide_the_migration_wrote_with_no_fingerprint_still_follows_the_guide(self):
+        """The 10-09 migration put a guide there and kept no sha, so the install froze on it for good (2026-10-15): the
+        last writer was the migration itself, so nobody has edited it since."""
+        doc = self._unprinted('migration')
+        self.assertIn('# How to triage what arrives', doc); self.assertNotIn('no fingerprint', doc); self.assertIn('vendor newsletters', doc)
+
+    def test_an_unfingerprinted_guide_somebody_else_wrote_last_is_left(self):
+        """histgen rewrites only the history block, so its name as the last writer can sit over an owner's edit."""
+        self.assertIn('no fingerprint', self._unprinted('histgen'))
+
     def test_the_owners_document_is_never_touched(self):
         doc = self._with('Classify one inbound work message. (an earlier guide)', 'owner', last='Classify one inbound work message. (an earlier guide)')
         self.assertIn('an earlier guide', doc)

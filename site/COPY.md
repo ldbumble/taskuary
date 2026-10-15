@@ -60,4 +60,4 @@ contradicts it). Put either back only with that settled.
 | 6 | Bottom strip | `it arrives → it gets sorted → it gets done` |
 | - | Tab title / previews | `Taskuary — your work manager. Locally. Securely. In control.` · search: `Your work manager: mail, chats and tickets in one list, in the right order - worked, and waiting for your yes. Runs on your computer. Free.` |
 
-The README's own headline on GitHub still reads `Your work, already underway.` - change it to match when you settle this.
+The README (both languages), the package description and the docs' header tag carry the same headline.

@@ -11,7 +11,7 @@
 
 <p align="center"><b>⭐ Please star Taskuary if you find it helpful</b> — it is how other people find it.</p>
 
-## Your work, already underway
+## Your work manager. Locally. Securely. In control.
 
 **A personal AI assistant for your job.** Mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve. Open source, runs on your machine, no subscription.
 

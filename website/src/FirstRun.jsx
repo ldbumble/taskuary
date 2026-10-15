@@ -17,7 +17,7 @@ import { focusOf, signinUrl } from "./firstRunFocus.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 
-const CHECK_MS = 90_000;            // a card test is a minute at most server-side; past this we say so instead of spinning
+const CHECK_MS = 200_000;           // its test, then one test email sorted (firstrun._prove, 90s at most): past this we say so
 const INSTALL_MS = 6 * 60_000;
 const FIRST = 4;                    // the four most people have; More shows the rest of the same shelf
 const errText = (e) => e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "That took too long." : e?.message) || "That didn't work.";
@@ -106,10 +106,10 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   const pick = async (ai) => {
     if (!ai.installed && ai.install && !ai.done) { install(ai); return; }
     setBusy(ai.name); setOpen(null); setBrowse(false);
-    setSaid(`Checking that ${ai.title} works - this can take up to a minute…`);
+    setSaid(`Checking that ${ai.title} works - it sorts one test email, up to two minutes…`);
     try { await api.post("/api/setup/first-run/ai", { name: ai.name }, { timeout: CHECK_MS }); }
     catch (e) { setBusy(""); setSaid(""); setErr(`${errText(e)} Click the card to try again.`); return; }
-    setBusy(""); setSaid(""); reload();               // what happened is the server's line now - and it survives a reload
+    await reload(); setBusy(""); setSaid("");         // what happened is the server's line now; cleared only once it is drawn (no flicker back)
   };
   // CHATGPT IS A BROWSER SIGN-IN, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
   // terminal??? no need for that. it's a regular oauth setup"): its card's own sign-in (chatgptauth), then tested and made the AI
@@ -132,10 +132,10 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     setSigning(null); setErr("The ChatGPT sign-in took too long. Click ChatGPT to start it again.");
   };
   const planCheck = async (cid) => {
-    setBusy(`c${cid}`); setSaid("Checking ChatGPT works - this can take up to a minute…");
+    setBusy(`c${cid}`); setSaid("Checking ChatGPT works - it sorts one test email, up to two minutes…");
     try { await api.post("/api/setup/first-run/connector", { cid }, { timeout: CHECK_MS }); }
     catch (e) { setErr(`${errText(e)} Click ChatGPT to try again.`); }
-    setBusy(""); setSaid(""); reload();
+    await reload(); setBusy(""); setSaid("");
   };
   const cancelSignin = () => {
     if (signing) api.post(`/api/connectors/${signing.cid}/chatgpt/cancel`, { flow: signing.flow }).catch(() => {});
@@ -212,7 +212,7 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
   const cli = signin && { name: fix.name, setup: fix.setup, installed: true };
   const cliDetail = busy ? (
     <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-      <Typography sx={{ color: DIM, fontSize: 13.5 }}>Checking it works - this can take up to a minute.</Typography></Box>
+      <Typography sx={{ color: DIM, fontSize: 13.5 }}>Checking it works by sorting one test email - up to two minutes.</Typography></Box>
   ) : signing ? (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
@@ -245,9 +245,10 @@ export default function FirstRun({ onWalk, onChanged, revisit = false }) {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       {said_}
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        {fix.key && plan && fix.key === planKey && <Button variant="contained" disableElevation onClick={() => planSignin(plan)}>Sign in again</Button>}
         {fix.fix === "update" && fix.install && <Button variant="contained" disableElevation
           onClick={() => install({ ...fixed, install: fix.install }, "Updating")}>Update {fix.title}</Button>}
-        <Button variant={fix.fix === "update" ? "outlined" : "contained"} disableElevation onClick={check}>Try again</Button>
+        <Button variant={fix.fix === "update" || fix.key ? "outlined" : "contained"} disableElevation onClick={check}>Try again</Button>
         <Button onClick={() => openBugReport({ message: `${fix.title} didn't answer the setup test
 ${fix.detail || ""}`, screen: "Setup",
           route: `first-run ${fix.name}` })}>Report this bug</Button>
@@ -278,7 +279,7 @@ ${fix.detail || ""}`, screen: "Setup",
       {shelf("other", other, "More connections")}
       {(st.step === "reading" || st.step === "done") && (
         <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", flexWrap: "wrap" }}>
-          {st.step === "reading" && <><CircularProgress size={16} /><Typography sx={{ color: DIM }}>
+          {st.step === "reading" && !st.ai_error && <><CircularProgress size={16} /><Typography sx={{ color: DIM }}>
             {st.sorting ? `Sorting ${st.sorting} email${st.sorting === 1 ? "" : "s"}…` : "Reading your mail…"}</Typography></>}
           <Button variant="contained" disableElevation disabled={st.step !== "done"} onClick={onWalk}>Walk me through my tasks</Button>
         </Box>

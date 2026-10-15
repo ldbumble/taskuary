@@ -14,3 +14,7 @@ test("signed in and failing shows the error and Update / Try again / Report this
   assert.match(fr, />Report this bug</);
   assert.match(fr, /"Signed in · not answering"/);
 });
+
+test("a ChatGPT plan that failed its test offers Sign in again first - its login may simply have lapsed", () => {
+  assert.match(fr, /fix\.key === planKey && <Button variant="contained" disableElevation onClick=\{\(\) => planSignin\(plan\)\}>Sign in again</);
+});

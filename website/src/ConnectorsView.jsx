@@ -476,10 +476,10 @@ const META = {
       "Paste it under Credentials. Leave model blank for gemini-2.0-flash, or name a newer one from ai.google.dev/models.",
       "Test runs a real round trip."] },
   vertex_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
-    fields: [["project", "project"], ["location (default global)", "location"], ["model (default gemini-2.5-flash)", "model"]], secretLabel: "API key",
+    fields: [["project", "project"], ["location (default global)", "location"], ["model (default gemini-3.8-flash)", "model"]], secretLabel: "API key",
     desc: "Gemini and partner models through Google Cloud's Agent Platform (Vertex AI) - project + API key.",
     howto: ["Google Cloud console → Agent Platform (Vertex AI) → API keys: create a key. The project id is in the console's project picker.",
-      "Enter the project id; leave location blank for global, or name a region (us-central1). Model blank = gemini-2.5-flash; a partner model is named with its publisher (meta/llama-4-maverick).",
+      "Enter the project id; leave location blank for global, or name a region (us-central1). Model blank = gemini-3.8-flash; a partner model is named with its publisher (meta/llama-4-maverick).",
       "Paste the key under Credentials. Test runs a real round trip."] },
   deepseek: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default deepseek-chat)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
@@ -2278,7 +2278,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       setBusy("save"); setTest(null);
       try {
         const { data } = isAI
-          ? await api.post("/api/setup/first-run/key", { type: conn.Type, key: secret, cid: conn.ConnectorId, config: cfg }, { timeout: 90000 })
+          ? await api.post("/api/setup/first-run/key", { type: conn.Type, key: secret, cid: conn.ConnectorId, config: cfg }, { timeout: 200000 })
           : await api.post("/api/setup/first-run/mail",
             { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
         setTest({ ok: data.ok, detail: data.why });

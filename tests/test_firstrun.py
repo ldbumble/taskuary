@@ -22,7 +22,8 @@ class ChooseAiTests(unittest.TestCase):
         # the CLI's own "am I signed in?" is asked only when a check fails; never the real one in a test
         self.p = [mock.patch('taskuary.config.save'), mock.patch('taskuary.cli_connections.sync'),
                   mock.patch.object(agents, 'cli_agent_options', return_value=[]),
-                  mock.patch('taskuary.clisetup.signed_in', return_value=False)]
+                  mock.patch('taskuary.clisetup.signed_in', return_value=False),
+                  mock.patch.object(firstrun, '_prove', return_value='')]        # ProvenOnMailTests proves the proof
         for p in self.p: p.start()
 
     def tearDown(self):
@@ -84,6 +85,8 @@ class ChooseAiTests(unittest.TestCase):
 
 
 class KeyAndMailTests(unittest.TestCase):
+    def setUp(self): p = mock.patch.object(firstrun, '_prove', return_value=''); p.start(); self.addCleanup(p.stop)
+
     def test_a_key_that_works_is_the_brain_and_one_that_does_not_is_switched_back_off(self):
         s = MemoryStore()
         cid = s.get_connector_by_type('anthropic')['ConnectorId']
@@ -277,6 +280,7 @@ class ChatGptPlanTests(unittest.TestCase):
     """ChatGPT is a browser sign-in, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
     terminal??? ... it's a regular oauth setup"). Signed in on its card, it is tested and made the AI everywhere in one call."""
     def setUp(self):
+        p = mock.patch.object(firstrun, '_prove', return_value=''); p.start(); self.addCleanup(p.stop)
         self.s = MemoryStore()
         self.cid = self.s.get_connector_by_type('chatgpt')['ConnectorId']
         self.s.save_connector({'ConnectorId': self.cid, 'Secret': 'refresh-token', 'Active': 1}, 'test')
@@ -295,8 +299,43 @@ class ChatGptPlanTests(unittest.TestCase):
         self.assertFalse(out['ok']); self.assertEqual(self.s.get_setting('triage_ai') or '', '')
         fix = firstrun.state(self.s)['fix']
         self.assertEqual((fix['key'], fix['fix'], fix['title']), (f'c{self.cid}', 'retry', 'ChatGPT'))
-        self.assertIn('weekly cap reached', fix['detail']); self.assertIn('signed in', fix['why'])
+        self.assertIn('weekly cap reached', fix['detail']); self.assertIn('sign in again', fix['why']); self.assertNotIn("You're signed in", fix['why'])
 
     def test_codex_is_its_own_card_named_codex(self):
         self.assertEqual(firstrun.PLAIN['codex'][0], 'Codex')
 
+
+
+class ProvenOnMailTests(unittest.TestCase):
+    """A Vertex key passed its one-word Test, became the AI, and then sorted no mail - every email ⚠, setup spinning (the owner,
+    2026-10-15: "if there is error timeout and say connect another one ... each cli tool or cloud tool or local tool should work by
+    itself for assistant/triage/and agent"). An AI is the AI only once it has sorted one invented email the way triage will."""
+    def setUp(self):
+        self.s = MemoryStore(); self.cid = self.s.get_connector_by_type('chatgpt')['ConnectorId']
+        self.s.save_connector({'ConnectorId': self.cid, 'Secret': 'refresh-token', 'Active': 1}, 'test')
+
+    def pick(self, verdict=None, error=None, slow=0):
+        import time
+        def classify(msg, **kw):
+            if slow: time.sleep(slow)
+            if error: raise RuntimeError(error)
+            return verdict
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True}), mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: ''), \
+             mock.patch('taskuary.triage.classify_intent', side_effect=classify), mock.patch.object(firstrun, 'PROVE_SECONDS', 0.5):
+            return firstrun.choose_connector(self.s, self.cid)
+
+    def test_one_that_sorts_the_test_email_is_the_ai_for_triage_the_assistant_and_agents(self):
+        out = self.pick(verdict={'intent': 'task', 'kind': 'task', 'title': 'Approve the invoice'})
+        self.assertTrue(out['ok'])
+        for k in firstrun.BRAINS: self.assertEqual(self.s.get_setting(k), f'connector:{self.cid}')
+
+    def test_one_that_answers_but_cannot_sort_mail_is_not_the_ai_and_says_pick_another(self):
+        out = self.pick(verdict={'intent': None, 'degraded': True, 'parse_error': 'RuntimeError: vertex_ai sent back no answer'})
+        self.assertFalse(out['ok']); self.assertIn('pick another AI', out['why'])
+        for k in firstrun.BRAINS: self.assertEqual(self.s.get_setting(k) or '', '')
+        self.assertIn('sent back no answer', firstrun.state(self.s)['fix']['detail'])
+
+    def test_one_that_hangs_is_cut_off_and_says_so(self):
+        out = self.pick(verdict={'intent': 'fyi'}, slow=2)
+        self.assertFalse(out['ok']); self.assertIn('too long', firstrun.state(self.s)['fix']['detail'])
+        self.assertEqual(self.s.get_setting('triage_ai') or '', '')

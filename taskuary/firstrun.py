@@ -11,11 +11,11 @@ The step is read from real state (setup.py's own readers), never stored: a step 
 under each question are the Connections page's own (the owner, 2026-10-15: "Don't create new ui. keep the same as we have in
 connections but just show them/tell what to do next") - this file says which step, and the one line on top.
 """
-import json
+import json, threading
 from loguru import logger
 
 # the CLIs most people already pay for, always offered; any OTHER installed CLI joins them
-OFFERED = ('claude', 'codex', 'gemini', 'copilot')
+OFFERED = ('claude', 'codex', 'gemini')
 # ChatGPT itself is the browser sign-in on its own card (choose_connector); Codex is ChatGPT's coding CLI, named as itself
 PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': ('Codex', "ChatGPT's coding CLI - if you pay for ChatGPT"),
          'gemini': ('Gemini', 'Gemini CLI - free with a Google account'), 'copilot': ('Copilot', 'GitHub Copilot CLI - if you pay for Copilot')}
@@ -62,7 +62,8 @@ def state(store) -> dict:
     # the CLIs, not the profiles that run them: detect also lists every worker on claude, and the first run showed eight
     # "Claude Code" cards (a fresh-install screenshot, 2026-10-14)
     found = list({k['name']: k for k in clis.detect(store) if not k.get('profile')}.values())
-    ais = [k for k in found if k['name'] in OFFERED or k['installed']]
+    # ...and only a CLI triage may run (clis.READONLY): Copilot was offered as "your AI" and then refused every mail (2026-10-15)
+    ais = [k for k in found if (k['name'] in OFFERED or k['installed']) and k['name'] in clis.READONLY]
     ais.sort(key=lambda k: (k['name'] not in OFFERED, not k['installed'], OFFERED.index(k['name']) if k['name'] in OFFERED else 9))
     # the three most people pay for lead; any other CLI on this machine is offered under "more", never in the first glance
     ais = [{'name': k['name'], 'title': PLAIN.get(k['name'], (k['label'], ''))[0], 'sub': PLAIN.get(k['name'], ('', 'Already on this computer'))[1],
@@ -87,15 +88,19 @@ def state(store) -> dict:
     # ...kept past step 1 too: Change brings the AI cards back, and a pick that fails there must still say why (2026-10-15)
     fix = _fix(store)
     ask = "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
+    # a brain that fails on the mail itself: said, with the way out, instead of "Sorting 18 emails" for good (2026-10-15)
+    ai_error = str(store.get_setting('triage_last_error') or store.get_setting('triage_last_unusable') or '').strip() if step in ('reading', 'done') else ''
     nxt = {'ai': fix['why'] if fix else ask,
            'email': f"{name or 'Your AI'} is ready. What email do you have? Click it below - Microsoft 365 is one sign-in.",
-           'reading': (f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
+           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Press Change to pick another AI." if ai_error
+                       else f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
            'done': "You're set up. Any other connection you'd like to set up? Click it below - or press Walk me through my tasks."}[step]
     # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15)
     todo = {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step]
     return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,
-            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt}
+            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt,
+            'ai_error': ai_error}
 
 
 # ONE PICK IS THE AI (the owner, 2026-10-14: "this is only triage ai not the other ai's"): the four brains - triage, general
@@ -104,8 +109,39 @@ def state(store) -> dict:
 BRAINS = ('triage_ai', 'assistant_ai', 'concierge_ai')
 
 
+# PROVEN ON MAIL, NOT ON "ok": a Vertex key answered its one-word Test, became the AI, and sorted no mail at all - every email
+# came back unusable and setup spun (the owner, 2026-10-15: "if there is error timeout and say connect another one ... each cli tool
+# or cloud tool or local tool should work by itself for assistant/triage/and agent"). One invented email, judged the way triage
+# will judge the real ones, by the brain the settings now name - the same one the Assistant and a general agent read.
+PROOF = {'from_email': 'erin.blake@northwind.example', 'from_name': 'Erin Blake', 'to': ['alex@northwind.example'],
+         'subject': 'Q3 vendor invoice - can you approve by Friday?', 'sent_at': '2026-10-15 09:00:00',
+         'body': 'Hi Alex, the Payworth invoice for Q3 is in the portal. Can you approve it by Friday so it goes out in this run? Thanks, Erin'}
+PROVE_SECONDS = 90
+
+
+def _prove(store) -> str:
+    """'' when the brain sorted the invented email; else why not, in a sentence."""
+    from . import llm as llm_mod, triage
+    said = {}
+    def go():
+        try:
+            v = triage.classify_intent(dict(PROOF), llm=llm_mod.build_llm(store), system=store.doc('triage'))
+            if v.get('degraded') or v.get('intent') not in ('task', 'reply_only', 'fyi'):
+                said['e'] = f"it couldn't sort a test email - {v.get('parse_error') or v.get('error') or 'its answer was not a verdict'}"
+        except Exception as e: said['e'] = f"it couldn't sort a test email - {str(e)[:300]}"
+    t = threading.Thread(target=go, daemon=True, name='first-run-proof'); t.start(); t.join(PROVE_SECONDS)
+    if t.is_alive(): return f'it took too long - more than {int(PROVE_SECONDS)} seconds to sort one test email'
+    return said.get('e', '')
+
+
+def _brains(store) -> dict: return {k: store.get_setting(k) or '' for k in BRAINS + ('default_brain',)}
+def _restore(store, was: dict):
+    for k in BRAINS + ('default_brain',): store.set_setting(k, was.get(k, ''), 'owner')
+
+
 def _everywhere(store, pick: str, cli: str = ''):
     for k in BRAINS: store.set_setting(k, pick, 'owner')
+    for k in ('triage_last_error', 'triage_last_unusable'): store.set_setting(k, '', 'system')   # the last brain's failure is not this one's
     if cli: store.set_setting('default_brain', cli, 'owner')
 
 
@@ -116,6 +152,8 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     k = next((k for k in clis.detect(store) if k['name'] == name), None)
     if not k: return {'ok': False, 'why': f'Taskuary does not know a CLI called {name}.', 'fix': ''}
     label = PLAIN.get(name, (k['label'],))[0]
+    if name not in clis.READONLY:
+        return {'ok': False, 'fix': '', 'why': f"{label} can run tasks for you, but it can't sort mail - pick Claude, Codex or Gemini, or an API key."}
     def failed(out):
         store.set_setting(FIX, json.dumps({'name': name, 'title': label, 'fix': out['fix'], 'setup': k.get('setup') or '', 'why': out['why'],
                                            'detail': out.get('detail') or '', 'install': k['install'] if k.get('installable') else ''}), 'owner')
@@ -147,7 +185,12 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
                           ' Sign in to it on this computer, then click its card again.'),
                 'detail': str(e)[:200]})
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
+    was = _brains(store)
     _everywhere(store, f'cli:{worker}', cli=key)                       # the owner's own click: theirs, not an auto-pick
+    if (why := _prove(store)):
+        _restore(store, was)
+        return failed({'ok': False, 'fix': 'retry', 'why': f"{label} answered, but {why.split(' - ')[0]}. Try again, or pick another AI.",
+                       'detail': why})
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
     store.set_setting(FIX, '', 'owner'); _close_setup(store, name)
     return {'ok': True, 'why': f'{label} works - it will sort your mail.'}
@@ -171,32 +214,41 @@ def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = Non
     if not out.get('ok'):
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'owner')
         return {'ok': False, 'why': f"That key didn't work: {str(out.get('detail') or 'the provider said no')[:200]}. Check you copied all of it."}
+    was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")
+    if (why := _prove(store)):
+        _restore(store, was)
+        return {'ok': False, 'why': f"The key works, but {why}. Pick another AI, or another model on its card."}
     store.set_setting(FIX, '', 'owner')
     return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort your mail."}
 
 
 def choose_connector(store, cid: int) -> dict:
-    """An AI card that signs in rather than taking a key - ChatGPT (chatgptauth): signed in on its card, then tested and made the
-    brain here, in one call. A plan that does not answer keeps its words for the card, and survives a reload (FIX)."""
+    """An AI card that signs in rather than taking a key - ChatGPT (chatgptauth): signed in on its card, then tested on one email
+    and made the brain here, in one call. One that does not answer keeps its words for the card, and survives a reload (FIX)."""
     from .channels import test_connector
     c = store.get_connector(cid)
     if not c: return {'ok': False, 'why': 'That card is not here any more.'}
     title = 'ChatGPT' if c.get('Type') == 'chatgpt' else (c.get('Name') or c.get('Type'))
+    # the sign-in's own adoption (server.chatgpt_poll makes it the brain when none is chosen) is undone on a failure below: a brain
+    # that does not answer moved setup on to email, and every mail after it failed
+    was = {k: v for k, v in _brains(store).items() if v != f'connector:{cid}'}
     out = test_connector(store, cid)
-    if not out.get('ok'):
-        why = f"You're signed in to {title}, but it didn't answer the test. What it said is below - try again, or pick another AI."
-        # ...and the sign-in's own adoption undone (server.chatgpt_poll makes it the brain when none is chosen): a brain that does not
-        # answer moved setup on to email, and every mail after it failed
-        for k in BRAINS:
-            if store.get_setting(k) == f'connector:{cid}': store.set_setting(k, '', 'owner')
-        store.set_setting(FIX, json.dumps({'key': f'c{cid}', 'name': c.get('Type'), 'title': title, 'fix': 'retry', 'why': why,
-                                           'detail': str(out.get('detail') or 'no reason given')[:400], 'setup': '', 'install': ''}), 'owner')
-        return {'ok': False, 'why': why}
-    _everywhere(store, f'connector:{cid}')
-    store.audit('setting', 0, 'first_run_brain', 'owner', detail={'pick': f'connector:{cid}'})
-    store.set_setting(FIX, '', 'owner')
-    return {'ok': True, 'why': f'{title} works - it will sort your mail.'}
+    if out.get('ok'):
+        _everywhere(store, f'connector:{cid}')
+        why = _prove(store)
+        if not why:
+            store.audit('setting', 0, 'first_run_brain', 'owner', detail={'pick': f'connector:{cid}'})
+            store.set_setting(FIX, '', 'owner')
+            return {'ok': True, 'why': f'{title} works - it will sort your mail.'}
+        detail = why
+    else: detail = str(out.get('detail') or 'no reason given')
+    _restore(store, was)
+    # not "you're signed in": a sign-in that had lapsed at OpenAI read "You're signed in to ChatGPT, but..." (a real copy, 2026-10-15)
+    msg = f"{title} didn't answer the test. What it said is below - sign in again, try again, or pick another AI."
+    store.set_setting(FIX, json.dumps({'key': f'c{cid}', 'name': c.get('Type'), 'title': title, 'fix': 'retry', 'why': msg,
+                                       'detail': detail[:400], 'setup': '', 'install': ''}), 'owner')
+    return {'ok': False, 'why': msg}
 
 
 def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:

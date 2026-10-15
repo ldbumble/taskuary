@@ -133,19 +133,42 @@ class SomeoneElsesAskTests(unittest.TestCase):
 
 
 class ChatReopensTests(unittest.TestCase):
-    def test_a_chat_line_that_answers_a_closed_ask_goes_back_to_it(self):
-        s = MemoryStore()
-        chat = lambda ext, body, llm: mail(s, ext, llm, conv='room-1', subject='', body=body, channel='teams')
-        first = chat('t1', 'Can you send me the August statement?', brain('reply_only')); tid = first['task_id']
-        s.update_task(tid, {'Status': 'done'}, 'owner')
-        mid1 = first['message_id']
-        def answers(system, user, **k):
-            return json.dumps({'intent': 'reply_only', 'why': 'asks again', 'title': 'August statement', 'summary': 's',
-                               'relationship': 'answers', 'related_message_ids': [mid1], 'existing_task_id': tid, 'same_problem': True})
-        back = chat('t2', 'still need that statement, the one for August', answers)
-        self.assertEqual((back['status'], back['task_id']), ('attached', tid))
-        self.assertEqual(s.get_task(tid)['Status'], 'open')
-        self.assertEqual(len(s.list_tasks()), 1)
+    """A closed task comes back only with NEW work (the owner, 2026-10-15: "it should update the task description if something new
+    was added to task, if not and it was just comment don't reopen this"). A colleague's "sure" to a meeting time the owner offered
+    later in the same chat reopened the morning's closed timesheet task, because triage read it as a reply."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.chat = lambda ext, body, llm: mail(self.s, ext, llm, conv='room-1', subject='', body=body, channel='teams')
+        first = self.chat('t1', 'Can you send me the August statement?', brain('reply_only', title='Send Erin the August statement'))
+        self.tid, self.mid1 = first['task_id'], first['message_id']
+        self.s.update_task(self.tid, {'Status': 'done'}, 'owner')
+
+    def joins(self, intent, title, summary='s'):
+        tid, mid1 = self.tid, self.mid1
+        return lambda system, user, **k: json.dumps({'intent': intent, 'why': 'scripted', 'title': title, 'summary': summary,
+                                                       'relationship': 'answers', 'related_message_ids': [mid1], 'existing_task_id': tid,
+                                                       'same_problem': True, **({'kind': 'task'} if intent == 'task' else {})})
+
+    def test_a_reply_on_a_closed_ask_is_kept_on_it_and_it_stays_closed(self):
+        back = self.chat('t2', 'sure, tomorrow morning works', self.joins('reply_only', 'Erin agrees to tomorrow morning'))
+        self.assertEqual((back['status'], back['task_id']), ('filed', self.tid))
+        t = self.s.get_task(self.tid)
+        self.assertEqual((t['Status'], t['Title']), ('done', 'Send Erin the August statement'))
+        self.assertIn('stays closed', self.s.message_routes(back['message_id'])[-1]['Reason'])
+        self.assertFalse(self.s.pending_review(self.tid))                     # nothing drafted for a task that is not back
+
+    def test_new_work_on_a_closed_ask_reopens_it_and_says_what_is_asked_now(self):
+        back = self.chat('t2', 'and the September one too please', self.joins('task', 'Send Erin the September statement',
+                                                                              'Erin also needs the September statement.'))
+        self.assertEqual((back['status'], back['task_id']), ('attached', self.tid))
+        t = self.s.get_task(self.tid)
+        self.assertEqual((t['Status'], t['Title'], t['Summary']), ('open', 'Send Erin the September statement', 'Erin also needs the September statement.'))
+        self.assertEqual(len(self.s.list_tasks()), 1)
+
+    def test_a_same_as_reply_on_a_closed_task_stays_closed_too(self):
+        r = mail(self.s, 'm2', brain('reply_only', same_as=self.tid, title='Erin asks if it went out'), conv='other')
+        self.assertEqual((r['status'], r['task_id']), ('filed', self.tid))
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
 
 
 class OwnChannelRepeatTests(unittest.TestCase):

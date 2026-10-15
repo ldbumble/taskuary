@@ -737,13 +737,19 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 return {'status': 'error', 'task_id': tid, 'message_id': mid}
         # the follow-up's own twelve words, like a new message's - an attached row read its raw subject (X2)
         if follow and follow.get('title'): msg['_title'] = str(follow['title']).strip()[:140] or None
-        if follow and follow.get('intent') == 'fyi' and not follow.get('degraded'):
+        # A CLOSED TASK COMES BACK ONLY WITH NEW WORK (the owner, 2026-10-15: "it should update the task description if something
+        # new was added to task, if not and it was just comment don't reopen this"). A Teams "sure" to a meeting time and a WhatsApp
+        # "Ok. Monday 2 pm?" each reopened the day's closed task - triage read both as reply_only, an answer and not work. Its own
+        # intent says which: a task reopens it under the new ask (_retitle, below); a reply or a comment is kept on it, still closed.
+        kept = bool(r.get('reopen') and follow and follow.get('intent') != 'task')
+        if follow and (follow.get('intent') == 'fyi' or kept) and not follow.get('degraded'):
             mid = _land(store, msg, tid, 'filed')
-            store.add_route(mid, tid, 'attach', r.get('score'),
-                            f"triage: fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain", [], 'triage',
-                            verdict=_stored_verdict(follow))
-            store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - fyi, nothing to do")
-            logger.info(f"ingest: filed onto {task_ref(tid)} as fyi - {msg.get('subject') or ''}")
+            said = (f"{follow.get('intent')} on {task_ref(tid)}, which is closed - nothing new to do on it, so it stays closed" if kept
+                    else f"fyi - {follow.get('why') or 'nothing to do'} · kept on {task_ref(tid)} for the chain")
+            store.add_route(mid, tid, 'attach', r.get('score'), f"triage: {said}", [], 'triage', verdict=_stored_verdict(follow))
+            store.add_comment(tid, actor, 'agent', f"New {msg.get('channel')} from {msg.get('from_email') or 'unknown'}: {msg.get('subject') or ''} - "
+                              + ('no new work, it stays closed' if kept else 'fyi, nothing to do'))
+            logger.info(f"ingest: filed onto {task_ref(tid)} as {'a reply on a closed task' if kept else 'fyi'} - {msg.get('subject') or ''}")
             # nothing for the owner, but the answer the waiting agent asked for all the same - it was typed in when a
             # busy thread skipped triage, and judging it must not strand the agent (B6, 2026-10-11)
             if talking: _hand_to_agent(store, cfg, tid, msg, actor)
@@ -1194,8 +1200,11 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str) -> bool:
     summary for it, and the task takes them; the old title is kept in a note. Only a task this same channel made: a task the
     owner wrote, a goal, a workflow run or a report keeps the name it was given."""
     title, summary = ' '.join(str(intent.get('title') or '').split())[:120], ' '.join(str(intent.get('summary') or '').split())
-    if not title or title == t.get('Title') or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
+    if not title or str(t.get('Source') or '') != str(msg.get('channel') or ''): return False
     if 'goal' in str(t.get('Tags') or '').split(): return False
+    if title == t.get('Title'):
+        if summary and summary != t.get('Summary'): store.update_task(t['TaskId'], {'Summary': summary}, actor)
+        return False
     store.update_task(t['TaskId'], {'Title': title, **({'Summary': summary} if summary else {})}, actor)
     store.add_comment(t['TaskId'], actor, 'agent', f"Now about: {title} (was: {t.get('Title') or 'untitled'})")
     return True
@@ -1207,9 +1216,11 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     t = store.get_task(tid) or {}
     closed = t.get('Status') == 'done'
     ref = task_ref(tid)
-    if intent.get('intent') == 'fyi':
+    # a closed task comes back only with new work (see ingest_message): a reply or a comment on it is kept, and it stays closed
+    if intent.get('intent') == 'fyi' or (closed and intent.get('intent') != 'task'):
         mid = _land(store, msg, tid, 'filed')
-        store.add_route(mid, tid, 'attach', 1.0, f"triage: fyi, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it" + notes_note,
+        store.add_route(mid, tid, 'attach', 1.0, f"triage: {intent.get('intent')}, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it"
+                        + (', which stays closed' if closed else '') + notes_note,
                         [], 'triage', verdict=_stored_verdict(intent))
         store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same, nothing new")
         logger.info(f"ingest: the same as {ref}, fyi - filed on it")
@@ -1241,21 +1252,23 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
     the box waits for their close. The verdict, `serves` with it, rides on the route - store.step_arrivals reads it back."""
     step = next((x for x in store.goal_steps(sv['task']) if x['id'] == sv['step']), None)
     tid, ref, k = (step or {}).get('tid') or sv['task'], task_ref(sv['task']), [x['id'] for x in store.goal_steps(sv['task'])].index(sv['step']) + 1
-    work = intent.get('intent') != 'fyi'
+    # a finished step comes back only with new work for it; a reply or a comment is kept on it (see ingest_message)
+    shut = tid != sv['task'] and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped')
+    work = intent.get('intent') == 'task' if shut else intent.get('intent') != 'fyi'
     mid = _land(store, msg, tid, 'routed' if work else 'filed')
     # ...and what same_as does for the task it joins (the review, 2026-10-12): the sender's escalation, triage's urgency, and - on the
     # step's own task only - the day it names; a step's day never moves the goal's date. A follow-up on a finished step reopens it.
     if (pol or {}).get('action') == 'escalate': _escalate(store, tid, pol, actor)
     elif intent.get('urgent'): _mark_urgent(store, tid, intent, actor)
     if intent.get('due') and tid != sv['task']: remind.set_due(store, tid, intent['due'], actor)
-    if work and tid != sv['task'] and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): _reopen(store, tid, msg, actor)
+    if work and shut: _reopen(store, tid, msg, actor)
     if work and tid != sv['task'] and intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
     store.add_route(mid, tid, 'attach', 1.0, f"triage: serves step {k} of {ref} - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"From {msg.get('from_name') or msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''}"
                       f" - it serves step {k}, \"{(step or {}).get('text', '')}\"")
     if sv.get('done') and step and not step.get('tid') and not step.get('done'): store.tick_checklist_item(sv['task'], sv['step'], True, 'triage')
-    if intent.get('intent') == 'reply_only' and not store.pending_review(tid):
+    if work and intent.get('intent') == 'reply_only' and not store.pending_review(tid):
         from .outbound import send_block
         unsendable = send_block(store, msg.get('channel'))
         rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
@@ -1264,7 +1277,7 @@ def _serve_step(store, msg: dict, sv: dict, intent: dict, actor: str, notes_note
     from . import advisor
     advisor.notice(store, 'message.attached', 'task', sv['task'])
     logger.info(f"ingest: serves step {k} of {ref}")
-    return {'status': 'filed' if intent.get('intent') == 'fyi' else 'routed', 'task_id': tid, 'message_id': mid}
+    return {'status': 'routed' if work else 'filed', 'task_id': tid, 'message_id': mid}
 
 
 def identity_route(store, msg: dict) -> dict:
@@ -1299,7 +1312,7 @@ def identity_route(store, msg: dict) -> dict:
                 'reason': f"a new run of the report behind {task_ref(home)}, which was closed - judged on its own, same_as decides"}
     if t.get('Status') == 'done':
         return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reopen': True,
-                'reason': f"same conversation thread as {task_ref(home)}, which was closed - it reopens if this needs you"}
+                'reason': f"same conversation thread as {task_ref(home)}, which was closed - it reopens only if this is new work for it"}
     return {'decision': 'attach', 'task_id': home, 'score': 1.0, 'candidates': [], 'reason': 'attached: same conversation thread'}
 
 
@@ -1583,17 +1596,17 @@ def _joinable_task(store, tid):
 
 
 def _reopen(store, tid, msg: dict, actor: str) -> bool:
-    """A line on a closed task's thread that needs the owner puts the task back in front of them (the owner,
-    2026-09-25). Said on the task, so the history reads why it came back."""
+    """New work on a closed task's thread puts the task back in front of the owner (2026-09-25; only NEW work since
+    2026-10-15 - a reply or a comment is kept on it). Said on the task, so the history reads why it came back."""
     t = store.get_task(tid) or {}
     if t.get('Status') != 'done': return False
     store.update_task(tid, {'Status': 'open'}, actor)
     from . import selfclose
     selfclose.forget(tid)
     who = msg.get('from_name') or msg.get('from_email') or 'someone'
-    store.add_comment(tid, actor, 'agent', f"Reopened - {who} wrote again and it needs you: {msg.get('subject') or (msg.get('body') or '')[:80]}")
-    store.audit('task', tid, 'reopen', actor, 'agent', {'why': 'a new line on its thread needs the owner'})
-    logger.info(f"ingest: {task_ref(tid)} reopened - a new line on its thread needs the owner")
+    store.add_comment(tid, actor, 'agent', f"Reopened - {who} asked for something new: {msg.get('subject') or (msg.get('body') or '')[:80]}")
+    store.audit('task', tid, 'reopen', actor, 'agent', {'why': 'new work on its thread'})
+    logger.info(f"ingest: {task_ref(tid)} reopened - new work on its thread")
     return True
 
 
@@ -1638,7 +1651,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
         closed = (store.get_task(target) or {}).get('Status') == 'done'
         return ({'decision': 'attach', 'task_id': target, 'score': 1.0, 'candidates': [], 'reopen': closed,
                  'reason': f'{rel} the ask on {task_ref(target)} (same chat, same day)'
-                           + (' - it was closed, and reopens if this needs you' if closed else '')}, (intent, fail))
+                           + (' - it was closed, and reopens only if this is new work for it' if closed else '')}, (intent, fail))
     why = ('a separate ask in the same chat' if rel == 'new' else
            'uncertain whether it continues an ask in this chat - not joined on a guess')
     return ({'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [], 'reason': why + apart}, (intent, fail))

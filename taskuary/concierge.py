@@ -105,7 +105,8 @@ CHIPS ={'review': ('approve', 'redraft', 'close', 'defer', 'not_ours', 'next'), 
          'report': ('mine', 'regular_agent', 'next'), 'agentdone': ('close', 'reply', 'next'),
          'wrapup': ('close', 'next'), 'idea': ('mine', 'regular_agent', 'not_ours', 'defer', 'next'), 'task': ('close', 'defer', 'next'),
          'asked': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
-         'todo': ('reply', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
+         # a to-do with a task behind it (a promise you made in a chat) is closed here too - Next only read it (2026-10-15)
+         'todo': ('reply', 'close', 'mine', 'regular_agent', 'defer', 'not_ours', 'next'),
          # an fyi can become WORK too: "make this job stop emailing me" arrived as a notification (2026-09-24)
          'fyi': ('mine', 'regular_agent', 'not_ours', 'next'),
          # the handful carries its own "All read, next" button (2026-09-14) and nothing else

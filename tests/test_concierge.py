@@ -792,6 +792,16 @@ class ClosingTests(unittest.TestCase):
         self.assertIsNone(s.get_settings().get('assistant_dock_task_id') or None, 'no chat was opened to say it in')
         self.assertEqual(last_receipt(s), '')
 
+    def test_a_todo_with_a_task_behind_it_offers_mark_done(self):
+        """A promise made in a chat is a to-do on your list; its card offered Send to agent, Remind me and Next, and Next
+        read as done - the owner walked past two promises believing they were closed (2026-10-15)."""
+        s = store()
+        t = s.create_task({'Title': 'Run the tests', 'Kind': 'task', 'Status': 'open', 'Source': 'whatsapp'}, 'promise')
+        verbs = lambda item: [c['verb'] for c in concierge.chips_for(s, item)]
+        self.assertEqual(verbs({'key': 'k', 'kind': 'todo', 'lane': 'yours', 'tid': t, 'ref': f'TQ-{t:04d}'}),
+                         ['close', 'regular_agent', 'defer', 'next'])
+        self.assertNotIn('close', verbs({'key': 'k', 'kind': 'todo', 'lane': 'yours', 'mid': 5}))   # no task yet: nothing to mark done
+
     def test_closing_dismisses_a_draft_that_was_still_waiting(self):
         s = store()
         t, m, r = drafted(s)

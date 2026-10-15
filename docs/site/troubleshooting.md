@@ -139,6 +139,27 @@ altered" is not, and it names the rows.
 
 Under Docker, all of it is `/data` inside the container. `TASKUARY_HOME` moves it anywhere.
 
+## Report a bug
+
+Every error the Assistant shows, and every failing item under the bell, has a small **Report this
+bug** link. The Help icon in the top bar opens the same popup when nothing failed but something is
+wrong.
+
+The popup is already filled in: a title, two or three sentences on what happened, and a collapsed
+**Technical details** section - where it happened, the error, the Taskuary version, your OS, which
+kinds of AI and connections are on, and the log lines around the error. You can edit all of it.
+
+- **Scrubbed before you see it.** Email addresses, names, task titles, message text, repository
+  names, server names and paths under your user folder are replaced with `[removed]`. If the report
+  cannot be made safe, the popup says so and offers only to copy the error.
+- **A screenshot is off by default.** Tick it and the Taskuary window is captured with every word
+  blurred; it goes on your clipboard to paste into the issue.
+- **Send opens GitHub's new-issue page with everything filled in.** You press Submit there - no
+  GitHub account is connected to Taskuary for this. If the report is too long for the link, the full
+  text is on your clipboard to paste.
+
+It goes to a public page: read it before you submit.
+
 ## Still wrong
 
 - The live API reference at `/api/docs` shows exactly what the app exposes, and is the fastest way

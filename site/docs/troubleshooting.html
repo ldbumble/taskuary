@@ -97,7 +97,7 @@
 <div class="entry on">
       <a class="page" href="./troubleshooting" aria-current="page">When something is wrong</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide When something is wrong's sections"></button>
-      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
+      <div class="secs"><a class="sec" href="#it-will-not-start" data-sec="it-will-not-start">It will not start</a><a class="sec" href="#a-connection-stopped" data-sec="a-connection-stopped">A connection stopped</a><a class="sec" href="#triage-got-it-wrong" data-sec="triage-got-it-wrong">Triage got it wrong</a><a class="sec" href="#a-reply-has-no-confirmed-delivery" data-sec="a-reply-has-no-confirmed-delivery">A reply has no confirmed delivery</a><a class="sec" href="#an-agent-is-stuck" data-sec="an-agent-is-stuck">An agent is stuck</a><a class="sec" href="#a-report-returned-nothing" data-sec="a-report-returned-nothing">A report returned nothing</a><a class="sec" href="#reading-the-audit-log" data-sec="reading-the-audit-log">Reading the audit log</a><a class="sec" href="#where-the-logs-are" data-sec="where-the-logs-are">Where the logs are</a><a class="sec" href="#report-a-bug" data-sec="report-a-bug">Report a bug</a><a class="sec" href="#still-wrong" data-sec="still-wrong">Still wrong</a></div>
     </div>
     </nav>
     <p class="note">Everything here is stored on your own machine, in the same SQLite file as your tasks.</p>
@@ -263,6 +263,24 @@ altered&quot; is not, and it names the rows.</p>
 </tr>
 </tbody></table>
 <p>Under Docker, all of it is <code>/data</code> inside the container. <code>TASKUARY_HOME</code> moves it anywhere.</p>
+<h2 id="report-a-bug">Report a bug<a class="anchor" href="#report-a-bug" aria-label="Link to this section">#</a></h2>
+<p>Every error the Assistant shows, and every failing item under the bell, has a small <strong>Report this
+bug</strong> link. The Help icon in the top bar opens the same popup when nothing failed but something is
+wrong.</p>
+<p>The popup is already filled in: a title, two or three sentences on what happened, and a collapsed
+<strong>Technical details</strong> section - where it happened, the error, the Taskuary version, your OS, which
+kinds of AI and connections are on, and the log lines around the error. You can edit all of it.</p>
+<ul>
+<li><strong>Scrubbed before you see it.</strong> Email addresses, names, task titles, message text, repository
+names, server names and paths under your user folder are replaced with <code>[removed]</code>. If the report
+cannot be made safe, the popup says so and offers only to copy the error.</li>
+<li><strong>A screenshot is off by default.</strong> Tick it and the Taskuary window is captured with every word
+blurred; it goes on your clipboard to paste into the issue.</li>
+<li><strong>Send opens GitHub&#39;s new-issue page with everything filled in.</strong> You press Submit there - no
+GitHub account is connected to Taskuary for this. If the report is too long for the link, the full
+text is on your clipboard to paste.</li>
+</ul>
+<p>It goes to a public page: read it before you submit.</p>
 <h2 id="still-wrong">Still wrong<a class="anchor" href="#still-wrong" aria-label="Link to this section">#</a></h2>
 <ul>
 <li>The live API reference at <code>/api/docs</code> shows exactly what the app exposes, and is the fastest way

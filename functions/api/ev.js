@@ -50,8 +50,9 @@ export async function onRequestGet({ request, env }) {
   // ever queried them, so "who is reaching us" was the one question the dashboard could not
   // answer while already holding the answer (2026-09-22). Each bucket counts SESSIONS, not rows:
   // by rows, one visitor who clicked a lot looks like a crowd.
-  const [visits, kinds, what, depth, pages, refs, countries] = await Promise.all([
-    q(`SELECT substr(At,1,10) d, COUNT(DISTINCT Sid) sessions, COUNT(*) events
+  const [visits, kinds, what, depth, pages, refs, countries, paths] = await Promise.all([
+    q(`SELECT substr(At,1,10) d, COUNT(DISTINCT Sid) sessions, COUNT(*) events,
+              SUM(Kind='cta' AND What='download') downloads
        FROM ev WHERE At>=? GROUP BY d ORDER BY d`),
     q(`SELECT Kind, COUNT(*) n FROM ev WHERE At>=? GROUP BY Kind ORDER BY n DESC`),
     q(`SELECT Kind, What, COUNT(*) n FROM ev WHERE At>=? AND What<>'' GROUP BY Kind, What
@@ -70,6 +71,11 @@ export async function onRequestGet({ request, env }) {
        FROM ev WHERE At>=? GROUP BY src ORDER BY sessions DESC LIMIT 25`),
     q(`SELECT CASE WHEN Country='' THEN '??' ELSE Country END country, COUNT(DISTINCT Sid) sessions
        FROM ev WHERE At>=? GROUP BY country ORDER BY sessions DESC LIMIT 25`),
+    // which door each tab came in by: the site, the demo straight from a shared link, or both - without it "Visitors"
+    // (every tab) and "visited the site" (landing tabs only) read as two answers to one question (2026-10-15)
+    q(`SELECT CASE WHEN l AND dm THEN 'both' WHEN l THEN 'site' WHEN dm THEN 'demo' ELSE 'other' END path, COUNT(*) sessions
+       FROM (SELECT Sid, MAX(Page='' OR Page='/') l, MAX(Page LIKE '/demo%') dm FROM ev WHERE At>=? GROUP BY Sid)
+       GROUP BY path`),
   ]);
-  return statsJson({ days, visits, kinds, what, depth, pages, refs, countries });
+  return statsJson({ days, visits, kinds, what, depth, pages, refs, countries, paths });
 }

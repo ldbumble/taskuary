@@ -37,13 +37,13 @@ test("a read forwards to the configured Durable Object", async () => {
   assert.equal(objectName, "taskuary.com");
   assert.equal(forwarded, "https://taskuary.com/api/ev?days=30");
   assert.equal((await response.json()).days, 30);
-  assert.equal(backing.counts.reads, 7);
+  assert.equal(backing.counts.reads, 8);
 });
 
 test("the Durable Object reads and records with no configuration at all", async () => {
   const backing = storage(), object = new StatsStore(backing.ctx);
   assert.equal((await object.fetch(new Request("https://taskuary.com/api/ev"))).status, 200);
-  assert.equal(backing.counts.reads, 7);
+  assert.equal(backing.counts.reads, 8);
   const beacon = await object.fetch(new Request("https://taskuary.com/api/ev", {
     method: "POST", body: JSON.stringify({ sid: "invented-session", events: [{ kind: "open" }] }),
   }));
@@ -55,7 +55,7 @@ test("the compatibility D1 binding is read the same way", async () => {
   let reads = 0;
   const DEMO_EVENTS = { prepare: () => ({ bind() { return this; }, all: async () => { reads++; return { results: [] }; } }) };
   assert.equal((await worker.fetch(new Request("https://taskuary.com/api/ev"), { ASSETS: assets, DEMO_EVENTS })).status, 200);
-  assert.equal(reads, 7);
+  assert.equal(reads, 8);
 });
 
 test("everything outside the API stays a static asset and unsupported methods fail", async () => {

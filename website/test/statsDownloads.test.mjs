@@ -8,10 +8,10 @@ import fs from "node:fs";
 
 const page = fs.readFileSync(new URL("../../site/stats.html", import.meta.url), "utf8");
 
-test("the first card is the downloads, read from the cta/download events", () => {
-  const kpis = page.slice(page.indexOf(`'<div class="kpis">'`));
-  const first = kpis.slice(0, kpis.indexOf(`'<div class="kpi">`));
-  assert.match(first, /Downloads/);
+test("downloads lead, in the band above every other number, read from the cta/download events", () => {
+  const band = page.indexOf(`'<section class="band">`);
+  assert.ok(band > -1 && band < page.indexOf(`'<div class="kpis">'`));
+  assert.match(page.slice(band, band + 200), /Downloads/);
   assert.match(page, /var downloads = what\(d, 'cta', 'download'\)/);
   assert.match(page, /x\.Kind === kind && \(name == null \|\| x\.What === name\)/);
 });
@@ -26,6 +26,13 @@ test("the dashboard speaks plainly: no collector words as labels", () => {
   for (const label of ["Opened a task", "Pressed a button in the app", "How long people stayed", "Where visitors come from"])
     assert.ok(page.includes(label), label);
   assert.doesNotMatch(page, /<h2>What they did<\/h2>|<h2>Which ones<\/h2>/);
+});
+
+test("visitors are split by the door they came in, so the site's count and the total never read as two answers", () => {
+  assert.match(page, /How visitors came in/);
+  for (const door of ["Only the site", "The site, then the demo", "Straight to the demo"]) assert.ok(page.includes(door), door);
+  assert.match(page, /var visitors = d\.paths \? sum\(d\.paths/);
+  assert.doesNotMatch(page, /From visit to download/);             // not a funnel: each next step is its own choice
 });
 
 test("the landing page counts a visit once, under the demo's own tab id", () => {

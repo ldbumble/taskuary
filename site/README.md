@@ -55,8 +55,9 @@ There is no database id or manual database binding to configure. A fork that alr
 Reading the stats is public, like collecting them: `/stats` and `GET /api/ev` need no login. The counts
 are of anonymous tab sessions; nothing in them names a person.
 
-Read it at **`https://taskuary.com/stats.html`** - a dashboard in plain words: downloads, visitors (and the week-on-week
-change), who tried the demo and who stayed a minute, visitors per day, the path from visit to download, where visitors came
+Read it at **`https://taskuary.com/stats.html`** - a dashboard in plain words: downloads first (with
+downloads per day), visitors (and the week-on-week change), who tried the demo and who stayed a minute, how visitors came in
+(the site, the site then the demo, or straight to the demo), visitors per day, what site visitors did next, where visitors came
 from, countries, what demo visitors did and how long people stayed. The page is not linked from the site and has no data of
 its own; it reads `/api/ev`. The landing page and the demo share one tab id (`tq_demo_sid`), so a visit that goes on into the
 demo is one visitor - before 2026-10-15 the landing page ran two counters and every visit counted twice.

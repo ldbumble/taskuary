@@ -86,5 +86,8 @@ def test_a_stranger_writing_after_raise_to_owner_lowers_it_again():
 def test_a_chat_line_is_trusted_unless_the_owner_turned_chat_trust_off():
     s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'teams'}, 'router')
     s.add_message({'TaskId': t, 'Channel': 'teams', 'SourceName': 'room', 'FromName': 'Erin Blake', 'BodyText': 'y', 'Status': 'routed'})
+    assert origin.of_task(s, t)[0] == 'stranger'                     # a room is not a person: talked with one-to-one first
+    s.add_message({'Channel': 'teams', 'ConversationId': 'teams:dm', 'FromName': 'Erin Blake', 'BodyText': 'y', 'Status': 'routed'})
+    s.add_message({'Channel': 'teams', 'ConversationId': 'teams:dm', 'FromName': 'Alex Doyle', 'BodyText': 'y', 'Status': 'context', 'Direction': 'out'})
     assert origin.of_task(s, t)[0] == 'trusted'
     s.set_setting('trust_non_email', '0', 't'); assert origin.of_task(s, t)[0] == 'stranger'

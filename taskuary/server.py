@@ -3777,6 +3777,8 @@ def release_task(task_id: int, body: ReleaseBody, background: BackgroundTasks):
     store.add_comment(task_id, ACTOR, 'human', 'Released to the agent - you vouched for this sender.')
     m = next((m for m in store.list_messages(task_id) if m.get('Channel') == 'email' and m.get('Direction') != 'out'), None)
     if m: store.remember_trust(m.get('SourceName'), m.get('FromEmail'), 'released by the owner')
+    from . import senders
+    senders.vouch(store, store.list_messages(task_id))
     store.audit('task', task_id, 'release', ACTOR)
     from . import general, ingest as _ing
     if general.handles(store.get_task(task_id)):

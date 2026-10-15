@@ -346,12 +346,12 @@
           "help": "Verified Sent Items evidence: this mailbox has sent that exact address something before."
         },
         "trust_non_email": {
-          "label": "chat channels",
-          "help": "Teams, Slack, WhatsApp and the rest - a chat channel you connected is a room you chose."
+          "label": "people you talk with in chats",
+          "help": "Someone you have talked with one-to-one in that chat app, or vouched for - not everyone in a group you joined. Off, only your own words count."
         }
       },
       "desc": "An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.",
-      "help": "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\nchat channels — Teams, Slack, Telegram, WhatsApp, iMessage, Discord.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start."
+      "help": "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\npeople you talk with in chats — in Teams, Slack, Telegram, WhatsApp, iMessage or Discord, someone you have talked with one-to-one there, or vouched for by releasing or trusting their task. A group chat is not a room of people you trust.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start."
     },
     "coder_context_file": {
       "group": "Coder agent",

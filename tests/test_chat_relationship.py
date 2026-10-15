@@ -189,6 +189,7 @@ class FactsStillDecideTests(unittest.TestCase):
 
     def test_the_task_owners_answer_is_typed_into_the_live_session(self):
         self._live(); self.s.set_setting('answer_to_agent', 'auto', 't')
+        self.s.remember_trust('whatsapp', 'tess', 'you vouched for them')   # a group member's words reach a full session only once trusted
         from taskuary import terminal
         with mock.patch.object(terminal, 'say_to_task', return_value=True) as say:
             out = line(self.s, 'yes, the production one', f'{TODAY} 17:10:00', verdict(relationship='new'))

@@ -22,8 +22,10 @@ def of_message(store, row: dict) -> tuple:
         from .batch import outside_row
         return ('stranger', 'a public repository, by someone without write access') if outside_row(store, row) \
             else ('trusted', 'a member of the repository')
-    ok, why = senders.known(store, {'channel': ch, 'from_email': row.get('FromEmail'), 'source_name': row.get('SourceName')},
-                            exclude_mid=row.get('MessageId'))
+    # the whole person, so a chat sender is judged as one (senders._chat_known); their own line is never the owner's talk
+    ok, why = senders.known(store, {'channel': ch, 'from_email': row.get('FromEmail'), 'from_name': row.get('FromName'),
+                                    'source_name': row.get('SourceName'), 'conversation_id': row.get('ConversationId'),
+                                    'direction': row.get('Direction'), 'status': row.get('Status')}, exclude_mid=row.get('MessageId'))
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor
@@ -53,7 +55,8 @@ def of_task(store, tid: int) -> tuple:
 def raise_to(store, tid: int, to: str, actor: str):
     "The owner's say-so: everything on the task so far counts as `to`. A later message is judged on its own."
     if to not in ('trusted', 'owner'): raise ValueError(f'cannot raise a task to {to!r}')
-    last = max((m['MessageId'] for m in store.list_messages(tid)), default=0)
+    ms = store.list_messages(tid); last = max((m['MessageId'] for m in ms), default=0)
+    senders.vouch(store, ms)          # a chat sender the owner vouched for here is trusted on their next task too
     store.update_task(tid, {'TrustedThrough': last, 'OriginBase': 'owner' if 'owner' in (to, (store.get_task(tid) or {}).get('OriginBase')) else to}, actor)
     store.audit('task', tid, 'origin_raised', actor, detail={'to': to, 'through': last})
     of_task(store, tid)

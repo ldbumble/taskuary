@@ -45,7 +45,7 @@ def own_addresses(store) -> set:
 
 def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
-    to PW-081): a chat channel inside a workspace the owner controls; the owner's own domains; and
+    to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and
     verified SENT evidence that THIS mailbox wrote to the exact address - what the store already
     holds, a hit remembered from an earlier lookup, and (deep) the mail server's own Sent Items,
     asked once per address. Prior incoming mail is never trust: a stranger's second message is a
@@ -54,7 +54,11 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     on = lambda k: cfg.get(k, '1') == '1'
     from .store import OWN_CHANNELS
     if msg.get('channel') in OWN_CHANNELS: return True, "Taskuary's own report"          # X3: never "a chat you control"
-    if (msg.get('channel') or '') != 'email':
+    ch = msg.get('channel') or ''
+    from .ingest import CHAT_CHANNELS
+    if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'))
+    # a tracker, an alert or the local API is a workspace item, not a room of people - and GitHub has its own gate (GH_AUTO)
+    if ch != 'email':
         return (True, 'a chat inside a workspace you control') if on('trust_non_email') else \
                (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')
     addr = (msg.get('from_email') or '').strip().lower()
@@ -78,6 +82,38 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
             store.remember_trust(mailbox, addr, 'in your Sent Items')
             return True, 'in your Sent Items'
     return False, f'first message from {addr}'
+
+
+def chat_key(msg: dict) -> str:
+    "ingest._who's key for a chat sender, from a DB row or an ingest dict: their address or chat id, else their name."
+    return str(msg.get('FromEmail') or msg.get('from_email') or msg.get('FromName') or msg.get('from_name') or '').strip().lower()
+
+
+def _is_own(msg: dict) -> bool:
+    "The owner's own line as channels.ingest_own_message stores it (X1): set by code. A display name of 'You' is anyone's."
+    return (msg.get('Direction') or msg.get('direction')) == 'out' or (msg.get('Status') or msg.get('status')) == 'context'
+
+
+def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
+    """A chat is trusted per PERSON, not per room: anyone in a connected group chat could start an agent with full
+    permissions. The owner's own line; someone the owner has talked with one-to-one in this channel; or someone the
+    owner vouched for (release, Trust this task). Switched off, only the owner."""
+    if _is_own(msg): return True, 'your own words'
+    if not on: return False, 'a chat sender - only you are trusted in chats (Settings)'
+    who = chat_key(msg)
+    if not who: return False, f'a {ch} chat sender nobody can name'
+    if store.trusted_sender(ch, who): return True, 'you vouched for them'
+    if store.talked_one_to_one(ch, who, exclude_mid): return True, f'someone you talk with in {ch}'
+    return False, f'a member of a {ch} chat you have not talked with one-to-one'
+
+
+def vouch(store, rows) -> None:
+    "The owner's say-so for a task's chat senders (release, Trust this task): remembered per channel and person."
+    from .ingest import CHAT_CHANNELS
+    for m in rows:
+        ch = (m.get('Channel') or '').lower()
+        if ch not in CHAT_CHANNELS or _is_own(m): continue
+        if (who := chat_key(m)) and who != 'you': store.remember_trust(ch, who, 'you vouched for them')
 
 
 def wrote_to(store, mailbox: str, addr: str) -> bool:

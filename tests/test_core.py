@@ -161,7 +161,9 @@ class CoreTests(unittest.TestCase):
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=True):
             self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_called_once()
-        # chat senders are already inside a workspace you control: no gate at all
+        # a chat sender the owner has talked with one-to-one in that channel: no Sent Items lookup (test_chat_trust)
+        s.add_message({'Channel': 'teams', 'ConversationId': 'dm-5', 'FromEmail': 'new.colleague@elsewhere.example', 'BodyText': 'hi', 'Status': 'routed'})
+        s.add_message({'Channel': 'teams', 'ConversationId': 'dm-5', 'FromName': 'You', 'BodyText': 'hi', 'Status': 'context', 'Direction': 'out'})
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',
                                                         conversation_id='c5', subject='teams: the exporter', body='e5: exporter fails in jobs/export.py'), llm=CODING_LLM)['status'], 'created')

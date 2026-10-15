@@ -155,7 +155,8 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         out = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': f"telegram:{cid}:{m.get('message_id')}", 'channel': 'telegram',
             'subject': None, 'body': text or '(no text - see the attachment)',
-            'from_name': who, 'from_email': f"@{frm['username']}" if frm.get('username') else None,
+            # a display name anyone can copy is not who they are: no username, the numeric id is the key (senders.chat_key)
+            'from_name': who, 'from_email': f"@{frm['username']}" if frm.get('username') else f"tg:{frm['id']}" if frm.get('id') else None,
             'conversation_id': f'telegram:{cid}',
             'sent_at': datetime.fromtimestamp(m.get('date') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': chat.get('title') or who,

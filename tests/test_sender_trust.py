@@ -78,7 +78,7 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(ok, False); self.assertIn('Settings', why)
         s = store()
         self.assertEqual(senders.known(s, msg(frm='sam@northwind.example'))[1], 'your own domain')
-        self.assertIn('workspace you control', senders.known(s, msg(channel='teams', frm=None))[1])
+        self.assertIn('one-to-one', senders.known(s, msg(channel='teams', frm=None))[1])         # a room is not a person (test_chat_trust)
 
     def test_a_public_mail_domain_is_nobodys_own_domain(self):
         """An owner on gmail.com made every stranger on gmail.com 'your own domain' and let their mail start an agent."""

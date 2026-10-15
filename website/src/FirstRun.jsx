@@ -15,6 +15,8 @@ import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
 import { focusOf, signinUrl } from "./firstRunFocus.js";
 import FirstRunAbout from "./FirstRunAbout.jsx";
+import CanvasBrowse from "./CanvasBrowse.jsx";
+import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
 import { doneOf, frontierOf, navMoves, nextOf, prevOf } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
@@ -77,6 +79,22 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     window.addEventListener("tq-setup-go", on);
     return () => window.removeEventListener("tq-setup-go", on);
   }, [go]);
+  // MORE CONNECTIONS IS THE CONNECTIONS PAGE (its sections, its cards, their own setup), and the Advisor says which to pick from the
+  // survey and the job (firstrun.suggest_connections) - the owner, 2026-10-15: "for other connectors it should show this screen with
+  // advisor suggesting based off of your job what to choose"
+  const [browseSt, setBrowseSt] = useState({}), [connSug, setConnSug] = useState(null);     // {line, picks}
+  useEffect(() => {
+    if (view !== "other" || connSug) return undefined;
+    let on = true;
+    api.post("/api/setup/first-run/suggest-connections", {}, { timeout: 120_000 })
+      .then(({ data }) => on && setConnSug(data || { line: "", picks: [] })).catch(() => on && setConnSug({ line: "", picks: [] }));
+    return () => { on = false; };
+  }, [view, connSug]);
+  const connLine = connSug?.line || "";
+  // what setup says next is the ADVISOR'S line, in its bar over the row (setupLine.js): written every render, cleared on the way out
+  const lineRef = useRef("");
+  useEffect(() => { writeSetupLine(lineRef.current); });
+  useEffect(() => () => writeSetupLine(""), []);
   const prevSt = useRef(null);
   useEffect(() => {
     if (!st) return;
@@ -103,13 +121,18 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     back: { label: "Back", tone: "s", run: () => go(prevOf(view)), title: "The step before" },
     next: { label: "Next", tone: "p", run: () => go(nextOf(view)), title: "The next step" },
     walk: { label: "Walk me through my tasks", tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
-    finish: { label: reopened ? "Back to my day" : "Finish setup", tone: "s", run: finishThen(onFinish),
+    finish: { label: reopened ? "Back to my day" : "Finish setup", tone: "p", run: finishThen(onFinish),
       title: "Setup is done - the canvas shows your day. Setup on the top bar opens this again." },
   };
   // Back takes the row's leading slot (the one Next takes on a card): the row shows two moves of a kind and folds the rest behind a
   // ▾, and Back, Walk and Finish as one kind put Finish setup behind it on the last step
-  useVerbs("setup", nav.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id] })), nav.length > 0);
+  // ...and ADVICE COMES WITH ITS BUTTON (the owner, 2026-10-15: "making buttons available when necessary"): each connection the
+  // Advisor names opens its section on the Connections page below; one Taskuary cannot connect yet gets no button
+  const suggested = view === "other" ? (connSug?.picks || []).filter((x) => !x.planned).slice(0, 3)
+    .map((x) => ({ id: `setup:open:${x.type}`, group: "decide", tone: "s", label: x.title, title: `${x.title} - under ${x.group}`,
+      run: () => setBrowseSt({ section: x.group, open: null }) })) : [];
+  useVerbs("setup", [...nav.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
+    ...VERB[m.id] })), ...suggested], nav.length > 0);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
   useEffect(() => {
     if (!view) return;
@@ -245,6 +268,16 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // processed, moving on or doing it in background as no need to wait")
   const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${st.sorting} email${st.sorting === 1 ? "" : "s"} to go; no need to wait.`
     : " Your mail is being read in the background - no need to wait.") : "";
+  const finishWord = reopened ? "Back to my day" : "Finish setup";
+  lineRef.current = said || err || {
+    ai: fix?.why || (st.step === "ai" ? "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
+      : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch.`),
+    mail: doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
+      : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
+    about: `Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything.${sortingLine}`,
+    other: st.ai_error ? st.next : connSug ? (connLine || "Nothing else is needed - connect more here any time, from Connections.")
+      : "Looking at what you told me about your work to suggest what to connect…",
+  }[q];
   const voice = byType(VOICE_TYPES).map((c) => card(c, true));
   const voiceDue = q === "other" && voice.length
     && conns.some((c) => VOICE_CHATS.includes(c.Type) && c.Active) && !conns.some((c) => VOICE_TYPES.includes(c.Type) && c.Active);
@@ -317,26 +350,10 @@ ${fix.detail || ""}`, screen: "Setup",
   );
   return (
     <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
-      <Ask text={said || err || {
-        ai: fix?.why || (st.step === "ai" ? "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
-          : `Your AI is ${st.brain?.name || "set"}. Click another to switch, or press Next.`),
-        mail: mailIn ? `Your email is connected.${sortingLine} Click another to add it, or press Next.`
-          : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
-        about: `Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything.${sortingLine}`,
-        other: st.ai_error ? st.next : `Any other connection you'd like? All optional.${sortingLine} Press ${reopened ? "Back to my day" : "Finish setup"} when you're done.`,
-      }[q]} />
       {shelf("ai", ai, "More AI")}
       {shelf("mail", mail, "More email")}
       {aboutDue && <FirstRunAbout again={!!st.about_done} onSaved={async () => { await reload(); go("other"); }} />}
-      {shelf("other", other, "More connections")}
-      {/* VOICE NOTES AS TEXT, once a chat that sends them is connected (the owner, 2026-10-15: "offer them voice connector so whatsapp
-          voice will work"): a speech-to-text card of the Connections page's own, Groq first */}
-      {voiceDue && <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 15 }}>Want voice notes as text?</Typography>
-        <Typography sx={{ color: DIM, fontSize: 13 }}>Voice notes from your chats arrive as audio until a speech-to-text service is
-          connected. Groq is free to start; Local Whisper needs no key.</Typography>
-        <Shelf cards={voice} more="More voice" opened={open && `c${open.id}`} detail={detail} onAll={() => setOpen(null)} />
-      </Box>}
+      {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
     </Box>
   );
 }

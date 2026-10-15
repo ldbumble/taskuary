@@ -6130,6 +6130,12 @@ def first_run_about_skip():
     firstrun.skip_about(store)
     return firstrun.state(store)
 
+@app.post('/api/setup/first-run/suggest-connections')
+def first_run_suggest_connections():
+    """What to connect next, from the setup answers and the job - the Advisor's line on More connections."""
+    from . import firstrun
+    return firstrun.suggest_connections(store)
+
 @app.post('/api/setup/first-run/finish')
 def first_run_finish():
     """Finish setup (or Walk me through my tasks): the canvas is the day from now on, until the top bar's Setup reopens it."""

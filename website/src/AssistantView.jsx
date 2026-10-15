@@ -55,6 +55,7 @@ import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink } from "./appLinks.js";
 import FirstRun from "./FirstRun.jsx";
 import SetupSteps from "./SetupSteps.jsx";
+import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
@@ -2232,7 +2233,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
-          {!firstRun && <AdvisorNext advice={shownAdvice} />}
+          {firstRun ? <SetupLine /> : <AdvisorNext advice={shownAdvice} />}
           <ActionRow advised={shownAdvice} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>

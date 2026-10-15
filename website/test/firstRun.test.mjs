@@ -21,7 +21,9 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 // using the advisor ... like what ai do you have? what email do you have? any other connection you would like to setup"
 test("three questions on the Advisor's line, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
-  assert.match(fr, /<Ask text=\{said \|\| err \|\| \{[\s\S]{0,900}other: st\.ai_error \? st\.next/, "the question is said on top, one per step");
+  // the question is the ADVISOR'S line, in its bar over the row (setupLine.js) - one per step, the server's own when the AI is failing
+  assert.match(fr, /lineRef\.current = said \|\| err \|\| \{[\s\S]{0,1200}other: st\.ai_error \? st\.next/, "the question is the Advisor's, one per step");
+  assert.match(fr, /useEffect\(\(\) => \{ writeSetupLine\(lineRef\.current\); \}\);/);
   assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");
   assert.match(fr, /import \{ CardGrid, ChannelDetail, ConnCard, connCardOf \} from "\.\/ConnectorsView\.jsx";/);
   assert.match(cv, /export const ConnCard = /); assert.match(cv, /export const connCardOf = /);

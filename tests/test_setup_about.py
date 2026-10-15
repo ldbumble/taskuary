@@ -80,3 +80,31 @@ class FinishTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class SuggestConnectionsTests(unittest.TestCase):
+    """More connections is the Connections page itself, and the Advisor's line over the row says which to connect, from the survey
+    and the job (the owner, 2026-10-15: "use ai to process their survey questions and then suggest what softwares they use ... advisor
+    is what tells you what to do next always")."""
+    def setUp(self):
+        self.s = MemoryStore()
+        with mock.patch.object(firstrun, '_learn_in_background'):
+            firstrun.save_about(self.s, ANSWERS)
+
+    def test_the_ai_reads_the_answers_and_names_the_cards_and_their_sections(self):
+        def brain(system, user, **kw):
+            brain.user = user
+            return json.dumps({'line': 'You work in Workday and Salesforce - connect those first.', 'picks': ['workday', 'salesforce', 'nosuch']})
+        with mock.patch('taskuary.llm.build_llm', return_value=brain):
+            out = firstrun.suggest_connections(self.s)
+        self.assertIn('Workday', brain.user); self.assertIn('Finance systems lead', brain.user)
+        self.assertEqual(out['line'], 'You work in Workday and Salesforce - connect those first.')
+        self.assertEqual([p['type'] for p in out['picks']], ['workday', 'salesforce'])          # an unknown card is dropped
+        self.assertTrue(all(p['group'] and p['title'] for p in out['picks']))
+
+    def test_with_no_ai_the_systems_ticked_are_matched_to_the_catalogue(self):
+        with mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')):
+            out = firstrun.suggest_connections(self.s)
+        titles = [p['title'] for p in out['picks']]
+        self.assertIn('Workday', titles); self.assertIn('Salesforce', titles)
+        self.assertIn('Workday', out['line'])

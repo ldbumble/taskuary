@@ -41,8 +41,8 @@ export const navMoves = (st, view, reopened = false) => {
     if (reopened) out.push({ id: "finish" });
   }
   else {
+    // Finish setup alone: Walk me through my tasks is the day's own move once setup is finished (the owner, 2026-10-15)
     const ready = requiredDone(st) || reopened;
-    out.push({ id: "walk", disabled: !ready || st.step !== "done", why: !ready ? "AI, email and About your work come first" : "still sorting your mail" });
     out.push({ id: "finish", disabled: !ready, why: ready ? "" : "AI, email and About your work come first" });
   }
   return out;

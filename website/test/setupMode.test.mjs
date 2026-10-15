@@ -27,7 +27,10 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
 
 test("Finish setup and Walk me through my tasks are row verbs, and both finish setup on the server", () => {
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /useVerbs\("setup", nav\.map\(/);
+  assert.match(fr, /useVerbs\("setup", \[\.\.\.nav\.map\(/);
+  // the Advisor's suggestions are buttons too: each connectable one opens its section; never "press Next" in its line
+  assert.match(fr, /id: `setup:open:\$\{x\.type\}`/);
+  assert.doesNotMatch(fr, /or press Next/);
   assert.match(fr, /walk: \{ label: "Walk me through my tasks"/);
   assert.match(fr, /finish: \{ label: reopened \? "Back to my day" : "Finish setup"/);
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/finish"\)/);
@@ -63,7 +66,7 @@ test("Finish is open once AI, email and About your work are done - the rest is o
   assert.equal(navMoves({ step: "reading", about_done: false }, "other").find((m) => m.id === "finish").disabled, true);
 });
 
-test("every step has Back and Next; Next waits for the step to be done; the last step is Walk and Finish", async () => {
+test("every step has Back and Next; Next waits for the step to be done; the last step is Finish setup alone", async () => {
   const { navMoves, frontierOf, nextOf, prevOf } = await import("../src/setupSteps.js");
   const ids = (st, v, r) => navMoves(st, v, r).map((m) => m.id + (m.disabled ? "-" : ""));
   assert.deepEqual(ids({ step: "ai" }, "ai"), ["next-"]);
@@ -71,9 +74,10 @@ test("every step has Back and Next; Next waits for the step to be done; the last
   assert.deepEqual(ids({ step: "email" }, "mail"), ["back", "next-"]);
   assert.deepEqual(ids({ step: "reading", about_done: false }, "mail"), ["back", "next"]);
   assert.deepEqual(ids({ step: "reading", about_done: false }, "about"), ["back", "next-"]);
-  assert.deepEqual(ids({ step: "reading", about_done: true }, "other"), ["back", "walk-", "finish"]);
-  assert.deepEqual(ids({ step: "done", about_done: true }, "other"), ["back", "walk", "finish"]);
-  assert.deepEqual(ids({ step: "reading", about_done: false }, "other"), ["back", "walk-", "finish-"]);
+  // no Walk me through my tasks in setup: it is the day's move once setup is finished (the owner, 2026-10-15)
+  assert.deepEqual(ids({ step: "reading", about_done: true }, "other"), ["back", "finish"]);
+  assert.deepEqual(ids({ step: "done", about_done: true }, "other"), ["back", "finish"]);
+  assert.deepEqual(ids({ step: "reading", about_done: false }, "other"), ["back", "finish-"]);
   assert.deepEqual(ids({ step: "done", about_done: true, dismissed: true }, "mail", true), ["back", "next", "finish"]);
   assert.equal(frontierOf({ step: "email" }), "mail"); assert.equal(frontierOf({ step: "reading", about_done: false }), "about");
   assert.equal(frontierOf({ step: "done", about_done: true }), "other");

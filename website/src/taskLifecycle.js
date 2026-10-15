@@ -38,6 +38,11 @@ export const agentPhase = ({ session, run, transcript, report, conversation, fin
   return handed === false ? null : AGENT.idle;
 };
 
+// A general agent's chat stays open after it answers, so "the session exists" is not "it is working": open and not busy is an
+// answer waiting on you (the owner, 2026-10-15: the heading said "researcher is working" under its finished answer). A pty
+// session has no `busy`, so a coding agent is never read this way.
+export const generalAnswered = (isGeneral, session) => !!(isGeneral && session?.alive && session.busy === false);
+
 // Action proposals (write a playbook, push a branch, close an issue) share the review table
 // with outbound replies, but they are not communication. A proposal is normally queued after
 // the reply, so blindly taking reviews[0] makes its JSON envelope appear as the current draft.

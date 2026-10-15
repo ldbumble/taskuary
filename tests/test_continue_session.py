@@ -19,6 +19,15 @@ class PillTests(unittest.TestCase):
             self.assertEqual(concierge.chips_for(s, item)[0]['label'], 'Continue session', extra)
         self.assertNotIn('continue', [c['verb'] for c in concierge.chips_for(s, {'key': 'k', 'kind': 'todo', 'tid': 7, 'lane': 'yours'})])
 
+    def test_a_general_agent_is_continued_in_its_chat_so_there_is_no_pill(self):
+        """Its card's own chat box is the way on (the owner, 2026-09-29), so the row draws no Continue - and the Advisor, offered
+        one, picked it: its line was hidden as a move the row could not make, and the owner got no next step at all (2026-10-15)."""
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Look into the census dip', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
+        for lane in ('stopped', 'saved'):
+            verbs = [c['verb'] for c in concierge.chips_for(s, {'key': 'k', 'kind': 'todo', 'tid': tid, 'lane': lane})]
+            self.assertNotIn('continue', verbs, lane); self.assertTrue(verbs, 'it still has moves to offer')
+
 
 class OneRoadTests(unittest.TestCase):
     def test_a_regular_agent_resumes_its_conversation_with_the_note_first(self):

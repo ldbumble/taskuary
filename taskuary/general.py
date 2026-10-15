@@ -1017,7 +1017,7 @@ class GeneralSession:
                 # the ask marker is for Taskuary, never for the screen - and a CLI that narrates its
                 # plan puts it in a progress line long before the reply it is stripped from
                 if kind in ('progress', 'live') and isinstance(detail, str):
-                    detail = _sc.without_ask(detail)
+                    detail = _sc.for_screen(detail)
                     if not detail.strip(): return
                 self._remember_trace(kind, name, detail)
                 if trace: trace(kind, name, detail)

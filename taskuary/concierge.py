@@ -743,6 +743,12 @@ def closeout_label(item: dict) -> str:
     return next((CLOSE_WORDS[a] for a, t in CLOSEOUT.items() if t in str(then) and a in CLOSE_WORDS), CLOSE_WORD)
 
 
+def _general(store, item: dict) -> bool:
+    if str(item.get('task_kind') or '').lower() == 'general': return True
+    try: return bool(item.get('tid')) and store is not None and str((store.get_task(int(item['tid'])) or {}).get('Kind') or '').lower() == 'general'
+    except (TypeError, ValueError): return False
+
+
 def chips_for(store, item: dict | None, first: str = None) -> list:
     """The action words to put under the assistant's line: this kind's vocabulary, minus anything this
     particular item cannot actually carry. An offered chip is a chip that works - which is the whole
@@ -760,6 +766,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
     # ...and on FINISHED work it is offered after the card's own close: the session is still there to be asked for more
     elif item.get('kind') == 'agentdone' and item.get('tid') and store is not None and store.resumable_session(item['tid'])             and 'continue' not in verbs: verbs = [v for v in verbs if v != 'next'] + ['continue'] + (['next'] if 'next' in verbs else [])
+    # ...but never on a general agent: its card's own chat box is the way on, so the row draws no Continue (the owner,
+    # 2026-09-29) - and the Advisor, offered one, picked it and its line was hidden as a move the row could not make (2026-10-15)
+    if 'continue' in verbs and _general(store, item): verbs = [v for v in verbs if v != 'continue']
     if first and first in CHIP_WORDS and first != 'next':
         verbs = [first] + [v for v in verbs if v != first]
     out = []

@@ -272,7 +272,10 @@ def reply_marker(text: str) -> tuple:
     """(reply with the markers taken out, the marked reply text) - or (text, None) when it wrote none."""
     m = _REPLY_RE.search(text or '')
     if not m: return text, None
-    said = m.group(1).strip()
+    said, rest = m.group(1).strip(), text[:m.start()] + text[m.end():]
+    # ...said once: an agent that wrote the answer out and then marked the same words had both left on screen (2026-10-15)
+    flat = lambda s: ' '.join(s.split())
+    if said and flat(said) in flat(rest): return rest.strip(), said
     return (text[:m.start()] + said + text[m.end():]).strip(), said or None
 
 
@@ -341,6 +344,12 @@ def without_ask(text: str) -> str:
     into the middle of the agent's thinking - `[[TASKUARY-ASK]] Have you signed in? | Signed in |
     Login failed`, verbatim, on screen (2026-09-15). The question itself is shown as a question."""
     return _ASK_RE.sub('', str(text or '')).rstrip()
+
+
+def for_screen(text: str) -> str:
+    """A progress line as the owner reads it: no ask marker, no attach lines, and no reply block - the reply is shown once, as
+    the answer. A CLI's final text streams in as a progress line too, so the box drew the markers and the answer twice (2026-10-15)."""
+    return attach_markers(_REPLY_RE.sub('', without_ask(text)))[0].strip()
 
 
 _ASK_ONE = re.compile(r'\[\[\s*TASKUARY[-_ ]?ASK\s*\]\]\s*:?', re.I)

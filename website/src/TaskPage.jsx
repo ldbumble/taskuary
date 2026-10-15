@@ -69,7 +69,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails,
-  AGENT, agentPhase, focusStage, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -803,8 +803,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
   const rowState = listRow?.State;
+  const answered = generalAnswered(isGeneral, term);
   const agentState = agentPhase({
-    session: term?.alive ? { ...term, waiting: isWaiting(term) } : null,
+    session: term?.alive ? { ...term, waiting: answered || isWaiting(term) } : null,
     run: liveRun, transcript: detail?.transcript, report,
     conversation: generalStarted, finished: rowState === "agentdone", state: rowState,
     handed: !!assignedAgent(t?.Assignee) || rowState === "queued" || !!detail?.transcript || !!report || generalStarted,
@@ -1588,6 +1589,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
+                      : answered ? `${agentName(t)} answered`
                       : agentState === AGENT.waiting ? says(subState(term), agentName(t))   /* asked, approval, stuck (T6) */
                         : `${agentName(t)} is working`}
                     chip={story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />

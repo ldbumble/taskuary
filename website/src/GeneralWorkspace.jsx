@@ -29,6 +29,7 @@ import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
+import { dropEcho, forScreen } from "./agentMarkers.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -87,7 +88,7 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
   // working" (TQ-0496 - codex exited 1 refusing the model it was configured with). A turn's
   // last word is its record when there is no other.
   const tail = out[out.length - 1];
-  if (tail?.role === "assistant") tail.content = [...parts, ...tail.content];
+  if (tail?.role === "assistant") tail.content = dropEcho([...parts, ...tail.content]);
   else out.push({ id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
   return out;
 };
@@ -154,12 +155,12 @@ const AgentBand = ({ name, provider, work, since }) => {
 const AgentNameCtx = React.createContext("Taskuary");
 
 const AssistantText = ({ text }) => <Md text={text} />;
-const AssistantReasoning = ({ text }) => text ? (
+const AssistantReasoning = ({ text: raw }) => { const text = forScreen(raw); return text ? (
   <details className="tq-aui-progress" open>
     <summary>Agent progress</summary>
     <div>{text}</div>
   </details>
-) : null;
+) : null; };
 const AssistantTool = ({ toolName, args, result, isError }) => {
   const state = isError ? "error" : result === undefined ? "running" : "complete";
   const target = toolTarget(args);
@@ -375,11 +376,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       const tools = new Map();
       const progress = [];
       let structuredSeen = false;
-      const content = (reply) => [
+      const content = (reply) => dropEcho([
         ...tools.values(),
         ...(progress.length ? [{ type: "reasoning", text: progress.join("\n\n") }] : []),
         ...(reply ? [{ type: "text", text: reply }] : []),
-      ];
+      ]);
       // A run that fails has to SAY so, here, under the question. Thrown out of the adapter it
       // is swallowed: the owner sees their own message and nothing after it, which is
       // indistinguishable from an agent that is still thinking (the wall, 2026-08-31). The
@@ -680,11 +681,14 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         const grew = (fresh.messages || []).length !== (data?.messages || []).length;
         const traceChanged = fresh.session?.trace_revision !== data?.session?.trace_revision;
         setData(fresh);
+        // ...and the page's copy too: it held the session the turn STARTED with, so its heading said "is working" under the
+        // finished answer (2026-10-15)
+        onSession?.(fresh.session || null);
         if (grew || traceChanged) setRevision((k) => k + 1);
       } catch { /* it will still be there next tick */ }
     }, 2500);
     return () => { live = false; clearInterval(timer); };
-  }, [busy, task.TaskId, data?.messages]);
+  }, [busy, task.TaskId, data?.messages, onSession]);
   const makeReport = async () => {
     setError(""); setNotice(""); setReportBusy(true);
     try {

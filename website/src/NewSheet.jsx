@@ -101,7 +101,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
       onChange={changed} {...(withPics ? pics.drop : {})}
       placeholder={kind === "goal" ? "the nightly census lands in the new ledger for all three sites, and the old portal's export is switched off"
         : kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
-        : kind === "agent" ? (how === "chat" ? "why did Riverbend's census move four points in July?"
+        : kind === "agent" ? (how === "general" ? "why did Riverbend's census move four points in July?"
           : "work out why the nightly export drops the last facility")
         : "chase the Ashgrove AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
@@ -139,11 +139,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages();
   // agent
-  const { agents, models, kinds, brainList, brainModels } = useAgents();
+  const { agents, models, kinds, brainList, brainModels, generalBrains } = useAgents();
   const [agent, setAgent] = useState("coder");
   const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
-  // "terminal" = a CLI on a keyboard, "chat" = the assistant's own thread. Held here rather
+  const [role, setRole] = useState("");     // a general agent: which profile (researcher, analyst...)
+  const [pick, setPick] = useState("");     // ...and which brain runs it; blank = the General agent setting
+  // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
   const [how, setHow] = useState("terminal");
@@ -158,6 +160,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   useEffect(() => {
     if (agents.length && !agents.includes(agent)) { setAgent(agents[0]); setModel(""); }
   }, [agents, agent]);
+  // a new general task has no profile to keep, so the first general role is chosen rather than "the profile it has"
+  const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
+  useEffect(() => { if (!role && roles.length) setRole(roles.includes("researcher") ? "researcher" : roles[0]); }, [roles, role]);
   useEffect(() => {
     if (!open) return;
     api.get("/api/send-targets").then(({ data }) => {
@@ -186,21 +191,23 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       } else if (kind === "agent") {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
-        const chat = how === "chat";
+        const general = how === "general";
         // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
         // the choice is the task's `repo:` tag, the override that always wins
-        const pickd = chat ? null : repoPick.current?.(about) || null;
-        const plan = planTask(chat ? NO_REPO : pickd?.repo || null, chat ? "live" : "terminal", false, !chat);
+        const pickd = general ? null : repoPick.current?.(about) || null;
+        // a general agent: kind general with no repository, started below like the task page's hand-off - never the
+        // assistant's thread, which does nothing itself (2026-10-15)
+        const plan = planTask(general ? NO_REPO : pickd?.repo || null, general ? "file" : "terminal", false, true);
         const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
           Kind: plan.kind, Tags: plan.tags });
         // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
         api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
         // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
         if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, agent });
-        if (plan.chat) {
-          // nothing to dispatch: the chat opens its own session and asks the question off the tag
-          // planTask put on the task (GeneralWorkspace), which is why the words are not passed as a prop
-          setOk(`${data.ref} — open on Tasks; the assistant already has the question.`);
+        if (general) {
+          const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
+            { kind: "general", agent: role || null, pick: pick || null, model: model || null });
+          setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         } else {
           // WHAT THE ANSWER SAID, not what the button hoped. A task with no checkout comes back
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
@@ -226,11 +233,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, when, by, who, plan, onDone, onOpenTask, pics]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, onDone, onOpenTask, pics]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
-    : kind === "agent" ? (how === "chat" ? "Ask the assistant" : "Start the session") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
+    : kind === "agent" ? (how === "general" ? "Start the agent" : "Start the session") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;
@@ -330,12 +337,23 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Box>
               <Label>Who works it</Label>
               <Box sx={{ display: "flex", gap: 1 }}>
-                <Fork on={how === "terminal"} onClick={() => setHow("terminal")} title="A live session"
+                <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title="A live session"
                   hint="a CLI agent on a keyboard, in a checkout — it edits, runs and reports back." />
-                <Fork on={how === "chat"} onClick={() => setHow("chat")} title="Just talk it through"
-                  hint="the assistant's own thread on the task. Research, plan, decide — no terminal, no repository." />
+                <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title="A general agent"
+                  hint="a researcher, analyst or writer on its own — no repository. It looks things up, drafts and reports back." />
               </Box>
             </Box>
+            {how === "general" && (
+              <Box>
+                <Label>Agent</Label>
+                {/* the task page's hand-off, the same three questions: which profile, which brain, which model */}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
+                  <AgentPicker agents={agents} models={models} kinds={kinds} agent={role} model={model}
+                    generalBrains={generalBrains} pick={pick} onPick={setPick}
+                    onAgent={(a) => { setRole(a); setModel(""); }} onModel={setModel} size={30} />
+                </Box>
+              </Box>
+            )}
             {how === "terminal" && (
               <Box>
                 <Label>Agent</Label>
@@ -357,7 +375,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
         <Box>
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
-            : kind === "agent" ? (how === "chat" ? "What do you want to work out" : "What should it do")
+            : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
             : "What do you want to remember"}</Label>
           <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} />
           {kind === "send" && (

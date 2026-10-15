@@ -65,7 +65,11 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
   assert.equal(focusStage({ kind: "task", task: "open", agent: "agent stopped", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");   // no sender to answer
-  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "sent" }), "task");
+  // finished: the last thing done - the message sent, else the agent's work, else the task
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "sent" }), "reply");
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "not needed" }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "done", agent: "waiting to start", record: true }), "agent");
+  assert.equal(focusStage({ kind: "task", task: "dropped", agent: "waiting to start" }), "task");
   assert.equal(focusStage({}), "task");
 });
 

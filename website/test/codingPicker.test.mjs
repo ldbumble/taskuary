@@ -50,11 +50,13 @@ test("the new-task dialog asks the question it means, and passes the kinds", () 
   assert.match(sheet, /onAgent=\{\(a\) => \{ setAgent\(a\); setModel\(""\); \}\}/);
 });
 
-test("every other picker is untouched - a general worker is still chosen by name", () => {
+test("a general worker is chosen by name alone - the brain is its own picker", () => {
   const ui = read("ui.jsx");
   const picker = ui.slice(ui.indexOf("export const AgentPicker"), ui.indexOf("export const timeAgo"));
-  // without `coding` the list is every worker, labelled name · cli exactly as before
-  assert.match(picker, /\(models\[a\]\?\.cmd \? ` · \$\{models\[a\]\.cmd\}` : ""\)/);
+  // a role no longer carries a brain (the 2026-09-16 spec), so "researcher · claude" named a CLI the run would not use
+  // (the owner, 2026-10-15: "Profile has nothing to do with what brain it uses??")
+  assert.doesNotMatch(picker, /models\[a\]\?\.cmd/);
+  assert.match(picker, /its profile · \$\{has\}/);       // blank names the profile it runs
 });
 
 test("Settings defaults and backups offer coding CLIs rather than profile names", () => {

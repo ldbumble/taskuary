@@ -654,7 +654,7 @@ export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "bra
 
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},
                              coding = false, brains = [], brain = "", onBrain, brainModels = {},
-                             generalBrains = [], pick = "", onPick }) => {
+                             generalBrains = [], pick = "", onPick, has = "" }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
   // to say so; the role is `coder` for every coding task now, so that list would be one entry
@@ -673,19 +673,21 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   const selected = handOff ? value : (list.includes(value) ? value : (list[0] || value));
   const info = (coding ? brainModels[selected] : models[selected]) || {};
   const chosenBrain = generalBrains.find((b) => b.pick === pick) || {};
+  // blank runs the task's own profile - triage's role, else the assistant (general.py) - so it NAMES it. A role no longer
+  // carries a brain (the 2026-09-16 spec): the brain is the next picker's answer, and a stale "· claude" here said otherwise.
+  const hasLabel = has ? `its profile · ${has}` : "the profile it has";
   return (
     <>
       {/* a blank answer SAYS so: closed, the select drew an empty box where "the profile it has" belonged (the 2026-10-07
           design pass) - MUI does not draw an empty value's item unless it is told how */}
       <Select size="small" value={selected || ""} displayEmpty={handOff}
-        renderValue={handOff ? (v) => v || "the profile it has" : undefined}
+        renderValue={handOff ? (v) => v || hasLabel : undefined}
         onChange={(e) => (coding ? onBrain : onAgent)(e.target.value)}
         sx={{ fontSize: 12.5, height: size, bgcolor: "#fff", minWidth: 120 }}>
-        {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>the profile it has</MenuItem>}
+        {handOff && <MenuItem value="" sx={{ fontSize: 12.5 }}>{hasLabel}</MenuItem>}
         {list.map((a) => (
           <MenuItem key={a} value={a} sx={{ fontSize: 12.5 }}>
             {a}{coding && brainModels[a] && brainModels[a].installed === false ? " · not installed" : ""}
-            {!coding && (models[a]?.cmd ? ` · ${models[a].cmd}` : "")}
           </MenuItem>
         ))}
       </Select>

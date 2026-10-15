@@ -146,7 +146,7 @@ export const waitingEmails = (checklist = [], reviews = []) => {
   return (checklist || []).filter((i) => i.out && !i.done && pending.has(i.rid)).length;
 };
 
-export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false } = {}) => {
+export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false, record = false } = {}) => {
   if (reply === READY) return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
@@ -161,7 +161,10 @@ export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agen
   // outlive the task being closed, so it is judged before either of those gates.
   if (proposal) return "reply";
   if (hasSender && kind === "reply" && !["sent", "not needed"].includes(reply)) return "reply";
-  if (["done", "dropped"].includes(task)) return "task";
+  // A FINISHED TASK OPENS ON THE LAST THING DONE (the owner, 2026-10-15: "if finished show the last thing done so either
+  // agent work, or message sent"): the reply that went out, else what the agent did, else the task itself. It opened on the
+  // Task step for every closed task, so a task the agent finished and closed showed its checklist, not what it found.
+  if (["done", "dropped"].includes(task)) return reply === "sent" ? "reply" : record || (agent && agent !== AGENT.idle) ? "agent" : "task";
   // a sender wrote AFTER the agent's last session: the message is the news, the session's record is history (2026-10-12)
   if (news) return "task";
   if (agent && agent !== AGENT.idle) return "agent";

@@ -362,14 +362,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // "the profile it has", and filling it with agents[0] sent `coder` - which the dispatch refuses on a non-coding task (422), so
   // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want coder profile always")
   const generalTask = isGeneralKind(detail?.task?.Kind);
+  // the profile a blank pick runs (general.py: the role triage gave, else the assistant's own)
+  const ownProfile = (agents.includes(assignedAgent(detail?.task?.Assignee)) && assignedAgent(detail?.task?.Assignee)) || (agents.includes("assistant") ? "assistant" : "");
   useEffect(() => {
-    if (agents.length && !agents.includes(run.agent) && !(generalTask && !run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
-  }, [agents, run.agent, generalTask]);
+    // ...and nor is a hand-off's: on a reply or a coding task, "Use non-coding agent" left blank was refilled with the
+    // roster's first role, so a task with no profile showed - and would have started - a researcher (2026-10-15)
+    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff) && !run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
+  }, [agents, run.agent, generalTask, handOff]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
     const task = detail?.task;
     if (!task || task.TaskId !== selected || !agents.length || pickerTask.current === task.TaskId) return;
     pickerTask.current = task.TaskId;
+    setHandOff(false);                  // another task opens on its own question, not the last one's hand-off
     const owned = assignedAgent(task.Assignee);
     // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name
     setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) ? "" : agents[0], model: "" }));
@@ -827,7 +832,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
-    emails: emailsWaiting,
+    emails: emailsWaiting, record: hasRecord,
   })));
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: stage === "agent" && !sessionView, hasRecord });
@@ -1054,17 +1059,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <AgentPicker agents={agents} models={models} kinds={kinds} coding={!handOff}
                           agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
-                          generalBrains={generalBrains} pick={run.pick || ""}
-                          onPick={(p) => setRun({ ...run, pick: p })}
-                          onBrain={(b) => setRun({ ...run, brain: b, model: "" })}
-                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
-                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
+                          generalBrains={generalBrains} pick={run.pick || ""} has={ownProfile}
+                          onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
+                          onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
+                          onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
+                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
                         <Typography variant="caption" sx={{ color: FAINT }}>
                           This run receives the task, messages, attachments, and the latest saved result.
                         </Typography>
                       </Box>
                       <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
-                        onChange={(e) => setRun({ ...run, instruction: e.target.value })}
+                        onChange={(e) => { const v = e.target.value; setRun((r) => ({ ...r, instruction: v })); }}
                         placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : "Extra instructions for this session (optional)"}
                         {...runPics.drop}
                         InputProps={{ endAdornment: (
@@ -1099,14 +1104,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             become the profile, brain and model, and the next press starts it */}
                         {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
-                          onClick={() => setHandOff(true)}>Use non-coding agent</Button>}
+                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Use non-coding agent</Button>}
                         {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
                           {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
                         </Button>}
                         {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
-                          onClick={() => { setHandOff(false); setRun({ ...run, agent: "", pick: "", model: "" }); }}>Back to coding</Button>}
+                          onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
                       </Box>
@@ -1668,10 +1673,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* the same three answers the hand-off asks - this door had none at all */}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
                         <AgentPicker agents={agents} models={models} kinds={kinds} agent={run.agent} model={run.model}
-                          generalBrains={generalBrains} pick={run.pick || ""}
-                          onPick={(p) => setRun({ ...run, pick: p })}
-                          onAgent={(a) => setRun({ ...run, agent: a, model: "" })}
-                          onModel={(m) => setRun({ ...run, model: m })} size={28} />
+                          generalBrains={generalBrains} pick={run.pick || ""} has={ownProfile}
+                          onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
+                          onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
+                          onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
                       </Box>
                       {/* on the canvas the button is the row's (rowVerbs: send-general); the pickers above are what it uses */}
                       {!inRow && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}

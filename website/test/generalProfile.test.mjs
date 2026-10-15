@@ -12,5 +12,6 @@ test("opening a general task picks its own role, or blank - never the roster's f
 });
 
 test("the roster check leaves a general task's blank alone", () => {
-  assert.match(src, /!agents\.includes\(run\.agent\) && !\(generalTask && !run\.agent\)/);
+  // ...and a hand-off's on any task: blank there is "its own profile", not a gap for researcher to fill (2026-10-15)
+  assert.match(src, /!agents\.includes\(run\.agent\) && !\(\(generalTask \|\| handOff\) && !run\.agent\)/);
 });

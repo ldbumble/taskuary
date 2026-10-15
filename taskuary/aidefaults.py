@@ -26,7 +26,8 @@ from . import climodels
 # the reason a coder and a triage brain can be the same agent without fighting over one field.
 SLOTS = [
     {'key': 'triage_ai', 'label': 'Triage brain', 'pick': 'brain', 'gear': 'light',
-     'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file.',
+     'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
+             'Also runs the Advisor and writes what Taskuary remembers.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
     {'key': 'default_agent', 'label': 'Default coding CLI', 'pick': 'agent', 'gear': 'main',
      'desc': 'Works the tasks. Start session, Send to coding agent and auto-dispatch all use this one.',

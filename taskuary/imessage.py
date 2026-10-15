@@ -322,6 +322,7 @@ def normalize_row(row) -> dict | None:
     # is the transport too, so it does not read "<number> in <number>".
     return {'rowid': r['rowid'], 'message_guid': r['message_guid'], 'chat_guid': r['chat_guid'],
             'text': text, 'is_from_me': bool(r.get('is_from_me')), 'handle': handle, 'group': group,
+            'dm': r.get('style') == 45 and not title,          # Messages' own 1:1 style; a chat whose style is unknown is not one
             'chat_title': title or (f'Group {service}' if group else service),
             'sent_at': apple_date(r.get('date')), 'service': service}
 
@@ -399,7 +400,7 @@ def _ingest(store, m, want, llm, file_only, ingest_message, ingest_own_message) 
         'external_id': f"imessage:{m['message_guid']}", 'channel': 'imessage',
         'subject': None, 'body': m['text'], 'from_name': m['handle'] or 'someone',
         'from_email': m['handle'] or None, 'conversation_id': conv, 'sent_at': m['sent_at'],
-        'source_name': m['chat_title']})
+        'source_name': m['chat_title'], **({'mail_meta': {'dm': True}} if m.get('dm') else {})})
     return int(r['status'] != 'duplicate')
 
 

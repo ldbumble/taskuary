@@ -1018,6 +1018,14 @@ def hosted_images(tok: str, html: str, cap: int = 4, where: str = '') -> list:
 _TEAMS_ME = {}
 
 
+def slack_msg(src: dict, m: dict) -> dict:
+    "One Slack line as ingest takes it. A channel id starting with D is Slack's direct message - the one-to-one mark."
+    return {'external_id': f"slack:{src['Address']}:{m.get('ts')}", 'channel': 'slack', 'subject': None, 'body': m.get('text'),
+            'from_name': m.get('user'), 'conversation_id': f"slack:{src['Address']}", 'source_name': src['Address'],
+            'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
+            **({'mail_meta': {'dm': True}} if str(src.get('Address') or '').startswith('D') else {})}
+
+
 def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
@@ -1072,12 +1080,14 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',
                   'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
-                  'source_name': upn, 'images': images_for_triage(store, atts)}
+                  'source_name': upn, 'images': images_for_triage(store, atts),
+                  **({'mail_meta': {'dm': True}} if kind == 'oneOnOne' else {})}      # Graph's own chat type, not who has spoken
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
                                     'your message in this chat - kept for context', keep_unmatched=True)
             continue
-        out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr}, llm=llm, file_only=file_only)
+        # no address (the lookup failed): the Graph id, never the shared 'Teams user' every failed lookup wears
+        out = ingest_message(store, {**common, 'from_name': name, 'from_email': addr or f"teams:{user['id']}"}, llm=llm, file_only=file_only)
         n += out['status'] != 'duplicate'
         if atts and out.get('message_id') and out['status'] != 'duplicate':
             try: save_attachments(store, out['message_id'], atts, f'teams:{m["id"]}')
@@ -1788,13 +1798,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 # the channel's read cursor is ONE timestamp - the newest line we took
                 if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))
                 for m in msgs:
-                    out = ingest_message(store, file_only=file_only, msg={
-                        'external_id': f"slack:{s['Address']}:{m.get('ts')}", 'channel': 'slack',
-                        'subject': None, 'body': m.get('text'), 'from_name': m.get('user'),
-                        'conversation_id': f"slack:{s['Address']}",
-                        'sent_at': datetime.fromtimestamp(float(m.get('ts', 0))).strftime('%Y-%m-%d %H:%M:%S'),
-                        'source_name': s['Address']}, llm=llm)
-                    n += out['status'] != 'duplicate'
+                    n += ingest_message(store, file_only=file_only, msg=slack_msg(s, m), llm=llm)['status'] != 'duplicate'
             store.touch_source(s['SourceId'])
         store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
         _watch(store, full, '; '.join(errors) if errors else None)

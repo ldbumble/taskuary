@@ -4837,16 +4837,19 @@ class SQLiteStore:
                              OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                              LIMIT 1""", (mailbox, email, exclude_mid or 0, mailbox, mailbox)) is not None
     def talked_one_to_one(self, channel: str, who: str, exclude_mid=None) -> bool:
-        """Has the owner talked with `who` alone in this chat channel: one conversation holding the owner's own line
-        and `who`'s (other than exclude_mid), and nobody else's. `who` is ingest._who's key - address, else name."""
+        """Has the owner talked with `who` alone in this chat channel: a conversation the PLATFORM called one-to-one
+        (the poller's {'dm': true} on their line - who has spoken proves nothing, a group's one talker looks alone),
+        with the owner's own line AFTER one of theirs (other than exclude_mid), and nobody else's. `who` is
+        senders.chat_key's key - their address or platform id, else their name."""
         if not (channel and who): return False
         k = "LOWER(TRIM(COALESCE(NULLIF(TRIM({0}.FromEmail),''), NULLIF(TRIM({0}.FromName),''), '')))"
         # code sets these; a sender who calls themselves 'You' is not the owner (ingest.is_ours reads names, this must not)
         mine = "(COALESCE({0}.Status,'')='context' OR COALESCE({0}.Direction,'')='out')"
         return self._one(f"""SELECT 1 x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
                                AND NOT {mine.format('m')} AND {k.format('m')}=LOWER(?)
+                               AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
                                AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
-                                           AND {mine.format('o')})
+                                           AND o.MessageId>m.MessageId AND {mine.format('o')})
                                AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
                                                AND NOT {mine.format('x')} AND {k.format('x')}<>LOWER(?))
                              LIMIT 1""", (channel, exclude_mid or 0, who.strip(), who.strip())) is not None

@@ -160,6 +160,8 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
             'conversation_id': f'telegram:{cid}',
             'sent_at': datetime.fromtimestamp(m.get('date') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': chat.get('title') or who,
+            # the platform's word that this chat is one-to-one: what senders.known needs, never guessed from who has spoken
+            **({'mail_meta': {'dm': True}} if chat.get('type') == 'private' else {}),
             'images': images_for_triage(store, atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += out['status'] != 'duplicate'
@@ -526,6 +528,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
+            **({} if m.get('group') or jid.endswith('@g.us') else {'mail_meta': {'dm': True}}),    # a person's JID, not a group's
             'images': images_for_triage(store, atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'

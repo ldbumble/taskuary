@@ -38,13 +38,14 @@ def _base(c, fallback='') -> str:
     return (_cfg(c).get('base_url') or fallback).strip().rstrip('/')
 
 
-def _ingest(store, src, channel, ext, body, who, at, llm, file_only) -> int:
+def _ingest(store, src, channel, ext, body, who, at, llm, file_only, uid=None) -> int:
     """One message onto the Timeline, through the same triage as mail. Returns 1 unless it was
     already here - a poll that re-reads its own window is normal, not an error."""
     from .ingest import ingest_message
     out = ingest_message(store, file_only=file_only, msg={
         'external_id': f'{channel}:{ext}', 'channel': channel, 'subject': None, 'body': body,
-        'from_name': who or channel.title(), 'conversation_id': f"{channel}:{src['Address']}",
+        # uid: the platform's stable user id - the key trust is remembered by (senders.chat_key); a name is only shown
+        'from_name': who or channel.title(), 'from_email': uid, 'conversation_id': f"{channel}:{src['Address']}",
         'sent_at': at, 'source_name': src['Address']}, llm=llm)
     return out['status'] != 'duplicate'
 
@@ -82,7 +83,7 @@ def poll_mattermost(store, c, src, since, llm=None, file_only=False) -> int:
         if m.get('type') or not (m.get('message') or '').strip(): continue   # typed posts are joins/leaves
         who = (m.get('props') or {}).get('override_username') or m.get('user_id') or 'Mattermost'
         at = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime((m.get('create_at') or 0) / 1000))
-        n += _ingest(store, src, 'mattermost', pid, m['message'], who, at, llm, file_only)
+        n += _ingest(store, src, 'mattermost', pid, m['message'], who, at, llm, file_only, uid=f"mm:{m['user_id']}" if m.get('user_id') else None)
     return n
 
 
@@ -121,7 +122,8 @@ def poll_rocketchat(store, c, src, since, llm=None, file_only=False) -> int:
     for m in reversed(hist.get('messages') or []):
         if m.get('t') or not (m.get('msg') or '').strip(): continue        # typed = a room event
         who = (m.get('u') or {}).get('name') or (m.get('u') or {}).get('username') or 'Rocket.Chat'
-        n += _ingest(store, src, 'rocketchat', m['_id'], m['msg'], who, _stamp(m.get('ts')), llm, file_only)
+        u = (m.get('u') or {}).get('_id')
+        n += _ingest(store, src, 'rocketchat', m['_id'], m['msg'], who, _stamp(m.get('ts')), llm, file_only, uid=f'rocket:{u}' if u else None)
     return n
 
 
@@ -232,8 +234,9 @@ def poll_google_chat(store, c, src, since, llm=None, file_only=False) -> int:
     for m in reversed(res.get('messages') or []):
         if not (m.get('text') or '').strip(): continue      # a card-only post has nothing to triage
         who = (m.get('sender') or {}).get('displayName') or 'Google Chat'
+        u = (m.get('sender') or {}).get('name')                 # users/<id>
         n += _ingest(store, src, 'google_chat', m['name'], m['text'], who,
-                     _stamp(m.get('createTime')), llm, file_only)
+                     _stamp(m.get('createTime')), llm, file_only, uid=f'gchat:{u}' if u else None)
     return n
 
 

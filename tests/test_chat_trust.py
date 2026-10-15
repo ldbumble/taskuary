@@ -19,6 +19,9 @@ def _line(s, conv, who=None, tid=None, ch='slack', **kw):
 
 def _mine(s, conv, ch='slack'): return _line(s, conv, 'Alex Doyle', ch=ch, Status='context', Direction='out')
 
+DM = '{"dm": true}'          # the platform said this conversation is one-to-one (the poller records it)
+def _dm(s, conv, who, ch='slack'): return _line(s, conv, who, ch=ch, MailMetaJson=DM)
+
 def _msg(who, conv='slack:group', ch='slack', **kw):
     return {'channel': ch, 'from_name': who, 'from_email': None, 'conversation_id': conv, 'source_name': 'team', **kw}
 
@@ -30,7 +33,7 @@ def test_a_group_member_the_owner_never_talked_with_alone_is_a_stranger():
 
 def test_the_same_person_after_a_one_to_one_conversation_with_the_owner_is_trusted():
     s = _store(); _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno')
-    _line(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
+    _dm(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
     mid = _line(s, 'slack:group', 'ray colton')
     assert senders.known(s, _msg('Ray Colton'), exclude_mid=mid) == (True, 'someone you talk with in slack')
     assert not senders.known(s, _msg('Ray Colton', ch='teams'), exclude_mid=mid)[0]      # another channel is another room
@@ -55,7 +58,7 @@ def test_a_vouched_for_sender_is_trusted_next_time():
 
 def test_switched_off_only_the_owner_is_trusted():
     s = _store(trust_non_email='0'); s.remember_trust('slack', 'ray colton', 'x')
-    _line(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
+    _dm(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
     assert not senders.known(s, _msg('Ray Colton'))[0]
     assert senders.known(s, _msg('Alex Doyle', Status='context'))[0]
 
@@ -64,7 +67,7 @@ def test_a_task_started_by_an_un_dmd_group_member_is_a_stranger_s():
     _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno'); _line(s, 'slack:group', 'Ray Colton', tid=t)
     o, why = origin.of_task(s, t)
     assert o == 'stranger' and 'one-to-one' in why
-    _line(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
+    _dm(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
     assert origin.of_task(s, t)[0] == 'trusted'
 
 c = TestClient(server.app)
@@ -110,3 +113,86 @@ def test_two_telegram_users_with_one_display_name_are_two_people():
 def test_a_sender_who_calls_themselves_you_is_not_the_owner_talking():
     s = _store(); _line(s, 'slack:pair', 'You'); _line(s, 'slack:pair', 'Ray Colton'); mid = _line(s, 'slack:pair', 'Ray Colton')
     assert not senders.known(s, _msg('Ray Colton', 'slack:pair'), exclude_mid=mid)[0]
+
+
+def test_a_group_where_only_one_member_has_spoken_is_not_one_to_one():
+    s = _store(); _mine(s, 'slack:big'); _line(s, 'slack:big', 'Mallory'); mid = _line(s, 'slack:big', 'Mallory')
+    assert not senders.known(s, _msg('Mallory', 'slack:big'), exclude_mid=mid)[0]
+
+def test_the_owner_must_answer_after_them_in_the_dm():
+    s = _store(); _mine(s, 'slack:dm'); _dm(s, 'slack:dm', 'Ray Colton'); mid = _dm(s, 'slack:dm', 'Ray Colton')
+    assert not senders.known(s, _msg('Ray Colton', 'slack:dm'), exclude_mid=mid)[0]
+    _mine(s, 'slack:dm'); mid = _dm(s, 'slack:dm', 'Ray Colton')
+    assert senders.known(s, _msg('Ray Colton', 'slack:dm'), exclude_mid=mid)[0]
+
+def test_vouching_trusts_only_the_task_s_opener():
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'slack'}, 'r')
+    _line(s, 'slack:g', 'U1', tid=t); _line(s, 'slack:g', 'U2', tid=t)
+    origin.raise_to(s, t, 'trusted', 'owner')
+    assert s.trusted_sender('slack', 'u1') and not s.trusted_sender('slack', 'u2')
+
+def _rows(s, ch): return s._rows(f"SELECT FromName, FromEmail, MailMetaJson FROM message WHERE Channel='{ch}' ORDER BY MessageId")
+def _is_dm(r): return '"dm": true' in (r['MailMetaJson'] or '')
+
+def test_telegram_marks_a_private_chat_as_one_to_one_and_a_group_not():
+    s = MemoryStore(); cid = s.get_connector_by_type('telegram')['ConnectorId']
+    s.save_connector({'ConnectorId': cid, 'Secret': 'TOKEN', 'Active': 1}, 'o')
+    for a in ('-5', '9'): s.save_source({'Channel': 'telegram', 'Address': a, 'ConnectorId': cid, 'Active': 1}, 'o')
+    dm = _tg(2, 11); dm['message']['chat'] = {'id': 9, 'type': 'private'}
+    with mock.patch.object(messengers, 'tg', lambda t, m, **p: [_tg(1, 11), dm] if m == 'getUpdates' else None):
+        messengers.poll_telegram(s, s.get_connector_by_type('telegram', with_secret=True), s.list_sources(), llm=None)
+    assert [_is_dm(r) for r in _rows(s, 'telegram')] == [False, True]
+
+def test_whatsapp_marks_a_direct_chat_as_one_to_one_and_a_group_not():
+    s = MemoryStore(); cid = s.get_connector_by_type('whatsapp')['ConnectorId']; s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
+    for a in ('155@s.whatsapp.net', '120363@g.us'): s.save_source({'Channel': 'whatsapp', 'Address': a, 'ConnectorId': cid, 'Active': 1}, 'o')
+    feed = {'seq': 2, 'messages': [{'seq': 1, 'id': 'a', 'jid': '155@s.whatsapp.net', 'name': 'Marcus', 'text': 'hi', 'ts': 1755700000},
+                                   {'seq': 2, 'id': 'b', 'jid': '120363@g.us', 'group': True, 'sender': '166@s.whatsapp.net',
+                                    'name': 'Gail', 'text': 'hey', 'ts': 1755700001}]}
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+        messengers.poll_whatsapp(s, s.get_connector_by_type('whatsapp', with_secret=True), s.list_sources(), llm=None)
+    assert [_is_dm(r) for r in _rows(s, 'whatsapp')] == [True, False]
+
+def test_slack_marks_a_dm_channel_as_one_to_one():
+    from taskuary import channels
+    assert channels.slack_msg({'Address': 'D0123'}, {'ts': '1755700000.1', 'user': 'U9', 'text': 'x'})['mail_meta'] == {'dm': True}
+    assert not channels.slack_msg({'Address': 'C0123'}, {'ts': '1755700000.1', 'user': 'U9', 'text': 'x'}).get('mail_meta')
+
+def test_imessage_marks_only_a_known_one_to_one_chat():
+    from taskuary import imessage
+    base = {'rowid': 1, 'message_guid': 'g', 'chat_guid': 'c', 'text': 'hi', 'is_from_me': 0, 'sender_handle': '+15550100', 'date': 0}
+    assert imessage.normalize_row({**base, 'style': 45})['dm'] is True
+    assert imessage.normalize_row({**base, 'style': 43})['dm'] is False
+    assert imessage.normalize_row(base)['dm'] is False                   # not known is not one-to-one
+
+def test_teams_keys_an_addressless_sender_by_their_id_and_marks_one_on_one():
+    from taskuary import channels
+    s = MemoryStore(); channels._TEAMS_ME['alex@northwind.example'] = 'me-id'
+    ms = [{'id': '1', 'chatId': 'c1', 'messageType': 'message', 'from': {'user': {'id': 'oid-7', 'displayName': 'Erin'}},
+           'body': {'content': 'hi'}, 'createdDateTime': '2026-10-14T09:00:00Z'}]
+    with mock.patch.object(channels, '_teams_delta', return_value=ms), mock.patch.object(channels, '_chat_meta', return_value=('', 'oneOnOne')), \
+         mock.patch.object(channels, '_graph_user', return_value=('Teams user', '')), mock.patch.object(channels, 'hosted_images', return_value=[]):
+        channels.ingest_teams_chats(s, 'alex@northwind.example', 'tok', __import__('datetime').datetime(2026, 10, 14, 8))
+    r = _rows(s, 'teams')[0]
+    assert r['FromEmail'] == 'teams:oid-7' and _is_dm(r)
+
+def test_discord_and_chat_servers_key_a_sender_by_the_platform_id():
+    from datetime import datetime
+    from taskuary import devtools, chatservers
+    s = MemoryStore(); src = {'Address': 'room1'}; since = datetime(2020, 1, 1)
+    with mock.patch.object(devtools, '_discord', return_value=[{'id': '5', 'timestamp': '2026-10-14T09:00:00+00:00', 'content': 'hi',
+                                                                 'author': {'id': '42', 'global_name': 'Erin', 'username': 'erin'}}]):
+        devtools.poll_discord(s, {}, src, since)
+    with mock.patch.object(chatservers, '_mm', return_value={'order': ['p1'], 'posts': {'p1': {'message': 'hi', 'user_id': 'u77', 'create_at': 1,
+                                                                                                 'props': {'override_username': 'Erin'}}}}):
+        chatservers.poll_mattermost(s, {}, src, since)
+    with mock.patch.object(chatservers, '_rc', return_value={'messages': [{'_id': 'm1', 'msg': 'hi', 'ts': '2026-10-14T09:00:00Z',
+                                                                            'u': {'_id': 'r9', 'name': 'Erin', 'username': 'erin'}}]}):
+        chatservers.poll_rocketchat(s, {}, src, since)
+    with mock.patch.object(chatservers, '_gc', return_value={'messages': [{'name': 'spaces/A/messages/1', 'text': 'hi', 'createTime': '2026-10-14T09:00:00Z',
+                                                                            'sender': {'name': 'users/123', 'displayName': 'Erin'}}]}):
+        chatservers.poll_google_chat(s, {}, src, since)
+    got = {ch: _rows(s, ch)[0] for ch in ('discord', 'mattermost', 'rocketchat', 'google_chat')}
+    assert {ch: r['FromEmail'] for ch, r in got.items()} == {'discord': 'discord:42', 'mattermost': 'mm:u77', 'rocketchat': 'rocket:r9',
+                                                             'google_chat': 'gchat:users/123'}
+    assert {r['FromName'] for r in got.values()} == {'Erin'}

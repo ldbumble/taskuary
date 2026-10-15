@@ -162,7 +162,8 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(ingest_message(s, mail(external_id='e4', from_email='old.client@partner.example'), llm=CODING_LLM)['status'], 'created')
         spawn.assert_called_once()
         # a chat sender the owner has talked with one-to-one in that channel: no Sent Items lookup (test_chat_trust)
-        s.add_message({'Channel': 'teams', 'ConversationId': 'dm-5', 'FromEmail': 'new.colleague@elsewhere.example', 'BodyText': 'hi', 'Status': 'routed'})
+        s.add_message({'Channel': 'teams', 'ConversationId': 'dm-5', 'FromEmail': 'new.colleague@elsewhere.example', 'BodyText': 'hi', 'Status': 'routed',
+                       'MailMetaJson': '{"dm": true}'})
         s.add_message({'Channel': 'teams', 'ConversationId': 'dm-5', 'FromName': 'You', 'BodyText': 'hi', 'Status': 'context', 'Direction': 'out'})
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to') as wt:
             self.assertEqual(ingest_message(s, self.msg(external_id='e5', channel='teams', from_email='new.colleague@elsewhere.example',

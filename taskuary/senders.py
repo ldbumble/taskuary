@@ -120,12 +120,12 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
 
 
 def vouch(store, rows) -> None:
-    "The owner's say-so for a task's chat senders (release, Trust this task): remembered per channel and person."
-    from .ingest import CHAT_CHANNELS
-    for m in rows:
-        ch = (m.get('Channel') or '').lower()
-        if ch not in CHAT_CHANNELS or _is_own(m): continue
-        if (who := chat_key(m)) and who != 'you': store.remember_trust(ch, who, 'you vouched for them')
+    """The owner's say-so for the task's OPENER (release, Trust this task) - the first line on it that is not ours, as
+    ingest.from_opener reads it: remembered per channel and person. Everyone else a group put on the task stays a stranger."""
+    from .ingest import CHAT_CHANNELS, is_ours
+    m = next((m for m in rows if not is_ours(m)), None)
+    ch = ((m or {}).get('Channel') or '').lower()
+    if ch in CHAT_CHANNELS and (who := chat_key(m)): store.remember_trust(ch, who, 'you vouched for them')
 
 
 def wrote_to(store, mailbox: str, addr: str) -> bool:

@@ -244,6 +244,7 @@ def poll_discord(store, c, src, since, llm=None, file_only=False) -> int:
             'external_id': f"discord:{m['id']}", 'channel': 'discord',
             'subject': None, 'body': m.get('content'),
             'from_name': who.get('global_name') or who.get('username') or 'Discord',
+            'from_email': f"discord:{who['id']}" if who.get('id') else None,     # a display name anyone can copy is not who they are
             'conversation_id': f"discord:{src['Address']}", 'sent_at': at,
             'source_name': src['Address']}, llm=llm)
         n += out['status'] != 'duplicate'

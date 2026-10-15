@@ -103,22 +103,46 @@ def wanted(store, profile: dict) -> bool:
     return bool(cli_for(profile)) and store.get_setting('agent_hooks', '1') == '1'
 
 
-def command(base: str, token: str = '', cli: str = 'claude') -> str:
+def header_file(token: str, home: str = None) -> str:
+    """The token as a header line in a file of its own, <taskuary home>/hooks/<sha>.hdr, for curl's `-H @file`. Written
+    into the command, it sat in every process listing for as long as the hook ran - the ask hook for up to ten minutes,
+    a stranger's permit for days - where any process of this account, a stranger's session among them, could read the
+    shared agent token. The file is in Taskuary's home, which the floor refuses a stranger's session. Named by the
+    token's hash, so the agent token and each stranger task's token never share one; replaced whole, so a hook firing
+    while it is written never reads half."""
+    import hashlib
+    from . import config
+    p = Path(home or config.home()) / 'hooks' / f'{hashlib.sha256(token.encode()).hexdigest()[:12]}.hdr'
+    want = f'X-Taskuary-Token: {token}\n'
+    try:
+        if p.read_text(encoding='utf-8') == want: return p.as_posix()
+    except OSError: pass
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f'{p.name}.{os.getpid()}.{threading.get_ident()}.tmp')
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w', encoding='utf-8', newline='\n') as f: f.write(want)
+    os.replace(tmp, p)
+    return p.as_posix()          # forward slashes: one spelling every hook shell (bash, PowerShell, cmd) passes through untouched
+
+
+def token_arg(token: str, home: str = None) -> str:
+    "curl's header argument for the token, quoted for a shell: the file's path, never the token itself (header_file)."
+    return f' -H "@{header_file(token, home)}"' if token else ''
+
+
+def command(base: str, token: str = '', cli: str = 'claude', home: str = None) -> str:
     """Claude's hook: POST the event. curl.exe by name on Windows (bare `curl` is a PowerShell alias for
     Invoke-WebRequest there). -m 3: a hook must never hold the agent. stdin -> body. -o to the null
     device (not a shell redirect: PowerShell has no /dev/null) - a hook's stdout is read by Claude as a
-    decision, and our reply is not one."""
+    decision, and our reply is not one. `home` is Taskuary's (tests); the token rides in a file (header_file)."""
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
-    tok = f' -H "X-Taskuary-Token: {token}"' if token else ''
-    return f'{curl} -s -m 3 -o {null} -X POST {base}/api/hooks/{cli} -H "Content-Type: application/json"{tok} --data-binary @-'
+    return f'{curl} -s -m 3 -o {null} -X POST {base}/api/hooks/{cli} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
-def ask_command(base: str, token: str = '') -> str:
+def ask_command(base: str, token: str = '', home: str = None) -> str:
     """The ask hook: POST the ask and PRINT our answer (Claude reads a hook's stdout as its decision). -f prints nothing
     on an error and -m outlives the server's wait, so a failure or a timeout leaves Claude to draw its own form."""
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    tok = f' -H "X-Taskuary-Token: {token}"' if token else ''
-    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{ASK_MARK} -H "Content-Type: application/json"{tok} --data-binary @-'
+    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{ASK_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
 def spool_path(home: str = None) -> str:
@@ -162,20 +186,21 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     version from; without it no version is read."""
     if cli not in HOOKED: return False
     home = home or os.path.expanduser('~')
-    if cli == 'copilot': return _install_copilot(Path(home), base or base_url(), agent_token() if token is None else token)
+    th = os.path.join(home, '.taskuary') if home != os.path.expanduser('~') else None      # Taskuary's home beside a test's user home
+    if cli == 'copilot': return _install_copilot(Path(home), base or base_url(), agent_token() if token is None else token, th)
     if cli == 'devin':
         # %APPDATA%\devin\config.json on Windows, ~/.config/devin/config.json elsewhere (its --help names the latter)
         roam = os.environ.get('APPDATA') if os.name == 'nt' and home == os.path.expanduser('~') else None
         p = Path(roam) / 'devin' / 'config.json' if roam else Path(home) / '.config' / 'devin' / 'config.json'
-        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, cli), 'timeout': 5}
+        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, cli, th), 'timeout': 5}
         events, mark = DEVIN_EVENTS, '/api/hooks/devin'
     elif cli == 'claude':
         p = Path(home) / '.claude' / 'settings.json'
-        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token), 'timeout': 5}
+        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, home=th), 'timeout': 5}
         events, mark = EVENTS, MARK
     else:
         p = Path(home) / '.codex' / 'hooks.json'
-        spool = spool_path(os.path.join(home, '.taskuary') if home != os.path.expanduser('~') else None)
+        spool = spool_path(th)
         entry = {'type': 'command', 'command': codex_command(spool), 'timeout': 3}
         events, mark = CODEX_EVENTS, CODEX_MARK
     cur = _read_json(p)
@@ -184,7 +209,7 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     before = json.dumps(cur, sort_keys=True)
     _merge(hooks, events, entry, mark)
     if cli == 'claude':
-        ask = {'type': 'command', 'command': ask_command(base or base_url(), agent_token() if token is None else token), 'timeout': ASK_TIMEOUT}
+        ask = {'type': 'command', 'command': ask_command(base or base_url(), agent_token() if token is None else token, th), 'timeout': ASK_TIMEOUT}
         hooks['PreToolUse'] = [g for g in (hooks.get('PreToolUse') or []) if isinstance(g, dict)
                                and not any(ASK_MARK in str(h.get('command') or '') for h in (g.get('hooks') or []) if isinstance(h, dict))]
         hooks['PreToolUse'].append({'matcher': 'AskUserQuestion', 'hooks': [ask]})
@@ -200,12 +225,12 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     return True
 
 
-def _install_copilot(home: Path, base: str, token: str) -> bool:
+def _install_copilot(home: Path, base: str, token: str, th: str = None) -> bool:
     """Copilot's own file, wholly ours: ~/.copilot/hooks/taskuary.json (or $COPILOT_HOME/hooks). Its schema is flat - each
     event a list of entries - and `timeoutSec`."""
     curl, null = ('curl.exe', 'NUL') if os.name == 'nt' else ('curl', '/dev/null')
     args = ['-s', '-m', '3', '-o', null, '-X', 'POST', f'{base}/api/hooks/copilot', '-H', 'Content-Type: application/json',
-            *(['-H', f'X-Taskuary-Token: {token}'] if token else []), '--data-binary', '@-']
+            *(['-H', f'@{header_file(token, th)}'] if token else []), '--data-binary', '@-']      # no shell: the path is one argument
     root = Path(os.environ['COPILOT_HOME']) if os.environ.get('COPILOT_HOME') and home == Path(os.path.expanduser('~')) else home / '.copilot'
     p = root / 'hooks' / 'taskuary.json'
     want = {'version': 1, 'hooks': {ev: [{'type': 'command', 'exec': curl, 'args': args, 'timeoutSec': 5}] for ev in COPILOT_EVENTS}}

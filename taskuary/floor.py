@@ -12,8 +12,8 @@ from .config import home
 _CREDS = ('.ssh', '.aws', '.azure', '.config/gh', '.config/gcloud', '.config/hub', 'AppData/Roaming/GitHub CLI', 'AppData/Roaming/gcloud',
           '.docker/config.json', '.git-credentials', '.netrc', '.npmrc', '.pypirc', '.claude/.credentials.json', '.claude.json',
           '.codex/auth.json', '.gemini', '.qwen', '.kube',
-          # where hooks.install_user writes the SHARED agent token (and the hooks every session runs): read, it is every
-          # session's authority; written, it is a command the owner's next session runs (R28)
+          # where hooks.install_user writes the hooks every session runs: written, each is a command the owner's next session
+          # runs (R28). The SHARED agent token they send now sits in Taskuary's home (hooks.header_file), refused above them
           '.claude/settings.json', '.codex/hooks.json', '.copilot/hooks', '.config/devin/config.json', 'AppData/Roaming/devin/config.json')
 # the session's own variables, by NAME: expanding them here would read the SERVER's environment, not the session's.
 # Fail-closed on purpose: `grep -r TASKUARY_TOKEN .` in a stranger's repository is refused too - a name match cannot tell

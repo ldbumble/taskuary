@@ -259,7 +259,7 @@ class DoorTests(unittest.TestCase):
     def test_f16_a_hook_still_reaches_us_with_the_agents_token(self):
         """The hook is a curl from inside the checkout: no Origin, and the agent token in a header."""
         cmd = hooks.command('http://127.0.0.1:7787', 'agent-tok')
-        self.assertIn('-H "X-Taskuary-Token: agent-tok"', cmd)
+        self.assertIn(f'-H "@{hooks.header_file("agent-tok")}"', cmd)        # by file: never on the command line
         r = c.post('/api/hooks/claude', json={'hook_event_name': 'Stop', 'session_id': 'nope'},
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})
         self.assertEqual(r.status_code, 200)

@@ -131,9 +131,10 @@ def _hook(path: str, tid: int, timeout: int) -> dict:
     from . import config, guard, hooks
     srv = config.load()['server']
     curl = 'curl.exe' if os.name == 'nt' else 'curl'
-    # the session's own token, bound to this task (R28): the shared agent token never sits in a stranger's session file
-    cmd = (f'{curl} -s -f -m {timeout} -X POST "{hooks.base_url()}{path}?task={tid}" -H "Content-Type: application/json" '
-           f'-H "X-Taskuary-Token: {guard.stranger_token(srv, tid)}" --data-binary @-')
+    # the session's own token, bound to this task (R28): the shared agent token never sits in a stranger's session file -
+    # and this one rides in a file too (hooks.header_file), off the permit's command line that stands for days
+    cmd = (f'{curl} -s -f -m {timeout} -X POST "{hooks.base_url()}{path}?task={tid}" -H "Content-Type: application/json"'
+           f'{hooks.token_arg(guard.stranger_token(srv, tid))} --data-binary @-')
     return {'type': 'command', 'command': cmd, 'timeout': timeout, 'onFailure': 'block'}
 
 def session_settings(store, tid: int, theme: str = '') -> str:

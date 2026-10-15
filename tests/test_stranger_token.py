@@ -4,7 +4,7 @@ import json, os, sys, tempfile, pytest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import guard, server, terminal, origin, llm, agents, floor, cli, coder, selfclose
+from taskuary import guard, server, terminal, origin, llm, agents, floor, cli, coder, selfclose, hooks
 from taskuary.store import MemoryStore
 
 # CI's machines have no AI CLI on them: these tests are about what a session is ALLOWED to do, never whether claude is
@@ -175,7 +175,9 @@ def test_the_session_settings_hooks_carry_the_stranger_token():
     s = MemoryStore(); t, _ = _task(s); shared = SRV()['agent_token']
     with mock.patch('taskuary.config.load', return_value=server.cfg): f = origin.session_settings(s, t)
     text = Path(f).read_text(encoding='utf-8')
-    assert guard.stranger_token(SRV(), t) in text and shared not in text and guard.TASK_HDR not in text
+    with mock.patch('taskuary.config.load', return_value=server.cfg): hdr = hooks.header_file(guard.stranger_token(SRV(), t))
+    # by file, the stranger's own token: neither it nor the shared one is in the settings the CLI's hooks run from
+    assert f'@{hdr}' in text and guard.stranger_token(SRV(), t) not in text and shared not in text and guard.TASK_HDR not in text
 
 def test_taskuary_reply_from_a_stranger_session_authenticates_with_its_token(monkeypatch):
     t, _ = _task()

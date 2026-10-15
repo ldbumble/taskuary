@@ -49,8 +49,10 @@ def test_the_hook_commands_carry_the_task_s_own_token_the_task_and_fail_on_http_
     s = MemoryStore(); t = _stranger(s); srv = config.load()['server']
     d = json.load(open(origin.session_settings(s, t), encoding='utf-8'))
     for c in (d['hooks']['PreToolUse'][0]['hooks'][0]['command'], d['hooks']['PermissionRequest'][0]['hooks'][0]['command']):
-        assert f'X-Taskuary-Token: {guard.stranger_token(srv, t)}' in c and f'?task={t}' in c and ' -f ' in c
-        assert srv['agent_token'] not in c and guard.TASK_HDR not in c     # never the shared token (R28)
+        f = c.split('-H "@')[1].split('"')[0]
+        assert open(f, encoding='utf-8').read() == f'X-Taskuary-Token: {guard.stranger_token(srv, t)}\n' and f'?task={t}' in c and ' -f ' in c
+        assert guard.stranger_token(srv, t) not in c                       # in a file, off the command line (hooks.header_file)
+        assert srv['agent_token'] not in c + open(f, encoding='utf-8').read() and guard.TASK_HDR not in c     # never the shared token (R28)
 
 def test_claude_version_caches_only_a_success(monkeypatch):
     import subprocess

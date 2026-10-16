@@ -457,6 +457,13 @@ const META = {
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
   // is a base url, a default model and a key. base_url is offered on every one for the same reason
   // ollama's is: a gateway or proxy in front of any of them still speaks this surface.
+  // HIPAA AI (llm.OPENAI_COMPATIBLE): an organisation's own AI behind its gateway - the access code IS the person's gateway key
+  hipaa_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
+    fields: [["gateway address (from whoever sent your code)", "base_url"]], secretLabel: "Access code",
+    desc: "Your organisation's own AI, run in its own cloud - switched on with the access code it sent you. Nothing to install, no API account of your own.",
+    howto: ["Paste the access code you were sent. It is yours alone - usage is counted against it.",
+      "If the card asks for a gateway address, it came with your code.",
+      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
   groq: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default llama-3.3-70b-versatile)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
     desc: "Open-weights models at the fastest tokens-per-second anywhere, on a free tier generous enough to triage a real mailbox.",

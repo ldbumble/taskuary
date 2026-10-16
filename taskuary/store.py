@@ -1116,6 +1116,7 @@ class SQLiteStore:
                          ('cohere', 'Cohere'),
                          ('deepseek', 'DeepSeek'),
                          ('perplexity', 'Perplexity'),
+                         ('hipaa_ai', 'HIPAA AI'),
                          ('azure_openai', 'Azure OpenAI'), ('vertex_ai', 'Google Vertex AI'), ('openrouter', 'OpenRouter'),
                          ('ollama', 'Local models (Ollama)'), ('meta', 'Meta Model API (Muse Spark)'),
                          ('chatgpt', 'ChatGPT (your plan)'),

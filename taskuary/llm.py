@@ -28,6 +28,7 @@ from . import redact
 # unauthenticated POST returning 401/400 (a wrong path returns 404). base_url stays overridable
 # for the same reason ollama's is: a gateway in front of any of them still speaks this surface.
 # The model defaults are a starting point, not a promise - model names churn, the box overrides.
+HIPAA_AI_URL = ''           # the HIPAA AI gateway's OpenAI-compatible address (https://<gateway>/v1) - blank until it is deployed
 OPENAI_COMPATIBLE = {
     'groq':       ('https://api.groq.com/openai/v1', 'llama-3.3-70b-versatile'),
     'mistral':    ('https://api.mistral.ai/v1', 'mistral-small-latest'),
@@ -38,6 +39,10 @@ OPENAI_COMPATIBLE = {
     'cohere':     ('https://api.cohere.ai/compatibility/v1', 'command-r-plus'),
     'deepseek':   ('https://api.deepseek.com/v1', 'deepseek-chat'),
     'perplexity': ('https://api.perplexity.ai', 'sonar'),
+    # HIPAA AI: an organisation's own AI (Vertex behind its gateway), switched on with an ACCESS CODE - the person's own gateway
+    # key, so usage is metered per person and one code is revoked alone (the owner, 2026-10-16). The app ships no key; the address
+    # is the gateway's, filled in here once it is deployed (HIPAA_AI_URL), and `hipaa-ai` is the alias the gateway maps to its model.
+    'hipaa_ai':   (HIPAA_AI_URL, 'hipaa-ai'),
 }
 # `chatgpt` is the owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py): no key, a signed-in account
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'vertex_ai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)
@@ -622,6 +627,7 @@ def make_llm(t, cfg: dict, key: str):
     elif t in OPENAI_COMPATIBLE:
         default_base, default_model = OPENAI_COMPATIBLE[t]
         base = (cfg.get('base_url') or default_base).rstrip('/')
+        if not base: raise RuntimeError('no gateway address for this AI yet - ask whoever sent your access code for it')
         urls = [f'{base}/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
     elif t == 'vertex_ai':

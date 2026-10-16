@@ -1014,6 +1014,18 @@
       ]
     },
     {
+      "type": "hipaa_ai",
+      "title": "HIPAA AI - access code",
+      "group": "AI — agents & models",
+      "planned": false,
+      "desc": "Your organisation's own AI, switched on with the access code it sent you",
+      "match": [
+        "hipaa ai",
+        "hipaa",
+        "access code"
+      ]
+    },
+    {
       "type": "groq",
       "title": "Groq inference",
       "group": "AI — agents & models",

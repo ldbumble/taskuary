@@ -22,6 +22,7 @@ class TableIsTheIntegration(unittest.TestCase):
 
     def test_each_one_resolves_to_the_url_that_was_verified(self):
         for t, (base, default_model) in OPENAI_COMPATIBLE.items():
+            if not base: continue        # an organisation's own gateway (hipaa_ai): its address comes with the access code
             with mock.patch('taskuary.llm.requests') as rq:
                 make_llm(t, {}, 'sk-test')
                 self.assertTrue(base.startswith('https://'), f'{t} must be https')
@@ -36,8 +37,8 @@ class TableIsTheIntegration(unittest.TestCase):
             self.assertTrue(callable(llm))
 
     def test_a_key_is_carried_as_a_bearer(self):
-        for t in OPENAI_COMPATIBLE:
-            self.assertTrue(callable(make_llm(t, {}, 'sk-abc')))
+        for t, (base, _m) in OPENAI_COMPATIBLE.items():
+            self.assertTrue(callable(make_llm(t, {} if base else {'base_url': 'https://gateway.example/v1'}, 'sk-abc')))
 
     def test_an_unknown_type_still_refuses(self):
         with self.assertRaises(RuntimeError):

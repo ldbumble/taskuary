@@ -1708,7 +1708,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [walking, setWalking] = useState(false);        // guards the chip against a double-click
   const setup = async () => {
     if (walking) return;
-    if (!DEMO) { setMsgs((m) => [...m, { id: `f${Date.now()}`, role: "assistant", card: { key: "firstrun", kind: "firstrun", lane: "report" }, options: [] }]); return; }
+    // typed or pressed, Set up Taskuary is the one setup mode the top bar's Setup opens (the owner, 2026-10-16) - its card in the chat
+    // was the same questions with the chat box still under them
+    if (!DEMO) { setFirstRun(true); return; }
     if (DEMO) {
       setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "assistant", text:
         "## Set up Taskuary on your own machine\n\nThis browser demo uses fictional data and cannot connect an inbox. "
@@ -1985,7 +1987,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             hides its chip on a phone, and this block is what a phone shows - without it the
             one door to the set-up guidance was absent on the device it is most needed on. */}
         <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={() => setupRef.current?.()}
-          title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
+          title="Setup - your AI, your email, a few questions about your work, and more connections. The same as Setup on the top bar">Set up Taskuary</button>
         {/* RUN, not set up: setting things up is Set up Taskuary's job; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
         <button type="button" className="tq-chip" disabled={resetting} onClick={() => onNavigate?.("Reports")}

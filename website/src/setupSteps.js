@@ -28,6 +28,9 @@ export const ORDER = ["ai", "mail", "about", "other"];
 export const nextOf = (v) => ORDER[Math.min(ORDER.indexOf(v) + 1, ORDER.length - 1)];
 export const prevOf = (v) => ORDER[Math.max(ORDER.indexOf(v) - 1, 0)];
 export const frontierOf = (st) => !st ? "ai" : st.step === "ai" ? "ai" : st.step === "email" ? "mail" : !st.about_done ? "about" : "other";
+// REOPENED, it opens where the work is (the owner, 2026-10-16: the survey sat two Nexts past Your AI, unseen); with every step done,
+// on Your AI - reopening is how the AI or the mailbox gets changed
+export const openAt = (st, reopened = false) => { const f = frontierOf(st); return reopened && f === "other" ? "ai" : f; };
 export const doneOf = (st, v) => !!st && (v === "ai" ? st.step !== "ai" : v === "mail" ? mailInOf(st) : v === "about" ? !!st.about_done : true);
 const WAIT = { ai: "pick an AI that works first", mail: "connect your email first", about: "save or skip the answers first" };
 // [{id, disabled, why}] for the row: Back from any step but the first; Next while there is a next; on the last, Walk and Finish

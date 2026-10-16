@@ -52,7 +52,7 @@ export const SetupChip = ({ state, onOpen }) => {
       </Box>
     </Tooltip>);
   const left = two ? state.first_left : state.total - state.done;
-  const pct = two ? ((2 - state.first_left) / 2) * 100 : state.total ? (state.done / state.total) * 100 : 0;
+  const pct = two ? ((3 - state.first_left) / 3) * 100 : state.total ? (state.done / state.total) * 100 : 0;
   return (
     <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}

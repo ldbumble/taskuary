@@ -89,9 +89,9 @@ test("other email is the Connections card in its simple mode, and an AI not inst
 // the owner, 2026-10-14: "what is this garbage ... where are the cards with choices" - Set up Taskuary opened the 13-stop walk
 test("Set up Taskuary opens the two cards, open on both steps, and only a fresh install opens on them by itself", () => {
   const view = read("AssistantView.jsx");
-  assert.match(view, /if \(!DEMO\) \{ setMsgs\(\(m\) => \[\.\.\.m, \{ id: `f\$\{Date\.now\(\)\}`, role: "assistant", card: \{ key: "firstrun", kind: "firstrun"/);
+  assert.match(view, /if \(!DEMO\) \{ setFirstRun\(true\); return; \}/);   // typed or pressed, the one setup mode (2026-10-16)
   assert.match(view, /firstrun: <FirstRun revisit onChanged=\{actions\.reload\} onWalk=\{\(\) => actions\.start\(null\)\} \/>/);
   assert.match(view, /data\?\.step && data\.dismissed === false\) setFirstRun\(true\)/, "setup stays the canvas until it is finished; a finished install opens on its day");
   assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more\) => q === k &&/);   // one step on the canvas; Back and Next move between them
-  assert.match(view, /c\?\.kind === "firstrun" \? "firstrun"/, "the card is routed to FirstRun, not drawn as an empty message");
+  assert.match(view, /c\?\.kind === "firstrun" \? "firstrun"/, "a card from before still routes to FirstRun, not an empty message");
 });

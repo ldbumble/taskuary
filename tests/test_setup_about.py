@@ -78,6 +78,21 @@ class FinishTests(unittest.TestCase):
             firstrun.settle_existing(t)                                  # once decided, never re-decided
         self.assertEqual(t.get_setting('first_run_dismissed'), '0')
 
+    def test_a_finished_install_that_never_answered_about_your_work_opens_setup_on_it_once(self):
+        """An install settled as finished before About your work existed never saw it - setup reopens once for it, and the owner's
+        Finish closes it for good."""
+        s = MemoryStore()
+        s.set_setting('first_run_dismissed', '1', 'system')
+        firstrun.offer_about(s)
+        self.assertEqual(s.get_setting('first_run_dismissed'), '0')
+        firstrun.finish(s); firstrun.offer_about(s)                      # offered once: Finish without answering is final
+        self.assertEqual(s.get_setting('first_run_dismissed'), '1')
+        t = MemoryStore()
+        t.set_setting('first_run_dismissed', '1', 'system')
+        with mock.patch.object(firstrun, '_learn_in_background'): firstrun.save_about(t, ANSWERS)
+        firstrun.offer_about(t)                                           # answered already: nothing to reopen
+        self.assertEqual(t.get_setting('first_run_dismissed'), '1')
+
 
 if __name__ == '__main__': unittest.main()
 

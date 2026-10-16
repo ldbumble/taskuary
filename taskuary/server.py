@@ -144,6 +144,8 @@ async def _lifespan(_app):
         from . import firstrun as _firstrun
         try: _firstrun.settle_existing(store)         # a working install is not sent back into setup by the new Finish button
         except Exception as e: logger.warning(f'first-run finish flag not settled: {e}')
+        try: _firstrun.offer_about(store)             # ...but one that never answered About your work opens on it, once
+        except Exception as e: logger.warning(f'About your work not offered: {e}')
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)
@@ -6019,7 +6021,9 @@ def setup_state():
     # ...and where the first run stands (firstrun.py): the top bar's chip says what is next from it, not the old checklist
     first = firstrun.state(store)
     step = first['step']
-    return {**setup_mod.state(store), 'first_left': {'ai': 2, 'email': 1}.get(step, 0), 'first_step': step, 'first_todo': first['todo']}
+    left = {'ai': 2, 'email': 1}.get(step, 0) + (not first.get('about_done'))         # About your work unanswered is a step left too
+    todo = first['todo'] or ('' if first.get('about_done') else 'about your work')
+    return {**setup_mod.state(store), 'first_left': left, 'first_step': step, 'first_todo': todo}
 
 @app.post('/api/setup/dismiss')
 def setup_dismiss(body: SetupBody):

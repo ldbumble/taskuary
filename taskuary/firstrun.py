@@ -395,6 +395,16 @@ def settle_existing(store):
     store.set_setting(DISMISSED, '1' if state(store).get('step') == 'done' else '0', 'system')
 
 
+ABOUT_OFFERED = 'first_run_about_offered'
+
+def offer_about(store):
+    """Once, at start: an install settled as finished before About your work existed never saw the questions - setup reopens on
+    them once (the owner, 2026-10-16: "on startup i still don't see ... the survey questions"). Finish or Skip closes it for good."""
+    if store.get_setting(ABOUT_OFFERED) is not None or about(store)['done']: return
+    store.set_setting(ABOUT_OFFERED, '1', 'system')
+    if store.get_setting(DISMISSED) == '1': store.set_setting(DISMISSED, '0', 'system')
+
+
 # WHICH CONNECTIONS, said by the Advisor over the row (the owner, 2026-10-15: "use ai to process their survey questions and then
 # suggest what softwares they use? advisor maybe can do that in the bar on top of the buttons like normal"): one model call over the
 # setup answers and JOB.md, picking cards from the catalogue; with no answer, the systems ticked matched to it by name.

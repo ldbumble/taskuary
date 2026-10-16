@@ -18,7 +18,7 @@ import FirstRunAbout from "./FirstRunAbout.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
-import { doneOf, frontierOf, navMoves, nextOf, prevOf } from "./setupSteps.js";
+import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 
@@ -99,7 +99,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   useEffect(() => {
     if (!st) return;
     const was = prevSt.current; prevSt.current = st;
-    if (view === null) { setView(revisit || st.dismissed ? "ai" : frontierOf(st)); return; }
+    if (view === null) { setView(openAt(st, revisit || st.dismissed)); return; }
     if (!was) return;
     // a working AI moves on to the email - a first one, or a new one picked on the way back; the mail coming in moves on to About
     const newAi = st.step !== "ai" && (was.step === "ai" || (was.brain?.name && st.brain?.name && was.brain.name !== st.brain.name));

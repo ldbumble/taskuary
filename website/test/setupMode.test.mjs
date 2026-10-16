@@ -47,6 +47,23 @@ test("the top bar keeps Setup after setup is done, and it opens the setup canvas
   assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => \(DEMO \? setup\(\) : setFirstRun\(true\)\);/);
 });
 
+// "on startup i still don't see ... the survey questions ... does hitting set up taskuary on assistant button put the system on
+// setup mode? is it the same as setup on top right corner?" (the owner, 2026-10-16): every door is the one setup mode
+test("set up Taskuary typed in the chat is setup mode too, never a card in the chat", () => {
+  const av = read("AssistantView.jsx");
+  assert.match(av, /if \(!DEMO\) \{ setFirstRun\(true\); return; \}/);
+  assert.doesNotMatch(av, /A walk through every part of Taskuary/);
+});
+
+test("setup reopens on the first step not done, and on Your AI only when every step is", async () => {
+  const { openAt } = await import("../src/setupSteps.js");
+  assert.equal(openAt({ step: "done", about_done: false }, true), "about");
+  assert.equal(openAt({ step: "email", brain: { name: "Claude" } }, true), "mail");
+  assert.equal(openAt({ step: "done", about_done: true }, true), "ai");
+  assert.equal(openAt({ step: "done", about_done: true }, false), "other");
+  assert.match(read("FirstRun.jsx"), /setView\(openAt\(st, revisit \|\| st\.dismissed\)\)/);
+});
+
 // "i went back to change the ai but could not go forward again to my email without clicking the sidebar ... while it's loading the
 // email it shows it's up to survey step on left sidebar ... when does it allow you to turn off setup mode? it should be after
 // email/ai/survey rest is optional" (the owner, 2026-10-15)

@@ -48,6 +48,10 @@ def run(s, p, version=None):
         return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': version if version is not None else p['version']})
 
 
+# the composer writes the card: a report the owner simply wants is never triaged (compose.with_watch, 2026-10-16)
+COMPOSED = {**REPORT, 'route': {'triage': {'how': 'never'}}}
+
+
 class ReportSetupTests(unittest.TestCase):
     def test_a_report_is_gathered_confirmed_and_created_through_the_reports_road(self):
         s = store()
@@ -55,7 +59,7 @@ class ReportSetupTests(unittest.TestCase):
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['title'], p['params']['runs'], p['params']['reaches_you']),
                          ('report.create', 'Create the report', 'Open tasks by kind', 'cron 0 8 * * 1', 'Reports: every run; alert: never'))
-        self.assertEqual(p['params']['config'], REPORT)
+        self.assertEqual(p['params']['config'], COMPOSED)
         self.assertIn('Nothing is saved', out['say']); self.assertIn('Counts open tasks by kind', out['say'])
         # the builder's order, not a config dump: the prompt first, then the settings, one labelled line each
         lines = out['say'].splitlines()
@@ -69,7 +73,7 @@ class ReportSetupTests(unittest.TestCase):
         self.assertEqual(r['status'], 'done')
         src = s.get_source(r['outcome']['sourceId'])
         cfg = json.loads(src['ConfigJson'])
-        self.assertEqual(cfg.pop('route'), {'timeline': {'how': 'always'}, 'alert': {'how': 'never'}, 'send': {'how': 'always'}})   # saved as the card, at its defaults
+        self.assertEqual(cfg.pop('route'), {'timeline': {'how': 'always'}, 'alert': {'how': 'never'}, 'send': {'how': 'always'}, 'triage': {'how': 'never'}})   # saved as the card, at its defaults
         self.assertEqual((src['Channel'], src['Address'], bool(src['Active']), cfg), ('report', 'Open tasks by kind', True, REPORT))
         self.assertEqual(r['outcome']['link'], f"#report={src['SourceId']}")                                # the real resource and its screen
         self.assertEqual(run(s, p).json()['duplicate'], True)                                               # a second click creates nothing
@@ -84,7 +88,7 @@ class ReportSetupTests(unittest.TestCase):
             out = concierge.call_turn(s, dock, {'kind': 'report.create', 'params': {'config': {'source': 'agent', 'deliver': 'always'}}},
                                       None, 'set up a report of open tasks by kind every Monday at 8')
         p = out['proposal']
-        self.assertEqual(p['params']['config'], REPORT); self.assertEqual(p['params']['title'], 'Open tasks by kind')
+        self.assertEqual(p['params']['config'], COMPOSED); self.assertEqual(p['params']['title'], 'Open tasks by kind')
         self.assertFalse(any('sort one set-up' in sysm for sysm, _ in seen))       # the model already said "report"
         self.assertNotIn('report.create', out['say'])
 

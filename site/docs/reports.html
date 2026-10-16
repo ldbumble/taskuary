@@ -127,7 +127,7 @@ share one builder, which is why they share one page here.</p>
 </tr>
 <tr>
 <td><strong>Where each run goes</strong></td>
-<td>What makes it a task, then the route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never</td>
+<td>The route card: Timeline, alert and send, each every run, ask the AI, when a rule trips, or never - and, under a Timeline line that waits on a condition, whether triage judges the run when it fires</td>
 </tr>
 <tr>
 <td><strong>Schedule &amp; save</strong></td>
@@ -217,7 +217,7 @@ run hands back a bar chart beside the text.</li>
 sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a number or words - no AI), or
 <strong>never</strong>.</p>
 <p><figure><img src="img/report-runs.svg" alt="When a report runs: app start, its own clock, Run due now, or run by hand - one run at a time, and a switched-off connection fails the run" loading="lazy"><figcaption>A manual run is extra: it never uses up the schedule.</figcaption></figure></p>
-<p><figure><img src="img/report-goes.svg" alt="Where a run goes: a failure goes to the bell; otherwise triage reads it, and each line of the card answers every run, the AI, a rule, or never" loading="lazy"><figcaption>No answer from the judge counts as yes.</figcaption></figure></p>
+<p><figure><img src="img/report-goes.svg" alt="Where a run goes: a failure goes to the bell; otherwise each line of the card answers every run, the AI, a rule, or never" loading="lazy"><figcaption>No answer from the judge counts as yes.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
@@ -249,6 +249,13 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 <td>When the rule trips</td>
 <td>Never</td>
 </tr>
+<tr>
+<td><strong>Triage</strong></td>
+<td>Triage judges the run: whether it needs a task</td>
+<td>When the judge says so</td>
+<td>When the rule trips</td>
+<td>Never - the default: a row, never a task</td>
+</tr>
 </tbody></table>
 <table>
 <thead>
@@ -278,9 +285,15 @@ sentence the judge answers yes or no to), <strong>when a rule trips</strong> (a 
 <li><strong>Send it somewhere</strong> — email, Teams, Telegram, WhatsApp, iMessage or Discord. It waits on
 the task for approval by default. &quot;Send it without asking&quot; is the one place in Taskuary where
 that gate can be switched off, and it is deliberate.</li>
-<li><strong>Triage reads every run that worked</strong>, against <code>TRIAGE.md</code> and the report&#39;s own <strong>Make it a task
-when…</strong> sentence. A task if it needs doing - a bug found, a job that did not run - and otherwise a
-row under Reports, as the Timeline line says.</li>
+<li><strong>Let triage judge it when it fires</strong> is a switch under a Timeline line that asks the AI or waits
+for a rule, and it is off unless you turn it on: most reports are news to read, and a daily summary
+never reaches triage. On, a run that meets the condition goes to triage, which reads it against
+<code>TRIAGE.md</code> and the report&#39;s own <strong>Make it a task when…</strong> sentence and decides whether it needs a
+task - a bug found, a job that did not run - or is a row to read. Nothing is made for what an open
+task already covers. A triage condition set apart from the Timeline&#39;s is kept, and the card says so.</li>
+<li><strong>A run about a task you already have</strong> never becomes a second task and is never put on that task:
+it stays a row under Reports, and the task gets one note that the report mentions it - one a day
+per report.</li>
 <li><strong>A failed run</strong> is in the bell, top right, and nowhere else: no row, never a task, never an alert,
 never sent to anyone. It clears itself when a run works again. A send or an alert that did not go
 is in the bell the same way, until the next one goes.</li>

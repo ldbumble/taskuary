@@ -891,6 +891,13 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # in front of it (context.recent_open / recent_closures) - never applied over its answer (the owner, 2026-10-08)
         # ...and A STEP OF A GOAL it serves (spec 2026-10-12): triage named a goal and a step it was shown; the mail lands under it
         sv = intent.get('serves')
+        # A REPORT NAMES WORK, IT IS NOT THE ASK (the owner, 2026-10-16: "if triage finds something that is already a task that
+        # triage should not make it a task"). The End of day checkup's line about an open thread was read as same_as that task, the
+        # whole digest joined it, and the next run followed it there for the chain - turning the task's origin to a stranger. A run
+        # that points at existing work leaves the task a note and files as its own row; only what no task covers opens one.
+        if msg.get('channel') == 'report' and (hit := (same if (same := intent.get('same_as')) and store.get_task(same) else None)
+                                               or (sv['task'] if sv and store.get_task(sv['task']) else None)):
+            return _mention(store, msg, hit, intent, actor, _notes_note())
         if sv and store.get_task(sv['task']) and any(x['id'] == sv['step'] for x in store.goal_steps(sv['task'])):
             return _serve_step(store, msg, sv, intent, actor, _notes_note(), pol)
         same = intent.get('same_as')
@@ -1219,6 +1226,20 @@ def _retitle(store, t: dict, msg: dict, intent: dict, actor: str) -> bool:
     return True
 
 
+def _mention(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:
+    """A report run about a task that exists: the run is filed as its own row (never on the task, so it cannot become the task's
+    origin or its chain) and the task gets ONE note a day per report that the report named it - a daily run does not stack them."""
+    mid = _land(store, msg, None, 'feed')
+    ref, who = task_ref(tid), msg.get('source_name') or msg.get('from_name') or 'A report'
+    store.add_route(mid, None, 'file', None, f"triage: it is about {ref}, which already holds that work - filed as the report's own row, "
+                    f"not joined to it · {intent.get('why') or ''}" + notes_note, [], 'triage', verdict=_stored_verdict(intent))
+    head, today = f'{who} mentions this', datetime.now().strftime('%Y-%m-%d')
+    if not any(str(c.get('Body') or '').startswith(head) and str(c.get('CreatedAt') or '')[:10] == today for c in store.list_comments(tid)):
+        store.add_comment(tid, actor, 'agent', f"{head} in its run of {str(msg.get('sent_at') or today)[:16]} (report row #{mid}): {msg.get('subject') or ''}")
+    logger.info(f"ingest: a report run about {ref} - filed as its own row, noted on the task")
+    return {'status': 'feed', 'task_id': None, 'message_id': mid, 'mentions': tid}
+
+
 def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note: str = '') -> dict:
     """The arrival IS a task that exists (same_as, or the exact repeat): it joins that one. Filed on it when it
     adds nothing that needs the owner; otherwise on it, a closed one reopened, a question drafted, new asks added."""
@@ -1316,6 +1337,12 @@ def identity_route(store, msg: dict) -> dict:
     # id, so "the same thread" there is only the same report - a new failure would reopen last week's task. For
     # those the closed task is shown to triage (recently_closed) and same_as decides whether this IS it.
     from .store import OWN_CHANNELS
+    # ...and a REPORT never joins by its conversation at all, open task or closed: the id is only the report's own, so "the
+    # thread" was yesterday's run - and a run that once landed on a task pulled every later run onto it (2026-10-16). Triage
+    # reads it as new; one naming existing work leaves that task a note (_mention), never a message on it
+    if msg.get('channel') == 'report':
+        return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
+                'reason': f"a report run - {task_ref(home)} holds an earlier run, but a run is judged on its own, never joined by its thread"}
     if t.get('Status') == 'done' and msg.get('channel') in OWN_CHANNELS:
         return {'decision': 'create', 'task_id': None, 'score': 0.0, 'candidates': [],
                 'reason': f"a new run of the report behind {task_ref(home)}, which was closed - judged on its own, same_as decides"}

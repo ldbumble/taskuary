@@ -283,19 +283,24 @@ const RULES = [
 // Every report is saved as this card (reports.from_old_rules); the server says what it means in
 // words (RouteWords), so the page never re-derives the rules. What is left here is only what an
 // UNSAVED report shows before the server has seen it - reports.default_route, word for word.
-export const ROUTE_LINES = ["timeline", "alert", "send"];
+export const ROUTE_LINES = ["timeline", "alert", "send", "triage"];
 const ROUTE_HOW = ["always", "ai", "rule", "never"];
-const LINE_DEFAULT = { timeline: "always", send: "always", alert: "never" };
+// triage is off until asked for (the owner, 2026-10-16: "if it's always show up then it's just a report fyi") - only a monitor,
+// a report that speaks when something fails, is "if this happens, then triage, then fix"
+const LINE_DEFAULT = { timeline: "always", send: "always", alert: "never", triage: "never" };
 export const ASSISTANT_WHEN = "it has an idea that matters: something I would act on or need to know today, not a status note or a restatement of what is already in front of me";
+// ...and an Assistant's ideas are each triaged as they are said (assistant.triage_ideas), so its triage line starts on
 const lineOf = (c, line) => c?.route?.[line]
-  || (c?.type === "assistant" && line === "timeline" ? { how: "ai", when: ASSISTANT_WHEN } : { how: LINE_DEFAULT[line] });
+  || (c?.type === "assistant" && line === "timeline" ? { how: "ai", when: ASSISTANT_WHEN }
+    : c?.type === "assistant" && line === "triage" ? { how: "always" } : { how: LINE_DEFAULT[line] });
 export const fullRoute = (c) => Object.fromEntries(ROUTE_LINES.map((l) => [l, lineOf(c, l)]));
 // `alert` is not "the phone" - it goes to whichever live channel you picked, as often email as
 // WhatsApp (2026-09-17). What makes it an alert is that it skips Review, not the device.
 export const LINE_SAYS = {
-  timeline: ["show it under Reports", "a run to read — whether it is work is triage's call, every run"],
+  timeline: ["show it under Reports", "a run to read"],
   alert: ["reach me right away", "the moment it lands, with no Review step"],
   send: ["send it out", "to the people it is addressed to"],
+  triage: ["Let triage judge it when it fires", "triage decides whether it needs a task; nothing is made for what an open task already covers"],
 };
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
 // build it: a rule you cannot read is a rule you cannot trust.
@@ -303,6 +308,7 @@ const PROMPT_SAYS = {
   timeline: "show it under Reports on the owner's work rail as news to read",
   alert: "reach the owner right away, on whichever channel they chose",
   send: "send the report out to the people it is addressed to",
+  triage: "let triage judge the run - it decides whether it needs a task, and makes none for what an open task already covers",
 };
 const aiLines = (c, lines) => lines.filter((l) => lineOf(c, l).how === "ai" && (lineOf(c, l).when || "").trim());
 export const judgePrompt = (c, lines = ROUTE_LINES) => aiLines(c, lines)
@@ -315,8 +321,14 @@ export const judgeQuestions = (c, lines = ROUTE_LINES) => aiLines(c, lines)
   .map((l) => `${l}:\n  ask:   Decide whether to ${PROMPT_SAYS[l]}. ${JEV_EVIDENCE}\n`
     + `  yes:   ${lineOf(c, l).when.trim()}\n  no:    ${JEV_FALSE}\n  answer: a probability 0–1; ≥ 0.50 is yes`)
   .join("\n\n");
+// a Reports line that speaks only on a condition - the one kind a run of which triage may judge
+const CONDITIONAL = ["ai", "rule"];
+const LINE_KEYS = ["how", "when", "rule", "count", "text"];
+const sameLine = (a, b) => LINE_KEYS.every((k) => String(a?.[k] ?? "").trim() === String(b?.[k] ?? "").trim());
+const lineWords = (r) => r.how === "always" ? "every run" : r.how === "ai" ? `the AI decides - ${(r.when || "").trim()}`
+  : r.how === "rule" ? `when ${(RULES.find((o) => o.v === r.rule)?.label || r.rule).replace("…", r.text ? ` "${r.text}"` : ` ${r.count ?? ""}`)}` : "never";
 // the short name a replayed run wears, so reading down the strip the DIFFERENCE is what stands out
-const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out" };
+const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out", triage: "triaged" };
 
 // `browse` (the assistant canvas, CanvasBrowse.jsx): Reports and Workflows are the sections, each report its tab row, and
 // one report its own editor - drawn through the canvas's frame instead of this tab's rail.
@@ -881,8 +893,19 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
   // THE BOX SHOWS THE SENTENCE AS TYPED - trimming it here made every space a trailing space, gone
   // before it was drawn (the owner, 2026-09-17: "can't type space here"). It is trimmed where it is read.
   const shownAs = (line) => { const r = view[line] || {}; return [ROUTE_HOW.includes(r.how) ? r.how : LINE_DEFAULT[line], r.when || "", r]; };
-  const set = (line, patch) => setCfg({ ...cfg, route: { ...view, [line]: { ...view[line], ...patch } } });
+  // TRIAGE RIDES ON A CONDITIONAL REPORTS LINE (the owner, 2026-10-16: "the steps that make the work rail conditional should also
+  // have option" to go to triage): on, it is the SAME condition, and it follows the Reports line as that changes. A triage line the
+  // owner set apart by hand (its own condition, or an Advisor's every idea) is never rewritten from here - only shown and offered back.
+  const linked = (r) => r.triage.how !== "never" && sameLine(r.triage, r.timeline);
+  const set = (line, patch) => {
+    const next = { ...view[line], ...patch };
+    const triage = line !== "timeline" || !linked(view) ? view.triage : CONDITIONAL.includes(next.how) ? { ...next } : { how: "never" };
+    setCfg({ ...cfg, route: { ...view, [line]: next, triage } });
+  };
+  const judgeIt = (on) => setCfg({ ...cfg, route: { ...view, triage: on ? { ...view.timeline } : { how: "never" } } });
   const shown = ROUTE_LINES.filter((l) => l !== "send" || cfg.deliver?.to);
+  const drawn = shown.filter((l) => l !== "triage");
+  const ownTriage = view.triage.how !== "never" && !linked(view);
   const ask = shown.some((l) => shownAs(l)[0] === "ai");
   const blank = (when) => !when.trim();
   const canSilenceTimeline = !!cfg.deliver?.to;
@@ -899,16 +922,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         <AutoAwesomeIcon sx={{ fontSize: 15, color: "#55697a" }} />
         <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, flex: 1 }}>ONE PROMPT THAT ROUTES EACH RUN</Typography>
       </Box>
-      {/* WHETHER A RUN IS WORK IS TRIAGE'S CALL, on every run that worked (the owner, 2026-09-28): the work
-          line is gone, and its sentence is the brief triage reads the run against (reports.work_brief) */}
-      <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>Make it a task when…</Typography>
-        <Typography variant="caption" sx={{ color: FAINT }}>triage reads every run; blank = it judges on your triage rules alone</Typography>
-        <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
-          placeholder="any error at all, or a job that did not run when it should have"
-          value={cfg.watch_for || ""} onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })} />
-      </Box>
-      {shown.map((line) => {
+      {drawn.map((line) => {
         const [how, when, r] = shownAs(line);
         const [label, hint] = LINE_SAYS[line];
         return (
@@ -930,6 +944,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             {how === "ai" && (
               <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
                 placeholder={line === "alert" ? "a job has not run in over two hours"
+                    : line === "triage" ? "something failed that someone has to fix"
                     : "anything happened that is worth my knowing about"}
                 value={when} onChange={(e) => set(line, { when: e.target.value })} />
             )}
@@ -958,6 +973,31 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
                 This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back on your Timeline.
               </Typography>
+            )}
+            {line === "timeline" && CONDITIONAL.includes(how) && !ownTriage && (
+              <Box sx={{ mt: 0.8, pl: 1, borderLeft: `2px solid ${BORDER}` }}>
+                <Box component="label" sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer" }}>
+                  <Switch size="small" checked={view.triage.how !== "never"} onChange={(e) => judgeIt(e.target.checked)} />
+                  <Typography variant="body2" sx={{ fontSize: 12.5, fontWeight: 600 }}>{LINE_SAYS.triage[0]}</Typography>
+                </Box>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>{LINE_SAYS.triage[1]}</Typography>
+                {/* the brief triage reads a run it is sent against (reports.work_brief) - only worth asking for once a run can get there */}
+                {view.triage.how !== "never" && (
+                  <TextField fullWidth multiline minRows={1} size="small" sx={{ bgcolor: "#fff", mt: 0.8, "& .MuiInputBase-root": { fontSize: 13 } }}
+                    label="Make it a task when… (blank = your triage rules alone)"
+                    placeholder="any error at all, or a job that did not run when it should have"
+                    value={cfg.watch_for || ""} onChange={(e) => setCfg({ ...cfg, watch_for: e.target.value })} />
+                )}
+              </Box>
+            )}
+            {line === "timeline" && ownTriage && (
+              <Box sx={{ mt: 0.8, pl: 1, borderLeft: `2px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
+                  Triage judges it on its own condition: {cfg.type === "assistant" && view.triage.how === "always" ? "every idea it says" : lineWords(view.triage)}
+                </Typography>
+                {CONDITIONAL.includes(how) && <Button size="small" onClick={() => judgeIt(true)} sx={{ fontSize: 12, color: INK }}>use this condition</Button>}
+                <Button size="small" onClick={() => judgeIt(false)} sx={{ fontSize: 12, color: INK }}>stop</Button>
+              </Box>
             )}
             {line === "alert" && how !== "never" && (
               <Box sx={{ display: "flex", gap: 1, mt: 0.8, flexWrap: "wrap" }}>

@@ -49,9 +49,10 @@ def test_an_unset_line_falls_back_to_what_that_destination_has_always_done():
     assert reports.route_of(cfg, 'timeline') == ('ai', 'any error')
 
 
-def test_there_is_no_work_line_because_triage_reads_every_run():
-    """The owner, 2026-09-28: whether a run is work is triage's call on every run, not a line on the card."""
-    assert reports.LINES == ('timeline', 'alert', 'send')
+def test_triage_is_a_line_and_the_old_work_line_is_not():
+    """The owner, 2026-10-16, reversing 2026-09-28's "triage reads every run": "most reports should not go through triage" -
+    so it is a line of the card, off unless set. The old work line stays gone; its meaning lives in this one."""
+    assert reports.LINES == ('timeline', 'alert', 'send', 'triage')
     assert 'work' not in reports.default_route({}) and 'work' not in reports.default_route({'type': 'assistant'})
     with pytest.raises(ValueError): reports.set_line({}, 'work', 'always')
 
@@ -189,7 +190,7 @@ def test_a_failed_run_goes_down_no_line_and_is_left_to_the_bell():
     cfg = {'route': {'timeline': {'how': 'always'}, 'alert': {'how': 'always'}, 'send': {'how': 'always'}}}
     d = reports.decide(cfg, res(failed=True), llm_saying('TIMELINE: yes', seen))
     assert seen == []
-    assert d == {'timeline': False, 'alert': False, 'send': False, 'why': 'the report failed to run'}
+    assert d == {'timeline': False, 'alert': False, 'send': False, 'triage': False, 'why': 'the report failed to run'}
 
 
 # ── which judge answers ─────────────────────────────────────────────────────────────────

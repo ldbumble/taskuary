@@ -109,6 +109,14 @@ JUDGEMENT = (
     '- A clear request is built, not questioned: never ask the owner to confirm what they already said, or to choose '
     'between readings when one is plainly meant. They check the draft before anything is saved.\n')
 
+# A WATCH is not a report you read: it speaks only when something is wrong, and then triage judges it (the owner, 2026-10-16:
+# "if it's always show up then it's just a report fyi, not a optional if this happens, then triage then fix type of thing").
+WATCH_RULE = ('- "watch": ONLY when the owner wants to hear from it IF something happens ("tell me if the system shows an error", '
+              '"let me know when the job fails"), the condition in their own words. Its run then shows under Reports only when '
+              'that holds, and triage judges it then: triage decides whether it needs a task, and makes none for what an open '
+              'task already covers. A report the owner simply wants ("send me X every morning") has NO "watch": it shows every '
+              'run and triage never sees it. Never write "route" - the server writes it from "watch".\n')
+
 REPOS_RULE = ('- "repositories" are the owner\'s own code repositories: full name and what each is for. When the request names one '
               'by its short name ("taskuary", "ledger"), it means that one - write its full owner/name, never ask which.\n')
 
@@ -142,7 +150,7 @@ SYSTEM = (
     JUDGEMENT +
     '- A config is not finished until it carries what its type needs to RUN: an Intacct report has an object, a SQL '
     'report has a query, a REST report has a url. A title alone is the owner\'s form handed back to them - peek or ask instead.\n'
-    + REPOS_RULE)
+    + WATCH_RULE + REPOS_RULE)
 
 
 WORKFLOW_SYSTEM = (
@@ -178,7 +186,9 @@ WORKFLOW_SYSTEM = (
     '- An agent workflow also says, when the request does: "uses" - the ids of the connections it works in, only from '
     'WORKFLOW OPTIONS connections; "ask_first" - what it must ask the owner before doing; "done_when" - what finished '
     'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page.\n'
-    '- Do not add report-only keys such as sources, ai_prompt, charts, triage, delivery, or alerts.')
+    '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, delivery, or alerts.\n'
+    + WATCH_RULE.replace('- "watch":', '- "watch" (an agent workflow given a "cwd" only - any other workflow run is its own task, with '
+                         'nothing to wait for):'))
 
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
@@ -186,6 +196,16 @@ WORKFLOW_KEYS = {
     'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'access', 'uses', 'ask_first', 'done_when', 'browser',
               'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
+
+
+def with_watch(cfg: dict, watch) -> dict:
+    """The card a composed config is saved with, written HERE from the model's `watch` and never from a route it wrote: a watch
+    shows under Reports when its condition holds and triage judges that same run; anything else is a report to read, and its
+    triage line is never (reports.LINE_DEFAULT) - so a model that forgot the key made a report, not a monitor."""
+    w = str(watch or '').strip()[:500]
+    line = {'how': 'ai', 'when': w}
+    return {**{k: v for k, v in cfg.items() if k not in ('route', 'watch', 'triage')},
+            'route': {'timeline': line, 'triage': dict(line)} if w else {'triage': {'how': 'never'}}}
 
 
 def workflow_catalog(store) -> dict:
@@ -221,6 +241,9 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
         typ = raw.get('type')
         if typ not in WORKFLOW_KEYS: return {'error': f'unsupported workflow type: {typ or "(missing)"}'}
         cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
+        # only a run filed like a report (a coding workflow, reports.run_agent) waits for anything: any other workflow run is
+        # handed to its worker as a task (workflows.run), so a watch on it would be a line the run never reads
+        watch = raw.get('watch') if typ == 'agent' and str(raw.get('cwd') or '').strip() else None
         if not str(cfg.get('title') or '').strip(): return {'error': 'the workflow has no title'}
         schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
         if not schedules:
@@ -243,6 +266,7 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             # The workflow door is the owner's grant to write. `type: agent` alone remains a
             # read-only report, because the executor is not the product boundary.
             cfg['access'] = 'write'
+            cfg = with_watch(cfg, watch)
         else:
             try: cid = int(cfg.get('connector_id'))
             except (TypeError, ValueError): return {'error': 'choose a connected Zoho Invoice account'}
@@ -363,6 +387,7 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
         if not isinstance(cfg, dict): return {'error': 'the model answered without a config'}
         if cfg.get('type') in excluded:
             return {'error': f"{cfg.get('type')} is a workflow - create it from the Workflows section"}
+        cfg = with_watch(cfg, cfg.get('watch'))
         ok, why = validate(store, cfg)
         if not ok: return {'error': why, 'config': cfg}
         return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],

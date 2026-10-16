@@ -237,14 +237,18 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(json.loads(s.get_idea(row['IdeaId'])['ActionJson'])['triage']['intent'], 'fyi')
 
     def test_every_report_run_asks_triage_and_a_workflow_trigger_never_does(self):
-        # there is no work line to switch triage off (the owner, 2026-09-28): triage reads every run that worked
+        # triage reads a run its triage line sends, and only that (the owner, 2026-10-16: "most reports should not go through
+        # triage") - a report nobody set the line on is a row under Reports
         s = MemoryStore(); calls = []
         rep = report_src(s, {'type': 'agent', 'title': 'Weekly numbers'})
         with mock.patch.object(reports, 'render_report', return_value=('12 rows', 'nothing looks off')):
             reports.run_report_source(s, rep, llm=brain('fyi', calls=calls))
+            self.assertEqual(calls, [])
+            rep = report_src(s, {'type': 'agent', 'title': 'Weekly checks', 'route': {'triage': {'how': 'always'}}})
+            reports.run_report_source(s, rep, llm=brain('fyi', calls=calls))
         self.assertEqual(len(calls), 1)
-        m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
-        self.assertEqual((m['Status'], m['TaskId']), ('filed', None))
+        self.assertEqual([(m['Status'], m['TaskId']) for m in s._rows("SELECT * FROM message WHERE Channel='report' ORDER BY MessageId")],
+                         [('feed', None), ('filed', None)])
         self.assertEqual(s.list_tasks(), []); self.assertEqual(s.list_ideas(), [])
         # a workflow is a triggered job, not a message: it reaches its worker whatever the switch says
         wf = report_src(s, {'type': 'agent', 'access': 'write', 'runs_on': 'general', 'title': 'File the invoices', 'triage': True})

@@ -88,9 +88,11 @@ class SameAsTests(unittest.TestCase):
         self.assertIn('a report run that needs nothing from the owner is better as its own quiet row than filed on a closed task', seen[-1]['sys'])
         self.assertEqual((today['status'], today['task_id']), ('filed', None), 'today\'s run vanished into the closed task')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
+        # ...and an OPEN task does not take it either (the owner, 2026-10-16: "if triage finds something that is already a task
+        # that triage should not make it a task"): the run stays its own row and the task gets a note that the report names it
         s.update_task(tid, {'Status': 'open'}, 'owner')
         again = run('report:7:wed', brain('fyi', same_as=tid, title='Morning digest'))
-        self.assertEqual(again['task_id'], tid, 'an open task is still where its next run belongs')
+        self.assertEqual((again['status'], again['task_id'], again['mentions']), ('feed', None, tid))
 
     def test_a_task_it_was_never_shown_joins_nothing(self):
         s = MemoryStore()

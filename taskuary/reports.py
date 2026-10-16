@@ -1663,16 +1663,18 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     if failed:
         return {'message_id': None, 'subject': subject, 'files': 0, 'said': 0, 'failed': True, 'error': body, 'summary': text[:2000]}
     d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm))
-    # EVERY RUN THAT WORKED IS TRIAGED (the owner, 2026-09-28, D1): a MESSAGE like any other, read under
-    # TRIAGE.md with the report's brief (classify_intent's `watch`). A task if it needs doing, else a row
-    # under Reports - or, with the Timeline line at no, nothing: a task or nothing
+    # ONLY A RUN THE TRIAGE LINE SENDS IS TRIAGED (the owner, 2026-10-16, reversing D1 of 2026-09-28): "most reports should not
+    # go through triage ... if it's always show up then it's just a report fyi, not a optional if this happens, then triage then
+    # fix type of thing." A daily summary triaged as mail had its line about an open thread read as that task, and the whole run
+    # joined it. Off the line, the run is a row under Reports and nothing else - it can never open or join a task. On it, it is
+    # a MESSAGE read under TRIAGE.md with the report's brief (classify_intent's `watch`): a task if it needs fixing, else a row
     from .ingest import ingest_message
     is_digest = 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}
     # ...except the MORNING DIGEST, which is the assistant's brief on the opening screen, not an arrival: every line of it
     # retells work that already has its own row, so judging it as mail only ever made a duplicate of that work - triage
     # flipped to "task" on two runs (TQ-0938, TQ-1038: "Review today's meetings and waiting work", urgent, on the rail
     # above the very items it listed) and the owner, 2026-10-12: "should not be a task"
-    out = {} if is_digest else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
+    out = {} if is_digest or not d['triage'] else ingest_message(store, msg={'external_id': f'report:{src["SourceId"]}:{stamp}', 'channel': 'report',
                                      'subject': subject, 'body': text, 'from_name': title,
                                      'conversation_id': f'report:{src["SourceId"]}', 'sent_at': stamp,
                                      'source_link': cfg.get('link'), 'source_name': title,
@@ -1731,7 +1733,7 @@ def report_muted(store, title: str, subject: str) -> bool:
 
 
 # ── where a run goes: one card, four lines ─────────────────────────────────────────────────
-# Every report answers the same four questions about every run - Timeline, work rail, alert, send -
+# Every report answers the same four questions about every run - Reports, alert, send, triage -
 # and each line is one of four answers: every run, ask the AI, when a rule trips, or never.
 #
 # This is the ONLY rule set. Reports saved before the card existed were routed by `reach`, an alert
@@ -1745,11 +1747,12 @@ def report_muted(store, title: str, subject: str) -> bool:
 ALERT_WHEN = ('nothing_came_back', 'something_came_back', 'fewer_than', 'more_than', 'contains', 'missing')
 _LEADING_COUNT = re.compile(r'\s*(\d[\d,]*)\b')
 ROUTE = ('always', 'ai', 'rule', 'never')
-LINES = ('timeline', 'alert', 'send')
+LINES = ('timeline', 'alert', 'send', 'triage')
 # What a line nobody set means. A report you set up lands under Reports every run unless you say
-# otherwise; whether a run is WORK is triage's call on every run, not a line (the owner, 2026-09-28).
-# Delivery has always gone out every run. Only the interruption stays off until it is asked for.
-LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'alert': 'never'}
+# otherwise, and delivery has always gone out every run. The interruption stays off until it is asked
+# for, and so does triage: a report is news to read, and only a monitor - one that speaks when
+# something fails - is "if this happens, then triage, then fix" (the owner, 2026-10-16).
+LINE_DEFAULT = {'timeline': 'always', 'send': 'always', 'alert': 'never', 'triage': 'never'}
 # ...except the Assistant: a voice that checks in every half hour, and "every run" from a voice is
 # noise (the owner, 2026-09-20: "only show up when the assistant has an idea that matters, not always").
 ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need to know today, '
@@ -1758,7 +1761,8 @@ ASSISTANT_WHEN = ('it has an idea that matters: something I would act on or need
 # picked, as often email as WhatsApp; what makes it an alert is that it skips Review.
 LINE_SAYS = {'timeline': "show it under Reports on the owner's work rail as news to read",
              'alert': "reach the owner right away, on whichever channel they chose",
-             'send': 'send the report out to the people it is addressed to'}
+             'send': 'send the report out to the people it is addressed to',
+             'triage': 'let triage judge the run - it decides whether it needs a task, and makes none for what an open task already covers'}
 JUDGE_TOKENS = 60                 # four bare yes/nos
 
 
@@ -1766,8 +1770,11 @@ def default_route(cfg: dict) -> dict:
     """The card a report gets when nobody has set a line. Every Advisor asks before it posts, the one
     watching systems too: "every run" had it post "I checked and found nothing" every half hour (D5, the
     owner 2026-09-28: "default to not show up at all if nothing found")."""
+    # ...and its ideas are each triaged as they are said (assistant.triage_ideas) - a voice speaks only when it has something,
+    # and an idea links to the task it names rather than joining it, so the Advisor's triage line starts on
     ask = cfg.get('type') == 'assistant'
-    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if ask and l == 'timeline' else {'how': LINE_DEFAULT[l]}) for l in LINES}
+    return {l: ({'how': 'ai', 'when': ASSISTANT_WHEN} if ask and l == 'timeline' else {'how': 'always'} if ask and l == 'triage'
+                else {'how': LINE_DEFAULT[l]}) for l in LINES}
 
 
 def route_of(cfg: dict, line: str) -> tuple:
@@ -1784,7 +1791,7 @@ def route_of(cfg: dict, line: str) -> tuple:
 
 
 def full_route(cfg: dict) -> dict:
-    """All three lines written down, for the page and for storage: the card shows what runs."""
+    """All four lines written down, for the page and for storage: the card shows what runs."""
     return {l: dict((cfg.get('route') or {}).get(l) or default_route(cfg)[l]) for l in LINES}
 
 
@@ -1796,14 +1803,16 @@ def rule_words(r: dict) -> str:
             'contains': f'it mentions "{text}"', 'missing': f'it never mentions "{text}"'}.get(str(r.get('rule') or '').lower(), '')
 
 
-LINE_NAMES = {'timeline': 'Reports', 'alert': 'alert', 'send': 'sent out'}
+LINE_NAMES = {'timeline': 'Reports', 'alert': 'alert', 'send': 'sent out', 'triage': 'triage'}
 
 
 def route_words(cfg: dict) -> str:
     """Where this report's runs go, in the card's own words - the one describer the page, the chat and
     the app facts all read, so none of them states the route its own way."""
     say = lambda h, w: {'always': 'every run', 'never': 'never', 'ai': f'the AI decides - {w}', 'rule': f'when {w}'}[h]
-    return '; '.join(f'{LINE_NAMES[l]}: {say(*route_of(cfg, l))}' for l in LINES if l != 'send' or (cfg.get('deliver') or {}).get('to'))
+    # triage is said only when it is on: "triage: never" on every daily report is a line about nothing
+    return '; '.join(f'{LINE_NAMES[l]}: {say(*route_of(cfg, l))}' for l in LINES
+                     if (l != 'send' or (cfg.get('deliver') or {}).get('to')) and (l != 'triage' or route_of(cfg, l)[0] != 'never'))
 
 
 def run_lands(cfg: dict) -> str:
@@ -1849,7 +1858,9 @@ def from_old_rules(cfg: dict) -> dict:
     if (r := cfg.get('route')) and any(str((r.get(l) or {}).get('how') or '').strip().lower() in ROUTE for l in (*LINES, 'work')):
         # the old work line's sentence is the triage brief now, so it moves to watch_for rather than drop
         brief = work_brief(cfg)
-        return {**{k: v for k, v in cfg.items() if k not in ('reach', 'triage')}, 'route': full_route(cfg), **({'watch_for': brief} if brief else {})}
+        # ...and the old work line WAS the triage line ("is this run work?"), so a card that still carries one keeps its meaning
+        route = {**full_route(cfg), **({'triage': dict(w)} if 'triage' not in r and _set_line(w := r.get('work')) else {})}
+        return {**{k: v for k, v in cfg.items() if k not in ('reach', 'triage')}, 'route': route, **({'watch_for': brief} if brief else {})}
     a, d = dict(cfg.get('alert') or {}), dict(cfg.get('deliver') or {})
     def line(how, cond):
         if how == 'always': return {'how': 'always'}
@@ -1873,6 +1884,22 @@ def from_old_rules(cfg: dict) -> dict:
     if a: out['alert'] = {k: v for k, v in a.items() if k not in ('when', 'count', 'text')}
     if d: out['deliver'] = {k: v for k, v in d.items() if k not in ('send', 'when', 'count', 'text')}
     return {**out, 'route': route}
+
+
+def _set_line(r) -> bool: return str((r or {}).get('how') or '').strip().lower() in ROUTE
+
+
+def triage_from(cfg: dict) -> dict:
+    """The triage line a report saved before the line existed gets, read off how it already behaves (store's one-time migration).
+    A Reports line that speaks only on a condition is a MONITOR - it talks when something is wrong - so triage takes that same
+    condition; one that posts every run (a digest, a daily summary) is news, and news is never triaged (the owner, 2026-10-16).
+    An old work line is the triage line by another name. An assistant voice keeps triaging what it says, as it always has (its
+    ideas are judged one by one, assistant.triage_ideas): only a rule carries over, since a rule asks nothing of a model."""
+    r = cfg.get('route') or {}
+    if _set_line(r.get('work')): return dict(r['work'])
+    how = route_of(cfg, 'timeline')[0]
+    if cfg.get('type') == 'assistant': return dict(r['timeline']) if how == 'rule' else {'how': 'always'}
+    return dict(r.get('timeline') or default_route(cfg)['timeline']) if how in ('ai', 'rule') else {'how': 'never'}
 
 
 def as_card(cfg: dict) -> dict:
@@ -1925,7 +1952,7 @@ def judge_prompt(cfg: dict) -> str:
                      for l in LINES for h, w in [route_of(cfg, l)] if h == 'ai')
 
 
-_FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|ALERT|SEND)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
+_FLAG = re.compile(r'^[ \t>*_\-]*(TIMELINE|ALERT|SEND|TRIAGE)\s*:\s*(yes|no)\b[ \t:.\-—]*(.*)$', re.I | re.M)
 
 
 def judge_state(res: dict) -> str:
@@ -1967,7 +1994,7 @@ def decide(cfg: dict, res: dict, llm=None, judge=None) -> dict:
     it errors out only in the app"), and only in the bell (2026-09-28): no row, never a task, never a
     ping, never a "Report error" sent to the people a report is addressed to.
     """
-    if res['failed']: return {'timeline': False, 'alert': False, 'send': False, 'why': 'the report failed to run'}
+    if res['failed']: return {**{l: False for l in LINES}, 'why': 'the report failed to run'}
     how = {l: route_of(cfg, l) for l in LINES}
     ask = [l for l in LINES if how[l][0] == 'ai']
     said = {}

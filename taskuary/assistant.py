@@ -1841,13 +1841,15 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     store.set_ideas_message([i['IdeaId'] for i in rows], mid)
     store.audit('message', mid, 'assistant_post', 'assistant', 'agent', {'ideas': len(rows)})
     # the ideas are ARRIVALS: each newly said one goes through the same triage as a mail (PW-199) - by
-    # the TRIAGE brain, the one every message is judged by, not the assistant's own model
-    try:
-        from .llm import build_llm
-        try: brain = build_llm(store)
-        except Exception: brain = None
-        triage_ideas(store, rows, brain, report_title=name if own_post else None)
-    except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
+    # the TRIAGE brain, the one every message is judged by, not the assistant's own model. Unless the
+    # report's triage line says not (reports.LINES, 2026-10-16): then they are shown, and only shown
+    if d is None or d.get('triage', True):
+        try:
+            from .llm import build_llm
+            try: brain = build_llm(store)
+            except Exception: brain = None
+            triage_ideas(store, rows, brain, report_title=name if own_post else None)
+        except Exception as e: logger.warning(f'assistant: idea triage skipped - {e}')
     if d is not None and not d.get('timeline'):
         # TIMELINE NEVER MEANS NEVER: an idea triage made no task of is put down at once - a task or nothing
         from . import funnel

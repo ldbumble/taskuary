@@ -20,7 +20,8 @@ def test_ai_agent_workflow_uses_a_real_configured_agent():
                    'skill': '/weekly-access-review', 'cron': '0 8 * * 1', 'deliver': {'to': 'invented'}},
         'explain': 'Coding runs the saved skill every Monday.', 'confidence': 'high'}, seen))
     assert out['config'] == {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coding',
-                             'skill': 'weekly-access-review', 'cron': '0 8 * * 1', 'access': 'write'}
+                             'skill': 'weekly-access-review', 'cron': '0 8 * * 1', 'access': 'write',
+                             'route': {'triage': {'how': 'never'}}}   # a workflow, not a watch: never triaged
     assert seen['user']['workflow_options']['agent'] == [{'name': 'coding'}]
     assert 'reports only read and summarize' in seen['system']
 

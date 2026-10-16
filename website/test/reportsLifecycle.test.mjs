@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const source = await readFile(new URL("../src/ReportsView.jsx", import.meta.url), "utf8");
 
@@ -103,7 +105,7 @@ test("every report is the card - the page draws it and never re-derives old rule
     assert.ok(!source.includes(gone), `${gone} is the old rule set and must not come back`);
   }
   assert.match(source, /export const fullRoute = \(c\) =>/);
-  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", alert: "never" \}/);
+  assert.match(source, /const LINE_DEFAULT = \{ timeline: "always", send: "always", alert: "never", triage: "never" \}/);
   // ...a rule is arithmetic a model is not trusted with, and it is a line's fourth answer
   assert.match(source, /<MenuItem value="rule"[^>]*>when a rule trips<\/MenuItem>/);
   // ...and what a saved report does is said in the server's words
@@ -143,11 +145,35 @@ test("the Assistant with no rule of its own asks whether it matters before it sh
   assert.match(source, /c\?\.type === "assistant" && line === "timeline" \? \{ how: "ai", when: ASSISTANT_WHEN \}/);
 });
 
-test("triage reads every run that worked, against the brief the card gives it", () => {
-  // the work line is gone (the owner, 2026-09-28) - its sentence is watch_for, the brief reports.work_brief reads
-  assert.match(source, /export const ROUTE_LINES = \["timeline", "alert", "send"\]/);
-  assert.match(source, /Make it a task when…/);
-  assert.match(source, /value=\{cfg\.watch_for \|\| ""\} onChange=\{\(e\) => setCfg\(\{ \.\.\.cfg, watch_for: e\.target\.value \}\)\}/);
+test("a conditional Reports line offers one toggle: let triage judge it when it fires", () => {
+  // the owner, 2026-10-16: "most reports should not go through triage ... if it's always show up then it's just a report fyi", and
+  // "the steps that make the work rail conditional should also have option" - a toggle on that line, never a fourth row
+  assert.match(source, /export const ROUTE_LINES = \["timeline", "alert", "send", "triage"\]/);
+  assert.match(source, /triage: \["Let triage judge it when it fires", "triage decides whether it needs a task; nothing is made for what an open task already covers"\]/);
+  assert.ok(!/escalate to a task/i.test(source), "the toggle does not force a task - triage judges");
+  // word for word as reports.LINE_SAYS, which is what the judge is asked
+  const reports = readFileSync(fileURLToPath(new URL("../../taskuary/reports.py", import.meta.url)), "utf8");
+  const says = /'triage': '([^']+)'/.exec(reports)[1];
+  assert.ok(source.includes(`triage: "${says}"`), `PROMPT_SAYS.triage must be reports.LINE_SAYS verbatim: ${says}`);
+  // an Assistant keeps triaging its ideas - reports.default_route, mirrored for an unsaved report
+  assert.match(source, /c\?\.type === "assistant" && line === "triage" \? \{ how: "always" \}/);
+  const card = source.slice(source.indexOf("function RoutingCard"), source.indexOf("function ReportWizard"));
+  // triage is not drawn as a row of its own...
+  assert.match(card, /const drawn = shown\.filter\(\(l\) => l !== "triage"\)/);
+  assert.match(card, /\{drawn\.map\(\(line\) => \{/);
+  // ...but shown under the Reports line, only while that line waits on a condition, and on = the SAME condition
+  assert.match(card, /line === "timeline" && CONDITIONAL\.includes\(how\) && !ownTriage && \(/);
+  assert.match(source, /const CONDITIONAL = \["ai", "rule"\]/);
+  assert.match(card, /triage: on \? \{ \.\.\.view\.timeline \} : \{ how: "never" \}/);
+  // a linked triage follows the Reports line; one turned to every run or never takes triage off with it
+  assert.match(card, /CONDITIONAL\.includes\(next\.how\) \? \{ \.\.\.next \} : \{ how: "never" \}/);
+  // ...and one the owner set apart by hand is never rewritten: it is said, and offered back
+  assert.match(card, /line === "timeline" && ownTriage && \(/);
+  assert.match(card, /Triage judges it on its own condition:/);
+  // the brief (reports.work_brief) is asked for only once a run can reach triage
+  assert.match(card, /Make it a task when…/);
+  assert.match(card, /value=\{cfg\.watch_for \|\| ""\} onChange=\{\(e\) => setCfg\(\{ \.\.\.cfg, watch_for: e\.target\.value \}\)\}/);
+  assert.ok(!source.includes("whether it is work is triage's call"), "D1 (every run triaged) is reversed");
 });
 
 test("a report with no schedule wears a red border and says it only runs by hand", () => {

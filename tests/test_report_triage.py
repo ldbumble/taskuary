@@ -1,6 +1,6 @@
-"""A report may become work: every run that worked is an inbound message TRIAGE.md judges (the owner,
-2026-09-28 - there is no switch any more); what triage calls informational stays a row under Reports.
-And the Board's Done lane is agent work only."""
+"""A report may become work when its triage line sends the run (reports.LINES - the owner, 2026-10-16); a run sent there is an
+inbound message TRIAGE.md judges, and what triage calls informational stays a row under Reports. test_report_triage_line has the
+line itself. And the Board's Done lane is agent work only."""
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
@@ -11,6 +11,9 @@ TASK_LLM = lambda sys_, usr, **kw: '{"intent": "task", "kind": "coding", "why": 
 FYI_LLM = lambda sys_, usr, **kw: '{"intent": "fyi", "why": "a weekly trend, nothing to do"}'
 
 
+TRIAGED = {'route': {'triage': {'how': 'always'}}}
+
+
 class ReportTriageTests(unittest.TestCase):
     def _src(self, s, cfg):
         sid = s.save_source({'Channel': 'report', 'Address': cfg['title'], 'ConfigJson': json.dumps(cfg), 'Active': 1}, 't')
@@ -18,7 +21,7 @@ class ReportTriageTests(unittest.TestCase):
 
     def test_a_run_triage_calls_informational_stays_a_row_under_reports(self):
         s = MemoryStore()
-        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
+        src = self._src(s, {'type': 'agent', 'title': 'Trends', **TRIAGED})
         with mock.patch.object(reports, 'render_report', return_value=('coding ran a prompt', '# Trends\nall steady this week')):
             reports.run_report_source(s, src, llm=FYI_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
@@ -73,7 +76,7 @@ class ReportTriageTests(unittest.TestCase):
     def test_the_brain_decides_and_a_task_can_open(self):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')   # triage needs a brain card
-        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
+        src = self._src(s, {'type': 'agent', 'title': 'Trends', **TRIAGED})
         with mock.patch.object(reports, 'render_report', return_value=('coding ran a prompt', '# Trends\nbuild a doc about X')), \
              mock.patch('taskuary.ingest._spawn'):
             reports.run_report_source(s, src, llm=TASK_LLM)
@@ -86,7 +89,7 @@ class ReportTriageTests(unittest.TestCase):
     def test_a_failed_run_is_never_triaged(self):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')
-        src = self._src(s, {'type': 'agent', 'title': 'Trends'})
+        src = self._src(s, {'type': 'agent', 'title': 'Trends', **TRIAGED})
         with mock.patch.object(reports, 'render_report', side_effect=RuntimeError('claude exit 1')):
             out = reports.run_report_source(s, src, llm=TASK_LLM)
         # nothing is filed at all - no row, no task; the run history and the bell have it (2026-09-28)

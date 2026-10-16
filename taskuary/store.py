@@ -1463,9 +1463,21 @@ class SQLiteStore:
                     # ...and a brief is once a day: on_startup alone re-filed it on every launch
                     if c.get('on_startup'): c['once_per_day'] = True
                     self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(c), sid_))
+            # THE TRIAGE LINE, once (the owner, 2026-10-16: "most reports should not go through triage"): every report triaged
+            # every run before it existed, so each is given the line its own behaviour already says - a monitor keeps its condition,
+            # a digest never (reports.triage_from). BEFORE the card pass below, which would write the default `never` into all of them
+            from .reports import from_old_rules, triage_from
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='report_triage_line_set'").fetchone():
+                for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
+                    try: c = json.loads(cj or '{}')
+                    except ValueError: continue
+                    card = c if c.get('route') else from_old_rules(c)
+                    if 'triage' in (card.get('route') or {}): continue
+                    card = {**card, 'route': {**card['route'], 'triage': triage_from(card)}}
+                    self.cx.execute('UPDATE source SET ConfigJson=? WHERE SourceId=?', (json.dumps(card), sid_))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('report_triage_line_set', '1', 'migration')")
             # ONE RULE SET for where a run goes (the owner, 2026-09-27): a report saved before the route
             # card is written down as the card, meaning exactly what it did - reports.from_old_rules
-            from .reports import from_old_rules
             for sid_, cj in self.cx.execute("SELECT SourceId, ConfigJson FROM source WHERE Channel='report'").fetchall():
                 try: c = json.loads(cj or '{}')
                 except ValueError: continue

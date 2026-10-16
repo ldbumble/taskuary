@@ -964,11 +964,14 @@ class CoreTests(unittest.TestCase):
         s = MemoryStore()
         REGISTRY['_t'] = lambda cfg: ('3 rows', 'a\nb\nc')
         try:
-            # every run is triaged (2026-09-28): one triage calls informational is filed, never a task
+            # a run its triage line sends (2026-10-16) that triage calls informational is filed, never a task
             fyi = lambda sys_, usr, **kw: '{"intent": "fyi", "why": "a census count"}'
-            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t"}'}, fyi)
+            out = run_report_source(s, {'SourceId': 1, 'Address': 'Census', 'ConfigJson': '{"type": "_t", "route": {"triage": {"how": "always"}}}'}, fyi)
             m = s.get_message(out['message_id'])
             self.assertEqual((m['Channel'], m['Status'], m['TaskId']), ('report', 'filed', None))
+            # ...and with the line unset it never reaches triage: a row under Reports
+            out = run_report_source(s, {'SourceId': 2, 'Address': 'Census', 'ConfigJson': '{"type": "_t"}'}, fyi)
+            self.assertEqual(s.get_message(out['message_id'])['Status'], 'feed')
         finally:
             REGISTRY.pop('_t')
 

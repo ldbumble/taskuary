@@ -1123,6 +1123,10 @@ def pages_block(store) -> str:
             f"- a connection: #connector=<its type>{' - connected now: ' + conns if conns else ''}; any other system by its type "
             '(intacct, outlook, gmail, teams, slack, whatsapp, quickbooks, sharepoint, mssql, github, jira ...)\n'
             '- the AI CLI agents (Claude Code, Codex): #cli-agents\n'
+            # the brains (the owner, 2026-10-15: "can you find me the setting for assistant ai brain" got "I can't see the exact name
+            # or location of that setting")
+            '- the brains - which CLI tool or AI connection, at which model, runs triage, this Assistant, general agents and coding, '
+            'and where report runs go: #settings=config&group=Triage%20%26%20agents\n'
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
             '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '

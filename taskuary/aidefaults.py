@@ -19,6 +19,7 @@ summaries, the digest (llm.make_cli_llm). Naming the same CLI as both the coder 
 brain is normal and cheap; it is the light gear that keeps it cheap.
 """
 import json, re
+from loguru import logger
 
 from . import climodels
 
@@ -188,6 +189,34 @@ def resolve(store, cfg, slot_key: str) -> dict:
     if not value: out['note'] = f"auto — currently {c['Name']}"
     if not out['model']: out['note'] = (out['note'] + '; ' if out['note'] else '') + f"blank = {_conn_default(c['Type'])}"
     return out
+
+
+def said(store, slot_key: str, cfg=None) -> str:
+    """One brain in the owner's words: the CLI tool or AI connection and the model it runs - "Claude Code, claude-sonnet-5-5".
+    Never the setting's raw value: `cli:coder` named a profile, so the Assistant told the owner it ran on "coder" while every
+    turn ran Claude Code on sonnet, and a blank slot read "auto" (the owner, 2026-10-15: "it's not set to coder. it's to a
+    specific model")."""
+    from .clis import KNOWN
+    try:
+        if cfg is None:
+            from . import config
+            cfg = config.load()
+        r = resolve(store, cfg, slot_key)
+    except Exception as e:
+        logger.debug(f'aidefaults: {slot_key} could not be said - {e}'); return ''
+    if r.get('cli'):
+        tool = next((k['label'] for k in KNOWN if k['name'] == r['cli']), r['cli'])
+        model = r.get('model') or str(r.get('default_hint') or '').split(' - ')[0]
+    elif r.get('connector'):
+        c = store.get_connector(r['connector'])
+        try: conf = json.loads((c or {}).get('ConfigJson') or '{}')
+        except ValueError: conf = {}
+        # Azure names its model by the deployment on the card; a placeholder hint ("(required ...)") is not a model
+        hint = '' if str(r.get('default_hint') or '').startswith('(') else r.get('default_hint')
+        tool, model = (c['Name'] or c['Type']) if c else 'an AI connection', r.get('model') or conf.get('deployment') or hint or ''
+    else: return r.get('display') or r.get('note') or 'not set'
+    return (f"{tool}, {model}" if model else tool) + (f", {r['effort']} effort" if r.get('effort') else '') \
+        + (' (the default brain)' if r.get('default') else '') + (f" - {r['note']}" if not r.get('ready', True) and r.get('note') else '')
 
 
 def _entry(cat: dict, model: str) -> dict:

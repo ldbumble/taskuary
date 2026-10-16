@@ -73,11 +73,9 @@ def agents(store) -> list:
 
 
 def brains(store) -> list:
-    """'triage brain: Azure OpenAI' for each brain slot - the words walk._brain_name already resolves."""
-    from .aidefaults import SLOTS
-    from .walk import _brain_name
-    st = store.get_settings()
-    return [f"{s['label'].lower()}: {_brain_name(store, st.get(s['key']))}" for s in SLOTS]
+    """'assistant: Claude Code, claude-sonnet-5-5' for each brain slot - the tool and the model, as the brains page says them."""
+    from .aidefaults import SLOTS, said
+    return [f"{s['label'].lower()}: {said(store, s['key']) or 'not set'}" for s in SLOTS]
 
 
 def _match(rows, want: str, field: str, id_field: str, id_val):

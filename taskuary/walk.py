@@ -178,21 +178,9 @@ def _fact_ai(s) -> str:
     return _named(live)
 
 
-def _brain_name(s, value: str) -> str:
-    """A setting reads `connector:80` or `cli:coder`; neither is a thing the owner named. Resolved
-    HERE and not through aidefaults.state, which needs the live config.toml this does not have."""
-    v = str(value or '').strip()
-    if not v: return 'auto'
-    if v.startswith('cli:'): return v[4:]
-    if v.startswith('connector:') and v[10:].isdigit():
-        row = s.get_connector(int(v[10:]))
-        return (row['Name'] or row['Type']) if row else v
-    return v
-
-
 def _fact_models(s) -> str:
-    st = s.get_settings()
-    return ', '.join(f'{label}: {_brain_name(s, st.get(key))}' for label, key in
+    from .aidefaults import said
+    return ', '.join(f"{label}: {said(s, key) or 'not set'}" for label, key in
                      (('triage', 'triage_ai'), ('assistant', 'concierge_ai'), ('general', 'assistant_ai')))
 
 
@@ -229,7 +217,8 @@ def _fact_reports(s) -> str:
 
 
 def _fact_assistant(s) -> str:
-    return f"speaking on {_brain_name(s, s.get_setting('concierge_ai'))}"
+    from .aidefaults import said
+    return f"speaking on {said(s, 'concierge_ai') or 'no brain yet'}"
 
 
 def _fact_hub(s) -> str:

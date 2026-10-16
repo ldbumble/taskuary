@@ -46,8 +46,8 @@ test("newest first, as every message list reads - and the thread stands over the
 
 // (the owner, 2026-10-15: "keep the width but center them in the chat ... test all different examples of this with newest message first
 // and then for email in both the task side and close out side")
-test("the conversation is a centred column in a box that keeps the task's width", () => {
-  assert.match(src, /width: "100%", maxWidth: 760, alignSelf: "center"/);
+test("the conversation is a centred column with its own line around it", () => {
+  assert.match(src, /data-tq-chat-thread="" sx={{ mt: 0.85, width: "100%", maxWidth: 800, mx: "auto"/);
 });
 
 test("an email task reads newest first on both sides: every email on the task, theirs and yours over the draft in Close out", () => {

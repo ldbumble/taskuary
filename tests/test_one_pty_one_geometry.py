@@ -135,7 +135,10 @@ class GeometryOwnerTests(unittest.TestCase):
                 _until_ready(kept)                                     # the attach geom, then the curtain lifts
                 owner.send_json({'type': 'resize', 'rows': 30, 'cols': 100})
                 owner.send_json({'type': 'in', 'data': 'hello' + chr(13)})
-                frames = [kept.receive_json() for _ in range(12)]
+                frames = []                                            # read to the answer, never a count (see the release test)
+                for _ in range(12):
+                    frames.append(kept.receive_json())
+                    if frames[-1].get('type') == 'geom': break
                 geom = [f for f in frames if f.get('type') == 'geom']
         self.assertTrue(geom, f'the kept pane never heard the pty change size: {frames}')
         self.assertEqual((geom[0]['rows'], geom[0]['cols'], geom[0]['owner']), (30, 100, False))
@@ -177,7 +180,12 @@ class GeometryOwnerTests(unittest.TestCase):
                 page.send_json({'type': 'resize', 'rows': 30, 'cols': 190})          # refused: the Wall holds it
                 _until_ready(page)                                                   # the attach geom, the refusal, the curtain
                 wall.send_json({'type': 'release'})                                  # the Wall goes out of sight
-                frames = [page.receive_json() for _ in range(3)]
+                # READ TO THE ANSWER, never a count: a quiet pty sends nothing else, so asking for three frames blocked for good
+                # on Linux and macOS, where the CLI under test (a sleep) prints nothing - ConPTY's own output filled the count
+                frames = []
+                for _ in range(6):
+                    frames.append(page.receive_json())
+                    if frames[-1].get('type') == 'geom': break
         freed = [f for f in frames if f.get('type') == 'geom']
         self.assertTrue(freed, f'the page never heard the pty was free: {frames}')
         self.assertEqual((freed[0]['owner'], freed[0]['free']), (False, True))

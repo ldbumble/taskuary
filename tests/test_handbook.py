@@ -265,3 +265,29 @@ class VotedOn(unittest.TestCase):
         # Agreement remains the primary value signal; comments are its forum-style tie-breaker.
         handbook.vote(s, quiet['LoreId'], 1, 'analyst')
         self.assertEqual(s.lore_posts(sort='top')[0]['LoreId'], quiet['LoreId'])
+
+
+class LaidOut(unittest.TestCase):
+    """A Hub entry keeps its lines - a table or a list posted as reference ran together as one paragraph (the owner,
+    2026-10-16: "it's hard to read now") - and a title that was retired is never refreshed out of sight."""
+
+    def test_line_breaks_survive_and_only_runs_of_spaces_collapse(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'Census terms', '| Term | Means |\n|---|---|\n| ADC  | average   daily census |\n\n\n\nnote', 'census', 'system', 'owner')
+        self.assertEqual(s.lore_get(p['LoreId'])['Body'], '| Term | Means |\n|---|---|\n| ADC | average daily census |\n\nnote')
+
+    def test_the_owner_posting_a_retired_title_again_brings_it_back_with_the_new_words(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'Census terms', 'old words', 'census', 'system', 'owner')
+        s.lore_retire(p['LoreId'], 'owner')
+        again = handbook.post(s, 'Census terms', 'new words', 'census', 'system', 'owner')
+        row = s.lore_get(again['LoreId'])
+        self.assertEqual((row['Status'], row['Body']), ('live', 'new words'))
+
+    def test_an_agent_cannot_bring_back_what_was_retired_by_posting_it_again(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'The export runs at 2am', 'it does', 'census', 'system', 'coding')
+        s.lore_retire(p['LoreId'], 'owner')
+        with self.assertRaises(ValueError) as e: handbook.post(s, 'The export runs at 2am', 'it still does', 'census', 'system', 'coding')
+        self.assertIn('retired', str(e.exception))
+        self.assertEqual((s.lore_get(p['LoreId'])['Status'], s.lore_get(p['LoreId'])['Body']), ('retired', 'it does'))

@@ -147,6 +147,10 @@ const TYPE_OF = {
   remind: "task", nat: "task", reshape: "task",
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
   kind: "task", priority: "task", assign: "task", repo: "task",
+  // the Advisor's moves a card has no button for join the row in their type (AdvisorNext), never beside the line (2026-10-16)
+  chase: "reply", prep: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
+  elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task", archive: "task",
+  let_go: "task", later: "task", skip: "task", defer: "task", split: "task", test_connection: "task",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 export function clustersOf(row, keep = 2) {

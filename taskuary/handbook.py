@@ -125,7 +125,9 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
     where an entry from a stranger's task is refused (wave B), before it can be filed OR counted as agreeing."""
     if from_stranger(store, task_id): raise ValueError(STRANGER_WHY)
     title = ' '.join(str(title or '').split())
-    body = ' '.join(str(body or '').split())
+    # the body keeps its lines - a table or a list ran together as one paragraph (the owner, 2026-10-16: "it's hard to read now");
+    # only runs of spaces and of blank lines close up
+    body = re.sub(r'\n{3,}', '\n\n', '\n'.join(' '.join(l.split()) for l in str(body or '').strip().splitlines())).strip()
     if not title: raise ValueError('a Hub entry needs a title - one line saying what is true')
     if clip: title, body = title[:TITLE_MAX], body[:BODY_MAX]
     if len(title) > TITLE_MAX:
@@ -146,8 +148,15 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
         store.audit('lore', have['LoreId'], 'agree', author, 'agent',
                     {'topic': tp, 'said': title[:120], 'why_earned': str(why_earned or '')[:500]})
         return {**dict(store.lore_get(have['LoreId'])), 'merged': True}
+    # A TITLE THAT WAS RETIRED: the write below refreshes that row by its signature and left it retired - the post vanished
+    # (2026-10-16). The owner saying it again brings it back; an agent may not undo a retirement by repeating itself.
+    gone = store._one("SELECT LoreId, Status FROM lore WHERE Sig=? AND Status<>'live'", (sig_of(tp, title),))
+    if gone and author != 'owner':
+        raise ValueError(f"Hub entry #{gone['LoreId']} with this title was {gone['Status']} - it is not posted again; "
+                         'the owner can restore it on the Hub if it is true again')
     lid = store.lore_put({'Topic': tp, 'Title': title, 'Body': body, 'Kind': kind, 'TaskId': task_id,
                           'Cwd': cwd or '', 'Sig': sig_of(tp, title)}, author)
+    if gone: store.lore_restore(lid)
     store.audit('lore', lid, 'post', author, 'agent',
                 {'topic': tp, 'kind': kind, 'why_earned': str(why_earned or '')[:500]})
     return {**dict(store.lore_get(lid)), 'merged': False}

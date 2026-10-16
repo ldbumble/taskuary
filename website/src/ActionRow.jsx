@@ -5,27 +5,31 @@ import React, { useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, press, rowOf, shortLabel, useHosted, useRowVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, press, rowOf, shortLabel, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 
 // THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
 // reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
 export function AdvisorNext({ advice, onPropose }) {
   const verbs = useRowVerbs();
   const [at, setAt] = useState(null), [note, setNote] = useState(null), [going, setGoing] = useState("");
-  if (!advice?.verb || !advice.line) return null;
-  const onRow = advisedIn(verbs.list, advice);
-  // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Save and end session left Next the filled
-  // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")...
-  if (!onRow && advisedAny(verbs.list, advice)) return null;
-  // ...but a move the row has no button for at all (Not ours, Take it myself, Chase, Let it go) was hidden too, and the right answer
-  // never reached the owner (the Advisor audit, 2026-10-15: "making buttons available when necessary"): it brings its own button,
-  // the same proposal road the pill takes, stamped with the revision it was judged at
-  const own = !onRow && onPropose ? async () => {
+  // A MOVE THE ROW HAS NO BUTTON FOR (Not ours, Take it myself, Chase, Let it go) was hidden, and then got a button of its own beside
+  // the line (2026-10-15) - a second row of buttons. The row owns every button (the owner, 2026-10-16: "the advisor should just
+  // highlight the button in the button row not add new ones"): the move joins the row in its type, on the proposal road the pill
+  // takes, stamped with the revision it was judged at, and the row fills it like any advised button
+  const theirs = verbs.list.filter((v) => !String(v.id).startsWith("advice:"));
+  const lacks = !!(advice?.verb && advice.line && onPropose) && !advisedAny(theirs, advice);
+  const run = async () => {
     setGoing("…");
     try { await onPropose(advice); setGoing(""); } catch (e) { setGoing(e?.response?.data?.detail || "That did not go through - try again."); }
-  } : null;
-  if (!onRow && !own) return null;
-  const word = onRow ? shortLabel(onRow) : advice.label;
+  };
+  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: "p", disabled: going === "…",
+    title: "What the Advisor suggests", run }] : [], lacks);
+  if (!advice?.verb || !advice.line) return null;
+  // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Save and end session left Next the filled
+  // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
+  const onRow = advisedIn(verbs.list, advice);
+  if (!onRow) return null;
+  const word = shortLabel(onRow);
   const [n, m] = advice.count || [0, 0];
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);
@@ -36,12 +40,11 @@ export function AdvisorNext({ advice, onPropose }) {
   return (
     <div className="tq-next" role="status" data-tq-advice="">
       <div className="tq-next-txt">{suggestion(advice.line, advice.label, advice.verb)}{going && going !== "…" && <span className="tq-next-err"> {going}</span>}</div>
-      {own && <button type="button" className="tq-ab p tq-next-go" data-tq-advice-go={advice.verb} disabled={going === "…"} onClick={own}>{advice.label}</button>}
       <button type="button" className="tq-next-why" aria-haspopup="dialog" aria-expanded={!!at} onClick={why}>Why?</button>
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{word}</b> - {onRow ? "the dark button below" : "the button beside this line"}</div>
+          <div className="pick">Suggested: <b>{word}</b> - the dark button below</div>
           <div className="said">{advice.line}</div>
           {m >= 2 && <div className="fact">You chose {word} {n} of {m} times in a moment like this.</div>}
           {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).length > 0 && (

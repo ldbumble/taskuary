@@ -63,13 +63,14 @@ test("the strip gives the suggestion, not the move's name: a lead-in that is the
   assert.equal(suggestion("You usually merge these.", "Mark done", "close"), "You usually merge these.");
 });
 
-// ...a button of its own ONLY for a move the row has no button for at all (the Advisor audit, 2026-10-15: "making buttons available
-// when necessary") - Not ours, Take it myself, Chase were right answers hidden for want of one
-test("the strip has no NEXT tag, uses the row's buttons, brings its own only for a move the row lacks, and Why? opens the reasoning", () => {
+// ...and a move the row has no button for (Not ours, Take it myself, Chase) JOINS THE ROW, never a button beside the line (the owner,
+// 2026-10-16: "the advisor should just highlight the button in the button row not add new ones? check this for all advisor lines")
+test("the strip has no NEXT tag and no button of its own; a move the row lacks joins the row, and Why? opens the reasoning", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.doesNotMatch(strip, /NEXT/);
-  assert.match(strip, /\{own && <button type="button" className="tq-ab p tq-next-go"/);
-  assert.match(strip, /const own = !onRow && onPropose \?/);
+  assert.doesNotMatch(strip, /<button type="button" className="tq-ab/, "the line draws no button - the row has them all");
+  assert.match(strip, /useVerbs\("advice", lacks \? \[\{ id: `advice:\$\{advice\.verb\}`/);
+  assert.match(strip, /const lacks = !!\(advice\?\.verb && advice\.line && onPropose\) && !advisedAny\(theirs, advice\);/);
   assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
   assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
   assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);
@@ -83,7 +84,8 @@ test("the clock menu offers the Advisor's notes for the item on the table", () =
 
 test("a move the row cannot make is no advice: a greyed or missing button draws no strip", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
-  assert.match(strip, /if \(!onRow && advisedAny\(verbs\.list, advice\)\) return null;/, "a greyed button: no line");
+  assert.match(strip, /const onRow = advisedIn\(verbs\.list, advice\);\s*if \(!onRow\) return null;/, "a greyed button: no line");
+  assert.match(strip, /!advisedAny\(theirs, advice\)/, "a greyed button is not lacking: nothing joins the row for it");
   const list = [v("stop_agent", "agent", { label: "Save and end session", disabled: true }), v("next", "next")];
   assert.equal(advisedIn(list, { verb: "stop_agent", label: "Save and end session" }), null, "greyed: nothing to fill, so nothing to say");
 });

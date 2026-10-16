@@ -22,6 +22,8 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { Md } from "./md.jsx";
+import { looksMd } from "./mdText.js";
 import { pollWhileVisible } from "./visible.js";
 import { plainError } from "./apiError.js";
 import { useSaveNote } from "./SaveNote.jsx";
@@ -124,9 +126,18 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
               bgcolor: ROLES[k.role].soft, color: ROLES[k.role].solid }} />
             <Chip size="small" label={p.Topic} sx={{ height: 18, fontSize: 10, bgcolor: PANEL2, color: DIM }} />
           </Box>
+          {/* a body written as markdown - a table, a list - is drawn as one: industry reference ran together as a single
+              paragraph (the owner, 2026-10-16: "it's hard to read now"); a plain sentence stays a sentence */}
+          {/* ...every entry, an agent's too; in the list a long one shows its start and a click opens the whole of it, with its
+              thread - the same press as the comments button (the owner, 2026-10-16: "if you click on it you can see the full thing") */}
           {p.Body && (
-            <Typography sx={{ fontSize: 13, color: DIM, lineHeight: 1.65, maxWidth: "72ch" }}>{p.Body}</Typography>
-          )}
+            <Box data-tq-post-body="" onClick={() => (onOpen ? onOpen() : !open && setOpen(true))} title={open ? undefined : "Open the whole entry"}
+              sx={{ maxWidth: "72ch", fontSize: 13, color: DIM, cursor: open ? "auto" : "pointer", position: "relative",
+                ...(open ? {} : { maxHeight: "9.5em", overflow: "hidden",
+                  maskImage: "linear-gradient(to bottom, #000 70%, transparent)", WebkitMaskImage: "linear-gradient(to bottom, #000 70%, transparent)" }) }}>
+              {looksMd(p.Body) ? <Md text={p.Body} />
+                : <Typography sx={{ fontSize: 13, color: DIM, lineHeight: 1.65, whiteSpace: "pre-line" }}>{p.Body}</Typography>}
+            </Box>)}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, mt: 0.85, flexWrap: "wrap" }}>
             <Typography variant="caption" sx={{ color: FAINT, display: "flex", alignItems: "center", gap: 0.55 }}>
               <TaskuaryMark size={13} />

@@ -173,6 +173,17 @@ class SuggestConnectionsTests(unittest.TestCase):
         self.assertEqual([p['type'] for p in out['picks']], ['workday', 'salesforce'])          # an unknown card is dropped
         self.assertTrue(all(p['group'] and p['title'] for p in out['picks']))
 
+    def test_the_ais_sentence_stands_even_when_it_picks_nothing(self):
+        """Every system the owner named was planned, the AI said so and picked none - and its sentence was dropped for the plain
+        "You said you work in..." line (a fresh-install walk, 2026-10-16). And it is asked for cards that CAN connect, too."""
+        def brain(system, user, **kw):
+            brain.system = system
+            return json.dumps({'line': "Workday and Salesforce can't be connected yet - nothing else fits your work for now.", 'picks': []})
+        with mock.patch('taskuary.llm.build_llm', return_value=brain):
+            out = firstrun.suggest_connections(self.s)
+        self.assertEqual(out, {'line': "Workday and Salesforce can't be connected yet - nothing else fits your work for now.", 'picks': []})
+        self.assertIn('can be connected now', brain.system)
+
     def test_with_no_ai_the_systems_ticked_are_matched_to_the_catalogue(self):
         with mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')):
             out = firstrun.suggest_connections(self.s)

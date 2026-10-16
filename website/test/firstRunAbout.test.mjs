@@ -32,3 +32,10 @@ test("while About your work is on the canvas setup's own Back and Next stand asi
   assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onLine=\{setAboutLine\}/);
   assert.match(fr, /about: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : aboutLine \|\|/);
 });
+
+test("the job reads as a document, and Edit opens its text", () => {
+  const src = read("FirstRunAbout.jsx");
+  assert.match(src, /\{editing \|\| !jobText\.trim\(\)\s*\? <TextField multiline/);
+  assert.match(src, /<Md text=\{jobText\} \/>/);
+  assert.match(src, /\{editing \? "Done editing" : "Edit"\}/);
+});

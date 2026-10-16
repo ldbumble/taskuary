@@ -9,6 +9,7 @@ import { Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui
 import api from "./api";
 import { DIM } from "./theme.jsx";
 import { useVerbs } from "./actionRow.js";
+import { Md } from "./md.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
 export const STEPS = ["name", "org", "role", "systems", "job"];
@@ -25,6 +26,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
   const [at, setAt] = useState(0), [reading, setReading] = useState(false), [note, setNote] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [other, setOther] = useState("");
   const [job, setJob] = useState({ state: "none", why: "", text: "" }), [jobText, setJobText] = useState(""), [edited, setEdited] = useState(false);
+  const [editing, setEditing] = useState(false);       // the job is read as a document; Edit opens its text
   const touched = useRef(new Set()), learnedFor = useRef("");
   useEffect(() => {
     let on = true;
@@ -98,7 +100,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
   const line = !a ? "" : step === "job"
     ? job.state === "running" ? "Reading three months of your email to write your job description - about a minute."
       : job.state === "failed" ? `I couldn't write it from your email (${job.why}). Press Write it again, or say it in your own words.`
-        : job.state === "ready" ? "This is your job as your email describes it. Is it right? Change anything, then press Looks right."
+        : job.state === "ready" ? "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Looks right."
           : "Press Write it - I read your email and describe your job."
     : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""}`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
@@ -145,9 +147,17 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
           <Typography sx={{ color: DIM, fontSize: 13.5 }}>Writing your job description from your email…</Typography></Box>
       ) : <>
-        <TextField multiline fullWidth minRows={10} maxRows={22} value={jobText} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
-          onChange={(e) => { setEdited(true); setJobText(e.target.value); }} inputProps={{ "aria-label": "Your job" }} />
-        <Box><Button size="small" onClick={() => learn()} disabled={!!busy}>{job.state === "none" ? "Write it" : "Write it again"}</Button></Box>
+        {/* READ AS A DOCUMENT, not its markdown (the owner, 2026-10-16: the box showed "### What my job is"): Edit opens the text */}
+        {editing || !jobText.trim()
+          ? <TextField multiline fullWidth minRows={10} maxRows={22} value={jobText} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
+            onChange={(e) => { setEdited(true); setJobText(e.target.value); }} inputProps={{ "aria-label": "Your job" }} autoFocus={editing} />
+          : <Box data-tq-job-read="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1, maxHeight: "52vh", overflowY: "auto",
+              "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
+              "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={jobText} /></Box>}
+        <Box sx={{ display: "flex", gap: 1 }}>
+          {jobText.trim() && <Button size="small" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit"}</Button>}
+          <Button size="small" onClick={() => { setEditing(false); learn(); }} disabled={!!busy}>{job.state === "none" ? "Write it" : "Write it again"}</Button>
+        </Box>
       </>)}
       {note && step !== "job" && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}

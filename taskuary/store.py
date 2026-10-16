@@ -655,6 +655,9 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # needs its card's 'Reply to issue/PR authors'; the read-only trackers
                     # can never carry one - see outbound.can_reply
                     'reply_channels': 'email,teams,slack,telegram,whatsapp,imessage,discord,github',
+                    # the owner's email signature, exactly as it goes under every email (responder.signed); read off their
+                    # sent mail at setup or by Settings' button, checked by them - blank: the writer signs as STYLE.md says
+                    'email_signature': '',
                     # watch the CI of a task's pull request and hand red builds back to the
                     # agent that wrote the code: off | watch (status only) | feedback
                     'ci_watch': 'off',

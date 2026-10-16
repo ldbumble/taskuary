@@ -46,6 +46,15 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(job.count('<!-- fromhistory:start -->'), 1)
         self.assertEqual(firstrun.about(s)['job'], '### What my job is\n- I own payroll and vendor payments, end to end.')
 
+    def test_the_signature_checked_at_setup_is_the_one_saved(self):
+        s = MemoryStore()
+        sig = 'Best,\nAlex Doyle\nNorthwind'
+        firstrun.save_about(s, {**ANSWERS, 'signature': sig})
+        self.assertEqual(s.get_setting('email_signature'), sig)
+        self.assertEqual(firstrun.about(s)['signature'], sig)
+        firstrun.save_about(s, ANSWERS)                                                   # not asked: left as it was
+        self.assertEqual(s.get_setting('email_signature'), sig)
+
     def test_saving_again_replaces_the_answers_and_keeps_the_owners_own_lines(self):
         s = MemoryStore()
         firstrun.save_about(s, ANSWERS)
@@ -71,7 +80,8 @@ class AboutTests(unittest.TestCase):
         with mock.patch('taskuary.histgen.sent_mail', return_value=(sent, [], 1, 'IMAP')), \
              mock.patch('taskuary.histgen._db_window', return_value=msgs), mock.patch('taskuary.llm.build_llm', return_value=brain):
             out = firstrun.suggest_about(s)
-        self.assertEqual(out, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance Systems Lead', 'systems': ['Workday']})
+        self.assertEqual(out, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance Systems Lead', 'systems': ['Workday'],
+                               'signature': ''})                     # one sent mail is no shared ending (test_signature_learn)
         for seen in ('alex@northwind.example', 'Finance Systems Lead | Northwind', 'Erin Blake', 'sign off the AP accruals'):
             self.assertIn(seen, brain.user)
 

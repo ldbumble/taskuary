@@ -6,9 +6,9 @@ import { readFileSync } from "node:fs";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("the questions come one at a time: name, organisation, title, systems, then the job", () => {
+test("the questions come one at a time: name, organisation, title, signature, systems, then the job", () => {
   const src = read("FirstRunAbout.jsx");
-  assert.match(src, /export const STEPS = \["name", "org", "role", "systems", "job"\];/);
+  assert.match(src, /export const STEPS = \["name", "org", "role", "signature", "systems", "job"\];/);
   assert.match(src, /useVerbs\("setup-about", a \? \[/, "its own Back and Next in the row");
   assert.match(src, /&& \(!x\[k\] \|\| \(data\.guessed \|\| \[\]\)\.includes\(k\)\)\)/, "the mail fills only empty boxes and the guessed name");
   assert.doesNotMatch(src, /placeholder=/, "a box is filled from the mail or empty - never a sample answer that reads as one");
@@ -68,4 +68,14 @@ test("More connections suggests in the catalogue's search, never as row buttons,
   const { stepsOf } = await import("../src/setupSteps.js");
   const other = (n) => stepsOf({ step: "done", about_done: true, more_connected: n }).find((r) => r.key === "other");
   assert.equal(other(0).done, false); assert.equal(other(3).done, true); assert.equal(other(3).sub, "3 connected");
+});
+
+// "pull the signature from the email and use that in emails ... have a setting so they can check it" (the owner, 2026-10-16)
+test("the email signature is a setup question and a Settings field, both with a preview under an email", () => {
+  const about = read("FirstRunAbout.jsx"), settings = read("SettingsView.jsx");
+  assert.match(about, /export const STEPS = \["name", "org", "role", "signature", "systems", "job"\];/);
+  assert.match(about, /data-tq-signature-preview=""/);
+  assert.match(settings, /if \(m\.type === "signature"\) return <SignatureSetting/);
+  assert.match(settings, /api\.post\("\/api\/signature\/learn"/);
+  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace doesn't allow other apps/);
 });

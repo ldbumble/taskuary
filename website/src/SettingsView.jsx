@@ -51,6 +51,36 @@ const ACTION_LABEL = { skip: "Skip — hide it completely", ignore: "Ignore — 
 const NEW_POLICY = { Name: "", Kind: "keyword", Pattern: "", Action: "ignore", Reason: "", SortOrder: 100, Active: true };
 // settings whose value is JSON: checked on the page before it is sent
 const JSON_KNOBS = new Set(["profile_brains"]);
+
+// THE EMAIL SIGNATURE, CHECKED (the owner, 2026-10-16: "pull the signature from the email and use that in emails ... have a setting so
+// they can check it that it looks good"): the exact block, a preview under an email, and Read it from my sent mail - which fills the
+// box and saves, since what it read is what the owner then sees and can still change
+function SignatureSetting({ value, save }) {
+  const [text, setText] = useState(value), [busy, setBusy] = useState(false), [note, setNote] = useState("");
+  useEffect(() => { setText(value); }, [value]);
+  const read = async () => {
+    setBusy(true); setNote("");
+    try {
+      const { data } = await api.post("/api/signature/learn", {}, { timeout: 120_000 });
+      if (data.signature) { setText(data.signature); save(data.signature); setNote("Read from your sent mail - check it below."); }
+      else setNote("Your sent mail has no closing lines in common - type it in.");
+    } catch (e) { setNote(e?.response?.data?.detail || "Couldn't read your sent mail."); }
+    setBusy(false);
+  };
+  return (
+    <Box data-tq-signature="" sx={{ display: "flex", flexDirection: "column", gap: 1, width: "100%", maxWidth: 460 }}>
+      <TextField multiline minRows={3} value={text} onChange={(e) => setText(e.target.value)} sx={{ bgcolor: "#fff" }}
+        inputProps={{ style: { fontSize: 12.5 }, "aria-label": "Email signature" }} onBlur={() => text !== value && save(text.trim())} />
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+        <Button size="small" variant="outlined" disabled={busy} onClick={read}>{busy ? "Reading…" : "Read it from my sent mail"}</Button>
+        {note && <Typography sx={{ fontSize: 12, color: DIM }}>{note}</Typography>}
+      </Box>
+      <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff", px: 1.5, py: 1, fontSize: 12.5, whiteSpace: "pre-line", color: INK }}>
+        {"Hi Erin,\n\nThanks - that's done.\n\n"}{text.trim() || <span style={{ color: DIM }}>(no signature - drafts sign the way your writing style does)</span>}
+      </Box>
+    </Box>
+  );
+}
 const jsonProblem = (v) => {
   if (!v) return "";
   try {
@@ -573,6 +603,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
         </Box>
       );
     }
+    // THE EMAIL SIGNATURE (responder.signed): the exact block under every email, read off the sent mail and checked here
+    if (m.type === "signature") return <SignatureSetting value={s.Value || ""} save={(v) => saveSetting(s.Name, v)} />;
     if (m.type === "sound") {
       return (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

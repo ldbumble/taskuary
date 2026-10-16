@@ -369,6 +369,7 @@ def about(store) -> dict:
     return {'name': a.get('name') or ('' if o['owner'] in ('the owner', '') else o['owner']), 'email': o.get('owner_email') or '',
             'org': a.get('org') or store.get_setting('owner_company') or '', 'role': a.get('role') or store.get_setting('owner_title') or '',
             'systems': list(a.get('systems') or []), 'job': learned_job(store), 'done': bool(a.get('done')), 'offered': _offered(),
+            'signature': str(store.get_setting('email_signature') or ''),
             # the name read off the address when the mail connected is a guess the mail's own signature may correct; an answer is not
             'guessed': [] if a.get('name') else ['name']}
 
@@ -412,7 +413,10 @@ def suggest_about(store) -> dict:
                                want=ABOUT_WANT, max_tokens=1200)
         d = ans.data if isinstance(ans.data, dict) else None
         if not d: return {'error': f"couldn't read a suggestion from your mail ({ans.error or 'no answer'})"}
-        return {**{k: str(d.get(k) or '').strip() for k in ('name', 'org', 'role')},
+        from .responder import learn_signature
+        try: sig = learn_signature(store)
+        except Exception: sig = ''
+        return {**{k: str(d.get(k) or '').strip() for k in ('name', 'org', 'role')}, 'signature': sig,
                 'systems': list(dict.fromkeys(str(x).strip() for x in (d.get('systems') or []) if str(x).strip()))[:12]}
     except Exception as e: return {'error': str(e)[:240]}
 
@@ -484,6 +488,8 @@ def save_about(store, ans: dict) -> dict:
     a = {k: str(ans.get(k) or '').strip() for k in ('name', 'org', 'role')}
     a['systems'] = list(dict.fromkeys(str(x).strip() for x in (ans.get('systems') or []) if str(x).strip()))
     _who(store, a)
+    # the signature as the owner checked it: the one block under every email (responder.signed); one left blank stays blank
+    if 'signature' in ans: store.set_setting('email_signature', str(ans.get('signature') or '').strip(), 'owner')
     soul = store.get_doc('soul') or ''
     systems = '\n'.join(f'- {x}' for x in a['systems']) or '_(none named yet)_'
     store.save_doc('soul', _block(soul, 'Systems I work in', 'systems', systems + '\n\nThe software the work happens in - a mail about '

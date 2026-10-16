@@ -83,6 +83,13 @@
       "desc": "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
       "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected."
     },
+    "email_signature": {
+      "group": "Replies",
+      "label": "Email signature",
+      "type": "signature",
+      "desc": "The block that goes under every email Taskuary writes for you - exactly this, once. Read it from your sent mail, then fix anything.",
+      "help": "Saved here, it is the only signature on an email: the AI is told not to sign, any sign-off it writes anyway is taken off, and this block goes under the text exactly as you see it. Chat messages (Teams, Slack, WhatsApp) never get it.\n\nRead it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank means no saved signature: drafts then sign the way STYLE.md describes."
+    },
     "reply_channels": {
       "group": "Replies",
       "label": "Draft replies on",

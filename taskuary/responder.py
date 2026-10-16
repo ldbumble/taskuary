@@ -69,6 +69,15 @@ CHAT = ('This is a CHAT or a COMMENT THREAD (Teams, Slack, a GitHub issue...), n
 EMAIL = ('This is EMAIL. Use the greeting, sign-off, and exact recurring signature STYLE.md '
          'specifies; include the signature once, at the end. If STYLE.md has no learned signature, '
          'use the sign-off SOUL.md specifies. Nothing else ceremonial.')
+# ...and with a SAVED signature, the signature is not the writer's to write: Taskuary puts the owner's saved block on every email
+# itself (the owner, 2026-10-16: "it should not be based on prompt but hardcoded to emails")
+EMAIL_SIGNED = ('This is EMAIL. Use the greeting STYLE.md specifies. Do NOT write a sign-off, your name or a signature - the '
+                "owner's saved signature is added under your text. Nothing else ceremonial.")
+
+
+def email_rule(store) -> str:
+    """The email line of the writer's prompt: told not to sign when a signature is saved, else to sign as STYLE.md says."""
+    return EMAIL_SIGNED if signature_for(store).strip() else EMAIL
 
 # This line used to say "the owner will turn it into a task", and the model answered in kind:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
@@ -183,6 +192,37 @@ def signature_for(store) -> str:
     return m.group(1).strip().strip('"\'').replace('\\n', '\n').strip()
 
 
+def signed(text: str, sig: str) -> str:
+    """An email as it goes out: the writer's own sign-off taken off and the saved signature put on, once. Nothing saved: as written."""
+    if not str(sig or '').strip(): return str(text or '').rstrip()
+    body = str(text or '').rstrip()
+    if body.endswith(sig.strip()): body = body[:-len(sig.strip())].rstrip()
+    return with_signature(strip_signoff(body) or body, sig)
+
+
+# THE SIGNATURE, READ OFF THE OWNER'S OWN SENT MAIL: the closing lines most of it shares, quoted history cut first. No model -
+# a signature is the same lines every time, and the owner checks it in Settings before it goes on anything (2026-10-16)
+SIG_MAILS, SIG_LINES = 40, 10
+
+
+def learn_signature(store, days: int = 90) -> str:
+    from . import histgen
+    from .channels import _body
+    ends = []
+    for m in histgen.sent_mail(store, days)[0][-SIG_MAILS:]:
+        lines = [' '.join(l.split()) for l in histgen.cut_quoted(_body(m)).strip().splitlines()]
+        ends.append([l for l in lines if l][-SIG_LINES:])
+    ends = [e for e in ends if e]
+    if len(ends) < 2: return ''
+    best = []
+    for k in range(1, SIG_LINES + 1):
+        tails = [tuple(e[-k:]) for e in ends if len(e) >= k]
+        top = max(set(tails), key=tails.count) if tails else ()
+        if tails.count(top) < max(2, len(ends) // 2): break
+        best = list(top)
+    return '\n'.join(best)
+
+
 def with_signature(text: str, sig: str) -> str:
     """Append the signature once - not when the text already ends with it (the model signed, or the owner did)."""
     text = str(text or '').rstrip()
@@ -288,7 +328,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else EMAIL) + '\n'
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else email_rule(store)) + '\n'
               + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
@@ -373,7 +413,7 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     if saw and str(saw.get('Channel') or '').lower() == 'email':
         # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
         # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept
-        text = with_signature(text, signature_for(store))
+        text = signed(text, signature_for(store))
         from . import outbound as _ob
         if not store.review_envelope(review_id):
             env = _ob.reply_envelope(store, saw)
@@ -452,7 +492,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else EMAIL) + '\n' + NOT_YET
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store)) + '\n' + NOT_YET
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -478,7 +518,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     if images: user += f"\n\n--- The picture{'s' if len(images) > 1 else ''} they sent with it {'are' if len(images) > 1 else 'is'} attached: look at {'them' if len(images) > 1 else 'it'}."
     out = (_ask(llm, system, user, REPLY_TOKENS, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
-    out = (strip_signoff(out) or out) if chat else with_signature(out, signature_for(store))
+    out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)

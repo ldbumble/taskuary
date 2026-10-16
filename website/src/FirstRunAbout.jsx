@@ -12,11 +12,15 @@ import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
-export const STEPS = ["name", "org", "role", "systems", "job"];
-const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", systems: "Systems you work in", job: "Your job" };
+export const STEPS = ["name", "org", "role", "signature", "systems", "job"];
+const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", signature: "Your email signature",
+  systems: "Systems you work in", job: "Your job" };
 const ASK = {
   name: "What's your name?", org: "What organisation do you work for?",
   role: "What's your job title? Next, I write your job description from your email.",
+  // the block under every email Taskuary writes - read off the sent mail, checked here (the owner, 2026-10-16: "pull the signature
+  // from the email and use that in emails ... have a setting so they can check it that it looks good")
+  signature: "Is this your email signature? It goes under every email Taskuary writes for you, exactly like this - fix anything that's off.",
   systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
 };
 const who = (a) => JSON.stringify([a.name, a.org, a.role].map((x) => (x || "").trim()));
@@ -32,7 +36,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
     let on = true;
     api.get("/api/setup/first-run/about").then(async ({ data }) => {
       if (!on) return;
-      const got = { name: data.name || "", org: data.org || "", role: data.role || "", systems: data.systems || [] };
+      const got = { name: data.name || "", org: data.org || "", role: data.role || "", signature: data.signature || "", systems: data.systems || [] };
       setOffered(data.offered || []); setA(got); setSeen(got.systems);
       // answered before and a job already written for those answers: no need to write it again unless one of them changes
       if (data.done && data.job) { learnedFor.current = who(got); setJob({ state: "ready", why: "", text: data.job }); setJobText(data.job); }
@@ -45,7 +49,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
         if (s.error) setNote(`I couldn't fill these in from your email (${s.error}) - type them in.`);
         else {
           // a box the owner answered - now or before - is theirs; only an empty one, or the name guessed from the address, takes the mail's
-          setA((x) => ({ ...x, ...Object.fromEntries(["name", "org", "role"].filter((k) => !touched.current.has(k) && s[k]
+          setA((x) => ({ ...x, ...Object.fromEntries(["name", "org", "role", "signature"].filter((k) => !touched.current.has(k) && s[k]
             && (!x[k] || (data.guessed || []).includes(k))).map((k) => [k, s[k]])),
             systems: touched.current.has("systems") || x.systems.length ? x.systems : s.systems || [] }));
           setSeen((x) => [...new Set([...x, ...(s.systems || [])])]);
@@ -127,6 +131,17 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
           inputProps={{ "aria-label": LABEL[step] }} />
         {reading && !a[step] && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />
           <Typography sx={{ color: DIM, fontSize: 13 }}>Reading your email to fill this in - you can type it yourself.</Typography></Box>}
+      </>}
+      {step === "signature" && <>
+        <TextField multiline fullWidth minRows={4} value={a.signature || ""} onChange={set("signature")} sx={{ ...field, "& textarea": { fontSize: 14 } }}
+          inputProps={{ "aria-label": LABEL.signature }} />
+        {reading && !a.signature && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />
+          <Typography sx={{ color: DIM, fontSize: 13 }}>Reading your sent mail for it…</Typography></Box>}
+        <Typography sx={{ color: DIM, fontSize: 12 }}>How it sits under an email:</Typography>
+        <Box data-tq-signature-preview="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1.25, fontSize: 13.5,
+          whiteSpace: "pre-line", color: "#2b2b2b", maxWidth: 520 }}>
+          {"Hi Erin,\n\nThanks - that's done.\n\n"}{(a.signature || "").trim() || <span style={{ color: DIM }}>(no signature - leave it blank and drafts sign the way your writing style does)</span>}
+        </Box>
       </>}
       {step === "systems" && <>
         {reading && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />

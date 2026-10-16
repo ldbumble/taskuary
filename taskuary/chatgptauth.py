@@ -16,7 +16,7 @@ Limits the card states (developers.openai.com/siwc/.../preview-limitations): ima
 search where the model accepts them; no image generation, file search, code interpreter, computer use or hosted
 connectors. Streamed and never stored on OpenAI's side; a cap reached stops the brain until the owner raises it.
 """
-import base64, hashlib, json, re, secrets, threading, time, uuid
+import base64, hashlib, html, json, re, secrets, threading, time, uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 import requests
@@ -42,6 +42,18 @@ def host_id(cfg: dict) -> str:
 def _b64(b: bytes) -> str: return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
 
 
+# WHAT OPENAI'S ERROR CODES MEAN, in the owner's words - "error_code: 3p_delegated_access_policy_denied" reached a colleague raw
+# (2026-10-16). Not documented by OpenAI; the code names a workspace (Team, Business, Enterprise, Edu) policy refusing apps.
+PLAIN = {'3p_delegated_access_policy_denied':
+         "Your ChatGPT workspace doesn't allow signing in to other apps - its admin decides that. Ask them to allow it, sign in "
+         "with a personal ChatGPT account instead, or pick another AI (the Codex CLI, or an OpenAI or Azure API key)."}
+
+
+def plain_error(code: str, said: str = '') -> str:
+    """The sentence for an error OpenAI's sign-in sent back: plain words for a code we know, else what it said."""
+    return PLAIN.get(str(code or '').strip()) or str(said or code or 'the sign-in was refused').strip()
+
+
 class _Callback(BaseHTTPRequestHandler):
     """One GET, the browser coming back from auth.openai.com. Everything else is a 404."""
     def do_GET(self):
@@ -51,12 +63,12 @@ class _Callback(BaseHTTPRequestHandler):
             self.send_response(404); self.end_headers(); return
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         if q.get('state') != f['state']: f['error'] = 'the sign-in came back for a different attempt - start it again'
-        elif q.get('error'): f['error'] = q.get('error_description') or q['error']
+        elif q.get('error'): f['error'] = plain_error(q.get('error_code') or q['error'], q.get('error_description') or q['error'])
         else: f['code'], f['client_id'], f['scope'] = q.get('code'), q.get('client_id') or f['client_id'], q.get('scope', '')
         ok = not f.get('error')
         body = (f"<!doctype html><meta charset=utf-8><title>Taskuary</title><body style='font:15px system-ui;margin:3em'>"
                 f"<h2>{'Signed in to ChatGPT' if ok else 'The sign-in did not finish'}</h2>"
-                f"<p>{'You can close this tab - Taskuary is finishing on its own.' if ok else f.get('error', '')}</p>").encode()
+                f"<p>{'You can close this tab - Taskuary is finishing on its own.' if ok else html.escape(f.get('error', ''))}</p>").encode()
         self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.end_headers()
         self.wfile.write(body)
         threading.Thread(target=self.server.shutdown, daemon=True).start()

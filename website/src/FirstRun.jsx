@@ -346,6 +346,9 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start" }}>
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
         <Typography sx={{ fontSize: 14 }}>Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done.</Typography></Box>
+      {/* a work ChatGPT can refuse other apps - OpenAI's own page says so in a code (3p_delegated_access_policy_denied, 2026-10-16) */}
+      <Typography sx={{ fontSize: 12.5, color: DIM, maxWidth: 620 }}>If OpenAI says your workspace doesn't allow other apps, its admin has
+        turned that off: sign in with a personal ChatGPT account, or press Cancel and pick another AI.</Typography>
       <Box sx={{ display: "flex", gap: 1 }}>
         <Button variant="outlined" href={signing.url} target="_blank" rel="noreferrer">Open the sign-in page</Button>
         <Button size="small" sx={{ color: DIM }} onClick={cancelSignin}>Cancel</Button>

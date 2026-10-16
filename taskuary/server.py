@@ -6126,7 +6126,7 @@ class FirstRunConnBody(BaseModel): cid: int
 
 
 class FirstRunAboutBody(BaseModel):
-    name: str = ''; org: str = ''; role: str = ''; systems: list = []; job: str = ''
+    name: str = ''; org: str = ''; role: str = ''; systems: list = []; job: str = ''; signature: str | None = None
 
 # ABOUT YOUR WORK: one question a screen - name, organisation, title, systems, suggested from the mail - then the job description
 # written from the mail with those in hand, for the owner to correct (firstrun.about / suggest_about / learn / job_state / save_about)
@@ -6139,6 +6139,13 @@ def first_run_about():
 def first_run_about_suggest():
     from . import firstrun
     return firstrun.suggest_about(store)
+
+@app.post('/api/signature/learn')
+def signature_learn():
+    """The closing lines the owner's sent mail shares - read, not saved: Settings and setup show it to check first."""
+    from . import responder
+    try: return {'signature': responder.learn_signature(store)}
+    except Exception as e: raise HTTPException(422, f"couldn't read your sent mail - {e}")
 
 @app.post('/api/setup/first-run/about/learn')
 def first_run_about_learn(body: FirstRunAboutBody):
@@ -6155,7 +6162,7 @@ def first_run_about_job():
 @app.post('/api/setup/first-run/about')
 def first_run_about_save(body: FirstRunAboutBody):
     from . import firstrun
-    firstrun.save_about(store, body.model_dump())
+    firstrun.save_about(store, body.model_dump(exclude_none=True))
     return firstrun.state(store)
 
 @app.post('/api/setup/first-run/about/skip')

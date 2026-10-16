@@ -194,6 +194,11 @@ is what you see if those cards cannot load.</li>
 <p>Set this to the role you do, and the mail you get lands on the worker built for it. An accounts-payable rep picks <code>ap</code>: a vendor asking where a payment is becomes a task for the AP worker, which looks it up in the ledger and drafts the answer for you to approve.</p>
 <p>Triage still names a specialist when one fits better (a researcher for outside information), and coding tasks always go to the coding agent. Docs → Profiles → Start from a role sets this for you.</p>
 <h2 id="replies">Replies<a class="anchor" href="#replies" aria-label="Link to this section">#</a></h2>
+<h3 id="email-signature">Email signature<a class="anchor" href="#email-signature" aria-label="Link to this section">#</a></h3>
+<p><code>email_signature</code> · type: signature · default: blank</p>
+<p>The block that goes under every email Taskuary writes for you - exactly this, once. Read it from your sent mail, then fix anything.</p>
+<p>Saved here, it is the only signature on an email: the AI is told not to sign, any sign-off it writes anyway is taken off, and this block goes under the text exactly as you see it. Chat messages (Teams, Slack, WhatsApp) never get it.</p>
+<p>Read it from my sent mail finds the closing lines most of your sent mail shares - quoted history is cut first. Blank means no saved signature: drafts then sign the way STYLE.md describes.</p>
 <h3 id="draft-replies-on">Draft replies on<a class="anchor" href="#draft-replies-on" aria-label="Link to this section">#</a></h3>
 <p><code>reply_channels</code> · type: channels · default: <code>email,teams,slack,telegram,whatsapp,imessage,discord,github</code></p>
 <p>Which channels get a drafted reply at all. Switch one off and its questions just file.</p>

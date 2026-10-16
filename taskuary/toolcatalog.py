@@ -102,7 +102,8 @@ PURPOSE = {
     # THE APP ITSELF, by name. A report is named by `title` (part of its name) or `source_id`; a
     # connection by `name` or `connector_id`; a setting by `key` or `label`. These run AT ONCE
     # (INSTANT below) with an undo in the receipt, except report.delete, which asks first.
-    'report.run':               'run a report or workflow now - `title` (or `source_id`); it lands in the pipe when done',
+    'report.run':               ('run a report or workflow now - `title` (or `source_id`); a report lands in the pipe when done, '
+                                 'a workflow starts as its task at once (the ref comes back)'),
     'report.pause':             'stop a report or workflow running on its clock - `title`',
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
     'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule)',

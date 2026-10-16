@@ -216,6 +216,24 @@ such system per run, and never one it has raised before. The app's own health (a
 run after run, a connection erroring) is raised the same way, and counts toward the post's
 lines like everything else.
 
+## Workflows
+
+A workflow is a job that writes or keeps state - posting bills, bumping dependencies, driving a
+portal - rather than a check that reads. **Every run of a workflow is a task**, whatever started
+it: its schedule, **Run now**, the assistant, or you from your phone. The run never becomes a row
+under Reports and never goes through triage; its agent works it like any other task.
+
+- A workflow that names a profile (`ap`, say) runs as that profile, with its rules; one that names
+  none runs on the assistant, or on the coding profile when it has a folder to work in.
+- A workflow with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
+  and nothing starts.
+- One run at a time: a scheduled run that comes round while the last one is still working is not
+  started, and **Run now** takes you to the run that is. A run that is only waiting for your yes
+  does not hold the next one back.
+- The task shows where it came from: the workflow's mark, **Workflow · its name** and
+  **Started by** - its schedule (with the clock, e.g. "Mondays 08:00"), you, the assistant, or your
+  phone - in the header and under **Came from**, with a link back to the workflow.
+
 ## Stateful workflows
 
 **Monthly Zoho invoices** is the first workflow on the Reports page that is not a query returning

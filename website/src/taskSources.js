@@ -87,17 +87,41 @@ export function askLine(text, max = 220) {
 const INTENT = { task: "task", reply_only: "reply", fyi: "fyi" };
 const WHO = { general: "an agent · general", coding: "an agent · coding" };
 export const repoTag = (tags, name = "repo") => (String(tags || "").match(new RegExp(`(?:^|[\\s,])${name}:([^\\s,]+)`)) || [])[1] || "";
-export function headerFacts({ verdict = null, route = null, task = {} } = {}) {
+// A WORKFLOW RUN has no message behind it and nobody triaged it (workflows.run): what started it is on the task as a tag, and the
+// workflow it belongs to rides on the detail (workflows.of_task) - the owner, 2026-10-16: "what does it show triggered it in the task card?"
+const STARTED_BY = { schedule: "its schedule", manual: "you (Run now)", assistant: "the assistant", phone: "you, from your phone" };
+export const isWorkflowRun = (task) => task?.Source === "workflow";
+export function startedBy(task = {}, wf = null) {
+  const t = wf?.trigger || repoTag(task?.Tags, "workflow-trigger");
+  const by = wf?.started_by || STARTED_BY[t] || "";
+  return by && t === "schedule" && wf?.schedule ? `${by} (${wf.schedule})` : by;
+}
+// the run's own title is "<workflow> - 2026-10-16 08:00": with the workflow gone, that is still its name
+export const workflowTitle = (task = {}, wf = null) => wf?.title || String(task?.Title || "").replace(/ - \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, "");
+// CAME FROM, for a run: the workflow and what started it - where a message would be, since there is none
+export function workflowOrigin(task = {}, wf = null) {
+  if (!isWorkflowRun(task)) return null;
+  const by = startedBy(task, wf);
+  return { title: workflowTitle(task, wf), by, line: by ? `Started by ${by}` : "A workflow run",
+    link: wf?.source_id != null ? `#report=${wf.source_id}` : "" };
+}
+export function headerFacts({ verdict = null, route = null, task = {}, workflow = null } = {}) {
   const kind = task?.Kind || verdict?.kind || "task";
+  const run = isWorkflowRun(task);
   // a route that CREATED the task is triage's decision even when its reason carries no head (rows from before the heads, fixtures)
-  const said = String(verdict?.intent || routeIntent(route?.Reason) || (route?.Decision === "create" ? (kind === "reply" ? "reply_only" : "task") : "")).toLowerCase();
+  const said = run ? ""
+    : String(verdict?.intent || routeIntent(route?.Reason) || (route?.Decision === "create" ? (kind === "reply" ? "reply_only" : "task") : "")).toLowerCase();
   const intent = INTENT[said] || "";
   const repo = kind === "coding" ? repoTag(task?.Tags) || repoTag(task?.Tags, "triage-repo") || verdict?.repository || "" : "";
   const profile = kind === "general" ? assignedAgent(task?.Assignee) || verdict?.profile || "" : "";
   const pri = task?.Priority || "normal";
+  const by = run ? startedBy(task, workflow) : "";
   return {
     triaged: !!intent,
+    workflow: run,
     pills: [
+      run && { key: "workflow", label: "Workflow", value: workflowTitle(task, workflow) },
+      by && { key: "trigger", label: "Started by", value: by },
       intent && { key: "intent", label: "Intent", value: intent },
       { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
       profile && { key: "profile", label: "Profile", value: profile },

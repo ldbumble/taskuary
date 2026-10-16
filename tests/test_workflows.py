@@ -62,7 +62,8 @@ class DispatchTests(unittest.TestCase):
         session = mock.Mock()
         with mock.patch.object(general, 'start_session', return_value=session) as start, mock.patch.object(general, 'history', return_value=[]), \
              mock.patch.object(ingest, 'ingest_message') as ingested, mock.patch.object(triage, 'classify_intent') as classified, \
-             mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch('taskuary.llm.make_cli_llm') as cli:
+             mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch('taskuary.llm.make_cli_llm') as cli, \
+             mock.patch.object(workflows, '_spawn', lambda fn: fn()):
             out = reports.run_report_source(s, s.get_source(sid), None, trigger=trigger)
         return out, start, session, ingested, classified, cli
 
@@ -90,12 +91,14 @@ class DispatchTests(unittest.TestCase):
     def test_a_full_house_queues_the_run_and_starts_nothing(self):
         s = store(); sid = workflow(s)
         with mock.patch.object(general, 'start_session') as start, mock.patch.object(blackboard, 'live_count', return_value=99), \
-             mock.patch('taskuary.llm.make_cli_llm'):
+             mock.patch('taskuary.llm.make_cli_llm'), mock.patch.object(workflows, '_spawn', lambda fn: fn()):
             out = reports.run_report_source(s, s.get_source(sid), None)
         start.assert_not_called()
         self.assertEqual([q['TaskId'] for q in s.queued_dispatches()], [out['task_id']])                     # capacity is respected (PW-204)
 
-    def test_a_read_only_agent_report_and_a_coding_workflow_keep_their_road(self):
+    def test_a_read_only_agent_report_keeps_its_road_and_a_coding_workflow_is_a_task_too(self):
+        """A coding workflow used to stay on the report road - a one-shot CLI in its checkout, filed under Reports - while its Run
+        now made a task (the owner, 2026-10-16). Now only the read-only report reads through the CLI; the code job is a task."""
         s = store()
         report = workflow(s, title='Nightly digest', access=None); s_cfg = json.loads(s.get_source(report)['ConfigJson']); s_cfg.pop('access', None)
         s.save_source({'SourceId': report, 'ConfigJson': json.dumps(s_cfg)}, 'o')
@@ -103,12 +106,14 @@ class DispatchTests(unittest.TestCase):
         calls = []
         def make(store_, name, model=None, cwd=None, **kw):
             calls.append(cwd); return lambda system, user, **k: 'ran it\n- ok'
-        with mock.patch('taskuary.llm.make_cli_llm', make), mock.patch.object(general, 'start_session') as start, mock.patch.object(ingest, '_auto_code') as auto_code:
+        with mock.patch('taskuary.llm.make_cli_llm', make), mock.patch.object(general, 'start_session') as start, \
+             mock.patch.object(ingest, '_auto_code') as auto_code, mock.patch.object(workflows, '_spawn', lambda fn: fn()):
             reports.run_report_source(s, s.get_source(report), None)
-            with mock.patch.object(ingest, 'ingest_message', return_value={'message_id': None}) as ingested:
-                self.assertIsNotNone(reports.run_report_source(s, s.get_source(code), None))
+            out = reports.run_report_source(s, s.get_source(code), None)
         start.assert_not_called()                                                                          # neither is the regular agent's
-        self.assertEqual(calls, [None, 'C:/work/repo'])                                                    # the report reads; the code job runs in its checkout
+        self.assertEqual(calls, [None])                                                                    # only the report reads through the CLI
+        self.assertEqual((s.get_task(out['task_id'])['Kind'], s.get_task(out['task_id'])['Source']), ('coding', 'workflow'))
+        auto_code.assert_called_once_with(s, out['task_id'])
 
 
 class ProcedureTests(unittest.TestCase):

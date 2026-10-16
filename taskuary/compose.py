@@ -158,9 +158,10 @@ WORKFLOW_SYSTEM = (
     'or keep state; reports only read and summarize. This builder supports exactly two workflow types:\n'
     '- "zoho_monthly_invoices": opens a monthly customer batch, copies each customer\'s last invoice '
     'into a Zoho draft, and leaves every send on the task for owner approval.\n'
-    '- "agent": runs a configured CLI AI agent with write access, using a saved skill and/or prompt, '
-    'then files its result. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
-    'TASKUARY IS WHERE RESULTS LAND. Each run is itself a task in Taskuary, and it may open tasks for people, write notes '
+    '- "agent": a configured AI agent with write access works a saved skill and/or prompt - in the folder "cwd" names when it has '
+    'one. A job that only retrieves or summarizes data is a report, not a workflow.\n\n'
+    'TASKUARY IS WHERE RESULTS LAND. Each run is itself a task in Taskuary - scheduled or run by hand, its agent works it there and '
+    'nothing is filed as a report or read by triage - and it may open tasks for people, write notes '
     'and leave drafts - emails, messages, invoices - for the owner to approve, with no connection at all. Never ask which '
     'connection opens a task or where a result should go. A connection is only for a system the work happens IN (Intacct '
     'to read, a portal to drive). Opening tasks or drafting IS doing work: such a job is a workflow, never "really a report".\n\n'
@@ -186,9 +187,8 @@ WORKFLOW_SYSTEM = (
     '- An agent workflow also says, when the request does: "uses" - the ids of the connections it works in, only from '
     'WORKFLOW OPTIONS connections; "ask_first" - what it must ask the owner before doing; "done_when" - what finished '
     'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page.\n'
-    '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, delivery, or alerts.\n'
-    + WATCH_RULE.replace('- "watch":', '- "watch" (an agent workflow given a "cwd" only - any other workflow run is its own task, with '
-                         'nothing to wait for):'))
+    '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, watch, delivery, or alerts: a run is a task, '
+    'so there is no condition to wait for and nothing for triage to judge.\n')
 
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
@@ -241,9 +241,6 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
         typ = raw.get('type')
         if typ not in WORKFLOW_KEYS: return {'error': f'unsupported workflow type: {typ or "(missing)"}'}
         cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
-        # only a run filed like a report (a coding workflow, reports.run_agent) waits for anything: any other workflow run is
-        # handed to its worker as a task (workflows.run), so a watch on it would be a line the run never reads
-        watch = raw.get('watch') if typ == 'agent' and str(raw.get('cwd') or '').strip() else None
         if not str(cfg.get('title') or '').strip(): return {'error': 'the workflow has no title'}
         schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
         if not schedules:
@@ -266,7 +263,8 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             # The workflow door is the owner's grant to write. `type: agent` alone remains a
             # read-only report, because the executor is not the product boundary.
             cfg['access'] = 'write'
-            cfg = with_watch(cfg, watch)
+            # EVERY RUN IS A TASK (workflows.run), a checkout or not: a watch would be a line no run reads, so triage is never
+            cfg = with_watch(cfg, None)
         else:
             try: cid = int(cfg.get('connector_id'))
             except (TypeError, ValueError): return {'error': 'choose a connected Zoho Invoice account'}

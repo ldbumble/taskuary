@@ -309,7 +309,7 @@ class RunNowOpensTheWorkflowsTaskTests(unittest.TestCase):
             gate.set()
         t = s.get_task(r['task_id'])
         self.assertEqual((r['workflow'], r['ref'], r['link']), (True, f"TQ-{r['task_id']:04d}", f"#task={r['task_id']}"))
-        self.assertEqual((t['Assignee'], t['Tags']), ('agent:ap', 'needs:browser'))
+        self.assertEqual((t['Assignee'], t['Tags']), ('agent:ap', 'needs:browser,workflow-trigger:manual'))   # ...and who started it
         for _ in range(50):
             if started: break
             threading.Event().wait(0.05)

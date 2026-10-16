@@ -190,15 +190,15 @@ class ComposerTests(unittest.TestCase):
         self.assertIn('makes none for what an open task already covers', seen['system'])
         self.assertNotIn('escalate', seen['system'].lower())
 
-    def test_a_workflow_watch_is_kept_only_where_a_run_can_wait_for_it(self):
-        """A workflow run with no checkout is handed to its worker as a task (workflows.run): it has no condition to wait for."""
+    def test_a_workflow_never_keeps_a_watch_checkout_or_not(self):
+        """Every workflow run is a task handed to its worker (workflows.run) - a coding one with its checkout too: no run is
+        filed as a report, so no condition is waited for and triage never reads one."""
         from taskuary import compose
         s = MemoryStore(); s.upsert_agent('coding', 'cli', 'local', json.dumps({'cmd': 'codex'}))
         wf = {'type': 'agent', 'title': 'Dependency watch', 'agent': 'coding', 'prompt': 'Bump what is outdated.', 'watch': 'a bump breaks the build'}
         coded = compose.compose_workflow(s, 'bump deps and tell me if it breaks', _answering({'config': {**wf, 'cwd': 'C:/work/ledger'}}))['config']
         handed = compose.compose_workflow(s, 'bump deps and tell me if it breaks', _answering({'config': wf}))['config']
-        self.assertEqual(reports.route_of(coded, 'triage'), ('ai', 'a bump breaks the build'))
-        self.assertEqual(handed['route'], {'triage': {'how': 'never'}})
+        self.assertEqual((coded['route'], handed['route']), ({'triage': {'how': 'never'}}, {'triage': {'how': 'never'}}))
 
 
 class WorkflowRoadTests(unittest.TestCase):
@@ -243,17 +243,18 @@ class WorkflowRoadTests(unittest.TestCase):
         self.assertEqual([t['TaskId'] for t in self.s.list_tasks()], [self.tid], 'no second task for work that has one')
         self.assertEqual(len([c for c in self.s.list_comments(self.tid) if 'Import watch mentions this' in c['Body']]), 1)
 
-    def test_a_coding_workflow_watch_runs_on_the_report_road_and_judges_only_what_fires(self):
+    def test_a_coding_workflow_is_its_own_task_too_and_never_triage(self):
+        """It ran on the report road and triage read what it said (the owner, 2026-10-16: "if it runs on schedule it should also
+        show up as task"): now its run is a coding task like its Run now, and no report row is filed."""
         from taskuary import compose
         wf = {'type': 'agent', 'title': 'Dependency watch', 'agent': 'coding', 'prompt': 'Bump what is outdated.', 'cwd': 'C:/work/ledger',
               'watch': 'a bump breaks the build'}
         src = self._saved(compose.compose_workflow(self.s, 'bump deps and tell me if it breaks', _answering({'config': wf}))['config'])
-        _, tri = self._run(src, 'Bumped three packages; the build is green.', triage_says='no')
+        with mock.patch('taskuary.workflows._spawn', lambda fn: fn()):
+            out, tri = self._run(src, 'The build broke after the bump.', triage_says='yes')
         tri.assert_not_called()
-        _, tri = self._run(src, 'The build broke after the bump.', {'intent': 'task', 'kind': 'coding', 'why': 'broken build',
-                                                                     'title': 'Fix the build after the dependency bump'}, triage_says='yes')
-        tri.assert_called_once()
-        self.assertEqual(len(self.s.list_tasks()), 2, 'what no open task covers opens one')
+        t = self.s.get_task(out['task_id'])
+        self.assertEqual((t['Source'], t['Kind'], self.s._rows("SELECT * FROM message WHERE Channel='report'")), ('workflow', 'coding', []))
 
     def test_a_workflow_with_no_checkout_is_its_own_task_and_never_triage(self):
         """Today's road for a composed workflow (workflows.run): each run is a task handed to its worker - no report row, no triage."""

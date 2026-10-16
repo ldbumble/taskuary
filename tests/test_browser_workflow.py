@@ -48,7 +48,7 @@ def run_it(s, sid, trigger='schedule'):
     session = mock.Mock()
     with mock.patch.object(general, 'start_session', return_value=session), mock.patch.object(general, 'history', return_value=[]), \
          mock.patch.object(ingest, 'ingest_message'), mock.patch.object(triage, 'classify_intent'), \
-         mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch('taskuary.llm.make_cli_llm') as cli:
+         mock.patch.object(blackboard, 'live_count', return_value=0), mock.patch('taskuary.llm.make_cli_llm') as cli,          mock.patch.object(workflows, '_spawn', lambda fn: fn()):      # a workflow starts its agent on a thread; here, inline
         out = reports.run_report_source(s, s.get_source(sid), None, trigger=trigger)
     return out, session, cli
 

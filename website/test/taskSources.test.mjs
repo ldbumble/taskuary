@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, previewRows, routeHead, triageLine } from "../src/taskSources.js";
+import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 let id = 0;
@@ -133,4 +133,43 @@ test("the task view draws the new section: read-only pills, no in-section button
   assert.match(page, /maxHeight: 360, overflowY: "auto"/, "Show all scrolls when it goes far back");
   // the edits the pills offered are reachable from the bar: kind, priority, who, repository
   for (const id of ["kind", "priority", "assign", "repo"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
+});
+
+// A WORKFLOW RUN (workflows.run): no message, never triaged - the header says which workflow and what started it, and Came from
+// says the same where a message would be (the owner, 2026-10-16: "what's the logo on it and what does it show triggered it?")
+test("a workflow run's header names the workflow and who started it, never Triage decided", () => {
+  const wf = { source_id: 7, title: "Vendor bill sweep", trigger: "schedule", schedule: "Mondays 08:00", started_by: "its schedule" };
+  const task = { Kind: "general", Source: "workflow", SourceRef: "workflow:7", Tags: "workflow-trigger:schedule", Assignee: "agent:ap",
+    Title: "Vendor bill sweep - 2026-10-12 08:00" };
+  const facts = headerFacts({ task, workflow: wf, route: { Decision: "create", Reason: "triage: task" } });
+  assert.equal(facts.triaged, false, "nobody triaged it, whatever a stray route says");
+  assert.equal(facts.workflow, true);
+  assert.deepEqual(facts.pills.slice(0, 2).map((p) => [p.label, p.value]),
+    [["Workflow", "Vendor bill sweep"], ["Started by", "its schedule (Mondays 08:00)"]]);
+  assert.ok(!facts.pills.some((p) => p.key === "intent"));
+  assert.deepEqual(facts.pills.slice(2).map((p) => p.value), ["an agent · general", "ap", "normal"]);
+  // the list row has no detail: the tag alone still says who started it, and the run's own title still names the workflow
+  assert.equal(startedBy({ Tags: "needs:browser,workflow-trigger:manual" }), "you (Run now)");
+  assert.equal(startedBy({ Tags: "workflow-trigger:assistant" }), "the assistant");
+  assert.equal(startedBy({ Tags: "workflow-trigger:phone" }), "you, from your phone");
+  assert.equal(startedBy({ Tags: "workflow-trigger:schedule" }), "its schedule", "no clock to name without the detail");
+  assert.equal(workflowTitle({ Title: "Vendor bill sweep - 2026-10-12 08:00" }), "Vendor bill sweep");
+  assert.equal(headerFacts({ task: { ...task, Tags: "" }, workflow: null }).pills.find((p) => p.key === "trigger"), undefined,
+    "a run from before the tag says nothing it does not know");
+});
+
+test("a workflow run's Came from is the workflow and its trigger, with the way back to it", () => {
+  const task = { Kind: "coding", Source: "workflow", Tags: "workflow-trigger:manual", Title: "Dependency bumps - 2026-10-16 09:30" };
+  assert.deepEqual(workflowOrigin(task, { source_id: 9, title: "Dependency bumps", trigger: "manual", started_by: "you (Run now)" }),
+    { title: "Dependency bumps", by: "you (Run now)", line: "Started by you (Run now)", link: "#report=9" });
+  assert.deepEqual(workflowOrigin({ ...task, Tags: "" }, null), { title: "Dependency bumps", by: "", line: "A workflow run", link: "" },
+    "the workflow deleted: the run still says what it was");
+  assert.equal(workflowOrigin({ Source: "email" }), null);
+  assert.ok(page.includes("workflowOrigin("), "the page draws it");
+  assert.ok(page.includes('channel="workflow"'), "with the workflow's own mark, as the Reports shelf draws it");
+});
+
+test("the Tasks list says a row is a workflow run and who started it", () => {
+  const list = fs.readFileSync(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
+  assert.ok(list.includes("isWorkflowRun(task)") && list.includes("started by ${startedBy(task)}"));
 });

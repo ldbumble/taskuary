@@ -2029,6 +2029,13 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     # A continuation names the exact checkout from the saved transcript. Use it when it still
     # exists; a moved/deleted checkout falls back through the normal guarded repo resolution.
     continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
+    # A WORKFLOW RUN works in the folder its definition names, not in a checkout guessed for its words: Run now on a workflow
+    # with a `cwd` opened wherever the coding agent's repository map pointed, and the REPO line named that one (workflows.cwd_of)
+    from . import workflows
+    wf_cwd = None if continued_cwd else workflows.cwd_of(store, t)
+    if wf_cwd:
+        if not os.path.isdir(wf_cwd): raise ValueError(f"no such folder: {wf_cwd} - the workflow's cwd; fix it on the Reports tab")
+        continued_cwd, repo = wf_cwd, None
     for i, candidate in enumerate(chain):
         try:
             term = open_session(store, agent, tid, repo, continued_cwd, 0, 0, actor,

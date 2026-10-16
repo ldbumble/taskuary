@@ -476,7 +476,7 @@ Create a scheduled report or workflow; the composer builds it from what the owne
 
 ### `report.run`
 
-Run a report or workflow now; it lands in the pipe when done.
+Run a report or workflow now; a report lands in the pipe when done, a workflow starts as its task at once (the ref comes back)
 
 - `title` - or `source_id`
 

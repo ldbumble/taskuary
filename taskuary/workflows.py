@@ -15,7 +15,7 @@ gates as any unattended start (ingest._auto_general / _auto_code), never through
 a coding agent unless the definition says the job is code (a checkout to work in, or `runs_on: coding`).
 The brief the worker reads is the workflow's own (PW-206); no procedure selection is needed for it.
 """
-import json
+import json, threading
 from datetime import datetime
 from loguru import logger
 
@@ -94,7 +94,8 @@ def catalog(store) -> dict:
 
 def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
     """What the worker is handed for THIS run: the definition and the run's own context (PW-204/206)."""
-    lines = [f"WORKFLOW RUN: {defn['title']} - {'scheduled' if trigger == 'schedule' else 'run now by the owner'} at {when}.",
+    said = {'schedule': 'scheduled', 'assistant': 'started by the assistant for the owner', 'phone': 'run now by the owner from their phone'}
+    lines = [f"WORKFLOW RUN: {defn['title']} - {said.get(trigger, 'run now by the owner')} at {when}.",
              'OBJECTIVE: ' + (defn['objective'] or (f"run the saved skill /{defn['skill']}" if defn['skill'] else '(none given)'))]
     if defn.get('inputs'): lines.append('INPUTS: ' + json.dumps(defn['inputs'], default=str))
     if context: lines.append('THIS RUN: ' + json.dumps(context, default=str))
@@ -119,33 +120,114 @@ def brief(defn: dict, trigger: str, when: str, context: dict = None) -> str:
     return '\n'.join(lines)
 
 
-def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context: dict = None, background: bool = False) -> dict:
-    """A triggered workflow goes straight to its worker: a task with the definition and this run's context,
-    through the same capacity and retry gates as any unattended start - never through message triage.
+# WHO STARTED THIS RUN, kept on the task it made (the owner, 2026-10-16: "what does it show triggered it in the task card?"): a
+# workflow task has no message behind it and nobody triaged it, so this tag is the only thing that can say where it came from
+TRIGGER_TAG = 'workflow-trigger:'
+STARTED_BY = {'schedule': 'its schedule', 'manual': 'you (Run now)', 'assistant': 'the assistant', 'phone': 'you, from your phone'}
+_STARTING, _LOCK = set(), threading.Lock()      # runs whose worker is on its way: no session yet, and no queue row
 
-    `background`: the task is made now and the worker starts on a thread, so a Run now pressed by the owner can
-    take them TO the task - a general session's first turn holds the call for as long as the agent works."""
-    from . import ingest
+
+def _spawn(fn): threading.Thread(target=fn, daemon=True, name='workflow-start').start()
+
+
+def trigger_of(task) -> str:
+    tags = [x.strip() for x in str((task or {}).get('Tags') or '').split(',')]
+    return next((x[len(TRIGGER_TAG):] for x in tags if x.startswith(TRIGGER_TAG)), '')
+
+
+def source_of(store, task):
+    """The workflow a run task came from, while it still exists."""
+    ref = str((task or {}).get('SourceRef') or '')
+    if (task or {}).get('Source') != 'workflow' or not ref.startswith('workflow:'): return None
+    try: return store.get_source(int(ref.split(':', 1)[1]))
+    except (TypeError, ValueError): return None
+
+
+def cwd_of(store, task) -> str | None:
+    """The folder a coding workflow works in - its own `cwd`, never a checkout guessed from the run's words."""
+    src = source_of(store, task)
+    return (str(cfg_of(src).get('cwd') or '').strip() or None) if src else None
+
+
+_DAYS = {'0': 'Sundays', '1': 'Mondays', '2': 'Tuesdays', '3': 'Wednesdays', '4': 'Thursdays', '5': 'Fridays', '6': 'Saturdays',
+         '7': 'Sundays', '1-5': 'weekdays', '*': 'daily'}
+
+
+def when_words(cfg: dict) -> str:
+    """The clock as the owner says it - "Mondays 08:00" - for the common crons; anything else as reports.schedule_words says it."""
+    from .reports import schedule_words
+    if cfg.get('daily_at') and not cfg.get('cron') and not cfg.get('every_minutes'): return f"daily {cfg['daily_at']}"
+    m, h, dom, mon, dow = (str(cfg.get('cron') or '').split() + [''] * 5)[:5]
+    if m.isdigit() and h.isdigit() and mon == '*':
+        at = f'{int(h):02d}:{int(m):02d}'
+        if dom == '*' and dow in _DAYS: return f'{_DAYS[dow]} {at}'
+        if dom.isdigit() and dow == '*': return f'day {dom} of each month, {at}'
+    return schedule_words(cfg)
+
+
+def of_task(store, task) -> dict | None:
+    """What the task card says about a workflow run: which workflow, and what started it (TaskPage's header and Came from)."""
+    if (task or {}).get('Source') != 'workflow': return None
+    src, trig = source_of(store, task), trigger_of(task)
+    cfg = cfg_of(src) if src else {}
+    title = cfg.get('title') or (src or {}).get('Address') or str(task.get('Title') or '').rsplit(' - ', 1)[0]
+    return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
+            'started_by': STARTED_BY.get(trig, '')}
+
+
+def running(store, sid) -> dict | None:
+    """The previous run of this workflow while its worker still has it: a live session, a start on its way, or a queued start that
+    has not given up. One that is merely open - waiting on the owner's yes - is not running, so tomorrow's run still goes."""
+    from . import terminal
+    from .agents import LIVE_STATUSES
+    for t in store.dock_tasks(f'workflow:{sid}', limit=3):
+        if t.get('Status') not in LIVE_STATUSES: continue
+        q = store.get_dispatch(t['TaskId'])
+        if t['TaskId'] in _STARTING or terminal.for_task(t['TaskId'], details=False) or (q and q.get('State') != 'failed'): return t
+    return None
+
+
+def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context: dict = None, background: bool = True) -> dict:
+    """EVERY RUN OF A WORKFLOW IS THIS ONE ROAD - its clock, Run now, the assistant, the phone: a task with the definition and this
+    run's context, worked by its agent through the same capacity and retry gates as any unattended start, never through message
+    triage. A scheduled run with a checkout used to go down the REPORT road instead - a one-shot CLI whose answer was filed under
+    Reports - while Run now made a task (the owner, 2026-10-16: "Run now creates task but if it runs on schedule it should also
+    show up as task").
+
+    `background`: the task is made now and the worker starts on its own thread - a general session's first turn holds the call
+    for as long as the agent works, which kept the owner from their task and held every report behind it on the clock."""
+    from . import ingest, browserview
+    from .agents import CODING_KINDS
     defn = definition(store, src)
-    when = datetime.now().strftime('%Y-%m-%d %H:%M')
-    text, kind = brief(defn, trigger, when, context), definition(store, src)['runs_on']
-    from . import browserview
+    busy = running(store, defn['source_id'])
+    if busy:
+        # ...and one run at a time: a tick that comes round while the last run still works would put a second agent on the same job
+        store.add_comment(busy['TaskId'], actor, 'agent', f"Workflow run ({trigger}) not started: this run is still working.")
+        return {'task_id': busy['TaskId'], 'ref': task_ref(busy['TaskId']), 'kind': busy.get('Kind'), 'title': defn['title'],
+                'trigger': trigger, 'busy': True}
+    when, kind = datetime.now().strftime('%Y-%m-%d %H:%M'), defn['runs_on']
+    text = brief(defn, trigger, when, context)
     # a browser job's run task asks for a browser the way the walk that taught it did: the tag is what
     # general.py reads to launch one, bound to this session and restored from the owner's profile
-    tags = browserview.WANTS if kind == 'general' and defn.get('browser') else ''
-    # ...and it runs AS the worker it names, wearing that worker's rules (an AP workflow gets AP.md).
-    # Only a general one: a coding name on a general run is a brain picked long ago, not a role.
-    from .agents import CODING_KINDS
-    row = store.get_agent(defn['agent']) if kind == 'general' and defn.get('agent') else None
-    who = f"agent:{defn['agent']}" if row and str(row.get('Kind') or '').lower() not in CODING_KINDS else None
+    tags = ','.join(x for x in (browserview.WANTS if kind == 'general' and defn.get('browser') else '', f'{TRIGGER_TAG}{trigger}') if x)
+    # ...and it runs AS the worker it names, wearing that worker's rules (an AP workflow gets AP.md), as reports.run_agent did.
+    # A coding name on a GENERAL run is a brain picked long ago, not a role; a coding run takes the profile it names, else the
+    # coding profile (ingest._auto_code) - and either way the default brain runs it.
+    row = store.get_agent(defn['agent']) if defn.get('agent') else None
+    named = bool(row) and (kind == 'coding' or str(row.get('Kind') or '').lower() not in CODING_KINDS)
     tid = store.create_task({'Title': f"{defn['title']} - {when}", 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
                              'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags,
-                             **({'Assignee': who} if who else {})}, actor)
-    store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent with the workflow definition - no triage.")
+                             **({'Assignee': f"agent:{defn['agent']}"} if named else {})}, actor)
+    store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
+                                           'with the workflow definition - no triage.')
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
-    start = (lambda: ingest._auto_code(store, tid)) if kind == 'coding' else (lambda: ingest._auto_general(store, tid, text))
-    if background:
-        import threading
-        threading.Thread(target=start, daemon=True, name=f'workflow-{tid}').start()
+    with _LOCK: _STARTING.add(tid)
+    def start():
+        try:
+            if kind == 'coding': ingest._auto_code(store, tid)
+            else: ingest._auto_general(store, tid, text)
+        finally:
+            with _LOCK: _STARTING.discard(tid)
+    if background: _spawn(start)
     else: start()
     return {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger}

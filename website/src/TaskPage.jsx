@@ -43,7 +43,7 @@ import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
-import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, previewRows, triageLine } from "./taskSources.js";
+import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, previewRows, triageLine, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -828,7 +828,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     || (detail?.routes || []).find(judged);
   const verdict = parseTriageVerdict(sourceRoute) || latestTriageVerdict(detail?.routes || [])
     || legacyTriageVerdict({ routes: detail?.routes || [], task: t || {}, checklist: detail?.checklist || [] });
-  const facts = headerFacts({ verdict, route: sourceRoute, task: t || {} });
+  const facts = headerFacts({ verdict, route: sourceRoute, task: t || {}, workflow: detail?.workflow });
+  // ...and a WORKFLOW RUN came from its workflow, not a message: which one, and what started it (workflows.of_task)
+  const fromWorkflow = workflowOrigin(t || {}, detail?.workflow);
   // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
   const sources = groupConversations(storedMessages, { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
@@ -1343,6 +1345,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     Not over a session: that strip stays one line so the agent keeps the room. */}
                 {!sessionView && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
                   {facts.triaged && <Typography component="span" sx={{ fontSize: 11, color: FAINT, mr: 0.25 }}>Triage decided</Typography>}
+                  {facts.workflow && <ChannelIcon channel="workflow" sx={{ fontSize: 15, mr: 0.1 }} />}
                   {facts.pills.map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
                     <Box key={p.key} component="span" data-tq-fact={p.key} sx={{ ...factPill, ...tone }}>
                       <Box component="span" sx={{ color: k || FAINT }}>{p.label}</Box>
@@ -1463,7 +1466,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           how many are between and who wrote them. It replaces "Where this came from" and the stack of later messages under
                           the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
                           its message in full under it, as the old disclosure did. */}
-                      <Part label="Came from" sub={cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
+                      <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
@@ -1527,6 +1530,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 {triaged.later > 0 && ` · ${triaged.later} later message${triaged.later === 1 ? "" : "s"} joined it`}
                               </Typography>
                             </Box>
+                          </Box>
+                        ) : fromWorkflow ? (
+                          /* A WORKFLOW RUN has no message to show: where it came from is the workflow and what started it - its clock, your
+                             Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
+                          <Box data-tq-workflow-origin="" sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", px: { xs: 1, sm: 1.4 }, py: 1.1,
+                            display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                            <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                              <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13 }} title={fromWorkflow.title}>Workflow · {fromWorkflow.title}</Typography>
+                              <Typography variant="caption" sx={{ color: DIM, fontSize: 11.5, display: "block" }} title={`${detail.ref} · ${made}`}>
+                                {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
+                            </Box>
+                            {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see

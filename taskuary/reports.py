@@ -1605,13 +1605,19 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     """Execute one due report (executor + optional AI pass) and file it on the timeline.
     Errors file visibly too."""
     title = cfg.get('title') or src['Address']
-    # a WORKFLOW for the regular agent is not run here and not filed as a report: it is handed to its worker
-    # as a task with the definition and this run's context, through the usual start gates (workflows.py, PW-204)
+    # A WORKFLOW is not run here and not filed as a report: it is handed to its worker as a task with the definition and this
+    # run's context, through the usual start gates (workflows.run, PW-204) - a coding one with its checkout too. That one used to
+    # stay here, a one-shot CLI filed under Reports, while its Run now made a task (the owner, 2026-10-16: "if it runs on schedule
+    # it should also show up as task")
     from . import workflows
-    if workflows.is_workflow(cfg) and cfg.get('type') == 'agent' and workflows.runs_on(cfg) == 'general':
+    if workflows.is_workflow(cfg) and cfg.get('type') == 'agent':
         out = workflows.run(store, src, actor='schedule' if trigger == 'schedule' else 'owner', trigger=trigger)
-        return {'message_id': None, 'subject': f"{title} → {out['ref']} (regular agent, {trigger})", 'files': 0, 'said': 0,
-                'summary': f"handed to the regular agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
+        who = 'coding' if out['kind'] == 'coding' else 'regular'
+        if out.get('busy'):
+            return {'message_id': None, 'subject': f"{title} - not started: {out['ref']} is still working", 'files': 0, 'said': 0,
+                    'summary': f"the last run, {out['ref']}, is still working - one run at a time", 'task_id': out['task_id']}
+        return {'message_id': None, 'subject': f"{title} → {out['ref']} ({who} agent, {trigger})", 'files': 0, 'said': 0,
+                'summary': f"handed to the {who} agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')
     if cfg.get('type') == 'zoho_monthly_invoices':
         from .invoice_workflow import run_report

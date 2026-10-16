@@ -823,12 +823,14 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
             except Exception as e: logger.debug(f'funnel: no rendered screen for {t.get("sid")} - {e}')
         agent = t.get('agent') or t.get('label') or 'agent'
         req = t.get('request') or None
+        # a workflow run wears the workflow's mark (ChannelIcon 'workflow') - the terminal is for work with no source at all
+        src = 'workflow' if task.get('Source') == 'workflow' else ''
         if req:
             # the worker said what it needs (workerstate.py, PW-228): the exact question or action, its kind and
             # choices - the card shows that, not four lines of screen
             out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                              tid=tid, agent=agent, priority=task.get('Priority'), since=req.get('at') or t.get('started'), asking=req.get('kind') == 'input_needed', tail=[str(req.get('text') or '')[:300]], sid=t.get('sid'),
-                             mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
+                             channel=src, mode=t.get('mode') or 'terminal', request_id=req.get('request_id'), request_kind=req.get('kind'), choices=list(req.get('choices') or []),
                              why=request_line(agent, req), questions=list(t.get('questions') or []), held=bool(t.get('held'))))
             continue
         # ONE READING of "is it asking" (A15, 2026-09-25): the session's own state and sentence (terminal.worker_fields,
@@ -838,6 +840,7 @@ def from_agents(store, live_state=_LIVE_UNSET, now: datetime = None) -> list:
         asking = t.get('state') == 'asking'
         out.append(_item(f"agent:{tid}", 'agent', 'blocked', task.get('Title') or f'task {tid}', who=agent, when=t.get('started'),
                          tid=tid, agent=agent, priority=task.get('Priority'), asking=asking, tail=tail[-4:], sid=t.get('sid'), mode=t.get('mode') or 'terminal',
+                         channel=src,
                          why=t.get('line') or agent_says('asking' if asking else 'parked', agent)))
     return out
 

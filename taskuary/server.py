@@ -972,7 +972,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         title = cfg.get('title') or src.get('Address')
         if kind == 'report.run':
             from . import remote_assistant
-            out = _rerun_report(tid, asked=remote_assistant.asking())
+            out = _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
             return {**out, 'title': title, 'undo': None}
         if kind in ('report.pause', 'report.resume'):
             on = kind == 'report.resume'
@@ -1226,7 +1226,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun':
         from . import remote_assistant
-        return _rerun_report(tid, asked=remote_assistant.asking())
+        return _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
     if kind == 'memory.remember':
         from . import concierge
         return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
@@ -1410,7 +1410,7 @@ def task_detail(task_id: int):
     # happened - the Done and Pause buttons used to vanish with the pty
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
-    from . import concierge, origin
+    from . import concierge, origin, workflows
     # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send & close, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo = {}
@@ -1425,6 +1425,8 @@ def task_detail(task_id: int):
                        'danger': next((m['Danger'] for m in store.list_messages(task_id) if m.get('Danger')), None)},
             # the same sender writing again and again about this one thing, said once (concierge.repeats) - counted here, no model
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
+            # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
+            'workflow': workflows.of_task(store, d['task']),
             'messages': [_readable(x) for x in d.get('messages') or []],
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
@@ -4497,22 +4499,25 @@ def _spawn_rerun(fn):
     threading.Thread(target=fn, daemon=True).start()
 
 
-def _rerun_report(sid: int, asked: dict | None = None) -> dict:
+def _rerun_report(sid: int, asked: dict | None = None, by: str = 'manual') -> dict:
     """The rerun itself. `asked` is the chat the ask came from (remote_assistant.asking): a run started
     from WhatsApp used to land on the Timeline and tell the chat nothing (the owner, 2026-09-18: "would
-    that come back?"). When it lands, that chat gets the summary."""
+    that come back?"). When it lands, that chat gets the summary. `by`: who pressed it - the owner's
+    Run now, or the assistant (_run_operation) - written on a workflow's task as what started it."""
     src = store.get_source(sid)
     if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
     try: title = json.loads(src.get('ConfigJson') or '{}').get('title') or src.get('Address')
     except ValueError: title = src.get('Address')
     # A WORKFLOW RUN IS A TASK, not a report landing later (the owner, 2026-10-08: "when you hit run now it should not
     # be like report that runs in background but the task should show up in assistant canvas"): it is made now, its
-    # agent starts on its own thread, and the page is handed the task to open. Asked from a phone, the phone road stays.
+    # agent starts on its own thread, and the page is handed the task to open. From a phone too - that road ran it as a
+    # report, blocking on the agent's first turn, and a workflow with a checkout was filed under Reports (workflows.run).
+    # The chat hears the task's ref in the receipt (concierge: "started as TQ-..."), at once - nothing lands later to tell it
     from . import workflows
-    if not asked and workflows.is_workflow(src) and workflows.definition(store, src)['type'] == 'agent':
-        out = workflows.run(store, src, actor=ACTOR, trigger='manual', background=True)
+    if workflows.is_workflow(src) and workflows.definition(store, src)['type'] == 'agent':
+        out = workflows.run(store, src, actor=ACTOR, trigger='phone' if asked else by, background=True)
         return {'queued': True, 'sourceId': sid, 'title': title, 'workflow': True, 'task_id': out['task_id'], 'ref': out['ref'],
-                'link': f"#task={out['task_id']}"}
+                'busy': bool(out.get('busy')), 'link': f"#task={out['task_id']}"}
     def work():
         # the one road (reports.run_one): a manual run is extra - it never uses up the report's schedule
         try: out = run_one(store, src, _llm(), trigger='manual')

@@ -21,6 +21,7 @@ import TaskPage from "./TaskPage.jsx";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
+import { isWorkflowRun, startedBy } from "./taskSources.js";
 
 // three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
 // "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
@@ -446,6 +447,11 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {!task.Playbook && task.Source === "report" && task.SearchSources
                   && <Typography variant="caption" noWrap sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
                     Report · {String(task.SearchSources).split(",")[0]}
+                  </Typography>}
+                {/* a workflow run says it is one, and who started it - its clock, your Run now, the assistant, your phone (workflows.run) */}
+                {!task.Playbook && isWorkflowRun(task)
+                  && <Typography variant="caption" noWrap data-tq-workflow-run="" sx={{ color: "#6b5f45", display: "block", mt: 0.2 }}>
+                    Workflow{startedBy(task) ? ` · started by ${startedBy(task)}` : ""}
                   </Typography>}
                 {search && <Typography variant="caption" noWrap sx={{ color: FAINT, display: "block", mt: 0.2 }}>
                   {[task.Source, task.SearchSources, task.Summary].filter(Boolean).join(" · ")}

@@ -19,7 +19,7 @@ class ReportTriageTests(unittest.TestCase):
     def test_a_run_triage_calls_informational_stays_a_row_under_reports(self):
         s = MemoryStore()
         src = self._src(s, {'type': 'agent', 'title': 'Trends'})
-        with mock.patch.object(reports, 'render_report', return_value=('coder ran a prompt', '# Trends\nall steady this week')):
+        with mock.patch.object(reports, 'render_report', return_value=('coding ran a prompt', '# Trends\nall steady this week')):
             reports.run_report_source(s, src, llm=FYI_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
         self.assertEqual((m['Status'], m['TaskId']), ('filed', None)); self.assertEqual(s.list_tasks(), [])
@@ -74,7 +74,7 @@ class ReportTriageTests(unittest.TestCase):
         s = MemoryStore()
         s.save_connector({'ConnectorId': s.get_connector_by_type('anthropic')['ConnectorId'], 'Active': 1, 'Secret': 'k'}, 't')   # triage needs a brain card
         src = self._src(s, {'type': 'agent', 'title': 'Trends'})
-        with mock.patch.object(reports, 'render_report', return_value=('coder ran a prompt', '# Trends\nbuild a doc about X')), \
+        with mock.patch.object(reports, 'render_report', return_value=('coding ran a prompt', '# Trends\nbuild a doc about X')), \
              mock.patch('taskuary.ingest._spawn'):
             reports.run_report_source(s, src, llm=TASK_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
@@ -100,6 +100,6 @@ class BoardDoneTests(unittest.TestCase):
         s = server.store
         a = s.create_task({'Title': 'answered by hand', 'Kind': 'reply', 'Status': 'done'}, 't')
         b = s.create_task({'Title': 'agent worked it', 'Kind': 'general', 'Status': 'done'}, 't')
-        s.add_transcript(b, 'sid-x', 'did things', 'coder', 'C:/x')
+        s.add_transcript(b, 'sid-x', 'did things', 'coding', 'C:/x')
         rows = {r['TaskId']: r for r in c.get('/api/tasks').json()['data']}
         self.assertFalse(rows[a]['HadAgent']); self.assertTrue(rows[b]['HadAgent'])

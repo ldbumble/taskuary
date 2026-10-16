@@ -68,13 +68,14 @@ class TargetTests(unittest.TestCase):
         s, tid, mid, item = table()
         p, out = call(s, 'agent.continue', key=item['key'], note='merge it in')
         self.assertIsNone(p, 'nothing saved on the task: still a miss, never an agent on it')
-        s.add_transcript(tid, 'pane-1', 'reviewed it', agent='coder', cwd='.', ext_id='thread-1')
+        s.add_transcript(tid, 'pane-1', 'reviewed it', agent='coding', cwd='.', ext_id='thread-1')
         item = T.pile(s)[0]
         p, out = call(s, 'agent.continue', key=item['key'], note='merge it in')
         self.assertEqual((p['kind'], p['target'], p['params']['note']), ('agent.continue', tid, 'merge it in'))
 
     def test_the_hand_offs_name_is_read_as_its_kind_and_never_falls_to_a_regular_agent(self):
-        """2026-09-29 replay: kind "coder" became a card labelled "Start a regular agent" that waited for a yes."""
+        """2026-09-29 replay: kind "coding" became a card labelled "Start a regular agent" that waited for a yes.
+        LEGACY kind on purpose: the old name a model may still say is read as coding."""
         s = T.store()
         p, _ = call(s, 'task.create_from_text', kind='coder', text='review the widgets repo for the portal')
         self.assertIn('coding agent', p['label'])
@@ -92,7 +93,7 @@ class ToolTests(unittest.TestCase):
         # "can you do that? just null those two" on a finished agent's card was read as a new job and opened a second task:
         # the model had only the summary. It is told the session exists - it decides (2026-10-08: never code in front of it)
         s, tid, mid, item = table()
-        s.add_transcript(tid, 'sid-1', 'found the two accounts', agent='coder', ext_id='abc-123', brain='claude')
+        s.add_transcript(tid, 'sid-1', 'found the two accounts', agent='coding', ext_id='abc-123', brain='claude')
         done = {**item, 'kind': 'agentdone', 'lane': 'agent', 'summary': 'found the two accounts', 'tid': tid, 'ref': f'TQ-{tid:04d}'}
         said = concierge.facts(s, done)
         self.assertIn('AGENT SESSION', said)
@@ -105,7 +106,7 @@ class ToolTests(unittest.TestCase):
 
     def test_the_model_choosing_a_new_task_is_left_to_be_a_new_task(self):
         s, tid, mid, item = table()
-        s.add_transcript(tid, 'sid-1', 'x', agent='coder', ext_id='abc-123', brain='claude')
+        s.add_transcript(tid, 'sid-1', 'x', agent='coding', ext_id='abc-123', brain='claude')
         p, _ = call(s, 'task.create_from_text', kind='coding', text=f'Like TQ-{tid:04d} but for the portal: fix the export')
         self.assertEqual(p['kind'], 'task.create_from_text', p)
 
@@ -215,8 +216,8 @@ class OneLineTests(unittest.TestCase):
             self.assertIsNone(concierge.parse_call('Ok.' + chr(10) + line)[1], line)
 
     def test_a_decision_and_an_operation_are_the_same_line(self):
-        d = concierge.parse_decision('Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'coder', 'params': {'text': 'fix it', 'as': 'northwind/ledger'}}))[1]
-        self.assertEqual(d, {'verb': 'coder', 'text': 'fix it', 'as': 'northwind/ledger'})
+        d = concierge.parse_decision('Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'coding_agent', 'params': {'text': 'fix it', 'as': 'northwind/ledger'}}))[1]
+        self.assertEqual(d, {'verb': 'coding_agent', 'text': 'fix it', 'as': 'northwind/ledger'})
         c = concierge.parse_call('Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'task.update', 'params': {'priority': 'urgent'}}))[1]
         self.assertEqual(c, {'kind': 'task.update', 'params': {'priority': 'urgent'}})
 

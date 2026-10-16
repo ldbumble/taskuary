@@ -18,7 +18,7 @@ touching the callers - which are:
   POST /api/tools/run gets the ranked hits with snippets;
 - `kb_reindex`, the same, so a nightly report keeps the index fresh;
 - `block(store, text)`: what the reply drafter, the assistant, an agent's task context and
-  the coder context file append - the few passages that bear on the thread, quoted as DATA,
+  the agent context file append - the few passages that bear on the thread, quoted as DATA,
   never instructions (a document can say anything; only the owner's verdicts write SOUL/LEARNED).
 """
 import html, io, json, os, re, time, zipfile

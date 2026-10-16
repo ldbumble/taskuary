@@ -39,13 +39,14 @@ def _brain(store, slot) -> str:
     """A slot's brain as a CLI name or a connector type - never a Name, which can be an account."""
     from . import agents, llm
     v = str(store.get_setting(slot['key']) or '').strip()
-    if slot['pick'] == 'agent': v = f"cli:{v or agents.default_agent(store)}" if ':' not in v else v
+    if slot['pick'] == 'cli': v = f"cli:{v or agents.default_brain(store)}" if ':' not in v else v
     st = llm.brain_status(store, v)
     if st.get('Type') != 'cli': return str(st.get('Type') or '')
-    row = agents.agent_row(store, str(st.get('pick') or '')[4:]) or {}
+    key = str(st.get('pick') or '')[4:]
+    row = agents.agent_row(store, key) or {}
     try: prof = json.loads(row.get('Config') or '{}')
     except (TypeError, ValueError): prof = {}
-    return f"{agents.cli_of(prof if isinstance(prof, dict) else {}, row.get('Name') or '') or 'unknown'} (cli)"
+    return f"{agents.cli_of(prof if isinstance(prof, dict) else {}, row.get('Name') or key) or 'unknown'} (cli)"
 
 
 def _fact(f, default='?'):
@@ -346,7 +347,7 @@ def private_strings(store) -> list:
         vals = [c.get('Name')] + [v for k, v in _strings(_json(c.get('ConfigJson'))) if _ACCOUNT_KEY.search(k)]
         for v in vals:
             if str(v or '').strip().lower() not in cat: _add(out, v); _add(out, to_home(v))
-    for r in terminal.known_repos(store, agent='coder'):
+    for r in terminal.known_repos(store):
         if str(r).lower() != OWN_REPO: _add(out, r)
     for a in store.list_agents(active_only=False):
         prof = _json(a.get('Config'))

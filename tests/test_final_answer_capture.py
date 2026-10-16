@@ -16,7 +16,7 @@ class FinalAnswer(Base):
     def declare(self, sentence):
         patches = quiet_gates()
         for p in patches: p.start()
-        try: return selfclose.declare(self.s, self.tid, sentence, 'coder')
+        try: return selfclose.declare(self.s, self.tid, sentence, 'coding')
         finally:
             for p in patches: p.stop()
 

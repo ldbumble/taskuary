@@ -17,7 +17,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import api from "./api";
 import { ACCENT, ACCENT2, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono } from "./theme.jsx";
-import { ChannelIcon, AgentPicker, MicButton, useAgents, TaskuaryMark } from "./ui.jsx";
+import { ChannelIcon, AgentPicker, MicButton, useAgents, codingProfile, TaskuaryMark } from "./ui.jsx";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
@@ -147,7 +147,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const pics = usePromptImages();
   // agent
   const { agents, models, kinds, brainList, brainModels, generalBrains } = useAgents();
-  const [agent, setAgent] = useState("coder");
+  const [agent, setAgent] = useState("");   // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
   const [role, setRole] = useState("");     // a general agent: which profile (researcher, analyst...)
@@ -165,8 +165,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
   useEffect(() => {
-    if (agents.length && !agents.includes(agent)) { setAgent(agents[0]); setModel(""); }
-  }, [agents, agent]);
+    if (!agents.includes(agent)) { setAgent(codingProfile(agents, kinds)); setModel(""); }
+  }, [agents, kinds, agent]);
   // a new general task has no profile to keep, so the first general role is chosen rather than "the profile it has"
   const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
   useEffect(() => { if (!role && roles.length) setRole(roles.includes("researcher") ? "researcher" : roles[0]); }, [roles, role]);
@@ -210,7 +210,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
         api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
         // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
-        if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, agent });
+        if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, ...(agent ? { agent } : {}) });
         if (general) {
           const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
             { kind: "general", agent: role || null, pick: pick || null, model: model || null });
@@ -221,7 +221,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
           const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
-            { agent, brain: brain || null, model: model || null });
+            { agent: agent || null, brain: brain || null, model: model || null });
           setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         }
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
@@ -417,7 +417,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             </Box>
             <Box>
               <Label>Who is involved</Label>
-              <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coder"
+              <TextField fullWidth size="small" value={who} onChange={(e) => setWho(e.target.value)} placeholder="Ray Colton, Payworth (Marcus), the coding agent"
                 sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
               <Typography sx={{ fontSize: 11, color: FAINT, mt: 0.5 }}>People it may chase and systems it may touch. Anyone else is a question to you first.</Typography>
             </Box>

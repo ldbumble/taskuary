@@ -24,8 +24,8 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   let installerRevision = 1;
   page.on('pageerror', (e) => errors.push(e.message));
   const profiles = {
-    coder: { provider: 'cli:claude', kind: 'coding', rules_doc: 'coder', purpose: 'Edit code' },
-    codex: { provider: 'cli:codex', kind: 'coding', rules_doc: 'coder', purpose: 'Edit code' },
+    coding: { provider: 'cli:claude', kind: 'coding', rules_doc: 'coding', purpose: 'Edit code' },
+    codex: { provider: 'cli:codex', kind: 'coding', rules_doc: 'coding', purpose: 'Edit code' },
     researcher: { provider: 'cli:claude', kind: 'research', purpose: 'Research public information' },
   };
   const clis = [
@@ -38,7 +38,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname; let data;
     if (path === '/api/version') data = { version: 'fixture', cli_installer_revision: installerRevision };
-    if (path === '/api/agents') data = { config: profiles, models: {}, default: 'coder',
+    if (path === '/api/agents') data = { config: profiles, models: {}, default: 'coding',
       data: Object.entries(profiles).map(([Name, config]) => ({ Name, Config: JSON.stringify(config), installed: true })) };
     if (path === '/api/cli/connections') data = { data: clis };
     if (path === '/api/cli/install/terminal' && request.method() === 'POST') {
@@ -95,12 +95,12 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   await page.waitForFunction(() => !document.querySelector('.xterm'));
   await clickText(page, 'Manage profiles in Docs', 'button');
   // the rail lists profiles by WORKER NAME - a profile's rules document can BE an operator
-  // document (the coder profile's is CODER.md), so filenames would name one thing twice in one rail
+  // document (the coding profile's is CODING.md), so filenames would name one thing twice in one rail
   await page.waitForFunction(() => document.body.innerText.includes('researcher'));
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /CODEX\.md/);
-  // codex shares coder's document, and the document it shares is where that is said
-  await clickRail(page, 'coder');
-  await page.waitForFunction(() => document.body.innerText.includes('Used by coder, codex'));
+  // codex shares coding's document, and the document it shares is where that is said
+  await clickRail(page, 'coding');
+  await page.waitForFunction(() => document.body.innerText.includes('Used by coding, codex'));
   await clickRail(page, 'researcher');
   await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some((el) => el.value.includes('Read public sources')));
   await clickRail(page, '+ New profile');
@@ -137,7 +137,7 @@ test('Connections share CLI commands; Docs profiles choose only provider and mod
   assert.equal(writes[2].update.model, 'test-codex-model');
   assert.equal(writes[2].update.purpose, 'Research public information');
   assert.equal(writes[2].update.kind, 'research');
-  assert.equal(profiles.coder.provider, 'cli:claude');
+  assert.equal(profiles.coding.provider, 'cli:claude');
   assert.deepEqual(clis[0].config.args, ['-p', '--verbose']);
   await page.screenshot({ path: '../.codex-tmp/docs-profiles.png', fullPage: true });
   assert.deepEqual(errors, []); assert.deepEqual(page.fixtureEscapes, []);

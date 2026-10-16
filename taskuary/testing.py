@@ -87,7 +87,7 @@ class Factory:
         fields = {k: v for k, v in fields.items() if v is not None}
         return self.s.add_review(fields)
 
-    def run(self, task_id, status='running', agent='coder', instruction='go'):
+    def run(self, task_id, status='running', agent='coding', instruction='go'):
         rid = self.s.start_run(task_id, agent, instruction, self.actor)
         if status != 'running':
             self.s.update_run(rid, {'Status': status}, finished=status in ('done', 'failed'))
@@ -102,7 +102,7 @@ class Factory:
     def waiting(self, task_id, note='also handle the null case'):
         return self.s.add_waiting(task_id, note, self.actor)
 
-    def queued(self, task_id, behind, agent='coder', reason='overlap'):
+    def queued(self, task_id, behind, agent='coding', reason='overlap'):
         return self.s.enqueue_dispatch(task_id, behind, agent, reason)
 
     def policy(self, pattern, action='ignore', kind='subject', reason='automated', **kw):
@@ -165,7 +165,7 @@ class Factory:
         self.s.update_task(tid, {'Status': 'dropped'}, self.actor)
         return _pic(tid=tid, mid=mid, rid=rid)
 
-    def running(self, title='busy work', agent='coder'):
+    def running(self, title='busy work', agent='coding'):
         """An agent is on it: NeedsYou flips off even with no review."""
         tid, mid = self._work(title, status='in_progress', kind='coding')
         run_id = self.run(tid, agent=agent)
@@ -264,10 +264,10 @@ class Factory:
         tid = self.task(title=title, status='in_progress', kind='coding')
         self.review(tid, status='approved')
         rid = self.review(tid, status='pending')
-        self.run(tid, agent='coder')
+        self.run(tid, agent='coding')
         run_id = self.run(tid, agent='codex')
-        self.comment(tid, note, actor='coder')
-        self.comment(tid, 'ordinary comment', actor='coder')
+        self.comment(tid, note, actor='agent')
+        self.comment(tid, 'ordinary comment', actor='agent')
         return _pic(tid=tid, rid=rid, run_id=run_id)
 
     def late_pending_on_done(self, title='already closed'):

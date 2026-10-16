@@ -20,7 +20,7 @@ def test_a_task_the_advisor_made_is_the_advisors_ask_never_yours():
 def test_the_three_parts_wear_the_task_pages_three_colours():
     s = MemoryStore(); tid = _task(s)
     item = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': tid, 'ref': 'TQ-0001', 'who': 'Erin Blake', 'channel': 'email',
-            'agent': 'coder', 'tail': ['Which branch?'], 'choices': ['main', 'release']}
+            'agent': 'coding', 'tail': ['Which branch?'], 'choices': ['main', 'release']}
     story, move = ra.story_block(s, item), ra.move_block(s, item)
     assert f'{ra.DOT_TASK} **Erin Blake** asked' in story          # 1 the task - slate
     assert f'{ra.DOT_AGENT} **Coding agent**' in story             # 2 the agent - sage

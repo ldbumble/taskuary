@@ -210,8 +210,8 @@ hang waiting for a click that cannot happen — the presets set this for you. An
 **Test** action runs a small prompt through the CLI before it ever receives real work, which is
 the fastest way to find out that a sign-in expired.
 
-Every CLI card has a **light model** as well as a main one. Naming the same CLI as both your
-coder and your triage brain is normal and cheap, and it is the light gear that keeps it cheap.
+Every CLI card has a **light model** as well as a main one. Naming the same CLI as the brain your coding
+agent runs on and as your triage brain is normal and cheap, and it is the light gear that keeps it cheap.
 
 ## Adding another of the same kind
 

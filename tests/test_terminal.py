@@ -24,6 +24,14 @@ def _wait(fn, secs=20):
     return False
 
 
+# The throwaway profiles these tests write are all kind `coding`, and the coding profile is found by its KIND, first by name
+# (agents.coding_role) - so a leftover `Atlas` became the profile every repo picker and later test read. Gone when done.
+THROWAWAY = ('Atlas', 'shimseed', 'argvseed', 'atomicseed', 'codex-continuation', 'old-agent', 'backup-agent', 'faketui', 'finder')
+def _drop_throwaways():
+    for n in THROWAWAY: server.store.delete_agent(n)
+def tearDownModule(): _drop_throwaways()
+
+
 class SeedArgvTests(unittest.TestCase):
     def test_a_named_worker_owns_the_task_it_opens(self):
         server.store.upsert_agent('Atlas', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': os.getcwd()}))
@@ -126,7 +134,7 @@ class SeedArgvTests(unittest.TestCase):
     def test_a_pane_being_seeded_is_working_whatever_its_screen_says(self):
         """The seed goes in over several seconds - a toe, its echo, the payload in chunks, Enter - with
         the CLI's prompt box on screen the whole time. That is longer than PHASE_DWELL, so the phase
-        read parked, the pile said "coder stopped on TQ-0631 and is waiting on you", and the watcher took
+        read parked, the pile said "the agent stopped on TQ-0631 and is waiting on you", and the watcher took
         it back as "working" a moment later: both lines in one WhatsApp by-the-way (2026-09-18)."""
         class Fake:
             argv, alive, accepted, seeding, seeded = ['claude.cmd'], True, None, True, ''
@@ -273,7 +281,7 @@ class TerminalTests(unittest.TestCase):
         already = len(server.store.list_tasks(status='in_progress'))
         tid = server.store.create_task({'Title': 'left behind by old process', 'Kind': 'coding',
                                         'Status': 'in_progress'}, 'owner')
-        rid = server.store.start_run(tid, 'coder', 'prompt', 'owner')
+        rid = server.store.start_run(tid, 'coding', 'prompt', 'owner')
         self.assertEqual(terminal.recover_after_restart(server.store), already + 1)
         self.assertEqual(server.store.get_task(tid)['Status'], 'open')
         self.assertEqual(server.store.get_run(rid)['Status'], 'stopped')
@@ -494,20 +502,20 @@ class TerminalTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'finished but needs another pass', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'done'}, 'test')
         class Fake:
-            cwd, sid, label = os.getcwd(), 'reopened-session', 'coder'
+            cwd, sid, label = os.getcwd(), 'reopened-session', 'coding'
             def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
         # Exercise the exact door used by TasksView's Start session button, not dispatch's
         # start_on_task wrapper; both must promote a closed task independently.
         with mock.patch.object(server.hub_term, 'open_session', return_value=Fake()):
-            self.assertEqual(c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid}).status_code, 200)
+            self.assertEqual(c.post('/api/terminals', json={'agent': 'coding', 'task_id': tid}).status_code, 200)
         self.assertEqual(server.store.get_task(tid)['Status'], 'in_progress')
 
-    def test_continue_reopens_the_same_coder_checkout_with_the_saved_result(self):
+    def test_continue_reopens_the_same_coding_checkout_with_the_saved_result(self):
         tid = c.post('/api/tasks', json={'Title': 'investigate then implement', 'Kind': 'coding'}).json()['taskId']
         server.store.upsert_agent('codex-continuation', 'coding', 'cli', '{"cmd": "codex"}')
         server.store.add_transcript(tid, 'old-session', 'the old terminal', 'codex-continuation', os.getcwd())
         server.store.add_comment(tid, 'codex-continuation', 'agent',
-                                 'CODER REPORT\nSummary: found the missing mapper\nActions: documented the approach')
+                                 'AGENT REPORT\nSummary: found the missing mapper\nActions: documented the approach')
         server.store.update_task(tid, {'Status': 'waiting'}, 'test')
         opened = {'sid': 'continued-session', 'alive': True, 'agent': 'codex-continuation'}
         with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
@@ -523,28 +531,28 @@ class TerminalTests(unittest.TestCase):
         self.assertIn('implement the mapper and tests', seed)
 
     def test_continue_can_switch_to_an_explicitly_selected_harness(self):
-        tid = c.post('/api/tasks', json={'Title': 'try another coder', 'Kind': 'coding'}).json()['taskId']
-        server.store.upsert_agent('old-coder', 'coding', 'cli', '{"cmd": "old"}')
-        server.store.upsert_agent('backup-coder', 'coding', 'cli', '{"cmd": "backup"}')
-        server.store.add_transcript(tid, 'old-session', 'rate limited', 'old-coder', os.getcwd())
-        opened = {'sid': 'backup-session', 'alive': True, 'agent': 'backup-coder'}
+        tid = c.post('/api/tasks', json={'Title': 'try another brain', 'Kind': 'coding'}).json()['taskId']
+        server.store.upsert_agent('old-agent', 'coding', 'cli', '{"cmd": "old"}')
+        server.store.upsert_agent('backup-agent', 'coding', 'cli', '{"cmd": "backup"}')
+        server.store.add_transcript(tid, 'old-session', 'rate limited', 'old-agent', os.getcwd())
+        opened = {'sid': 'backup-session', 'alive': True, 'agent': 'backup-agent'}
         with mock.patch.object(terminal, 'start_on_task', return_value=opened) as start:
             out = c.post(f'/api/tasks/{tid}/continue',
-                         json={'agent': 'backup-coder', 'instruction': 'pick up from the failed run'}).json()
-        self.assertEqual(out['agent'], 'backup-coder')
-        self.assertEqual(start.call_args.args[2], 'backup-coder')
+                         json={'agent': 'backup-agent', 'instruction': 'pick up from the failed run'}).json()
+        self.assertEqual(out['agent'], 'backup-agent')
+        self.assertEqual(start.call_args.args[2], 'backup-agent')
 
     def test_start_session_seeds_the_new_prompt(self):
         tid = c.post('/api/tasks', json={'Title': 'repair imports', 'Kind': 'coding'}).json()['taskId']
         captured = {}
         class Fake:
-            cwd, sid, label = os.getcwd(), 'prompted-session', 'coder'
+            cwd, sid, label = os.getcwd(), 'prompted-session', 'coding'
             def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
         def opened(*args, **kwargs):
             captured['seed'] = kwargs['seed_fn'](os.getcwd())
             return Fake()
         with mock.patch.object(server.hub_term, 'open_session', side_effect=opened):
-            r = c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid, 'seed': True,
+            r = c.post('/api/terminals', json={'agent': 'coding', 'task_id': tid, 'seed': True,
                                                 'instruction': 'Only repair the CSV retry path.'})
         self.assertEqual(r.status_code, 200)
         self.assertIn('Only repair the CSV retry path.', captured['seed'])
@@ -552,7 +560,7 @@ class TerminalTests(unittest.TestCase):
     def test_stop_agent_leaves_task_status_unchanged(self):
         tid = c.post('/api/tasks', json={'Title': 'keep this task', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'waiting'}, 'test')
-        live = mock.Mock(sid='only-the-session', alive=True, label='Codex', agent='coder')
+        live = mock.Mock(sid='only-the-session', alive=True, label='Codex', agent='coding')
         with mock.patch.object(server.hub_term, 'session_for', return_value=live), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             out = c.post(f'/api/tasks/{tid}/agent/stop').json()
@@ -560,12 +568,12 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
         close.assert_called_once_with('only-the-session')
 
-    def test_continue_does_not_silently_replace_a_removed_coder(self):
+    def test_continue_does_not_silently_replace_a_removed_profile(self):
         tid = c.post('/api/tasks', json={'Title': 'continue it', 'Kind': 'coding'}).json()['taskId']
-        server.store.add_transcript(tid, 'gone-session', 'work', 'removed-coder', os.getcwd())
+        server.store.add_transcript(tid, 'gone-session', 'work', 'removed-agent', os.getcwd())
         r = c.post(f'/api/tasks/{tid}/continue', json={'instruction': 'make the changes'})
         self.assertEqual(r.status_code, 422)
-        self.assertIn('removed-coder', r.json()['detail'])
+        self.assertIn('removed-agent', r.json()['detail'])
 
     def test_an_image_pasted_into_a_task_terminal_is_saved_for_its_prompt(self):
         tid = c.post('/api/tasks', json={'Title': 'inspect this screenshot', 'Kind': 'coding'}).json()['taskId']
@@ -593,7 +601,7 @@ class TerminalTests(unittest.TestCase):
                                   'SourceName': 'me@corp.com', 'FromEmail': 'john@corp.com',
                                   'BodyText': 'all CNA should be restricted', 'Status': 'routed'})
         t = terminal.Term(ECHO, os.getcwd(), 'test')
-        t.task_id, t.agent = tid, 'coder'
+        t.task_id, t.agent = tid, 'coding'
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))     # something on screen to harvest
         self.assertTrue(_wait(lambda: not t.alive))     # the CLI exited by itself - wrap-up must still work
@@ -602,7 +610,7 @@ class TerminalTests(unittest.TestCase):
         report = '{"determination": "325 was Y/Y", "actions": "flipped it to N/N", "summary": "no mailbox now"}'
         try:
             # the handbook is OFF for this one. It is on by default now and asks the transcript
-            # its own question during wrap (coder.wrap -> handbook.learn_from_session), which
+            # its own question during wrap (wrapup.wrap -> handbook.learn_from_session), which
             # would eat one of the two brains below and leave the reply undrafted. What wrap does
             # with the handbook is tests/test_handbook.py's subject, not this test's.
             with mock.patch('taskuary.handbook.enabled', return_value=False),                  mock.patch('taskuary.llm.build_llm', side_effect=[lambda s, u, **kw: report,
@@ -627,7 +635,7 @@ class TerminalTests(unittest.TestCase):
         task gets the note typed into it so it carries on instead of starting over."""
         tid = c.post('/api/tasks', json={'Title': 'importer is down', 'Kind': 'coding'}).json()['taskId']
         t = terminal.Term(ECHO, os.getcwd(), 'test')
-        t.task_id, t.agent = tid, 'coder'
+        t.task_id, t.agent = tid, 'coding'
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: 'hello-from-pty' in t.scrollback()))
         self.assertTrue(_wait(lambda: not t.alive))     # same for pausing an exited session
@@ -652,7 +660,7 @@ class TerminalTests(unittest.TestCase):
     def test_the_prompt_carries_everything_so_the_agent_never_calls_back(self):
         """An agent that goes back to Taskuary for the message spends a minute of tool calls
         re-fetching what it was handed. The prompt says the message IS the context - and carries
-        the mail, the repo and CODER.md (which claimed to be sent every run, and never was)."""
+        the mail, the repo and CODING.md (which claimed to be sent every run, and never was)."""
         tid = c.post('/api/tasks', json={'Title': 'payroll import month is wrong', 'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:PAY1', 'Channel': 'email',
                                   'FromName': 'Dana Reyes', 'FromEmail': 'dreyes@northwind.example',
@@ -663,7 +671,7 @@ class TerminalTests(unittest.TestCase):
                   'REPO: northwind/Census', 'Do NOT call the Taskuary API', 'fix it if it is fixable',
                   'Do NOT create GitHub issues']:
             self.assertIn(s, seed)
-        self.assertIn('CODING RULES (CODER.md)', seed)                  # CODER.md rides along (PW-185: one labelled block)
+        self.assertIn('CODING RULES (CODING.md)', seed)                  # CODING.md rides along (PW-185: one labelled block)
         self.assertIn('RULES (AGENT.md', seed)                          # ...on top of the rules every worker shares (PW-182)
         self.assertIn('Work ONLY in the repository', seed)
         self.assertNotIn('\\n', seed)                                   # one line - a newline submits
@@ -694,21 +702,21 @@ class TerminalTests(unittest.TestCase):
         """"Start session" in the Tasks header used to build its OWN thin prompt - title plus
         summary, no message, no rules - which is precisely why an agent started that way went
         back to the API for the mail. One prompt builder, both doors."""
-        server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
+        server.store.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
         tid = c.post('/api/tasks', json={'Title': 'payroll month', 'Kind': 'coding'}).json()['taskId']
         server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:PAY2', 'Channel': 'email',
                                   'FromEmail': 'dreyes@northwind.example', 'Subject': 'Payroll File Imports',
                                   'SentAt': '2026-08-19 15:03', 'BodyText': 'imports in the wrong month'})
 
         class Fake:
-            sid, cwd, label, agent, task_id = 'fake-sid', os.getcwd(), 'coder', 'coder', tid
+            sid, cwd, label, agent, task_id = 'fake-sid', os.getcwd(), 'coding', 'coding', tid
             seeded = None
             def info(self): return {'sid': self.sid, 'cwd': self.cwd, 'alive': True}
         def fake_open(*a, seed_fn=None, **k):
             Fake.seeded = seed_fn(os.getcwd()) if seed_fn else None    # the prompt now travels as seed_fn
             return Fake()
         with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
-            self.assertEqual(c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid, 'seed': True}).status_code, 200)
+            self.assertEqual(c.post('/api/terminals', json={'agent': 'coding', 'task_id': tid, 'seed': True}).status_code, 200)
         for s in ('imports in the wrong month', 'dreyes@northwind.example', 'Do NOT call the Taskuary API', 'fix it if it is fixable'):
             self.assertIn(s, Fake.seeded)
 
@@ -790,7 +798,7 @@ class TerminalTests(unittest.TestCase):
         # fake_tui reads stdin in CANONICAL mode: macOS caps a line at 1024 bytes and drops the
         # overflow at the tty layer. Real TUIs are raw-mode (no cap) - so trim what only bloats
         # this test's prompt, and assert it fits, or the failure mode is invisible.
-        saved = {n: server.store.get_doc(n) for n in ('agent', 'coder', 'soul')}   # AGENT.md rides in the seed too (PW-182)
+        saved = {n: server.store.get_doc(n) for n in ('agent', 'coding', 'soul')}   # AGENT.md rides in the seed too (PW-182)
         for n in saved: server.store.save_doc(n, '', 'test')
         # Runtime now restores blank profile documents. This test isolates terminal input,
         # so omit that block explicitly instead of relying on an empty persisted document.
@@ -824,7 +832,7 @@ class TerminalTests(unittest.TestCase):
         # Back to 1000. Switching the handbook on briefly pushed this to 1100 by adding a line
         # about how to write an entry - and a longer seed takes longer to type into a real TUI,
         # which is what turned this end-to-end test red on CI while passing locally. The rule
-        # moved to CODER.md instead of the ceiling moving: "belongs in a document" was already
+        # moved to CODING.md instead of the ceiling moving: "belongs in a document" was already
         # the right answer, written in this comment, one line above where it was ignored.
         self.assertLess(len(seed), 1000, seed)
         ses = c.post('/api/terminals', json={'agent': 'faketui', 'task_id': tid, 'seed': True,
@@ -1083,7 +1091,7 @@ class DurableWrapTests(unittest.TestCase):
     def test_a_cli_that_exits_releases_its_in_progress_task(self):
         tid = self._task('agent exited without wrapping')
         server.store.update_task(tid, {'Status': 'in_progress'}, 'router')
-        t = terminal.Term(ECHO, os.getcwd(), 'coder', tid, 'coder', store=server.store)
+        t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=server.store)
         terminal.SESSIONS[t.sid] = t
         try:
             self.assertTrue(_wait(lambda: not t.alive))
@@ -1096,7 +1104,7 @@ class DurableWrapTests(unittest.TestCase):
 
     def test_the_transcript_outlives_the_pty_and_the_task_can_still_be_wrapped(self):
         tid = self._task()
-        t = terminal.Term(ECHO, os.getcwd(), 'coder', tid, 'coder', store=server.store)
+        t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=server.store)
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: not t.alive))                     # it exited by itself
         self.assertTrue(_wait(lambda: server.store.last_transcript(tid) is not None))
@@ -1106,7 +1114,7 @@ class DurableWrapTests(unittest.TestCase):
         self.assertIsNone(terminal.session_for(tid))
         text, agent, sid = terminal.transcript_for(server.store, tid)
         self.assertIn('hello-from-pty', text)
-        self.assertEqual((agent, sid), ('coder', t.sid))
+        self.assertEqual((agent, sid), ('coding', t.sid))
         # ...and the buttons still have somewhere to point
         self.assertTrue(c.get(f'/api/tasks/{tid}').json()['transcript'])
         with mock.patch('taskuary.llm.build_llm', return_value=None):   # no AI: files the tail verbatim
@@ -1116,7 +1124,7 @@ class DurableWrapTests(unittest.TestCase):
 
     def test_pause_works_off_a_dead_session_too(self):
         tid = self._task('paused after exit')
-        t = terminal.Term(ECHO, os.getcwd(), 'coder', tid, 'coder', store=server.store)
+        t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=server.store)
         terminal.SESSIONS[t.sid] = t
         self.assertTrue(_wait(lambda: server.store.last_transcript(tid) is not None))
         terminal.SESSIONS.pop(t.sid, None)
@@ -1145,7 +1153,7 @@ class DurableWrapTests(unittest.TestCase):
                                        'DraftText': 'We will look into it.', 'Reason': 'needs a reply'})
         pending = lambda: [r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data']]
         self.assertIn(rid, pending())
-        t = terminal.Term(ECHO, os.getcwd(), 'coder', tid, 'coder', store=server.store)
+        t = terminal.Term(ECHO, os.getcwd(), 'coding', tid, 'coding', store=server.store)
         terminal.SESSIONS[t.sid] = t
         server.store.hold_reviews(tid, 'held while an agent works the task')   # what open_session does
         self.assertNotIn(rid, pending())                                        # out of the queue
@@ -1183,8 +1191,9 @@ class RepoRoutingTests(unittest.TestCase):
             '- **northwind/portal**: a travel and expense reimbursement platform with AI receipt validation\n')
 
     def setUp(self):
+        _drop_throwaways()
         server.store.save_doc('soul', self.SOUL, 'test')
-        server.store.upsert_agent('coder', 'coding', 'cli',
+        server.store.upsert_agent('coding', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': os.getcwd(),
                                               'cwd_map': {'northwind/Census': os.getcwd()}}))
 
@@ -1194,11 +1203,11 @@ class RepoRoutingTests(unittest.TestCase):
     def test_the_only_configured_repo_is_not_taken_while_the_map_knows_others(self):
         """No verdict from triage and no guess from the words (2026-10-11): the owner chooses, and the one checkout
         with a path is not quietly taken for them - that is how the reimbursement task opened in the wrong tree."""
-        prof = json.loads(server.store.get_agent('coder')['Config'])
+        prof = json.loads(server.store.get_agent('coding')['Config'])
         tid = self._task('Reimbursement app', 'approving reimbursements shows an error on each transaction')
         self.assertEqual(terminal.guess_repo(server.store, tid, prof), (None, 'triage named no repository - choose one'))
         with mock.patch.object(terminal, 'Term') as worker, self.assertRaisesRegex(ValueError, 'could not tell which checkout'):
-            terminal.open_session(server.store, 'coder', tid, None)
+            terminal.open_session(server.store, 'coding', tid, None)
         worker.assert_not_called()
         # the picker still lists every repo, with whether it can be opened - ordering it is not choosing
         ranked = terminal.rank_repos(server.store, tid, prof)
@@ -1209,19 +1218,19 @@ class RepoRoutingTests(unittest.TestCase):
         # pin that with a search that must come up empty. CI has no claude, so resolution is
         # mocked too: this test is about the repo guard, not the binary.
         with mock.patch.object(terminal, 'find_checkout', return_value=None),              mock.patch('taskuary.agents._resolve_cmd', return_value=[sys.executable]),              self.assertRaises(ValueError) as e:
-            terminal.open_session(server.store, 'coder', self._task('x'), 'northwind/portal')
+            terminal.open_session(server.store, 'coding', self._task('x'), 'northwind/portal')
         self.assertIn('no local path for northwind/portal', str(e.exception))
         self.assertIn('search of your code folders', str(e.exception))
         self.assertIn('Pick the repository', str(e.exception))    # the fix is ON the task now
         self.assertIn('wrong tree', str(e.exception))
 
     def test_a_named_repo_without_any_path_mapping_never_uses_the_default_folder(self):
-        server.store.upsert_agent('coder', 'coding', 'cli',
+        server.store.upsert_agent('coding', 'coding', 'cli',
                                   json.dumps({'cmd': 'claude', 'cwd': os.getcwd(), 'cwd_map': {}}))
         with mock.patch.object(terminal, 'find_checkout', return_value=None), \
              mock.patch.object(terminal, 'Term') as worker, \
              self.assertRaisesRegex(ValueError, 'no local path for northwind/portal'):
-            terminal.open_session(server.store, 'coder', self._task('Prepare portal fix'), 'northwind/portal')
+            terminal.open_session(server.store, 'coding', self._task('Prepare portal fix'), 'northwind/portal')
         worker.assert_not_called()
 
     def test_the_api_lists_every_repo_with_whether_it_can_be_opened(self):
@@ -1242,15 +1251,15 @@ class RepoRoutingTests(unittest.TestCase):
         self.assertEqual([r['repo'] for r in out], sorted(by, key=str.lower))
         # ...and a task made with that pick carries the tag the session reads, so the checkout is the one chosen
         tid = c.post('/api/tasks', json={'Title': 'x', 'Kind': 'coding', 'Tags': 'repo:northwind/portal,stay:open'}).json()['taskId']
-        prof = json.loads(server.store.get_agent('coder')['Config'])
+        prof = json.loads(server.store.get_agent('coding')['Config'])
         self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/portal', 'tagged on the task'))
 
     def test_pinning_a_repo_overrides_the_guess_and_takes_the_path_with_it(self):
         tid = self._task('Reimbursement app', 'approving reimbursements errors out')
         here = os.getcwd()
-        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'northwind/portal', 'path': here, 'agent': 'coder'})
+        r = c.put(f'/api/tasks/{tid}/repo', json={'repo': 'northwind/portal', 'path': here, 'agent': 'coding'})
         self.assertEqual(r.status_code, 200)
-        prof = json.loads(server.store.get_agent('coder')['Config'])
+        prof = json.loads(server.store.get_agent('coding')['Config'])
         self.assertEqual(prof['cwd_map']['northwind/portal'], here)          # the path stuck
         self.assertEqual(terminal.guess_repo(server.store, tid, prof), ('northwind/portal', 'tagged on the task'))
         self.assertIn('repo:northwind/portal', server.store.get_task(tid)['Tags'])
@@ -1345,6 +1354,7 @@ class SeedCompletenessTests(unittest.TestCase):
     def _task(self, body, title='long ask'):
         from taskuary.store import MemoryStore
         s = MemoryStore()
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))     # the profile a coding task runs under, by its kind
         tid = s.create_task({'Title': title, 'Kind': 'coding'}, 'o')
         s.add_message({'TaskId': tid, 'Channel': 'email', 'ExternalId': 'b1', 'FromName': 'Dana',
                        'FromEmail': 'd@x.example', 'Subject': 'Importer',
@@ -1378,7 +1388,7 @@ class SeedCompletenessTests(unittest.TestCase):
         loses the tail of a paragraph."""
         s, tid = self._task('z' * 200000)
         seed = terminal.seed_text(s, tid)
-        for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODER.md)', 'RULES (AGENT.md'):   # PW-185 labels
+        for must in ('WHAT TO DO', 'Do NOT push', 'CODING RULES (CODING.md)', 'RULES (AGENT.md'):   # PW-185 labels
             self.assertIn(must, seed, must)
 
     @_owner
@@ -1421,14 +1431,14 @@ class SeedCompletenessTests(unittest.TestCase):
         self.assertIn('if the sender must answer', seed)
 
     def test_a_coding_agent_gets_the_whole_of_its_rules(self):
-        """coder.md flattens to ~4,884 chars and was delivered as 1,800 - every coding session ran on
+        """coding.md flattens to ~4,884 chars and was delivered as 1,800 - every coding session ran on
         37% of its own rules, cut mid-sentence, with nothing saying so. Measured, not hardcoded, so
         the test still means something after the document is edited."""
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        doc = s.get_doc('coder') or ''
-        self.assertGreater(len(doc), 2000, 'the shipped coder.md should be substantial')
-        got = terminal.rules_text(s, profile='coder')
+        doc = s.get_doc('coding') or ''
+        self.assertGreater(len(doc), 2000, 'the shipped coding.md should be substantial')
+        got = terminal.rules_text(s, profile='coding')
         self.assertNotIn('truncated here', got)
         # every non-empty line of the document survives into the flattened rules
         for line in [l.strip(' #*-').strip() for l in doc.splitlines() if l.strip()][-3:]:
@@ -1437,15 +1447,15 @@ class SeedCompletenessTests(unittest.TestCase):
     def test_a_profile_too_long_to_fit_says_so(self):
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.save_doc('coder', 'x ' * 8000, 'test')
-        got = terminal.rules_text(s, profile='coder')
+        s.save_doc('coding', 'x ' * 8000, 'test')
+        got = terminal.rules_text(s, profile='coding')
         self.assertIn('truncated here', got)      # _cut's own words - silence is the expensive kind
 
     def test_a_short_profile_is_returned_untouched(self):
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.save_doc('coder', '# Rules\nBe careful.', 'test')
-        self.assertNotIn('truncated', terminal.rules_text(s, profile='coder'))
+        s.save_doc('coding', '# Rules\nBe careful.', 'test')
+        self.assertNotIn('truncated', terminal.rules_text(s, profile='coding'))
 
     def test_the_ask_is_what_gives_when_the_whole_seed_is_over(self):
         """The existing priority, asserted rather than assumed: raising DOC_CHARS must not change
@@ -1553,8 +1563,8 @@ class PhaseRenderTests(unittest.TestCase):
         self.assertEqual(terminal.phase_of(t.status_tail(8)), 'working')
 
     def test_a_chooser_is_parked_however_it_offers_to_cancel(self):
-        """TQ-0621, the owner 2026-09-17: a coder stood on Claude's four-option question for half an
-        hour saying "coder is working". The footer under the options is
+        """TQ-0621, the owner 2026-09-17: a coding agent stood on Claude's four-option question for half an
+        hour saying it "is working". The footer under the options is
         "Enter to select - Tab/Arrow keys to navigate - Esc to cancel", and `esc to cancel` was read
         as a turn in flight - on the same line as the keys that pick an answer."""
         t = self._dead()

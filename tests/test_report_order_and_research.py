@@ -75,7 +75,7 @@ class ReportOrderTests(unittest.TestCase):
 
 class ResearchIsAWalkThroughTests(unittest.TestCase):
     def _proposed(self, said, verb):
-        s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', '{}')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             return s, concierge.say(s, said, llm=lambda *a, **k: 'On it.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {'text': said}}))
 
@@ -92,13 +92,13 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
     def test_diagnosing_a_system_is_still_a_hand_off(self):
         for said in ('look into that server and tell me what the file looks like', 'find out why the export drops rows',
                      'send it to the coding agent and figure out why this was not updated'):
-            s, out = self._proposed(said, 'coder')
+            s, out = self._proposed(said, 'coding_agent')
             self.assertEqual((out['proposal']['kind'], out['proposal']['params']['kind']), ('task.create_from_text', 'coding'), said)
 
     def test_the_brain_is_given_the_walk_through_road_and_the_test_for_it(self):
-        """It had `coder` and no way to say "let's talk this through", so reading work had nowhere
+        """It had `coding agent` and no way to say "let's talk this through", so reading work had nowhere
         to go but a checkout. The rule moved from the code's SYSTEM string into COUNSEL's own
-        document (PW-248/256): the code keeps only the coder/regular_agent/setup verbs themselves."""
+        document (PW-248/256): the code keeps only the coding_agent/regular_agent/setup verbs themselves."""
         # a blank store loads the shipped template - prove the rule REACHES the model, not just the file
         system = ' '.join(concierge._system(MemoryStore()).split())
         # 2026-09-24: research is a HAND-OFF to a regular agent - it was sent to the set-up walk, which the contract's

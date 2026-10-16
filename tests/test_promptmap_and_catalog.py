@@ -18,7 +18,8 @@ c = TestClient(server.app)
 def _loaded():
     s = MemoryStore()
     s.save_doc('soul', 'You work for **Test Owner**.\nSOULMARK', 'owner')
-    s.save_doc('coder', '# rules\n- CODERMARK', 'owner')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')         # the coding profile, found by its kind: CODING.md rides with it
+    s.save_doc('coding', '# rules\n- CODINGMARK', 'owner')
     s.save_doc('style', '### Tone\n- STYLEMARK: two sentences, answer first, never a preamble.', 'owner')
     s.add_memory({'Scope': 'global', 'ScopeKey': None, 'Note': 'NOTEMARK defer to finance',
                   'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner'})
@@ -45,7 +46,7 @@ class PromptMapTests(unittest.TestCase):
     def test_the_real_document_text_is_in_it_attributed_to_the_right_document(self):
         s, _tid = _loaded()
         out = promptmap.render(s)
-        for mark, doc in (('SOULMARK', 'SOUL.md'), ('STYLEMARK', 'STYLE.md'), ('CODERMARK', 'CODER.md')):
+        for mark, doc in (('SOULMARK', 'SOUL.md'), ('STYLEMARK', 'STYLE.md'), ('CODINGMARK', 'CODING.md')):
             self.assertIn(mark, out, f'{doc} text never appears')
         # the block header naming the doc must come BEFORE its text, or the map attributes wrongly
         self.assertLess(out.index('SOUL.md'), out.index('SOULMARK'))

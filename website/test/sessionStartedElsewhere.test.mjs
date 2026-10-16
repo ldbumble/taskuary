@@ -1,7 +1,7 @@
 import { taskSource } from "./taskSource.mjs";
 // A session can be started from anywhere - the Assistant's "send to the coding agent", the Board,
 // a second window - and the task page has to notice. TQ-0500 (2026-09-11): the Board showed a live
-// coder session while the task page said "agent - not started" and offered to start one, which
+// coding session while the task page said "agent - not started" and offered to start one, which
 // would have put a second agent in the same checkout.
 //
 // The page could not learn it, by construction. findTerm only ran when the SELECTION changed; the
@@ -21,7 +21,7 @@ test("a live session anywhere means the agent stage is working, not 'not started
   assert.equal(agentPhase({ session: { alive: true } }), "agent working");
   assert.equal(agentPhase({ session: { alive: true, waiting: true } }), "agent waiting on you");
   // the shape the task detail actually carries (server: hub_term.for_task)
-  assert.equal(agentPhase({ session: { sid: "c0df3a87bfa1", alive: true, agent: "coder" } }), "agent working");
+  assert.equal(agentPhase({ session: { sid: "c0df3a87bfa1", alive: true, agent: "coding" } }), "agent working");
   assert.equal(agentPhase({}), "waiting to start");
 });
 
@@ -43,7 +43,7 @@ test("the session the detail already carries is adopted", () => {
 test("a switch never adopts the task it is leaving's session", () => {
   // Switching clears `term` while `detail` still holds the previous task until its reload lands.
   // Unguarded, that task's live session was adopted - and nothing cleared it once the new detail
-  // arrived without one: a done task showed another task's coder working, and its "Save and end
+  // arrived without one: a done task showed another task's agent working, and its "Save and end
   // session" and composer acted on THAT task's agent (2026-09-24).
   const effect = /const live = detail\?\.session;[\s\S]*?\}, \[([^\]]*)\]\);/.exec(src);
   assert.ok(effect, "the adopting effect is where it was");

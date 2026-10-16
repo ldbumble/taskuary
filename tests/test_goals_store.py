@@ -45,7 +45,7 @@ class StepsTests(unittest.TestCase):
         g = goal(s)
         a = s.create_task({'Title': 'Map the schema', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), a, 'owner')
         b = s.create_task({'Title': 'Schema sign-off', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Schema sign-off'), b, 'owner')
-        s.update_task(a, {'Status': 'done'}, 'agent:coder')          # whoever closes it
+        s.update_task(a, {'Status': 'done'}, 'agent:coding')          # whoever closes it
         s.update_task(b, {'Status': 'dropped'}, 'owner')
         done = {x['text']: x['done'] for x in s.goal_steps(g)}
         self.assertEqual(done, {'Inventory the fields': False, 'Map the schema': True, 'Schema sign-off': False})

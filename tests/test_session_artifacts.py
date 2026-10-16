@@ -14,7 +14,7 @@ class SessionArtifactTests(unittest.TestCase):
         tid = store.create_task({'Title': 'Research Azure deployments', 'Kind': 'coding'}, 'owner')
         artifact = session_artifacts.coding(
             store, tid, 'Summary: deployments were unavailable.',
-            'Investigated every resource.\nThe full evidence and follow-up details are here.', 'coder',
+            'Investigated every resource.\nThe full evidence and follow-up details are here.', 'coding',
             final_message='1. Checked production.\n2. Checked staging.\n3. Documented both results.')
         saved = session_artifacts.confined(artifact['Path']).read_text(encoding='utf-8')
         self.assertIn('deployments were unavailable', saved)
@@ -26,7 +26,7 @@ class SessionArtifactTests(unittest.TestCase):
     def test_task_detail_returns_safe_agent_artifact_link(self):
         store = MemoryStore()
         tid = store.create_task({'Title': 'Market research agent', 'Kind': 'coding'}, 'owner')
-        session_artifacts.coding(store, tid, 'Summary: research complete.', 'raw terminal repaint', 'coder',
+        session_artifacts.coding(store, tid, 'Summary: research complete.', 'raw terminal repaint', 'coding',
                                  final_message='Full agent findings.')
         with mock.patch.object(server, 'store', store):
             client = TestClient(server.app)
@@ -42,9 +42,9 @@ class SessionArtifactTests(unittest.TestCase):
     def test_redraft_recovers_the_complete_final_response(self):
         store = MemoryStore()
         tid = store.create_task({'Title': 'Eight questions', 'Kind': 'coding'}, 'owner')
-        store.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: only the first item fit here.')
+        store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nSummary: only the first item fit here.')
         final = '\n'.join(f'{n}. Full outcome {n}.' for n in range(1, 9))
-        session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript fallback', 'coder',
+        session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript fallback', 'coding',
                                  final_message=final)
         recovered = responder.resolution_of(store, tid)
         for n in range(1, 9):
@@ -58,9 +58,9 @@ class SessionArtifactTests(unittest.TestCase):
         from taskuary.selfclose import DONE_SAID
         store = MemoryStore()
         tid = store.create_task({'Title': 'Vendor sample', 'Kind': 'coding'}, 'owner')
-        store.add_comment(tid, 'coder', 'agent', f"{DONE_SAID}The vendor's sample is an empty backup, not the export we import.")
-        store.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: the sample was rejected; the reply asks for the monthly export.')
-        session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript', 'coder',
+        store.add_comment(tid, 'coding', 'agent', f"{DONE_SAID}The vendor's sample is an empty backup, not the export we import.")
+        store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: the sample was rejected; the reply asks for the monthly export.')
+        session_artifacts.coding(store, tid, 'Summary: compact.', 'transcript', 'coding',
                                  final_message='The reply above is ready for you to review and send.')
         got = responder.resolution_of(store, tid)
         self.assertIn('the sample was rejected', got)

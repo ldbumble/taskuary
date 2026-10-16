@@ -1801,17 +1801,17 @@ Acceptance PW-231, PW-232, PW-233 implemented; PW-230 and PW-234 partial (Codex 
 messages are not integrated; pending approvals at finish and retained follow-up context are
 exercised only through Sections 6.1 and 5.5).
 
-`coder.wrap` now takes the agent's OWN final answer first - the `--done` sentence recorded as the
+`wrapup.wrap` now takes the agent's OWN final answer first - the `--done` sentence recorded as the
 run's Finished event (`workerstate`), matched to the live run, then the Stop hook's last message the
 witness kept - and only then the report a second AI writes from the transcript. The result artifact
 (`session_artifacts.coding`: compact result plus the final answer) is written BEFORE the pty is
 closed; a save that fails raises `the result could not be saved ... the session was left open`,
 writes no CODER REPORT, closes nothing and leaves the finish retryable (`selfclose._wrap`/`declare`
-forget their once-only mark and say so on the task). `coder.tick_reported_checklist` ticks only the
+forget their once-only mark and say so on the task). `wrapup.tick_reported_checklist` ticks only the
 checklist items the agent itself reported done (`- [x] item` lines in its result or transcript,
 matched by words, by item identity) and says which; nothing is added, moved or blindly completed.
 `selfclose.declare` on a session the owner opened no longer holds: the explicit finish records the
-Finished event, saves the result and closes the completed run (`coder.wrap(close=False)`), leaving
+Finished event, saves the result and closes the completed run (`wrapup.wrap(close=False)`), leaving
 the task's own closure and any reply to the owner (PW-232); live wall notes leave with the session
 (Section 5.4). A second finish for the same run does nothing twice.
 
@@ -1973,12 +1973,12 @@ checkpoint. Section 7.3 is CI-verified (3459868/9c6017e, CI run 34054847136 (all
 Acceptance PW-235 to PW-238 implemented.
 
 The agent's result became a reply the moment the session closed, written against the ask as it
-stood when the work began. `coder.finish` now refreshes the source conversation first through
-`coder.REFRESH`, the hook the server installs over `_refresh_chat_context` (the same gate the
-Assistant and approvals use, incremental, connector-typed), and `coder.freshen` says where the ask
+stood when the work began. `wrapup.finish` now refreshes the source conversation first through
+`wrapup.REFRESH`, the hook the server installs over `_refresh_chat_context` (the same gate the
+Assistant and approvals use, incremental, connector-typed), and `wrapup.freshen` says where the ask
 stands: fresh; changed (a newer inbound message - the review is pinned to it, the reason says the
 thread moved on, and the drafting source carries the newest message so the reply answers what is
-asked now); answered (`coder.answered_elsewhere`: the owner's own line newer than the newest inbound
+asked now); answered (`wrapup.answered_elsewhere`: the owner's own line newer than the newest inbound
 message - a comment says so, a held draft is retired as no_reply, the task closes, nothing is drafted);
 unresolved (the refresh failed - the draft is written from the saved result and marked stale with the
 reason, so Send waits for a refresh that succeeds); or unchecked when no refresh is installed, which
@@ -1990,7 +1990,7 @@ written from the saved final result and the current thread with its context revi
 The always-draft rule (PW-237): a channel that cannot carry the reply no longer suppresses it.
 `finish` and `wrap` return `can_send` and `send_block` alongside `drafting`; the review is raised, the
 task waits, the Review page hides Send with the reason and offers Close without sending (Section 7.3).
-Only a row nobody sent - a report, work started here, the assistant's own post (`coder.no_one_behind`)
+Only a row nobody sent - a report, work started here, the assistant's own post (`wrapup.no_one_behind`)
 - drafts nothing; a report whose card names a findings target still delivers there. The pins in
 `tests/test_reply_channels.py` and `tests/test_api.py` that said "GitHub replies off closes clean with
 no draft" were rewritten to this rule.

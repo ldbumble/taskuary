@@ -275,7 +275,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
   // The NEXT ring has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the marker did not, so a
-  // coder parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
+  // coding agent parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
   // New servers capture the selection from the same snapshot as this pile. FYI batches have a
   // composite selected key, so their first ordered member wears the visible NEXT marker.
   const nextKey = nextMarkerKey(pile, items, current);
@@ -611,7 +611,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       {m.status === "error" && <ReportLink text={m.text} />}
     </div></div>);
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
-  // the task identity across that rename; matching only the old key left a live coder displayed as
+  // the task identity across that rename; matching only the old key left a live agent displayed as
   // "nobody on it" until a new chat line happened to replace the card.
   const follows = live && !m.proposal && followsItem(m.card, fresh);   // a proposal is its own card, never the item's
   // ``fresh`` is a complete presentation, not a patch. Exact replacement clears source fields
@@ -2104,7 +2104,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <div className="grow" />
         <Tooltip title="Your work"><IconButton size="small" onClick={() => setRailOpen(true)} sx={{ display: { xs: "inline-flex", md: "none" } }}><ViewSidebarIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title={speakOnState ? "Reading replies aloud — click to stop" : "Read replies aloud"}><IconButton size="small" className="tq-phone-hide" onClick={toggleSpeak}>{speakOnState ? <VolumeUpIcon sx={{ fontSize: 18, color: "#526b53" }} /> : <VolumeOffIcon sx={{ fontSize: 18, color: DIM }} />}</IconButton></Tooltip>
-        {/* no AI to name before the first run picked one - it said "Claude Code · coder" over the question asking which (2026-10-15) */}
+        {/* no AI to name before the first run picked one - it named a CLI and a profile over the question asking which (2026-10-15) */}
         {!firstRun && <Tooltip title={state?.scripted ? "Scripted demo - no AI is running" : `AI: ${state?.provider || "none"}${state?.model ? ` · ${state.model}` : ""}`}><IconButton size="small" className="tq-phone-hide" onClick={(e) => setAiEl(e.currentTarget)}><TuneIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>}
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>

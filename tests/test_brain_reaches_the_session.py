@@ -35,7 +35,7 @@ class BrainReachesTheSessionTests(unittest.TestCase):
     def test_the_dispatch_door_carries_the_brain_it_was_given(self):
         seen, patched = self._started()
         with patched:
-            r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'coding', 'agent': 'coder', 'brain': 'devin'})
+            r = self.c.post(f'/api/tasks/{self.tid}/dispatch', json={'kind': 'coding', 'agent': 'coding', 'brain': 'devin'})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(seen.get('brain'), 'devin', 'the picked brain reached the session')
 
@@ -44,7 +44,7 @@ class BrainReachesTheSessionTests(unittest.TestCase):
         seen, patched = self._started()
         with patched:
             op = self.c.post('/api/operations', json={'kind': 'dispatch.prepare', 'target': self.tid,
-                                                      'params': {'kind': 'coding', 'agent': 'coder', 'brain': 'devin'}}).json()
+                                                      'params': {'kind': 'coding', 'agent': 'coding', 'brain': 'devin'}}).json()
             r = self.c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(seen.get('brain'), 'devin')
@@ -55,7 +55,7 @@ class BrainReachesTheSessionTests(unittest.TestCase):
                                   'BodyText': 'it drops the last row', 'Status': 'routed'})
         seen, patched = self._started()
         with patched:
-            r = self.c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'coding', 'agent': 'coder', 'brain': 'devin'})
+            r = self.c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'coding', 'agent': 'coding', 'brain': 'devin'})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(seen.get('brain'), 'devin')
 
@@ -66,7 +66,7 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
         tid = s.create_task({'Title': 'no repo anywhere', 'Kind': 'coding', 'Status': 'open'}, 'router')
         with mock.patch.object(hub_term, 'start_on_task',
                                side_effect=ValueError('I could not tell which checkout this belongs in')):
-            out = c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coder'}).json()
+            out = c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'}).json()
         self.assertEqual(out['dispatch'], 'needs_repo')
         self.assertFalse(out['started'], 'a caller that reads `started` is told the truth')
 
@@ -78,8 +78,8 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
         tid = s.create_task({'Title': 'go through the budget inputs', 'Kind': 'coding', 'Status': 'open'}, 'owner')
         with mock.patch.object(hub_term, 'start_on_task',
                                side_effect=ValueError('I could not tell which checkout this belongs in')):
-            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coder'})
-            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coder'})
+            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'})
+            c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'})
         self.assertTrue(funnel.held_for_repo(s.get_task(tid)))
         self.assertEqual(sum('needs a repository' in str(x.get('Body')) for x in s.list_comments(tid)), 1, 'said once, not per press')
         self.assertIn('needs a repository', funnel.not_started_why(s, tid))

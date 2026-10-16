@@ -34,7 +34,7 @@ class SinceTests(unittest.TestCase):
         # a transcript row is filed when a hook names the session and again when a close kills it - neither is a finish (B3)
         s = MemoryStore()
         for sid, kinds in (('a', ('working', 'finished')), ('b', ('working', 'disconnected')), ('c', ('working',))):
-            s.note_session_id(7, sid, f'ext-{sid}', 'coder')
+            s.note_session_id(7, sid, f'ext-{sid}', 'coding')
             for k in kinds: s.add_worker_event({'TaskId': 7, 'Sid': sid, 'Kind': k})
         s._exec("UPDATE transcript SET CreatedAt='2026-10-07 01:00:00'"); s._exec("UPDATE worker_event SET CreatedAt='2026-10-07 01:00:00'")
         out = since.overnight(s, NOW)
@@ -71,7 +71,7 @@ class WhatChangedTests(unittest.TestCase):
         s = self.store()
         for title in ('Fix the export', 'Rename the vendor', 'Archive the old ledger'):
             tid = s.create_task({'Title': title, 'Kind': 'coding', 'Status': 'done'}, 'o')
-            s.audit('task', tid, 'self_close', 'coder', 'agent', {'why': 'finished'})
+            s.audit('task', tid, 'self_close', 'coding', 'agent', {'why': 'finished'})
         mid = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'Subject': 'Export check — 1 real failure', 'BodyText': 'x'})
         s.add_report_run(self.check, {'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'type': 'taskuary', 'title': 'Export check',
                                       'subject': 'Export check — 1 real failure', 'message_id': mid})

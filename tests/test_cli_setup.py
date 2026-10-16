@@ -36,7 +36,7 @@ class TableTests(unittest.TestCase):
                 self.assertEqual(clisetup.argv(name), ['/x/thing'], name)
 
     def test_a_set_up_ends_the_way_a_setup_task_ends(self):
-        """No report, no proposals, no reply draft - coder.wrap routes Kind='setup' to this."""
+        """No report, no proposals, no reply draft - wrapup.wrap routes Kind='setup' to this."""
         self.assertEqual(clisetup.KIND, aisetup.KIND)
         self.assertIs(clisetup.finish, aisetup.finish)
 
@@ -152,15 +152,15 @@ class SignedOutMessageTests(unittest.TestCase):
 
     def test_it_names_the_button_this_app_now_has(self):
         from taskuary import agents
-        msg = agents.signed_out_msg('coder', 'not logged in', r'C:\n\claude.cmd')
+        msg = agents.signed_out_msg('coding', 'not logged in', r'C:\n\claude.cmd')
         self.assertIn('Set it up', msg)
         self.assertNotIn('Open a terminal', msg)
 
     def test_a_profile_is_mapped_to_its_cli_not_read_as_one(self):
-        """Every install ships a profile called `coder`; _LOGIN_HOW.get('coder') always missed."""
+        """Every install ships a profile called `coding agent`; _LOGIN_HOW.get('coding') always missed."""
         from taskuary import agents
-        self.assertIn('/login', agents.signed_out_msg('coder', 'x', r'C:\n\claude.cmd'))
-        self.assertIn('codex login', agents.signed_out_msg('coder', 'x', '/usr/bin/codex'))
+        self.assertIn('/login', agents.signed_out_msg('coding', 'x', r'C:\n\claude.cmd'))
+        self.assertIn('codex login', agents.signed_out_msg('coding', 'x', '/usr/bin/codex'))
 
     def test_every_setup_cli_has_a_terminal_sentence_too(self):
         """The pane is the road; a terminal is still a road, and the only one when the app is not

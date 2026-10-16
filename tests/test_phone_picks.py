@@ -16,7 +16,7 @@ JID = '15550001234@s.whatsapp.net'
 
 def armed():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     cid = s.get_connector_by_type('whatsapp')['ConnectorId']
     s.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
@@ -98,7 +98,7 @@ class PickIsTheButtonTests(unittest.TestCase):
     def test_the_current_answer_is_the_confirm_and_cancel_moves_nothing(self):
         s, _ = armed()
         q, rows = ra.proposal_choices({'id': 'op1', 'verb': 'regular_agent', 'key': 'msg:7', 'settles': True,
-                                       'alts': [{'verb': 'coder', 'label': 'A coding agent', 'current': True},
+                                       'alts': [{'verb': 'coding_agent', 'label': 'A coding agent', 'current': True},
                                                 {'verb': 'regular_agent', 'label': 'A non-coding agent', 'current': False}]})
         self.assertEqual(q, 'Which agent?')
         self.assertEqual([(l, a['t']) for l, a in rows], [('A coding agent', 'confirm'), ('A non-coding agent', 'alt'), ('Cancel', 'cancel')])
@@ -164,11 +164,11 @@ class PollTests(unittest.TestCase):
         # an agent finished the task behind a report that came again - the card asked "want to see the final report?"
         # and offered only Next
         s, _ = armed()
-        t = s.create_task({'Title': 'Why the nightly export times out', 'Kind': 'coding', 'Status': 'done'}, 'coder')
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nThe mass update made the export 6x larger.')
+        t = s.create_task({'Title': 'Why the nightly export times out', 'Kind': 'coding', 'Status': 'done'}, 'coding')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nThe mass update made the export 6x larger.')
         item = {'key': f'task:{t}', 'kind': 'agentdone', 'tid': t, 'ref': f'TQ-{t:04d}', 'title': 'Why the nightly export times out',
                 'lane': 'report', 'channel': 'report'}
-        got = offer(s, {'say': 'coder finished it.', 'item': item, 'chips': concierge.chips_for(s, item)})
+        got = offer(s, {'say': 'coding finished it.', 'item': item, 'chips': concierge.chips_for(s, item)})
         self.assertEqual(got[-1][1], ['Mark done', 'Next', 'More'])
 
     def test_the_bridge_is_sent_the_poll(self):
@@ -239,8 +239,8 @@ class PhoneCardTests(unittest.TestCase):
 
     def test_an_agents_card_is_the_task_then_what_the_agent_did(self):
         item = {'key': 'agent:9', 'kind': 'agentdone', 'tid': 9, 'ref': 'TQ-0009', 'title': 'Why the nightly export times out',
-                'who': 'coder', 'channel': 'report', 'lane': 'report', 'why': 'the agent finished and closed it'}
-        text = ra.turn_text({'say': 'coder finished TQ-0009: the export timed out on a mass update.', 'item': item})
+                'who': 'coding', 'channel': 'report', 'lane': 'report', 'why': 'the agent finished and closed it'}
+        text = ra.turn_text({'say': 'coding finished TQ-0009: the export timed out on a mass update.', 'item': item})
         # the task, then the agent and what it found (the card as a story, 2026-09-28)
         self.assertTrue(text.startswith('✅ agent finished · TQ-0009\n🔵 **The task**'), text)
         self.assertLess(text.index('Why the nightly export times out'), text.index('the export timed out on a mass update'))
@@ -252,8 +252,8 @@ class PhoneCardTests(unittest.TestCase):
 
     def test_a_finished_agents_more_is_its_report(self):
         s = MemoryStore()
-        t = s.create_task({'Title': 'Export timeouts', 'Kind': 'coding', 'Status': 'done'}, 'coder')
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nThe mass update made the export 6x larger.')
+        t = s.create_task({'Title': 'Export timeouts', 'Kind': 'coding', 'Status': 'done'}, 'coding')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nThe mass update made the export 6x larger.')
         self.assertEqual(ra.more_text(s, {'kind': 'agentdone', 'tid': t}), 'The mass update made the export 6x larger.')
 
 

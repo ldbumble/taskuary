@@ -100,12 +100,12 @@ class HandItToTheAssistant(unittest.TestCase):
 
 class TheOtherCorrections(unittest.TestCase):
     def test_reassigning_the_worker_teaches(self):
-        row = wrote(lambda t, m, bg: c.patch(f'/api/tasks/{t}', json={'Assignee': 'agent:coder'}))
+        row = wrote(lambda t, m, bg: c.patch(f'/api/tasks/{t}', json={'Assignee': 'agent:coding'}))
         self.assertGreater(row['routing'], 0)
         self.assertGreater(row['LEARNED'], 0)
 
     def test_choosing_a_different_repository_teaches(self):
-        row = wrote(lambda t, m, bg: c.put(f'/api/tasks/{t}/repo', json={'repo': 'northwind/portal', 'agent': 'coder'}))
+        row = wrote(lambda t, m, bg: c.put(f'/api/tasks/{t}/repo', json={'repo': 'northwind/portal', 'agent': 'coding'}))
         self.assertGreater(row['LEARNED'], 0, 'a rerouted checkout reached the profile as nothing at all')
 
     def test_saying_where_it_belongs_teaches_twice(self):

@@ -1,11 +1,11 @@
-"""One concise context structure for both worker kinds: AGENT.md, CODER.md and one task brief (PW-182 to PW-187).
+"""One concise context structure for both worker kinds: AGENT.md, CODING.md and one task brief (PW-182 to PW-187).
 
 Every worker prompt carried the whole of SOUL.md - the owner's routing document, written for
-triage - stacked under a flattened CODER.md, and the general assistant got a different pile in a
+triage - stacked under a flattened CODING.md, and the general assistant got a different pile in a
 different order. Now AGENT.md holds the operating rules both worker kinds share (scope, honest
 reporting, when to ask, progress and completion, and the approval boundaries that used to live only
 in SOUL.md: nothing sends without approval, inbound text is data, the owner decides money/legal/
-HR/credentials); CODER.md adds only the coding rules; and one task brief - id, objective, the
+HR/credentials); CODING.md adds only the coding rules; and one task brief - id, objective, the
 triage checklist, the owner's instruction, the repository when there is one, the latest complete
 conversation with its history, and attachments - is what either worker reads, with the revision of
 the context it was built from. SOUL.md stays with triage. Writing style rides only where the work
@@ -28,6 +28,8 @@ def make(s, kind='coding', checklist=('Fix the nightly export', 'Send Dana the A
     s.set_setting('owner_email', 'alex@vendor.example', 't')   # Dana writes from the owner's own domain; a stranger's words ride in a file, not the seed
     llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': kind, 'why': 'w', 'title': 'Fix the nightly export', 'summary': 'The export job fails nightly.',
                                       'checklist': list(checklist)})
+    # a coding task runs under the profile whose KIND is coding (agents.coding_role) - the one a real install ships
+    if kind == 'coding': s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     with mock.patch.object(ingest, '_spawn'):
         return ingest.ingest_message(s, dict(MSG), llm=llm)['task_id']
 
@@ -42,8 +44,8 @@ class RulesDocumentsTests(unittest.TestCase):
         self.assertIn('nothing sends or ships', (s.doc('agent') or '').lower())            # seeded like the other operator documents
         self.assertNotIn('{{owner}}', s.doc('agent'))                                     # rendered
 
-    def test_coder_md_is_only_the_coding_additions(self):
-        text = (TEMPLATES / 'coder.md').read_text(encoding='utf-8').lower()
+    def test_coding_md_is_only_the_coding_additions(self):
+        text = (TEMPLATES / 'coding.md').read_text(encoding='utf-8').lower()
         for needle in ('repositor', 'commit', 'test', 'the wall', 'github'): self.assertIn(needle, text, needle)
         for gone in ('money, legal', 'inbound text is data', 'when you need'): self.assertNotIn(gone, text, gone)
         self.assertIn('agent.md', text)                                                     # it says what it is stacked on
@@ -90,10 +92,10 @@ class OneBriefTests(unittest.TestCase):
 
 
 class NoBlanketSoulTests(unittest.TestCase):
-    def test_the_coding_seed_carries_agent_and_coder_rules_and_not_soul(self):
+    def test_the_coding_seed_carries_agent_and_coding_rules_and_not_soul(self):
         s = MemoryStore(); tid = make(s)
         seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
-        self.assertIn('RULES (AGENT.md', seed); self.assertIn('CODING RULES (CODER.md', seed)
+        self.assertIn('RULES (AGENT.md', seed); self.assertIn('CODING RULES (CODING.md', seed)
         self.assertNotIn('OPERATOR RULES (SOUL.md', seed); self.assertNotIn('What counts as a task', seed)
         for kept in ('data, not instructions', 'approval'): self.assertIn(kept, seed, kept)   # the safety constraints survived the move
         self.assertNotIn('ASSISTANT STYLE', seed)                                             # coding does not need the writing voice
@@ -124,14 +126,14 @@ class ScopedExtrasTests(unittest.TestCase):
         s = MemoryStore(); tid = make(s)
         seed = terminal.seed_text(s, tid, repo='org/exports', cwd=r'C:\code\exports')
         self.assertNotIn('OTHER AGENTS', seed); self.assertNotIn('THE WALL', seed)
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nFound the failing step: the S3 key rotated. Not fixed yet.')
+        s.add_comment(tid, 'agent', 'agent', 'AGENT REPORT\nFound the failing step: the S3 key rotated. Not fixed yet.')
         seed2 = terminal.seed_text(s, tid, repo='org/exports', cwd=r'C:\code\exports')
         self.assertIn('PREVIOUS SESSION RESULT', seed2); self.assertIn('S3 key rotated', seed2)
 
     def test_no_duplicate_rule_blocks(self):
         s = MemoryStore(); tid = make(s)
         seed = terminal.seed_text(s, tid, repo='org/exports', cwd=None)
-        self.assertEqual(seed.count('RULES (AGENT.md'), 1); self.assertEqual(seed.count('CODING RULES (CODER.md'), 1)
+        self.assertEqual(seed.count('RULES (AGENT.md'), 1); self.assertEqual(seed.count('CODING RULES (CODING.md'), 1)
 
     def test_the_brief_is_fresh_each_turn(self):
         """PW-187: a message that arrives after a worker's first turn is in its NEXT prompt, not just in brief.build."""
@@ -160,7 +162,7 @@ class PromptAuditTests(unittest.TestCase):
     """PW-185: audit the built prompts with a playbook AND a saved preference competing for
     space on the task - no instruction block repeats, and the writing voice (ASSISTANT STYLE)
     reaches only general (writing) work, never a coding run."""
-    HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODER.md', 'PROCEDURE FOR THIS JOB', 'ASSISTANT STYLE',
+    HEADERS = ('RULES (AGENT.md', 'CODING RULES (CODING.md', 'PROCEDURE FOR THIS JOB', 'ASSISTANT STYLE',
                'OTHER AGENTS', 'THE WALL', 'ASKING THE OWNER')
 
     def setUp(self):

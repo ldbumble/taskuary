@@ -9,7 +9,7 @@ from taskuary.testing import Factory
 
 def queued_task(store, title):
     task_id = Factory(store).task(title=title, kind='coding')
-    store.enqueue_dispatch(task_id, None, 'coder', 'capacity')
+    store.enqueue_dispatch(task_id, None, 'coding', 'capacity')
     return task_id
 
 

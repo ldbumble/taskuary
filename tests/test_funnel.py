@@ -19,7 +19,7 @@ def ahead(minutes=0):
 
 def store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     return s
 
@@ -127,7 +127,7 @@ class FlapTests(unittest.TestCase):
         return t
 
     def _live(self, tid, **kw):
-        return [{'taskId': tid, 'agent': 'coder', 'label': 'coder', 'started': ago(hours=1), 'tail': ['…'], **kw}]
+        return [{'taskId': tid, 'agent': 'coding', 'label': 'coding', 'started': ago(hours=1), 'tail': ['…'], **kw}]
 
     def test_a_moment_of_quiet_is_not_announced(self):
         s = store(); t = self._task(s)
@@ -514,7 +514,7 @@ class LanesTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=parked):
             ev = funnel.announce(s)
         self.assertEqual(ev[0]['kind'], 'asking'); self.assertIn('asked you something on TQ-0001', ev[0]['text']); self.assertIsNone(ev[0]['card'])
-        s.add_comment(t, 'codex', 'agent', 'CODER REPORT' + chr(10) + 'Summary: imported all 80 PTO files; results mailed.')
+        s.add_comment(t, 'codex', 'agent', 'AGENT REPORT' + chr(10) + 'Summary: imported all 80 PTO files; results mailed.')
         s.update_task(t, {'Status': 'done'}, 'o')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             ev = funnel.announce(s)
@@ -528,7 +528,7 @@ class LanesTests(unittest.TestCase):
             self.assertIn('events', funnel.pile(s, force=True))
 
     def test_a_working_notice_is_dropped_once_the_agent_is_gone(self):
-        """The phone walk, 2026-09-10: four "coder is working on TQ-xxxx" notices, the newest two days
+        """The phone walk, 2026-09-10: four "coding agent is working on TQ-xxxx" notices, the newest two days
         old, replayed on every handoff - their tasks closed and their sessions ended long before."""
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
@@ -617,7 +617,7 @@ class LanesTests(unittest.TestCase):
         s = store()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m = mail(s, 'Export still broken', hours=2, tid=t)
-        s.add_comment(t, 'claude', 'agent', 'CODER REPORT\nSummary: the export dropped rows with commas; fixed the escaping.')
+        s.add_comment(t, 'claude', 'agent', 'AGENT REPORT\nSummary: the export dropped rows with commas; fixed the escaping.')
         s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed - the corrected file is attached.', 'Status': 'pending'})
         it = funnel.build(s)['items'][0]
         self.assertEqual(it['kind'], 'review'); self.assertIn('fixed the escaping', it['summary'])
@@ -647,7 +647,7 @@ class LanesTests(unittest.TestCase):
         s = store()
         t = s.create_task({'Title': 'T&e portal', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m = mail(s, 'RE: T&E Portal', who='Craig', email='craig@northwind.example', hours=3, tid=t, conv='te')
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: Bulk Approve removed and deployed.')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT' + chr(10) + 'Summary: Bulk Approve removed and deployed.')
         r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - it is off now.', 'Status': 'pending'})
         self.assertEqual([i['kind'] for i in funnel.build(s)['items']], ['review'])
         s.decide_review(r, 'approved', 'Done - it is off now.', 'owner')
@@ -660,7 +660,7 @@ class LanesTests(unittest.TestCase):
     def test_a_closed_agent_job_never_reenters_the_funnel(self):
         s = store()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'done'}, 'o')
-        s.add_comment(t, 'claude', 'agent', 'CODER REPORT\nSummary: corrected the CSV escaping and added a test.')
+        s.add_comment(t, 'claude', 'agent', 'AGENT REPORT\nSummary: corrected the CSV escaping and added a test.')
         self.assertEqual(funnel.build(s)['items'], [])
         self.assertIsNone(funnel.next_item(s, f'done:{t}'))
 
@@ -955,8 +955,8 @@ class MemoryTests(unittest.TestCase):
         holds for the same hour the receipt does, and the row comes round with it."""
         from taskuary import concierge, funnel_selection, processing_unread
         s = store()
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
-        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'o')
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Dana', email='dana@ours.com', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
         settle = lambda: (s.reconcile_processing_membership(fixed_now=ago(0)), funnel.invalidate())
@@ -1143,16 +1143,16 @@ class MemoryTests(unittest.TestCase):
         t = s.create_task({'Title': 'Grant budget access', 'Kind': 'general', 'Status': 'open'}, 'o')
         mail(s, 'Grant budget access', who='Erin', email='erin@northwind.example', hours=2, tid=t)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        s.add_comment(t, 'coder', 'agent', 'The agent closed this itself: access granted.')
-        s.update_task(t, {'Status': 'done'}, 'coder'); settle()
+        s.add_comment(t, 'coding', 'agent', 'The agent closed this itself: access granted.')
+        s.update_task(t, {'Status': 'done'}, 'coding'); settle()
         s.add_comment(t, 'owner', 'human', 'Closed - the reply went out.')
         s.update_task(t, {'Status': 'done'}, 'owner'); settle()                    # the send is the owner's edit (verdicts)
         self.assertFalse([i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t])
         u = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
         mail(s, 'Fix the export', who='Erin', email='erin@northwind.example', hours=2, tid=u)
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
-        s.add_comment(u, 'coder', 'agent', 'The agent closed this itself: fixed.')
-        s.update_task(u, {'Status': 'done'}, 'coder'); settle()
+        s.add_comment(u, 'coding', 'agent', 'The agent closed this itself: fixed.')
+        s.update_task(u, {'Status': 'done'}, 'coding'); settle()
         from taskuary import concierge
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             concierge.surface(s, llm=lambda *a, **k: 'never')                 # the result is read
@@ -1187,16 +1187,16 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual(walk(), ('agentdone', t))                  # ...their new mail still brings it back
 
     def test_a_pty_worker_that_ran_and_left_leaves_a_transcript_not_a_run(self):
-        """A coder started from the terminal writes a TRANSCRIPT on its way out and no run row at
+        """A coding agent started from the terminal writes a TRANSCRIPT on its way out and no run row at
         all - the same row the task card reads to offer "Continue previous work". not_started_why
         only consulted runs, so a task an agent had actually worked and walked away from reported
-        "it was handed to coder and nothing has started it" (TQ-0588/0589, 2026-09-16: six hours of
-        it, with transcripts from copilot and from coder sitting right there)."""
+        "it was handed to coding agent and nothing has started it" (TQ-0588/0589, 2026-09-16: six hours of
+        it, with transcripts from copilot and from coding agent sitting right there)."""
         s = store()
-        tid = s.create_task({'Title': 'Run the August audit', 'Kind': 'coding', 'Assignee': 'agent:coder'}, 'o')
+        tid = s.create_task({'Title': 'Run the August audit', 'Kind': 'coding', 'Assignee': 'agent:coding'}, 'o')
         before = funnel.not_started_why(s, tid)
         self.assertNotIn('ran on this', before)                    # nothing has run yet, whatever the reason
-        s.add_transcript(tid, 'sess-1', 'the agent said things', agent='coder')
+        s.add_transcript(tid, 'sess-1', 'the agent said things', agent='coding')
         # ...and a transcript outranks every softer reason below it: "auto-start is off" is not why
         # this one is sitting there, because it plainly did start
         self.assertIn('ran on this and left without finishing it', funnel.not_started_why(s, tid))
@@ -1204,12 +1204,12 @@ class MemoryTests(unittest.TestCase):
     def test_answering_the_thread_does_not_finish_the_work(self):
         """NeedsYou is zeroed once the owner has answered or the ball is in the sender's court, which
         is right for a message waiting on a reply and wrong for an open task with work in it. TQ-0588
-        was an open coding task assigned to the coder, nothing ticked off, and it left the rail the
+        was an open coding task assigned to the coding agent, nothing ticked off, and it left the rail the
         moment the owner replied to the mail that started it - filed into fyi behind seventy rows
         (2026-09-16). A reply is not the work."""
         s = store()
         tid = s.create_task({'Title': 'Run the August audit', 'Kind': 'coding',
-                             'Assignee': 'agent:coder', 'Status': 'open'}, 'o')
+                             'Assignee': 'agent:coding', 'Status': 'open'}, 'o')
         mid = mail(s, 'August audit', who='Dana', email='dana@vendor.com', hours=2, tid=tid)
         s.add_route(mid, tid, 'route', 1.0, 'triage: coding', [], 'triage')
         on_rail = lambda: [(i['lane'], i['tid']) for i in funnel.build(s)['items'] if i.get('tid') == tid]

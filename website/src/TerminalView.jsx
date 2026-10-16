@@ -286,7 +286,7 @@ function liveSession(sid, readOnly) {
   };
   // A SESSION THAT IS ALREADY GONE SENDS NO `exit` FRAME. The socket just closes, so nothing was
   // ever written and the pane sat as a frozen black rectangle - while the page, never told, went
-  // on saying "coder is working" over a session that had ended (the owner, 2026-09-17: "it should
+  // on saying "the agent is working" over a session that had ended (the owner, 2026-09-17: "it should
   // never be frozen black screen", on a task whose run had closed twenty minutes earlier).
   //
   // So say it on the screen, lift the curtain that is waiting for a replay that will never come,

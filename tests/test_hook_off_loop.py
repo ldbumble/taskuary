@@ -37,7 +37,7 @@ class HookOffLoopTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.tid = Factory(self.s).task(title='Fix the cron', kind='coding')
         self._sessions = dict(term.SESSIONS); term.SESSIONS.clear()
-        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cwd=CWD, agent='coder', label='coder', argv=['claude'],
+        term.SESSIONS['run1'] = SimpleNamespace(sid='run1', alive=True, task_id=self.tid, cwd=CWD, agent='coding', label='coding', argv=['claude'],
                                                 last=1.0, ext_id='c-sess', started='2026-09-20 09:00:00', files=lambda: [], tail=lambda n=3: [],
                                                 idle=lambda: 0.0, witness=SimpleNamespace(note=lambda n: None), store=self.s)
 

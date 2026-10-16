@@ -68,7 +68,7 @@ def store():
     t1 = s.create_task({'Title': 'Reconcile the Q3 ledger', 'Kind': 'coding', 'Status': 'open'}, 'owner')
     t2 = s.create_task({'Title': 'Draft the audit answers', 'Kind': 'writing', 'Status': 'in_progress'}, 'owner')
     t3 = s.create_task({'Title': 'Ship the invoice importer', 'Kind': 'coding', 'Status': 'done'}, 'owner')
-    s.add_comment(t3, 'coder', 'agent', 'CODER REPORT\nSummary: imported the March invoices and closed the run.')
+    s.add_comment(t3, 'coding', 'agent', 'AGENT REPORT\nSummary: imported the March invoices and closed the run.')
     # the age of a task is what DONE THIS WEEK and WORK GONE QUIET are about, and update_task stamps
     # UpdatedAt with the current moment by design - so the fixture writes the clock it needs
     def aged(tid, when):

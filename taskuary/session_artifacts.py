@@ -34,7 +34,7 @@ def _write(store, tid: int, label: str, body: str, kind: str, actor: str) -> dic
     return store.get_task_artifact(aid)
 
 
-def coding(store, tid: int, report: str, transcript: str, actor='coder', final_message: str = '') -> dict:
+def coding(store, tid: int, report: str, transcript: str, actor='agent', final_message: str = '') -> dict:
     """Save the useful outcome, not a repaint-heavy copy of the terminal scrollback."""
     task = store.get_task(tid) or {}
     ans = answer_since(store, tid)

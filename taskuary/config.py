@@ -105,7 +105,7 @@ def load() -> dict:
     # --dangerously-skip-permissions matters: without it a headless claude waits forever
     # for permission approvals nobody can click. stream-json (+ required --verbose) makes
     # claude emit events AS IT WORKS so the Board can stream the run live.
-    cfg.setdefault('agents', {'coder': {'cmd': 'claude',
+    cfg.setdefault('agents', {'coding': {'kind': 'coding', 'cmd': 'claude',
                                         'args': ['-p', '--dangerously-skip-permissions',
                                                  '--output-format', 'stream-json', '--verbose'],
                                         'resume_args': ['--resume'], 'timeout': 1500}})

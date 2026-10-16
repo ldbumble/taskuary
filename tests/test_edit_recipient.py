@@ -17,7 +17,7 @@ class EditRecipientTests(unittest.TestCase):
         self.tid = self.s.create_task({'Title': 'AP invoices', 'Kind': 'general', 'Status': 'open'}, 'owner')
 
     def test_a_task_email_with_no_address_is_given_one_on_its_card(self):
-        [slot] = slots.add(self.s, self.tid, [{'to': 'Erin Blak', 'about': 'status'}], 'agent:coder')
+        [slot] = slots.add(self.s, self.tid, [{'to': 'Erin Blak', 'about': 'status'}], 'agent:coding')
         out = slots.draft(self.s, self.tid, 'Here is where AP stands.', slot=slot['id'])
         rid = out['review_id']
         r = self.c.put(f'/api/reviews/{rid}/envelope', json={'to': ['Erin@Northwind.example']})

@@ -8,7 +8,7 @@ class InterruptedWork(unittest.TestCase):
     def working(self, s):
         tid = s.create_task({'Title': 'Half done'}, 'owner')
         s.update_task(tid, {'Status': 'in_progress'}, 'owner')
-        rid = s.add_run(tid, 'coder', 'do it') if hasattr(s, 'add_run') else None
+        rid = s.add_run(tid, 'coding', 'do it') if hasattr(s, 'add_run') else None
         return tid
 
     def test_a_restart_leaves_the_task_open_marked_interrupted_not_working_or_done(self):

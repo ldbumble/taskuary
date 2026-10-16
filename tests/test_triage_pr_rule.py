@@ -3,7 +3,7 @@ brain is a setting you can find.
 
 Two fixes from 2026-09-16, both the same shape: something was decided in code where nobody could
 see it. A regex in ingest overrode TRIAGE.md's PR rule and named no `kind`, so twelve pull
-requests in a row went to the assistant instead of the coder; and `assistant_ai` - the general
+requests in a row went to the assistant instead of the coding agent; and `assistant_ai` - the general
 agent's brain - sat on the Assistant tab calling itself the bubble's, so general work ran on Azure
 while the owner's `default_brain` said claude and no page admitted it.
 """
@@ -95,12 +95,14 @@ class GeneralBrainTests(unittest.TestCase):
         """The whole point: the setting has to reach general._selected, or the card is decoration."""
         s = MemoryStore()
         cid = _azure(s)
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        self.assertEqual(general._selected(s)[0], f'connector:{cid}')   # blank prefers the quick API path
-        aidefaults.apply(s, {}, 'assistant_ai', value='cli:coder', actor='owner')
-        self.assertEqual(general._selected(s)[0], 'cli:coder')
-        self.assertIn('cli:coder', [o['pick'] for o in general.provider_options(s)])
-
+        from unittest import mock
+        from taskuary import agents
+        # the brain is the connected CLI TOOL - never a profile
+        with mock.patch.object(agents, 'connection_brains', lambda store, cfg=None: [('claude', {'cmd': 'claude'})]):
+            self.assertEqual(general._selected(s)[0], f'connector:{cid}')   # blank prefers the quick API path
+            aidefaults.apply(s, {}, 'assistant_ai', value='cli:claude', actor='owner')
+            self.assertEqual(general._selected(s)[0], 'cli:claude')
+            self.assertIn('cli:claude', [o['pick'] for o in general.provider_options(s)])
 
 if __name__ == '__main__':
     unittest.main()

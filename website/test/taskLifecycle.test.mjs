@@ -106,7 +106,7 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   assert.ok(folded.includes('"Mark done"}</Button>'), "the folded Task strip must carry the done control");
   assert.ok(folded.includes("onClick={askFinish}"), "and it must run the same completion road (askFinish -> finish(\"done\"))");
   assert.match(source, /const WorkflowHeading = \(\{ number, title, description, chip, tone, folded, onToggle, action \}\)/);
-  // ...and a general conversation is wrappable once its provider session is gone (server.py/coder.py, 2026-09-07)
+  // ...and a general conversation is wrappable once its provider session is gone (server.py/wrapup.py, 2026-09-07)
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);
   // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
@@ -119,8 +119,8 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
 });
 
 test("the agent heading says what the agent is doing, not that a session exists", () => {
-  // "② coder is working" sat beside its own chip reading "agent · needs you", because the title
-  // asked only whether a pty was alive. The coder had been parked on a question for an hour
+  // "② <agent> is working" sat beside its own chip reading "agent · needs you", because the title
+  // asked only whether a pty was alive. The agent had been parked on a question for an hour
   // (the owner, 2026-09-11, TQ-0499: "is this the same bug?" - yes, the third surface of it).
   const view = taskSource();
   assert.doesNotMatch(view, /title=\{term\?\.alive \? `\$\{agentName\(t\)\} is working`/);
@@ -183,7 +183,7 @@ test("a drafted reply still outranks a waving agent, whatever it is parked on", 
 });
 
 test("a message after the agent's last session opens the task, not the old session", async () => {
-  // the owner, 2026-10-12: a sender wrote back five days after the coder's session ended, and the page opened on that session
+  // the owner, 2026-10-12: a sender wrote back five days after the coding agent's session ended, and the page opened on that session
   const { focusStage, AGENT } = await import("../src/taskLifecycle.js");
   assert.equal(focusStage({ task: "open", agent: AGENT.saved, news: true }), "task");
   assert.equal(focusStage({ task: "open", agent: AGENT.saved }), "agent", "with no news the record still leads");

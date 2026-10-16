@@ -16,7 +16,7 @@ from taskuary.store import MemoryStore
 
 def store():
     s = MemoryStore()
-    for k in ('coder_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
+    for k in ('coding_auto_enabled', 'learn_enabled'): s.set_setting(k, '0', 't')
     return s
 
 
@@ -215,8 +215,8 @@ class TheKindControlTeaches(unittest.TestCase):
         self.assertTrue(said[0]['Confirmed'])
 
     def test_reassigning_the_worker_is_a_verdict_too(self):
-        self.c.patch(f'/api/tasks/{self.tid}', json={'Assignee': 'agent:coder'})
-        self.assertEqual([f['Value'] for f in self.facts('profile')], ['coder'])
+        self.c.patch(f'/api/tasks/{self.tid}', json={'Assignee': 'agent:coding'})
+        self.assertEqual([f['Value'] for f in self.facts('profile')], ['coding'])
 
     def test_an_unchanged_kind_teaches_nothing(self):
         self.c.patch(f'/api/tasks/{self.tid}', json={'Kind': 'coding', 'Priority': 'high'})
@@ -293,7 +293,7 @@ class LearnedSeesEveryCorrection(unittest.TestCase):
 
     def test_it_names_what_triage_had_answered(self):
         self.assertIn('triage said coding', self.said('kind', 'task'))
-        self.assertIn('triage said analyst', self.said('profile', 'coder'))
+        self.assertIn('triage said analyst', self.said('profile', 'coding'))
         self.assertIn('northwind/ledger', self.said('repository', 'northwind/portal'))
 
     def test_a_kind_says_what_the_kind_MEANS(self):

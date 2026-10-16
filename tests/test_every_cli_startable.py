@@ -23,8 +23,8 @@ def config_with(*names):
     cfg = {'cli_connections': {}, 'agents': {}}
     for n in names:
         cfg['cli_connections'][n] = {'cmd': n, 'args': ['-p'], 'timeout': 1500}
-        cfg['agents']['coder' if n == 'claude' else n] = {
-            'kind': 'coding', 'rules_doc': 'coder', 'provider': f'cli:{n}',
+        cfg['agents']['coding' if n == 'claude' else n] = {
+            'kind': 'coding', 'rules_doc': 'coding', 'provider': f'cli:{n}',
             'purpose': 'Write, review and test code in a repository.',
             'cwd_map': {'acme/app': 'C:/work/app'}}
     return cfg
@@ -67,12 +67,12 @@ class AdoptTests(unittest.TestCase):
         self.assertNotIn('gemini', cfg['cli_connections'])
 
     def test_a_cli_already_worked_by_a_differently_named_worker_gains_no_twin(self):
-        """`coder` IS claude. Adopting must not file a second worker called claude beside it."""
+        """`coding agent` IS claude. Adopting must not file a second worker called claude beside it."""
         cfg, store = config_with('claude'), MemoryStore()
         _, find = installed('claude')
         with find:
             cli_connections.adopt_installed(cfg, store)
-        self.assertEqual(sorted(cfg['agents']), ['coder'])
+        self.assertEqual(sorted(cfg['agents']), ['coding'])
 
     def test_what_the_owner_configured_is_left_alone(self):
         cfg, store = config_with('claude'), MemoryStore()

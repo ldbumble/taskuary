@@ -10,7 +10,7 @@ from taskuary.store import MemoryStore, task_ref
 from taskuary.testing import Factory
 
 
-def fake_session(tid, cwd, agent='coder', alive=True, files=()):
+def fake_session(tid, cwd, agent='coding', alive=True, files=()):
     return SimpleNamespace(alive=alive, task_id=tid, cwd=cwd, agent=agent, label=agent,
                            started='2026-08-23 09:00:00', files=lambda: list(files),
                            info=lambda tail=0: {'sid': 'fake', 'taskId': tid})
@@ -32,8 +32,8 @@ class BlackboardTests(unittest.TestCase):
     # ── the queue itself ──────────────────────────────────────────────────────
     def test_enqueue_is_deduped_and_clearable(self):
         t1, t2 = self.task(), self.task('Second')
-        self.assertTrue(self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap'))
-        self.assertIsNone(self.s.enqueue_dispatch(t2, None, 'coder', 'again'))   # one row per task
+        self.assertTrue(self.s.enqueue_dispatch(t2, t1, 'coding', 'overlap'))
+        self.assertIsNone(self.s.enqueue_dispatch(t2, None, 'coding', 'again'))   # one row per task
         q = self.s.queued_dispatches()
         self.assertEqual([(q[0]['TaskId'], q[0]['BehindTaskId'])], [(t2, t1)])
         self.s.clear_dispatch(t2)
@@ -58,8 +58,8 @@ class BlackboardTests(unittest.TestCase):
 
     def test_headless_runs_are_peers_too(self):
         t1, t2 = self.task('Headless'), self.task('New')
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
-        rid = self.s.start_run(t1, 'coder', 'work', 'owner')
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        rid = self.s.start_run(t1, 'coding', 'work', 'owner')
         self.s.update_run(rid, {'TraceJson': json.dumps([
             {'kind': 'live', 'name': 'claude', 'detail': '→ Edit: C:\\code\\repo\\taskuary\\llm.py'}])})
         ps = bb.peers(self.s, r'C:\code\repo', exclude_tid=t2)
@@ -92,7 +92,7 @@ class BlackboardTests(unittest.TestCase):
     def test_likely_overlap_is_a_briefing_not_a_queue(self):
         """PW-171 (owner): similar work informs the new agent; it never parks the task behind the peer."""
         t1, t2 = self.task('First in'), self.task('Would collide')
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
         started = []
         real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'same files')
@@ -103,7 +103,7 @@ class BlackboardTests(unittest.TestCase):
 
     def test_no_overlap_starts_with_awareness(self):
         t1, t2 = self.task('First in'), self.task('Disjoint')
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo')
         started = []
         real_o, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (None, '')
@@ -117,8 +117,8 @@ class BlackboardTests(unittest.TestCase):
     def test_drain_starts_what_was_blocked_and_skips_what_still_is(self):
         t1, t2, t3, t4 = self.task('Done'), self.task('Freed'), self.task('Still blocked'), self.task('Blocker')
         term.SESSIONS['b'] = fake_session(t4, r'C:\code\repo')          # t4 still working
-        self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap')             # t1 has no session: freed
-        self.s.enqueue_dispatch(t3, t4, 'coder', 'overlap')             # t4 live - but overlap no longer parks work (PW-171)
+        self.s.enqueue_dispatch(t2, t1, 'coding', 'overlap')             # t1 has no session: freed
+        self.s.enqueue_dispatch(t3, t4, 'coding', 'overlap')             # t4 live - but overlap no longer parks work (PW-171)
         started = []
         real, term.start_on_task = term.start_on_task, lambda s, tid, *a, **k: started.append(tid)
         try: bb.drain(self.s)
@@ -128,7 +128,7 @@ class BlackboardTests(unittest.TestCase):
 
     def test_failed_start_stays_queued_until_successful_retry(self):
         tid = self.task('Retry startup')
-        self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         with patch.object(term, 'start_on_task', side_effect=RuntimeError('startup failed')):
             bb.drain(self.s)
         self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [tid])
@@ -146,7 +146,7 @@ class BlackboardTests(unittest.TestCase):
 
     def test_drain_clears_a_task_that_moved_on(self):
         t1 = self.task('Closed while queued')
-        self.s.enqueue_dispatch(t1, None, 'coder', 'slot')
+        self.s.enqueue_dispatch(t1, None, 'coding', 'slot')
         self.s.update_task(t1, {'Status': 'done'}, 't')
         bb.drain(self.s)
         self.assertEqual(self.s.queued_dispatches(), [])
@@ -155,7 +155,7 @@ class BlackboardTests(unittest.TestCase):
     def test_two_similar_tasks_both_launch_when_capacity_permits(self):
         """The model reads an overlap; the new task still starts alongside the peer it overlaps (PW-171)."""
         t1, t2 = self.task('First in'), self.task('Would collide')
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         term.SESSIONS['a'] = fake_session(t1, r'C:\code\repo', files=['reports.py'])
         started = []
         real, bb.likely_overlap = bb.likely_overlap, lambda s, tid, ps: (ps[0], 'same files')
@@ -177,7 +177,7 @@ class BlackboardTests(unittest.TestCase):
     def test_an_obsolete_overlap_blocker_does_not_double_start(self):
         """A row still parked behind a (now-ended) peer is simply due (PW-171): drain starts it once."""
         t1, t2 = self.task('Ended blocker'), self.task('Freed by an old queue row')
-        self.s.enqueue_dispatch(t2, t1, 'coder', 'overlap')          # t1's session is long gone
+        self.s.enqueue_dispatch(t2, t1, 'coding', 'overlap')          # t1's session is long gone
         started = []
         real, term.start_on_task = term.start_on_task, lambda s, tid, *a, **k: started.append(tid)
         try:

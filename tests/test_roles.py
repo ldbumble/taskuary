@@ -14,8 +14,9 @@ from taskuary.store import MemoryStore
 
 def setup():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-    return s, {'agents': {'coder': {'cmd': 'claude', 'args': ['-p']}}}
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    s.set_setting('default_brain', 'claude', 'o')
+    return s, {'agents': {'coding': {'kind': 'coding'}}, 'cli_connections': {'claude': {'cmd': 'claude', 'args': ['-p']}}}
 
 
 class RoleTests(unittest.TestCase):
@@ -33,7 +34,8 @@ class RoleTests(unittest.TestCase):
         a = s.get_agent('ap')
         self.assertEqual(a['Kind'], 'accounts-payable')
         self.assertTrue(json.loads(a['Config'])['triage_enabled'])
-        self.assertEqual(cfg['agents']['ap']['cmd'], 'claude')          # runnable on day one
+        self.assertNotIn('cmd', cfg['agents']['ap'])                    # a profile carries no CLI...
+        self.assertEqual(json.loads(a['Config'])['cmd'], 'claude')      # ...its row runs on the default brain: runnable on day one
         self.assertIn('vendor asks where their money is', s.get_doc('ap'))
         self.assertIn('- ap: ACCOUNTS PAYABLE', agents.roster(s))
         self.assertEqual(sorted(r['playbooks_added']), ['portal-bill-approvals', 'vendor-payment-inquiry'])
@@ -86,12 +88,12 @@ class DefaultProfileTests(unittest.TestCase):
         self.assertEqual(agents.routed_role(s, 'general', ''), 'ap')
         self.assertEqual(agents.routed_role(s, 'general', 'invented'), 'ap')
         self.assertEqual(agents.routed_role(s, 'general', 'researcher'), 'researcher')   # a better fit still wins
-        self.assertEqual(agents.routed_role(s, 'coding', ''), 'coder')
+        self.assertEqual(agents.routed_role(s, 'coding', ''), 'coding')
         self.assertEqual(agents.routed_role(s, 'task', ''), '')           # the owner's own list stays theirs
 
     def test_a_coding_or_switched_off_default_routes_nothing(self):
         s, _ = setup()
-        s.set_setting('default_profile', 'coder', 'o')
+        s.set_setting('default_profile', 'coding', 'o')
         self.assertEqual(agents.routed_role(s, 'general', ''), '')
         s.upsert_agent('ap', 'accounts-payable', 'cli', '{}'); s.set_setting('default_profile', 'ap', 'o')
         self.assertEqual(agents.routed_role(s, 'general', ''), 'ap')
@@ -111,7 +113,7 @@ class WorkflowRunsAsItsWorkerTests(unittest.TestCase):
         s, _ = setup()
         s.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
         self.assertEqual(self.run_it(s, 'ap')['Assignee'], 'agent:ap')
-        self.assertFalse(self.run_it(s, 'coder').get('Assignee'))
+        self.assertFalse(self.run_it(s, 'coding').get('Assignee'))
 
 
 class ANestedBillIsProposedTests(unittest.TestCase):
@@ -149,12 +151,12 @@ class AFinishedAgentLeavesItsProposalForTheOwnerTests(unittest.TestCase):
     """The agent's own finish closed the task, and closing supersedes every pending review: the bill it had just
     proposed was cancelled before the owner saw it (live AP portal run). It now waits on the owner instead."""
     def finished(self):
-        from taskuary import coder, proposals
+        from taskuary import wrapup, proposals
         s, _ = setup()
         s.save_connector({'Type': 'intacct', 'Name': 'Intacct', 'Active': 1, 'Scope': 'read'}, 'o')
         tid = s.create_task({'Title': 'bills', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
         proposals.collect(s, tid, ANestedBillIsProposedTests.REPLY, 'assistant')
-        coder.finish(s, tid, {'summary': 'one bill proposed'}, None, 'assistant')
+        wrapup.finish(s, tid, {'summary': 'one bill proposed'}, None, 'assistant')
         return s, tid, s.list_reviews('pending')
 
     def test_the_task_waits_and_the_proposal_stays_pending(self):
@@ -172,11 +174,11 @@ class AFinishedAgentLeavesItsProposalForTheOwnerTests(unittest.TestCase):
             self.assertEqual(s.get_task(tid)['Status'], 'done', verb)
 
     def test_the_owners_own_done_still_closes_at_once(self):
-        from taskuary import coder, proposals
+        from taskuary import wrapup, proposals
         s, _ = setup()
         tid = s.create_task({'Title': 'bills', 'Kind': 'general', 'Status': 'in_progress'}, 'o')
         proposals.collect(s, tid, ANestedBillIsProposedTests.REPLY, 'assistant')
-        coder.finish(s, tid, {'summary': 'x'}, None, 'owner', owner_done=True)
+        wrapup.finish(s, tid, {'summary': 'x'}, None, 'owner', owner_done=True)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
 
 

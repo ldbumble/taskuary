@@ -48,7 +48,7 @@ class TypedWordsNeverStartAnAgent(unittest.TestCase):
     def test_a_new_hand_off_with_a_named_checkout_still_waits_for_the_yes(self):
         s = T.store()
         s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
         llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash', 'repo': 'ledger'}}))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             p = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm).get('proposal')

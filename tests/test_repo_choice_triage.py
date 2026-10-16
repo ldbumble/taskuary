@@ -23,7 +23,7 @@ MSG = {'external_id': 'e1', 'channel': 'email', 'from_email': 'dana@acme.example
 
 def store():
     s = MemoryStore()
-    s.set_setting('coder_auto_enabled', '0', 't')
+    s.set_setting('coding_auto_enabled', '0', 't')
     for repo, about in (('acme/payroll', 'payroll import and portal sync'), ('acme/integrations', 'vendor integrations'), ('acme/portal', 'the customer portal')):
         projects.ensure_repository(s, repo, about, actor='test')
     return s
@@ -98,7 +98,7 @@ class TriagePicksTests(unittest.TestCase):
         with mock.patch.object(ingest, '_spawn'): out = ingest.ingest_message(s, dict(MSG), llm=verdict(repository=None, needs=True, reason='payroll or portal - both plausible'))
         repo, why = terminal.guess_repo(s, out['task_id'], PROFILE)
         self.assertIsNone(repo); self.assertIn('both plausible', why)
-        with self.assertRaises(ValueError): terminal.start_on_task(s, out['task_id'], 'coder')
+        with self.assertRaises(ValueError): terminal.start_on_task(s, out['task_id'], 'coding')
 
 
 class PrecedenceTests(unittest.TestCase):
@@ -131,9 +131,9 @@ class CheckoutPathTests(unittest.TestCase):
         p = mock.patch.object(server, 'store', s); p.start(); self.addCleanup(p.stop)
         with mock.patch.object(ingest, '_spawn'): out = ingest.ingest_message(s, dict(MSG), llm=verdict())
         c = TestClient(server.app)
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'acme/payroll': 'C:/definitely/gone/payroll'}}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'acme/payroll': 'C:/definitely/gone/payroll'}}))
         with mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError('working directory does not exist: C:/definitely/gone/payroll')):
-            r = c.post(f"/api/tasks/{out['task_id']}/dispatch", json={'agent': 'coder'})
+            r = c.post(f"/api/tasks/{out['task_id']}/dispatch", json={'agent': 'coding'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()['dispatch'], 'needs_repo'); self.assertIn('does not exist', r.json()['reason'])
 

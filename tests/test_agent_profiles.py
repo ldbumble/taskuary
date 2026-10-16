@@ -1,13 +1,13 @@
-"""Agent profiles: CODER.md is one profile, not the ground.
+"""Agent profiles: CODING.md is one profile, not the ground.
 
-Asked for 2026-09-10. Every worker session was seeded `CODING RULES (CODER.md)` unconditionally
+Asked for 2026-09-10. Every worker session was seeded `CODING RULES (CODING.md)` unconditionally
 (terminal.py), so a meeting-prep task and a research task were both told "work only in the repository
 the task names" - and the system compensated with prose ("NO REPOSITORY", "THIS IS NOT A CODE
 CHANGE") rather than by not sending the wrong document. On the owner's own store: 123 general tasks
 against 98 coding ones, and 27 agent sessions on general work against 10 on coding.
 
 The model, minimal: a profile IS an agent row, and its rules document is the `doc` row of the same
-name. `coder` already was exactly that. Triage is shown the roster and names one, validated against
+name. `coding` already was exactly that. Triage is shown the roster and names one, validated against
 the menu it was offered - the same shape playbooks already use.
 """
 import json, re, unittest
@@ -19,13 +19,13 @@ from taskuary.store import MemoryStore
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     return s
 
 
 def seeded(s):
     """What server.py's boot does: seed the config, then copy it into the store."""
-    cfg = {'agents': {'coder': {'cmd': 'claude', 'kind': 'coding'}}}
+    cfg = {'agents': {'coding': {'cmd': 'claude', 'kind': 'coding'}}}
     hub_agents.seed_profiles(cfg)
     for name, prof in cfg['agents'].items():
         s.upsert_agent(name, prof.get('kind', 'coding'), 'cli', json.dumps(prof))
@@ -39,7 +39,7 @@ class TheRosterTests(unittest.TestCase):
             self.assertGreater(len(s.get_doc(name) or ''), 200, name)
 
     def test_the_shipped_profiles_are_the_ones_the_owner_chose(self):
-        # ...and the general assistant's own, like CODER.md for coding (the owner, 2026-10-14)
+        # ...and the general assistant's own, like CODING.md for coding (the owner, 2026-10-14)
         self.assertEqual(set(hub_agents.DEFAULT_PROFILES),
                          {'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'})
         for name, prof in hub_agents.DEFAULT_PROFILES.items():
@@ -78,44 +78,40 @@ class TheRosterTests(unittest.TestCase):
         self.assertIn('- researcher: ', menu)
         # ...and the coding profile is NOT: a coding task has one role and triage does not choose
         # it (agents.routed_role). Offering it here is how `copilot` was named on TQ-0588.
-        self.assertNotIn('- coder: ', menu)
+        self.assertNotIn('- coding: ', menu)
         for line in menu.splitlines():
             self.assertRegex(line, r'^- [a-z0-9-]+: .+')      # what triage validates against
 
     def test_seeding_never_clobbers_a_profile_the_owner_changed(self):
         """It goes in config.toml, which is what the Agents page reads and writes."""
-        cfg = {'agents': {'coder': {'cmd': 'claude', 'args': ['-p'], 'kind': 'coding'}}}
+        cfg = {'agents': {'coding': {'cmd': 'claude', 'args': ['-p'], 'kind': 'coding'}}}
         self.assertIn('researcher', hub_agents.seed_profiles(cfg))
-        cfg['agents']['researcher'] = {'cmd': 'codex', 'purpose': 'mine', 'kind': 'research'}
+        cfg['agents']['researcher'] = {'purpose': 'mine', 'kind': 'research', 'rules_doc': 'mine'}
         self.assertEqual(hub_agents.seed_profiles(cfg), [])          # nothing left to add
-        self.assertEqual(cfg['agents']['researcher']['cmd'], 'codex')
+        self.assertEqual(cfg['agents']['researcher']['rules_doc'], 'mine')
         self.assertEqual(cfg['agents']['researcher']['purpose'], 'mine')
 
-    def test_a_shipped_profile_inherits_the_whole_cli_setup(self):
-        """`cmd` falls back to the agent's NAME in half the codebase, so a profile with none would try
-        to run a command called `researcher` - and a claude profile without the skip-permissions flag
-        hangs headless, so the FLAGS have to come along too."""
-        cfg = {'agents': {'coder': {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions'],
+    def test_a_shipped_profile_carries_instructions_and_no_cli(self):
+        """A profile is instructions layered on whichever brain runs its work (the owner, 2026-10-15): it
+        inherits no command, flags or timeout - its row takes the brain's command at sync."""
+        cfg = {'agents': {'coding': {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions'],
                                     'timeout': 1500, 'kind': 'coding'}}}
         hub_agents.seed_profiles(cfg)
         got = cfg['agents']['marketer']
-        self.assertEqual(got['cmd'], 'claude')
-        self.assertIn('--dangerously-skip-permissions', got['args'])
-        self.assertEqual(got['timeout'], 1500)
-        self.assertEqual(got['kind'], 'marketing')
+        self.assertEqual(got, {'kind': 'marketing', 'purpose': hub_agents.DEFAULT_PROFILES['marketer']['purpose']})
+        for k in ('cmd', 'args', 'timeout', 'provider'): self.assertNotIn(k, got)
 
-    def test_nothing_is_seeded_when_there_is_no_coding_agent_to_inherit_from(self):
-        """A fresh install with no CLI configured yet: leave it to setup rather than write profiles
-        that name a command nobody has."""
+    def test_profiles_are_seeded_even_before_any_cli_is_configured(self):
+        """With no CLI to inherit from there is nothing to wait for: a profile names no command."""
         cfg = {}
-        self.assertEqual(hub_agents.seed_profiles(cfg), [])
-        self.assertEqual(cfg.get('agents'), {})
+        self.assertEqual(set(hub_agents.seed_profiles(cfg)), set(hub_agents.DEFAULT_PROFILES))
+        self.assertFalse(any('cmd' in p for p in cfg['agents'].values()))
 
 
 class WhyAWorkerIsNotOnTheRosterTests(unittest.TestCase):
     """"Not routed" was one word for four different situations, and for the commonest of them it was
-    the opposite of the truth: every coding task goes to CODER.md, the ROUTER just does not pick it
-    (the owner, 2026-09-17: "why does coder.md say not routed? it is but default for coding tasks").
+    the opposite of the truth: every coding task goes to CODING.md, the ROUTER just does not pick it
+    (the owner, 2026-09-17: the coding document is not "not routed" - it is the default for every coding task).
 
     The reason prose already distinguished them. The chip could not read prose, so the code says it.
     """
@@ -131,7 +127,7 @@ class WhyAWorkerIsNotOnTheRosterTests(unittest.TestCase):
 
     def test_a_coding_worker_is_routed_by_kind_and_says_so(self):
         """The one that read as an accusation. It is not off anything - it takes every coding task."""
-        self.assertEqual(self._code(store(), 'coder'), 'coding')
+        self.assertEqual(self._code(store(), 'coding'), 'coding')
 
     def test_a_worker_switched_off_is_its_own_case(self):
         s = seeded(store())
@@ -176,15 +172,15 @@ class ProfileEditingTests(unittest.TestCase):
         self.s.save_doc('trader', 'The owner wrote this.', 'owner')
         self.assertEqual(self.client.get('/api/doc/trader').json()['content'], 'The owner wrote this.')
 
-    def test_codex_and_coder_edit_and_run_the_same_document(self):
+    def test_codex_and_coding_edit_and_run_the_same_document(self):
         self.s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        self.s.save_doc('coder', 'Shared coding rules: test every changed behavior.', 'owner')
+        self.s.save_doc('coding', 'Shared coding rules: test every changed behavior.', 'owner')
         result = self.client.get('/api/doc/codex').json()
-        self.assertEqual(result['name'], 'coder')
-        self.assertEqual(result['content'], self.s.get_doc('coder'))
+        self.assertEqual(result['name'], 'coding')
+        self.assertEqual(result['content'], self.s.get_doc('coding'))
         self.client.put('/api/doc/codex', json={'content': 'Shared coding rules: preserve user changes.'})
         self.assertIn('preserve user changes', terminal.rules_text(self.s, profile='codex'))
-        self.assertEqual(terminal.rules_text(self.s, profile='codex'), terminal.rules_text(self.s, profile='coder'))
+        self.assertEqual(terminal.rules_text(self.s, profile='codex'), terminal.rules_text(self.s, profile='coding'))
         self.assertFalse(self.s.get_doc('codex'))
 
     def test_new_profile_gets_starter_rules_and_is_immediately_in_triage(self):
@@ -224,7 +220,7 @@ class ProfileEditingTests(unittest.TestCase):
         brain; that fusion is what routed TQ-0588's coding work to Copilot (the 2026-09-16 spec)."""
         from taskuary import general
         self.s.save_doc('researcher', 'Research rule: compare independent public sources.', 'owner')
-        self.s.save_doc('coder', 'CODE-ONLY SENTINEL: edit repository files.', 'owner')
+        self.s.save_doc('coding', 'CODE-ONLY SENTINEL: edit repository files.', 'owner')
         task_id = self.s.create_task({'Title': 'Compare vendors', 'Kind': 'general', 'Status': 'open',
                                      'Assignee': 'agent:researcher'}, 'owner')
         task = self.s.get_task(task_id)
@@ -249,7 +245,7 @@ class TriageNamesTheProfileTests(unittest.TestCase):
 
     def test_a_profile_from_the_menu_rides_on_the_verdict(self):
         out = self._classify({'intent': 'task', 'kind': 'coding', 'profile': 'researcher', 'why': 'a look-up'},
-                             profiles='- researcher: find out and report\n- coder: code')
+                             profiles='- researcher: find out and report\n- coding: code')
         self.assertEqual(out['profile'], 'researcher')
         self.assertEqual(out['kind'], 'coding')               # profile does not disturb the three-way route
 
@@ -271,10 +267,10 @@ class TriageNamesTheProfileTests(unittest.TestCase):
 
 
 class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
-    def test_a_profile_task_is_seeded_its_own_document_and_not_coder(self):
+    def test_a_profile_task_is_seeded_its_own_document_and_not_coding_md(self):
         s = store()
         seeded(s)
-        s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
+        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
         s.save_doc('researcher', 'RESEARCH RULES: cite every source; change nothing.', 'test')
         tid = s.create_task({'Title': 'Who are Acme?', 'Kind': 'coding', 'Status': 'open',
                              'Assignee': 'agent:researcher'}, 'o')
@@ -283,28 +279,28 @@ class TheSessionGetsItsOwnRulesTests(unittest.TestCase):
         self.assertNotIn('work only in the repository', seed)
         self.assertIn('RESEARCHER.md', seed)
 
-    def test_a_coding_task_still_gets_coder_md(self):
+    def test_a_coding_task_still_gets_coding_md(self):
         """The regression that matters: coding work must be untouched by this."""
         s = store()
-        s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
+        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open',
-                             'Assignee': 'agent:coder'}, 'o')
+                             'Assignee': 'agent:coding'}, 'o')
         seed = terminal.seed_text(s, tid)
         self.assertIn('work only in the repository', seed)
-        self.assertIn('CODER.md', seed)
+        self.assertIn('CODING.md', seed)
 
     def test_a_task_with_no_assignee_falls_back_to_the_default_profile(self):
         s = store()
-        s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
+        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
         tid = s.create_task({'Title': 'Something', 'Kind': 'coding', 'Status': 'open'}, 'o')
         seed = terminal.seed_text(s, tid)
         self.assertIn('work only in the repository', seed)
 
-    def test_a_profile_with_an_empty_document_seeds_no_rules_block_rather_than_coders(self):
-        """Falling back to CODER.md here is the bug, not a safety net."""
+    def test_a_profile_with_an_empty_document_seeds_no_rules_block_rather_than_coding_md(self):
+        """Falling back to CODING.md here is the bug, not a safety net."""
         s = store()
         seeded(s)
-        s.save_doc('coder', 'CODER RULES: work only in the repository the task names.', 'test')
+        s.save_doc('coding', 'CODING RULES: work only in the repository the task names.', 'test')
         s.save_doc('marketer', '', 'test')
         tid = s.create_task({'Title': 'Write the launch note', 'Kind': 'coding', 'Status': 'open',
                              'Assignee': 'agent:marketer'}, 'o')
@@ -317,16 +313,16 @@ if __name__ == '__main__':
 
 
 class WorkflowsAreNotCodeTests(unittest.TestCase):
-    """"workflows should not be coder always as well. it's not code" (the owner, 2026-09-10).
+    """A workflow is not code, so it must not always go to the coding agent (the owner, 2026-09-10).
 
-    run_agent fell back to a hardcoded 'coder', and - because that road never loaded an operator
+    run_agent fell back to the coding profile, and - because that road never loaded an operator
     document at all - a workflow pointed at `researcher` got the researcher's CLI and none of the
     researcher's rules."""
 
-    def test_an_unnamed_workflow_goes_to_the_default_worker_not_the_coder(self):
+    def test_an_unnamed_workflow_goes_to_the_default_brain_not_the_coding_profile(self):
         from taskuary import reports
         s = seeded(store())
-        s.set_setting('default_agent', 'researcher', 'test')
+        s.set_setting('default_brain', 'codex', 'test')
         seen = {}
         def fake_cli(store_, name, model=None, **kw):
             seen['name'] = name
@@ -334,7 +330,7 @@ class WorkflowsAreNotCodeTests(unittest.TestCase):
         with mock.patch.object(reports, 'make_cli_llm', fake_cli, create=True), \
              mock.patch('taskuary.llm.make_cli_llm', fake_cli):
             reports.run_agent({'store': s, 'prompt': 'summarise the week'})
-        self.assertEqual(seen['name'], 'researcher')
+        self.assertEqual(seen['name'], 'codex')
 
     def test_a_named_workflow_runs_under_that_profiles_rules(self):
         from taskuary import reports
@@ -353,7 +349,7 @@ class WorkflowsAreNotCodeTests(unittest.TestCase):
     def test_an_unnamed_workflow_gets_no_rules_block_so_nothing_existing_changes(self):
         from taskuary import reports
         s = seeded(store())
-        s.save_doc('coder', 'CODER RULES: work only in the repository.', 'test')
+        s.save_doc('coding', 'CODING RULES: work only in the repository.', 'test')
         seen = {}
         def fake_cli(store_, name, model=None, **kw):
             return lambda system, user, **k: seen.update(ask=user) or 'done'

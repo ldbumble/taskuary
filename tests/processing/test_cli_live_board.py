@@ -28,7 +28,7 @@ def run_cli(capsys, *args):
 
 
 def test_live_board_uses_running_server_registry_and_scoped_session_route(capsys):
-    live = {'NoteId': 7, 'TaskId': 41, 'Agent': 'coder', 'Kind': 'working',
+    live = {'NoteId': 7, 'TaskId': 41, 'Agent': 'coding', 'Kind': 'working',
             'Body': 'active in the server-owned SID', 'CreatedAt': '2026-09-06 14:00:00',
             'Cwd': r'C:\work\taskuary', 'Sid': 'server-session'}
     env = {'TASKUARY_API': 'http://127.0.0.1:45678/',

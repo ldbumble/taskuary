@@ -31,7 +31,7 @@ and its tools disabled, MCP servers included. A CLI with no known way to disable
 picked as the triage brain at all (Cursor, Copilot, Kimi, OpenCode and custom commands).
 
 **A stranger does not start an agent.** A message opens a task, but an agent starts on it by itself
-only when the sender passes **Settings → Coder agent → Who may start a worker without you**: your own
+only when the sender passes **Settings → Coding agent → Who may start a worker without you**: your own
 domain, someone you have written to before, or, in a chat you connected, someone you have talked with
 one-to-one or vouched for. Everyone else's task waits for you to press Start. Earlier mail *from*
 someone never counts. A stranger's second message is still a stranger's.

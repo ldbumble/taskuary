@@ -25,7 +25,7 @@ export const laneCounted = (lane) => LANE_COUNTED[lane] || LANE_COUNTED.fyi;
 export const laneMeta = (lane) => LANE_META[lane] || LANE_META.fyi;
 
 // A few KINDS carry more than their lane does. An agent's finished job and a report you set up share
-// the 'report' lane (both just landed), but reading "report" on the coder's own summary is wrong (the
+// the 'report' lane (both just landed), but reading "report" on the agent's own summary is wrong (the
 // owner, 2026-09-03: "it's not a report but agent awaiting little hand no?").
 export const KIND_META = byKey(vocab.kinds);
 export const STATE_META = byKey(vocab.states);
@@ -220,8 +220,8 @@ export const settledHistory = (messages, currentKey) => (messages || []).map((m)
   return currentKey && (c.key === currentKey || (c.aliases || []).includes(currentKey)) ? m : { ...m, done: true };
 });
 
-// A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while a
-// coder has it. The task id is the stable identity across that hand-off.
+// A live task changes keys as ownership changes: msg:<mid> before dispatch, agent:<tid> while an
+// agent has it. The task id is the stable identity across that hand-off.
 export const followsItem = (card, fresh) => !!(card && fresh && (fresh.key === card.key
   || (fresh.processing_id && fresh.aliases?.includes(card.key))
   || (fresh.tid && fresh.tid === card.tid && fresh.lane === "working")));

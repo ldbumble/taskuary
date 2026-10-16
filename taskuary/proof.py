@@ -247,7 +247,7 @@ def push_base(cwd: str) -> tuple:
     """What a push would measure against, and how many commits are already stacked on it.
 
     HEAD was the wrong answer and the panel proved it: an agent that finishes its work with
-    `git commit` - which is what CODER.md tells it to do, commit locally and stop - left the
+    `git commit` - which is what CODING.md tells it to do, commit locally and stop - left the
     reviewer saying "the working tree is clean" over a completed job. Committed-but-unpushed
     IS what a push carries. So the base is the upstream branch when the checkout tracks one,
     and only a checkout with nowhere to push falls back to HEAD.
@@ -420,9 +420,9 @@ def gather(store, task_id: int) -> dict:
     transcript, agent, _sid = '', None, None
     try: transcript, agent, _sid = hub_term.transcript_for(store, task_id)
     except Exception as e: logger.warning(f'proof: transcript for {task_id} failed: {e}')
-    # the coder's own report is a CLAIM; it sits beside the evidence, never as evidence
-    rep = next((c['Body'] for c in reversed(store.list_comments(task_id))
-                if str(c.get('Body') or '').startswith('CODER REPORT')), None)
+    # the agent's own report is a CLAIM; it sits beside the evidence, never as evidence
+    from .wrapup import is_report
+    rep = next((c['Body'] for c in reversed(store.list_comments(task_id)) if is_report(c.get('Body'))), None)
     attempts = [{'run': r['RunId'], 'agent': r.get('AgentName'), 'status': r.get('Status'),
                  'started': r.get('StartedAt'), 'seconds': _secs(r.get('StartedAt'), r.get('FinishedAt') or r.get('UpdatedAt')),
                  'error': (r.get('LastError') or '')[:200] or None} for r in runs]

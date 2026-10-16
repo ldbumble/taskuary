@@ -14,7 +14,7 @@ export const demoTerminalRecording = (sid, source) => {
   const activity = trace.length ? trace : (live?.tail || detail.session?.tail || terminal.tail || []);
   const files = live?.files || detail.session?.files || terminal.files || [];
   const lines = [
-    `${terminal.agent || terminal.label || "coder"} · ${detail.task?.Title || `TQ-${terminal.taskId}`}`,
+    `${terminal.agent || terminal.label || "coding"} · ${detail.task?.Title || `TQ-${terminal.taskId}`}`,
     `${terminal.cwd || "repository"}${files.length ? ` · ${files.join(", ")}` : ""}`,
     "",
     ...activity,

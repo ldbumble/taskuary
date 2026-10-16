@@ -68,9 +68,9 @@ class VisionTests(unittest.TestCase):
         """The CLI brain has no image input - it reads files off disk itself. Accepting and
         dropping the kwarg beats a TypeError in the middle of triage."""
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
         with mock.patch('taskuary.agents.run_cli', return_value=('{"intent": "fyi", "why": "x"}', None, None)):
-            fn = llm_mod.make_cli_llm(s, 'coder')
+            fn = llm_mod.make_cli_llm(s, 'coding')
             self.assertIn('fyi', fn('sys', 'user', images=[('image/png', 'AAAA')]))
 
 

@@ -22,7 +22,7 @@ from taskuary.testing import Factory
 CWD = r'C:\code\repo'
 
 
-def fake_session(tid, sid='s1', cwd=CWD, alive=True, agent='coder', files=()):
+def fake_session(tid, sid='s1', cwd=CWD, alive=True, agent='coding', files=()):
     return SimpleNamespace(sid=sid, alive=alive, task_id=tid, cwd=cwd, agent=agent, label=agent, started='2026-09-06 09:00:00',
                            files=lambda: list(files), info=lambda tail=0, details=True: {'sid': sid, 'taskId': tid, 'alive': alive})
 
@@ -31,7 +31,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore(); self.fx = Factory(self.s)
         self._sessions = dict(term.SESSIONS); term.SESSIONS.clear()
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': CWD}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': CWD}))
     def tearDown(self): term.SESSIONS.clear(); term.SESSIONS.update(self._sessions)
     def task(self, title='Fix the cron', summary='reports cron is broken'): return self.fx.task(title=title, Summary=summary, kind='coding')
 
@@ -50,7 +50,7 @@ class AdvisoryOverlapTests(Base):
     def test_an_old_overlap_dependency_no_longer_blocks_the_queue(self):
         t1, t2 = self.task('Blocker'), self.task('Was parked behind it')
         term.SESSIONS['a'] = fake_session(t1, 'a')
-        self.s.enqueue_dispatch(t2, t1, 'coder', 'likely to touch the same files')
+        self.s.enqueue_dispatch(t2, t1, 'coding', 'likely to touch the same files')
         started = []
         with mock.patch.object(term, 'start_on_task', side_effect=lambda s, tid, *a, **k: started.append(tid)): bb.drain(self.s)
         self.assertEqual(started, [t2]); self.assertEqual(self.s.queued_dispatches(), [])
@@ -58,7 +58,7 @@ class AdvisoryOverlapTests(Base):
     def test_a_ranked_task_is_not_re_parked_on_its_way_out(self):
         t1, t2 = self.task('Running'), self.task('Ranked')
         term.SESSIONS['a'] = fake_session(t1, 'a', files=['reports.py'])
-        self.s.enqueue_dispatch(t2, None, 'coder', 'ranked', value=0.7, why='asked directly')
+        self.s.enqueue_dispatch(t2, None, 'coding', 'ranked', value=0.7, why='asked directly')
         started = []
         with mock.patch.object(bb, 'likely_overlap', return_value=({'tid': t1, 'ref': task_ref(t1), 'title': 'Running'}, 'same files')), \
              mock.patch.object(term, 'start_on_task', side_effect=lambda s, tid, *a, **k: started.append(tid)):
@@ -157,7 +157,7 @@ class LiveWallTests(Base):
 
 class SessionIdentityTests(unittest.TestCase):
     def test_a_sessions_shell_knows_its_own_session_id_so_its_notes_can_be_owned(self):
-        env = term.session_env('coder', 7, CWD, sid='abc123')
+        env = term.session_env('coding', 7, CWD, sid='abc123')
         self.assertEqual(env.get('TASKUARY_SID'), 'abc123')
 
 

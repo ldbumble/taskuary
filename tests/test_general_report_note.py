@@ -13,13 +13,13 @@ def chat(s):
     return tid
 
 
-def notes(s, tid): return [c['Body'] for c in s.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
+def notes(s, tid): return [c['Body'] for c in s.list_comments(tid) if str(c['Body']).startswith('AGENT REPORT')]
 
 
 def test_its_last_answer_is_filed_verbatim_once():
     s = MemoryStore(); tid = chat(s)
     general.report_note(s, tid); general.report_note(s, tid)
-    assert notes(s, tid) == ['CODER REPORT\nAugust was $192,600, up 8% on July.']
+    assert notes(s, tid) == ['AGENT REPORT\nAugust was $192,600, up 8% on July.']
 
 
 def test_a_later_answer_is_filed_again_and_a_chat_with_none_files_nothing():
@@ -27,7 +27,7 @@ def test_a_later_answer_is_filed_again_and_a_chat_with_none_files_nothing():
     general.report_note(s, tid)
     s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Supplies drove most of it.')
     general.report_note(s, tid)
-    assert notes(s, tid)[-1] == 'CODER REPORT\nSupplies drove most of it.'
+    assert notes(s, tid)[-1] == 'AGENT REPORT\nSupplies drove most of it.'
     empty = Factory(s).task(title='Nothing said yet', kind='general')
     assert general.report_note(s, empty) is None and notes(s, empty) == []
 
@@ -38,4 +38,4 @@ def test_closing_the_session_files_it():
     session.store, session.task_id, session.alive, session.sid, session.subs, session.pick, session.model = s, tid, True, 'x', [], '', ''
     session._emit = lambda *a: None
     session.close(learn=False)
-    assert notes(s, tid) == ['CODER REPORT\nAugust was $192,600, up 8% on July.']
+    assert notes(s, tid) == ['AGENT REPORT\nAugust was $192,600, up 8% on July.']

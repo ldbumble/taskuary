@@ -1,6 +1,6 @@
 """The funnel's other end: answering the person who asked.
 
-Everything else here decides - triage routes, the coder works, you approve - and until now
+Everything else here decides - triage routes, the agent works, you approve - and until now
 the answer never left the machine. Sending closes the loop, on the same channel the request
 arrived on: an email replies IN ITS THREAD (so it lands under the original, not as a fresh
 mail nobody connects), a chat answers in the chat.
@@ -218,7 +218,7 @@ def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
 
 
 # Which channels Taskuary DRAFTS AND SENDS replies on. One answer, asked by everything:
-# triage (should this become a reply task?), the coder wrap-up (is there a reply to draft?),
+# triage (should this become a reply task?), the agent wrap-up (is there a reply to draft?),
 # and the Review buttons (can Approve actually send?). Before this, each decided for itself
 # and they disagreed - a github task with replies off closed with no draft while the UI
 # still promised one.
@@ -803,9 +803,9 @@ def draft_handoff(store, task_id: int, to: str, note: str = None, llm=None) -> s
     ctx = hub_agents.task_context(store, task_id)
     # ONE HAND-OFF, WITH THE RESULT IN IT (the owner, 2026-10-02: "Send this result to someone" and "Hand it to a person" were
     # the same button): task_context cuts every note to 300 characters, so the agent's newest report rides whole
-    rep = next((str(c.get('Body') or '') for c in reversed(store.list_comments(task_id))
-                if str(c.get('Body') or '').startswith('CODER REPORT')), '')
-    if rep: ctx += f"\n\nThe agent's result:\n{rep.removeprefix('CODER REPORT').strip()[:4000]}"
+    from .wrapup import is_report, report_body
+    rep = next((report_body(c.get('Body')) for c in reversed(store.list_comments(task_id)) if is_report(c.get('Body'))), '')
+    if rep: ctx += f"\n\nThe agent's result:\n{rep[:4000]}"
     ask = f'Forward this to {to}.' + (f' The owner adds: {note}' if note else '')
     out = llm(f"{HANDOFF_SYSTEM}\n\n{store.doc('soul') or ''}", f'{ask}\n\n{ctx}', max_tokens=700)
     return (out or '').strip()

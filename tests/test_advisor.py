@@ -92,7 +92,7 @@ class _Rail(unittest.TestCase):
         t = s.create_task({'Title': 'Export job', 'Status': 'in_progress', 'Kind': 'code'}, 'owner')
         s.add_message({'ConversationId': f'c{t}', 'Channel': 'email', 'Subject': 'Export job', 'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno',
                        'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'BodyText': 'Please move the export.', 'Status': 'routed', 'TaskId': t})
-        rid = s.start_run(t, 'coder', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))   # the agent left: Continue leads
+        rid = s.start_run(t, 'coding', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))   # the agent left: Continue leads
         s.reconcile_processing_membership(); s.activate_processing_reads(fixed_now=datetime.now().isoformat(), live_state=[]); funnel.invalidate()
         return t
 
@@ -101,7 +101,7 @@ class JudgeTests(_Rail):
     def test_a_verb_the_item_carries_lands_with_the_ledgers_number(self):
         s = MemoryStore(); t = self._stopped_task(s)
         for _ in range(3):
-            i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': False}); outcomes.settle(s, i, 'continued 2 min later', 'continued')
+            i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', facts={'pr': False}); outcomes.settle(s, i, 'continued 2 min later', 'continued')
         llm = brain_saying({'verb': 'continue', 'line': 'You usually continue it here.', 'evidence': ['out1']})
         rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
@@ -182,7 +182,7 @@ class JudgeTests(_Rail):
 class DoorTests(unittest.TestCase):
     def _session(self, s, tid):
         from types import SimpleNamespace
-        return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd='C:/x', agent='coder', label='coder', argv=['claude'], last=1.0,
+        return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd='C:/x', agent='coding', label='coding', argv=['claude'], last=1.0,
                                ext_id='', started='2026-10-12 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
                                witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
 
@@ -196,13 +196,13 @@ class DoorTests(unittest.TestCase):
             self.assertEqual([c.args[1] for c in n.call_args_list], ['agent.stopped', 'agent.asked'])
 
     def test_an_interrupted_agent_is_noticed_at_startup(self):
-        """Taskuary closed while the coder had TQ-1048: the Stop hook never fires for a close, so no door told the Advisor and the card
+        """Taskuary closed while the coding agent had TQ-1048: the Stop hook never fires for a close, so no door told the Advisor and the card
         carried no line (the owner, 2026-10-12). The close itself may run no model, so the startup is where it hears of it."""
         from taskuary import terminal
         s = MemoryStore()
-        t = s.create_task({'Title': 'x', 'Status': 'in_progress', 'Assignee': 'agent:coder'}, 'owner')
+        t = s.create_task({'Title': 'x', 'Status': 'in_progress', 'Assignee': 'agent:coding'}, 'owner')
         terminal.release_task(s, t, 'shutdown', 'closed')                                   # the close, already recorded
-        u = s.create_task({'Title': 'y', 'Status': 'in_progress', 'Assignee': 'agent:coder'}, 'owner')   # died with the process
+        u = s.create_task({'Title': 'y', 'Status': 'in_progress', 'Assignee': 'agent:coding'}, 'owner')   # died with the process
         s.create_task({'Title': 'z', 'Status': 'open'}, 'owner')                               # nobody's stop
         with mock.patch.object(advisor, 'notice') as n:
             terminal.recover_after_restart(s)
@@ -261,7 +261,7 @@ class ReadTests(_Rail):
         self.assertIn('reviews or sends it', advisor.SYSTEM)
 
     def test_an_agent_at_work_has_no_line_until_it_stops_again(self):
-        # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coder
+        # a continue writes nothing the revision sees until the prompt lands: the stop's line stood over a working coding agent
         from taskuary import workerstate as ws
         s, t, rid = self._advised()
         with mock.patch.object(advisor, 'notice'), mock.patch.object(ws, 'status', return_value={'state': 'working'}):
@@ -335,7 +335,7 @@ class FixPassTests(_Rail):
         from taskuary import hooks, selfclose
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
         from types import SimpleNamespace
-        sess = SimpleNamespace(sid='run1', alive=True, task_id=t, cwd='C:/x', agent='coder', label='coder', argv=['claude'], last=1.0, ext_id='',
+        sess = SimpleNamespace(sid='run1', alive=True, task_id=t, cwd='C:/x', agent='coding', label='coding', argv=['claude'], last=1.0, ext_id='',
                                started='2026-10-12 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
                                witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
         with mock.patch.object(advisor, 'notice') as n, mock.patch.object(selfclose, 'ask_markers', return_value=('Open the PR?', [('Open the PR?', ['yes', 'no'])])):

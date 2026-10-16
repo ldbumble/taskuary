@@ -32,7 +32,7 @@ class GatedBrain:
 class PressNeverWaitsTests(unittest.TestCase):
     def setUp(self):
         self.s, self.brain = MemoryStore(), GatedBrain()
-        self.s.upsert_agent('coder', 'coding', 'cli', '{}')
+        self.s.upsert_agent('coding', 'coding', 'cli', '{}')
         self.addCleanup(self.brain.gate.set)                    # a failing test must not leave a thread parked
         for p in (mock.patch.object(server, 'store', self.s), mock.patch.dict(terminal.SESSIONS, {}, clear=True),
                   mock.patch.object(ingest, '_spawn'), mock.patch('taskuary.llm.build_llm', return_value=self.brain)):
@@ -82,8 +82,8 @@ class PressNeverWaitsTests(unittest.TestCase):
 
     def test_dispatch_message(self):
         mid = self._mail()
-        with mock.patch.object(server, 'start_session', return_value={'sid': 's1', 'agent': 'coder'}):
-            out = self._press(f'/api/messages/{mid}/dispatch', {'kind': 'coding', 'agent': 'coder'})
+        with mock.patch.object(server, 'start_session', return_value={'sid': 's1', 'agent': 'coding'}):
+            out = self._press(f'/api/messages/{mid}/dispatch', {'kind': 'coding', 'agent': 'coding'})
         self.assertEqual(self.s.get_task(out['taskId'])['Kind'], 'coding')
         self._lands_after(out['taskId'])
 

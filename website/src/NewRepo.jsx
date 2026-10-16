@@ -13,7 +13,7 @@ import { AUTO, OTHER, chosenRepo } from "./newRepo.js";
 
 const small = { "& .MuiInputBase-root": { fontSize: 12.5, bgcolor: "#fcfaf7" } };
 
-export default function NewRepo({ agent = "coder", bus, out, first = "" }) {
+export default function NewRepo({ agent = "", bus, out, first = "" }) {
   const [rows, setRows] = useState(null);
   const [pick, setPick] = useState(AUTO);
   const [said, setSaid] = useState(first);
@@ -21,7 +21,7 @@ export default function NewRepo({ agent = "coder", bus, out, first = "" }) {
   const [path, setPath] = useState("");
   useEffect(() => {
     let live = true; setRows(null);
-    api.get("/api/repos", { params: { agent } }).then(({ data }) => live && setRows(data.data || [])).catch(() => live && setRows([]));
+    api.get("/api/repos", { params: agent ? { agent } : {} }).then(({ data }) => live && setRows(data.data || [])).catch(() => live && setRows([]));
     return () => { live = false; };
   }, [agent]);
   useEffect(() => { bus.current = setSaid; return () => { bus.current = null; }; }, [bus]);

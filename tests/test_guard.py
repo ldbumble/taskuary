@@ -1,7 +1,7 @@
 """An agent may not send. Enforced in code, where a message cannot argue with it.
 
 The threat is not an agent that decides to misbehave; it is an agent working a message that
-CONTAINS instructions. Every earlier control against it was a paragraph - SOUL.md, CODER.md, the
+CONTAINS instructions. Every earlier control against it was a paragraph - SOUL.md, CODING.md, the
 seed prompt - sitting in the same context as the untrusted text and arguing with it on equal
 terms. These tests are the line that is not a paragraph.
 """
@@ -145,7 +145,7 @@ class OverTheWireTests(unittest.TestCase):
     def test_a_session_is_given_the_token_in_its_environment(self):
         """...which is how `taskuary --note` works at all, and how the middleware knows."""
         from taskuary import terminal
-        env = terminal.session_env('coder', 41, 'C:/repo')
+        env = terminal.session_env('coding', 41, 'C:/repo')
         self.assertEqual(env[guard.AGENT_ENV], config.load()['server']['agent_token'])
 
     def test_a_session_cannot_open_or_kill_a_live_pty(self):
@@ -243,7 +243,7 @@ class AllowListTests(unittest.TestCase):
     def test_a_session_drafts_only_its_own_task(self):
         srv = config.load()['server']
         mine, theirs = 999991, 999992
-        body = {'task_id': mine, 'text': 'done, see the PR', 'agent': 'coder'}
+        body = {'task_id': mine, 'text': 'done, see the PR', 'agent': 'coding'}
         for door in ('/api/agent/reply', '/api/agent/done', '/api/agent/draft'):
             self.assertEqual(c.post(door, json=body, headers=AGENT).status_code, 403, f'{door} with no proof')
             wrong = {**AGENT, guard.TASK_HDR: guard.task_proof(srv, theirs)}
@@ -256,7 +256,7 @@ class AllowListTests(unittest.TestCase):
         from unittest import mock
         from taskuary import cli, terminal
         srv = config.load()['server']
-        env = terminal.session_env('coder', 41, 'C:/repo')
+        env = terminal.session_env('coding', 41, 'C:/repo')
         self.assertEqual(env[guard.TASK_ENV], guard.task_proof(srv, 41))
         self.assertNotEqual(guard.task_proof(srv, 41), guard.task_proof(srv, 42))
         self.assertNotIn(guard.TASK_ENV, terminal.session_env('shell', None, 'C:/repo'))      # a bare shell owns no task

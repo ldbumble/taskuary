@@ -14,12 +14,12 @@ async def _no_membership_worker(_store):
 
 def _legacy_opt_out(path):
     store = SQLiteStore(str(path))
-    store.set_setting('coder_auto_enabled', '0', 'owner')
-    # This is the on-disk shape from before general_auto_enabled and the one-time
-    # migration marker existed. Reopen through the real constructor: it seeds the
-    # newly introduced switch to 1 with no owner, and startup must still recover
-    # the older owner's broader "no unattended sessions" choice before intake.
-    store._exec("DELETE FROM setting WHERE Name IN ('general_auto_enabled','auto_start_upgraded')")
+    store.set_setting('coder_auto_enabled', '0', 'owner')     # LEGACY key on purpose: the switch's name before coding_auto_enabled
+    # This is the on-disk shape from before general_auto_enabled, the one-time
+    # migration marker and the switch's rename existed. Reopen through the real constructor: it
+    # renames the old switch, seeds the newly introduced one to 1 with no owner, and startup must
+    # still recover the older owner's broader "no unattended sessions" choice before intake.
+    store._exec("DELETE FROM setting WHERE Name IN ('general_auto_enabled','auto_start_upgraded','coding_auto_enabled')")
     store.cx.close()
     reopened = SQLiteStore(str(path))
     seeded = reopened._one("SELECT * FROM setting WHERE Name='general_auto_enabled'")

@@ -16,7 +16,7 @@ import "./publishedPages.css";
 // sandboxed WITHOUT allow-same-origin: the page's scripts run (charts, tabs) but in an opaque origin -
 // no Taskuary token, no cookies, no reach into this window
 export const SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
-// a published page is not a run of the session: CoderReport numbers only its own session results
+// a published page is not a run of the session: AgentReport numbers only its own session results
 export const isPublished = (a) => !!a?.external_url;
 const type = (p) => p?.content_type || "";
 export const isHtml = (p) => !/markdown|csv/.test(type(p)) && !isPicture(p);

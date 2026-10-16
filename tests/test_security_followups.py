@@ -24,7 +24,7 @@ def _stranger(s):
 # ── what the floor refused is on the record ─────────────────────────────────────────────────────────────────────
 def test_a_session_s_floor_refusals_are_on_its_record():
     s = MemoryStore(); tid = Factory(s).task(title='x')
-    s.add_transcript(tid, 'pane-1', 'screen', 'coder', '', 'c1', brain='claude')
+    s.add_transcript(tid, 'pane-1', 'screen', 'coding', '', 'c1', brain='claude')
     s.add_worker_event({'TaskId': tid, 'Sid': 'pane-1', 'Kind': 'floor_denied', 'Text': 'Read: that file is Taskuary\'s own', 'Source': 'floor'})
     s.add_worker_event({'TaskId': tid, 'Sid': 'other', 'Kind': 'floor_denied', 'Text': 'not this run', 'Source': 'floor'})
     [rec] = sessionrecord.record(s, tid)['sessions']
@@ -32,14 +32,14 @@ def test_a_session_s_floor_refusals_are_on_its_record():
 
 def test_a_headless_run_s_refusals_follow_the_cli_s_id():
     s = MemoryStore(); tid = Factory(s).task(title='x')
-    s.add_transcript(tid, 'hl-1', 'screen', 'coder', '', 'cli-abc', brain='claude')
+    s.add_transcript(tid, 'hl-1', 'screen', 'coding', '', 'cli-abc', brain='claude')
     s.add_worker_event({'TaskId': tid, 'Sid': 'cli-abc', 'Kind': 'floor_denied', 'Text': 'Bash: refused', 'Source': 'floor'})
     [rec] = sessionrecord.record(s, tid)['sessions']
     assert [r['text'] for r in rec['refused']] == ['Bash: refused']
 
 def test_a_session_nothing_was_refused_carries_no_list():
     s = MemoryStore(); tid = Factory(s).task(title='x')
-    s.add_transcript(tid, 'pane-1', 'screen', 'coder', '', 'c1', brain='claude')
+    s.add_transcript(tid, 'pane-1', 'screen', 'coding', '', 'c1', brain='claude')
     assert 'refused' not in sessionrecord.record(s, tid)['sessions'][0]
 
 

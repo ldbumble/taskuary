@@ -30,11 +30,11 @@ def _stranger(s, subject='hi'):
 def _owner(s): return s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
 
 def _store(cmd='claude'):
-    s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': cmd})); return s
+    s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': cmd})); return s
 
 def _pane(s, t, tmp_path, **kw):
     with mock.patch.object(terminal, 'Term') as T, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-        terminal.open_session(s, 'coder', task_id=t, cwd=str(tmp_path), **kw)
+        terminal.open_session(s, 'coding', task_id=t, cwd=str(tmp_path), **kw)
     return T.call_args.args[0]
 
 
@@ -93,7 +93,7 @@ def test_a_stranger_batch_may_read_its_file_too(tmp_path):
 
 def test_a_stranger_headless_run_adds_its_folder():
     s = _store(); t = _stranger(s)
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t)
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t)
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('', 'hi')
     a = run.call_args.args[0]['args']
     assert Path(_after(a, '--add-dir')) == origin.stranger_dir(t) and a[a.index('--add-dir') + 2].startswith('--')

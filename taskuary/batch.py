@@ -431,11 +431,11 @@ def close_if_settled(store, tid, actor: str = 'router') -> bool:
     its = store.batch_items(tid)
     if not its or any(i['State'] in OPEN for i in its): return False
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
-    from . import coder, terminal as term
+    from . import wrapup, terminal as term
     store.add_comment(tid, 'router', 'agent', 'Every item of this batch is settled.')
     wrapped = False
     if getattr(term.session_for(tid), 'alive', False):
-        try: coder.wrap(store, tid, close=True, actor=actor, no_reply=True); wrapped = True
+        try: wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True); wrapped = True
         except Exception as e: logger.warning(f'{task_ref(tid)}: the batch ending failed ({e}) - closing it plainly')
     if not wrapped: store.update_task(tid, {'Status': 'done'}, actor)
     _next(store)

@@ -50,7 +50,7 @@ ONE VOCABULARY: an ask has no statuses of its own. Its state is the lane the wor
 sentence (`lanes.json` `says`, `workerstate.says`), plus the slot count where it has slots ("2 of 4 emails drafted").
 `asks.state` reads the rail's row for the task - it never re-derives a lane - so the chat line, the phone and the rail
 say the same words about the same task. A closed task reads as finished, with the agent's own summary
-(`coder.agent_found`).
+(`wrapup.agent_found`).
 
 The only ask-specific rule is WHICH lane changes are said at the ask's door:
 

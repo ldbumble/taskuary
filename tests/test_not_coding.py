@@ -64,7 +64,7 @@ class DispatchGateTests(unittest.TestCase):
     general, and no session is bought on a keyword guess."""
     def _ingest(self, subject, body, llm=None, classify='0'):
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 'o')
+        s.set_setting('coding_auto_enabled', '1', 'o')
         s.set_setting('intent_classify_enabled', classify, 'o')
         s.remember_trust('teams', 'a@b.c', 'you vouched for them')        # a trusted sender: this is about the kind, not the gate
         from taskuary import general

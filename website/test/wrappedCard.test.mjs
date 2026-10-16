@@ -11,7 +11,7 @@ const closeOut = () => {
   return page.slice(at, page.indexOf("<Fold title={`Context & history", at));
 };
 
-// The card drew the NEWEST CODER REPORT, and the poll that saw the agent's own merge filed a second one whose "last
+// The card drew the NEWEST AGENT REPORT, and the poll that saw the agent's own merge filed a second one whose "last
 // message" was our sentence - the agent's account was there, then gone (2026-10-12). Then it was a second telling of the run
 // under the step's own: the ended session is the step's record now, with the ending added to it.
 test("an ended session has no card of its own - the step's record is it, with the ending added", () => {

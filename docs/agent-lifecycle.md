@@ -3,7 +3,7 @@
 How an agent gets a task, what it can be doing, how it ends and what brings it back - as decided with the owner on
 2026-09-25 (A1-A23) and built the same day. Six states, one word and one mark each, on every surface
 (`taskuary/lanes.json`). The code: `ingest.py` (auto-start), `terminal.py` (sessions, `close`, `release_task`,
-`release_held`), `coder.py` (`wrap`, `finish`), `workerstate.py` and `general.py` (what a session needs),
+`release_held`), `wrapup.py` (`wrap`, `finish`), `workerstate.py` and `general.py` (what a session needs),
 `funnel.py` (`not_started_why`, `left_by_facts`), `processing_unread.py` (the rail's lane), `server.py`
 (`continue_work`).
 

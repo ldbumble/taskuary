@@ -24,7 +24,7 @@ QS = {'questions': [{'question': 'Which branch?', 'options': [{'label': 'main'},
 
 
 def pane(tid, store, ext_id='sess-1', argv=('claude',)):
-    return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coder', label='coder', argv=list(argv), last=1.0,
+    return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=list(argv), last=1.0,
                            ext_id=ext_id, resumed_from='', store=store, witness=SimpleNamespace(note=lambda n: None), written=[],
                            write=None)
 
@@ -94,7 +94,7 @@ class HeldAskTests(Base):
         self.assertEqual(got['out'], {})
 
     def test_another_claude_in_the_folder_is_never_held(self):
-        """The owner's own CLI beside the coder: its question is its own, drawn in its own terminal at once."""
+        """The owner's own CLI beside the coding agent: its question is its own, drawn in its own terminal at once."""
         t0 = time.time()
         out = hooks.ask({'tool_name': 'AskUserQuestion', 'session_id': 'owners-own', 'cwd': CWD, 'tool_input': QS}, wait=5)
         self.assertEqual(out, {}); self.assertLess(time.time() - t0, 1)
@@ -197,14 +197,14 @@ class CodexTests(Base):
 
 
 class PhoneTests(unittest.TestCase):
-    ITEM = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': 3, 'ref': 'TQ-0003', 'title': 'Fix the export', 'who': 'coder',
-            'agent': 'coder', 'choices': ['main', 'release'],
+    ITEM = {'kind': 'agent', 'lane': 'blocked', 'asking': True, 'tid': 3, 'ref': 'TQ-0003', 'title': 'Fix the export', 'who': 'coding',
+            'agent': 'coding', 'choices': ['main', 'release'],
             'questions': [{'request_id': 'q:1', 'text': 'Which branch?', 'choices': ['main', 'release']},
                           {'request_id': 'q:2', 'text': 'Which color?', 'choices': ['red', 'blue']}]}
 
     def test_every_question_is_numbered_and_answered_in_one_line(self):
         from taskuary import remote_assistant as ra
-        text = ra.turn_text({'say': 'coder asked you two things.', 'item': self.ITEM,
+        text = ra.turn_text({'say': 'coding asked you two things.', 'item': self.ITEM,
                              'chips': [{'verb': 'answer_agent', 'label': 'Answer it'}, {'verb': 'next', 'label': 'Next'}]})
         self.assertIn('**1. Which branch?** (main / release)', text)
         self.assertIn('**2. Which color?** (red / blue)', text)
@@ -212,7 +212,7 @@ class PhoneTests(unittest.TestCase):
         # a poll holds ONE question's answers, and "Answer it" carries no words - neither is offered for several
         self.assertEqual(ra.agent_answers(self.ITEM), [])
         self.assertNotIn('Answer it', text)
-        self.assertNotIn('**coder** asked', text, "an agent card's `who` is the agent, never the asker")
+        self.assertNotIn('**coding** asked', text, "an agent card's `who` is the agent, never the asker")
 
 
 class InstallAndGuardTests(unittest.TestCase):

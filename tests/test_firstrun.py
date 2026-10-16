@@ -142,21 +142,23 @@ class KeyAndMailTests(unittest.TestCase):
 class StateTests(unittest.TestCase):
     def test_step_one_is_a_choice_not_a_cli_that_happens_to_be_installed(self):
         s = MemoryStore()
-        ready = {'ready': True, 'Name': 'claude (CLI)', 'pick': 'cli:coder', 'why': ''}
+        ready = {'ready': True, 'Name': 'claude (CLI)', 'pick': 'cli:claude', 'why': ''}
         with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]), \
              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'):
             self.assertEqual(firstrun.state(s)['step'], 'ai', 'installed is not chosen - it may never have signed in')
-            s.set_setting('triage_ai', 'cli:coder', 'owner')
+            s.set_setting('triage_ai', 'cli:claude', 'owner')
             st = firstrun.state(s)
         self.assertEqual(st['step'], 'email'); self.assertIn('What email do you have?', st['next']); self.assertIn('Claude is ready', st['next'])
 
     def test_step_two_names_the_ai_not_the_profile_that_runs_it(self):
-        """A fresh install's brain is the `coder` profile on claude: step 2 said "coder is ready" (a fresh-home run, 2026-10-15)."""
-        s = MemoryStore(); s.set_setting('triage_ai', 'cli:coder', 'owner')
-        ready = {'ready': True, 'Name': 'coder (CLI)', 'pick': 'cli:coder', 'why': ''}
-        with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]),              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'),              mock.patch.object(agents, 'cli_agent_options', return_value=[{'value': 'coder', 'cli': 'claude'}]):
+        """A fresh install's brain was the coding profile on claude: step 2 said "<profile> is ready" (a fresh-home run, 2026-10-15).
+        The pick names the tool now; the coding profile beside it is instructions and never the AI's name."""
+        s = MemoryStore(); s.set_setting('triage_ai', 'cli:claude', 'owner')
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        ready = {'ready': True, 'Name': 'claude (CLI)', 'pick': 'cli:claude', 'why': ''}
+        with mock.patch('taskuary.setup._ai', return_value=ready), mock.patch('taskuary.setup._inbound', return_value=[]),              mock.patch('taskuary.setup._first_items', return_value=[]), detect(name='claude', cmd='claude', label='Claude Code'),              mock.patch.object(agents, 'cli_agent_options', return_value=[{'value': 'claude', 'cli': 'claude'}]):
             st = firstrun.state(s)
-        self.assertEqual(st['brain']['name'], 'Claude'); self.assertNotIn('coder', st['next'])
+        self.assertEqual(st['brain']['name'], 'Claude'); self.assertNotIn('coding', st['next'])
 
     def test_each_step_is_a_plain_question(self):
         s = MemoryStore()

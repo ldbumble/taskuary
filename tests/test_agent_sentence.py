@@ -30,19 +30,19 @@ class SubState(unittest.TestCase):
 class Says(unittest.TestCase):
     def test_every_sub_state_has_a_bare_sentence_naming_the_agent(self):
         for sub in ('asking', 'approval', 'stalled', 'parked'):
-            self.assertTrue(ws.says(sub, 'coder').startswith('coder '), sub)
+            self.assertTrue(ws.says(sub, 'coding').startswith('coding '), sub)
 
     def test_the_requests_words_ride_on_the_line(self):
-        self.assertEqual(ws.says('stalled', 'coder', 'rate limit: resets at 3pm'), 'coder is stuck - rate limit: resets at 3pm')
+        self.assertEqual(ws.says('stalled', 'coding', 'rate limit: resets at 3pm'), 'coding is stuck - rate limit: resets at 3pm')
         self.assertEqual(ws.says('asking', 'codex', 'Which branch?'), 'codex asked you: Which branch?')
-        self.assertEqual(ws.says('approval', 'coder', 'Bash rm -rf build'), 'coder needs your approval: Bash rm -rf build')
+        self.assertEqual(ws.says('approval', 'coding', 'Bash rm -rf build'), 'coding needs your approval: Bash rm -rf build')
 
     def test_parked_has_no_words_to_carry(self):
-        self.assertEqual(ws.says('parked', 'coder', 'whatever the screen said'), 'coder is waiting on you')
+        self.assertEqual(ws.says('parked', 'coding', 'whatever the screen said'), 'coding is waiting on you')
 
     def test_request_line_is_the_same_table(self):
-        self.assertEqual(ws.request_line('coder', {'kind': 'stalled', 'text': 'rate limit'}), ws.says('stalled', 'coder', 'rate limit'))
-        self.assertEqual(ws.request_line('coder', {'kind': 'input_needed', 'text': 'Which?'}), 'coder asked you: Which?')
+        self.assertEqual(ws.request_line('coding', {'kind': 'stalled', 'text': 'rate limit'}), ws.says('stalled', 'coding', 'rate limit'))
+        self.assertEqual(ws.request_line('coding', {'kind': 'input_needed', 'text': 'Which?'}), 'coding asked you: Which?')
 
     def test_the_desktop_reads_the_same_entry(self):
         lanes = json.load(open(os.path.join(ROOT, 'taskuary', 'lanes.json'), encoding='utf-8'))

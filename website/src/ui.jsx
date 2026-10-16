@@ -580,7 +580,7 @@ export const ChoiceList = ({ children }) => (
   <Box sx={{ bgcolor: PANEL, border: `1px solid ${BORDER}`, borderRadius: 2, overflow: "hidden" }}>{children}</Box>
 );
 
-export const CoderReport = ({ body, artifacts: all = [] }) => {
+export const AgentReport = ({ body, artifacts: all = [] }) => {
   // WHAT THE AGENT DID (the owner, 2026-10-09: "Just show the last message/summary and that's all"; then "the original summary
   // was much more in detail? what happened to that?"). The detailed account is the ANSWER the agent saved for the task
   // (session_artifacts.result - the seven items); a later session's last message is only that session's own news (the deploy),
@@ -591,8 +591,8 @@ export const CoderReport = ({ body, artifacts: all = [] }) => {
   // ...and what it MADE: pages it published, files a chat showed (the owner, 2026-10-09: "agent work ... should reflect what it
   // did. simple task and any related artifacts it creates. replies, actions should be on the close out tab")
   const pages = all.filter((a) => isPublished(a) || a.kind === "shown");
-  // the session's last message rides at the END of the report (coder.finish: CODER REPORT ... LAST MESSAGE ...)
-  const [report, last] = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
+  // the session's last message rides at the END of the report (the agent's finish: AGENT REPORT ... LAST MESSAGE ...; CODER REPORT on older rows)
+  const [report, last] = String(body || "").replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\n?/, "").trim().split(/\n+LAST MESSAGE\n/);
   const lead = (/^Summary:[ \t]*([\s\S]*?)(?=^(?:Triage|Determination|Actions|Found|Did|Next):|(?![\s\S]))/m.exec(report)?.[1] ?? report).trim();
   const [said, setSaid] = useState(answer?.url ? null : "");
   useEffect(() => {
@@ -639,11 +639,11 @@ export const useAgents = () => {
       // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
       // researcher, analyst, coordinator, marketer, trader - answer a question it never asked.
       setKinds(Object.fromEntries((data.data || []).map((a) => [a.Name, a.Kind])));
-      // profile name -> the CLI it actually runs ('coder' is usually claude) - the Board
+      // profile name -> the CLI it actually runs (the coding profile is usually claude) - the Board
       // tints a working card by the BRAND, and the name alone doesn't say which one it is
       setCmds(Object.fromEntries(Object.entries(data.config || {}).map(([k, v]) => [k, (v || {}).cmd || k])));
       // ...and WHICH BRAIN each role runs on. A role no longer says which CLI runs it - every
-      // coding task's role is `coder` - so the card asks this instead (the owner, 2026-09-16).
+      // coding task's role is the one coding profile - so the card asks this instead (the owner, 2026-09-16).
       setBrains(data.brains || {});
       setBrainList(data.brain_list || []);
       setBrainModels(data.brain_models || {});
@@ -653,9 +653,12 @@ export const useAgents = () => {
   }, []);
   return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains };
 };
+// THE CODING PROFILE IS FOUND BY ITS KIND, never by a name: the owner may rename it, or have none - and then blank, so
+// the server (which resolves the same way) chooses rather than this page naming one that is not there.
+export const codingProfile = (agents = [], kinds = {}) => agents.find((a) => String(kinds[a] || "").toLowerCase() === "coding") || "";
 
-// CODING IS THE PROFILE. Both shipped coding workers carry rules_doc "coder", so `coder` and
-// `codex` are not two workers to choose between - they are one job on two CLIs, and the question a
+// CODING IS THE PROFILE. A coding profile is not a worker to choose between - it is one job that any CLI
+// can run, and the question a
 // repository dialog asks is which CLI runs it (the owner, 2026-09-14: "for coding there is no need
 // to choose profile. That's for general. Coding is the profile for coding sessions"). So in coding
 // mode the menu says the CLI, and the five general profiles are not offered at all.
@@ -686,7 +689,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
                              generalBrains = [], pick = "", onPick, has = "" }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
-  // to say so; the role is `coder` for every coding task now, so that list would be one entry
+  // to say so; the role is the coding profile for every coding task now, so that list would be one entry
   // repeated (the 2026-09-16 spec). General work picks a ROLE **and** a brain: two questions, and
   // a hand-off is allowed to answer both (the owner, 2026-09-18).
   const roles = Object.keys(kinds).length
@@ -871,8 +874,8 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   const [agentKind, setAgentKind] = useState("");
   const coding = agentKind === "coding";
   const [open, setOpen] = useState(false);
-  const { agents, models, brainList, brainModels } = useAgents();
-  const [agent, setAgent] = useState("coder");
+  const { agents, models, kinds, brainList, brainModels } = useAgents();
+  const [agent, setAgent] = useState("");          // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");          // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -880,13 +883,13 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
   const [sent, setSent] = useState(null);
   const [repoAsk, setRepoAsk] = useState(null);     // a repository DECISION, never reported as a start (PW-212)
   const [err, setErr] = useState("");
-  useEffect(() => { if (agents.length && !agents.includes(agent)) setAgent(agents[0]); }, [agents, agent]);
+  useEffect(() => { if (!agents.includes(agent)) setAgent(codingProfile(agents, kinds)); }, [agents, kinds, agent]);
   const send = async () => {
     if (!agentKind) return;
     setBusy(true); setErr("");
     try {
       const { data } = await api.post(`/api/messages/${messageId}/dispatch`,
-        { kind: agentKind, agent: coding ? agent : null, brain: coding ? (brain || null) : null,
+        { kind: agentKind, agent: coding ? (agent || null) : null, brain: coding ? (brain || null) : null,
           model: model || null, instruction: prompt.trim() || null });
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") { setRepoAsk({ taskId: data.taskId, agent: data.agent || agent }); }
@@ -994,14 +997,14 @@ export const IDLE_WAITING = 45;
 export const isWaiting = (s) => (s?.waiting ?? (s?.idle >= IDLE_WAITING));
 // A LIVE SESSION SPEAKS FOR ITSELF. The run row says `running` for as long as the pty is up,
 // including while the CLI sits at its prompt waiting for an answer - so the rail read "agent
-// working" on TQ-0004 while the page header, the Wall and the toast all said the coder had
+// working" on TQ-0004 while the page header, the Wall and the toast all said the agent had
 // stopped and was waiting (2026-09-18). The run row decides only when there is no session to ask.
 export const busyNow = (t) => (t?.Session?.alive ? !isWaiting(t.Session) : t?.RunStatus === "running");
 // The ladder, top down: dropped, done, an agent is ACTUALLY running it, else it is yours.
 // "in_progress with nothing running" used to read as "agent working" - a task whose agent
 // finished without closing it then sat there looking busy and nobody was told.
 // THE RAIL SAYS WHAT THE WORK RAIL SAYS. Everything that was not done, dropped or busy fell
-// through to ONE red "needs you", so a coder parked on a question and a reply waiting for your
+// through to ONE red "needs you", so an agent parked on a question and a reply waiting for your
 // yes wore the identical chip - two different moves, one word (the owner, 2026-09-22: "right now
 // it has tags needs you, which is agent stopped but now you are going to move that to reply
 // needed... just keep the same tags in in progress like in work").
@@ -1526,7 +1529,7 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
 };
 
 // The agent's live session as a black console - the same peephole the Board cards wear, so
-// "coder is working this now" is a thing you can SEE moving, not a sentence. Last lines of the
+// "the agent is working this now" is a thing you can SEE moving, not a sentence. Last lines of the
 // terminal, the files it has modified, a blinking cursor while it works and a pause mark when
 // it has stopped and is waiting on you. Click opens the task's real terminal.
 const _elapsed = (since) => {

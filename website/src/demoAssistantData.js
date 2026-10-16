@@ -49,8 +49,8 @@ const pileItems = [
   {
     bind: { task: "northwind/importers#214 - census sync fails when a site has no manager", key: "agent" },
     kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
-    who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the coder needs a choice before changing skip behavior",
-    agent: "coder", working: "coder", asking: true,
+    who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the coding agent needs a choice before changing skip behavior",
+    agent: "coding", working: "coding", asking: true,
     // the answers it named, and the request they bind to: a raised hand is answered by picking one
     request_id: "q7", request_kind: "input_needed",
     choices: ["Skip only that site and log it", "Fail the whole sync", "Ask me each time"],
@@ -96,7 +96,7 @@ const currentMessages = [
   },
   {
     id: "demo-current-3", role: "assistant", at: "2026-09-03 10:16:10",
-    text: "Ruth needs the Thursday cutover confirmed, and the census-sync coder needs one behavior choice. The audit requests can wait until those are clear.",
+    text: "Ruth needs the Thursday cutover confirmed, and the census-sync coding agent needs one behavior choice. The audit requests can wait until those are clear.",
   },
   {
     id: "demo-current-4", role: "user", at: "2026-09-03 10:19:00",
@@ -194,7 +194,7 @@ export function createDemoAssistantState(fx = {}) {
       rev: "demo-assistant-1", items: structuredClone(items), hidden: 0, muted: 2,
       rules: ["vendor newsletters", "automated success notices"], events: [],
       alerts: [
-        { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `coder asked you something on ${census?.ref}` },
+        { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `coding asked you something on ${census?.ref}` },
       ],
       lanes: [
         { lane: "blocked", word: "agent waiting on you", role: "you", n: 1 },

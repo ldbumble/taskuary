@@ -188,7 +188,7 @@ class ConvertingTests(unittest.TestCase):
         self.assertIn('counterparty sends an NDA', got['purpose'])
 
     def test_the_kind_is_never_coding(self):
-        """A coding profile is chosen by routed_role, not by triage, and CODER.md's repository rules
+        """A coding profile is chosen by routed_role, not by triage, and CODING.md's repository rules
         apply to it. An imported skill must never land there by accident."""
         said = '{"name": "x", "purpose": "p", "kind": "coding"}'
         got = skillimport.convert(skillimport.parse(SKILL), llm=lambda *a, **k: said)
@@ -239,7 +239,7 @@ class CollisionTests(unittest.TestCase):
         does not exist yet - blank one and the shipped text flows back in, so writing it is a hijack
         either way."""
         s = MemoryStore()
-        for name in ('soul', 'agent', 'style', 'counsel', 'digest', 'learned', 'coder'):
+        for name in ('soul', 'agent', 'style', 'counsel', 'digest', 'learned', 'coding'):
             before = s.get_doc(name)
             with self.assertRaises(skillimport.ProfileCollision, msg=name):
                 skillimport.save(s, self._got(name=name))
@@ -372,13 +372,15 @@ class OrdinaryProfileTests(unittest.TestCase):
         return saved
 
     def test_an_import_lands_in_the_config_table_the_agents_page_reads(self):
-        s, cfg = MemoryStore(), self._cfg(agents={'coder': {'provider': 'cli:claude', 'kind': 'coding'}},
+        s, cfg = MemoryStore(), self._cfg(agents={'coding': {'kind': 'coding'}},
                                           cli_connections={'claude': {'cmd': 'claude', 'args': ['-p']}})
+        s.set_setting('default_brain', 'claude', 'owner')
         saved = self._import(s, cfg)
         prof = cfg['agents']['nda-triage']
         self.assertEqual((prof['kind'], prof['purpose'], prof['triage_enabled'], prof['imported']),
                          ('analysis', self.GOT['purpose'], True, True))
-        self.assertEqual(prof['provider'], 'cli:claude')       # starts from the coding agent's CLI, like a shipped role
+        self.assertNotIn('provider', prof)                     # a profile names no brain, like a shipped role...
+        self.assertEqual(json.loads(s.get_agent('nda-triage')['Config'])['cmd'], 'claude')   # ...its row runs on the default brain
         self.assertTrue(saved.called)                          # and it is on disk, not only in memory
         self.assertEqual(s.get_agent('nda-triage')['Kind'], 'analysis')   # the store row still says what save() said
 
@@ -415,10 +417,10 @@ class OrdinaryProfileTests(unittest.TestCase):
 class WhatTriageSeesTests(unittest.TestCase):
     """The router reads ONE LINE per worker; the session it picks receives the whole document. The
     Docs page shows that line, or the reason there is none, from the SAME function roster() is built
-    from - the chip used to count `triage_enabled` in JSX and called CODER.md "on the roster"."""
+    from - the chip used to count `triage_enabled` in JSX and called CODING.md "on the roster"."""
     def _rows(self):
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
         s.upsert_agent('quiet', 'general', 'cli', '{"purpose": "handles the mail", "triage_enabled": false}')
         s.upsert_agent('blank', 'general', 'cli', '{"purpose": ""}')
         s.upsert_agent('loud', 'general', 'cli', json.dumps({'purpose': 'x' * 500}))
@@ -430,7 +432,7 @@ class WhatTriageSeesTests(unittest.TestCase):
         s, rows = self._rows()
         line, why, _ = agents.roster_line(s, rows['nda-triage'])
         self.assertEqual((line, why), ('- nda-triage: signs NDAs', ''))
-        for name, word in (('coder', 'coding'), ('quiet', 'Available to triage'), ('blank', 'no purpose')):
+        for name, word in (('coding', 'coding'), ('quiet', 'Available to triage'), ('blank', 'no purpose')):
             line, why, _ = agents.roster_line(s, rows[name])
             self.assertEqual(line, '', name); self.assertIn(word, why, name)
         line, why, _ = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})
@@ -448,7 +450,7 @@ class WhatTriageSeesTests(unittest.TestCase):
         s, rows = self._rows()
         lines = [l for l, *_ in (agents.roster_line(s, a) for a in s.list_agents()) if l]
         self.assertEqual(agents.roster(s), '\n'.join(lines))
-        self.assertEqual(len(lines), 2)                        # loud and nda-triage; not coder, quiet or blank
+        self.assertEqual(len(lines), 2)                        # loud and nda-triage; not coding, quiet or blank
 
     def test_the_agents_endpoint_carries_it(self):
         s, rows = self._rows()
@@ -456,9 +458,9 @@ class WhatTriageSeesTests(unittest.TestCase):
             data = TestClient(server.app).get('/api/agents').json()['data']
         by = {r['Name']: r['roster'] for r in data}
         self.assertEqual(by['nda-triage'], {'line': '- nda-triage: signs NDAs', 'reason': '', 'code': ''})
-        self.assertEqual(by['coder']['line'], ''); self.assertIn('coding', by['coder']['reason'])
+        self.assertEqual(by['coding']['line'], ''); self.assertIn('coding', by['coding']['reason'])
         # the word a chip can switch on: "not routed" was wrong for exactly this row
-        self.assertEqual(by['coder']['code'], 'coding')
+        self.assertEqual(by['coding']['code'], 'coding')
 
 
 class FetchByLinkTests(unittest.TestCase):
@@ -562,12 +564,13 @@ class FetchByLinkTests(unittest.TestCase):
         self.assertFalse(guard.denied('GET', '/api/skills/found'))
 
 
-class OneCoderTests(unittest.TestCase):
-    """There is one coding role and one CODER.md; a brain is picked per session. An older setup minted
-    a coding worker per installed CLI, all pointing at CODER.md, and the rows outlived the minting."""
+class OneCodingProfileTests(unittest.TestCase):
+    """There is one coding role and one CODING.md; a brain is picked per session. An older setup minted
+    a coding worker per installed CLI, all pointing at the shared document, and the rows outlived the minting."""
     def _cfg(self):
         return {'agents': {
-            'coder':      {'kind': 'coding', 'rules_doc': 'coder', 'provider': 'cli:claude', 'cwd_map': {'repo-a': 'C:/a'}},
+            'coding':     {'kind': 'coding', 'rules_doc': 'coding', 'cwd_map': {'repo-a': 'C:/a'}},
+            # a clone from an older install: it still names the shared document by its legacy name, `coder`
             'codex':      {'kind': 'coding', 'rules_doc': 'coder', 'provider': 'cli:codex', 'cwd_map': {'repo-b': 'C:/b', 'repo-a': 'C:/old'}},
             'copilot':    {'kind': 'coding', 'provider': 'cli:copilot'},
             'researcher': {'kind': 'research', 'purpose': 'outside information', 'provider': 'cli:claude'},
@@ -578,22 +581,22 @@ class OneCoderTests(unittest.TestCase):
         from taskuary import agents
         s, cfg = MemoryStore(), self._cfg()
         for n in cfg['agents']: s.upsert_agent(n, cfg['agents'][n]['kind'], 'cli', json.dumps(cfg['agents'][n]))
-        s.upsert_agent('devin', 'coding', 'cli', '{"rules_doc": "coder"}')       # a store-only leftover
-        s.set_setting('default_agent', 'codex', 'owner')
+        s.upsert_agent('devin', 'coding', 'cli', '{"rules_doc": "coding"}')      # a store-only leftover
+        s.set_setting('default_brain', 'codex', 'owner')
         gone = agents.drop_cli_clones(cfg, s)
         self.assertEqual(gone, ['codex', 'copilot', 'devin'])
-        self.assertEqual(sorted(cfg['agents']), ['coder', 'frontend', 'researcher'])
-        self.assertEqual(sorted(a['Name'] for a in s.list_agents()), ['coder', 'frontend', 'researcher'])
-        self.assertEqual(cfg['agents']['coder']['cwd_map'], {'repo-a': 'C:/a', 'repo-b': 'C:/b'})  # folded in, coder's own wins
-        self.assertEqual(s.get_settings()['default_agent'], 'coder')
+        self.assertEqual(sorted(cfg['agents']), ['coding', 'frontend', 'researcher'])
+        self.assertEqual(sorted(a['Name'] for a in s.list_agents()), ['coding', 'frontend', 'researcher'])
+        self.assertEqual(cfg['agents']['coding']['cwd_map'], {'repo-a': 'C:/a', 'repo-b': 'C:/b'})  # folded in, the profile's own wins
+        self.assertEqual(s.get_settings()['default_brain'], 'codex')      # a brain is the tool: a clone going changes no CLI
         self.assertEqual(agents.drop_cli_clones(cfg, s), [])                         # idempotent
 
     def test_a_clean_install_is_untouched(self):
         from taskuary import agents
-        s, cfg = MemoryStore(), {'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude'}}}
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s, cfg = MemoryStore(), {'agents': {'coding': {'kind': 'coding'}}}
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
         self.assertEqual(agents.drop_cli_clones(cfg, s), [])
-        self.assertIn('coder', cfg['agents'])
+        self.assertIn('coding', cfg['agents'])
 
 
 class ReadReportsTheCutTests(unittest.TestCase):
@@ -616,8 +619,8 @@ class ReadReportsTheCutTests(unittest.TestCase):
     def test_flatten_is_the_seeds_own_rule(self):
         from taskuary import terminal
         s = MemoryStore()
-        s.save_doc('coder', '# Heading\n\n- one  two\n\nthree\n', 'owner')
-        self.assertEqual(terminal.rules_text(s, 10_000, 'coder'), terminal.flatten_rules(s.get_doc('coder')))
+        s.save_doc('coding', '# Heading\n\n- one  two\n\nthree\n', 'owner')
+        self.assertEqual(terminal.rules_text(s, 10_000, 'coding'), terminal.flatten_rules(s.get_doc('coding')))
 
 
 class CatalogueTests(unittest.TestCase):

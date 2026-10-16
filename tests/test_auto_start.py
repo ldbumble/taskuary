@@ -71,7 +71,7 @@ class AutoStartTests(unittest.TestCase):
         self.assertEqual(spawned, [])
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
         self.assertIn('auto-start is off for the assistant (Settings)', last_reason(s))
-        s2 = store(coder_auto_enabled='0')
+        s2 = store(coding_auto_enabled='0')
         _out, spawned = ingested(s2, mail(external_id='c1'), 'coding')
         self.assertEqual(spawned, []); self.assertIn('auto-dispatch is off (Settings)', last_reason(s2))
         _out, spawned = ingested(s2, mail(external_id='g1', conversation_id='AAQk-2'), 'general')    # the other switch is untouched
@@ -212,13 +212,13 @@ class WorkerTests(unittest.TestCase):
 class SettingsTests(unittest.TestCase):
     def test_fresh_installs_default_both_on_and_an_old_opt_out_is_kept_for_both(self):
         s = MemoryStore()
-        self.assertEqual((s.get_settings().get('coder_auto_enabled'), s.get_settings().get('general_auto_enabled')), ('1', '1'))
+        self.assertEqual((s.get_settings().get('coding_auto_enabled'), s.get_settings().get('general_auto_enabled')), ('1', '1'))
         s2 = MemoryStore()
-        s2.set_setting('coder_auto_enabled', '0', 'owner')
+        s2.set_setting('coding_auto_enabled', '0', 'owner')
         s2._exec("DELETE FROM setting WHERE Name='general_auto_enabled'")     # an install from before the switch existed
         s2.upgrade_auto_start()
         self.assertEqual(s2.get_settings().get('general_auto_enabled'), '0')
-        s3 = MemoryStore(); s3.set_setting('general_auto_enabled', '1', 'owner'); s3.set_setting('coder_auto_enabled', '0', 'owner')
+        s3 = MemoryStore(); s3.set_setting('general_auto_enabled', '1', 'owner'); s3.set_setting('coding_auto_enabled', '0', 'owner')
         s3.upgrade_auto_start()
         self.assertEqual(s3.get_settings().get('general_auto_enabled'), '1')  # an explicit choice is never overwritten
 
@@ -226,7 +226,7 @@ class SettingsTests(unittest.TestCase):
         # the knob table is taskuary/settings_schema.json now - one file for the page and the assistant (2026-09-18)
         from taskuary import settings_schema
         knobs = settings_schema.knobs()
-        self.assertIn('general_auto_enabled', knobs); self.assertIn('coder_auto_enabled', knobs)
+        self.assertIn('general_auto_enabled', knobs); self.assertIn('coding_auto_enabled', knobs)
 
 
 if __name__ == '__main__':

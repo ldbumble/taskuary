@@ -129,7 +129,7 @@ class AttachRespectsTheVerdictTests(unittest.TestCase):
         """The agent asked a question on this thread and the reply is arriving. A standing
         verdict about the topic must not eat the answer to a question we asked."""
         s = _store(VERDICT); tid = self._thread(s)
-        s.start_run(tid, 'coder', 'go', 'test')
+        s.start_run(tid, 'coding', 'go', 'test')
         out = self._arrive(s)
         self.assertEqual((out['status'], out['task_id']), ('attached', tid))
 

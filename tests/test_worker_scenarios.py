@@ -3,7 +3,7 @@ the real status model (workerstate.py), the funnel, the hand-raise, self-close a
 from unittest import mock
 from fastapi.testclient import TestClient
 
-from taskuary import blackboard as bb, coder, funnel, selfclose, server, terminal as term, workerstate as ws
+from taskuary import blackboard as bb, wrapup, funnel, selfclose, server, terminal as term, workerstate as ws
 from tests.test_worker_events import Base, live
 
 
@@ -41,11 +41,11 @@ class Relay(Base):
         self.assertEqual(out['state'], 'disconnected'); self.assertIn('Open the workspace', self.s.list_comments(self.tid)[-1]['Body'])
 
     def test_acceptance_is_visible_in_the_discussion(self):
-        a = live(self.tid); a.send_prompt = lambda t: a.typed.append(t); term.SESSIONS['run1'] = a
+        a = live(self.tid, agent='coding'); a.send_prompt = lambda t: a.typed.append(t); term.SESSIONS['run1'] = a
         ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q1', text='Branch?', source='hook')
         ws.answer(self.s, self.tid, 'q1', 'main')
         body = self.s.list_comments(self.tid)[-1]['Body']
-        self.assertIn('delivered to coder (run run1)', body); self.assertIn('main', body)
+        self.assertIn('delivered to coding (run run1)', body); self.assertIn('main', body)
 
     def test_a_general_and_a_coding_agent_relay_through_the_same_road(self):
         general = self.fx.task(title='Compare vendors', kind='general')
@@ -71,7 +71,7 @@ class Providers(Base):
 
     def test_a_run_whose_turn_ended_is_no_longer_painted_as_working(self):
         """The wall, 2026-09-10: hooks fired, the turn ended at its prompt, and the card kept pulsing
-        `coder - Bash cd ... - 12m` because a silent word was read as "definitely not waiting"."""
+        `coding - Bash cd ... - 12m` because a silent word was read as "definitely not waiting"."""
         a = live(self.tid); a.idle = lambda: 900.0; a.tail = lambda n=3: ['bypass permissions on (shift+tab to cycle)']
         term.SESSIONS['run1'] = a
         ws.record(self.s, self.tid, 'run1', 'working', source='hook')
@@ -124,8 +124,8 @@ class Providers(Base):
     def test_one_hand_raise_per_request_in_the_pile(self):
         funnel.invalidate()
         req = {'request_id': 'q1', 'kind': 'input_needed', 'text': 'Which branch?', 'choices': []}
-        state = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coder', 'started': '2026-09-06 12:00:00', 'waiting': True, 'request': req, 'tail': ['> ']},
-                 {'taskId': self.tid, 'sid': 'run1', 'agent': 'coder', 'started': '2026-09-06 12:00:00', 'waiting': True, 'request': req, 'tail': ['> ']}]
+        state = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': True, 'request': req, 'tail': ['> ']},
+                 {'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': True, 'request': req, 'tail': ['> ']}]
         items = funnel.from_agents(self.s, live_state=state)
         self.assertEqual(len({i['key'] for i in items}), 1)
 
@@ -134,29 +134,29 @@ class Providers(Base):
 class Unread(Base):
     def test_a_working_run_is_no_blocked_row_and_no_chat_turn(self):
         funnel.invalidate()
-        state = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coder', 'started': '2026-09-06 12:00:00', 'waiting': False, 'idle': 900, 'tail': ['> ']}]
+        state = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': False, 'idle': 900, 'tail': ['> ']}]
         with mock.patch('taskuary.concierge.record') as rec:
             self.assertEqual(funnel.from_agents(self.s, live_state=state), [])
         self.assertFalse(rec.called)
 
     def test_a_request_is_promoted_with_its_text_and_a_finished_run_is_not_blocked_work(self):
         funnel.invalidate()
-        asking = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coder', 'started': '2026-09-06 12:00:00', 'waiting': True,
+        asking = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': True,
                    'request': {'request_id': 'q1', 'kind': 'input_needed', 'text': 'Which branch?', 'choices': ['main']}, 'tail': ['> ']}]
         it = funnel.from_agents(self.s, live_state=asking)[0]
         self.assertEqual((it['lane'], it['asking']), ('blocked', True)); self.assertIn('Which branch?', it['why'])
         term.SESSIONS['run1'] = live(self.tid)
         ws.record(self.s, self.tid, 'run1', 'finished', text='Done: exports fixed.', source='cli')
-        finished = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coder', 'started': '2026-09-06 12:00:00', 'waiting': False, 'tail': ['> ']}]
+        finished = [{'taskId': self.tid, 'sid': 'run1', 'agent': 'coding', 'started': '2026-09-06 12:00:00', 'waiting': False, 'tail': ['> ']}]
         self.assertEqual(funnel.from_agents(self.s, live_state=finished), [], 'a result is a result, not a raised hand')
         self.assertEqual(ws.status(self.s, self.tid)['result'], 'Done: exports fixed.')
 
     def test_the_same_event_is_announced_once(self):
         funnel.forget_states(); funnel.invalidate()
-        with mock.patch.object(funnel, 'agent_states', return_value={self.tid: ('working', 'coder')}), mock.patch.object(funnel, 'DWELL', 0):
+        with mock.patch.object(funnel, 'agent_states', return_value={self.tid: ('working', 'coding')}), mock.patch.object(funnel, 'DWELL', 0):
             funnel.announce(self.s)                                                   # the first look only remembers
             self.assertEqual(funnel.announce(self.s), [])
-            with mock.patch.object(funnel, 'agent_states', return_value={self.tid: ('asking', 'coder')}):
+            with mock.patch.object(funnel, 'agent_states', return_value={self.tid: ('asking', 'coding')}):
                 first = funnel.announce(self.s); again = funnel.announce(self.s)
         self.assertEqual(len(first), 1); self.assertEqual(again, [])
 
@@ -174,20 +174,20 @@ class Completion(Base):
 
     def test_save_before_close_a_failed_save_keeps_the_session_and_says_so(self):
         a = live(self.tid); term.SESSIONS['run1'] = a; selfclose.forget(self.tid)
-        patches = self.gates() + [mock.patch.object(coder, 'wrap', side_effect=RuntimeError('disk full'))]
+        patches = self.gates() + [mock.patch.object(wrapup, 'wrap', side_effect=RuntimeError('disk full'))]
         for p in patches: p.start()
-        try: out = selfclose.declare(self.s, self.tid, 'done', 'coder')
+        try: out = selfclose.declare(self.s, self.tid, 'done', 'coding')
         finally:
             for p in patches: p.stop()
         self.assertFalse(out['closed']); self.assertTrue(a.alive)
         self.assertIn('could not', self.s.list_comments(self.tid)[-1]['Body']); self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')
-        self.assertEqual(selfclose.declare(self.s, self.tid, 'done', 'coder')['closed'], False, 'retryable: the mark was dropped')
+        self.assertEqual(selfclose.declare(self.s, self.tid, 'done', 'coding')['closed'], False, 'retryable: the mark was dropped')
 
     def test_duplicate_finish_signals_do_not_duplicate_the_finish(self):
         a = live(self.tid); term.SESSIONS['run1'] = a; selfclose.forget(self.tid)
         patches = self.gates() + [mock.patch.object(selfclose, '_wrap', return_value={'closed': True})]
         for p in patches: p.start()
-        try: first, second = selfclose.declare(self.s, self.tid, 'done', 'coder'), selfclose.declare(self.s, self.tid, 'done', 'coder')
+        try: first, second = selfclose.declare(self.s, self.tid, 'done', 'coding'), selfclose.declare(self.s, self.tid, 'done', 'coding')
         finally:
             for p in patches: p.stop()
         self.assertTrue(first['closed']); self.assertFalse(second['closed'])
@@ -204,7 +204,7 @@ class Completion(Base):
         self.assertEqual(ws.status(self.s, self.tid)['state'], 'stopped')
 
     def test_follow_up_context_is_retained_after_a_finish(self):
-        self.s.add_comment(self.tid, 'coder', 'agent', 'CODER REPORT\nFixed the cron; the schedule was UTC.')
+        self.s.add_comment(self.tid, 'coding', 'agent', 'AGENT REPORT\nFixed the cron; the schedule was UTC.')
         seed = term.seed_text(self.s, self.tid, repo='org/exports', cwd=None)
         self.assertIn('PREVIOUS SESSION RESULT', seed); self.assertIn('schedule was UTC', seed)
 

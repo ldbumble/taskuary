@@ -75,7 +75,7 @@ class TheChatIsNamedTooTests(unittest.TestCase):
                              'Status': 'open', 'Tags': tags}, 'owner')
         if hands: s.set_setting('general_agent_hands', hands, 'test')
         session = general.GeneralSession(s, tid)
-        session.pick, session.provider, session.model = 'cli:coder', 'Claude Code (your CLI)', ''
+        session.pick, session.provider, session.model = 'cli:claude', 'Claude Code (your CLI)', ''
         seen = {}
         def build(store, **kw): seen.update(kw); return None                  # no brain: the turn stops here
         with mock.patch.object(llm_mod, 'build_llm', side_effect=build), \

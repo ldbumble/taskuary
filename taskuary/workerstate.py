@@ -116,7 +116,7 @@ def open_requests(evs: list) -> list:
 
     Only the answer route writes one, and answering in the pane is the ordinary way to answer. So
     a single permission notification made a session read "stopped - waiting on you" for the rest
-    of its life: TQ-0500 sat at the top of Work under that sentence while the coder was mid-search,
+    of its life: TQ-0500 sat at the top of Work under that sentence while the agent was mid-search,
     twenty minutes and four prompts later (the owner, 2026-09-11: "when i input another prompt it
     does not pick up its coding again"). A request raised DURING the current turn still stands -
     it comes after that turn's own prompt.

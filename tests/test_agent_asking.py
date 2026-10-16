@@ -10,11 +10,11 @@ class RailReadsTheSessionTests(unittest.TestCase):
     def test_the_sessions_own_state_decides_not_a_question_mark_on_screen(self):
         s = MemoryStore()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        live = [{'taskId': t, 'agent': 'coder', 'sid': 's1', 'waiting': True, 'state': 'parked',
-                 'line': 'coder is waiting on you', 'tail': ['Shall I also fix the import?']}]
+        live = [{'taskId': t, 'agent': 'coding', 'sid': 's1', 'waiting': True, 'state': 'parked',
+                 'line': 'coding is waiting on you', 'tail': ['Shall I also fix the import?']}]
         card = funnel.from_agents(s, live_state=live)[0]
         self.assertFalse(card['asking'])
-        self.assertEqual(card['why'], 'coder is waiting on you')
+        self.assertEqual(card['why'], 'coding is waiting on you')
 
 
 class RegularAgentQuestionTests(unittest.TestCase):
@@ -46,7 +46,7 @@ class OneLaneRuleTests(unittest.TestCase):
 
     def test_all_says_what_the_rail_says(self):
         from taskuary.processing_all import row_lane
-        base = {'TaskStatus': 'open', 'Assignee': 'agent:coder'}
+        base = {'TaskStatus': 'open', 'Assignee': 'agent:coding'}
         self.assertEqual(row_lane({**base, 'AgentLeft': 'stopped'}), 'stopped')
         self.assertEqual(row_lane({**base, 'AgentLeft': 'saved'}), 'saved')
         self.assertEqual(row_lane(base), 'queued')
@@ -71,7 +71,7 @@ class OneLaneRuleTests(unittest.TestCase):
 class AgentFinishedTests(unittest.TestCase):
     """A17: one "agent finished". Whoever edited the task last owns the close (the owner, 2026-09-25)."""
 
-    def _done(self, s, note, actor='coder'):
+    def _done(self, s, note, actor='coding'):
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         s.add_comment(t, actor, 'agent', note)
         s.update_task(t, {'Status': 'done'}, actor)
@@ -80,7 +80,7 @@ class AgentFinishedTests(unittest.TestCase):
     def test_the_agent_closing_it_keeps_its_result_with_no_time_limit(self):
         from taskuary.processing_unread import finish_evidence
         s = MemoryStore(); t = self._done(s, 'The agent closed this itself: the export is fixed.')
-        s.add_comment(t, 'Taskuary', 'system', 'coder finished TQ-0001.')          # notes a day later change nothing
+        s.add_comment(t, 'Taskuary', 'system', 'coding finished TQ-0001.')          # notes a day later change nothing
         self.assertEqual(finish_evidence(s, t)['summary'], 'the export is fixed.')
 
     def test_whoever_edited_it_last_owns_it(self):

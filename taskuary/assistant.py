@@ -893,7 +893,7 @@ def _done(store, days: float = 7) -> str:
     for t in ts:
         notes = [str(c.get('Body') or '') for c in reversed(store.list_comments(t['TaskId']))]
         said = next((b.split(':', 1)[1] for b in notes if b.startswith('The agent closed this itself:')), None)
-        rep = next((b for b in notes if b.startswith('CODER REPORT')), None) if said is None else None
+        rep = next((b for b in notes if b.startswith(('AGENT REPORT', 'CODER REPORT'))), None) if said is None else None
         if rep:
             m = re.search(r'(?im)^summary:\s*(.+)$', rep)
             said = m.group(1) if m else rep.split('\n', 1)[-1]
@@ -1520,7 +1520,7 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
     "No task at all" is the test, not "no OPEN task" (TQ-0487, 2026-09-10). The verdict used to turn on
     the linked task's status, and every re-say rewords the idea, so its Sig changes and it is judged
     again: close the work and the next say read 'linked task not active' as 'about nothing', opening a
-    duplicate on the very mail just closed - with a coder on it. A follow-up noticed after the work
+    duplicate on the very mail just closed - with a coding agent on it. A follow-up noticed after the work
     closed is real, but it is the OWNER's click (act(verb='task'), which carries the evidence across and
     names the completed task), never something a check opens by itself."""
     from .ingest import judge, ingest_message, owner_addresses, own_addresses

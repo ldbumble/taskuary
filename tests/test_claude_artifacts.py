@@ -58,7 +58,7 @@ class KeepTests(unittest.TestCase):
     def rows(self): return [a for a in self.s.list_task_artifacts(self.tid) if a['Kind'] == ca.KIND]
 
     def test_a_publish_lands_on_the_task_with_a_local_copy(self):
-        ca.keep(self.s, self.tid, ca.published(result(path=self.page())), by='coder')
+        ca.keep(self.s, self.tid, ca.published(result(path=self.page())), by='coding')
         (row,) = self.rows()
         self.assertEqual((row['Url'], row['ExtId'], row['Version'], row['Name']), (URL, AID, 'v1', 'Northwind ledger check'))
         self.assertEqual(Path(row['Path']).read_text(encoding='utf-8'), '<h1>v1</h1>')
@@ -66,14 +66,14 @@ class KeepTests(unittest.TestCase):
 
     def test_a_republish_updates_the_one_row(self):
         """the Artifact tool republishes to the same url while the work runs - one page, one row, the newest copy"""
-        ca.keep(self.s, self.tid, ca.published(result(path=self.page())), by='coder')
-        ca.keep(self.s, self.tid, ca.published(result(path=self.page('<h1>v2</h1>'), version='v2', title='Ledger check, final')), by='coder')
+        ca.keep(self.s, self.tid, ca.published(result(path=self.page())), by='coding')
+        ca.keep(self.s, self.tid, ca.published(result(path=self.page('<h1>v2</h1>'), version='v2', title='Ledger check, final')), by='coding')
         (row,) = self.rows()
         self.assertEqual((row['Version'], row['Name']), ('v2', 'Ledger check, final'))
         self.assertEqual(Path(row['Path']).read_text(encoding='utf-8'), '<h1>v2</h1>')
 
     def test_no_local_file_still_keeps_the_link(self):
-        ca.keep(self.s, self.tid, ca.published(result(path=os.path.join(self.dir, 'gone.html'))), by='coder')
+        ca.keep(self.s, self.tid, ca.published(result(path=os.path.join(self.dir, 'gone.html'))), by='coding')
         (row,) = self.rows()
         self.assertEqual(row['Url'], URL); self.assertFalse(row['Path'])
 
@@ -164,7 +164,7 @@ class PreviewEndpointTests(unittest.TestCase):
         from taskuary import server
         s = MemoryStore(); tid = Factory(s).task(title='Check the ledger')
         p = Path(tempfile.mkdtemp()) / 'page.html'; p.write_text('<script>alert(1)</script>', encoding='utf-8')
-        row = ca.keep(s, tid, ca.published(result(path=str(p))), by='coder')
+        row = ca.keep(s, tid, ca.published(result(path=str(p))), by='coding')
         old, server.store = server.store, s
         try: r = TestClient(server.app).get(f"/api/task-artifacts/{row['ArtifactId']}")
         finally: server.store = old

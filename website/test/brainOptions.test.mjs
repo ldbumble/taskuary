@@ -5,12 +5,12 @@ import { normalizeBrainOptions } from "../src/brainOptions.js";
 test("old profile-shaped brain rows collapse to one choice per CLI", () => {
   const rows = [
     { value: "", label: "auto" },
-    { value: "cli:coder", label: "claude · coder", models: [] },
+    { value: "cli:coding", label: "claude · coding", models: [] },
     { value: "cli:researcher", label: "claude · researcher", models: [] },
     { value: "cli:copilot", label: "copilot · copilot", models: [] },
   ];
   const models = {
-    coder: { cli: "claude", choices: ["opus", "sonnet"] },
+    coding: { cli: "claude", choices: ["opus", "sonnet"] },
     researcher: { cli: "claude", choices: ["opus", "sonnet"] },
     copilot: { cli: "copilot", choices: ["auto", "gpt-5.4"] },
   };

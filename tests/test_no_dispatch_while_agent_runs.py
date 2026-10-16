@@ -13,14 +13,14 @@ from test_funnel import ago
 
 
 class Live:
-    def __init__(self, tid): self.task_id, self.alive, self.agent, self.mode, self.sid = tid, True, 'coder', 'pty', 's1'
+    def __init__(self, tid): self.task_id, self.alive, self.agent, self.mode, self.sid = tid, True, 'coding', 'pty', 's1'
     def info(self, tail=0, details=True): return {'sid': self.sid, 'taskId': self.task_id, 'alive': True, 'agent': self.agent}
 
 
 class Base(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         self.tid = self.s.create_task({'Title': 'Fix the nightly export', 'Kind': 'coding', 'Status': 'open'}, 'owner')
         self.mid = self.s.add_message({'TaskId': self.tid, 'ExternalId': 'x:1', 'Channel': 'email', 'SourceName': 'inbox', 'Subject': 'Export',
                                        'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example', 'SentAt': ago(1),
@@ -52,7 +52,7 @@ class DispatchDoorTests(Base):
 class ChipTests(Base):
     def test_no_send_to_agent_chip_on_a_task_an_agent_is_working(self):
         item = {'kind': 'message', 'tid': self.tid, 'mid': self.mid, 'ref': 'TQ-0001', 'lane': 'asked'}
-        for verb in ('coder', 'regular_agent'):
+        for verb in ('coding_agent', 'regular_agent'):
             self.assertIn('already being worked on', concierge.cannot(item, verb, self.s))
 
     def test_it_is_offered_again_once_the_session_is_gone(self):
@@ -63,7 +63,7 @@ class ChipTests(Base):
 
 class TwoStartsAtOnceTests(unittest.TestCase):
     """Two dispatches half a second apart both passed the live check - the first session did not exist yet - and one task
-    got two coder sessions in one checkout (2026-10-13). The second now waits for the first and answers with its start."""
+    got two coding sessions in one checkout (2026-10-13). The second now waits for the first and answers with its start."""
     def setUp(self):
         self.s = MemoryStore()
         self.tid = self.s.create_task({'Title': 'Review the pull requests', 'Kind': 'coding', 'Status': 'open'}, 'owner')

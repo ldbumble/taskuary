@@ -1,7 +1,7 @@
 """Take credentials out of anything on its way to a model.
 
 The leak this closes is on the FIRST prompt, not in stored history: a colleague mails an API
-key, triage reads that mail, and `agents.task_context` writes the body verbatim into a coder
+key, triage reads that mail, and `agents.task_context` writes the body verbatim into an agent
 prompt that goes to Anthropic, OpenAI or Azure. Scrubbing happens at the three doors a prompt
 leaves by (llm.build_llm, agents.run_cli, terminal.Term.seed) and NOT at the database: a
 `message` row is a mirror of the owner's inbox, and a vendor's one-time portal code is the whole

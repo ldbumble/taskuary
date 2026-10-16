@@ -21,13 +21,13 @@ BILL = ('# Post a vendor bill\nwhen: a card transaction or an invoice arrives\nu
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-    s.set_setting('general_auto_enabled', '1', 't'); s.set_setting('coder_auto_enabled', '1', 't')
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    s.set_setting('general_auto_enabled', '1', 't'); s.set_setting('coding_auto_enabled', '1', 't')
     return s
 
 
 def workflow(s, **cfg):
-    base = {'type': 'agent', 'access': 'write', 'title': 'Weekly access review', 'agent': 'coder', 'prompt': 'Review who got admin this week and revoke stale grants.',
+    base = {'type': 'agent', 'access': 'write', 'title': 'Weekly access review', 'agent': 'coding', 'prompt': 'Review who got admin this week and revoke stale grants.',
             'cron': '0 8 * * 1', 'uses': ['entra'], 'inputs': {'window': '7d'}, 'ask_first': 'revoking a grant', 'done_when': 'the review is posted'}
     base.update(cfg)
     return s.save_source({'Channel': 'report', 'Address': base['title'], 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(base)}, 'o')

@@ -26,8 +26,8 @@ def store(replies_off=('teams',), auto_draft='1'):
     s = MemoryStore()
     s.set_setting('reply_channels', ','.join(c for c in ('email', 'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord') if c not in replies_off), 't')
     s.set_setting('auto_draft_enabled', auto_draft, 't')
-    s.set_setting('coder_auto_enabled', '1', 't')
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
+    s.set_setting('coding_auto_enabled', '1', 't')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
     s.remember_trust('teams', 'dana@vendor.example', 'you vouched for them')   # a trusted sender: these are about drafting and kind
     return s
 

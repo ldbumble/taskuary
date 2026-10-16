@@ -62,19 +62,20 @@ export const atBottom = (items = [], passed = new Set()) => bossHp(items, passed
 // The matchmaker: who is right for this, and the one move that gets it there. It routes on the
 // judged lane/kind and on the agents actually configured - never on the subject line.
 export function matchFor(item, agents = []) {
-  const coder = agents.find((a) => a.Kind === "coding")?.Name || agents[0]?.Name || "the coder";
+  // the coding profile by its KIND - a name may be renamed or absent, and the roster's first entry may be a researcher
+  const coding = agents.find((a) => a.Kind === "coding")?.Name || "the coding agent";
   const general = agents.find((a) => a.Kind && a.Kind !== "coding")?.Name || "the general agent";
   const lane = item?.lane, kind = item?.kind;
-  if (kind === "agent" && lane === "blocked") return { who: item.working || item.agent || coder, verb: "answer", why: "an agent stopped for your call" };
+  if (kind === "agent" && lane === "blocked") return { who: item.working || item.agent || coding, verb: "answer", why: "an agent stopped for your call" };
   if (kind === "agent" && item.paused) return { who: "you", verb: "resume", why: "its session was saved - pick it up where it stopped" };
-  if (kind === "agent") return { who: item.working || item.agent || coder, verb: "watch", why: "already with an agent" };
+  if (kind === "agent") return { who: item.working || item.agent || coding, verb: "watch", why: "already with an agent" };
   if (kind === "agentdone" || kind === "wrapup") return { who: "you", verb: "close", why: "the agent finished - read what it found, then close it" };
   if (kind === "meeting") return { who: "you", verb: "prep", why: "coming up - get prepped first" };
   if (lane === "approve") return { who: "you", verb: "approve", why: "a draft is written - it only needs your yes" };
   if (lane === "forgotten") return { who: "you", verb: "followup", why: "gone quiet - a nudge keeps it alive" };
   if (lane === "fyi" || lane === "report") return { who: "nobody", verb: "read", why: "nothing to do but know it" };
   if (lane === "broken") return { who: "you", verb: "open", why: "a connection stopped - only you can sign it back in" };
-  if (item?.coding || kind === "coding") return { who: coder, verb: "dispatch", kind: "coding", why: "code work - hand it to a coding agent" };
+  if (item?.coding || kind === "coding") return { who: coding, verb: "dispatch", kind: "coding", why: "code work - hand it to a coding agent" };
   if (kind === "todo" || kind === "task" || lane === "yours") return { who: general, verb: "dispatch", kind: "general", why: "real work, not a sentence - an agent can start it" };
   return { who: "you", verb: "draft", why: "a question a reply settles - let the assistant draft it" };
 }
@@ -92,8 +93,8 @@ export const MOVE_WORDS = {
 };
 
 // the chat's action words (concierge.CHIP_WORDS) scored as the move they are - a word the server adds
-// later still runs, it just scores as a plain "done"
-export const CHIP_MOVE = { approve: "approve", redraft: "draft", reply: "draft", coder: "dispatch", regular_agent: "dispatch",
+// later still runs, it just scores as a plain "done" - `coder` is `coding_agent`'s old name, still sent by an older server
+export const CHIP_MOVE = { approve: "approve", redraft: "draft", reply: "draft", coding_agent: "dispatch", coder: "dispatch", regular_agent: "dispatch",
   mine: "done", not_ours: "sort", not_ours_sender: "sort", block_sender: "sort", archive: "sort", close: "done", done: "done",
   later: "later", skip: "later", defer: "later", continue: "dispatch", answer_agent: "answer", stop_agent: "wrap", rerun: "rerun", split: "done", prep: "prep", followup: "followup" };
 

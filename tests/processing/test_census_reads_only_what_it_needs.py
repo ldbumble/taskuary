@@ -173,6 +173,6 @@ def test_another_process_writing_makes_this_one_notice(tmp_path):
     tid = mine.create_task({'Title': 'Shared', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
     mine.reconcile_processing_membership()
     assert not mine.processing_reconcile_status()['pending']
-    SQLiteStore(path).add_comment(tid, 'coder', 'agent', 'an agent wrote this from its own process')
+    SQLiteStore(path).add_comment(tid, 'coding', 'agent', 'an agent wrote this from its own process')
     assert mine.processing_reconcile_status()['pending'], (
         "this connection must notice another one's write; nothing else tells it")

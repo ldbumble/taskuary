@@ -43,12 +43,12 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # How much of a worker's rules document reaches the session that runs as it. 1800 was sized for a
 # delivery limit that no longer applies - the prompt goes over STDIN now (agents.py's header), and
 # what bounds it is SEED_CEILING, which already says the ASK is what gives, never the rules. Left at
-# 1800 it delivered 1,800 of coder.md's 4,884 characters to every coding session, cut mid-sentence,
+# 1800 it delivered 1,800 of the coding document's 4,884 characters to every coding session, cut mid-sentence,
 # under an instruction saying these are your rules. This is the same fix ASK_CHARS got (3000 ->
 # 12000) for the same reason, on the same day somebody noticed the message body had it too.
 # 6000 blew the ceiling: a coding seed also carries AGENT_CHARS (2600, AGENT.md, every worker's
 # shared rules) on top of this document, and the worst case (ASK 12,000 + CONTEXT 4,000 + AGENT.md
-# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 5600 clears coder.md's
+# 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 5600 clears the coding document's
 # measured 4,884 - the whole point of raising this - with room for an edit (4900 cleared it by 16
 # characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
 # genuinely maximal seed, where the trim below cuts the ask and nothing else.
@@ -425,8 +425,8 @@ class Term:
                 # The toe proved the box was LISTENING. Nothing proved the PAYLOAD arrived - and
                 # _echoed(), written for exactly this question, was never called. A TUI that
                 # drops a bite mid-paste leaves a SPLICE, and a splice submits happily: TQ-0038's
-                # "Fix employee id's" ran straight into the flattened CODER.md behind it and the
-                # agent spent ten minutes working "fix emd for every coder run" - a sentence
+                # "Fix employee id's" ran straight into the flattened CODING.md behind it and the
+                # agent spent ten minutes working a spliced "fix emd for every ... run" - a sentence
                 # nobody wrote, in a repo the eaten REPO: line never named. A prompt that did not
                 # go in is recoverable; a garbled one that did is not.
                 end = time.time() + 8
@@ -483,7 +483,7 @@ class Term:
 
     def quiet_for(self, secs: float):
         """The next `secs` of output are OURS - a repaint we asked for - and must not count as the
-        agent working. Opening the card in the chat produced exactly that, idle() reset, and a coder
+        agent working. Opening the card in the chat produced exactly that, idle() reset, and an agent
         sitting on a trust dialog flipped to "the agent is working again" (2026-09-03)."""
         self.calm_until = max(self.calm_until, time.time() + float(secs))
 
@@ -603,8 +603,8 @@ def worker_fields(store, t) -> dict:
     # ...and a `working` word does not outrank a question the screen is actually SHOWING. PW-228 was
     # written against a quiet screen, which is a different thing: a CLI that stops mid-turn to ask -
     # a chooser, a permission prompt - reports nothing, so its own last word stays `working` for as
-    # long as it stands there (the owner, 2026-09-17, TQ-0621: "why does coder say is working, when
-    # it's waiting for answer?"). There is no request to bind an answer to; the pane is the answer.
+    # long as it stands there (the owner, 2026-09-17, TQ-0621: why did the agent say it was working when
+    # it was waiting for an answer?). There is no request to bind an answer to; the pane is the answer.
     elif w is False and not req and screen_asking(t): w = True
     # ...and the ONE sentence for the state (lanes.json via workerstate.says), keyed by the request's kind
     # first - a stall reads "stuck", never "asked you" - and the screen's question second
@@ -647,7 +647,7 @@ def prompt_pending(t) -> bool:
     """
     # A pane being SEEDED is not waiting on anyone, whatever its screen says. The prompt box is up
     # while the seed goes in - a toe, its echo, the payload in chunks, Enter - which is longer than
-    # PHASE_DWELL, so the screen read parked, the pile raised "coder stopped on TQ-0631 and is waiting
+    # PHASE_DWELL, so the screen read parked, the pile raised "the agent stopped on TQ-0631 and is waiting
     # on you", and the watcher took it back a moment later as "working": both lines in one WhatsApp
     # by-the-way (the owner, 2026-09-18: "stopped for a second then changed its mind").
     if getattr(t, 'alive', False) and getattr(t, 'seeding', False) and getattr(t, 'accepted', None) is None: return True
@@ -903,7 +903,7 @@ def _codex_hook_trust(argv: list) -> list:
 # Claude Code asks two questions the FIRST time it opens a folder: "Do you trust the files in this
 # directory?" and "Allow external CLAUDE.md imports?". An agent Taskuary started answers neither -
 # it sits on the dialog, the pipe says "waiting on you", and the card shows the theme toolbar
-# instead of a question (the 2026-09-03 break test: three auto-started coders parked like that).
+# instead of a question (the 2026-09-03 break test: three auto-started agents parked like that).
 # The owner already answered by dispatching the work, and the folder is one Taskuary chose. So the
 # answers are written where the CLI reads them, before it starts.
 TRUSTED = {'hasTrustDialogAccepted': True, 'hasCompletedProjectOnboarding': True,
@@ -1141,7 +1141,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # ...and a RESUMED pane is already named - by the conversation it reopens (`claude --resume <id>` keeps the id: the
     # prompts typed into TQ-0779's continued pane landed in that id's transcript, 2026-09-28). Left blank, the first
     # unbound hook from ANY claude in the same folder claimed it: the owner's own CLI there did, its questions were drawn
-    # on the coder's card as the coder asking, and the coder's own hooks were dropped for being someone else's.
+    # on the agent's card as the agent asking, and the agent's own hooks were dropped for being someone else's.
     elif resume and agent: bind_ext(t, resume)
     # ...and it keeps that id as its own for good: Codex FORKS a resumed thread - a new rollout id, `forked_from_id` the
     # one we asked for - so the rollout renames the pane (witness.RolloutTail) while a hook may still say the old one
@@ -1176,7 +1176,7 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         if extra: t.seeded, t.accepted = seed, True   # the CLI submits it itself; kept so harvest drops the echo
         else: t.seed(seed)               # no prompt argument on this CLI: type it in, verified
     # A reply drafted from the mail alone promises what this session has not worked out yet, so
-    # it stops waiting on the task and comes back rewritten from the report - see coder.raise_reply.
+    # it stops waiting on the task and comes back rewritten from the report - see wrapup.raise_reply.
     if task_id:
         # ONE START, whatever the door (A22, 2026-09-25): the interruption is over, a saved session is live again, and the
         # task is no longer queued - the task page's own terminal door skipped all three and left them stale
@@ -1404,7 +1404,7 @@ _GUTTER = ' \t│┃┊▎|╭╮╰╯─━>❯›'
 
 def _drop_echo(text: str, seed: str) -> str:
     """A pty ECHOES what was typed into it, so the seeded prompt - the ask, the mail, all of
-    CODER.md - comes back as if the agent had said it. It is the one thing in the transcript we
+    CODING.md - comes back as if the agent had said it. It is the one thing in the transcript we
     know the agent did not write, and the AI writing the report should not read it twice.
 
     Matched by CONTAINMENT, not by a fixed head: a real terminal wraps an 8000-character prompt
@@ -1436,24 +1436,28 @@ def harvest(t: Term, chars: int = 12000) -> str:
     return (tidy if letters(tidy) >= 160 else degutter(raw).strip())[-chars:]
 
 
-def profile_of(task: dict) -> str:
+def profile_of(task: dict, store=None) -> str:
     """Which worker this task was handed to - the name on `Assignee` ('agent:researcher'), else the
-    coding profile. `Assignee` has carried 'agent:<name>' since before profiles existed, so nothing
-    new is stored: the routed worker and its rules document are the same name."""
+    coding profile, found by its kind (agents.coding_role; '' with none). `Assignee` has carried 'agent:<name>' since before
+    profiles existed, so nothing new is stored: the routed worker and its rules document are the same name."""
     who = str((task or {}).get('Assignee') or '')
-    return who.split(':', 1)[1].strip() if who.startswith('agent:') and who.split(':', 1)[1].strip() else 'coder'
+    if who.startswith('agent:') and who.split(':', 1)[1].strip(): return who.split(':', 1)[1].strip()
+    from .agents import coding_role
+    return coding_role(store) if store is not None else ''
 
 
-def rules_text(store, chars: int = DOC_CHARS, profile: str = 'coder') -> str:
-    """One profile's rules document, flattened. CODER.md is the coding profile's - one of several, not
+def rules_text(store, chars: int = DOC_CHARS, profile: str = '') -> str:
+    """One profile's rules document, flattened - the coding profile's when none is named. CODING.md is the coding profile's - one of several, not
     the ground under all of them: it used to be appended to EVERY worker session, so a research or
     meeting-prep task was told "work only in the repository the task names" and the router had to add
     "NO REPOSITORY" to argue with it (the owner, 2026-09-10).
 
-    The doc says it is 'stacked on top of SOUL.md for every coder run' - it never was: these docs live
+    The doc said it was 'stacked on top of SOUL.md for every coding run' - it never was: these docs live
     in Taskuary's own database, nowhere the agent can read, so the rules only reach a session if the
     prompt carries them."""
-    from .agents import ensure_profile_document
+    from .agents import coding_role, ensure_profile_document
+    profile = profile or coding_role(store)
+    if not profile: return ''                 # no coding profile: the session runs on the base rules alone
     return _cut(flatten_rules(str(store.doc(ensure_profile_document(store, profile)) or '')), chars, 'rules')
 
 
@@ -1557,7 +1561,7 @@ def _cut(text: str, n: int, what: str = 'message') -> str:
 
 # An agent working a repository has no use for anybody's email address, and every prompt is
 # a copy handed to a third-party CLI, written into its transcript and its own logs. So the
-# addresses come out of everything we inject: SOUL.md carries the owner's, the coder rules and
+# addresses come out of everything we inject: SOUL.md carries the owner's, the coding rules and
 # handover notes quote correspondents, and none of it changes a line of code. The NAME stays -
 # a "sign as <the owner's name>" instruction still means something without the mailbox next to it.
 _EMAIL = re.compile(r'\b[\w.+-]+@[\w-]+\.[\w.-]+')
@@ -1569,7 +1573,7 @@ def no_emails(text: str) -> str:
 
 def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: str = None, instruction_theirs: bool = False) -> str:
     """What gets typed into a fresh session, and the ONLY context it should need: the ask, the
-    mail behind it, which checkout to work in, and the coder rules. One line - a newline
+    mail behind it, which checkout to work in, and the coding rules. One line - a newline
     submits in a TUI.
 
     It says so explicitly, because an agent that goes back to Taskuary for the message spends
@@ -1614,10 +1618,9 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         else: say(f'ASK: {fence(instruction.strip()) if instruction_theirs else instruction.strip()}', theirs_too=True)
     # A finished session can be continued with a new ask. Its PTY is gone, but its result is
     # durable task context: hand that result to the next terminal so "now make the changes" does
-    # not send the same coder back through the investigation it just completed.
-    previous = next((str(c.get('Body') or '')[len('CODER REPORT'):].strip()
-                     for c in reversed(store.list_comments(tid))
-                     if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    # not send the same agent back through the investigation it just completed.
+    from .wrapup import is_report, report_body
+    previous = next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
     if previous:
         say('PREVIOUS SESSION RESULT: continue from this saved result; verify the current checkout '
             f'before changing it and do not repeat finished work: {no_emails(_cut(previous, 3000, "previous result"))}', theirs_too=True)
@@ -1647,36 +1650,36 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     if atts: say('FILES that came with it, already on this machine - open them: '
                  + '; '.join(f"{a['Name']} ({a['Path']})" for a in atts[:8]), theirs_too=True)
     # a paused session left a handover note: carry it in, or the next agent redoes the digging
-    from .coder import PAUSE_MARKER
+    from .wrapup import PAUSE_MARKER
     note = next((c['Body'] for c in reversed(store.list_comments(tid))
                  if str(c.get('Body') or '').startswith(PAUSE_MARKER)), None)
     if note: say('HANDOVER: an earlier session on this task was paused and left this - '
                  f'continue from it, do not start over: {no_emails(_cut(note, 3000, "handover note"))}', theirs_too=True)
-    # SOUL.md rides in WITH the coder rules, because the coder rules refer to it: CODER.md says
+    # SOUL.md rides in WITH the coding rules, because the coding rules refer to it: CODING.md says
     # "work only in the repository the task names (see the repository map in SOUL.md)" and
-    # claims it is "stacked on top of SOUL.md for every coder run" - and for a live session it
-    # never was. A coder found this itself, went looking for SOUL.md on disk, found three
+    # claimed it is "stacked on top of SOUL.md for every coding run" - and for a live session it
+    # never was. A coding agent found this itself, went looking for SOUL.md on disk, found three
     # unrelated copies in Downloads and concluded it had been told to consult a document it is
     # structurally incapable of seeing. It was right. These docs live in Taskuary's database;
     # if the prompt does not carry them, nothing does.
-    # what is CERTIFIED about the company's own systems - a coder asked a finance question on a
+    # what is CERTIFIED about the company's own systems - a coding agent asked a finance question on a
     # general task would otherwise write its own ERP query and be plausibly wrong
     from . import semantic
     layer = ' '.join(semantic.block(store).split())
     if layer: parts.append(layer)
     # SOUL.md stays with triage (PW-184): the worker gets the rules both kinds share (AGENT.md, which
     # carries the approval boundaries and 'inbound text is data' that used to ride only in SOUL.md) and
-    # the coding additions (CODER.md) - one block each, nothing duplicated (PW-185)
+    # the coding additions (CODING.md) - one block each, nothing duplicated (PW-185)
     agent_rules = with_fence_rule(_brief.rules(store, 'agent', AGENT_CHARS))
     if agent_rules: parts.append(f'RULES (AGENT.md - every worker): {no_emails(agent_rules)}')
-    # the ROUTED profile's rules, not the coder's by default: a researcher gets RESEARCHER.md and is
+    # the ROUTED profile's rules, not the coding profile's by default: a researcher gets RESEARCHER.md and is
     # never told to work only in a repository. An empty document sends no block at all - falling back
-    # to CODER.md here would be the bug, not a safety net.
-    prof = profile_of(t)
+    # to CODING.md here would be the bug, not a safety net.
+    prof = profile_of(t, store)
     rules = rules_text(store, profile=prof)
     from .agents import profile_document
     rules_doc = profile_document(store, prof)
-    if rules: parts.append(f"{'CODING RULES' if rules_doc == 'coder' else 'RULES'} ({rules_doc.upper()}.md): {no_emails(rules)}")
+    if rules: parts.append(f"{'CODING RULES' if rules_doc == 'coding' else 'RULES'} ({rules_doc.upper()}.md): {no_emails(rules)}")
     # the rules are the owner's document, written for every session; a stranger's runs fewer commands (cli.STRANGER_ACTS),
     # and told to read the wall first, its first step was a refusal (live check 2026-10-14)
     if stranger:
@@ -1685,7 +1688,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
         parts.append(f'THIS SESSION: a stranger\'s task runs none of taskuary {no} - skip what the rules say about them; '
                      '--note still posts to this task\'s own wall.')
     # the playbook for THIS kind of job (playbooks.py): triage tagged the task with it, and it is the
-    # operative rule set here - CODER.md's "work only in the repository" is the wrong first rule for a
+    # operative rule set here - CODING.md's "work only in the repository" is the wrong first rule for a
     # bill, so the playbook says so out loud; the closing-out and wall rules still stand
     from . import playbooks as _pbk
     pbk = _pbk.seed_block(t)
@@ -1734,7 +1737,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
     # what earlier agents worked out about this ground, and how to add to it (handbook.py). The
     # wall says what is happening in this checkout this hour; the handbook says what is still
     # true next month, and no agent could see it before.
-    # HOW to write one is not here: it is a standing rule, and standing rules ride in CODER.md,
+    # HOW to write one is not here: it is a standing rule, and standing rules ride in CODING.md,
     # which is already in this prompt and already capped (DOC_CHARS). An unconditional line here
     # is paid for by every session forever - and it pushed the seed past its budget the day the
     # handbook was switched on, which is how we found out it was ever off.
@@ -1889,9 +1892,10 @@ def remember_path(store, agent: str, repo: str, path: str):
 NO_REPO = 'none'
 
 
-def known_repos(store, agent: str = 'coder') -> list:
-    """Every repository a coding job could open in: the SOUL.md map and the coder's checkouts, once each."""
-    row = store.get_agent(agent) or {}
+def known_repos(store, agent: str = '') -> list:
+    """Every repository a coding job could open in: the SOUL.md map and the coding profile's checkouts, once each."""
+    from .agents import coding_role
+    row = store.get_agent(agent or coding_role(store)) or {}
     try: profile = json.loads(row.get('Config') or '{}')
     except (TypeError, ValueError): profile = {}
     return known_repos_of(store, profile if isinstance(profile, dict) else {})
@@ -1901,12 +1905,13 @@ def known_repos_of(store, profile: dict) -> list:
     return list(dict.fromkeys(list(repo_map(store)) + list(profile.get('cwd_map') or {})))
 
 
-def known_repo(store, name: str, agent: str = 'coder') -> str:
+def known_repo(store, name: str, agent: str = '') -> str:
     """The repository a NAME points at - full ('northwind/ledger') or its last part ('ledger'), any case - out of
-    the SOUL.md map and the coder's checkouts; '' when it names none, or more than one."""
+    the SOUL.md map and the coding profile's checkouts; '' when it names none, or more than one."""
     want = str(name or '').strip().lower()
     if not want: return ''
-    row = store.get_agent(agent) or {}
+    from .agents import coding_role
+    row = store.get_agent(agent or coding_role(store)) or {}
     try: paths = json.loads(row.get('Config') or '{}').get('cwd_map') or {}
     except (TypeError, ValueError, AttributeError): paths = {}
     known = list(dict.fromkeys(list(repo_map(store)) + list(paths)))
@@ -1925,7 +1930,7 @@ APP = (__package__ or 'taskuary').split('.')[0]
 def our_own_repo(store, tid: int, known) -> str:
     """A task about Taskuary's own machinery belongs in Taskuary's own checkout. A scheduled report
     that failed is the plain case: it is our scheduler, our prompt, our code - and it was sent to a
-    coder in a completely unrelated repository (the owner, 2026-09-03: "It was issue with the github
+    coding agent in a completely unrelated repository (the owner, 2026-09-03: "It was issue with the github
     trending report but it says fannapp???")."""
     t = store.get_task(tid) or {}
     ours = (str(t.get('Source') or '') == 'report'
@@ -1989,7 +1994,7 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     return (known[0], 'the only repository there is') if len(known) == 1 else (None, 'triage named no repository - choose one')
 
 
-def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, instruction: str = None,
+def start_on_task(store, tid: int, agent: str = '', model: str = None, instruction: str = None,
                   actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None,
                   brain: str = None, instruction_theirs: bool = False) -> dict:
     """Put a CLI on a task, in a REAL terminal - the only way an agent starts work here. An
@@ -2014,8 +2019,9 @@ def start_on_task(store, tid: int, agent: str = 'coder', model: str = None, inst
     # a saved conversation belongs to the CLI that held it: a backup harness handed an id it has
     # never heard of would either refuse to start or quietly begin a blank session under its name
     if resume: chain = chain[:1]
+    agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
     row = store.get_agent(agent or '')
-    if not row: raise ValueError(f'unknown agent: {agent}')
+    if not row: raise ValueError(f'unknown agent: {agent}' if agent else 'no coding profile is set up - add one under Settings > Agents')
     term = repo = why = None
     chosen = None
     last_error = None
@@ -2103,8 +2109,8 @@ _PARKED = re.compile(r'shift\+tab to cycle|\? for shortcuts|bypass permissions o
 # its keys, and it is the one thing that outranks "working" within a line: Claude draws
 # "Enter to select - Tab/Arrow keys to navigate - Esc to cancel" under its options, and the cancel
 # there is the way out of the QUESTION, not a turn in flight the way "esc to interrupt" is. Working
-# won that line, so a coder parked on a choice read as busy on every surface at once (the owner,
-# 2026-09-17: "why does coder say is working, when it's waiting for answer?"). The chooser's own layout counts too - the
+# won that line, so an agent parked on a choice read as busy on every surface at once (the owner,
+# 2026-09-17: why did the agent say it was working when it was waiting for an answer?). The chooser's own layout counts too - the
 # selection cursor standing on a numbered option ("❯ 1. Yes") is drawn by the CLI, never typed by the agent - but the
 # "Do you want to proceed?" above it is prose and decides nothing (2026-10-11).
 _ASKING = re.compile(r'enter to (confirm|select)|(tab|arrow)[\w/ ]*keys? to navigate|[↑↓]+\s*to (select|navigate|choose)|'
@@ -2399,9 +2405,9 @@ def transcript_for(store, task_id) -> tuple:
         text = harvest(t)
         # a session that has printed nothing yet (just opened, or spawn failed) must not shadow
         # the FILED transcript of the session that actually did the work
-        if text.strip(): return text, (t.agent or 'coder'), t.sid
+        if text.strip(): return text, (t.agent or 'agent'), t.sid
     row = store.last_transcript(task_id) or {}
-    return (row.get('Text') or ''), (row.get('Agent') or 'coder'), row.get('Sid')
+    return (row.get('Text') or ''), (row.get('Agent') or 'agent'), row.get('Sid')
 
 
 def live_sessions(tail=3, details=True):

@@ -31,7 +31,7 @@ export const canRevealTerminal = (readySeen, pendingWrites, lifted = false) => !
 
 // ConPTY keeps its viewport TOP-anchored when the pty grows: the cursor stays on its row and the
 // new rows below are blank. xterm's default does the opposite - it pulls scrollback back into the
-// viewport and moves the cursor down with it. A triage-started coder opens at the server's 32x110,
+// viewport and moves the cursor down with it. A triage-started coding agent opens at the server's 32x110,
 // the task page then fits ~60 rows, and the CLI's next absolute cursor move (row 32, where ConPTY
 // still is) lands mid-pane over lines the pane already showed: "two frames at once" (2026-09-18).
 // xterm's windowsPty option switches its grow to ConPTY's model. The server says which pty it is

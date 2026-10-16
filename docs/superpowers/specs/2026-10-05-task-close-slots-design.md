@@ -9,7 +9,7 @@ A task has exactly one way to end, and it is implied by where it came from: a ma
 to its sender, a pull request by merging it, an issue by closing it, a report by its findings. An ask
 whose result is several messages to several people has nowhere to live:
 
-- the agent's only door for an answer, `coder.agent_reply`, writes ONE review, addressed to the message
+- the agent's only door for an answer, `wrapup.agent_reply`, writes ONE review, addressed to the message
   the task came from - and refuses outright on work the owner typed ("there is no one to reply to");
 - `store.pending_review` / `held_review` are `LIMIT 1`, and the task page shows the newest pending reply
   only (`taskLifecycle.pendingReplyReview`);
@@ -57,7 +57,7 @@ second closes the task, from every door"). Slots are the same pattern:
   then runs the same check. The last one sent closes the task.
 - Rejecting a slot's draft ticks the slot as dropped and runs the same check, like `_playbook_decided`.
 - The owner's Done closes everything, as today (done ticks every box; pending drafts are superseded).
-- `coder.finish` does NOT pass through `closed_out` when nobody is behind the task: it sets `done` directly
+- `wrapup.finish` does NOT pass through `closed_out` when nobody is behind the task: it sets `done` directly
   (`'waiting' if (mid or due) else 'done'`), and `done` supersedes every pending draft. Open slots count
   like `due` there - the run ends `waiting`, never `done`. That one condition is the only change to `finish`.
 - The checklist's non-owner cap (12 items) covers slots too - plenty for this shape; not raised.
@@ -69,7 +69,7 @@ second closes the task, from every door"). Slots are the same pattern:
 | triage, per message | the verdict gains `outputs: [{to, about}]` (nullable in `verdict_schema`, one line in `TASK_FIELDS`), answered only when the message asks the owner to send something to OTHER people. A reply to the sender stays implied and is never an output. `ingest` writes them as slot items beside the checklist it already writes. |
 | the assistant, creating | the hand-made task reader (`triage.py` ~464, which already returns `summary` + `checklist` for typed work) also returns `outputs`; `concierge.handoff_task` writes them as slots. "Draft four emails to..." shows four slots on the card at once - a wrong count or recipient is fixed before work starts. |
 | the assistant, editing | one new operation `task.checklist` (add, reword, remove an item or slot) in `operations.KINDS`, running the page's own `PUT /api/tasks/{id}/checklist` handler in `server._run_operation`. |
-| the agent | `taskuary --draft --to X [--subject S] [--slot ID]` (+ `--draft-file`) and a `[[TASKUARY-DRAFT to=... subject=...]]` block in the general chat, both reaching a new `coder.agent_draft`: fills the slot named by id, else the open slot whose `to` matches, else ADDS a slot and says so in a comment. The draft is a pending `draft_reply` review with `Deliver {channel:'email', to, subject}`, `DraftBy agent:<name>`, `TaskId` set - the same row `outbox.compose` and `deliver_findings` already file, approved and sent by the same `verdicts.decide` -> `outbound.send_out`. `agent_reply` is unchanged. |
+| the agent | `taskuary --draft --to X [--subject S] [--slot ID]` (+ `--draft-file`) and a `[[TASKUARY-DRAFT to=... subject=...]]` block in the general chat, both reaching a new `wrapup.agent_draft`: fills the slot named by id, else the open slot whose `to` matches, else ADDS a slot and says so in a comment. The draft is a pending `draft_reply` review with `Deliver {channel:'email', to, subject}`, `DraftBy agent:<name>`, `TaskId` set - the same row `outbox.compose` and `deliver_findings` already file, approved and sent by the same `verdicts.decide` -> `outbound.send_out`. `agent_reply` is unchanged. |
 
 The kind list is validated in code; the model only picks from it (no word lists).
 
@@ -87,7 +87,7 @@ The kind list is validated in code; the model only picks from it (no word lists)
 ## Not in this spec
 
 - Triage REPLACING a source's default close ("forward to Erin instead of replying"). That is the step that
-  moves `coder.finish`'s cascade into data; it is a follow-up, not needed for any shape above.
+  moves `wrapup.finish`'s cascade into data; it is a follow-up, not needed for any shape above.
 - Kinds beyond `email` (file, setting, wait_for).
 - Remembering asks, reporting back to the door that asked, "tell me when it's finished", wake-ups - spec 2.
 - A nudge to an agent that stopped with slots unfilled - spec 2 (it is part of "follow up").

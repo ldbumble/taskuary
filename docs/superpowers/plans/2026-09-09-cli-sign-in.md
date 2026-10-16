@@ -101,7 +101,7 @@ class TableTests(unittest.TestCase):
         self.assertEqual(clilogin.RECIPES['gemini'], {'args': [], 'type': ''})
 
     def test_a_sign_in_ends_the_way_a_setup_task_ends(self):
-        """No report, no proposals, no reply draft - coder.wrap routes Kind='setup' to this."""
+        """No report, no proposals, no reply draft - wrapup.wrap routes Kind='setup' to this."""
         self.assertEqual(clilogin.KIND, aisetup.KIND)
         self.assertIs(clilogin.finish, aisetup.finish)
 
@@ -134,7 +134,7 @@ seconds ago has no credentials, so the wizard's Add & test fails - and `agents.s
 told the owner to "open a terminal", about an app that has had a real interactive pty all along.
 
 A sign-in IS a setup task, for the reasons aisetup already argues: the owner types secrets into
-it, so nothing is filed on the task; Done is a plain close (coder.wrap routes Kind='setup' to
+it, so nothing is filed on the task; Done is a plain close (wrapup.wrap routes Kind='setup' to
 aisetup.finish); and it belongs on the Board, because an agent working is an agent working
 wherever it started.
 

@@ -111,8 +111,8 @@ class AppAtWorkTests(unittest.TestCase):
 
     def test_agents_now_names_the_task_and_what_the_session_is_asking(self):
         s = world()
-        live = [{'taskId': 1, 'agent': 'coder', 'cli': 'claude', 'started': '2026-09-24 09:00', 'phase': 'parked',
-                 'line': 'coder asked you: which branch?', 'request': {'text': 'which branch?'}}]
+        live = [{'taskId': 1, 'agent': 'coding', 'cli': 'claude', 'started': '2026-09-24 09:00', 'phase': 'parked',
+                 'line': 'coding asked you: which branch?', 'request': {'text': 'which branch?'}}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             out = read(s, 'agents.now')
             self.assertIn('TQ-0001', out); self.assertIn('which branch?', out); self.assertIn('claude', out)
@@ -158,7 +158,7 @@ class AppAtWorkTests(unittest.TestCase):
     def test_activity_list_keeps_the_owner_and_the_agents_apart(self):
         s = world()
         s.audit('task', 2, 'close_from_assistant', 'owner')
-        s.audit('lore', 5, 'post', 'coder', actor_type='agent')
+        s.audit('lore', 5, 'post', 'coding', actor_type='agent')
         out = read(s, 'activity.list')
         self.assertIn('you: 1 x task close from assistant', out); self.assertIn('agents: 1 x lore post', out)
         self.assertNotIn('lore post', read(s, 'activity.list', who='you'))
@@ -167,7 +167,7 @@ class AppAtWorkTests(unittest.TestCase):
         import pathlib, tempfile
         s = world()
         self.assertIn('Nothing is failing', read(s, 'errors.list'))
-        rid = s.start_run(1, 'coder', 'fix it', 't')
+        rid = s.start_run(1, 'coding', 'fix it', 't')
         s.update_run(rid, {'Status': 'error', 'LastError': 'the checkout is dirty'}, finished=True)
         s.add_report_run(1, {'at': '2099-01-01 00:00:00', 'title': 'Nightly export check', 'failed': True, 'error': 'HTTP 500'})
         # a log of its own: the real one may be held open by the app's logger, and Windows will not let go of it

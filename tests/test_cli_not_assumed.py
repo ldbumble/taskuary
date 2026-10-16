@@ -16,22 +16,22 @@ class RemoveRemovesTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
         self.cfg = {**copy.deepcopy(server.cfg), 'cli_connections': {'claude': dict(CLAUDE)},
-                    'agents': {'coder': {'provider': 'cli:claude', 'kind': 'coding'}, 'analyst': {'provider': 'cli:claude', 'kind': 'general'}}}
+                    'agents': {'coding': {'provider': 'cli:claude', 'kind': 'coding'}, 'analyst': {'provider': 'cli:claude', 'kind': 'general'}}}
         for p in (mock.patch.object(server, 'store', self.s), mock.patch.object(server, 'cfg', self.cfg), mock.patch.object(config, 'save')):
             p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
 
     def test_profiles_on_it_are_named_first_then_detached_never_moved(self):
         rows = self.c.get('/api/cli/connections').json()['data']
-        self.assertEqual(next(r for r in rows if r['name'] == 'claude')['used_by'], ['coder', 'analyst'])
+        self.assertEqual(next(r for r in rows if r['name'] == 'claude')['used_by'], ['coding', 'analyst'])
         self.assertEqual(self.c.delete('/api/cli/connections/claude').status_code, 409)
         r = self.c.delete('/api/cli/connections/claude?detach=1')
-        self.assertEqual((r.status_code, r.json()['detached']), (200, ['coder', 'analyst']), r.text)
+        self.assertEqual((r.status_code, r.json()['detached']), (200, ['coding', 'analyst']), r.text)
         self.assertNotIn('claude', self.cfg['cli_connections'])
-        self.assertNotIn('provider', self.cfg['agents']['coder'])
+        self.assertNotIn('provider', self.cfg['agents']['coding'])
 
     def test_a_profile_on_a_cli_that_is_gone_never_stops_the_app(self):
-        cfg = {'cli_connections': {}, 'agents': {'coder': {'provider': 'cli:claude', 'kind': 'coding'}}}
+        cfg = {'cli_connections': {}, 'agents': {'coding': {'provider': 'cli:claude', 'kind': 'coding'}}}
         cli_connections.sync(cfg, self.s)                       # "CLI connection 'claude' is not configured" stopped every start
 
 

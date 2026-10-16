@@ -290,7 +290,7 @@ class ProofTests(unittest.TestCase):
     def test_gather_states_the_gaps(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'PTO rounding', 'Kind': 'coding', 'Status': 'waiting'}, 't')
-        rid = s.start_run(tid, 'coder', 'fix it', 'owner')
+        rid = s.start_run(tid, 'coding', 'fix it', 'owner')
         s.update_run(rid, {'Status': 'done', 'DiffText': DIFF}, finished=True)
         with mock.patch.object(terminal, 'transcript_for', return_value=('12 passed in 3s', 'claude', 'sid')):
             p = proof.gather(s, tid)

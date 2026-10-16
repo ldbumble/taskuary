@@ -73,7 +73,7 @@ def _blocks_reply(store, tid: int) -> list:
     return out
 
 
-def _blocks_coder(store, tid: int) -> list:
+def _blocks_coding(store, tid: int) -> list:
     """The coding agent gets ONE typed line, not a system/user pair - so the map is its parts."""
     from . import terminal
     from .agents import memory_block
@@ -86,7 +86,7 @@ def _blocks_coder(store, tid: int) -> list:
             ("this source's standing instruction", 'the connector card (GitHub PR/issue rules, or task_prompt)',
              source_rules(store, m) if m else ''),
             ('your document', 'SOUL.md (flattened, addresses stripped)', ' '.join((store.doc('soul') or '').split())[:600]),
-            ('the coder rules', 'CODER.md (flattened)', terminal.rules_text(store)[:600]),
+            ('the coding rules', 'CODING.md (flattened)', terminal.rules_text(store)[:600]),
             ('standing notes for this thread', 'memory table (agents.memory_block)', memory_block(store, msgs)),
             ('what to do, and what not to go looking for', 'terminal.seed_text (code)', 'see the whole prompt above')]
     return [b for b in out if b[0] is None or b[2]]
@@ -130,7 +130,7 @@ def render(store, message_id: int = None, task_id: int = None, width: int = 96) 
                 _blocks_reply(store, tid))
         section(f'3. the coding agent - opening prompt on {task_ref(tid)}',
                 'typed into the CLI session as ONE line. Not a system/user pair: a session prompt.',
-                _blocks_coder(store, tid))
+                _blocks_coding(store, tid))
     else:
         section('2. the reply writer', 'no task with messages on this machine yet', [])
     return '\n'.join(lines)

@@ -8,7 +8,7 @@ from taskuary.store import MemoryStore
 
 
 class Live:
-    def __init__(self, sid='s1'): self.sid, self.alive, self.agent, self.label, self.mode = sid, True, 'coder', 'coder', 'terminal'
+    def __init__(self, sid='s1'): self.sid, self.alive, self.agent, self.label, self.mode = sid, True, 'coding', 'coding', 'terminal'
 
 
 class TaskControls(unittest.TestCase):
@@ -73,7 +73,7 @@ class TaskControls(unittest.TestCase):
         error - pointing at a task menu the card redesign removed - and no chooser (live,
         2026-09-22, TQ-0666)."""
         tid = self.s.create_task({'Title': 'Work', 'Kind': 'coding'}, 'owner')
-        self.s.upsert_agent('coder', 'coding', 'cli', '{}')
+        self.s.upsert_agent('coding', 'coding', 'cli', '{}')
         why = 'I could not tell which checkout this belongs in, and guessing would put an agent in C:/ledger.'
         with mock.patch.object(server.hub_term, 'session_for', return_value=None), \
              mock.patch.object(server.hub_term, 'start_on_task', side_effect=ValueError(why)):

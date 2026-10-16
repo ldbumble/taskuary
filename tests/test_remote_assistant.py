@@ -20,8 +20,8 @@ TG_CHAT = '900100'
 
 def armed_store(channel='whatsapp', chat=JID, on='1'):
     store = MemoryStore()
-    store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): store.set_setting(k, '0', 't')
+    store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): store.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     cid = store.get_connector_by_type(channel)['ConnectorId']
     store.save_connector({'ConnectorId': cid, 'Active': 1, 'Roles': 'trigger,tool', 'Secret': 'tok',
@@ -166,7 +166,7 @@ class WordsInsteadOfButtonsTests(unittest.TestCase):
     def test_a_report_wears_the_report_mark_and_a_finished_agent_its_own(self):
         report = {'say': 'Process Error Check - 0 rows landed 8 min ago.', 'item': {'lane': 'report', 'kind': 'report'}}
         self.assertTrue(remote_assistant.turn_text(report).startswith('📄 Process Error Check'))
-        done = {'say': 'coder finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
+        done = {'say': 'coding finished TQ-0491.', 'item': {'lane': 'report', 'kind': 'agentdone'}}
         self.assertTrue(remote_assistant.turn_text(done).startswith('✅ agent finished'), 'the kind outranks the lane')
 
     def test_an_fyi_batch_is_its_items_one_per_line_and_no_summary(self):
@@ -431,7 +431,7 @@ class HandoffTests(unittest.TestCase):
 class InterruptionsReachThePhoneTests(unittest.TestCase):
     """The desktop's by-the-way strip is on the tab the handoff locked - the wrong place to raise
     an agent's question (the owner, 2026-09-07)."""
-    def pile(self, key='agent:tq412', text='coder asked you something', ref='TQ-0412'):
+    def pile(self, key='agent:tq412', text='coding asked you something', ref='TQ-0412'):
         return {'items': [{'key': key, 'ref': ref}],
                 'alerts': [{'key': f'alert:{key}', 'item': key, 'kind': 'agent', 'text': text}]}
 
@@ -448,7 +448,7 @@ class InterruptionsReachThePhoneTests(unittest.TestCase):
             self.assertEqual(remote_assistant.push_alerts(store, force=True), 0)     # said once per handoff
         sent = send.call_args.args[2]
         self.assertIn('By the way', sent)
-        self.assertIn('coder asked you something (TQ-0412)', sent)
+        self.assertIn('coding asked you something (TQ-0412)', sent)
         self.assertIn('Say TQ-0412 to take it now', sent)                            # a ref lookup() can find
         rows = general.chat_rows(store, general.dock_task(store)[0]['TaskId'])
         self.assertTrue(any('By the way' in (r['Body'] or '') for r in rows))        # answerable next turn

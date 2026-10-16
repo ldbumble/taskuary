@@ -271,9 +271,9 @@ _UNAVAILABLE = re.compile(
 def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
     """Taskuary opens the CLI's own setup itself now (clisetup.py), so this stops sending people away.
 
-    The name that arrives here is the PROFILE's - every install ships one called `coder` - so the
+    The name that arrives here is the PROFILE's - every install ships one called `coding` - so the
     CLI is read off the command it runs, which is the rule cliinstall.recipe_for exists for. Told
-    the profile name, _LOGIN_HOW.get('coder') missed every time and always had."""
+    the profile name, _LOGIN_HOW.get('coding') missed every time and always had."""
     from . import cliinstall
     cli = cliinstall.recipe_for(cmd) or name
     how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
@@ -458,31 +458,42 @@ def runs_here(profile: dict) -> bool:
 
 
 def agent_row(store, name: str) -> dict | None:
-    """The row a `cli:<name>` pick runs: the worker profile of that name, else the CLI CONNECTION of
-    that name. adopt_installed connects every installed CLI and mints no worker for it, so codex,
-    copilot and qwen sat connected while the chat's picker - which only walked profiles - offered
-    claude alone (the owner, 2026-09-24: "why only claude cli? where are the rest"). A connection
-    is a brain in its own right; this is the one place a pick naming one becomes something to run."""
-    row = store.get_agent(name)
-    if row or not name: return row
+    """The row a `cli:<name>` pick runs. A BRAIN IS A CLI TOOL OR AN AI CONNECTION, NEVER A PROFILE (the owner, 2026-10-15:
+    "there is no such profile or brain.. it's models or cli tools only"): `cli:claude` is the Claude Code connection, whatever
+    profiles exist. A profile name here is a pick saved before brains named tools (`cli:<profile>`) - still run, by its row, so an
+    old chat keeps working until migrate_brain_settings rewrites it."""
+    if not name: return None
     from . import config
     from .cli_connections import with_defaults
     conn = (config.load().get('cli_connections') or {}).get(str(name))
-    return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(with_defaults(conn))} if conn else None
+    if conn: return {'Name': name, 'Kind': 'general', 'Runner': 'cli', 'Config': json.dumps(with_defaults(conn))}
+    return store.get_agent(name)
 
 
-def connection_brains(store) -> list[tuple[str, dict]]:
-    """(key, command) for each connected CLI that no worker profile already runs - the brains
-    agent_row resolves. Installed or not: the pickers decide whether that matters."""
+def connection_brains(store, cfg: dict = None) -> list[tuple[str, dict]]:
+    """(key, command) for every connected CLI - the CLI brains, one per tool. Installed or not: the pickers decide whether
+    that matters. Profiles are not here: a profile is instructions layered on whichever brain runs it."""
     from . import config
     from .cli_connections import with_defaults
-    covered = {cli_of(json.loads(r.get('Config') or '{}'), r['Name']) for r in store.list_agents()}
-    out = []
-    for key, conn in (config.load().get('cli_connections') or {}).items():
-        full = with_defaults(conn)
-        if store.get_agent(key) or cli_of(full, key) in covered: continue
-        covered.add(cli_of(full, key)); out.append((key, full))
-    return out
+    return [(key, with_defaults(conn)) for key, conn in ((config.load() if cfg is None else cfg).get('cli_connections') or {}).items()]
+
+
+def brain_key(store, pick: str, cfg: dict = None) -> str:
+    """The CLI tool a `cli:` pick names - the connection key. A legacy pick naming a profile (`cli:<profile>`) is read as the tool
+    that profile ran on, so nothing saved before brains named tools is lost."""
+    name = str(pick or '')[4:] if str(pick or '').startswith('cli:') else str(pick or '')
+    from . import config
+    from .cli_connections import cli_key
+    cfg = config.load() if cfg is None else cfg
+    if not name or name in (cfg.get('cli_connections') or {}): return name
+    prof = (cfg.get('agents') or {}).get(name)
+    if prof is None:
+        row = store.get_agent(name)
+        try: prof = json.loads(row.get('Config') or '{}') if row else None
+        except ValueError: prof = {}
+    if prof is None: return name
+    provider = str(prof.get('provider') or '')
+    return provider[4:] if provider.startswith('cli:') else cli_key(prof.get('cmd') or '') or name
 
 
 def availability_failure(error) -> bool:
@@ -512,35 +523,16 @@ def cli_of(profile: dict, fallback: str = '') -> str:
 
 
 def cli_agent_options(store, preferred=(), coding_only: bool = False) -> list[dict]:
-    """One representative worker per CLI, labelled by the CLI rather than the profile.
-
-    Runtime APIs still carry a worker name because its model is stored on that
-    profile. Pickers, however, ask which tool runs, so five profiles backed by
-    Claude must be one ``claude`` choice rather than five apparent providers.
-    """
-    rows = list(store.list_agents())
-    if coding_only:
-        # ``cli`` is the legacy Kind used by older databases for coding workers.
-        rows = [r for r in rows if str(r.get('Kind') or '').lower() in ('coding', 'cli')]
-    order = {str(name): i for i, name in enumerate(preferred or ()) if name}
-    rows.sort(key=lambda r: (order.get(str(r.get('Name')), len(order)),
-                             str(r.get('Kind') or '').lower() not in ('coding', 'cli')))
-    out, seen = [], set()
-    for row in rows:
-        name = str(row.get('Name') or '').strip()
-        if not name: continue
-        try: profile = json.loads(row.get('Config') or '{}')
-        except ValueError: profile = {}
-        cli = cli_of(profile, name)
-        if cli in seen: continue
-        seen.add(cli)
-        out.append({'value': name, 'label': cli, 'cli': cli,
-                    'ready': runs_here(profile), 'profile': name})
-    return out
+    """The CLI brains a picker offers: one per connected CLI tool, its value the tool's own key (`claude`, `codex`) - never a
+    profile, which is instructions and runs on whichever brain is chosen (the owner, 2026-10-15). `preferred` keys lead;
+    `coding_only` is kept for its callers - every CLI tool can code."""
+    order = {str(k): i for i, k in enumerate(preferred or ()) if k}
+    rows = sorted(connection_brains(store), key=lambda kc: (order.get(kc[0], len(order)), ))
+    return [{'value': key, 'label': key, 'cli': key, 'ready': runs_here(conn)} for key, conn in rows]
 
 
-# The workers Taskuary ships, besides `coder`. A profile IS an agent row and its rules document is
-# the `doc` row of the same name - which is what `coder` already was, so this adds no new storage and
+# The workers Taskuary ships, besides `coding`. A profile IS an agent row and its rules document is
+# the `doc` row of the same name - which is what the coding profile already was, so this adds no new storage and
 # no migration. `purpose` is the one line triage is shown when it picks; `kind` is deliberately never
 # 'coding', because that is what the coding-specific paths key on.
 DEFAULT_PROFILES = {
@@ -554,7 +546,7 @@ DEFAULT_PROFILES = {
     'coordinator': {'kind': 'coordination', 'purpose': 'meetings, chasing people, scheduling and follow-ups'},
     'marketer':   {'kind': 'marketing', 'purpose': 'copy, positioning and campaigns - drafts, never sends'},
     'trader':     {'kind': 'markets', 'purpose': 'markets and positions - proposes, never places an order'},
-    # the GENERAL assistant's own profile, like CODER.md for coding (the owner, 2026-10-14): general work triage gives no other
+    # the GENERAL assistant's own profile, like CODING.md for coding (the owner, 2026-10-14): general work triage gives no other
     # role runs on ASSISTANT.md - it ran on AGENT.md alone, the one worker with no profile of its own
     'assistant':  {'kind': 'general', 'purpose': 'general work no other profile owns - writing, planning, follow-ups, looking '
                                                  'things up in our connections'},
@@ -562,13 +554,9 @@ DEFAULT_PROFILES = {
 
 
 def cli_inheritance(cfg: dict) -> dict:
-    """The coding agent's CLI setup - command AND flags - for a new general profile to start from.
-    Empty when no coding profile has one yet. Shared by the shipped roles and an imported skill, so a
-    worker made either way is runnable and editable on the Agents page the same day."""
-    have = cfg.get('agents') or {}
-    base = have.get('coder') or next((p for p in have.values() if p.get('kind', 'coding') == 'coding'), None)
-    if not ((base or {}).get('cmd') or (base or {}).get('provider')): return {}
-    return {k: v for k, v in base.items() if k in ('provider', 'cmd', 'args', 'resume', 'resume_args', 'timeout')}
+    """What a new profile inherits of a CLI: nothing. A profile is instructions layered on whichever brain runs its work (the
+    owner, 2026-10-15) - its row takes that brain's command when it is synced (cli_connections.sync). Kept for its callers."""
+    return {}
 
 
 def seed_profiles(cfg: dict) -> list:
@@ -578,44 +566,40 @@ def seed_profiles(cfg: dict) -> list:
     It goes in config.toml rather than straight into the database because that is what the Agents page
     reads and writes (`put_agent` saves both): a profile seeded only into the database routed work and
     seeded documents while being invisible and un-editable on the page that exists to configure it.
-
-    Each one inherits the coding agent's whole CLI setup - command AND flags - not just its name.
-    `cmd` falls back to the agent's own NAME in several places, so a profile with none would try to run
-    a command called `researcher`; and a claude profile without --dangerously-skip-permissions hangs
-    headless, which is exactly the trap the presets exist to avoid."""
+    A profile carries no CLI: it runs on the brain its work uses."""
     have = cfg.setdefault('agents', {})
-    keep = cli_inheritance(cfg)
-    if not keep: return []
     added = []
     for name, prof in DEFAULT_PROFILES.items():
         if name in have: continue
-        have[name] = {**keep, 'kind': prof['kind'], 'purpose': prof['purpose']}
+        have[name] = {'kind': prof['kind'], 'purpose': prof['purpose']}
         added.append(name)
     return added
 
 
 def drop_cli_clones(cfg: dict, store) -> list:
     """Remove the coding workers named after a CLI - codex, copilot, devin, opencode... - leaving
-    `coder`. Returns the names dropped, so the caller knows whether to save.
+    the one coding profile. Returns the names dropped, so the caller knows whether to save.
 
-    There is ONE coding role and one CODER.md; a brain is chosen per session from the CLI
-    connections. An older setup minted a coding worker per installed CLI, each pointing at CODER.md
-    and differing only in which CLI ran it. That minting stopped on 2026-09-14 (adopt_installed's
+    There is ONE coding profile and one rules document; a brain is chosen per session from the CLI
+    connections. An older setup minted a coding worker per installed CLI, each pointing at the shared
+    document and differing only in which CLI ran it. That minting stopped on 2026-09-14 (adopt_installed's
     docstring), but the rows it had already written stayed on the Manage profiles page - five
-    "coders" for one document (the owner, 2026-09-17: "there should be one coder.md for all cli's").
+    profiles for one document (the owner, 2026-09-17: one coding document for every CLI).
 
     Only a row that IS such a clone goes: coding kind, named after a known CLI, using the shared
     document. A coding profile with its own name or its own rules document is the owner's and stays.
-    A clone's cwd_map (repository -> checkout) is folded into coder's so no path mapping is lost."""
+    A clone's cwd_map (repository -> checkout) is folded into the coding profile's so no path mapping is lost."""
     from .clis import KNOWN
     from .cli_connections import cli_key
     clis = {k['name'] for k in KNOWN} | {cli_key(k['cmd']) for k in KNOWN}
     have = cfg.get('agents') or {}
+    shared = ('coding', 'coder')                       # the shared document, by its name now and before
     def is_clone(name, prof):
-        if name == 'coder' or name not in clis: return False
+        if name not in clis: return False
         if str(prof.get('kind') or 'coding').lower() not in CODING_KINDS: return False
-        return str(prof.get('rules_doc') or 'coder') == 'coder'
+        return str(prof.get('rules_doc') or 'coding') in shared
     rows = {a['Name']: a for a in store.list_agents(active_only=False)}
+    home = next((n for n, p in have.items() if not is_clone(n, p) and str(p.get('kind') or 'coding').lower() in CODING_KINDS), None)
     gone = []
     for name in sorted(set(have) | set(rows)):
         prof = have.get(name)
@@ -624,14 +608,11 @@ def drop_cli_clones(cfg: dict, store) -> list:
             except ValueError: prof = {}
             prof.setdefault('kind', rows[name].get('Kind') or 'coding')
         if not is_clone(name, prof): continue
-        if prof.get('cwd_map') and 'coder' in have:
-            have['coder'].setdefault('cwd_map', {})
-            have['coder']['cwd_map'] = {**prof['cwd_map'], **have['coder']['cwd_map']}
+        if prof.get('cwd_map') and home:
+            have[home]['cwd_map'] = {**prof['cwd_map'], **(have[home].get('cwd_map') or {})}
         have.pop(name, None)
         if name in rows: store.delete_agent(name)
         gone.append(name)
-    if gone and str(store.get_setting('default_agent') or '') in gone:
-        store.set_setting('default_agent', 'coder', 'system')      # the role, which is what that setting names now
     return gone
 
 
@@ -649,7 +630,7 @@ def profile_document(store, name: str, prof: dict = None) -> str:
     explicit = str(prof.get('rules_doc') or '').strip()
     if explicit and re.fullmatch(r'[a-z0-9][a-z0-9_-]*', explicit): return explicit
     kind = prof.get('kind') or DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind')
-    return 'coder' if kind == 'coding' else name
+    return 'coding' if kind == 'coding' else name           # the coding rules, CODING.md, shared by every coding profile
 
 
 def profile_template(store, name: str) -> str:
@@ -703,13 +684,13 @@ def roster_line(store, a: dict) -> tuple:
     """(line, reason, code) for one agent row: the EXACT line triage reads for it, or '' plus why
     there is none. roster() is assembled from this and the Docs page shows it per profile, so "does
     triage see this worker" has one implementation. It used to have two - this rule here and a count
-    of `triage_enabled` in JSX - and the JSX one said "on the roster" for CODER.md, which triage can
+    of `triage_enabled` in JSX - and the JSX one said "on the roster" for CODING.md, which triage can
     never choose. The router reads this ONE LINE per worker; the session it picks gets the document.
 
     `code` is the same answer in a word a UI can switch on, because the four of these are NOT one
     situation and a chip that called them all "not routed" said the opposite of the truth for the
-    commonest: every coding task goes to CODER.md, the router simply is not what sends it there
-    (the owner, 2026-09-17: "why does coder.md say not routed? it is but default for coding tasks").
+    commonest: every coding task goes to CODING.md, the router simply is not what sends it there
+    (the owner, 2026-09-17: the coding document is not routed - it is the default for every coding task).
     Reading the prose to tell them apart would be a second implementation of this rule.
     """
     if not a.get('Active', 1): return '', 'switched off', 'off'
@@ -725,14 +706,19 @@ def roster_line(store, a: dict) -> tuple:
     return f"- {a['Name']}: {purpose}", '', ''
 
 
-def default_agent(store) -> str:
-    """Which agent a task goes to when nobody picked one.
+def coding_role(store) -> str:
+    """The profile a coding task runs under: the one whose KIND is coding, found by its kind and never by a name (the owner,
+    2026-10-15: "in triage if task is coding then map to profile coding"; a coding profile is just a profile). Triage does
+    not choose it - `kind: coding` names the job. With several, the shipped `coding`, else the first by name; '' with none, and a session then runs on the brain with the base rules alone. Which CLI runs it is the brain's question (default_brain)."""
+    rows = sorted((a for a in store.list_agents() if str(a.get('Kind') or '').lower() in CODING_KINDS and a.get('Active', 1)),
+                  key=lambda a: (a['Name'] != 'coding', a['Name']))
+    return rows[0]['Name'] if rows else ''
 
-    Availability is deliberately NOT resolved here. A PATH probe is only a hint and can change
-    while Taskuary is running; using it to rewrite this answer made ``coder`` (Claude) silently
-    become Copilot. The terminal's bounded failover road tries backups after the chosen CLI
-    actually refuses to start, which is the only trustworthy time to switch providers."""
-    return str(store.get_setting('default_agent') or 'coder').strip()
+
+def default_agent(store) -> str:
+    """The profile a task runs under when nobody picked one - the coding profile (coding_role). Kept as a name for its callers;
+    it no longer reads a setting, and never answers with a brain."""
+    return coding_role(store)
 
 
 def default_brain(store) -> str:
@@ -743,15 +729,12 @@ def default_brain(store) -> str:
     not been migrated keeps running exactly what it ran yesterday."""
     key = str(store.get_setting('default_brain') or '').strip()
     if key: return key
-    legacy = default_agent(store)
-    return cli_of(profiles(store).get(legacy) or {}, legacy)
+    legacy = str(store.get_setting('default_agent') or '').strip()       # an install from before brains named tools
+    return brain_key(store, f'cli:{legacy}') if legacy else next((k for k, c in connection_brains(store) if runs_here(c)), '')
 
 
 def brain_ready(store, key: str) -> bool:
-    """Does the CLI brain `key` actually start on this machine - the readiness the pickers already show
-    (cli_agent_options' `ready`), for a worker profile or a bare CLI connection alike."""
-    row = next((o for o in cli_agent_options(store) if o['cli'] == key), None)
-    if row: return bool(row['ready'])
+    """Does the CLI brain `key` actually start on this machine - the readiness the pickers show."""
     conn = dict(connection_brains(store)).get(key)
     return bool(conn) and runs_here(conn)
 
@@ -777,17 +760,16 @@ def default_pick(store) -> str:
     and otherwise gives way to an AI connector that can answer. '' when there is neither: no brain yet."""
     saved = str(store.get_setting('default_brain') or '').strip()
     key = saved or default_brain(store)
-    row = next((o for o in cli_agent_options(store, preferred=[default_agent(store)]) if o['cli'] == key), None) if key else None
-    conn = None if row or not key else dict(connection_brains(store)).get(key)
-    pick = f"cli:{row['value']}" if row else f'cli:{key}' if conn else ''
-    if pick and (row['ready'] if row else runs_here(conn)): return pick
+    brains = dict(connection_brains(store))
+    conn = brains.get(key) if key else None
+    pick = f'cli:{key}' if conn else ''
+    if pick and runs_here(conn): return pick
     if pick and saved and store.setting_writer('default_brain') != 'migration': return pick
     # ...any OTHER connected CLI that runs here: the default key is claude, and an install with only Codex (or Gemini) read
     # "no brain" over a CLI that worked - every mail awaited triage (a first-run log, 2026-10-14)
     # ...but never in place of a default the OWNER named: theirs is taken at its word, connected or not
     chosen = bool(saved) and store.setting_writer('default_brain') != 'migration'
-    other = '' if chosen else (next((f"cli:{o['value']}" for o in cli_agent_options(store) if o.get('ready')), '')
-                               or next((f'cli:{k}' for k, c in connection_brains(store) if runs_here(c)), ''))
+    other = '' if chosen else next((f'cli:{k}' for k, c in brains.items() if runs_here(c)), '')
     if other: return other
     c = ready_connector(store)
     return f"connector:{c['ConnectorId']}" if c else ''
@@ -807,7 +789,7 @@ def brain_chain(store, first: str = None, cfg: dict = None) -> list:
 
     A chain of BRAINS needs no dedupe. `agent_chain` had to skip candidates whose `cli_of` it had
     already seen, because a list of roles was really a list of brains and trying claude three times
-    under coder/researcher/analyst is not failover. Brains are distinct by construction.
+    under coding/researcher/analyst is not failover. Brains are distinct by construction.
 
     `backup_brains=*` is the resilient default: every other configured connection, in the owner's
     own order. A CSV narrows and orders it explicitly."""
@@ -840,6 +822,98 @@ def adopt_brain_setting(store) -> bool:
     return True
 
 
+BRAIN_SETTINGS = ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
+
+
+def migrate_brain_settings(store, cfg: dict = None) -> int:
+    """EVERY SAVED BRAIN NAMES A TOOL (the owner, 2026-10-15: no profile is a brain - "it's models or cli tools only").
+    A pick saved as `cli:<profile>` - the Assistant's old pick named the coding profile - becomes the tool that profile
+    ran on, `cli:claude`; a blank coding brain takes the one the legacy `default_agent` profile ran; and each saved chat's pick
+    follows, with its context key, so a chat that could resume still does. Returns how many it rewrote; a second run, none."""
+    from . import config, continuity
+    cfg = config.load() if cfg is None else cfg
+    conns = cfg.get('cli_connections') or {}
+    def fix(v):
+        out = []
+        for p in str(v or '').split(','):
+            k = brain_key(store, p.strip(), cfg) if p.strip().startswith('cli:') else ''
+            out.append(f'cli:{k}' if k in conns and p.strip()[4:] not in conns else p)
+        return ','.join(out)
+    n = 0
+    for k in BRAIN_SETTINGS:
+        v = str(store.get_setting(k) or '')
+        if v and (new := fix(v)) != v: store.set_setting(k, new, 'migration'); n += 1
+    if not str(store.get_setting('default_brain') or '').strip() and (key := default_brain(store)) in conns:
+        store.set_setting('default_brain', key, 'migration'); n += 1
+    for row in store._rows("SELECT * FROM session_resume WHERE Pick LIKE 'cli:%'"):
+        new = fix(row['Pick'])
+        if new == row['Pick']: continue
+        live = row['ContextKey'] == continuity.context_key(store, row['Pick'], row['Model'])
+        store.save_session(row['TaskId'], new, row['Model'], row['NativeId'],
+                           continuity.context_key(store, new, row['Model']) if live else row['ContextKey'])
+        n += 1
+    return n
+
+
+def layer_profiles(cfg: dict, store) -> bool:
+    """A PROFILE IS INSTRUCTIONS LAYERED ON ANY BRAIN (the owner, 2026-10-15: "profiles have nothing to do with brains. they are
+    layered on top of any brain tool"; the coding profile is just a profile). Once, at start:
+
+    - the coding brain is named outright (default_brain) from the legacy `default_agent` profile, and that setting goes;
+    - a profile's own `provider` leaves it: one on another CLI than the default becomes that role's brain override
+      (profile_brains), so nothing runs anywhere new, and the rest simply run on the default brain;
+    - the shipped coding profile's old name becomes `coding` - its config, its row, its document (now CODING.md), the tasks and
+      transcripts that name it, the settings that do. Only when no `coding` exists yet, so an owner's own is never overwritten.
+    Returns whether config.toml changed (the caller saves it)."""
+    agents = cfg.setdefault('agents', {})
+    before = json.dumps(agents, sort_keys=True, default=str)
+    migrate_brain_settings(store, cfg)          # first: a `cli:<profile>` pick is read as its tool while that profile and its provider exist
+    if not str(store.get_setting('default_brain') or '').strip():
+        key = default_brain(store)
+        if key and key in (cfg.get('cli_connections') or {}): store.set_setting('default_brain', key, 'migration')
+    if str(store.get_setting('default_agent') or '').strip(): store.set_setting('default_agent', '', 'migration')
+    dflt = str(store.get_setting('default_brain') or '').strip()
+    try: over = json.loads(store.get_setting('profile_brains') or '{}')
+    except ValueError: over = {}
+    over = over if isinstance(over, dict) else {}
+    moved = dict(over)
+    for name, prof in agents.items():
+        provider = str(prof.pop('provider', '') or '')
+        if provider.startswith('cli:') and provider[4:] != dflt and name not in moved: moved[name] = provider[4:]
+    if 'coder' in agents and 'coding' not in agents:
+        agents['coding'] = agents.pop('coder')
+        if 'coder' in moved: moved['coding'] = moved.pop('coder')
+        _rename_coding_profile(store)
+    for prof in agents.values():
+        if str(prof.get('rules_doc') or '') == 'coder': prof['rules_doc'] = 'coding'
+    if moved != over: store.set_setting('profile_brains', json.dumps(moved) if moved else '', 'migration')
+    return json.dumps(agents, sort_keys=True, default=str) != before
+
+
+def _rename_coding_profile(store) -> None:
+    """The store half of the rename to `coding`: the row, its rules document (an edited one keeps its edits), and every place that
+    names the profile - task assignees, transcripts, settings. History included: a closed task read the old name on its card."""
+    row = store.get_agent('coder')
+    if row and not store.get_agent('coding'):
+        try: conf = json.loads(row.get('Config') or '{}')
+        except ValueError: conf = {}
+        if conf.get('rules_doc') == 'coder': conf['rules_doc'] = 'coding'
+        conf.pop('provider', None)
+        store.upsert_agent('coding', row.get('Kind') or 'coding', row.get('Runner') or 'cli', json.dumps(conf))
+        store._exec('UPDATE agent SET Active=? WHERE Name=?', (row.get('Active', 1), 'coding'))
+    store.delete_agent('coder')
+    # the store seeds an untouched CODING.md from the template when it opens - BEFORE this runs - so "already there" is not
+    # the owner's; only their own edits on either side decide, and an edited CODER.md wins over a fresh template copy
+    doc, now = store.get_doc_row('coder'), store.get_doc_row('coding')
+    if doc and (not now or now.get('UpdatedBy') == 'template'):
+        if doc.get('UpdatedBy') == 'template': ensure_profile_document(store, 'coding')     # an untouched copy takes the new template
+        else: store.save_doc('coding', doc['Content'], doc.get('UpdatedBy') or 'owner')
+    if doc: store.delete_doc('coder')
+    store._exec("UPDATE task SET Assignee='agent:coding' WHERE Assignee='agent:coder'")
+    store._exec("UPDATE transcript SET Agent='coding' WHERE Agent='coder'")
+    if str(store.get_setting('default_profile') or '') == 'coder': store.set_setting('default_profile', 'coding', 'migration')
+
+
 def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
     """The COMMAND a role's brain runs - cmd, args, resume flags, timeout, gears.
 
@@ -869,13 +943,6 @@ def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:
     return {k: full[k] for k in COMMAND_FIELDS if k in full}
 
 
-def coding_role(store) -> str:
-    """The one role a coding task takes. Triage does not choose it: `kind: coding` names the job,
-    and the job names the worker. Reads `default_agent` while that setting is still a PROFILE name;
-    step 2 of the spec splits it into a brain and this becomes the fixed 'coder'."""
-    return default_agent(store)
-
-
 def routed_role(store, kind: str, profile: str) -> str:
     """Which ROLE a verdict lands on - never which brain runs it.
 
@@ -883,7 +950,7 @@ def routed_role(store, kind: str, profile: str) -> str:
     TQ-0588 drew `copilot` and TQ-0586 drew `analyst`, and neither may reach a coding task. The
     role is still WRITTEN rather than left implied, because `Assignee` does a third job beyond
     naming a worker and seeding its document: an `agent:` prefix is what puts the row in the pipe's
-    `queued` lane - "handed to coder, not started yet" (processing_unread, processing_all). An
+    `queued` lane - "handed to an agent, not started yet" (processing_unread, processing_all). An
     unstamped coding task reads as one that needs the owner.
 
     General takes the specialist triage named, if it names a general one that exists. Naming none
@@ -912,7 +979,7 @@ def repair_role_assignees(store) -> int:
     left alone. A second run corrects nothing.
 
     CLOSED work is history, not a routing decision to fix: `transcript.Agent` says copilot or devin
-    actually worked those, and rewriting the stamp to `coder` would make the task claim otherwise.
+    actually worked those, and rewriting the stamp to the coding profile would make the task claim otherwise.
     Only tasks still open can still be dispatched, so only they are corrected."""
     role, fixed = coding_role(store), 0
     # the six search blobs this used to opt out of are gone for everyone: search runs in SQL now,

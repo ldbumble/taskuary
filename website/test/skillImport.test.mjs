@@ -172,7 +172,7 @@ test("an own profile can be deleted from Docs, and it asks first", () => {
   assert.match(docs, /<ConfirmDelete open=\{!!deleteProf\}/);
   assert.match(docs, /api\.delete\(`\/api\/agents\/\$\{encodeURIComponent\(deleteProf\)\}`\)/);
   // never for the shared coding document: its workers are removed on Manage profiles
-  assert.match(docs, /cur\.name !== "coder"/);
+  assert.match(docs, /cur\.kind !== "coding"/);
 });
 
 test("renaming out of a clash also clears replace, defensively", () => {

@@ -1,6 +1,6 @@
-# CODER.md — the coding agent's additions
+# CODING.md — the coding agent's additions
 
-Stacked on top of AGENT.md (the rules every worker runs under) for every coder run. AGENT.md says
+Stacked on top of AGENT.md (the rules every worker runs under) for every coding run. AGENT.md says
 how you work, ask, report and finish; this document adds only what is specific to working in a
 repository. The task brief is your context and John is watching the session - talk to them in it.
 

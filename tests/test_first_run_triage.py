@@ -79,6 +79,6 @@ class ChatGptSignInTests(unittest.TestCase):
              mock.patch('taskuary.chatgptauth.poll', return_value=t), mock.patch.object(server, 'brain_arrived') as arrived:
             out = TestClient(server.app).post(f'/api/connectors/{cid}/chatgpt/poll', json={'flow': 'f'}).json()
             self.assertTrue(out['adopted']); self.assertEqual(s.get_setting('triage_ai'), f'connector:{cid}'); arrived.assert_called_once()
-            s.set_setting('triage_ai', 'cli:coder', 'owner')
+            s.set_setting('triage_ai', 'cli:claude', 'owner')
             again = TestClient(server.app).post(f'/api/connectors/{cid}/chatgpt/poll', json={'flow': 'f'}).json()
-        self.assertFalse(again['adopted']); self.assertEqual(s.get_setting('triage_ai'), 'cli:coder', "the owner's choice stays")
+        self.assertFalse(again['adopted']); self.assertEqual(s.get_setting('triage_ai'), 'cli:claude', "the owner's choice stays")

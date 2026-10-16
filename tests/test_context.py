@@ -1,4 +1,4 @@
-"""The coder's context file (context.py): what the hub knows about a task, written to Taskuary's
+"""The coding agent's context file (context.py): what the hub knows about a task, written to Taskuary's
 home and pointed at from the seed - history, past work, the thread. Offline; the
 calendar is off and TASKUARY_HOME is the temp home conftest forces.
 """
@@ -6,7 +6,7 @@ import json, os, unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from taskuary import context, terminal
+from taskuary import context, terminal, wrapup
 from taskuary.store import MemoryStore
 
 ME, DANA = 'owner@ours.com', 'dana@vendor.com'
@@ -15,7 +15,7 @@ def _ago(days=0): return (datetime.now() - timedelta(days=days)).strftime('%Y-%m
 
 def _store():
     s = MemoryStore()
-    s.set_setting('calendar_enabled', '0', 't'); s.set_setting('coder_auto_enabled', '0', 't')
+    s.set_setting('calendar_enabled', '0', 't'); s.set_setting('coding_auto_enabled', '0', 't')
     return s
 
 
@@ -27,7 +27,7 @@ def _mail(s, frm, subject, body, days=3, tid=None, conv=None, status='routed'):
 def _closed(s, title, frm, report, days=20):
     tid = s.create_task({'Title': title, 'Kind': 'coding', 'Status': 'done'}, 't')
     _mail(s, frm, title, 'the original ask', days=days, tid=tid)
-    s.add_comment(tid, 'coder', 'agent', f'CODER REPORT\n{report}')
+    s.add_comment(tid, 'agent', 'agent', f'{wrapup.REPORT}\n{report}')
     s._exec('UPDATE task SET ClosedAt=? WHERE TaskId=?', (_ago(days - 1), tid))
     return tid
 
@@ -87,7 +87,7 @@ class FileTests(unittest.TestCase):
         _closed(s, 'Payroll import month wrong', DANA, 'Actions: fixed.')
         tid = s.create_task({'Title': 'Payroll import wrong again', 'Kind': 'coding'}, 't')
         _mail(s, DANA, 'Payroll import wrong again', 'Again.', days=1, tid=tid)
-        s.set_setting('coder_context_file', '0', 't')
+        s.set_setting('agent_context_file', '0', 't')
         self.assertIsNone(context.write(s, tid))
         seed = terminal.seed_text(s, tid)
         self.assertNotIn('CONTEXT FILE', seed); self.assertIn('everything known about it is above. ', seed)
@@ -105,7 +105,7 @@ class NewestFirstTests(unittest.TestCase):
                                  'BodyText': f'Mail {n}. ' + 'detail ' * 200, 'Status': 'routed'})
             s.cx.execute('UPDATE message SET CreatedAt=? WHERE MessageId=?', (reached, mid))
         for n in range(1, 13): mail(n, f'2026-10-{n:02d} 09:00:00', f'2026-10-{n:02d} 09:05:00')
-        s.add_transcript(tid, 'sid-1', 'worked it', agent='coder', ext_id='ext-1')
+        s.add_transcript(tid, 'sid-1', 'worked it', agent='coding', ext_id='ext-1')
         s.cx.execute("UPDATE transcript SET CreatedAt='2026-10-10 12:00:00' WHERE TaskId=?", (tid,))
         mail(13, '2026-10-09 18:00:00', '2026-10-13 08:00:00')                 # sent before the run, read in after it: still news
         s.cx.commit()

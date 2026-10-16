@@ -1,6 +1,6 @@
 """The latest action is the status: an agent still working is newer than the reply it drafted.
 
-A coder wrote its reply a minute into the session (coder.agent_reply takes the held draft back out as
+A coding agent wrote its reply a minute into the session (wrapup.agent_reply takes the held draft back out as
 pending) and then worked on for forty more - edits, a build. The rail said "reply ready" the whole
 time, offering to send words the work was still moving under (the owner, 2026-09-24: "it says reply
 ready but agent is still working? ... meaning the latest action is the status").
@@ -22,13 +22,13 @@ STAMP = datetime.now().replace(microsecond=0).isoformat(sep=' ')
 
 def drafted(store, *, canonical):
     tid = store.create_task({'Title': 'Budget tab missing', 'Kind': 'coding', 'Status': 'in_progress',
-                             'Assignee': 'agent:coder'}, 'triage')
+                             'Assignee': 'agent:coding'}, 'triage')
     mid = store.add_message({'TaskId': tid, 'ExternalId': 'x:budget', 'ConversationId': 'c:budget',
                              'Channel': 'email', 'Subject': 'Budget tab missing', 'FromName': 'Erin Blake',
                              'FromEmail': 'erin@northwind.example', 'SentAt': STAMP,
                              'BodyText': 'I still cannot see the budget tab.', 'Status': 'routed'})
     store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending',
-                      'DraftText': 'Your access is fixed.', 'Reason': 'coder wrote this reply in its session - approve to send'})
+                      'DraftText': 'Your access is fixed.', 'Reason': 'coding wrote this reply in its session - approve to send'})
     if canonical:
         store.reconcile_processing_membership(fixed_now=STAMP)
         store.activate_processing_reads(fixed_now=STAMP, live_state=[])
@@ -36,7 +36,7 @@ def drafted(store, *, canonical):
 
 
 def session(tid, *, waiting):
-    return [{'taskId': tid, 'sid': 's-budget', 'agent': 'coder', 'label': 'coder', 'alive': True,
+    return [{'taskId': tid, 'sid': 's-budget', 'agent': 'coding', 'label': 'coding', 'alive': True,
              'started': STAMP, 'waiting': waiting, 'idle': 0, 'tail': ['npm run build']}]
 
 

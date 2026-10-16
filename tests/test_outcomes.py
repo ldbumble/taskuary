@@ -76,12 +76,12 @@ class ResolveTests(unittest.TestCase):
 
     def test_a_stop_takes_the_owners_next_move_from_the_later_row(self):
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
-        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': True}, at=ago(hours=30))
+        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', facts={'pr': True}, at=ago(hours=30))
         outcomes.record(s, 'agent.continued', 'task', t, next_move='merge it', at=ago(hours=29))
         outcomes.resolve(s)
         r = s._one('SELECT * FROM outcome WHERE Id=?', (i,))
         self.assertEqual((r['Verdict'], r['NextMove']), ('continued', 'merge it'))
-        j = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', at=ago(days=3)); outcomes.resolve(s)
+        j = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', at=ago(days=3)); outcomes.resolve(s)
         self.assertEqual(s._one('SELECT Verdict FROM outcome WHERE Id=?', (j,))['Verdict'], 'left')
 
     def test_a_promise_is_kept_late_or_late(self):
@@ -137,11 +137,11 @@ class DoorsTests(unittest.TestCase):
 class EvidenceTests(unittest.TestCase):
     def test_resolved_rows_become_evidence_lines_with_their_ids(self):
         s = MemoryStore(); t = s.create_task({'Title': 'Export job'}, 'owner')
-        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', facts={'pr': True}, at=ago(hours=30))
+        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', facts={'pr': True}, at=ago(hours=30))
         outcomes.record(s, 'agent.continued', 'task', t, next_move='merge it', at=ago(hours=29)); outcomes.resolve(s)
         lines = outcomes.evidence(s, ago(days=30))
         self.assertTrue(lines[0].startswith(f'out{i}: ') or lines[1].startswith(f'out{i}: '))
-        self.assertTrue(any('"merge it"' in l and 'coder stopped' in l for l in lines))
+        self.assertTrue(any('"merge it"' in l and 'coding stopped' in l for l in lines))
 
     def test_reflection_gathers_the_ledger_and_the_graph_resolves_out_ids(self):
         from taskuary import learn, learnedgraph
@@ -155,7 +155,7 @@ class EvidenceTests(unittest.TestCase):
 class FixPassTests(unittest.TestCase):
     """The review's fix pass (2026-10-12): rows that would have taught reflection a false habit."""
     def _session(self, s, tid):
-        return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd='C:/x', agent='coder', label='coder', argv=['claude'], last=1.0,
+        return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd='C:/x', agent='coding', label='coding', argv=['claude'], last=1.0,
                                ext_id='', started=ago(hours=1), typed=[], files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
                                witness=SimpleNamespace(note=lambda n: None), store=s, bg={})
 
@@ -172,7 +172,7 @@ class FixPassTests(unittest.TestCase):
 
     def test_a_wordless_continue_says_so_and_invents_no_words(self):
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
-        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coder', at=ago(hours=2))
+        i = outcomes.record(s, 'agent.stopped', 'task', t, 'agent:coding', at=ago(hours=2))
         outcomes.record(s, 'agent.continued', 'task', t, next_move=None, at=ago(hours=1)); outcomes.resolve(s)
         r = s._one('SELECT * FROM outcome WHERE Id=?', (i,))
         self.assertEqual((r['Verdict'], r['NextMove']), ('continued', ''))
@@ -188,7 +188,7 @@ class FixPassTests(unittest.TestCase):
         self.assertEqual([(r['Actor'], json.loads(r['FactsJson'])['from']) for r in rows], [('owner', 'open')])
         t2 = s.create_task({'Title': 'y'}, 'owner'); concierge.close_task(s, t2, 'owner')
         self.assertEqual(len([r for r in outcomes.rows_for(s, 'task', t2) if r['Kind'] == 'task.closed']), 1)
-        t3 = s.create_task({'Title': 'z'}, 'owner'); s.update_task(t3, {'Status': 'waiting'}, 'agent:coder')   # a self-close that drafted a reply
+        t3 = s.create_task({'Title': 'z'}, 'owner'); s.update_task(t3, {'Status': 'waiting'}, 'agent:coding')   # a self-close that drafted a reply
         self.assertEqual(outcomes.rows_for(s, 'task', t3), [])
 
     def test_a_delivered_promise_is_its_own_row_not_a_close(self):

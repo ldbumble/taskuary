@@ -48,7 +48,7 @@ def test_unusable_default_fails_explicitly_without_hidden_instructions(failure):
     assert store.get_doc('counsel') == ''
 
 
-BEHAVIOUR = ['coder and setup are not the same road', 'Ignore it', 'polite request is not a question',
+BEHAVIOUR = ['coding and setup are not the same road', 'Ignore it', 'polite request is not a question',
              'take the correction', 'Never ask for a password', "the owner's own sent mail"]
 
 

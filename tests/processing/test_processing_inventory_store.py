@@ -161,11 +161,11 @@ def test_display_cache_ignores_terminal_tail_ticks_but_not_waiting_transitions(t
     task = store.create_task({'Title': 'Live worker'}, 'fixture')
     add_message(store, task=task, subject='Live worker message')
     store.reconcile_processing_membership()
-    first_worker = [{'taskId': task, 'agent': 'coder', 'waiting': False,
+    first_worker = [{'taskId': task, 'agent': 'coding', 'waiting': False,
                      'tail': ['first frame'], 'phase': 'working'}]
-    next_frame = [{'taskId': task, 'agent': 'coder', 'waiting': False,
+    next_frame = [{'taskId': task, 'agent': 'coding', 'waiting': False,
                    'tail': ['different frame'], 'phase': 'working'}]
-    waiting = [{'taskId': task, 'agent': 'coder', 'waiting': True,
+    waiting = [{'taskId': task, 'agent': 'coding', 'waiting': True,
                 'tail': ['different frame'], 'phase': 'waiting'}]
 
     with mock.patch.object(store, '_processing_snapshot_cursor', wraps=store._processing_snapshot_cursor) as projection:

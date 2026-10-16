@@ -67,7 +67,7 @@ class PrepOpensTheChat(unittest.TestCase):
 
     def test_an_old_page_posting_an_agent_still_works(self):
         """The agent/model fields stayed on the body so a tab loaded before the switch does not 422."""
-        r = c.post('/api/calendar/prep', json={**EVENT, 'agent': 'coder', 'model': 'whatever'})
+        r = c.post('/api/calendar/prep', json={**EVENT, 'agent': 'coding', 'model': 'whatever'})
         self.assertEqual(r.status_code, 200, r.text)
 
 

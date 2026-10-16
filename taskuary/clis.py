@@ -92,7 +92,7 @@ def tools() -> list:
     return [{**t, 'installed': bool(shutil.which(t['cmd'])), 'path': shutil.which(t['cmd']) or ''} for t in TOOLS]
 
 
-# The classifier is not the coder. When a CLI reads mail as the triage brain (llm.make_cli_llm) the
+# The classifier is not the coding agent. When a CLI reads mail as the triage brain (llm.make_cli_llm) the
 # bypass flags come OFF and its tools with them: the message it reads IS the prompt, and a sentence
 # in it saying "run this" must find nothing to run (audit 2026-09-02). Per CLI: (flags to drop,
 # flags to add). Gemini's default approval mode refuses tool calls headlessly, so dropping suffices.
@@ -234,18 +234,25 @@ def runnable(cmd: str) -> tuple:
 def detect(store=None) -> list:
     """Every known CLI found on PATH, plus anything already configured here.
 
-    `installed` says it resolves on PATH; `configured` says Taskuary already has a profile for
-    it. Neither means it WORKS - only a test run does, which is why the wizard runs one.
+    `installed` says it resolves on PATH; `configured` says some agent already runs on it.
+    Neither means it WORKS - only a test run does, which is why the wizard runs one.
     """
+    import json, os
     from . import cliinstall, clisetup
-    have = {a['Name']: a for a in (store.list_agents() if store else [])}
+    # configured = some row already runs this CLI. A profile is never a row of its own here: it is instructions on whichever
+    # tool is the brain, and listing `coding` beside Claude Code read as a second CLI (the owner, 2026-10-15)
+    def cmd_of(a):
+        try: return os.path.basename(str(json.loads(a.get('Config') or '{}').get('cmd') or '')).lower().rsplit('.', 1)[0]
+        except ValueError: return ''
+    rows = store.list_agents() if store else []
+    have = {a['Name'] for a in rows} | {cmd_of(a) for a in rows}
     out = []
     for k in KNOWN:
         found = which(k['cmd'])
         # a CLI nobody has installed is exactly who the Install button is for, so it gets a row.
         # Dropping it is what left the wizard saying "no AI CLI found" with nothing to press.
         # `install` is the RECIPE the row is an install of - what the button posts. It is not the
-        # row's name: a profile is called `coder`, and there is no recipe called that.
+        # row's name: a profile is called `coding`, and there is no recipe called that.
         recipe = cliinstall.recipe_for(k['cmd'])
         installable = bool(cliinstall.plan(recipe))
         # A CLI with no road on THIS machine still gets a row, carrying the reason (`why_not`).
@@ -261,25 +268,5 @@ def detect(store=None) -> list:
                     # button's own road test, and only a CLI already on this machine has one
                     'updatable': bool(found and cliinstall.update_plan(recipe)),
                     'why_not': '' if (found or installable) else cliinstall.why_not(recipe),
-                    'setup': recipe if recipe in clisetup.SETUP else ''})
-    import json, os
-    labels = {k['cmd']: k['label'] for k in KNOWN}
-    for name, row in have.items():
-        if any(o['name'] == name for o in out): continue
-        try: prof = json.loads(row.get('Config') or '{}')
-        except ValueError: prof = {}
-        cmd = str(prof.get('cmd') or '')
-        base = os.path.basename(cmd).lower().rsplit('.', 1)[0] if cmd else ''
-        found = which(cmd) if cmd else None
-        # the row is about the CLI, not the profile's nickname: 'coder' running claude is Claude
-        # Code - and "already configured" said nothing about whether claude is even on this machine
-        runs, blocked = runnable(cmd) if found else ('', False)
-        recipe = cliinstall.recipe_for(cmd)
-        out.append({'name': name, 'cmd': cmd, 'label': labels.get(base) or cmd or name, 'profile': name,
-                    'args': list(prof.get('args') or []), 'installed': bool(found), 'path': found or '',
-                    'runs': runs, 'store': blocked, 'install': recipe,
-                    'installable': bool(cliinstall.plan(recipe)), 'configured': True,
-                    'updatable': bool(found and cliinstall.update_plan(recipe)),
-                    'why_not': '' if (found or cliinstall.plan(recipe)) else cliinstall.why_not(recipe),
                     'setup': recipe if recipe in clisetup.SETUP else ''})
     return out

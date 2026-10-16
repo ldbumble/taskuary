@@ -17,7 +17,7 @@ def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=h
 def _store():
     s = MemoryStore()
     s.set_setting('calendar_enabled', '0', 't')
-    s.set_setting('coder_auto_enabled', '0', 't')
+    s.set_setting('coding_auto_enabled', '0', 't')
     s.set_setting('learn_enabled', '0', 't')
     return s
 
@@ -113,7 +113,7 @@ class ColdAndAheadTests(unittest.TestCase):
         got = assistant.cold(s, days=3)
         self.assertEqual([c['key'] for c in got], [f'cold:TQ-{tid:04d}'])
         self.assertIn('sat quiet', got[0]['text'])
-        s.add_comment(tid, 'coder', 'agent', 'working on it')            # activity today: no longer cold
+        s.add_comment(tid, 'coding', 'agent', 'working on it')            # activity today: no longer cold
         self.assertEqual(assistant.cold(s, days=3), [])
 
 
@@ -395,7 +395,7 @@ class ButtonTests(unittest.TestCase):
         self.assertEqual(s.get_task(out['taskId'])['Kind'], 'general')             # coding is never the default
         self.assertEqual([getattr(c[0][0], '__name__', '') for c in spawn.call_args_list], ['_auto_general'])
         s2, _, idea2 = self._posted()
-        s2.set_setting('coder_auto_enabled', '1', 't')
+        s2.set_setting('coding_auto_enabled', '1', 't')
         s2.set_idea_action(idea2['IdeaId'], json.loads(idea2['ActionJson']) | {'kind': 'coding'})
         with mock.patch('taskuary.ingest._spawn') as spawn:
             out = assistant.act(s2, idea2['IdeaId'], 'agent')
@@ -528,8 +528,8 @@ class ButtonTests(unittest.TestCase):
         lines about it are dropped; a recurrence reaches the owner as its own mail, which triage puts back on the task."""
         s = _store()
         fixed = s.create_task({'Title': 'Vendor create loop', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        s.add_comment(fixed, 'coder', 'agent', 'The agent closed this itself: the name-keyed delete bug, fixed and deployed.')
-        s.update_task(fixed, {'Status': 'done'}, 'coder')
+        s.add_comment(fixed, 'coding', 'agent', 'The agent closed this itself: the name-keyed delete bug, fixed and deployed.')
+        s.update_task(fixed, {'Status': 'done'}, 'coding')
         live = s.create_task({'Title': 'Budget tab missing', 'Kind': 'general', 'Status': 'open'}, 'o')
         mid = _mail(s, 'erin@northwind.example', 'Vendor create', 'Rejected again.', days=0, name='Erin')
         s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (fixed, mid))

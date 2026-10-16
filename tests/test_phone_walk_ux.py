@@ -338,7 +338,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
 
     def test_the_rails_bands_and_the_lead(self):
         items = [{'key': 'a', 'lane': 'approve', 'kind': 'review', 'who': 'Erin Blake', 'title': 'Q3 numbers', 'order_band': 2},
-                 {'key': 'c', 'lane': 'working', 'kind': 'agent', 'agent': 'coder', 'title': 'Reconcile the GL', 'order_band': 5},
+                 {'key': 'c', 'lane': 'working', 'kind': 'agent', 'agent': 'coding', 'title': 'Reconcile the GL', 'order_band': 5},
                  {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over', 'order_band': 3},
                  {'key': 'f', 'lane': 'fyi', 'kind': 'fyi', 'who': 'Omar Keller', 'title': 'Portal is back', 'order_band': 4}]
         text = remote_assistant.who_wants_what(items)
@@ -350,7 +350,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
 
     def test_a_finished_agents_task_is_on_you_as_on_the_rail(self):
         # the owner's screenshot, 2026-10-02: the rail had it On you, the opener said "Agents waiting" - no agent was working
-        done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coder', 'title': 'Investigate the export'}
+        done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coding', 'title': 'Investigate the export'}
         self.assertEqual(remote_assistant.group_of(done), 'task')
         self.assertIn('ON YOU · 1', remote_assistant.who_wants_what([done]))
 

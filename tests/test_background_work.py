@@ -1,6 +1,6 @@
 """A turn that ends with work still running is not "waiting on you" (background.py).
 
-The shape: a coder starts a long pull in the background, arms a monitor on it, says "re-pulling now" and ends
+The shape: a coding agent starts a long pull in the background, arms a monitor on it, says "re-pulling now" and ends
 its turn. Claude's Stop fires, the pane sits at a bare prompt with "1 shell, 1 monitor still running" under it,
 and every surface read the agent as parked on the owner while the work went on.
 """

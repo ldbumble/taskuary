@@ -27,15 +27,15 @@ def home(tmp_path, monkeypatch):
 def saved_session(s, steps_at='2020-01-01T09:00:00Z'):
     """A pull-request task whose session the owner already saved: the agent merged, its write-up is filed, a reply drafted."""
     tid = s.create_task({'Title': 'Review PR for the export fix', 'Kind': 'coding', 'Status': 'open', 'Source': 'github',
-                         'Assignee': 'agent:coder'}, 'router')
+                         'Assignee': 'agent:coding'}, 'router')
     mid = s.add_message({'TaskId': tid, 'ExternalId': 'gh:northwind/portal#41', 'ConversationId': 'gh:northwind/portal#41',
                          'Channel': 'github', 'Subject': 'northwind/portal#41 Fix the export', 'FromName': 'erin-blake',
                          'FromEmail': 'erin-blake@users.noreply.github.com', 'BodyText': 'Fixes the export.', 'Status': 'routed'})
-    s.add_transcript(tid, 'pane1', 'merged it', agent='coder', brain='claude', ext_id='x1')
+    s.add_transcript(tid, 'pane1', 'merged it', agent='coding', brain='claude', ext_id='x1')
     sessionrecord._saved_path(tid, 'pane1').write_text(json.dumps({'source': 'Claude Code log', 'steps': [
         {'k': 'tool', 'name': 'Bash', 'text': 'Squash-merge PR 41', 'at': steps_at},
         {'k': 'said', 'text': SAID, 'at': steps_at}]}), encoding='utf-8')
-    s.add_comment(tid, 'coder', 'agent', f'CODER REPORT\nDetermination: merged\nActions: gh pr merge 41\nSummary: merged #41\n\nLAST MESSAGE\n{SAID}')
+    s.add_comment(tid, 'coding', 'agent', f'AGENT REPORT\nDetermination: merged\nActions: gh pr merge 41\nSummary: merged #41\n\nLAST MESSAGE\n{SAID}')
     s.tag_task(tid, terminal.SAVED, True, 'owner')
     rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Merged - thanks, Erin.'})
     return tid, rid
@@ -43,10 +43,10 @@ def saved_session(s, steps_at='2020-01-01T09:00:00Z'):
 
 def test_a_saved_session_is_not_wrapped_again_when_its_pr_merges(home):
     s = MemoryStore(); tid, rid = saved_session(s)
-    with mock.patch('taskuary.coder.wrap') as wrap:
+    with mock.patch('taskuary.wrapup.wrap') as wrap:
         channels.close_upstream_ended(s, tid, ENDED, 'owner')
     wrap.assert_not_called()
-    reports = [c['Body'] for c in s.list_comments(tid) if c['Body'].startswith('CODER REPORT')]
+    reports = [c['Body'] for c in s.list_comments(tid) if c['Body'].startswith('AGENT REPORT')]
     assert len(reports) == 1 and SAID in reports[0]
     assert s.get_task(tid)['Status'] == 'done'
     # the draft is decided, not left to be swept away: Close out still has it to read, and "not needed" is its word
@@ -67,7 +67,7 @@ def test_a_rewrap_already_filed_does_not_replace_the_last_message(home):
     session's last step. The agent's own words stay the result."""
     s = MemoryStore(); tid, _ = saved_session(s)
     s.add_comment(tid, 'router', 'agent', ENDED)
-    s.add_comment(tid, 'coder', 'agent', f'CODER REPORT\nDetermination: merged\nActions: gh pr merge 41\nSummary: merged #41\n\n'
+    s.add_comment(tid, 'coding', 'agent', f'AGENT REPORT\nDetermination: merged\nActions: gh pr merge 41\nSummary: merged #41\n\n'
                                           f'LAST MESSAGE\nnorthwind/portal#41 was merged on GitHub - {ENDED}')
     assert sessionrecord.record(s, tid)['sessions'][0]['result'] == SAID
 
@@ -75,14 +75,14 @@ def test_a_rewrap_already_filed_does_not_replace_the_last_message(home):
 def test_a_session_that_worked_again_after_its_report_gets_its_new_last_message(home):
     """...but a session resumed and wrapped again DID speak since: its newer last message is the result."""
     s = MemoryStore(); tid, _ = saved_session(s, steps_at='2099-01-01T09:00:00Z')
-    s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: follow-up\nActions: none\nSummary: answered\n\nLAST MESSAGE\nAlso fixed the CSV header.')
+    s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: follow-up\nActions: none\nSummary: answered\n\nLAST MESSAGE\nAlso fixed the CSV header.')
     assert sessionrecord.record(s, tid)['sessions'][0]['result'] == 'Also fixed the CSV header.'
 
 
 def test_a_live_session_is_still_wrapped_with_no_words_put_in_its_mouth(home):
     s = MemoryStore(); tid, _ = saved_session(s)
     s.tag_task(tid, terminal.SAVED, False, 'owner')            # a session running on it: the normal ending
-    with mock.patch('taskuary.coder.wrap') as wrap:
+    with mock.patch('taskuary.wrapup.wrap') as wrap:
         channels.close_upstream_ended(s, tid, ENDED, 'owner')
     assert wrap.call_args.kwargs.get('close') is True and not wrap.call_args.kwargs.get('final_message')
 

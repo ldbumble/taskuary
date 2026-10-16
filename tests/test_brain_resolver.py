@@ -18,14 +18,19 @@ from taskuary.store import MemoryStore
 
 @pytest.fixture
 def real_pick():
-    with mock.patch.object(agents, 'default_pick', agents.default_pick.real): yield
+    """...and the real brains: the `claude` connection a fresh install's config.toml carries (conftest empties them too)."""
+    from taskuary import config
+    real = config.load
+    with mock.patch.object(agents, 'default_pick', agents.default_pick.real), \
+         mock.patch.object(agents, 'connection_brains', agents.connection_brains.real), \
+         mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': {'claude': {'cmd': 'claude'}}}): yield
 
 
 def _fresh():
-    """What server start leaves on a fresh install: the shipped coder profile on claude, nothing chosen."""
+    """What server start leaves on a fresh install: the claude connection, the shipped coding profile (instructions, no
+    command of its own), nothing chosen."""
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-    s.set_setting('default_agent', 'coder', 'template')
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'kind': 'coding'}))
     return s
 
 
@@ -71,15 +76,15 @@ def test_a_working_cli_and_no_key_runs_on_the_cli_and_ticks(real_pick):
     with _cli(True):
         assert agents.adopt_brain_setting(s)
         assert s.get_setting('default_brain') == 'claude'
-        assert llm.effective_pick(s) == 'cli:coder'
+        assert llm.effective_pick(s) == 'cli:claude'
         step = _ai_step(s)
-    assert step['done'] and 'coder (CLI)' in step['detail']
+    assert step['done'] and 'claude (CLI)' in step['detail']
 
 
 def test_a_working_cli_wins_over_a_key_when_nothing_is_chosen(real_pick):
     """'First connected should not matter' (the owner, 2026-09-24): blank is the default brain when it runs."""
     s = _fresh(); _key(s)
-    with _cli(True): assert llm.effective_pick(s) == 'cli:coder'
+    with _cli(True): assert llm.effective_pick(s) == 'cli:claude'
 
 
 def test_neither_is_not_done_and_says_why(real_pick):
@@ -95,13 +100,13 @@ def test_neither_is_not_done_and_says_why(real_pick):
 def test_a_chosen_brain_that_does_not_start_is_kept_and_flagged(real_pick):
     """The owner's choice is not swapped behind their back - but the checklist stops claiming it works."""
     s = _fresh(); _key(s)
-    s.set_setting('triage_ai', 'cli:coder', 'owner')
+    s.set_setting('triage_ai', 'cli:claude', 'owner')
     with _cli(False):
-        assert llm.effective_pick(s) == 'cli:coder'
+        assert llm.effective_pick(s) == 'cli:claude'
         step = _ai_step(s)
     assert not step['done'] and 'not installed' in step['detail']
     s.set_setting('triage_ai', '', 'owner'); s.set_setting('default_brain', 'claude', 'owner')
-    with _cli(False): assert llm.effective_pick(s) == 'cli:coder'   # an owner-chosen default brain too
+    with _cli(False): assert llm.effective_pick(s) == 'cli:claude'   # an owner-chosen default brain too
 
 
 def test_a_chosen_connector_with_no_key_is_not_done():

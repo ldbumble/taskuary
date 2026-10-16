@@ -16,7 +16,7 @@ closed on "finished". It is gone (the owner, 2026-09-24): a guess read off a qui
 ending. Only the agent saying so, or the owner's Mark done, ends a task - and the agent only on a task
 that allows it: one the owner opened to work in (STAY_TAG) is theirs to complete (2026-09-25).
 
-It lands in coder.wrap, which is exactly what the Done button calls. Nothing about the ending
+It lands in wrapup.wrap, which is exactly what the Done button calls. Nothing about the ending
 is different because a machine started it: the same report, the same proposals, the same drafted
 reply sitting on the task with the task tagged "reply pending". The owner still approves what goes
 out - that is the part a person is genuinely needed for, and it is the only part left.
@@ -35,7 +35,7 @@ from loguru import logger
 SETTING = 'agent_self_close'      # '1' (default) on, '0' off. A legacy 'ask' reads as on (see mode)
 # A task the owner opened to WORK IN, rather than to have worked FOR them. Set by claim() the
 # moment the OWNER opens a session on a task - by ANY door: + New on the Timeline or the Board, a
-# new task on the Tasks tab, Start session, Continue with coder, the Wall - and never by the
+# new task on the Tasks tab, Start session, Continue with the agent, the Wall - and never by the
 # router: a message that arrived has somebody waiting on an answer, so finishing it should close
 # it and draft the reply, which is the whole point of the funnel.
 #
@@ -196,16 +196,16 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
     """The same ending the Done button gets. A failure here must not take the hook (or the CLI)
     with it, and it must not leave the task looking closed when it is not - so the mark is
     dropped and the reason is written where the owner reads it."""
-    from . import coder
+    from . import wrapup
     from .store import task_ref
     try:
-        out = coder.wrap(store, tid, close=True, actor=agent or 'coder', final_message=final_message, no_reply=no_reply)
+        out = wrapup.wrap(store, tid, close=True, actor=agent or 'agent', final_message=final_message, no_reply=no_reply)
         # ...and a reply already waiting (triage's early draft, one the agent saved) goes down with it: nobody hears back
         if no_reply:
             for rv in (store.pending_review(tid, 'draft_reply', live_only=False), store.pending_review(tid, 'draft', live_only=False),
                        store.held_review(tid)):
                 if rv and rv.get('Status') in ('pending', 'held'):
-                    store.decide_review(rv['ReviewId'], 'no_reply', None, agent or 'coder', 'the agent said no reply is owed')
+                    store.decide_review(rv['ReviewId'], 'no_reply', None, agent or 'agent', 'the agent said no reply is owed')
     except Exception as e:
         forget(tid)
         logger.warning(f'self-close failed for task {tid}: {e}')
@@ -213,7 +213,7 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
                           f'The agent tried to close this itself and could not ({str(e)[:200]}) - '
                           'the Done button on the task still works.')
         return {'closed': False, 'why': str(e)[:200]}
-    store.audit('task', tid, 'self_close', agent or 'coder', 'agent', {'why': why[:300], 'drafting': out.get('drafting')})
+    store.audit('task', tid, 'self_close', agent or 'agent', 'agent', {'why': why[:300], 'drafting': out.get('drafting')})
     logger.info(f'{task_ref(tid)} closed itself - {why[:120]}'
                 + (' (reply drafted)' if out.get('drafting') else ''))
     return {'closed': True, 'drafting': bool(out.get('drafting')), 'why': why, **out}
@@ -224,13 +224,13 @@ def _wrap(store, tid: int, agent: str, why: str, final_message: str = '', no_rep
 # It is phrased as the CHEAP ending, because that is what it is: the alternative is a human
 # looking at a screen hours later.
 # Short on purpose. Every character here rides on a command line that a canonical tty caps at
-# 1024 bytes, so the WHOLE rule lives in CODER.md (which rides in as RULES) and this is only the
+# 1024 bytes, so the WHOLE rule lives in CODING.md (which rides in as RULES) and this is only the
 # part that must survive a blanked document: the command, and what pressing it does.
 SEED_LINE = ('REPLY: save the answer for the person who asked with `taskuary --reply "<text>"` (a file it promises: add `--attach <path>`) - the owner approves it. '
              'WHEN FINISHED: run `taskuary --done "<one sentence>"` - it closes the task and drafts the reply unless you saved one; '
              'add `--no-reply` when nobody should hear back.')
 # ...and its opposite, for a session the owner opened to sit in (stays_open): the one thing the
-# agent must NOT do is end it. Said in the prompt, because CODER.md's finishing rules say the
+# agent must NOT do is end it. Said in the prompt, because CODING.md's finishing rules say the
 # reverse and an agent reading both without this line picks the one with a command in it. It says
 # what `declare` does: the command is refused here and the owner completes the task.
 STAY_LINE = ('THE OWNER OPENED THIS SESSION: `taskuary --done` is refused. Reply via `taskuary --reply "<text>"`, not chat. '
@@ -258,7 +258,7 @@ CHAT_LINE = (
 
 
 # ...and its reply. The chat writes the answer the sender gets inside a marked block; the words between
-# the markers become the task's pending reply as written (coder.agent_reply) and stay in the chat too.
+# the markers become the task's pending reply as written (wrapup.agent_reply) and stay in the chat too.
 REPLY_OPEN, REPLY_CLOSE = '[[TASKUARY-REPLY]]', '[[/TASKUARY-REPLY]]'
 _REPLY_RE = re.compile(r'\[\[\s*TASKUARY[-_ ]?REPLY\s*\]\](.*?)\[\[\s*/\s*TASKUARY[-_ ]?REPLY\s*\]\]', re.I | re.S)
 REPLY_LINE = (f'REPLYING FOR THE OWNER: when you write the answer the person who asked will get, put exactly that '

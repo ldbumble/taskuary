@@ -122,7 +122,7 @@ facts mean is always the model's, at reflection.
 **Reflection distils it into the stores that exist.** The resolved rows reach reflection as
 evidence lines with their own ids, `out` beside the `mem`, `rv` and `task` ids a learned line
 already cites. Habits about you go to `LEARNED.md` with the same grammar, the same strength, the
-same decay: "green PR from the coder: you merge it, 8 of 8"; "the agent asks 'open the PR?': you
+same decay: "green PR from the coding agent: you merge it, 8 of 8"; "the agent asks 'open the PR?': you
 always say yes". A habit carries the one number it never had, the regret count. Facts about other
 people ("Ray answers in three days and needs a second chase") and about kinds of work ("closing
 from a thread with an open question reopens 40%; ask first") go elsewhere: a page per person

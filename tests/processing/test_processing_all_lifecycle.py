@@ -121,7 +121,7 @@ def test_detail_preserves_unavailable_empty_and_supplied_native_session_states(t
             store, selected['item_id'], kind='message', local_id=mid)
         observed_empty = processing_all.item_detail(
             store, selected['item_id'], kind='message', local_id=mid, live_state=[])
-        session = {'taskId': task, 'sid': 'fixture-session', 'agent': 'coder',
+        session = {'taskId': task, 'sid': 'fixture-session', 'agent': 'coding',
                    'waiting': True, 'question': {'text': 'Choose a safe path'}}
         supplied = processing_all.item_detail(
             store, selected['item_id'], kind='message', local_id=mid,
@@ -169,7 +169,7 @@ def test_native_session_generator_is_consumed_once_and_detached_from_caller(tmp_
         mid = _message(store, 'Generator-backed message', task=task)
         store.reconcile_processing_membership(fixed_now=NOW)
         selected = _item_for_member(store, f'message:{mid}', live_state=[])
-        original = {'taskId': task, 'sid': 'one-shot', 'agent': 'coder', 'waiting': True,
+        original = {'taskId': task, 'sid': 'one-shot', 'agent': 'coding', 'waiting': True,
                     'question': {'text': 'Original nested question'}}
         consumed = 0
 
@@ -376,7 +376,7 @@ def test_persisted_transcript_exposes_metadata_without_full_text_and_refreshes_v
 
         full_text = 'PRIVATE FULL TRANSCRIPT\nwith an exact second line'
         store.add_transcript(task, 'ended-session', full_text,
-                             agent='coder', cwd='/synthetic/repository')
+                             agent='coding', cwd='/synthetic/repository')
         assert store.processing_reconcile_status()['pending'] is True
         store.reconcile_processing_membership(fixed_now='2026-09-06 12:04:00')
         after = processing_all.item_detail(
@@ -385,7 +385,7 @@ def test_persisted_transcript_exposes_metadata_without_full_text_and_refreshes_v
         assert after['context_revision'] == before['context_revision']
         assert after['view_revision'] != before['view_revision']
         assert after['detail']['transcript'] == {
-            'sid': 'ended-session', 'agent': 'coder', 'cwd': '/synthetic/repository',
+            'sid': 'ended-session', 'agent': 'coding', 'cwd': '/synthetic/repository',
             'at': store.last_transcript(task)['CreatedAt'], 'chars': len(full_text),
         }
         assert full_text not in json.dumps(after)
@@ -418,15 +418,15 @@ def test_detail_collection_order_matches_legacy_and_selects_latest_work(tmp_path
             store.cx.commit()
 
         old_comment = store.add_comment(
-            task, 'coder', 'agent', 'CODER REPORT\nZulu older report')
+            task, 'coding', 'agent', 'AGENT REPORT\nZulu older report')
         new_comment = store.add_comment(
-            task, 'coder', 'agent', 'CODER REPORT\nAlpha newest report')
+            task, 'coding', 'agent', 'AGENT REPORT\nAlpha newest report')
         old_run = store._exec('''INSERT INTO run
             (TaskId,AgentName,Status,DiffText,StartedAt) VALUES (?,?,?,?,?)''',
-            (task, 'coder', 'done', 'AAA older diff', '2026-09-06 10:00:00'))
+            (task, 'coding', 'done', 'AAA older diff', '2026-09-06 10:00:00'))
         new_run = store._exec('''INSERT INTO run
             (TaskId,AgentName,Status,DiffText,StartedAt) VALUES (?,?,?,?,?)''',
-            (task, 'coder', 'done', 'ZZZ newest diff', '2026-09-06 11:00:00'))
+            (task, 'coding', 'done', 'ZZZ newest diff', '2026-09-06 11:00:00'))
         old_artifact = store.add_task_artifact({
             'TaskId': task, 'Name': 'zulu-old.txt', 'Path': '/synthetic/zulu-old.txt'})
         new_artifact = store.add_task_artifact({
@@ -462,7 +462,7 @@ def test_detail_collection_order_matches_legacy_and_selects_latest_work(tmp_path
         assert [row['RouteId'] for row in detail['routes']] == [old_route, new_route]
 
         latest_report = next(row for row in reversed(detail['comments'])
-                             if row['Body'].startswith('CODER REPORT'))
+                             if row['Body'].startswith('AGENT REPORT'))
         latest_owner_reply = next(row for row in reversed(detail['messages'])
                                   if row['Direction'] == 'out')
         newest_diff = next(row for row in detail['runs'] if row['DiffText'])

@@ -101,8 +101,8 @@ function FinalReport({ tid }) {
   useEffect(() => {
     let live = true;
     api.get(`/api/tasks/${tid}`).then(({ data }) => {
-      const rep = (data?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
-      if (live) setText(rep ? rep.Body.replace(/^(CODER REPORT|HANDOVER NOTE)\s*/, "") : "No report was filed on this task.");
+      const rep = (data?.comments || []).slice().reverse().find((c) => /^((?:AGENT|CODER) REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
+      if (live) setText(rep ? rep.Body.replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\s*/, "") : "No report was filed on this task.");
     }).catch((e) => live && setText(errText(e)));
     return () => { live = false; };
   }, [tid]);
@@ -256,7 +256,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   const coding = item.coding || item.kind === "coding" || m.kind === "coding";
   const dispatch = (kind) => play("dispatch", item.key, async () => {
     const { data } = await api.post(`/api/messages/${item.mid}/dispatch`, { kind });
-    if (data?.dispatch === "needs_repo") { setRepo({ taskId: data.taskId, agent: data.agent || "coder" }); throw new Error("pick the repository it works in first"); }
+    if (data?.dispatch === "needs_repo") { setRepo({ taskId: data.taskId, agent: data.agent || "" }); throw new Error("pick the repository it works in first"); }
     return data;
   });
   // the owner's own words are what goes: the box is opened without a draft the model would only write to be thrown away
@@ -346,7 +346,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   } else {
     // a person wrote something (asked / on your list / fyi / triage failed), or a task on you
     const asks = item.kind !== "fyi" && item.lane !== "fyi";
-    covers = ["reply", "coder", "regular_agent"];
+    covers = ["reply", "coding_agent", "coder", "regular_agent"];   // coder: coding_agent's old name
     body = <>
       {item.mid ? <MessageText mid={item.mid} /> : item.preview && <Reading text={item.preview} cap={90} />}
       {item.lane === "unjudged" && <Row><Btn kind="gold" disabled={!!busy} onClick={() => play("sort", item.key, () => api.post(`/api/messages/${item.mid}/retriage`, {}))}>🔁 Try triage again · +10</Btn></Row>}

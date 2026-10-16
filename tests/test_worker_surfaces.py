@@ -46,7 +46,7 @@ class BlendTests(unittest.TestCase):
 
 class AskedOnScreenTests(unittest.TestCase):
     """A run that says `working` and is standing on a question (TQ-0621, the owner 2026-09-17:
-    "why does coder say is working, when it's waiting for answer?").
+    "why does coding agent say is working, when it's waiting for answer?").
 
     Claude records `working` when the owner submits a prompt and reports nothing when it stops
     mid-turn to ask - so its own last word stays `working` for as long as the chooser is up, and

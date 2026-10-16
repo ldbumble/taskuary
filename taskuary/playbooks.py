@@ -1,7 +1,7 @@
 """Playbooks: how THIS company does ONE kind of job, one markdown file each, accreted the first
 time each kind is done (docs/beyond-code.md).
 
-CODER.md is one playbook - the one about code - and "work only in the repository the task
+CODING.md is one playbook - the one about code - and "work only in the repository the task
 names" is the wrong first rule for a bill. So a playbook is a fourth operator document with a
 DIRECTORY instead of a file: ~/.taskuary/playbooks/<slug>.md, six labelled lines on top
 (when / uses / steps / alone / ask first / done when) and any prose below. Two doors to the
@@ -11,7 +11,7 @@ playbooks whose `uses:` line names it.
 Three consumers, none of which re-reads the mail to second-guess triage:
 - triage is handed menu() - each playbook's title and `when` - and names the one a message is an
   instance of. The task is tagged playbook:<slug>; the tag routes it, like repo: does.
-- the seed carries seed_block(): the playbook flattened, riding beside CODER.md and outranking its
+- the seed carries seed_block(): the playbook flattened, riding beside CODING.md and outranking its
   repository rules. context.build writes the whole text into the context file.
 - on close, draft() asks one more question of the transcript: was this a kind of job that will
   recur, and does no playbook cover it? The answer is a PROPOSAL (proposals.py write_playbook) -
@@ -27,7 +27,7 @@ _FIELD = re.compile(r'^(' + '|'.join(FIELDS) + r'):\s*(.*)$', re.I)
 _TAG = re.compile(r'playbook:([\w-]+)')
 SEED_CHARS = 2200            # the whole playbook usually fits; the seed line is the operative rules
 MIN_SESSION = 600            # a session shorter than this did no job worth a playbook - no AI call for it
-# connections whose presence on `uses:` makes a playbook about code: CODER.md's repository rules apply. ONLY these - the
+# connections whose presence on `uses:` makes a playbook about code: CODING.md's repository rules apply. ONLY these - the
 # words of its steps decide nothing (2026-10-11, "everything should be ai"): "visit the branch office" and "commit the
 # journal entry" made a bookkeeping playbook a code change, and its agent was told the repository rules outranked it.
 CODE_SYSTEMS = {'github', 'gitlab', 'azdo', 'bitbucket'}
@@ -209,7 +209,7 @@ def for_task(task: dict) -> dict | None:
 # ── the seed and the context file ───────────────────────────────────────────────────────
 def seed_block(task: dict) -> str:
     """The playbook, flattened onto the command line. It is the operative rules for this job, so it
-    rides where CODER.md rides; the repository rules there yield to it, the closing-out and wall
+    rides where CODING.md rides; the repository rules there yield to it, the closing-out and wall
     rules do not (an agent posting a bill still says --done)."""
     pb = for_task(task)
     if not pb: return ''
@@ -233,7 +233,7 @@ DRAFT_SYSTEM = (
     'company. Decide whether it did a KIND OF JOB that will recur - posting a bill, onboarding a user, '
     'reconciling a statement, chasing a vendor - which no existing playbook covers, and which the session '
     'shows was done well enough to write down. Usually it did not: a one-off, a code change in a repository '
-    '(CODER.md already covers those), or a job a listed playbook already describes is {"playbook": null}.\n'
+    '(CODING.md already covers those), or a job a listed playbook already describes is {"playbook": null}.\n'
     'When it did, draft the playbook the NEXT agent would follow, in exactly this shape - a title line and six '
     'labelled lines, then optional notes:\n'
     '# <Verb phrase naming the job>\nwhen:      <what arriving message or event is an instance of this job>\n'
@@ -247,7 +247,7 @@ DRAFT_SYSTEM = (
     '"text": "<the markdown above>", "why": "<one sentence: what in the session says this will recur>"}}.')
 
 
-def draft(store, task_id: int, transcript: str, agent: str = 'coder', llm=None) -> dict | None:
+def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) -> dict | None:
     """The on-close question. Queues a write_playbook PROPOSAL for the owner and returns it, or None -
     and None is the usual, right answer. Never raises: a playbook is a bonus, the task must still close."""
     from .llm import build_llm

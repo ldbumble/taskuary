@@ -10,13 +10,13 @@ from taskuary.store import MemoryStore
 
 class FakeLive:
     """A started session as the drain sees one: alive, on a task, in a checkout."""
-    def __init__(self, tid): self.task_id, self.alive, self.cwd, self.agent, self.label, self.started = tid, True, 'x', 'coder', 'coder', ''
+    def __init__(self, tid): self.task_id, self.alive, self.cwd, self.agent, self.label, self.started = tid, True, 'x', 'coding', 'coding', ''
     def files(self): return []
     def info(self, tail=0): return {'sid': f's{self.task_id}', 'taskId': self.task_id, 'alive': True, 'idle': 0, 'files': []}
 
 
 def fake_start(started):
-    def go(store, tid, agent='coder', *a, **k):
+    def go(store, tid, agent='coding', *a, **k):
         started.append(tid); terminal.SESSIONS[f's{tid}'] = FakeLive(tid); return {'sid': f's{tid}'}
     return go
 
@@ -75,9 +75,9 @@ class QueueTests(unittest.TestCase):
     def test_the_queue_is_in_value_order_and_unranked_rows_sit_at_base(self):
         s = MemoryStore()
         a, b, c = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in 'abc')
-        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.3, why='cc')
-        s.enqueue_dispatch(b, None, 'coder', 'full house')                      # clear mode, no value
-        s.enqueue_dispatch(c, None, 'coder', 'ranked', value=0.9, why='to you · urgent')
+        s.enqueue_dispatch(a, None, 'coding', 'ranked', value=0.3, why='cc')
+        s.enqueue_dispatch(b, None, 'coding', 'full house')                      # clear mode, no value
+        s.enqueue_dispatch(c, None, 'coding', 'ranked', value=0.9, why='to you · urgent')
         self.assertEqual([q['TaskId'] for q in s.queued_dispatches()], [c, b, a])
         s.set_dispatch_value(a, rank.PIN, 'pinned by you')
         self.assertEqual(s.queued_dispatches()[0]['TaskId'], a)
@@ -104,7 +104,7 @@ class QueueTests(unittest.TestCase):
     def test_the_drain_takes_the_highest_value_first_when_several_wait(self):
         s = MemoryStore(); s.set_setting('auto_sessions', '1', 't')
         a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in 'ab')
-        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.2, why='cc'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.8, why='to you')
+        s.enqueue_dispatch(a, None, 'coding', 'ranked', value=0.2, why='cc'); s.enqueue_dispatch(b, None, 'coding', 'ranked', value=0.8, why='to you')
         started = []
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(blackboard, 'peers', return_value=[]), \
              mock.patch.object(terminal, 'start_on_task', side_effect=fake_start(started)):
@@ -118,7 +118,7 @@ class QueueTests(unittest.TestCase):
         kept only as what answers when there is no brain to ask."""
         s = MemoryStore()
         a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in ('alpha', 'beta'))
-        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.3, why='cc')
+        s.enqueue_dispatch(a, None, 'coding', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coding', 'ranked', value=0.3, why='cc')
         llm = lambda sys_, usr_, **k: json.dumps({'order': [{'ref': f'TQ-{b:04d}', 'why': 'CFO is asking'}, {'ref': f'TQ-{a:04d}', 'why': 'routine'}]})
         with mock.patch('taskuary.llm.build_llm', return_value=llm):
             self.assertEqual(rank.rerank(s, force=True), 2)
@@ -131,7 +131,7 @@ class QueueTests(unittest.TestCase):
     def test_with_no_brain_the_floor_still_orders_the_dispatch_queue(self):
         s = MemoryStore()
         a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in ('alpha', 'beta'))
-        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.3, why='cc')
+        s.enqueue_dispatch(a, None, 'coding', 'ranked', value=0.9, why='to you'); s.enqueue_dispatch(b, None, 'coding', 'ranked', value=0.3, why='cc')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             self.assertEqual(rank.rerank(s, force=True), 0)
         qa, qb = (next(q for q in s.queued_dispatches() if q['TaskId'] == t) for t in (a, b))
@@ -144,7 +144,7 @@ class ApiTests(unittest.TestCase):
         from taskuary import server
         s = MemoryStore(); rank_mode(s)
         a, b = (s.create_task({'Title': t, 'Kind': 'coding', 'Status': 'open'}, 't') for t in 'ab')
-        s.enqueue_dispatch(a, None, 'coder', 'ranked', value=0.7, why='to you'); s.enqueue_dispatch(b, None, 'coder', 'ranked', value=0.4, why='cc')
+        s.enqueue_dispatch(a, None, 'coding', 'ranked', value=0.7, why='to you'); s.enqueue_dispatch(b, None, 'coding', 'ranked', value=0.4, why='cc')
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(blackboard, 'drain_later'):
             c = TestClient(server.app)

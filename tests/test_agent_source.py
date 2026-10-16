@@ -15,7 +15,8 @@ from taskuary.store import MemoryStore
 class AgentSourceTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': 'C:/elsewhere'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': 'C:/elsewhere'}))
+        self.s.set_setting('default_brain', 'claude', 'test')     # an unnamed workflow runs on the brain, never the coding profile
 
     def _fake_cli(self, calls):
         def make(store, name, model=None, cwd=None, **_kwargs):
@@ -34,9 +35,9 @@ class AgentSourceTests(unittest.TestCase):
         with mock.patch('taskuary.llm.make_cli_llm', self._fake_cli(calls)):
             head, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {
                 'type': 'agent', 'skill': '/weekly-user-review', 'prompt': 'focus on admin roles', 'cwd': 'C:/work/census', 'model': 'opus'}))
-        self.assertEqual(calls, [{'name': 'coder', 'model': 'opus', 'cwd': 'C:/work/census'}])
+        self.assertEqual(calls, [{'name': 'claude', 'model': 'opus', 'cwd': 'C:/work/census'}])
         self.assertIn('ASKED[/weekly-user-review focus on admin roles]', body)
-        self.assertIn('coder ran /weekly-user-review', head)
+        self.assertIn('claude ran /weekly-user-review', head)
         self.assertIn('3 lines', head)
 
     def test_a_prompt_alone_is_enough_and_a_bare_skill_is_too(self):
@@ -68,7 +69,7 @@ class AgentSourceTests(unittest.TestCase):
             _, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, cfg))
         self.assertNotIn('STRUCTURE', body)                                                    # first run: nothing to keep
         self.s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'Daily GitHub Trending Projects',
-                            'Subject': 'Daily GitHub Trending Projects — coder ran a prompt - 5 lines', 'SentAt': '2026-08-28 08:16:00',
+                            'Subject': 'Daily GitHub Trending Projects — claude ran a prompt - 5 lines', 'SentAt': '2026-08-28 08:16:00',
                             'BodyText': '# GitHub Trending Report\n## Headline\nAI agents everywhere\n## Fast risers\n| Repo | Lang | Stars |\n|---|---|---|\n| a/b | Go | 900 |\nsecret content line'})
         self.s.add_message({'ExternalId': 'r2', 'Channel': 'report', 'SourceName': 'Daily GitHub Trending Projects',
                             'Subject': 'Daily GitHub Trending Projects — FAILED', 'SentAt': '2026-08-28 08:40:00', 'BodyText': '# Report error'})
@@ -111,21 +112,21 @@ class AgentSourceTests(unittest.TestCase):
                 '| c/d | Rust | 400 |\n\nNote: total stars were unable to fetch for one row.')
         with mock.patch('taskuary.llm.make_cli_llm', lambda *a, **k: (lambda s, u, **kw: real)):
             head, body = reports.REGISTRY['agent'](reports.resolve_cfg(self.s, {'type': 'agent', 'prompt': 'top 15 trending'}))
-        self.assertIn('| a/b | Go | 900 |', body); self.assertIn('coder ran a prompt', head)
+        self.assertIn('| a/b | Go | 900 |', body); self.assertIn('claude ran a prompt', head)
 
     def test_a_scheduled_agent_keeps_its_timeout_and_the_classifier_keeps_the_short_leash(self):
         """Two of that report's four runs died at exactly "timed out after 300s": the 300s cap belongs
         to the classifier reading one message, not to an agent the owner scheduled into a repo to research."""
         from taskuary import llm as llm_mod
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'timeout': 1500}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'timeout': 1500}))
         seen = {}
         def run_cli(prof, prompt, trace, resume=None): seen['timeout'] = prof.get('timeout'); return 'ok', None, None
         with mock.patch('taskuary.agents.run_cli', run_cli):
-            llm_mod.make_cli_llm(self.s, 'coder', cwd='C:/work/census')('SYS', 'USER')
+            llm_mod.make_cli_llm(self.s, 'coding', cwd='C:/work/census')('SYS', 'USER')
             self.assertEqual(seen['timeout'], 1500)
-            llm_mod.make_cli_llm(self.s, 'coder')('SYS', 'USER')
+            llm_mod.make_cli_llm(self.s, 'coding')('SYS', 'USER')
             self.assertEqual(seen['timeout'], 300)
-            llm_mod.make_cli_llm(self.s, 'coder', read_only=True, research=True)('SYS', 'USER')
+            llm_mod.make_cli_llm(self.s, 'coding', read_only=True, research=True)('SYS', 'USER')
             self.assertEqual(seen['timeout'], 1500)
 
     def test_the_cli_runner_takes_the_working_directory(self):
@@ -133,7 +134,7 @@ class AgentSourceTests(unittest.TestCase):
         seen = {}
         def run_cli(prof, prompt, trace, resume=None): seen.update(prof=prof, prompt=prompt); return 'ok', None, None
         with mock.patch('taskuary.agents.run_cli', run_cli):
-            f = llm_mod.make_cli_llm(self.s, 'coder', cwd='C:/work/census')
+            f = llm_mod.make_cli_llm(self.s, 'coding', cwd='C:/work/census')
             f('SYS', 'USER')
         self.assertEqual(seen['prof']['cwd'], 'C:/work/census')
         # the instructions ride as Claude's system prompt, appended since this run has hands (2026-09-24)
@@ -179,7 +180,7 @@ class AgentSourceTests(unittest.TestCase):
 
     def test_the_report_composer_may_choose_a_read_only_agent(self):
         out = compose.compose(self.s, 'Fetch GitHub Trending every morning', lambda *_a, **_k: json.dumps({
-            'config': {'type': 'agent', 'title': 'GitHub Trending', 'agent': 'coder',
+            'config': {'type': 'agent', 'title': 'GitHub Trending', 'agent': 'coding',
                        'prompt': 'Fetch and summarize the top repositories', 'daily_at': '08:00'},
             'explain': 'Reads GitHub and files the summary.', 'confidence': 'high'}),
             exclude_types=('zoho_monthly_invoices',))

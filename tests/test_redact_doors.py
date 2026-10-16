@@ -4,7 +4,7 @@ Every model call in the app goes out through one of these:
 
 * ``llm.build_llm``      - the hosted brains (triage, assistant, concierge, drafter, digest).
                            Its own docstring says "everything in the app asks for its brain here".
-* ``agents.run_cli``     - a headless CLI run. This is the one the owner asked about: the coder
+* ``agents.run_cli``     - a headless CLI run. This is the one the owner asked about: the coding agent
                            prompt is built by ``agents.task_context``, which writes each message's
                            ``BodyText`` in verbatim.
 * ``terminal.open_session`` - the first prompt of an interactive pane, by either road: handed to

@@ -7,8 +7,8 @@ Copilot session on a coding task somebody notices weeks later.
 WHERE THE SPLIT IS NOT COMPLETE, on purpose and written down rather than implied:
 
   * `concierge.py:223` - the Assistant and the one-message jobs build their brain from an agent ROW
-    (`llm.make_cli_llm(store, agent_name)`), so `triage_ai = cli:coder` still means "coder's CLI",
-    not "the brain named coder". Removing this is what lets `_build_llm`'s dedupe go too.
+    (`llm.make_cli_llm(store, agent_name)`), so `triage_ai = cli:claude` still means "coding agent's CLI",
+    not "the brain named coding agent". Removing this is what lets `_build_llm`'s dedupe go too.
   * `general.provider_options` - a general session's provider list is one entry per AGENT, so its
     picker still offers workers where the coding picker now offers brains.
 
@@ -29,10 +29,10 @@ from taskuary.store import MemoryStore
 def store(default_brain='claude'):
     """The owner's shape after the split: one coding role, the general specialists, no CLI clones."""
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'provider': 'cli:claude'}))
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'provider': 'cli:claude'}))
     for name, kind in (('researcher', 'research'), ('analyst', 'analysis')):
         s.upsert_agent(name, kind, 'cli', json.dumps({'cmd': 'claude', 'purpose': f'{name} work'}))
-    s.set_setting('default_agent', 'coder', 'owner')
+    s.set_setting('default_agent', 'coding', 'owner')
     if default_brain: s.set_setting('default_brain', default_brain, 'owner')
     return s
 
@@ -51,20 +51,20 @@ class TriageOnlyEverNamesARole(unittest.TestCase):
     def test_a_coding_verdict_lands_on_the_coding_role_whatever_it_named(self):
         s = store()
         for named in ('copilot', 'analyst', 'codex', ''):
-            self.assertEqual(hub_agents.routed_role(s, 'coding', named), 'coder', named)
+            self.assertEqual(hub_agents.routed_role(s, 'coding', named), 'coding', named)
 
     def test_a_general_verdict_cannot_land_on_a_coding_role(self):
         s = store()
         s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
-        for named in ('coder', 'copilot'):
+        for named in ('coding', 'copilot'):
             self.assertEqual(hub_agents.routed_role(s, 'general', named), '', named)
 
 
 class TheSessionRunsTheBrain(unittest.TestCase):
     def test_the_profiles_own_command_does_not_decide_what_runs(self):
-        """coder's profile says claude; settings say codex. Settings win, and the ROLE is unchanged."""
+        """coding agent's profile says claude; settings say codex. Settings win, and the ROLE is unchanged."""
         s = store('codex')
-        self.assertEqual(hub_agents.brain_command(s, 'coder', CFG).get('cmd'), 'codex')
+        self.assertEqual(hub_agents.brain_command(s, 'coding', CFG).get('cmd'), 'codex')
 
     def test_open_session_launches_the_brain_not_the_profile(self):
         s = store('codex')
@@ -77,9 +77,9 @@ class TheSessionRunsTheBrain(unittest.TestCase):
         with mock.patch.object(hub_agents, 'brain_command', return_value={'cmd': 'codex', 'args': ['exec']}), \
              mock.patch.object(terminal, 'Term', side_effect=fake_term), \
              mock.patch('taskuary.agents._resolve_cmd', side_effect=lambda c: [c]):
-            terminal.open_session(s, 'coder')
+            terminal.open_session(s, 'coding')
         self.assertEqual(seen['argv'][0], 'codex')     # what RUNS is the brain
-        self.assertEqual(seen['agent'], 'coder')       # what it IS is the role
+        self.assertEqual(seen['agent'], 'coding')       # what it IS is the role
         self.assertEqual(seen['cli'], 'codex')         # and the card is told the brain
 
     def test_the_card_is_told_the_cli_not_its_launcher(self):
@@ -114,9 +114,9 @@ class GearsBelongToTheBrain(unittest.TestCase):
     def test_a_profile_carries_no_model(self):
         from taskuary import cli_connections
         cfg = {'cli_connections': {'claude': {'cmd': 'claude'}},
-               'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'opus'}}}
+               'agents': {'coding': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'opus'}}}
         cli_connections.migrate(cfg)
-        self.assertNotIn('model', cfg['agents']['coder'])
+        self.assertNotIn('model', cfg['agents']['coding'])
         self.assertEqual(cli_connections.gears(cfg, 'claude')['model'], 'opus')
 
 

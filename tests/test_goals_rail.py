@@ -63,7 +63,7 @@ class GoalRowTests(unittest.TestCase):
     def test_a_step_closed_today_is_news(self):
         s, settle = settled(); g = goal(s)
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'general', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), c, 'owner')
-        s.update_task(c, {'Status': 'done'}, 'agent:coder'); settle()
+        s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()
         k = card(s, g)
         self.assertTrue(k['news']); self.assertEqual(funnel.level_of(k), 'goals')
 
@@ -110,10 +110,10 @@ class FixPassTests(unittest.TestCase):
     def test_a_child_an_agent_is_running_folds_into_the_goal(self):
         s, settle = settled(); g = goal(s)
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'coding', 'Status': 'in_progress', 'ParentId': g}, 'owner')
-        s.link_step(g, checklist_id('Map the schema'), c, 'owner'); s.start_run(c, 'coder', 'map it', 'owner'); settle()
+        s.link_step(g, checklist_id('Map the schema'), c, 'owner'); s.start_run(c, 'coding', 'map it', 'owner'); settle()
         items = rail(s, include_read=True)
         self.assertNotIn(c, [i.get('tid') for i in items])
-        k = card(s, g); self.assertIn('coder on step 2', k['why']); self.assertEqual(k['who'], 'coder')
+        k = card(s, g); self.assertIn('coding on step 2', k['why']); self.assertEqual(k['who'], 'coding')
 
     def test_a_read_goal_comes_back_on_a_childs_close_and_not_on_the_quiet_hours(self):
         s, settle = settled(); g = goal(s)
@@ -124,5 +124,5 @@ class FixPassTests(unittest.TestCase):
         later = datetime.now() + timedelta(hours=4)                         # past the quiet hours, with no news
         k = next(i for i in rail(s, include_read=True, now=later) if i.get('tid') == g)
         self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
-        s.update_task(c, {'Status': 'done'}, 'agent:coder'); settle()      # news: a step closed since you read it
+        s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()      # news: a step closed since you read it
         k = card(s, g); self.assertFalse(k.get('surfaced')); self.assertTrue(k['actionable']); self.assertEqual(funnel.level_of(k), 'goals')

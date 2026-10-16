@@ -18,9 +18,9 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
     for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
-    s.set_setting('coder_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
+    s.set_setting('coding_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     return s
 
@@ -99,7 +99,7 @@ class FyiHandfulTests(unittest.TestCase):
         # the agent roads on an entry are the same proposals, with the kind in them
         with mock.patch.object(server, 'store', s), quiet():
             c = client(s)
-            self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'coder', 'key': second['key']}).json()['params']['kind'], 'coding')
+            self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'coding_agent', 'key': second['key']}).json()['params']['kind'], 'coding')
             self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'regular_agent', 'key': second['key']}).json()['params']['kind'], 'general')
             self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'juggle', 'key': second['key']}).status_code, 422)
             self.assertEqual(c.post('/api/concierge/propose', json={'verb': 'mine', 'key': 'msg:999'}).status_code, 422)

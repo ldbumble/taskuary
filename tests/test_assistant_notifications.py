@@ -25,8 +25,8 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states()
     return s
 
@@ -55,7 +55,7 @@ class WatcherTests(unittest.TestCase):
     def test_a_finished_agent_leaves_nothing_on_the_strip_and_nothing_in_the_chat(self):
         s = store(); t = task(s); dock = general.dock_task(s)[0]['TaskId']
         self.assertEqual(self._events(s, live(t)), [])                                  # the first look only remembers
-        s.add_comment(t, 'codex', 'agent', 'CODER REPORT\nSummary: imported all 80 files.')
+        s.add_comment(t, 'codex', 'agent', 'AGENT REPORT\nSummary: imported all 80 files.')
         s.update_task(t, {'Status': 'done'}, 'o')
         ev = self._events(s, [])
         self.assertEqual([(e['kind'], e['card']) for e in ev], [('done', None)])        # the transition is still SEEN...

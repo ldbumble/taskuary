@@ -21,7 +21,7 @@ def finished():
                          'Subject': 'Export broken', 'FromName': 'Erin Blake', 'FromEmail': 'erin@northwind.example',
                          'SentAt': '2026-09-30 09:00:00', 'BodyText': 'The nightly export is empty.', 'Status': 'routed'})
     reply = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Fixed - it runs tonight.'})
-    book = proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'monthly-export-fix', 'text': BOOK, 'why': 'it recurs'}, 'coder')
+    book = proposals.queue(s, tid, {'action': 'write_playbook', 'slug': 'monthly-export-fix', 'text': BOOK, 'why': 'it recurs'}, 'coding')
     assert book, 'the playbook proposal was refused'
     return s, tid, reply, book['reviewId']
 

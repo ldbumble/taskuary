@@ -60,7 +60,7 @@ def advised_item(t: dict, messages=()) -> str | None:
     owner, 2026-10-12: "why does number 1 show advisor not github pr?" - the row wore the PR's rank under the Advisor's
     icon). Anything that joined AFTER the Advisor opened it still wears the Advisor's (the report run of 2026-09-28)."""
     if not advisor_task(t): return None
-    from .coder import no_one_behind
+    from .wrapup import no_one_behind
     opened = str(t.get('CreatedAt') or '')
     before = [m for m in messages or () if m.get('TaskId') in (None, t.get('TaskId')) and m.get('Direction') != 'out'
               and not no_one_behind(m.get('Channel')) and opened and str(m.get('CreatedAt') or '') <= opened]
@@ -116,7 +116,7 @@ def row_lane(row: dict) -> str:
     if band == 2:
         # ...and an agent that stopped and is waiting on you is not a drafted reply awaiting a
         # yes. The lane table has always had a word for it - `blocked`, the 👋 - and this never
-        # returned it, so a parked coder wore "needs your yes", the same pill as a draft (the
+        # returned it, so a parked agent wore "needs your yes", the same pill as a draft (the
         # owner, 2026-09-11: "can't see the hand waving"). Both stay band 2, so the rail files
         # them together under "your task"; only the word on the row changes.
         if row.get('AgentWaiting'): return 'blocked'
@@ -277,7 +277,7 @@ def message_row(message, item, threads, now, *, full=False):
     working = (running[-1].get('AgentName') or 'agent') if running else None
     waiting, line = False, ''
     for worker in workers:
-        working = worker.get('agent') or worker.get('label') or 'coder'
+        working = worker.get('agent') or worker.get('label') or 'agent'
         waiting, line = waiting or bool(worker.get('waiting')), line or str(worker.get('line') or '')
     if working and active_task:
         row.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '')
@@ -443,8 +443,8 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
             if kind == 'idea' and (reason := idea_reason(entity)): legacy['RouteReason'] = reason
             # ...and for a task, the LIVE AGENT's word, exactly as a message-backed row takes it above. A task
             # with no message - the owner's own todo, a Board card - read `queued` ("waiting to start") over a
-            # coder that was mid-turn, and still `queued` once it stopped on a question (measured 2026-09-20);
-            # the pile beside it said "coder asked you", so one item wore two words.
+            # agent that was mid-turn, and still `queued` once it stopped on a question (measured 2026-09-20);
+            # the pile beside it said "the agent asked you", so one item wore two words.
             if kind == 'task':
                 tid = entity.get('TaskId')
                 legacy.update(TaskId=tid, Title=entity.get('Title'), TaskStatus=status, Assignee=entity.get('Assignee'), TaskKind=entity.get('Kind'))
@@ -453,7 +453,7 @@ def compact_inventory(snapshot, query, *, include_excluded=False, degraded_ok=Fa
                 working = (running[-1].get('AgentName') or 'agent') if running else None
                 waiting, line = False, ''
                 for w in workers:
-                    working = w.get('agent') or w.get('label') or 'coder'
+                    working = w.get('agent') or w.get('label') or 'agent'
                     waiting, line = waiting or bool(w.get('waiting')), line or str(w.get('line') or '')
                 if working and open_task:
                     legacy.update(Working=working, AgentWaiting=waiting, AgentLine=line if waiting else '', NeedsYou=int(waiting),

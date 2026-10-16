@@ -5,7 +5,7 @@ Two failures from one owner's machine (2026-08-31), both of which read as somebo
 * `codex exit 1: ... Error finding codex home: Could not find home directory` - Taskuary handed
   the CLI an environment with no home in it. codex keeps its settings and its sign-in there and
   will not start without one, and the message points at codex.
-* Every dispatch aimed at `claude`, which that machine has never had, because `coder` = claude
+* Every dispatch aimed at `claude`, which that machine has never had, because the coding profile = claude
   is what Taskuary ships. The Board showed it as the agent failing.
 
 Neither is the CLI's fault, so neither is left to the CLI to explain.
@@ -73,7 +73,7 @@ class TheEnvironmentAChildGetsTests(unittest.TestCase):
 class WhichAgentWorkTests(unittest.TestCase):
     def test_default_backup_chain_uses_every_other_configured_brain(self):
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
+        _agent(s, 'coding', 'claude')
         s.set_setting('default_brain', 'claude', 'o')
         s.set_setting('backup_brains', '*', 'o')
         cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}, 'gemini': {'cmd': 'gemini'}}}
@@ -81,7 +81,7 @@ class WhichAgentWorkTests(unittest.TestCase):
 
     def test_explicit_backup_chain_keeps_the_owners_order(self):
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
+        _agent(s, 'coding', 'claude')
         s.set_setting('backup_brains', 'gemini,codex', 'o')
         self.assertEqual(agents.brain_chain(s, 'claude', cfg={}), ['claude', 'gemini', 'codex'])
 
@@ -90,54 +90,55 @@ class WhichAgentWorkTests(unittest.TestCase):
         self.assertTrue(agents.availability_failure(RuntimeError('rate limit exceeded')))
         self.assertFalse(agents.availability_failure(RuntimeError('tests failed after editing three files')))
 
-    def test_the_owners_default_wins_when_its_cli_is_here(self):
+    def test_the_default_profile_is_the_coding_one_found_by_kind(self):
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
-        s.set_setting('default_agent', 'coder', 'o')
+        _agent(s, 'coding', 'claude')
+        s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         with mock.patch.object(agents, 'runs_here', return_value=True):
-            self.assertEqual(agents.default_agent(s), 'coder')
+            self.assertEqual(agents.default_agent(s), 'coding')
 
-    def test_a_path_probe_never_silently_replaces_the_owners_default(self):
+    def test_a_path_probe_never_silently_replaces_the_default_profile(self):
+        """A profile is instructions, not a CLI: which tool is installed has nothing to say about it."""
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
-        _agent(s, 'codex', 'codex')
-        s.set_setting('default_agent', 'coder', 'o')
+        _agent(s, 'coding', 'claude')
         with mock.patch.object(agents, 'runs_here', side_effect=lambda p: p.get('cmd') == 'codex'):
-            self.assertEqual(agents.default_agent(s), 'coder')
+            self.assertEqual(agents.default_agent(s), 'coding')
 
     def test_a_chain_of_brains_needs_no_dedupe(self):
         """agent_chain had to skip candidates whose cli_of it had already seen, because a list of
-        ROLES was really a list of brains - trying claude three times under coder/researcher/analyst
+        ROLES was really a list of brains - trying claude three times under coding/researcher/analyst
         is not failover. Brains are distinct by construction, so the patch went with them."""
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
+        _agent(s, 'coding', 'claude')
         s.set_setting('default_brain', 'claude', 'o')
         s.set_setting('backup_brains', '*', 'o')
         cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'copilot': {'cmd': 'copilot'}}}
         self.assertEqual(agents.brain_chain(s, cfg=cfg), ['claude', 'copilot'])
         self.assertFalse(hasattr(agents, 'agent_chain'))
 
-    def test_coding_cli_options_name_the_tool_and_collapse_profile_aliases(self):
+    def test_coding_cli_options_name_the_tool_never_a_profile(self):
+        """One option per connected CLI, valued by the tool's key - profiles on the same tool are not options of their own."""
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
+        _agent(s, 'coding', 'claude')
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
-        with mock.patch.object(agents, 'runs_here', return_value=True):
-            got = agents.cli_agent_options(s, preferred=['coder'], coding_only=True)
-        self.assertEqual([(o['value'], o['label']) for o in got], [('coder', 'claude'), ('copilot', 'copilot')])
+        conns = [('claude', {'cmd': 'claude'}), ('copilot', {'cmd': 'copilot'})]
+        with mock.patch.object(agents, 'runs_here', return_value=True),              mock.patch.object(agents, 'connection_brains', lambda store, cfg=None: conns):
+            got = agents.cli_agent_options(s, preferred=['copilot'], coding_only=True)
+        self.assertEqual([(o['value'], o['label']) for o in got], [('copilot', 'copilot'), ('claude', 'claude')])
 
-    def test_with_nothing_installed_the_owners_choice_is_still_reported(self):
+    def test_with_nothing_installed_the_default_profile_is_still_reported(self):
         """Silently renaming their default would be worse than failing where they can see it."""
         s = MemoryStore()
-        _agent(s, 'coder', 'claude')
-        s.set_setting('default_agent', 'coder', 'o')
+        _agent(s, 'coding', 'claude')
         with mock.patch.object(agents, 'runs_here', return_value=False):
-            self.assertEqual(agents.default_agent(s), 'coder')
+            self.assertEqual(agents.default_agent(s), 'coding')
 
-    def test_an_unknown_default_is_left_alone(self):
+    def test_a_legacy_default_agent_setting_invents_no_profile(self):
+        """`default_agent` once held a profile name; it is read by nothing now, and with no coding profile the answer is
+        blank - never a name nobody has."""
         s = MemoryStore()
         s.set_setting('default_agent', 'somebody-elses-agent', 'o')
-        self.assertEqual(agents.default_agent(s), 'somebody-elses-agent')
+        self.assertEqual(agents.default_agent(s), '')
 
     def test_runs_here_answers_no_rather_than_raising_for_a_missing_cli(self):
         self.assertFalse(agents.runs_here({'cmd': 'no-such-cli-anywhere-9z'}))

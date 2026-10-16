@@ -129,7 +129,7 @@ took or proposed - a reply sent, a task closed, an agent stopping and your next 
 words, a pull request merged, a promise made, a sender ignored - and a daily sweep fills in what
 followed from facts already in the store: more rounds on the thread, a task reopened, a promise
 delivered late. Reflection reads those rows as evidence, so a lesson can say "green PR from the
-coder: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
+coding agent: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
 first. It also keeps a page per person it deals with, compiled from the same ledger: how fast they
 answer, whether a chase is needed, who on copy moves them - and a thread gone quiet past that
 person's own day is *slipped*, on your rail under On you, with Chase, Let it go, They answered elsewhere

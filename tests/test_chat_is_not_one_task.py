@@ -117,7 +117,7 @@ class OneRoomManyJobs(unittest.TestCase):
     def test_an_answer_to_a_live_agent_is_never_split_off(self):
         """The agent asked them something on this chat; their answer is that round trip."""
         seen = []
-        rid = self.s.start_run(self.first['task_id'], 'coder', 'have a look', 'owner')
+        rid = self.s.start_run(self.first['task_id'], 'coding', 'have a look', 'owner')
         self.s.update_run(rid, {'Status': 'running'})
         out = line(self.s, 'yes, the production one', '2026-09-02 17:10:00', brain(same=False, seen=seen))
         self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id']))

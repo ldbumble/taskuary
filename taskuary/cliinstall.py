@@ -167,9 +167,9 @@ def npm_install(pkg: str) -> list:
 def recipe_for(cmd: str) -> str:
     """Which recipe a profile's `cmd` is an install OF, or ''.
 
-    A profile is named for its job - every install ships one called `coder` - so the name to
+    A profile is named for its job - every install ships one called `coding` - so the name to
     install is read off the command it runs, never off the row's own name. Asking to install
-    'coder' is a 422, and `coder` is the first row an owner sees."""
+    'coding' is a 422, and `coding` is the first row an owner sees."""
     base = str(cmd or '').replace('\\', '/').rsplit('/', 1)[-1].lower()   # both separators, on either OS
     for ext in ('.exe', '.cmd', '.bat', '.ps1'):
         if base.endswith(ext): base = base[:-len(ext)]

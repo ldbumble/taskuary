@@ -14,12 +14,12 @@ import { outcomeOf } from "../src/dispatchOutcome.js";
 const src = (name) => fs.readFileSync(path.join(process.cwd(), "src", name), "utf8");
 
 test("a dispatch answer is read as started, existing, needs_repo or assistant - never a decision as a start", () => {
-  assert.equal(outcomeOf({ dispatch: "needs_repo", taskId: 3, agent: "coder" }).state, "needs_repo");
-  assert.equal(outcomeOf({ dispatch: "session", started: true, accepted: true, agent: "coder", ref: "TQ-0003" }).state, "started");
-  assert.match(outcomeOf({ dispatch: "session", started: true, accepted: true, agent: "coder", ref: "TQ-0003" }).text, /coder is on it/);
-  assert.match(outcomeOf({ dispatch: "session", started: true, accepted: false, agent: "coder", ref: "TQ-0003" }).text, /opening|typing/i);
-  assert.equal(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coder", ref: "TQ-0003" }).state, "existing");
-  assert.match(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coder", ref: "TQ-0003" }).text, /already/);
+  assert.equal(outcomeOf({ dispatch: "needs_repo", taskId: 3, agent: "coding" }).state, "needs_repo");
+  assert.equal(outcomeOf({ dispatch: "session", started: true, accepted: true, agent: "coding", ref: "TQ-0003" }).state, "started");
+  assert.match(outcomeOf({ dispatch: "session", started: true, accepted: true, agent: "coding", ref: "TQ-0003" }).text, /coding is on it/);
+  assert.match(outcomeOf({ dispatch: "session", started: true, accepted: false, agent: "coding", ref: "TQ-0003" }).text, /opening|typing/i);
+  assert.equal(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coding", ref: "TQ-0003" }).state, "existing");
+  assert.match(outcomeOf({ dispatch: "session", started: false, existing: true, agent: "coding", ref: "TQ-0003" }).text, /already/);
   assert.equal(outcomeOf({ dispatch: "assistant", started: true, agent: "cli:claude", ref: "TQ-0004" }).state, "started");
   // an older server without the flags: a session payload is a start, a needs_repo is not
   assert.equal(outcomeOf({ dispatch: "session", session: { sid: "s" } }).state, "started");

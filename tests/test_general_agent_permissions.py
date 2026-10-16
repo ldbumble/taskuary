@@ -18,8 +18,13 @@ from taskuary.store import MemoryStore
 def task(store): return store.create_task({'Title': 'Fix his access', 'Kind': 'general', 'Status': 'open'}, 'owner')
 
 
-def a_claude(store):
-    store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+def a_claude(test):
+    """Claude Code connected as a brain - a CLI tool in config.toml's cli_connections, never a profile row."""
+    from taskuary import agents
+    real, conns = config.load, {'claude': {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}}
+    for p in (mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': conns}),
+              mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains))):
+        p.start(); test.addCleanup(p.stop)
 
 
 def turn(store, tid, reply='ok', hands=None):
@@ -32,41 +37,41 @@ def turn(store, tid, reply='ok', hands=None):
         seen.update(profile=profile, prompt=f'{system}\n\n{prompt}', env={**(profile.get('env') or {}), **(kwargs.get('extra_env') or {})})
         return reply, None, None
     with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch('taskuary.agents.run_cli', side_effect=run_cli):
-        s = general.start_session(store, tid, pick='cli:my-claude')
-        s.send_prompt('Grant him the Financial role', pick='cli:my-claude')
+        s = general.start_session(store, tid, pick='cli:claude')
+        s.send_prompt('Grant him the Financial role', pick='cli:claude')
     return seen
 
 
 class TheDefaultIsTheCliAgentsOwnHandsTests(unittest.TestCase):
     def test_by_default_a_general_agent_keeps_the_cli_profiles_permissions(self):
-        store = MemoryStore(); a_claude(store)
+        store = MemoryStore(); a_claude(self)
         args = turn(store, task(store))['profile']['args']
         self.assertIn('--dangerously-skip-permissions', args)
         self.assertNotIn('--allowedTools', args)
 
     def test_it_works_in_a_folder_of_its_own_and_knows_who_it_is(self):
-        store = MemoryStore(); a_claude(store)
+        store = MemoryStore(); a_claude(self)
         seen = turn(store, task(store))
         self.assertTrue(seen['profile'].get('cwd'))
         self.assertEqual(seen['env'].get('TASKUARY_TOKEN'), config.load()['server'].get('agent_token'))
         self.assertTrue(seen['env'].get('TASKUARY_URL'))
 
     def test_it_is_told_which_systems_it_may_use_and_how(self):
-        store = MemoryStore(); a_claude(store)
+        store = MemoryStore(); a_claude(self)
         store.save_connector({'Type': 'mssql', 'Name': 'SQL Server', 'Active': 1, 'Roles': 'report,tool', 'Scope': 'read'}, 'test')
         prompt = turn(store, task(store))['prompt']
         self.assertIn('SQL Server', prompt); self.assertIn('/api/tools/run', prompt)
         self.assertIn('authority read', prompt)          # so a write is proposed rather than attempted
 
     def test_look_only_takes_the_hands_away(self):
-        store = MemoryStore(); a_claude(store)
+        store = MemoryStore(); a_claude(self)
         args = turn(store, task(store), hands='look')['profile']['args']
         self.assertNotIn('--dangerously-skip-permissions', args)
 
 
 class AChatCanProposeTests(unittest.TestCase):
     def test_a_proposal_in_the_chats_reply_is_queued_for_the_owner(self):
-        store = MemoryStore(); a_claude(store); tid = task(store)
+        store = MemoryStore(); a_claude(self); tid = task(store)
         turn(store, tid, reply='I need your yes for the grant.\nTASKUARY-PROPOSE {"action": "run_tool", "type": "mssql", '
                                 '"query": "INSERT INTO dbo.UserRoles VALUES (1, 2)"}')
         waiting = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending'", (tid,))

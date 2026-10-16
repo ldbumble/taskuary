@@ -15,12 +15,12 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from taskuary import coder, selfclose, session_artifacts, terminal as term, workerstate as ws
+from taskuary import wrapup, selfclose, session_artifacts, terminal as term, workerstate as ws
 from taskuary.store import MemoryStore
 
 
 def live(tid, sid='run1'):
-    return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=r'C:\code\repo', agent='coder', label='coder', argv=['claude'],
+    return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=r'C:\code\repo', agent='coding', label='coding', argv=['claude'],
                            started='2026-09-06 09:00:00', started_ts=1.0, n=5000, tail=lambda k=3: ['done'], files=lambda: [],
                            witness=SimpleNamespace(said='I fixed the cron user and re-ran it.', note=lambda n: None), store=None, last=1.0)
 
@@ -32,11 +32,11 @@ class Base(unittest.TestCase):
         self.tid = self.s.create_task({'Title': 'Fix the cron', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
         self.s.set_task_checklist(self.tid, ['Find why the cron fails', 'Fix it', 'Re-run tonight'], 'triage')
         self.closed = []
-        self.patches = [mock.patch.object(term, 'transcript_for', return_value=('the transcript\n- [x] Find why the cron fails\n- [x] Fix it', 'coder', 'run1')),
+        self.patches = [mock.patch.object(term, 'transcript_for', return_value=('the transcript\n- [x] Find why the cron fails\n- [x] Fix it', 'coding', 'run1')),
                         mock.patch.object(term, 'close', side_effect=lambda sid: self.closed.append(sid) or True),
-                        mock.patch.object(coder, 'report_from_transcript', return_value={'summary': 'Fixed the cron user.', 'changed': [], 'left': ''}),
-                        mock.patch.object(coder, 'resolution_text', return_value='Fixed the cron user.'),
-                        mock.patch.object(coder, 'finish', return_value={'drafting': False}),
+                        mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'Fixed the cron user.', 'changed': [], 'left': ''}),
+                        mock.patch.object(wrapup, 'resolution_text', return_value='Fixed the cron user.'),
+                        mock.patch.object(wrapup, 'finish', return_value={'drafting': False}),
                         mock.patch('taskuary.proposals.collect', return_value=[]),
                         mock.patch('taskuary.playbooks.draft', return_value=None),
                         mock.patch('taskuary.handbook.enabled', return_value=False)]
@@ -54,31 +54,31 @@ class SaveBeforeCloseTests(Base):
         order = []
         with mock.patch.object(session_artifacts, 'coding', side_effect=lambda *a, **k: order.append('saved') or {'ArtifactId': 1, 'Path': 'x', 'Kind': 'coding_session'}), \
              mock.patch.object(term, 'close', side_effect=lambda sid: order.append('closed') or True):
-            coder.wrap(self.s, self.tid, close=True, actor='coder', final_message='Fixed: the cron ran as the wrong user.')
+            wrapup.wrap(self.s, self.tid, close=True, actor='agent', final_message='Fixed: the cron ran as the wrong user.')
         self.assertEqual(order, ['saved', 'closed'])
         # no box is ticked from a `- [x] ...` line in the prose (2026-10-11): nothing gives the agent an item id to report,
         # and a substring match ticked items it never named; closing the TASK ticks every box (done-ticks-every-box)
         items = {i['text']: i['done'] for i in self.s.task_checklist(self.tid)}
         self.assertEqual(items, {'Find why the cron fails': False, 'Fix it': False, 'Re-run tonight': False})
-        self.assertFalse(hasattr(coder, 'tick_reported_checklist'))
+        self.assertFalse(hasattr(wrapup, 'tick_reported_checklist'))
 
     def test_the_final_answer_is_the_agents_own_and_matched_to_the_run(self):
         term.SESSIONS['run1'] = live(self.tid)
         ws.record(self.s, self.tid, 'run1', 'finished', text='Done: cleared the stuck job and re-ran it.', source='cli')
-        coder.wrap(self.s, self.tid, close=True, actor='coder')
+        wrapup.wrap(self.s, self.tid, close=True, actor='agent')
         self.assertIn('cleared the stuck job', self.artifact_text())                       # the --done sentence, not a reconstruction
         term.SESSIONS['run1'].alive = False                                              # the first run is over
         term.SESSIONS['run2'] = live(self.tid, 'run2')
         ws.record(self.s, self.tid, 'run2', 'finished', text='Second run: nothing left to do.', source='cli')
-        coder.wrap(self.s, self.tid, close=True, actor='coder')
+        wrapup.wrap(self.s, self.tid, close=True, actor='agent')
         self.assertIn('Second run', self.artifact_text()); self.assertNotIn('cleared the stuck job', self.artifact_text())
 
     def test_a_save_that_fails_keeps_the_session_and_claims_nothing(self):
         term.SESSIONS['run1'] = live(self.tid)
         with mock.patch.object(session_artifacts, 'coding', side_effect=OSError('disk full')):
-            with self.assertRaises(ValueError): coder.wrap(self.s, self.tid, close=True, actor='coder', final_message='x')
+            with self.assertRaises(ValueError): wrapup.wrap(self.s, self.tid, close=True, actor='agent', final_message='x')
         self.assertEqual(self.closed, []); self.assertEqual(self.s.get_task(self.tid)['Status'], 'in_progress')
-        self.assertFalse(any(str(c['Body']).startswith('CODER REPORT') for c in self.s.list_comments(self.tid)))
+        self.assertFalse(any(str(c['Body']).startswith(wrapup.REPORTS) for c in self.s.list_comments(self.tid)))
 
 
 class ExplicitFinishTests(Base):
@@ -88,28 +88,28 @@ class ExplicitFinishTests(Base):
         closed, nothing is wrapped, and the agent's sentence is filed for the owner."""
         sess = live(self.tid); term.SESSIONS['run1'] = sess
         selfclose.claim(self.s, self.tid, 'owner')                                           # the owner opened it to sit in
-        out = selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'coder')
+        out = selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'agent')
         self.assertFalse(out.get('closed')); self.assertEqual(out['why'], selfclose.OWNER_ENDS)
         self.assertEqual(self.closed, []); self.assertFalse(self.artifacts())
         self.assertIn('The agent says it is finished: cleared the stuck job', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
         # ...and once the owner takes the mark off, the same word is the ending
         selfclose.unclaim(self.s, self.tid)
-        self.assertTrue(selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'coder').get('closed'))
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'cleared the stuck job', 'agent').get('closed'))
         self.assertEqual(self.closed, ['run1']); self.assertEqual(ws.status(self.s, self.tid)['state'], 'finished')
 
     def test_a_second_finish_for_the_same_run_does_nothing_twice(self):
         term.SESSIONS['run1'] = live(self.tid)
-        a = selfclose.declare(self.s, self.tid, 'done', 'coder')
-        b = selfclose.declare(self.s, self.tid, 'done again', 'coder')
+        a = selfclose.declare(self.s, self.tid, 'done', 'agent')
+        b = selfclose.declare(self.s, self.tid, 'done again', 'agent')
         self.assertTrue(a.get('closed') or a.get('closed_run')); self.assertFalse(b.get('closed') or b.get('closed_run'))
         self.assertEqual(len(self.artifacts()), 1)
 
     def test_a_finish_whose_save_fails_can_be_retried(self):
         term.SESSIONS['run1'] = live(self.tid)
         with mock.patch.object(session_artifacts, 'coding', side_effect=OSError('disk full')):
-            a = selfclose.declare(self.s, self.tid, 'done', 'coder')
+            a = selfclose.declare(self.s, self.tid, 'done', 'agent')
         self.assertFalse(a.get('closed')); self.assertTrue(any('could not' in c['Body'] for c in self.s.list_comments(self.tid)))
-        b = selfclose.declare(self.s, self.tid, 'done', 'coder')
+        b = selfclose.declare(self.s, self.tid, 'done', 'agent')
         self.assertTrue(b.get('closed') or b.get('closed_run')); self.assertEqual(len(self.artifacts()), 1)
 
 
@@ -121,13 +121,13 @@ class QuestionGateTests(Base):
         sess = live(self.tid); sess.tail = lambda k=3: ['Fixed the cron. Why did it fail? It ran as the wrong user.', 'Should I also tidy the logs?']
         term.SESSIONS['run1'] = sess
         self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '')
-        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'coder').get('closed'))
+        self.assertTrue(selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent').get('closed'))
 
     def test_an_open_marker_question_refuses_done(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
         ws.record(self.s, self.tid, 'run1', 'input_needed', text='Which account should the refund go to?', choices=['Card', 'Bank'], source='hook')
         self.assertIn('Which account should the refund go to?', selfclose.blocked(self.s, self.tid, sess))
-        self.assertFalse(selfclose.declare(self.s, self.tid, 'done', 'coder').get('closed'))
+        self.assertFalse(selfclose.declare(self.s, self.tid, 'done', 'agent').get('closed'))
 
     def test_the_models_read_of_a_turn_does_not_refuse_done(self):
         sess = live(self.tid); term.SESSIONS['run1'] = sess
@@ -150,16 +150,16 @@ class NoReplyTests(Base):
     def test_done_with_no_reply_drafts_none_and_puts_a_waiting_draft_down(self):
         term.SESSIONS['run1'] = live(self.tid)
         rid = self.s.add_review({'TaskId': self.tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Hi Erin, on it.'})
-        out = selfclose.declare(self.s, self.tid, 'not ours - the owner chose no reply', 'coder', no_reply=True)
+        out = selfclose.declare(self.s, self.tid, 'not ours - the owner chose no reply', 'agent', no_reply=True)
         self.assertTrue(out.get('closed'))
-        self.assertTrue(coder.finish.call_args.kwargs.get('no_reply'), 'finish is told no reply is owed')
+        self.assertTrue(wrapup.finish.call_args.kwargs.get('no_reply'), 'finish is told no reply is owed')
         self.assertEqual(self.s.get_review(rid)['Status'], 'no_reply')
         self.assertIn('no reply is owed', ' '.join(c['Body'] for c in self.s.list_comments(self.tid)))
 
     def test_plain_done_still_drafts_as_before(self):
         term.SESSIONS['run1'] = live(self.tid)
-        selfclose.declare(self.s, self.tid, 'fixed the cron', 'coder')
-        self.assertFalse(coder.finish.call_args.kwargs.get('no_reply'))
+        selfclose.declare(self.s, self.tid, 'fixed the cron', 'agent')
+        self.assertFalse(wrapup.finish.call_args.kwargs.get('no_reply'))
 
     def test_the_agent_is_told_the_flag_exists(self):
         self.assertIn('--no-reply', selfclose.SEED_LINE)

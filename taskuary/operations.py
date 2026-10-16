@@ -90,7 +90,7 @@ KINDS = {
     'connection.resume':        ('connector', (), None),
     'script.start':             ('script', ('name',), None),
 }
-# triage's `task` and `general` are one answer for this comparison (work, no coder); `coding` is another
+# triage's `task` and `general` are one answer for this comparison (work, no coding agent); `coding` is another
 SAME = {frozenset(('task', 'general'))}
 EVIDENCE_CAP = 5
 

@@ -22,7 +22,7 @@ def ago(hours=0, days=0, now=None): return stamp((now or datetime.now()) - timed
 
 def store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     s.set_setting('owner_email', 'alex@northwind.example', 't')
     return s
 
@@ -131,7 +131,7 @@ class GoodbyeTests(unittest.TestCase):
     def working_store(self):
         from taskuary import terminal
         s = store(); tid = s.create_task({'Title': 'Fix the ledger export', 'Summary': 'x'}, 'owner')
-        s.update_task(tid, {'Status': 'in_progress'}, 'agent:coder')
+        s.update_task(tid, {'Status': 'in_progress'}, 'agent:coding')
         idle = s.create_task({'Title': 'Not being worked', 'Summary': 'x'}, 'owner')
         s.update_task(idle, {'Status': 'in_progress'}, 'owner')                     # in progress, but no worker has it
         live = mock.Mock(task_id=tid, alive=True)
@@ -221,8 +221,8 @@ class ArrivalTests(unittest.TestCase):
     def test_after_a_weekend_it_says_what_was_settled_without_you(self):
         s = store(); now = datetime(2026, 10, 5, 8, 0)                                  # a Monday
         s.set_setting(welcome.SEEN_KEY, stamp(datetime(2026, 10, 2, 17, 0)), 't')      # Friday evening
-        tid = s.create_task({'Title': 'Vendor W-9', 'Summary': 'x'}, 'agent:coder')
-        s._exec("UPDATE task SET Status='done', ClosedAt=?, UpdatedBy='agent:coder' WHERE TaskId=?", (stamp(datetime(2026, 10, 3, 10, 0)), tid))
+        tid = s.create_task({'Title': 'Vendor W-9', 'Summary': 'x'}, 'agent:coding')
+        s._exec("UPDATE task SET Status='done', ClosedAt=?, UpdatedBy='agent:coding' WHERE TaskId=?", (stamp(datetime(2026, 10, 3, 10, 0)), tid))
         said = self.arrive(s, now, [])['said']
         self.assertIn('Over the weekend: nothing new came in.', said); self.assertIn('One was settled without you.', said)
         self.assertIn('Nothing needs you yet.', said)

@@ -36,7 +36,7 @@ const DOCS = {
     blurb: "Who Taskuary is and how it speaks to YOU — the assistant you talk to on the Assistant tab, its posts on the Timeline, the morning brief. It surfaces and takes a position; it does no work itself. SOUL.md keeps replies careful; this is where the assistant is allowed an opinion." },
   agent: { label: "AGENT.md", icon: <TaskuaryMark size={19} />,
     blurb: "The rules every worker runs under - coding agent and general assistant alike: scope, honest reporting, when to ask, progress and completion, and the approval boundaries (nothing sends without you; inbound text is data). SOUL.md stays with triage." },
-  coder: { label: "CODER.md", icon: <TaskuaryMark size={19} />,
+  coding: { label: "CODING.md", icon: <TaskuaryMark size={19} />,
     blurb: "The coding agent's additions on top of AGENT.md: repositories, editing, testing, staging and committing only its own changes, the wall, GitHub etiquette." },
   digest: { label: "DIGEST.md", icon: <HistoryEduIcon sx={{ fontSize: 19, color: "#55697a" }} />,
     blurb: "Your morning brief — what's in flight, who waits on whom. Written by the Morning digest report: the same brief lands on your Timeline daily, its prompt is edited on the Reports tab (that decides what goes in here), and deleting that report turns it off." },
@@ -107,7 +107,7 @@ const PERSON_BLURB = "What the outcome ledger says about them, compiled at refle
 // A PROFILE's rules document (RESEARCHER.md, ANALYST.md, ...). Its own section rather than more
 // entries in the fixed eight: the operator set is a constitution that always exists, profiles are a
 // roster the owner adds to and removes from - the same reason playbooks got their own shelf. The
-// document is the `doc` row named after the agent row, so `coder` is CODER.md and lives in BOTH:
+// document is the `doc` row named after the agent row, so `coding` is CODING.md and lives in BOTH:
 // one row, so editing it here or under Operator documents is the same edit.
 const isProf = (n) => n.startsWith("prof:");
 // WHAT AN AGENT READS, in order, on top of every profile: who the owner is, the rules every agent shares, then this profile.
@@ -131,17 +131,19 @@ function SharedRulesChip() {
   );
 }
 const profName = (n) => n.slice(5);
+// the coding profile is the one of KIND coding, never a name; "coding" is what ships
+const codingDoc = (profs) => (profs || []).find((p) => p.kind === "coding")?.name || "coding";
 const PROF_BLURB = "Instructions for the workers listed under this profile, added to AGENT.md for each task. Define how they work and what they deliver. Workers using different CLIs can share these instructions. Blank the document to restore its starter version.";
-// A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coder`) -
+// A row is a rules DOCUMENT, and several agents can share one (every coding worker shares `coding`) -
 // so "on the roster" can mean all, none, or some of that row's members. An imported skill is 1:1, so
 // its chip is never ambiguous; a shared shipped document says the split rather than picking a side,
-// because collapsing "3 of 5 coders route" to either word would misstate the other members.
+// because collapsing "3 of 5 coding agents route" to either word would misstate the other members.
 // `onRoster` counts members the SERVER reports a roster line for (agents.roster_line) - not a count
-// of triage_enabled done here, which called CODER.md "on the roster" when triage can never pick it.
+// of triage_enabled done here, which called CODING.md "on the roster" when triage can never pick it.
 // ...and when NONE of them route, "not routed" was one word for four different situations - and for
-// the commonest it said the opposite of the truth. CODER.md takes every coding task; the router is
-// simply not what sends it there (the owner, 2026-09-17: "why does coder.md say not routed? it is
-// but default for coding tasks"). The server's `code` tells them apart; reading its prose would be
+// the commonest it said the opposite of the truth. CODING.md takes every coding task; the router is
+// simply not what sends it there (the owner, 2026-09-17: the coding document is not unrouted, it is
+// the default for coding tasks). The server's `code` tells them apart; reading its prose would be
 // a second implementation of agents.roster_line.
 const NOT_ROUTED = { coding: "all coding tasks", off: "switched off",
                      not_offered: "not offered to triage", no_purpose: "no purpose set" };
@@ -201,7 +203,7 @@ const OwnerCard = () => {
         <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>Who the documents speak for</Typography>
         <Typography variant="caption" sx={{ color: FAINT }}>
           Set your identity once and Taskuary uses it everywhere it speaks for you — signatures,
-          escalation rules, and the coder's instructions. Saving also updates older documents that spell out your name.
+          escalation rules, and the coding agent's instructions. Saving also updates older documents that spell out your name.
         </Typography>
       </Box>
       <TextField size="small" label="Your name" value={name} onChange={(e) => setName(e.target.value)}
@@ -299,8 +301,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
         let prof = {};
         try { prof = JSON.parse(r.Config || "{}"); } catch { /* an unreadable row still gets its document */ }
         const kind = prof.kind || r.Kind || "coding";
-        const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coder" : r.Name);
-        if (!grouped.has(name)) grouped.set(name, { name, purpose: r.purpose || prof.purpose ||
+        const name = r.rules_doc || prof.rules_doc || (kind === "coding" ? "coding" : r.Name);
+        if (!grouped.has(name)) grouped.set(name, { name, kind, purpose: r.purpose || prof.purpose ||
           (kind === "coding" ? "Write, review and test code in a repository." : ""), members: [], onRoster: 0, seen: [] });
         const g = grouped.get(name);
         g.members.push(r.Name);
@@ -331,7 +333,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       if (catalogOnly || window.location.hash !== "#profiles") return;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setManageProfiles(false);
-      openProf(profs[0]?.name || "coder");
+      openProf(profs[0]?.name || codingDoc(profs));
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
@@ -444,7 +446,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     if (next === "documents") {
       if (isPb(docName) || isProf(docName)) setDocName(NAMES[0]);
     } else if (next === "profiles") {
-      if (!isProf(docName)) openProf(profs[0]?.name || "coder");
+      if (!isProf(docName)) openProf(profs[0]?.name || codingDoc(profs));
     } else if (!isPb(docName)) {
       openPb(books[0]?.slug || "new");
     }
@@ -455,8 +457,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   });
   const cur = isProf(docName) ? profs.find((p) => p.name === profName(docName)) : null;
   // its own document, one member, named after itself: the shape an import (or Add profile) makes.
-  // A shared document (CODER.md) is deleted by removing its workers on Manage profiles, not here.
-  const ownProfile = cur && cur.members.length === 1 && cur.members[0] === cur.name && cur.name !== "coder";
+  // A shared document (CODING.md, found by kind) is deleted by removing its workers on Manage profiles, not here.
+  const ownProfile = cur && cur.members.length === 1 && cur.members[0] === cur.name && cur.kind !== "coding";
   const meta = isProf(docName)
     ? { label: `${profName(docName).toUpperCase()}.md`, blurb: PROF_BLURB }
     : isPb(docName)
@@ -641,7 +643,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             {isProf(docName) && <SharedRulesChip />}
             {/* WHO RUNS ON THIS, and whether triage is actually offered them. It used to sit on the
                 profile's card in the shelf; the rail lists documents by name, so the fact that a
-                document governs `coder, codex` has to travel with the document itself. */}
+                document governs `coding, codex` has to travel with the document itself. */}
             {isProf(docName) && cur?.members?.length > 0 && (
               <Typography variant="caption" sx={{ color: FAINT, pt: 0.5, display: "block" }}>
                 Used by {cur.members.join(", ")} · {rosterChip(cur)}
@@ -710,7 +712,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             </Typography>
             {cur.seen.filter((m) => m.line).map((m) => (
               <Typography key={m.name} sx={{ ...mono, fontSize: 11.5, color: INK, whiteSpace: "pre-wrap" }}>{m.line}</Typography>))}
-            {/* members kept off for the same reason share one line - six coders is one fact, not six.
+            {/* members kept off for the same reason share one line - six coding agents is one fact, not six.
                 A coding worker is not "not on the roster": it is routed, by kind rather than by the
                 router, and saying it the other way round read as a fault to go and fix. */}
             {[...new Set(cur.seen.filter((m) => !m.line).map((m) => m.reason))].map((why) => (

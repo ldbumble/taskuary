@@ -1,6 +1,6 @@
 """`kind` routes the task, and triage is the only thing that decides it.
 
-Owner, 2026-08-30 (TQ-0253), after a PhishGuard training reminder got a full coder run and a
+Owner, 2026-08-30 (TQ-0253), after a PhishGuard training reminder got a full coding agent run and a
 drafted reply back to the mailer: the exception to everything-goes-to-the-agent is not "an
 automated sender", it is "clearly not a coding job" - and it belongs in TRIAGE.md, not in a
 hardcoded rule. So there is exactly one gate on the work: coding starts a session, general
@@ -34,7 +34,7 @@ def mail(**kw):
 
 def store():
     s = MemoryStore()
-    s.set_setting('coder_auto_enabled', '1', 't')
+    s.set_setting('coding_auto_enabled', '1', 't')
     s.set_setting('owner_email', 'dana@northwind.example', 't')
     return s
 
@@ -84,7 +84,7 @@ class DispatchTests(unittest.TestCase):
 
     def test_a_person_asking_for_something_no_agent_can_do_also_gets_no_cli(self):
         """And it cuts the other way: a colleague asking you to attend a meeting is general - the
-        assistant, not a coder (PW-069)."""
+        assistant, not a coding agent (PW-069)."""
         s = store()
         _out, spawned = ingested(s, mail(external_id='p1', from_email='teammate@northwind.example', from_name='Sam',
                                          subject='board meeting', body='Can you sit in on the board meeting Thursday?'),
@@ -108,7 +108,7 @@ class GateTests(unittest.TestCase):
                               'SentAt': '2026-08-30 09:00', 'BodyText': NOTICE, 'Status': 'routed'})
 
     def test_coding_falls_through_to_the_stranger_gate(self):
-        s = store(); s.set_setting('coder_auto_enabled', '1', 't')
+        s = store(); s.set_setting('coding_auto_enabled', '1', 't')
         with mock.patch.object(senders, 'wrote_to', return_value=False):
             ok, why = auto_start_ok(s, {'channel': 'email', 'from_email': 'stranger@evil.example'},
                                     self._mid(s, 'stranger@evil.example'), 'coding')

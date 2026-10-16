@@ -87,7 +87,7 @@ const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || k
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
 // One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·
-// coder" spent three words saying an agent has it.
+// coding" spent three words saying an agent has it.
 const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent · /, "");
 // The checklist is already on every list row - store.list_tasks selects t.* and the Checklist
 // column rides along - so the rail draws progress without a request per task.

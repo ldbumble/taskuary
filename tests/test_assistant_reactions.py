@@ -14,7 +14,7 @@ Read it as a matrix:
                general (non-coding) work · a person's own task · an urgent sender · a muted family
 
     RESPONSES  next · done · later · tomorrow · reply (with the gist) · approve · not ours ·
-               never again · that sender is noise · remember X · send it to the coder · I'll do it ·
+               never again · that sender is noise · remember X · send it to the coding agent · I'll do it ·
                close the task · stop the agent · wrap it up · rerun the report · sweep them away ·
                split it in two · set something up · a correction · a question · a lookup
 
@@ -29,7 +29,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, general, ingest, operations, server, terminal
+from taskuary import concierge, funnel, general, ingest, operations, server, terminal, wrapup
 from taskuary.store import MemoryStore
 
 
@@ -43,9 +43,9 @@ def ahead(minutes=0):
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', '{}')         # an install has one; without it a hand-off is refused
+    s.upsert_agent('coding', 'coding', 'cli', '{}')         # an install has one; without it a hand-off is refused
     for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
-    s.set_setting('coder_auto_enabled', '1', 't')          # the funnel of record: work reaches an agent
+    s.set_setting('coding_auto_enabled', '1', 't')          # the funnel of record: work reaches an agent
     s.set_setting('team_domains', 'ours.com', 't')
     s.set_setting('owner_email', 'owner@ours.com', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
@@ -93,7 +93,7 @@ def surface(s, key=None, live=()):
 
 
 def session(tid, **kw):
-    base = {'taskId': tid, 'sid': f's{tid}', 'agent': 'coder', 'label': 'coder', 'started': ago(hours=1),
+    base = {'taskId': tid, 'sid': f's{tid}', 'agent': 'coding', 'label': 'coding', 'started': ago(hours=1),
             'idle': 2, 'waiting': False, 'tail': ['reading…']}
     return [{**base, **kw}]
 
@@ -126,7 +126,7 @@ class ArrivalsTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))
         self.assertFalse(spawn.called)                                  # …held on purpose: nobody has ever written to them
         self.assertIn('first message from', s.list_routes(out['task_id'])[-1]['Reason'])
-        # handed to the coder and held, so it is WAITING TO START - not "asked you", which claimed a
+        # handed to the coding agent and held, so it is WAITING TO START - not "asked you", which claimed a
         # person had asked for something (the owner, 2026-09-16). The owner's own tasks, which no
         # agent is assigned, keep the asked lane and their kind says "on you".
         self.assertEqual(lanes(s), [('todo', 'queued')])
@@ -169,7 +169,7 @@ class ArrivalsTests(unittest.TestCase):
         self.assertEqual([(i['kind'], i['category'], i['title']) for i in pile(s)],
                          [('fyi', 'assistant', 'Tess sent a new requirement')])
 
-    def test_general_work_opens_a_conversation_and_starts_no_coder(self):
+    def test_general_work_opens_a_conversation_and_starts_no_coding_agent(self):
         s = store()
         with mock.patch.object(ingest, '_spawn') as spawn:
             out = arrive(s, subject='Which vendor should we pick?', body='Weigh these two quotes for me.',
@@ -293,8 +293,8 @@ class ArrivalsTests(unittest.TestCase):
             self.assertEqual([e['kind'] for e in ev], ['asking'])
             self.assertEqual(lanes(s, asking), [('agent', 'blocked')])
             self.assertEqual(funnel.alerts(s, funnel.build(s)['items'])[0]['kind'], 'agent')
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: fixed the export and deployed.')
-        s.update_task(tid, {'Status': 'done'}, 'coder')
+        s.add_comment(tid, 'agent', 'agent', wrapup.REPORT + chr(10) + 'Summary: fixed the export and deployed.')
+        s.update_task(tid, {'Status': 'done'}, 'agent')
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             ev = funnel.announce(s)
         self.assertEqual([e['kind'] for e in ev], ['done'])
@@ -316,7 +316,7 @@ class ArrivalsTests(unittest.TestCase):
         with mock.patch.object(ingest, '_spawn'):
             arrive(s, subject='Northwind Financial Report - can you re-run .02?', body='please re-run it',
                    who='Paula Vance', email='pvance@vendor.example', hours=0, llm=brain('task', 'coding'))
-        self.assertEqual([i['lane'] for i in pile(s)], ['queued'])   # a coding ask reached the coder
+        self.assertEqual([i['lane'] for i in pile(s)], ['queued'])   # a coding ask reached the coding agent
 
 
 # ── what the owner says back, and what actually happens ──────────────────────────────────────
@@ -389,14 +389,14 @@ class WrongThreadTests(unittest.TestCase):
         with mock.patch.object(ingest, '_spawn'):
             out = arrive(s, llm=brain('task', 'coding'))
         tid = out['task_id']
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: the second run corrected the first.')
+        s.add_comment(tid, 'agent', 'agent', wrapup.REPORT + chr(10) + 'Summary: the second run corrected the first.')
         d = pathlib.Path(tempfile.mkdtemp())
         first, second = d / 'run1.md', d / 'run2.md'
         first.write_text('# run 1\n\n## Final agent response\n\nthe first answer, since corrected\n\n## Full session transcript\n', encoding='utf-8')
         second.write_text('# run 2\n\n## Final agent response\n\nthe corrected answer\n\n## Full session transcript\n', encoding='utf-8')
         for name, path in (('run1.md', first), ('run2.md', second)):
             s.add_task_artifact({'TaskId': tid, 'Name': name, 'Path': str(path), 'Kind': 'coding_session',
-                                 'ContentType': 'text/markdown', 'Size': path.stat().st_size, 'CreatedBy': 'coder'})
+                                 'ContentType': 'text/markdown', 'Size': path.stat().st_size, 'CreatedBy': 'agent'})
         with mock.patch('taskuary.session_artifacts.confined', side_effect=lambda p: pathlib.Path(p) if p else None):
             got = responder.resolution_of(s, tid)
         self.assertIn('the corrected answer', got)
@@ -488,8 +488,9 @@ class ResponseTests(unittest.TestCase):
         self.assertIn('Gail is the CFO and signs off on refunds', [m['Note'] for m in s.list_memories()])   # the row exists, not just the receipt
         self.assertEqual(funnel.next_item(s, item['key'])['key'], item['key'])                                 # ...and the walk did not move
 
-    def test_send_it_to_the_coder_with_nothing_on_the_table_proposes_a_new_task(self):
+    def test_send_it_to_the_coding_agent_with_nothing_on_the_table_proposes_a_new_task(self):
         s = store()
+        # LEGACY verb on purpose: `coder` is the old name a model may still say, and VERB_ALIAS still reads it
         p = decide(s, 'look into why the bulk approve fix did not stick', 'coder', text_arg='look into why the bulk approve fix did not stick')['proposal']
         self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'coding', 'Start a coding agent on it'))
         self.assertEqual(s.list_tasks(active_only=True), [])           # no task on the words
@@ -525,7 +526,7 @@ class ResponseTests(unittest.TestCase):
         # it SETTLES the table - the walk moves on (2026-09-28: stuck on the same item and button after it ran) - and the
         # task still stands, below: settling is the walk's, never a close
         self.assertEqual((p['kind'], p['target'], p['params']['wrap'], p['label'], p['settles']), ('agent.stop', tid, False, 'Save and end session', True))
-        held = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
+        held = mock.Mock(sid='s1', alive=True, label='coding', agent='coding', task_id=tid)
         with mock.patch.object(server.hub_term, 'session_for', return_value=held), mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             self.assertEqual(run(s, p, live=live).json()['status'], 'done')
         self.assertTrue(close.called)
@@ -533,7 +534,7 @@ class ResponseTests(unittest.TestCase):
         self.assertTrue(any('The task stays open' in b for b in receipts(s)))
         # the task page's "Save and end session": with a transcript the session is written up, WHATEVER
         # the words - "stop the agent" no longer throws its work away (2026-09-23)
-        s.add_transcript(tid, 'sid1', 'ran the tests, fixed the filter', 'coder')
+        s.add_transcript(tid, 'sid1', 'ran the tests, fixed the filter', 'coding')
         p = decide(s, f'stop the agent on TQ-{tid:04d}', 'stop_agent', key=item['key'], live=live)['proposal']
         self.assertTrue(p['params']['wrap']); self.assertEqual(p['label'], 'Save and end session')
 
@@ -713,14 +714,14 @@ class WrongTargetTests(unittest.TestCase):
 
     def test_filing_a_message_whose_task_an_agent_worked_archives_it(self):
         s, tid, mid, item = ResponseTests()._asked()
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nFixed the filter; committed as abc123.')
+        s.add_comment(tid, 'agent', 'agent', f'{wrapup.REPORT}\nFixed the filter; committed as abc123.')
         with mock.patch.object(server, 'store', s), mock.patch.object(terminal, 'live_sessions', return_value=[]):
             c = TestClient(server.app)
             r = c.post(f'/api/messages/{mid}/file', json={'learn': False}).json()
         self.assertFalse(r['taskDeleted']); self.assertTrue(r['taskArchived'])
         t = s.get_task(tid)
         self.assertEqual(t['Status'], 'done')                                        # closed, kept, report and all
-        self.assertTrue(any('CODER REPORT' in (c['Body'] or '') for c in s.list_comments(tid)))
+        self.assertTrue(any(wrapup.REPORT in (c['Body'] or '') for c in s.list_comments(tid)))
 
     def test_filing_a_message_whose_task_carries_a_drafted_reply_archives_it(self):
         """A drafted reply IS work that deleting destroys, and nothing else records it: no agent ever
@@ -780,7 +781,7 @@ class OneTruthPerTurnTests(unittest.TestCase):
     def test_a_hand_off_with_no_agent_on_the_machine_says_so(self):
         s, tid, mid, item = ResponseTests()._asked()
         s._exec('DELETE FROM agent')
-        out = decide(s, 'send it to the coder', 'coder', key=item['key'])
+        out = decide(s, 'send it to the coding agent', 'coding_agent', key=item['key'])
         self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal')); self.assertIn("isn't set up on this computer", out['say'])
 
     def test_remembering_writes_the_row_on_the_click_and_leaves_the_walk_where_it_was(self):
@@ -827,7 +828,7 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
     def test_the_verbs_the_owner_kept_using_each_have_a_proposal_kind(self):
         # later, skip, archive and not_ours_remember were retired with their buttons (the owner, 2026-09-25)
         for verb, kind in (('not_ours', 'message.file'), ('not_ours_sender', 'preference.exclude_sender'),
-                           ('coder', 'task.create_from_message'), ('regular_agent', 'task.create_from_message'),
+                           ('coding_agent', 'task.create_from_message'), ('regular_agent', 'task.create_from_message'),
                            ('mine', 'task.create_from_message'), ('close', 'task.complete'), ('done', 'item.settle')):
             s, tid, mid, item = ResponseTests()._asked()
             p = decide(s, verb, verb, key=item['key'])['proposal']
@@ -922,7 +923,8 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         self.assertEqual((out['proposal']['kind'], out['proposal']['target']), ('task.defer', tid))
 
     def test_a_dispatch_named_by_its_verb_is_the_kind_it_names(self):
-        """"Start an agent on it" carried kind "coder" and failed at the press: kind must be general or coding (2026-10-06)."""
+        """"Start an agent on it" carried kind "coding" and failed at the press: kind must be general or coding (2026-10-06).
+        LEGACY kind on purpose: the old verb a model may still name is read as coding."""
         s, tid, mid, item = ResponseTests()._asked()
         out = say(s, 'get it fixed', key=item['key'], model=f'CALL: {{"kind": "dispatch.prepare", "params": {{"kind": "coder", "ref": "TQ-{tid:04d}"}}}}')
         self.assertEqual((out['proposal']['kind'], out['proposal']['params']['kind']), ('dispatch.prepare', 'coding'))
@@ -1106,7 +1108,7 @@ class PipeTruthTests(unittest.TestCase):
         s, tid, mid, item = ResponseTests()._asked()
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
         c = TestClient(server.app)
-        live = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
+        live = mock.Mock(sid='s1', alive=True, label='coding', agent='coding', task_id=tid)
         with mock.patch.object(server, 'store', s), mock.patch.object(server.hub_term, 'session_for', return_value=live), \
              mock.patch.object(server.hub_term, 'close', return_value=True):
             c.post(f'/api/tasks/{tid}/agent/stop')
@@ -1116,7 +1118,7 @@ class PipeTruthTests(unittest.TestCase):
 
     def test_a_run_row_nobody_touched_is_not_an_agent_at_work(self):
         s, tid, mid, item = ResponseTests()._asked()
-        rid = s.start_run(tid, 'coder', 'fix it', 'owner')
+        rid = s.start_run(tid, 'coding', 'fix it', 'owner')
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             self.assertIn(tid, funnel.working_tids(s))                     # fresh: an agent really is on it
             s._exec('UPDATE run SET StartedAt=?, UpdatedAt=? WHERE RunId=?', (ago(hours=3), ago(hours=3), rid))
@@ -1189,9 +1191,9 @@ class AgentsStartAndFinishTests(unittest.TestCase):
         live[0]['started'] = ago(hours=2)                                            # ...but not any more
         self.assertEqual([i['key'] for i in pile(s, live) if i['kind'] == 'agent'], [f'agent:{tid}'])
 
-    def test_the_coder_brief_has_one_rule_about_finishing(self):
+    def test_the_coding_brief_has_one_rule_about_finishing(self):
         doc = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'taskuary', 'templates', 'coder.md'), encoding='utf-8').read()
+                                'taskuary', 'templates', 'coding.md'), encoding='utf-8').read()
         closing = doc.split('## Closing out', 1)[1].split('##', 1)[0]
         self.assertIn('taskuary --done', closing)                        # it says to say so...
         self.assertNotIn('do not write a wrap-up', closing)              # ...and no longer says not to
@@ -1318,7 +1320,7 @@ class WhichCheckoutTests(unittest.TestCase):
 
     def _report_task(self, s):
         s.save_doc('soul', self.SOUL, 'owner')
-        tid = s.create_task({'Title': 'GitHub Trending Top 15 Morning Report - coder ran a prompt', 'Kind': 'coding',
+        tid = s.create_task({'Title': 'GitHub Trending Top 15 Morning Report - an agent ran a prompt', 'Kind': 'coding',
                              'Status': 'open', 'Source': 'report'}, 'o')
         s.add_message({'TaskId': tid, 'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'GitHub Trending',
                        'Subject': 'GitHub Trending Top 15 Morning Report — FAILED', 'FromName': 'GitHub Trending',
@@ -1354,10 +1356,10 @@ class WhichCheckoutTests(unittest.TestCase):
         from taskuary import concierge, general
         s = store()
         s.save_doc('soul', self.SOUL, 'owner')
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps(self.PROFILE))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps(self.PROFILE))
         dock = general.dock_task(s, 'owner')[0]['TaskId']
         brief = 'Fix the login crash in the fan mobile app on older phones'
-        prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': brief, 'as': 'northwind/ledger'}, None, brief)   # the model names it
+        prop = concierge.propose_for(s, dock, {'verb': 'coding_agent', 'text': brief, 'as': 'northwind/ledger'}, None, brief)   # the model names it
         self.assertEqual(prop['params']['repo'], 'northwind/ledger')
         self.assertIn(prop['label'], prop['say'])                       # a phone chat, with no card, gets it all
         self.assertNotIn(prop['label'], prop['say_card'])
@@ -1387,9 +1389,9 @@ class WhichCheckoutTests(unittest.TestCase):
                        'Status': 'routed'})
         repo, why = terminal.guess_repo(s, tid, self.PROFILE)
         self.assertIsNone(repo, f'nothing here names a checkout (why={why})')
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps(self.PROFILE))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps(self.PROFILE))
         with self.assertRaises(ValueError) as caught:
-            terminal.open_session(s, 'coder', tid, None, None)
+            terminal.open_session(s, 'coding', tid, None, None)
         self.assertIn('could not tell which checkout', str(caught.exception))
         self.assertIn('Pick the repository', str(caught.exception))
         self.assertNotIn('ledger', str(caught.exception).split('would put an agent in')[0])
@@ -1430,13 +1432,13 @@ class SettingProposalTests(unittest.TestCase):
     def test_the_assistant_writes_a_setting_only_through_the_registry_with_an_audit_row(self):
         s = store()
         before = dict(s.get_settings())
-        for words in ('stop auto-starting the coder', 'never read my calendar', 'the pipe should hold at most 15'):
+        for words in ('stop auto-starting the coding agent', 'never read my calendar', 'the pipe should hold at most 15'):
             decide(s, words, 'setting')                                   # words alone: nothing moves
-        self.assertEqual({k: v for k, v in s.get_settings().items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')},
-                         {k: v for k, v in before.items() if k in ('coder_auto_enabled', 'calendar_enabled', 'funnel_max')})
+        self.assertEqual({k: v for k, v in s.get_settings().items() if k in ('coding_auto_enabled', 'calendar_enabled', 'funnel_max')},
+                         {k: v for k, v in before.items() if k in ('coding_auto_enabled', 'calendar_enabled', 'funnel_max')})
         with mock.patch.object(server, 'store', s):
-            concierge.run_proposal(s, self._call(s, 'setting.set', setting='coder_auto_enabled', value='off')['proposal'])
-        self.assertEqual(s.get_settings().get('coder_auto_enabled'), '0')
+            concierge.run_proposal(s, self._call(s, 'setting.set', setting='coding_auto_enabled', value='off')['proposal'])
+        self.assertEqual(s.get_settings().get('coding_auto_enabled'), '0')
         self.assertTrue(any(r.get('Actor') == 'assistant' and r.get('EntityType') == 'setting' for r in s.list_audit(limit=20)))
 
     def test_only_the_allow_listed_switches_can_ever_be_named_on_the_review_road(self):
@@ -1448,7 +1450,7 @@ class SettingProposalTests(unittest.TestCase):
             self.assertIn('not a switch a proposal may touch', why)
         ok, why = proposals.validate(s, {'action': 'settings', 'changes': [{'name': 'poll_minutes', 'value': 'soon'}]})
         self.assertFalse(ok); self.assertIn('whole number', why)
-        ok, _ = proposals.validate(s, {'action': 'settings', 'changes': [{'name': 'coder_auto_enabled', 'value': False}]})
+        ok, _ = proposals.validate(s, {'action': 'settings', 'changes': [{'name': 'coding_auto_enabled', 'value': False}]})
         self.assertTrue(ok)
 
 
@@ -1486,14 +1488,14 @@ class ApiActionsTests(unittest.TestCase):
 
     def test_dispatch_hands_the_mail_to_a_coding_agent_with_the_owners_words(self):
         s = store(); out = self._ask(s); c = self.client(s)
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
-        with mock.patch.object(server, 'start_session', return_value={'sid': 's1', 'agent': 'coder'}) as start:
+        s.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
+        with mock.patch.object(server, 'start_session', return_value={'sid': 's1', 'agent': 'coding'}) as start:
             r = c.post(f"/api/messages/{out['message_id']}/dispatch",
-                       json={'agent': 'coder', 'instruction': 'find out why it drops inter-company rows'})
+                       json={'agent': 'coding', 'instruction': 'find out why it drops inter-company rows'})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(start.called)
         tid, agent, instruction = start.call_args[0][1], start.call_args[0][2], start.call_args[0][4]
-        self.assertEqual((tid, agent), (out['task_id'], 'coder'))
+        self.assertEqual((tid, agent), (out['task_id'], 'coding'))
         self.assertIn('inter-company', instruction)                     # the owner's words reach the session
         self.assertEqual(s.get_task(tid)['Kind'], 'coding')
 
@@ -1582,7 +1584,7 @@ class ApiActionsTests(unittest.TestCase):
         s = store(); out = self._ask(s); c = self.client(s)
         tid = out['task_id']
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
-        live = mock.Mock(sid='s1', alive=True, label='coder', agent='coder', task_id=tid)
+        live = mock.Mock(sid='s1', alive=True, label='coding', agent='coding', task_id=tid)
         with mock.patch.object(server.hub_term, 'session_for', return_value=live), \
              mock.patch.object(server.hub_term, 'close', return_value=True) as close:
             r = c.post(f'/api/tasks/{tid}/agent/stop')
@@ -1593,19 +1595,19 @@ class ApiActionsTests(unittest.TestCase):
         # ever, saying "agent working, nothing for you" (the 2026-09-03 break test)
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertNotIn(tid, funnel.working_tids(s))
-        self.assertTrue(any('Stopped the coder session' in (x['Body'] or '') for x in s.list_comments(tid)))
+        self.assertTrue(any('Stopped the coding session' in (x['Body'] or '') for x in s.list_comments(tid)))
 
     def test_wrapping_up_files_the_report_and_closes_the_task(self):
         s = store(); out = self._ask(s); c = self.client(s)
         tid = out['task_id']
         # wrapping up needs a transcript to turn into the report - that IS the ending
-        s.add_transcript(tid, 's1', 'coder: fixed the export and deployed.', 'coder', 'C:/repo')
+        s.add_transcript(tid, 's1', 'agent: fixed the export and deployed.', 'coding', 'C:/repo')
         with mock.patch('taskuary.responder.draft_for_review', return_value='Fixed - shipping tonight.'):
             r = c.post(f'/api/tasks/{tid}/wrap', json={'close': True})
         self.assertEqual(r.status_code, 200, r.text)
         t = s.get_task(tid)
         self.assertIn(t['Status'], ('done', 'waiting'))                      # closed, or waiting on the reply it drafted
-        self.assertTrue(any(str(x['Body'] or '').startswith('CODER REPORT') for x in s.list_comments(tid)),
+        self.assertTrue(any(str(x['Body'] or '').startswith(wrapup.REPORT) for x in s.list_comments(tid)),
                         'the transcript became the report on THIS task')
 
     def test_the_pile_says_when_the_item_on_the_table_is_gone(self):
@@ -1631,8 +1633,8 @@ class ApiActionsTests(unittest.TestCase):
     def test_a_closed_agent_cannot_become_a_current_funnel_card(self):
         s = store(); out = self._ask(s)
         tid = out['task_id']
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: the export is fixed and shipping tonight.')
-        s.update_task(tid, {'Status': 'done'}, 'coder')
+        s.add_comment(tid, 'agent', 'agent', wrapup.REPORT + chr(10) + 'Summary: the export is fixed and shipping tonight.')
+        s.update_task(tid, {'Status': 'done'}, 'agent')
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             self.assertEqual(funnel.build(s)['items'], [])
         c = self.client(s)

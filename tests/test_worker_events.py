@@ -21,7 +21,7 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 
-def live(tid, sid='run1', cwd=r'C:\code\repo', agent='coder', argv=('claude',)):
+def live(tid, sid='run1', cwd=r'C:\code\repo', agent='coding', argv=('claude',)):
     typed = []
     s = SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, agent=agent, label=agent, argv=list(argv), last=1.0, ext_id='',
                         started='2026-09-06 09:00:00', typed=typed, files=lambda: [], tail=lambda n=3: [], idle=lambda: 0.0,
@@ -212,7 +212,7 @@ class ProducersTests(Base):
         selfclose.forget(self.tid)                                   # the once-only mark is process-wide; another suite may have used this id
         with mock.patch.object(selfclose, '_wrap', return_value={'closed': True, 'drafting': False}), \
              mock.patch.object(selfclose, 'blocked', return_value=''), mock.patch.object(selfclose, 'stays_open', return_value=False):
-            selfclose.declare(self.s, self.tid, 'cleared the stuck cron and re-ran it', 'coder')
+            selfclose.declare(self.s, self.tid, 'cleared the stuck cron and re-ran it', 'coding')
         st = ws.status(self.s, self.tid)
         self.assertEqual(st['state'], 'finished'); self.assertIn('stuck cron', st['result'])
 

@@ -63,7 +63,7 @@ def test_a_write_to_any_backing_table_recomputes_and_matches_a_cold_stamp(db, mo
     p = pile(s)
     before = fp.present(s, p)
     if write == 'body': s.update_message_body(mid, 'A body that grew')
-    elif write == 'comment': s.add_comment(tid, 'coder', 'agent', 'Working on it.')
+    elif write == 'comment': s.add_comment(tid, 'coding', 'agent', 'Working on it.')
     elif write == 'run': s.cx.execute('INSERT INTO run(TaskId, AgentName, Status, StartedAt) VALUES (?,?,?,?)', (tid, 'codex', 'running', '2026-09-17 12:00:00')); s.cx.commit()
     elif write == 'waitroom': s.cx.execute('INSERT INTO waitroom(TaskId, Note, CreatedBy, CreatedAt) VALUES (?,?,?,?)', (tid, 'parked', 'codex', '2026-09-17 12:00:00')); s.cx.commit()
     elif write == 'connector':

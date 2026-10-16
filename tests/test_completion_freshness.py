@@ -1,8 +1,8 @@
 """Finished work refreshes its conversation before it drafts the reply (PW-235 to PW-238).
 
 The agent's result was turned into a reply the moment the session closed, from the ask as it stood
-when the work began. Now `coder.finish` refreshes the source conversation first (through the
-`coder.REFRESH` hook the server installs), reassesses whether a reply is still owed - an answer
+when the work began. Now `wrapup.finish` refreshes the source conversation first (through the
+`wrapup.REFRESH` hook the server installs), reassesses whether a reply is still owed - an answer
 the owner already sent from the mail client means none is, a changed ask means the draft answers
 the thread as it is now - drafts from the saved result and the verified current conversation,
 recording the context revision it used, and shows an unresolved freshness state when the refresh
@@ -13,7 +13,7 @@ is Close without sending. Repeated completion events reuse the one review and ne
 import unittest
 from unittest import mock
 
-from taskuary import coder, outbound
+from taskuary import wrapup, outbound
 from taskuary.store import MemoryStore
 
 REP = {'summary': 'fixed the export', 'outcome': 'did_work', 'determination': '', 'actions': ''}
@@ -39,19 +39,19 @@ def refresh_that(**out):
 
 class NoHook(unittest.TestCase):
     """Each case installs the refresh it wants; the server's own hook (set at import) never leaks in."""
-    def setUp(self): self._prev, coder.REFRESH = coder.REFRESH, None
-    def tearDown(self): coder.REFRESH = self._prev
+    def setUp(self): self._prev, wrapup.REFRESH = wrapup.REFRESH, None
+    def tearDown(self): wrapup.REFRESH = self._prev
 
 
 class FreshnessTests(NoHook):
 
     def test_the_conversation_is_refreshed_before_the_reply_is_drafted_and_an_unchanged_chain_drafts_as_before(self):
         s = MemoryStore(); tid, mid = task_with(s)
-        coder.REFRESH = refresh_that(newer=False)
+        wrapup.REFRESH = refresh_that(newer=False)
         order = []
-        coder.REFRESH.calls = order
+        wrapup.REFRESH.calls = order
         with mock.patch('taskuary.responder.write_draft', side_effect=lambda *a, **k: order.append('draft') or 'Fixed.'):
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(order, [(tid, mid), 'draft'])                                   # refresh, then the draft
         self.assertEqual((out['drafting'], out['message_id'], out['freshness']), (True, mid, 'fresh'))
         rv = s.list_reviews('pending')[0]
@@ -69,7 +69,7 @@ class FreshnessTests(NoHook):
                        'SourceName': 'northwind/portal', 'Subject': 'Split long replies', 'FromName': 'alexdoyle',
                        'FromEmail': 'alexdoyle@users.noreply.github.com', 'SentAt': '2026-09-06 09:00:00', 'BodyText': 'Split them.', 'Status': 'routed'})
         with mock.patch('taskuary.responder.write_draft') as wd:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_not_called(); self.assertFalse(out['drafting'])
         self.assertTrue(any('You opened this yourself' in c['Body'] for c in s.list_comments(tid)))
         self.assertTrue(responder.written_as_chat('github') and responder.written_as_chat('discord'))
@@ -82,9 +82,9 @@ class FreshnessTests(NoHook):
                                'Subject': 'RE: August export', 'FromEmail': 'me@northwind.example', 'FromName': 'You', 'SentAt': '2026-09-06 11:00:00',
                                'BodyText': 'Done - the export is fixed.', 'Status': 'context', 'Direction': 'out'})
             return {'polled': True, 'newer': False, 'added': 1}
-        coder.REFRESH = poll
+        wrapup.REFRESH = poll
         with mock.patch('taskuary.responder.write_draft') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_not_called(); send.assert_not_called()
         self.assertEqual((out['drafting'], out['freshness']), (False, 'answered'))
         self.assertEqual(s.list_reviews('pending'), []); self.assertEqual(s.get_task(tid)['Status'], 'done')
@@ -98,9 +98,9 @@ class FreshnessTests(NoHook):
                                               'Subject': 'RE: August export', 'FromEmail': 'dana@vendor.example', 'FromName': 'Dana', 'SentAt': '2026-09-06 10:30:00',
                                               'BodyText': 'Actually - September too, please.', 'Status': 'routed'})
             return {'polled': True, 'newer': True, 'added': 1}
-        coder.REFRESH = poll
+        wrapup.REFRESH = poll
         with mock.patch('taskuary.responder.write_draft', return_value='Both months are done.') as wd:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual((out['drafting'], out['message_id'], out['freshness']), (True, newer['mid'], 'changed'))
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['MessageId'], newer['mid'])                                  # the draft answers the newest ask
@@ -109,9 +109,9 @@ class FreshnessTests(NoHook):
 
     def test_a_refresh_that_fails_leaves_the_draft_visibly_unresolved(self):
         s = MemoryStore(); tid, mid = task_with(s)
-        coder.REFRESH = refresh_that(error='I could not refresh email: token expired')
+        wrapup.REFRESH = refresh_that(error='I could not refresh email: token expired')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual((out['drafting'], out['freshness']), (True, 'unresolved'))
         rv = s.list_reviews('pending')[0]
         self.assertEqual(rv['Stale'], 1)                                                   # Send waits for a refresh
@@ -121,7 +121,7 @@ class FreshnessTests(NoHook):
     def test_no_refresh_hook_means_the_freshness_is_unchecked_not_fresh(self):
         s = MemoryStore(); tid, mid = task_with(s)
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(out['freshness'], 'unchecked'); self.assertEqual(s.list_reviews('pending')[0]['Stale'], 0)
 
 
@@ -151,10 +151,10 @@ class CompletionScopeTests(NoHook):
                 s.save_doc('style', 'Owner text /Data >= 7', 'owner')
                 messages = [s.get_message(mid), s.get_message(other)]
                 receipts = s.funnel_states()
-                coder.REFRESH = refresh_that(newer=False)
+                wrapup.REFRESH = refresh_that(newer=False)
                 with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as draft, \
                      mock.patch.object(outbound, 'reply_to_message') as send:
-                    result = coder.finish(s, tid, REP)
+                    result = wrapup.finish(s, tid, REP)
                 self.assertTrue(result['drafting'])
                 self.assertEqual(result['message_id'], mid)
                 self.assertEqual(s.get_task(tid)['Status'], 'waiting')
@@ -175,9 +175,9 @@ class CompletionScopeTests(NoHook):
         s.add_message({'ExternalId': 'same-answer', 'ConversationId': 'AAQk-x',
             'Channel': 'email', 'SourceName': 'ME@NORTHWIND.EXAMPLE', 'FromEmail': 'me@northwind.example',
             'SentAt': '2026-09-06 11:00:00', 'BodyText': 'Done.', 'Status': 'context', 'Direction': 'out'})
-        coder.REFRESH = refresh_that(newer=False)
+        wrapup.REFRESH = refresh_that(newer=False)
         with mock.patch('taskuary.responder.write_draft') as draft, mock.patch.object(outbound, 'reply_to_message') as send:
-            result = coder.finish(s, tid, REP)
+            result = wrapup.finish(s, tid, REP)
         self.assertEqual((result['drafting'], result['freshness']), (False, 'answered'))
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         self.assertEqual(s.get_review(rid)['Status'], 'no_reply')
@@ -191,12 +191,12 @@ class CompletionScopeTests(NoHook):
         tid, mid = task_with(foreign)
         foreign.set_setting('notify_level', 'off', 'test')
         before = list(owned.cx.iterdump())
-        coder.REFRESH = server._refresh_for_finish
+        wrapup.REFRESH = server._refresh_for_finish
         with mock.patch.object(server, 'store', owned), \
              mock.patch.object(server, '_refresh_chat_context') as refresh, \
              mock.patch('taskuary.responder.write_draft', return_value='Fixed.'), \
              mock.patch.object(outbound, 'reply_to_message') as send:
-            result = coder.finish(foreign, tid, REP)
+            result = wrapup.finish(foreign, tid, REP)
         refresh.assert_not_called(); send.assert_not_called()
         self.assertEqual(result['freshness'], 'unresolved')
         self.assertEqual(foreign.get_task(tid)['Status'], 'waiting')
@@ -220,9 +220,9 @@ class ResultAndReviewTests(NoHook):
 
     def test_the_saved_result_survives_a_failed_draft_which_stays_retryable(self):
         s = MemoryStore(); tid, mid = task_with(s)
-        s.add_comment(tid, 'coder', 'agent', 'REPORT: fixed the export')                 # the result, saved before finish
+        s.add_comment(tid, 'coding', 'agent', 'REPORT: fixed the export')                 # the result, saved before finish
         with mock.patch('taskuary.responder.write_draft', side_effect=RuntimeError('no AI connector is set up to write replies')):
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertTrue(out['drafting'])
         rv = s.list_reviews('pending')[0]
         self.assertFalse((rv.get('DraftText') or '').strip())                            # empty draft: "Draft with AI" retries it
@@ -232,7 +232,7 @@ class ResultAndReviewTests(NoHook):
     def test_a_repeated_completion_reuses_the_one_review_and_never_sends(self):
         s = MemoryStore(); tid, mid = task_with(s)
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
-            coder.finish(s, tid, REP, None, 'coder'); coder.finish(s, tid, REP, None, 'coder')
+            wrapup.finish(s, tid, REP, None, 'coding'); wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(len(s.list_reviews('pending')), 1); send.assert_not_called()
         self.assertEqual(wd.call_count, 2)                                                # rewritten, not duplicated
         self.assertEqual(wd.call_args_list[0].args[2], wd.call_args_list[1].args[2])     # the same review id both times
@@ -242,7 +242,7 @@ class ResultAndReviewTests(NoHook):
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'early guess', 'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd:
-            coder.finish(s, tid, REP, None, 'coder')
+            wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual(wd.call_args.args[2], rid); self.assertEqual(len(s.list_reviews('pending')), 1)
 
 
@@ -251,7 +251,7 @@ class UnsupportedSendTests(NoHook):
     def test_a_channel_that_cannot_send_still_gets_its_draft_and_says_why_send_is_hidden(self):
         s = MemoryStore(); tid, mid = task_with(s, 'github')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as wd, mock.patch.object(outbound, 'reply_to_message') as send:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_called_once(); send.assert_not_called()
         self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
         self.assertIn('GitHub', out['send_block'])
@@ -261,13 +261,13 @@ class UnsupportedSendTests(NoHook):
     def test_a_channel_switched_off_by_the_owner_drafts_too(self):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't'); tid, mid = task_with(s, 'slack')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         self.assertEqual((out['drafting'], out['can_send']), (True, False)); self.assertEqual(len(s.list_reviews('pending')), 1)
 
     def test_a_report_row_still_drafts_nothing_because_nobody_sent_it(self):
         s = MemoryStore(); tid, mid = task_with(s, 'report')
         with mock.patch('taskuary.responder.write_draft') as wd:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         wd.assert_not_called(); self.assertEqual((out['drafting'], out['can_send']), (False, False)); self.assertEqual(s.get_task(tid)['Status'], 'done')
 
 

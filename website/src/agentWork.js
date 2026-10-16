@@ -5,7 +5,7 @@
 // and "TASKUARY" as the speaker of every turn - while a real agent searched the web (the owner,
 // 2026-09-08: "it should be agent not assistant. Assistant is what helps you run taskuary. agents
 // are what do work"). Where the window named anything at all it named a binary and a profile:
-// "Agent running · Claude Code · coder (your CLI)".
+// "Agent running · Claude Code · <profile> (your CLI)".
 //
 // Nothing here asks the server for anything new. The trace is already on the assistant payload and
 // the name is already on the task, so an agent that reads as working needs no new endpoint.
@@ -15,7 +15,7 @@ import { toolTarget } from "./assistantStream.js";
 // Until a roster of named specialists exists, the kind of work IS the name - which is the same
 // thing triage already decided. A worker explicitly assigned to the task outranks it.
 export const KIND_NAME = { research: "Research", marketing: "Marketing", triage: "Triage",
-                           setup: "Set-up", coding: "Coder", general: "Agent", assistant: "Agent" };
+                           setup: "Set-up", coding: "Coding", general: "Agent", assistant: "Agent" };
 export const agentName = (task) => assignedAgent(task?.Assignee)
   || KIND_NAME[String(task?.Kind || "").toLowerCase()] || "Agent";
 

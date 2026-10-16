@@ -24,7 +24,7 @@ from . import guard
 from . import policy as policy_engine
 from . import reshape
 from . import terminal as hub_term
-from .coder import PAUSE_MARKER, pause_note, reply_target as coder_reply_target, wrap as coder_wrap
+from .wrapup import PAUSE_MARKER, REPORTS, pause_note, reply_target, wrap as end_task
 from . import aisetup, assistant, demo, deps, learn, learnedgraph, operations, outbound, playbooks, rank, responder, waitroom
 from . import live as live_bus
 from . import processing_all
@@ -34,9 +34,8 @@ from . import processing_all
 deps.use_packages()
 cfg = config.load()
 store = SQLiteStore(config.db_path())
-# The workers Taskuary ships besides the coder, added to the CONFIG before the loop below copies it
-# into the database - so they appear on the Agents page like `coder` does, and a restart never
-# rewrites one the owner has changed (seed_profiles skips any name already there).
+# The profiles Taskuary ships, added to the CONFIG before the loop below copies it into the database - so they appear on
+# the Agents page, and a restart never rewrites one the owner has changed (seed_profiles skips any name already there).
 try:
     from loguru import logger as _log                    # loguru is not bound at module scope yet here
     _added = hub_agents.seed_profiles(cfg)
@@ -46,8 +45,15 @@ try:
         _config_file = config.home() / 'config.toml'
         _backup_file = config.home() / 'config.before-cli-connections.toml'
         if _config_file.exists() and not _backup_file.exists(): shutil.copy2(_config_file, _backup_file)
-    if _added or _split_cli:
+    # a profile is instructions on any brain: its own CLI leaves it, and the shipped coding profile takes the name `coding` (2026-10-15)
+    _config_file = config.home() / 'config.toml'
+    _backup_file = config.home() / 'config.before-profiles-on-brains.toml'
+    if _config_file.exists() and not _backup_file.exists() and 'provider' in _config_file.read_text(encoding='utf-8'):
+        import shutil; shutil.copy2(_config_file, _backup_file)
+    _layered = hub_agents.layer_profiles(cfg, store)
+    if _added or _split_cli or _layered:
         config.save(cfg)
+    if _layered: _log.info('profiles run on the brain their work uses: their own CLI is gone, and the coding profile is `coding`')
     if _added:
         _log.info(f"added the shipped agent profiles: {', '.join(_added)}")
 except Exception as _e:
@@ -72,12 +78,12 @@ except Exception as _e:
 # so a CLI the owner never chose showed up connected and in the pickers (the owner, 2026-10-06: "don't assume if cli
 # installed to be used.. don't automatically connect them"). Set it up on its card connects it.
 try:
-    # one coding role, one CODER.md: the per-CLI coding clones an older setup minted go
+    # one coding profile, one CODING.md: the per-CLI coding clones an older setup minted go
     _dropped = hub_agents.drop_cli_clones(cfg, store)
     if _dropped:
         config.save(cfg)
         from loguru import logger as _log
-        _log.info(f"one coder for every CLI: dropped the coding clones {', '.join(_dropped)}")
+        _log.info(f"one coding profile for every CLI: dropped the coding clones {', '.join(_dropped)}")
 except Exception as _e:
     from loguru import logger as _log
     _log.warning(f'could not drop the per-CLI coding clones: {_e}')
@@ -573,7 +579,7 @@ def _send_block(channel, has_message=True) -> str:
 
 def _can_send(channel, has_message=True, gh_ok=None) -> bool:
     """Can an approved reply actually LEAVE on this channel? One answer for the whole app -
-    outbound.can_reply - so the Approve button, triage and the coder wrap-up cannot
+    outbound.can_reply - so the Approve button, triage and the agent's wrap-up cannot
     disagree. The UI turns an unsendable draft's Approve into 'No response required'."""
     if not has_message: return False
     return outbound.can_reply(store, channel)
@@ -1481,7 +1487,7 @@ def _resumable(task_id: int):
     row = store.resumable_session(task_id)
     if not row: return None, 'no saved session to continue - that agent never named a conversation we can reopen'
     if not store.get_agent(row['Agent'] or ''):
-        return None, f'the coder "{row["Agent"]}" is no longer configured; use Run another agent'
+        return None, f'the profile "{row["Agent"]}" is no longer configured; use Run another agent'
     if not (row['Cwd'] and Path(row['Cwd']).is_dir()):
         return None, f'the checkout it worked in no longer exists: {row["Cwd"]}'
     return row, ''
@@ -1804,7 +1810,7 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     # verdict, so the task enters the review queue the way a question would have at triage:
     # a draft review appears (auto-drafted when that is on), instead of a repo session.
     if fields.get('Kind') == 'reply' and t.get('Kind') != 'reply':
-        mid = coder_reply_target(store, task_id)
+        mid = reply_target(store, task_id)
         if mid and not store.pending_review(task_id):
             rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                     'Reason': 'reclassified by you: a question, not work to do - needs a reply'})
@@ -1831,7 +1837,7 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None),
                         brain=getattr(body, 'brain', None))
-    return {'coder': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
+    return {'start': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
 
 @app.post('/api/tasks/{task_id}/continue')
 def continue_task(task_id: int, body: CodeBody):
@@ -1839,7 +1845,7 @@ def continue_task(task_id: int, body: CodeBody):
 
     The transcript is the durable session record. Reopen the same configured agent in the same
     checkout and seed the new terminal with the owner's next instruction plus the saved result.
-    If that agent profile was removed, stop and say so instead of silently changing coders.
+    If that agent profile was removed, stop and say so instead of silently changing profiles.
     """
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
@@ -1853,7 +1859,8 @@ def continue_task(task_id: int, body: CodeBody):
     # transcript preserves the convenient same-agent continue path.
     agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
     if not store.get_agent(agent):
-        raise HTTPException(422, f'the previous coder "{agent}" is no longer configured; choose a coder from Start session')
+        raise HTTPException(422, f'the previous profile "{agent}" is no longer configured; choose an agent from Start session'
+                            if agent else 'no coding profile is set up - add one under Settings > Agents')
     try:
         session = hub_term.start_on_task(store, task_id, agent, body.model, instruction, ACTOR,
                                          brain=getattr(body, 'brain', None),
@@ -2035,14 +2042,19 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again
     path: str | None = None          # set the agent's local path for it, if it has none
-    agent: str = 'coder'
+    agent: str = ''                  # blank: the coding profile (agents.coding_role)
     restart: bool = False            # close the session that is in the wrong tree and reopen here
 
-def _repo_rows(task_id: int, agent: str = 'coder'):
+def _profile(agent: str = '') -> str:
+    """The profile whose checkouts a repo picker reads: the one named, else the coding profile by its kind. A name that is
+    gone - a page still sending an old profile name - reads the coding profile too, not an empty map."""
+    return agent if agent and store.get_agent(agent) else hub_agents.coding_role(store)
+
+def _repo_rows(task_id: int, agent: str = ''):
     """Every repo Taskuary knows, ranked for this task, with whether the agent can open it. A repo
     in SOUL.md with no local path is listed and flagged, not hidden - "we know what it is but not
     where it is" is the thing the owner has to fix, and it cannot be fixed invisibly."""
-    row = store.get_agent(agent) or {}
+    row = store.get_agent(_profile(agent)) or {}
     prof = json.loads(row.get('Config') or '{}')
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
     tagged = (re.search(r'repo:([^\s,]+)', str((store.get_task(task_id) or {}).get('Tags') or '')) or [None, None])[1]
@@ -2053,16 +2065,16 @@ def _repo_rows(task_id: int, agent: str = 'coder'):
             for r, sc, has in hub_term.rank_repos(store, task_id, prof)]
 
 @app.get('/api/tasks/{task_id}/repos')
-def task_repos(task_id: int, agent: str = 'coder'):
+def task_repos(task_id: int, agent: str = ''):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(agent) or {}).get('Config') or '{}'))
+    picked, why = hub_term.guess_repo(store, task_id, json.loads((store.get_agent(_profile(agent)) or {}).get('Config') or '{}'))
     return {'data': _repo_rows(task_id, agent), 'picked': picked, 'why': why}
 
 @app.get('/api/repos')
-def list_repos(agent: str = 'coder'):
+def list_repos(agent: str = ''):
     """Every repo Taskuary knows, for a task that does not exist yet (the New card's picker). Alphabetical - there is no
     ask to rank against - and the flag the task-bound list carries: a repo with no local folder is listed, not hidden."""
-    prof = json.loads((store.get_agent(agent) or {}).get('Config') or '{}')
+    prof = json.loads((store.get_agent(_profile(agent)) or {}).get('Config') or '{}')
     paths, desc = (prof.get('cwd_map') or {}), hub_term.repo_map(store)
     return {'data': [{'repo': r, 'what': desc.get(r, ''), 'path': paths.get(r), 'has_path': bool(paths.get(r))}
                      for r in sorted(dict.fromkeys(list(desc) + list(paths)), key=str.lower)]}
@@ -2083,8 +2095,9 @@ def set_task_repo(task_id: int, body: RepoBody, background: BackgroundTasks = No
     store.update_task(task_id, {'Tags': ' '.join(tags)}, ACTOR)
     # a repo Taskuary knows about but has no path for cannot be opened - take the path here
     if body.repo and body.path:
+        body.agent = _profile(body.agent)
         row = store.get_agent(body.agent)
-        if not row: raise HTTPException(422, f'unknown agent: {body.agent}')
+        if not row: raise HTTPException(422, f'unknown agent: {body.agent}' if body.agent else 'no coding profile is set up to hold that path')
         if not Path(body.path).is_dir(): raise HTTPException(422, f'not a directory: {body.path}')
         prof = copy.deepcopy(cfg.get('agents', {}).get(body.agent) or json.loads(row.get('Config') or '{}'))
         prof.setdefault('cwd_map', {})[body.repo] = body.path
@@ -2344,7 +2357,7 @@ def work_on_task(tid: int) -> str:
     """What deleting this task would DESTROY, in words - '' when there is nothing to lose. An agent
     on it, a report it wrote, a commit it made: none of that can be recovered, and one sentence in
     the chat used to be enough to lose all three (the 2026-09-03 break test: "not ours" about the
-    Teams outage deleted TQ-0002, its CODER REPORT and its drafted reply)."""
+    Teams outage deleted TQ-0002, its agent report and its drafted reply)."""
     if not store.get_task(tid): return ''
     had = []
     try:
@@ -2359,7 +2372,7 @@ def work_on_task(tid: int) -> str:
     rv = store.pending_review(tid)
     if rv and str(rv.get('DraftText') or '').strip(): had.append('it carries a reply waiting to be sent')
     cs = store.list_comments(tid)
-    if any(str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
+    if any(str(c.get('Body') or '').startswith((*REPORTS, 'HANDOVER NOTE')) for c in cs): had.append('it carries an agent report')
     # the router's own bookkeeping ('not auto-started', 'start failed', 'queued') is not an agent's work: a task
     # nothing ever ran on stays deletable however loudly the pipeline explained why (PW-073)
     if any(str(c.get('ActorType') or '') == 'agent' and str(c.get('Actor') or '') != 'router' for c in cs) and 'it carries an agent report' not in had:
@@ -2563,19 +2576,19 @@ class OpenReplyBody(BaseModel):
 
 @app.post('/api/messages/{mid}/reply')
 def open_reply(mid: int, body: OpenReplyBody = None):
-    """Put a reply on the table for ANY message - the coder finished and you want to answer, or
+    """Put a reply on the table for ANY message - the agent finished and you want to answer, or
     triage never queued one. Creates the pending review (reusing one if it exists) and, unless
     draft=false, writes the AI draft right now so the box comes back filled. Approving still
     sends; nothing here does."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     # NOBODY SENT IT, SO THERE IS NOBODY TO ANSWER. A finished session already knows this rule and
-    # skips the draft (coder.no_one_behind); this door did not ask, so pressing Write reply on a task
+    # skips the draft (wrapup.no_one_behind); this door did not ask, so pressing Write reply on a task
     # the owner typed himself sent the drafter a thread with no correspondent in it - and it answered
     # the OWNER, analysis first, with a letter suggested underneath, in the box whose button sends
     # (the owner, 2026-09-22, TQ-0674). A channel that cannot CARRY a reply is a different question
     # and still drafts (PW-237): there the answer is real, it just leaves by another road.
-    from .coder import no_one_behind
+    from .wrapup import no_one_behind
     if no_one_behind(m.get('Channel')):
         raise HTTPException(422, 'nobody sent this, so there is nobody to answer - work it, or write '
                                  'what you found on the task itself')
@@ -2860,7 +2873,7 @@ def start_session(store_, tid: int, agent: str = None, model: str = None, instru
 
 
 # ONE START AT A TIME PER TASK. A start takes seconds (a CLI booting in its checkout) and the live-session check below
-# only sees a session once it exists, so two dispatches 0.5 s apart both passed it: TQ-1059 got two coder sessions in
+# only sees a session once it exists, so two dispatches 0.5 s apart both passed it: TQ-1059 got two coding sessions in
 # one checkout, the second finding "changes I didn't make", and its rail row read the idle one as waiting on you while
 # the other worked (2026-10-13). A dispatch that arrives while one is under way waits for it and answers with ITS
 # start - the same session, `existing` - rather than a second worker or a 409 for a press that was only sent twice.
@@ -2925,7 +2938,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         # THE PROFILE IS THE ASSIGNEE. A general hand-off may now name the worker it goes to, and
         # `agent:<name>` is where general.assigned_role already reads it from to seed PROFILE RULES -
         # so choosing one needs no new column and no migration (the owner, 2026-09-18). A CODING
-        # profile named here would seed CODER.md into a chat, so it is refused rather than obeyed.
+        # profile named here would seed CODING.md into a chat, so it is refused rather than obeyed.
         if body.agent and body.agent != general.assigned_role(store, task):
             if str((store.get_agent(body.agent) or {}).get('Kind') or '').lower() in ('coding', 'cli'):
                 raise HTTPException(422, f'{body.agent} is a coding profile - it cannot run a non-coding task')
@@ -3825,12 +3838,12 @@ def _agent_files(files):
 @app.post('/api/agent/reply')
 def agent_reply(body: AgentReplyBody, request: Request):
     """`taskuary --reply "..."` from inside an agent's own shell: the agent that did the work writes the
-    answer the sender gets, and it becomes the task's pending reply as written (coder.agent_reply).
+    answer the sender gets, and it becomes the task's pending reply as written (wrapup.agent_reply).
     Nothing is sent - the owner approves it - and the end of the run keeps it instead of redrafting."""
-    from . import coder
+    from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return coder.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files))
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files))
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 
@@ -3840,10 +3853,10 @@ def agent_draft(body: AgentDraftBody, request: Request):
     from . import slots
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    from . import coder
+    from . import wrapup
     files = _agent_files(body.files)
     out = slots.draft(store, body.task_id, body.text, body.to, body.subject, body.slot, body.agent)
-    return {**out, **coder.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
+    return {**out, **wrapup.attach_files(store, out['review_id'], files, body.agent)} if out.get('ok') and files else out
 
 class AgentItemBody(BaseModel): task_id: int; item: int; result: str; overlap: str = ''; settled: bool = False; agent: str = 'agent'; propose: str = ''
 
@@ -3996,7 +4009,7 @@ class MeetingPrepBody(BaseModel):
     instruction: str | None = None
     # kept so a page loaded before the switch to the chat assistant still posts cleanly; the
     # prep conversation picks its own provider inside the workspace
-    agent: str = 'coder'; model: str | None = None
+    agent: str | None = None; model: str | None = None
 
 @app.post('/api/calendar/prep')
 def calendar_prep(body: MeetingPrepBody):
@@ -4644,7 +4657,7 @@ def waitroom_add(tid: int, body: dict):
 @app.post('/api/tasks/{tid}/waitroom/bulk')
 def waitroom_bulk(tid: int, body: dict):
     """A pasted list - one prompt per line - becomes that many notes, in order. With the drip on
-    (Settings -> Coder agent) each lands as its own turn when the agent stops."""
+    (Settings -> Coding agent) each lands as its own turn when the agent stops."""
     try: return waitroom.add_many(store, tid, str((body or {}).get('text') or ''), ACTOR)
     except ValueError as e: raise HTTPException(422, str(e))
 
@@ -4746,7 +4759,7 @@ class DraftBody(BaseModel): instruction: str | None = None     # a reply opened 
 def draft_review(rid: int, body: DraftBody = None):
     """(Re)generate the AI draft for a pending review inline. The main AI writes replies -
     a coding CLI is the wrong (and expensive) tool for two sentences of email - unless the
-    owner deliberately configured an agent named `responder`. On a review a coder closed,
+    owner deliberately configured an agent named `responder`. On a review a coding agent closed,
     the redraft reads its report, so it reports the work instead of promising it."""
     rv = store.get_review(rid)
     if not rv: raise HTTPException(404, 'review not found')
@@ -5105,8 +5118,8 @@ def brains():
     out = [{'value': f"connector:{c['ConnectorId']}", 'label': c['Name'], 'kind': 'api',
              'ready': bool(c['Active'] and (c['HasSecret'] or c['Type'] == 'ollama'))}   # local models carry no key
             for c in store.list_connectors() if c['Type'] in AI_TYPES]
-    # named by WHAT RUNS, leading with the CLI ('claude · coder'): the profile name is the
-    # detail, not the identity - 'coder' says nothing about which model family answers.
+    # named by WHAT RUNS, leading with the CLI ('claude · coding'): the profile name is the
+    # detail, not the identity - 'coding' says nothing about which model family answers.
     # Each entry also carries its known model choices, so pickers offer a dropdown instead
     # of a spelling test (free typing still allowed for models we don't know about).
     CONN_MODELS = {'anthropic': ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'],
@@ -5123,22 +5136,14 @@ def brains():
     preferred = ([selected[4:]] if selected.startswith('cli:') else [])
     preferred += [x.strip()[4:] for x in str(settings.get('triage_backup_ai') or '').split(',')
                   if x.strip().startswith('cli:')]
-    preferred += [str(settings.get('default_agent') or 'coder')]
-    # A profile is a job description, not another provider. Researcher, analyst and coder may
-    # all use Claude; show one Claude entry rather than several aliases for the same executable.
-    # The representative worker remains in the value because its light-model setting is still
-    # the runtime source of truth.
+    preferred += [hub_agents.default_brain(store)]
+    # A brain is a CLI TOOL or an AI connection, never a profile: one entry per connected CLI, its value the tool's own key
+    # (the owner, 2026-10-15: "it's models or cli tools only"). Its gears live on the connection.
     from . import climodels
     out += [{'value': f"cli:{o['value']}", 'label': f"{o['label']} (your CLI)",
              'kind': 'cli', 'ready': o['ready'],
              'models': climodels.catalog(o['cli'])['choices']}
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
-    # ...and every connected CLI no profile runs on. Only the profiles' CLIs were listed, so with every profile on
-    # claude, codex never appeared here while the hand-off picker (general.brain_options) offered it (2026-09-24)
-    from . import general
-    have = {o['label'].split(' (', 1)[0] for o in out if o['kind'] == 'cli'}
-    out += [{'value': o['pick'], 'label': o['label'], 'kind': 'cli', 'ready': True, 'models': climodels.catalog(o['cmd'])['choices']}
-            for o in general.brain_options(store) if o.get('connection') and o.get('cmd') not in have]
     # An API provider with no key cannot be picked, and fifteen greyed rows made the menu taller than the page with
     # the CLIs at the bottom (the owner, 2026-09-24: "drop down is too big"). One already in use stays listed.
     used = {str(settings.get(k) or '') for k in ('triage_ai', 'triage_backup_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')}
@@ -6054,23 +6059,16 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
     checklist's "Set up an AI" row now points at the AI CLI agents page instead, and nothing there
     ever wrote it, so installing and testing a CLI there left that row stubbornly grey.
 
-    `body.cli` names a CLI CONNECTION (`claude`, `codex`); `cli:<x>` in `triage_ai` names an agent
-    PROFILE, because every reader of it - `setup._ai`, `llm._build_llm`, `llm.make_cli_llm` - looks
-    the suffix up with `get_agent`. Writing the connection name stored an id nothing could resolve:
-    the row stayed grey AND an install that was happily auto-picking an API key lost its brain
-    entirely. So resolve the connection to a worker first, off the same list the Settings brain
-    picker is built from, and store nothing at all when no profile runs that CLI - a dangling
+    `body.cli` names a CLI CONNECTION (`claude`, `codex`), and so does `cli:<x>` in `triage_ai` - a brain is the tool
+    (agents.agent_row), never a profile (2026-10-15). Nothing is stored for a CLI that is not connected: a dangling
     `triage_ai` is worse than an unticked row.
 
     First writer wins, decided server-side. It is not a compare-and-set: `get_settings` and
     `set_setting` each take and release the store lock and sync routes run in a threadpool, so two
     tests landing together can race - and the loser's only cost is that the other valid CLI won."""
     from . import setup as setup_mod
-    worker = next((o['value'] for o in hub_agents.cli_agent_options(store) if o['cli'] == body.cli), '')
-    # ...or the CONNECTION itself: a fresh install's profiles all run claude, so a Codex-only owner's passing test wrote
-    # nothing - triage read "no AI connector" over every mail while the card said Codex worked (a first-run log, 2026-10-14).
-    # `cli:<connection>` resolves through agents.agent_row like a profile does.
-    if not worker and dict(hub_agents.connection_brains(store)).get(body.cli): worker = body.cli
+    # the CONNECTION itself - a brain is the tool, never a profile running it (2026-10-15)
+    worker = body.cli if dict(hub_agents.connection_brains(store)).get(body.cli) else ''
     current = str(store.get_setting('triage_ai') or '')
     adopted = bool(worker) and not current            # a brain the owner picked is theirs - never stomped by a Test
     if adopted:
@@ -6283,7 +6281,7 @@ def _agent_work(store_, books=None):
             s for s in cfg_.get('sources') or [] if isinstance(s, dict) and s.get('type') == 'agent']
         by_agent = {}
         for part in parts:
-            name = str(part.get('agent') or cfg_.get('agent') or 'coder').strip()
+            name = str(part.get('agent') or cfg_.get('agent') or hub_agents.coding_role(store)).strip()
             skill = str(part.get('skill') or '').strip().lstrip('/')
             if name: by_agent.setdefault(name, set()).update([skill] if skill else [])
         for name, skills in by_agent.items():
@@ -6482,7 +6480,7 @@ def agents():
                 'models': cat['models'], 'current': cat['current'], 'source': cat['source']}
     # the default agent (a setting) comes FIRST: every picker's initial value is the head of
     # this list, so "which CLI opens when I hit Start session" is decided in one place
-    # ...and "the default" is the one that can actually run: shipping coder=claude means a
+    # ...and "the default" is the one that can actually run: shipping coding=claude means a
     # machine with only codex installed had every dispatch aimed at a CLI nobody had.
     # A BRAIN THAT IS NOT INSTALLED IS NOT A CHOICE. brain_list was every key in cli_connections,
     # so a CLI the owner had removed - or one seeded and never installed - stayed on every dispatch
@@ -6508,12 +6506,12 @@ def agents():
             'config': cfg.get('agents', {}), 'default': head,
             'models': {a['Name']: _models(a) for a in store.list_agents()},
             # WHICH BRAIN each role runs on. The card used to name the role, and after the roles
-            # and brains were split every coding row would read `coder` - the owner asked for the
+            # and brains were split every coding row would read `coding` - the owner asked for the
             # coding AGENT (2026-09-16). A brain is not a property of the task, so it is served
             # once per role here rather than stamped on every row.
             'brains': {a['Name']: hub_agents.brain_for(store, a['Name']) for a in rows},
             # every brain that can be picked, and the models each offers. A coding picker chooses
-            # the BRAIN: the role is `coder` for every coding task, so offering roles there would
+            # the BRAIN: the role is the coding profile for every coding task, so offering roles there would
             # be one choice with one entry (the 2026-09-16 spec).
             # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
             'general_brains': _general.brain_options(store),
@@ -6550,7 +6548,7 @@ def put_agent(name: str, body: dict):
     candidate = copy.deepcopy(cfg)
     try:
         profile = cli_connections.set_profile(candidate, store, name, body)
-        resolved = cli_connections.resolve(candidate, profile)
+        resolved = cli_connections.resolve(candidate, profile, cli_connections.brain_of(store, candidate, name, profile))
     except ValueError as e: raise HTTPException(422, str(e))
     if not str(resolved.get('cmd') or '').strip(): raise HTTPException(422, 'Choose a configured CLI provider')
     profile['kind'] = profile.get('kind') or hub_agents.DEFAULT_PROFILES.get(name, {}).get('kind') or row.get('Kind') or 'coding'
@@ -6606,7 +6604,7 @@ def _template_text(name: str) -> str:
 
 def _heal_blank_doc(name: str) -> str:
     """An EMPTY operator document is never what anyone meant: it switches off the rules every prompt
-    is stacked on (CODER.md blank = a coder with no rules) and it says nothing an owner wrote. The
+    is stacked on (CODING.md blank = a coding agent with no rules) and it says nothing an owner wrote. The
     templates have always said "blank the document entirely and the shipped default is used again",
     so that is what happens - here, the moment it is read, not at the next restart."""
     cur = store.get_doc(name)
@@ -6824,7 +6822,7 @@ def whoami_avatar(style: str = 'monogram', seed: str = '', name: str = ''):
 
 @app.put('/api/owner')
 def put_owner(body: OwnerBody):
-    """Your name, in ONE place. SOUL.md and CODER.md refer to the owner nine times between them,
+    """Your name, in ONE place. SOUL.md and CODING.md refer to the owner nine times between them,
     so typing it in changed one of them and left a document that half called you by name and half
     called you John Smith. Saving here rewrites every literal occurrence of the OLD name into a
     {{owner}} token, so the documents convert themselves once and never drift again."""
@@ -7065,7 +7063,7 @@ def _latest_context_message(task_id: int = None, message_id: int = None):
 
 
 def _refresh_for_finish(_store, task_id: int, message_id: int) -> dict:
-    """coder.finish's refresh (PW-235): the conversation is read from its provider before the result becomes a reply."""
+    """wrapup.finish's refresh (PW-235): the conversation is read from its provider before the result becomes a reply."""
     if _store is not store:
         raise RuntimeError('completion refresh belongs to a different store')
     return _refresh_chat_context(task_id=task_id, message_id=message_id)
@@ -7115,8 +7113,8 @@ def _refresh_chat_context(task_id: int = None, message_id: int = None, grace: bo
             'added': int(added or 0), 'channel': channel}
 
 
-from . import coder as _coder_mod
-_coder_mod.REFRESH = _refresh_for_finish
+from . import wrapup as _wrapup
+_wrapup.REFRESH = _refresh_for_finish
 
 
 _NOTICED = {}      # funnel key -> the message-set revision the owner was last told about (PW-052: once per revision)
@@ -7684,7 +7682,7 @@ def _heal_owner_docs():
         who = store.owner()
         if who['owner'] in ('the owner', '', 'John Smith') or '{{' in who['owner']:
             return                                    # nobody real named yet: the example stands
-        for doc in ('soul', 'job', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+        for doc in ('soul', 'job', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel'):
             raw = store.get_doc(doc)
             if not raw: continue
             t = store_mod.retoken_doc(raw, 'John Smith', 'john.smith@example.com')
@@ -7835,10 +7833,10 @@ class WrapBody(BaseModel):
     no_reply: bool = False
 
 def _wrap_task(tid: int, close: bool, sid: str = None, no_reply: bool = False):
-    """The route's thin end of coder.wrap - which is also what a self-closing agent calls
+    """The route's thin end of wrapup.wrap - which is also what a self-closing agent calls
     (selfclose.py), so "the agent decided it was done" and "you clicked Done" travel the
     same road and leave the same record."""
-    try: return coder_wrap(store, tid, close, ACTOR, sid, no_reply=no_reply)
+    try: return end_task(store, tid, close, ACTOR, sid, no_reply=no_reply)
     except ValueError as e: raise HTTPException(422, str(e))
 
 

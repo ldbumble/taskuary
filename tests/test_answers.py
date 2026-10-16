@@ -49,14 +49,14 @@ class VerdictTests(unittest.TestCase):
                              'FromEmail': 'sender@work.example', 'Status': 'routed'})
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                             'DraftText': 'We do not have that bank yet.'})
-        live = mock.Mock(sid='live-coder', alive=True)
+        live = mock.Mock(sid='live-agent', alive=True)
         with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
              mock.patch.object(terminal, 'session_for', return_value=live), \
              mock.patch.object(terminal, 'close', return_value=True) as close:
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual(out['status'], 'approved')
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        close.assert_called_once_with('live-coder')
+        close.assert_called_once_with('live-agent')
 
     def test_a_sent_reply_closes_even_a_task_the_owner_opened_a_session_on(self):
         """Since 0.3.2.9 a task the owner opened a session on (stay:open) stayed open after its reply went out; the
@@ -70,7 +70,7 @@ class VerdictTests(unittest.TestCase):
                              'FromEmail': 'sender@work.example', 'Status': 'routed'})
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                             'DraftText': 'The first batch is complete; continuing tomorrow.'})
-        live = mock.Mock(sid='manual-coder', alive=True)
+        live = mock.Mock(sid='manual-agent', alive=True)
         with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
              mock.patch.object(terminal, 'session_for', return_value=live), \
              mock.patch.object(terminal, 'close', return_value=True) as close:
@@ -96,14 +96,14 @@ class VerdictTests(unittest.TestCase):
                              'FromEmail': 'sender@work.example', 'Status': 'routed'})
         rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'clarification', 'Status': 'pending',
                             'DraftText': 'Which spreadsheet and dashboard?'})
-        live = mock.Mock(sid='blocked-coder', alive=True)
+        live = mock.Mock(sid='blocked-agent', alive=True)
         with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': []}), \
              mock.patch.object(terminal, 'session_for', return_value=live), \
              mock.patch.object(terminal, 'close', return_value=True) as close:
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual(out['status'], 'approved')
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
-        close.assert_called_once_with('blocked-coder')
+        close.assert_called_once_with('blocked-agent')
 
 
 class FakeSession:
@@ -159,11 +159,11 @@ class AttachHookTests(unittest.TestCase):
 
 class BusyThreadTests(unittest.TestCase):
     """A mail on a thread whose agent is running used to skip triage entirely: no due day, and whoever wrote it
-    was typed into the coder under auto (B6, 2026-10-11). It is judged now; only the redraft waits on the agent."""
+    was typed into the coding agent under auto (B6, 2026-10-11). It is judged now; only the redraft waits on the agent."""
     def setUp(self):
         self.s = MemoryStore(); self.s.set_setting('answer_to_agent', 'auto', 't')
         self.tid = Factory(self.s).attachable(from_email='erin@northwind.example').tid
-        rid = self.s.start_run(self.tid, 'coder', 'go', 'owner'); self.s.update_run(rid, {'Status': 'running'})
+        rid = self.s.start_run(self.tid, 'coding', 'go', 'owner'); self.s.update_run(rid, {'Status': 'running'})
 
     def mail(self, ext, sender, body):
         llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'coding', 'why': 'more to do', 'due': '2026-08-28'})

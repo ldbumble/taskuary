@@ -13,7 +13,7 @@ FIELDS = [['workspace', 'team'], ['channel filter', 'channels']]
 
 class FakeTerm:
     def __init__(self, sid, task_id): self.sid, self.task_id, self.alive, self.keep_transcript = sid, task_id, True, True
-    def info(self, tail=0): return {'sid': self.sid, 'taskId': self.task_id, 'alive': self.alive, 'agent': 'coder', 'label': 'coder'}
+    def info(self, tail=0): return {'sid': self.sid, 'taskId': self.task_id, 'alive': self.alive, 'agent': 'coding', 'label': 'coding'}
 
 
 def _slack(): return next(x for x in server.store.list_connectors() if x['Type'] == 'slack')
@@ -71,7 +71,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual((tk['Kind'], tk['Status'], tk['Tags']), ('setup', 'in_progress', f'connector:{cid}'))
         self.assertTrue(tk['Title'].startswith('Set up '))
         agent, cwd, seed = made[0]
-        self.assertEqual(agent, 'coder'); self.assertIn('1. Create a Slack app', seed); self.assertNotIn('Do NOT call the Taskuary API', seed)
+        self.assertEqual(agent, 'coding'); self.assertIn('1. Create a Slack app', seed); self.assertNotIn('Do NOT call the Taskuary API', seed)
         self.assertFalse(terminal.SESSIONS['s1'].keep_transcript)                                    # tokens get typed here: no transcript filed
         # the card reloads: the same session comes back, and a second click does not start a second agent
         self.assertEqual(c.get(f'/api/connectors/{cid}/ai-setup').json()['session']['sid'], 's1')
@@ -82,7 +82,7 @@ class EndpointTests(unittest.TestCase):
             self.assertEqual(c.post(f"/api/tasks/{r['taskId']}/wrap", json={}).json(), {'wrap': 'done', 'taskId': r['taskId']})
         cl.assert_called_once_with('s1')
         self.assertEqual(server.store.get_task(r['taskId'])['Status'], 'done')
-        self.assertFalse(any(str(x.get('Body', '')).startswith('CODER REPORT') for x in server.store.list_comments(r['taskId'])))
+        self.assertFalse(any(str(x.get('Body', '')).startswith('AGENT REPORT') for x in server.store.list_comments(r['taskId'])))
 
     def test_no_agent_is_said_not_500ed(self):
         cid = _slack()['ConnectorId']

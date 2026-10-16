@@ -61,7 +61,7 @@ def catalog(store) -> list:
 
 
 def _profile(store, cfg, r, routed: bool = True) -> bool:
-    """The worker, inheriting the coding agent's CLI the way the shipped roles do (agents.seed_profiles) - on the
+    """The worker - instructions only, run on the default brain like the shipped roles (agents.seed_profiles) - on the
     triage roster only when the owner's mail is to reach it. An existing one is the owner's and is left as it is."""
     from . import agents, cli_connections
     name = r['profile']

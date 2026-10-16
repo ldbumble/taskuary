@@ -38,7 +38,7 @@ export const stateOf = (i, laneWord) => i?.lane === "approve"
 
 // a band's card says who it is from, never what each one said - the rail beside it has the rows (the owner, 2026-10-06)
 // ...a report has no "who" but its own name, so it says that
-// ...and an agent's row says the TASK, not the profile running it: "coder" alone read as a task called coder (the owner, 2026-10-08)
+// ...and an agent's row says the TASK, not the profile running it: a profile name alone read as a task of that name (the owner, 2026-10-08)
 const cut = (t, n = 40) => t.length <= n ? t : `${t.slice(0, n).replace(/\s+\S*$/, "")}…`;
 // ...nor a row with nobody behind it but the agent - a task an agent opened from a report, say - whose only name IS the profile
 // ...and an agent's FINISHED work (kind agentdone), whose "who" is the agent itself with no agent field beside it (TQ-1016 live)

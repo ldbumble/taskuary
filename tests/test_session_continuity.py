@@ -14,8 +14,21 @@ def task(store, **fields):
     return store.create_task({'Title': 'Prepare item numbers', 'Kind': 'general', 'Status': 'open', **fields}, 'owner')
 
 
-def connect(store, name='claude'):
-    store.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': name, 'args': ['exec'] if name == 'codex' else ['-p']}))
+CONNS = {}
+
+
+@pytest.fixture(autouse=True)
+def connections():
+    """A brain is a connected CLI tool (config.toml's cli_connections), never a profile row - so that is what connect() writes."""
+    from taskuary import config
+    real = config.load; CONNS.clear()
+    with mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': dict(CONNS)}), \
+         mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains)):
+        yield CONNS
+
+
+def connect(store, name='claude', args=None):
+    CONNS[name] = {'cmd': name, 'args': args or (['exec'] if name == 'codex' else ['-p'])}
 
 
 def brain(text='The numbers are collected. Next: prepare a summary.', sid='native-thread'):
@@ -52,12 +65,12 @@ def test_provider_switch_and_changed_configuration_do_not_reuse_a_foreign_thread
     session.select_provider(pick='cli:codex')
     assert session.cli_sid == ''
     session.cli_sid = 'codex-only'; session._remember_session()
-    store.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec', '-c', 'profile="other"']}))
+    connect(store, 'codex', ['exec', '-c', 'profile="other"'])
     with mock.patch.object(llm, 'build_llm', return_value=brain(sid='new-context')) as build:
         session.send_prompt('Continue')
     assert not build.call_args.kwargs.get('resume')
     assert store.saved_session(tid)['NativeId'] == 'new-context'
-    store.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec']}))
+    connect(store, 'codex')
     assert general.GeneralSession(store, tid).cli_sid == ''
     store.delete_task(tid)
     assert store.saved_session(tid) is None
@@ -97,21 +110,22 @@ def test_backup_provider_receives_history_without_primary_session_id():
 
 
 def test_backup_brains_do_not_retry_the_same_cli_under_another_profile_name():
+    # LEGACY picks naming profiles (`cli:<profile>`, saved before brains named tools) still run by their rows
     store = MemoryStore()
-    store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+    store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
     store.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
     store.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'args': ['exec']}))
     store.set_setting('triage_backup_ai', 'cli:researcher,cli:codex', 'owner')
     made = []
     def make(st, name, *args, **kw):
         made.append(name)
-        if name == 'coder': return mock.Mock(side_effect=RuntimeError('provider unavailable'))
+        if name == 'coding': return mock.Mock(side_effect=RuntimeError('provider unavailable'))
         return lambda *a, **k: 'Codex answered'
     with mock.patch.object(llm, 'make_cli_llm', side_effect=make), \
          mock.patch.object(agents, 'availability_failure', return_value=True):
-        answer = llm._build_llm(store, pick='cli:coder')
+        answer = llm._build_llm(store, pick='cli:coding')
         assert answer('system', 'question') == 'Codex answered'
-    assert made == ['coder', 'codex']
+    assert made == ['coding', 'codex']
 
 
 @pytest.mark.parametrize('provider', ['claude', 'codex'])

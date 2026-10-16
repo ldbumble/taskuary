@@ -83,9 +83,9 @@ def test_copilot_events_read_and_an_unknown_cli_keeps_its_screen(home):
 def test_a_coding_session_is_one_record_with_its_report_and_result_said_once(home):
     s = MemoryStore(); tid = Factory(s).task(title='March import doubled')
     claude_log(home, 'c1')
-    s.add_comment(tid, 'claude', 'agent', 'CODER REPORT\nDetermination: the cursor reset on retry\nActions: patched importer.py\n'
+    s.add_comment(tid, 'claude', 'agent', 'AGENT REPORT\nDetermination: the cursor reset on retry\nActions: patched importer.py\n'
                                           'Summary: March was read twice; fixed.\n\nLAST MESSAGE\nFixed: the cursor reset on retry, so March was read twice.')
-    s.add_transcript(tid, 'pane-1', 'screen text', 'coder', 'C:/work/ledger', 'c1', brain='claude')
+    s.add_transcript(tid, 'pane-1', 'screen text', 'coding', 'C:/work/ledger', 'c1', brain='claude')
     [rec] = sessionrecord.record(s, tid)['sessions']
     assert rec['cli'] == 'claude' and rec['source'] == 'Claude Code log'
     assert rec['report']['decided'] == 'the cursor reset on retry' and rec['report']['changed'] == 'patched importer.py'
@@ -96,7 +96,7 @@ def test_a_coding_session_is_one_record_with_its_report_and_result_said_once(hom
 def test_a_saved_answer_is_the_result_and_the_snapshot_outlives_the_cli_log(home):
     s = MemoryStore(); tid = Factory(s).task(title='Vendor list')
     claude_log(home, 'c2')
-    s.add_transcript(tid, 'pane-2', 'screen', 'coder', '', 'c2', brain='claude')
+    s.add_transcript(tid, 'pane-2', 'screen', 'coding', '', 'c2', brain='claude')
     sessionrecord.save(s, tid, 'pane-2', 'claude', 'c2', 'screen')
     (home / '.claude' / 'projects' / 'C--work-ledger' / 'c2.jsonl').unlink()           # the CLI pruned its logs
     session_artifacts.result(s, tid, '1. Payworth\n2. Trainly\n3. Spendly')
@@ -125,10 +125,10 @@ def test_a_general_chat_keeps_every_turns_working_and_no_reply_twice(home):
 def test_sessions_come_newest_first_each_with_its_own_report(home):
     s = MemoryStore(); tid = Factory(s).task(title='Two runs')
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",
-            (tid, 'codex', 'agent', 'CODER REPORT\nSummary: first pass', '2026-10-09 10:00:00'))
-    s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,CreatedAt) VALUES (?,?,?,?,?,?)", (tid, 'a', 'coder', 'one', 'codex', '2026-10-09 10:00:05'))
+            (tid, 'codex', 'agent', 'AGENT REPORT\nSummary: first pass', '2026-10-09 10:00:00'))
+    s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,CreatedAt) VALUES (?,?,?,?,?,?)", (tid, 'a', 'coding', 'one', 'codex', '2026-10-09 10:00:05'))
     s._exec("INSERT INTO comment (TaskId,Actor,ActorType,Body,CreatedAt) VALUES (?,?,?,?,?)",
-            (tid, 'claude', 'agent', 'CODER REPORT\nSummary: second pass', '2026-10-10 09:00:00'))
-    s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,CreatedAt) VALUES (?,?,?,?,?,?)", (tid, 'b', 'coder', 'two', 'devin', '2026-10-10 09:00:03'))
+            (tid, 'claude', 'agent', 'AGENT REPORT\nSummary: second pass', '2026-10-10 09:00:00'))
+    s._exec("INSERT INTO transcript (TaskId,Sid,Agent,Text,Brain,CreatedAt) VALUES (?,?,?,?,?,?)", (tid, 'b', 'coding', 'two', 'devin', '2026-10-10 09:00:03'))
     recs = sessionrecord.record(s, tid)['sessions']
     assert [(r['sid'], r['report']['summary'], r['source']) for r in recs] == [('b', 'second pass', 'screen'), ('a', 'first pass', 'screen')]

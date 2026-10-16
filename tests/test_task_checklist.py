@@ -96,7 +96,7 @@ class ProgressTests(unittest.TestCase):
 
     def test_a_tick_never_closes_and_closing_ticks_every_box(self):
         """A tick is a tick: Mark done is the close (T16, the owner, 2026-09-25 - the last tick closed it from
-        2026-09-18 to then). And closing ticks every box. "The list records what was done" left a coder's
+        2026-09-18 to then). And closing ticks every box. "The list records what was done" left a coding agent's
         `--done` on TQ-0646 showing three open boxes on a closed card (the owner, 2026-09-18: "part of
         --done should be that, no? same if it's saved manually"). Dropped still ticks nothing."""
         first, last = self.items

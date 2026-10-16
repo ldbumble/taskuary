@@ -220,8 +220,8 @@ class BrokenInstallTests(unittest.TestCase):
 
 
 class RecipeForTests(unittest.TestCase):
-    """A profile is named for its JOB. Every install ships one called `coder`, so the name to
-    install has to be read off the command it runs - install('coder') is a 422, and `coder` is
+    """A profile is named for its JOB. Every install ships one called `coding`, so the name to
+    install has to be read off the command it runs - install('coding') is a 422, and `coding` is
     the first row every install has."""
 
     def test_a_profiles_command_names_the_recipe_not_the_profile(self):
@@ -236,7 +236,7 @@ class RecipeForTests(unittest.TestCase):
         self.assertEqual(cliinstall.recipe_for('cursor-agent.cmd'), 'cursor')
 
     def test_something_nobody_vetted_maps_to_nothing(self):
-        for cmd in ('', 'coder', 'aider', 'my-own-wrapper', 'rm'):
+        for cmd in ('', 'coding', 'aider', 'my-own-wrapper', 'rm'):
             self.assertEqual(cliinstall.recipe_for(cmd), '', cmd)
 
 
@@ -254,9 +254,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.get('/api/cli/install/state').json()['phase'], 'idle')
 
     def test_a_profile_name_is_not_a_thing_that_can_be_installed(self):
-        """The `coder` row wears the button; what it posts has to be `claude`."""
+        """A profile's name is never a recipe; what a button posts has to be `claude`."""
         self.addCleanup(cliinstall.reset)
-        self.assertEqual(c.post('/api/cli/install', json={'name': 'coder'}).status_code, 422)
+        self.assertEqual(c.post('/api/cli/install', json={'name': 'coding'}).status_code, 422)
 
     def test_a_second_install_of_something_else_is_refused_while_one_runs(self):
         """The phase is global, so letting the second press through would have it poll the first
@@ -281,23 +281,25 @@ class DetectTests(unittest.TestCase):
         self.assertTrue(by['claude']['installable'])
         self.assertEqual(by['claude']['install'], 'claude')
 
-    def test_a_configured_profile_offers_the_recipe_its_command_runs(self):
-        """`coder` runs claude, so its row installs claude - not the nickname, which is a 422."""
+    def test_a_profile_running_a_cli_marks_that_tool_configured_and_is_no_row_of_its_own(self):
+        """A profile is instructions on a brain, never a CLI: `coding` running claude makes the claude row `configured` -
+        and only the tool itself is listed, wearing the recipe it installs."""
         class Store:
-            def list_agents(self): return [{'Name': 'coder', 'Config': '{"cmd": "claude"}'}]
+            def list_agents(self): return [{'Name': 'coding', 'Config': '{"cmd": "claude"}'}]
         with mock.patch.object(clis.shutil, 'which', return_value=None):
             by = {r['name']: r for r in clis.detect(Store())}
-        self.assertEqual(by['coder']['install'], 'claude')
-        self.assertTrue(by['coder']['installable'])
-        self.assertIn(by['coder']['install'], cliinstall.RECIPES)
+        self.assertNotIn('coding', by)
+        self.assertTrue(by['claude']['configured']); self.assertFalse(by['codex']['configured'])
+        self.assertEqual(by['claude']['install'], 'claude')
+        self.assertIn(by['claude']['install'], cliinstall.RECIPES)
 
-    def test_a_profile_pointing_at_something_unknown_offers_no_button(self):
+    def test_a_profile_pointing_at_something_unknown_adds_no_row_and_configures_nothing(self):
         class Store:
             def list_agents(self): return [{'Name': 'mine', 'Config': '{"cmd": "my-own-wrapper"}'}]
         with mock.patch.object(clis.shutil, 'which', return_value=None):
-            by = {r['name']: r for r in clis.detect(Store())}
-        self.assertEqual(by['mine']['install'], '')
-        self.assertFalse(by['mine']['installable'])
+            rows = clis.detect(Store())
+        self.assertNotIn('mine', {r['name'] for r in rows})
+        self.assertFalse(any(r['configured'] for r in rows))
 
     def test_what_is_installed_is_still_reported_as_installed(self):
         # `path=` because detection asks twice now: this process's PATH, then the live one a CLI

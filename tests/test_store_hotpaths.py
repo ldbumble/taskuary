@@ -145,7 +145,7 @@ class RelatedIndexTests(unittest.TestCase):
         s.add_route(mid, None, 'file', None, 'fyi', [], 'triage')
         tid = s.create_task({'Title': 't'}, 't')
         s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
-        s.start_run(tid, 'coder', 'go', 't')
+        s.start_run(tid, 'coding', 'go', 't')
         s.add_attachment({'MessageId': mid, 'Name': 'a.png', 'ContentType': 'image/png'})
         self.assertIn('idx_route_message', _plan(s, 'SELECT * FROM route WHERE MessageId=?', (mid,)))
         self.assertIn('idx_review_message', _plan(s, 'SELECT * FROM review WHERE MessageId=?', (mid,)))

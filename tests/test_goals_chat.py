@@ -5,7 +5,7 @@ from taskuary import concierge
 from taskuary.store import MemoryStore
 
 
-def goal_item(kind='goal_slipped', why='3 of 7 · coder on step 5 · Ray owes step 4, chased twice · slipped 4d'):
+def goal_item(kind='goal_slipped', why='3 of 7 · coding on step 5 · Ray owes step 4, chased twice · slipped 4d'):
     return {'key': 'processing:x', 'kind': kind, 'lane': 'yours', 'tid': 7, 'ref': 'TQ-0007', 'due': '2026-12-01', 'news': True,
             'title': 'Migrate the census export off the old portal', 'why': why, 'steps': 7, 'steps_done': 3}
 
@@ -22,7 +22,7 @@ class GoalOpenerTests(unittest.TestCase):
         self.assertIn('first step', line.lower())
 
     def test_a_goal_on_track_needs_nothing(self):
-        line = concierge.fallback(goal_item('goal', '2 of 7 · coder on step 3'), opening=True)
+        line = concierge.fallback(goal_item('goal', '2 of 7 · coding on step 3'), opening=True)
         self.assertIn('nothing needs you', line.lower())
 
 

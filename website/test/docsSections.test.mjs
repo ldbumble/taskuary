@@ -42,8 +42,8 @@ test("the manage screen names both roads to a worker", () => {
 });
 
 // "not routed" was one word for four situations, and for the commonest it said the opposite of what
-// happens: every coding task goes to CODER.md (the owner, 2026-09-17: "why does coder.md say not
-// routed? it is but default for coding tasks").
+// happens: every coding task goes to CODING.md (the owner, 2026-09-17: the coding document is the
+// default for coding tasks, not unrouted).
 test("a worker routed by kind says so, and is not dressed as a fault", () => {
   assert.match(source, /coding: "all coding tasks"/);
   assert.match(source, /off: "switched off"/);

@@ -315,7 +315,7 @@ const PAGE = 980;
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, what it has learned, and the playbooks your agents follow." },
-  config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coder and display knobs — how the funnel behaves." },
+  config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coding agent and display knobs — how the funnel behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
@@ -957,7 +957,7 @@ const docsTree = ({ profiles = [], playbooks = [], people = [] }) => [
   ...OPERATOR_DOCS.map((d) => ({ key: `d:${d.name}`, label: d.label, sel: { group: "documents", doc: d.name } })),
   { key: "g:profiles", label: "Profiles", head: true, sel: { group: "profiles" } },
   // by WORKER NAME, not by filename. A profile's rules document can BE an operator document -
-  // the coder profile's is CODER.md - so filenames here put the same label in the rail twice,
+  // the coding profile's is CODING.md - so filenames here put the same label in the rail twice,
   // under two groups, and a click landed on whichever came first.
   ...profiles.map((r) => ({ key: `p:${r.name}`, label: r.name, sel: { group: "profiles", doc: r.name } })),
   { key: "a:new-profile", label: "+ New profile", sel: { action: "new-profile" } },

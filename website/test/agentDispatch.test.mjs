@@ -18,7 +18,7 @@ test("the assistant offers ONE Send to agent, and the card asks coding or not", 
   // question offers both, triage's pick first (concierge.ALTS)
   assert.match(py, /'regular_agent': 'Send to agent'/);
   assert.match(py, /'mine', 'regular_agent', 'not_ours'/);
-  assert.match(py, /'agent': \(\('coder', 'A coding agent'\), \('regular_agent', 'A non-coding agent'\)\)/);
+  assert.match(py, /'agent': \(\('coding_agent', 'A coding agent'\), \('regular_agent', 'A non-coding agent'\)\)/);
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 

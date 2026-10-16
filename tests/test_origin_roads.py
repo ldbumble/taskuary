@@ -24,10 +24,10 @@ def _stranger(s):
 
 def _owner(s): return s.create_task({'Title': 'x', 'Kind': 'coding', 'Source': 'manual', 'OriginBase': 'owner'}, 'owner')
 
-def _store(cmd='claude', name='coder'):
+def _store(cmd='claude', name='coding'):
     s = MemoryStore(); s.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': cmd})); return s
 
-def _pane(s, t, tmp_path, agent='coder', **kw):
+def _pane(s, t, tmp_path, agent='coding', **kw):
     with mock.patch.object(terminal, 'Term') as T, mock.patch.dict(terminal.SESSIONS, {}, clear=True):   # no stand-in outlives the test
         terminal.open_session(s, agent, task_id=t, cwd=str(tmp_path), **kw)
     return T.call_args.args[0], T.call_args.kwargs
@@ -132,7 +132,7 @@ def test_a_headless_run_trims_its_env_only_when_the_profile_says_so(monkeypatch)
 
 # ── headless and general ─────────────────────────────────────────────────────────────────────────────────────────
 def _headless(s, t, **kw):
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, **kw)
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t, **kw)
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('', 'hi')
     return run.call_args.args[0]
 
@@ -151,25 +151,26 @@ def test_an_owner_s_headless_run_is_unchanged():
 
 def test_a_stranger_s_headless_run_on_a_cli_with_no_reviewer_is_refused():
     s = _store('gemini'); t = _stranger(s)
-    with pytest.raises(ValueError, match='no built-in reviewer'): llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t)
+    with pytest.raises(ValueError, match='no built-in reviewer'): llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t)
 
 def test_the_classifier_road_ignores_the_task():
     s = _store('gemini'); t = _stranger(s)
-    assert llm.make_cli_llm(s, 'coder', task_id=t)      # no hands: it already runs with every tool off
+    assert llm.make_cli_llm(s, 'coding', task_id=t)      # no hands: it already runs with every tool off
 
 def test_build_llm_forwards_the_task():
     s = _store(); t = _stranger(s)
-    with mock.patch.object(llm, 'make_cli_llm', return_value=lambda *a, **k: 'x') as m: llm.build_llm(s, pick='cli:coder', cli_tools=True, task_id=t)
+    with mock.patch.object(llm, 'make_cli_llm', return_value=lambda *a, **k: 'x') as m: llm.build_llm(s, pick='cli:coding', cli_tools=True, task_id=t)
     assert m.call_args.kwargs['task_id'] == t
 
 def test_a_backup_brain_that_cannot_run_a_stranger_s_task_is_skipped():
     s = _store(); s.upsert_agent('g', 'coding', 'cli', json.dumps({'cmd': 'gemini'})); t = _stranger(s)
     s.set_setting('triage_backup_ai', 'cli:g', 'owner')
-    assert llm.build_llm(s, pick='cli:coder', cli_tools=True, task_id=t)
+    assert llm.build_llm(s, pick='cli:coding', cli_tools=True, task_id=t)
 
 def _general_build(s, t):
-    with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'done') as b, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-        general.start_session(s, t, pick='cli:coder').send_prompt('go', pick='cli:coder')
+    # a general turn runs on a BRAIN - the connected CLI tool - never on a profile
+    with mock.patch.object(agents, 'connection_brains', lambda store, cfg=None: [('claude', {'cmd': 'claude'})]),          mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'done') as b, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        general.start_session(s, t, pick='cli:claude').send_prompt('go', pick='cli:claude')
     return b.call_args.kwargs
 
 def test_a_general_agent_s_turn_names_its_task():
@@ -184,7 +185,7 @@ def test_the_owner_s_guide_chat_is_the_owner_s():
     assert origin.of_task(s, d['TaskId'])[0] == 'stranger'          # a stranger's message on it still lowers it
 
 def _headless_research(s, t):
-    brain = llm.make_cli_llm(s, 'coder', research=True, task_id=t)
+    brain = llm.make_cli_llm(s, 'coding', research=True, task_id=t)
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run: brain('', 'hi')
     return run.call_args.args[0]
 
@@ -201,16 +202,16 @@ def test_an_owner_s_research_run_is_unchanged():
 
 def test_a_stranger_s_run_does_not_resume_a_conversation_from_another_folder():
     s = _store(); t = _stranger(s)
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='owner-sid')
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t, resume='owner-sid')
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'new-sid', '')) as run: brain('', 'hi')
     assert run.call_args.kwargs.get('resume') is None
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='new-sid')      # its own, from that folder, continues
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t, resume='new-sid')      # its own, from that folder, continues
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'new-sid', '')) as run: brain('', 'hi')
     assert run.call_args.kwargs.get('resume') == 'new-sid'
 
 def test_an_owner_s_run_resumes_as_before():
     s = _store(); t = _owner(s)
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, resume='owner-sid')
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t, resume='owner-sid')
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'owner-sid', '')) as run: brain('', 'hi')
     assert run.call_args.kwargs.get('resume') == 'owner-sid' and not s.get_setting(f'stranger_sid:{t}')   # and nothing written for it
 
@@ -222,7 +223,7 @@ def test_only_the_stranger_refusal_skips_a_backup_brain():
         if name == 'g': raise ValueError('a broken profile')
         return real(store, name, *a, **k)
     with mock.patch.object(llm, 'make_cli_llm', side_effect=boom), pytest.raises(ValueError, match='a broken profile'):
-        llm.build_llm(s, pick='cli:coder', cli_tools=True, task_id=t)
+        llm.build_llm(s, pick='cli:coding', cli_tools=True, task_id=t)
 
 
 # ── the stranger's folder cannot be planted ──────────────────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ def test_a_planted_link_for_the_task_s_folder_refuses_the_launch(tmp_path):
     s = _store(); t = _stranger(s)
     target = tmp_path / 'secret'; target.mkdir(); origin.stranger_path(t).parent.mkdir(parents=True, exist_ok=True)
     _link(target, origin.stranger_path(t))
-    with pytest.raises(ValueError, match='folder'): llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t)
+    with pytest.raises(ValueError, match='folder'): llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t)
     with pytest.raises(origin.Refusal): origin.stranger_dir(t)
     assert not any(o == floor._norm(target, real=True) or o.startswith(floor._norm(target, real=True) + '/') for o in floor._own(t, s))
 
@@ -271,7 +272,7 @@ def test_the_strict_env_keeps_what_a_cli_signs_in_and_runs_with(monkeypatch):
 def test_the_pane_takes_the_theme_from_any_settings_spelling_and_keeps_one(tmp_path):
     s = _store(); t = _stranger(s)
     f = tmp_path / 'theme.json'; f.write_text('{"theme": "dark"}', encoding='utf-8'); g = tmp_path / 'other.json'; g.write_text('{}', encoding='utf-8')
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': [f'--settings={g}', '--settings', str(f)]}))
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': [f'--settings={g}', '--settings', str(f)]}))
     argv, _ = _pane(s, t, tmp_path)
     assert argv.count('--settings') == 1 and not any(str(x).startswith('--settings=') for x in argv)
     assert json.loads(Path(argv[argv.index('--settings') + 1]).read_text(encoding='utf-8')).get('theme') == 'dark'
@@ -295,7 +296,7 @@ def test_a_stranger_s_line_reaches_only_an_auto_session(monkeypatch, mode):
     assert typed == []
 
 def test_an_auto_start_that_is_refused_says_so_on_the_task_and_does_not_retry(monkeypatch):
-    s = _store('gemini'); t = _stranger(s)
+    s = _store('gemini'); t = _stranger(s); s.set_setting('default_brain', 'gemini', 'owner')     # the coding brain is the CLI, not the profile
     monkeypatch.setattr(blackboard, 'drain_later', lambda *a, **k: None)
     with mock.patch.object(terminal, 'Term'), mock.patch.dict(terminal.SESSIONS, {}, clear=True): ingest._auto_code(s, t)   # never raises into the poller
     said = ' '.join(c['Body'] for c in s.list_comments(t))

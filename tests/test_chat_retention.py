@@ -22,7 +22,7 @@ def ago(days=0, minutes=0): return (datetime.now() - timedelta(days=days, minute
 
 def store():
     s = MemoryStore()
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states()
     return s
 
@@ -119,7 +119,7 @@ class RetentionTests(unittest.TestCase):
     def test_what_a_chat_said_about_a_task_and_every_independent_record_outlive_the_archive(self):
         s = store(); t, m = real_task(s)
         item = {'key': f'msg:{m}', 'kind': 'asked', 'lane': 'asked', 'title': 'Fix the export', 'mid': m, 'tid': t}
-        dock = chat(s, 'send it to the coder when the export fix is ready', days=30, item=item)
+        dock = chat(s, 'send it to the coding agent when the export fix is ready', days=30, item=item)
         # an fyi discussed in that chat and promoted later: its discussion travelled onto the task (PW-133)
         fyi = s.add_message({'ExternalId': 'x:fyi', 'ConversationId': 'c:fyi', 'Channel': 'email', 'Subject': 'FYI - Rebecca is back', 'FromName': 'Erin',
                              'FromEmail': 'erin@ours.com', 'SentAt': ago(days=30), 'BodyText': 'Back Tuesday.', 'Status': 'filed'})
@@ -127,7 +127,7 @@ class RetentionTests(unittest.TestCase):
         promoted = s.create_task({'Title': 'Welcome Rebecca back', 'Kind': 'task', 'Status': 'open'}, 'o')
         operations.link_discussion(s, promoted, [fyi])
         op = operations.record_direct(s, 'task.complete', t, {}, 'owner', {'status': 'done'})
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nSummary: fixed the export.')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nSummary: fixed the export.')
         rv = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Fixed.', 'Status': 'approved'})
         mem = concierge.remember_fact(s, 'Gail signs off on refunds')
         funnel.remember_mute(s, {'sender': 'pvance@vendor.example', 'words': ['northwind'], 'why': 'the financials process'}, 'o')
@@ -136,10 +136,10 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(retention.cleanup(s)['removed'], [dock])
         self.assertIsNone(s.get_task(dock))
         mirrored = [c['Body'] for c in s.list_comments(t) if c['ActorType'] in (concierge.DISCUSSION_USER_TYPE, concierge.DISCUSSION_ASSISTANT_TYPE)]
-        self.assertIn('send it to the coder when the export fix is ready', mirrored)                          # readable on the task itself
+        self.assertIn('send it to the coding agent when the export fix is ready', mirrored)                          # readable on the task itself
         self.assertEqual([d['Body'] for d in operations.discussion(s, task_id=promoted)], ['make this a task when she is back'])
         self.assertEqual([h['type'] for h in operations.history(s, task_id=t) if h['type'] != 'discussion'], ['operation', 'correction'])
-        self.assertTrue(any('CODER REPORT' in c['Body'] for c in s.list_comments(t)))
+        self.assertTrue(any('AGENT REPORT' in c['Body'] for c in s.list_comments(t)))
         self.assertEqual(s.get_review(rv)['Status'], 'approved')
         self.assertEqual([x['Note'] for x in s.list_memories()], ['Gail signs off on refunds'])
         self.assertEqual([r['sender'] for r in funnel.mutes(s)], ['pvance@vendor.example'])

@@ -20,7 +20,7 @@ def seeded():
     s.save_connector({'Type': 'imap', 'Name': 'alex@northwind.example', 'Active': 1,
                       'ConfigJson': json.dumps({'username': 'adoyle-mail', 'host': 'mail.northwind.example', 'port': 993, 'ssl': 'true'})}, 'test')
     s.save_source({'Channel': 'email', 'Address': 'inbox@northwind.example', 'Active': 1}, 'test')
-    s.upsert_agent('coder', 'cli', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:\\Users\\alexd\\src\\ledger'}}))
+    s.upsert_agent('coding', 'cli', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:\\Users\\alexd\\src\\ledger'}}))
     return s
 
 

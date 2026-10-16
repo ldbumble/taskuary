@@ -18,16 +18,21 @@ c = TestClient(server.app)
 
 def _store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
     return s
+
+
+def _cfg(key='claude', **gears):
+    """The gears live on the BRAIN - the CLI connection - never on a profile (the owner, 2026-10-15)."""
+    return {'cli_connections': {key: {'cmd': key, **gears}}}
 
 
 @mock.patch('taskuary.agents.runs_here', lambda profile: True)       # the hints below are for a CLI that starts
 class ResolveTests(unittest.TestCase):
     def test_a_cli_brain_reports_its_LIGHT_gear_not_its_coding_model(self):
         """The whole point of the two gears: triage must not quietly run the coding model."""
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus', 'light_model': 'haiku'}}}
-        s.set_setting('triage_ai', 'cli:coder', 'o')
+        s, cfg = _store(), _cfg(model='opus', light_model='haiku')
+        s.set_setting('triage_ai', 'cli:claude', 'o')
         r = aidefaults.resolve(s, cfg, 'triage_ai')
         self.assertEqual((r['model'], r['cli']), ('haiku', 'claude'))
         self.assertIn('light model', r['owner'])
@@ -35,17 +40,16 @@ class ResolveTests(unittest.TestCase):
 
     def test_a_cli_brain_with_no_light_model_runs_the_small_one_and_says_so(self):
         """Blank meant the CODING model - triage on the expensive tier (the owner, 2026-09-24: "lower model for triage")."""
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
-        s.set_setting('triage_ai', 'cli:coder', 'o')
+        s, cfg = _store(), _cfg(model='opus')
+        s.set_setting('triage_ai', 'cli:claude', 'o')
         r = aidefaults.resolve(s, cfg, 'triage_ai')
         self.assertEqual(r['model'], '')
         self.assertEqual(r['default_hint'], 'haiku - the light default'); self.assertEqual(r['note'], '')
 
     def test_codex_effort_only_light_gear_round_trips(self):
         """codex on a ChatGPT plan has no smaller model - its cheap gear IS the effort."""
-        s, cfg = _store(), {'agents': {'x': {'cmd': 'codex', 'light_model': 'effort:low'}}}
-        s.upsert_agent('x', 'coding', 'cli', json.dumps(cfg['agents']['x']))
-        s.set_setting('triage_ai', 'cli:x', 'o')
+        s, cfg = _store(), _cfg('codex', light_model='effort:low')
+        s.set_setting('triage_ai', 'cli:codex', 'o')
         r = aidefaults.resolve(s, cfg, 'triage_ai')
         self.assertEqual((r['model'], r['effort']), ('', 'low'))
 
@@ -76,20 +80,21 @@ class ResolveTests(unittest.TestCase):
         self.assertFalse(r['ready']); self.assertIn('no AI connector', r['note'])
 
     def test_the_coding_slot_reads_the_MAIN_model(self):
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus', 'light_model': 'haiku'}}}
-        s.set_setting('default_agent', 'coder', 'o')
-        r = aidefaults.resolve(s, cfg, 'default_agent')
+        s, cfg = _store(), _cfg(model='opus', light_model='haiku')
+        s.set_setting('default_brain', 'claude', 'o')
+        r = aidefaults.resolve(s, cfg, 'default_brain')
         self.assertEqual(r['model'], 'opus')                # not haiku
         self.assertEqual(r['owner_link'], 'agents')
 
-    def test_state_offers_coding_clis_instead_of_every_profile(self):
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
+    def test_state_offers_cli_tools_never_profiles(self):
+        """A profile is instructions on whichever brain runs it, so the coding picker lists the TOOLS - one per connection."""
+        from taskuary import agents
+        s, cfg = _store(), {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'opus'}, 'copilot': {'cmd': 'copilot'}}}
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('copilot', 'coding', 'cli', json.dumps({'cmd': 'copilot'}))
-        with mock.patch('taskuary.agents.runs_here', return_value=True):
+        with mock.patch.object(agents, 'connection_brains', agents.connection_brains.real), \
+             mock.patch('taskuary.config.load', return_value=cfg):
             options = aidefaults.state(s, cfg)['agent_options']
-        self.assertEqual([(o['value'], o['label']) for o in options],
-                         [('coder', 'claude'), ('copilot', 'copilot')])
+        self.assertEqual([(o['value'], o['label']) for o in options], [('claude', 'claude'), ('copilot', 'copilot')])
 
 
 class TheFifthSlotTests(unittest.TestCase):
@@ -144,9 +149,9 @@ class TheFifthSlotTests(unittest.TestCase):
         """Two settings, because only one of the two jobs needs a model that can write - not
         because the judge stopped being allowed to be an ordinary brain."""
         s = _store()
-        s.set_setting('judge_ai', 'cli:coder', 'o')
-        self.assertEqual(aidefaults.resolve(s, {'agents': {'coder': {'cmd': 'claude'}}}, 'judge_ai')['kind'], 'brain')
-        self.assertEqual(aidefaults.resolve(s, {'agents': {'coder': {'cmd': 'claude'}}}, 'judge_ai')['value'], 'cli:coder')
+        s.set_setting('judge_ai', 'cli:claude', 'o')
+        self.assertEqual(aidefaults.resolve(s, _cfg(), 'judge_ai')['kind'], 'brain')
+        self.assertEqual(aidefaults.resolve(s, _cfg(), 'judge_ai')['value'], 'cli:claude')
 
 
 class WhatTheJudgeIsAskedTests(unittest.TestCase):
@@ -171,21 +176,20 @@ class WhatTheJudgeIsAskedTests(unittest.TestCase):
 
 class ApplyTests(unittest.TestCase):
     def test_setting_a_cli_brains_model_writes_the_light_model_and_leaves_coding_alone(self):
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'model': 'opus'}}}
-        s.set_setting('triage_ai', 'cli:coder', 'o')
+        s, cfg = _store(), {**_cfg(model='opus'), 'agents': {'coding': {'kind': 'coding'}}}
+        s.set_setting('default_brain', 'claude', 'o'); s.set_setting('triage_ai', 'cli:claude', 'o')
         out = aidefaults.apply(s, cfg, 'triage_ai', model='haiku')
         self.assertEqual(out['model'], 'haiku')
-        # the GEARS live on the brain now, not on the worker - a profile has nothing to do with
-        # which model runs it (the owner, 2026-09-16). Coding is still left alone, on the brain.
+        # the GEARS live on the brain, not on the profile - a profile has nothing to do with which model runs it
+        # (the owner, 2026-09-16). Coding is still left alone, on the brain.
         self.assertEqual(cfg['cli_connections']['claude']['light_model'], 'haiku')
         self.assertEqual(cfg['cli_connections']['claude']['model'], 'opus')      # untouched
-        self.assertNotIn('light_model', cfg['agents']['coder'])
-        self.assertEqual(json.loads(s.get_agent('coder')['Config'])['light_model'], 'haiku')  # and mirrored
+        self.assertNotIn('light_model', cfg['agents']['coding'])
+        self.assertEqual(json.loads(s.get_agent('coding')['Config'])['light_model'], 'haiku')  # and mirrored to the row it runs
 
     def test_effort_without_a_model_is_written_as_codex_spells_it(self):
-        s, cfg = _store(), {'agents': {'x': {'cmd': 'codex'}}}
-        s.upsert_agent('x', 'coding', 'cli', json.dumps(cfg['agents']['x']))
-        s.set_setting('triage_ai', 'cli:x', 'o')
+        s, cfg = _store(), _cfg('codex')
+        s.set_setting('triage_ai', 'cli:codex', 'o')
         aidefaults.apply(s, cfg, 'triage_ai', model='', effort='low')
         self.assertEqual(cfg['cli_connections']['codex']['light_model'], 'effort:low')
 
@@ -200,15 +204,15 @@ class ApplyTests(unittest.TestCase):
 
     def test_clearing_a_model_removes_it_rather_than_saving_an_empty_string(self):
         """'' means back to the provider default, and a saved '' is not that."""
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude', 'light_model': 'haiku'}}}
-        s.set_setting('triage_ai', 'cli:coder', 'o')
+        s, cfg = _store(), _cfg(light_model='haiku')
+        s.set_setting('triage_ai', 'cli:claude', 'o')
         aidefaults.apply(s, cfg, 'triage_ai', model='')
         self.assertNotIn('light_model', cfg.get('cli_connections', {}).get('claude', {}))
 
     def test_the_brain_and_the_model_can_be_set_in_one_call(self):
-        s, cfg = _store(), {'agents': {'coder': {'cmd': 'claude'}}}
-        aidefaults.apply(s, cfg, 'triage_ai', value='cli:coder', model='haiku')
-        self.assertEqual(s.get_settings()['triage_ai'], 'cli:coder')
+        s, cfg = _store(), _cfg()
+        aidefaults.apply(s, cfg, 'triage_ai', value='cli:claude', model='haiku')
+        self.assertEqual(s.get_settings()['triage_ai'], 'cli:claude')
         self.assertEqual(cfg['cli_connections']['claude']['light_model'], 'haiku')
 
     def test_an_unknown_slot_is_refused(self):
@@ -222,7 +226,7 @@ class ApiTests(unittest.TestCase):
         # to say what will run was silent about the brain half the board's tasks use, and the judge
         # on 2026-09-17, because where a finished run goes is a fifth thing an AI decides
         self.assertEqual([s['key'] for s in j['slots']],
-                         ['triage_ai', 'default_agent', 'concierge_ai', 'assistant_ai', 'judge_ai'])
+                         ['triage_ai', 'default_brain', 'concierge_ai', 'assistant_ai', 'judge_ai'])
         for s in j['slots']:
             self.assertTrue(s['label'] and s['desc'] and s['why'])     # every row explains itself
             for k in ('model', 'effort', 'choices', 'efforts', 'owner', 'note'): self.assertIn(k, s)
@@ -238,27 +242,29 @@ if __name__ == '__main__': unittest.main()
 class AssistantModelTests(unittest.TestCase):
     def test_the_assistant_card_names_the_model_it_really_runs_on(self):
         """It said "the coding model, the expensive gear" while every turn ran on haiku (2026-09-24)."""
-        s = _store(); s.set_setting('concierge_ai', 'cli:coder', 'owner')
-        r = aidefaults.resolve(s, {}, 'concierge_ai')
+        s = _store(); s.set_setting('concierge_ai', 'cli:claude', 'owner')
+        r = aidefaults.resolve(s, _cfg(), 'concierge_ai')
         self.assertEqual(r['default_hint'], 'sonnet - the Assistant default'); self.assertEqual(r['note'], '')
         s.set_setting('concierge_model', 'sonnet', 'owner')
-        self.assertEqual(aidefaults.resolve(s, {}, 'concierge_ai')['model'], 'sonnet')
+        self.assertEqual(aidefaults.resolve(s, _cfg(), 'concierge_ai')['model'], 'sonnet')
 
 
 class DefaultBrainTests(unittest.TestCase):
     def test_a_blank_brain_means_the_default_brain_never_the_first_connector(self):
-        """"First connected should not matter" (the owner, 2026-09-24): blank = default_brain, on its worker."""
+        """"First connected should not matter" (the owner, 2026-09-24): blank = default_brain, the CLI tool itself."""
         from taskuary import agents
         real = agents.default_pick.real
         s = _store()
-        with mock.patch.object(agents, 'runs_here', return_value=False):
-            self.assertEqual(real(s), '')                                   # nothing set, nothing runs: no brain yet
-        with mock.patch.object(agents, 'runs_here', return_value=True):
-            self.assertEqual(real(s), 'cli:coder')                          # nothing set: the legacy CLI, when it runs
-            s.set_setting('default_brain', 'claude', 'o')
-            self.assertEqual(real(s), 'cli:coder')                          # the worker that runs it
-            s.set_setting('default_brain', 'gemini', 'o')
-            self.assertEqual(real(s), '')                                   # a brain nothing here runs names nobody
+        with mock.patch.object(agents, 'connection_brains', agents.connection_brains.real), \
+             mock.patch('taskuary.config.load', return_value=_cfg()):
+            with mock.patch.object(agents, 'runs_here', return_value=False):
+                self.assertEqual(real(s), '')                               # nothing set, nothing runs: no brain yet
+            with mock.patch.object(agents, 'runs_here', return_value=True):
+                self.assertEqual(real(s), 'cli:claude')                     # nothing set: the connected CLI, when it runs
+                s.set_setting('default_brain', 'claude', 'o')
+                self.assertEqual(real(s), 'cli:claude')                     # the tool, never the profile on it
+                s.set_setting('default_brain', 'gemini', 'o')
+                self.assertEqual(real(s), '')                               # a brain nothing here connects names nobody
 
 
 class AliasTests(unittest.TestCase):

@@ -338,7 +338,7 @@ def resolve(store, name: str, scope: str = None, period: str = None) -> dict:
 
 # ── what the assistant is told ─────────────────────────────────────────────────────────
 def block(store, budget: int = 2_400) -> str:
-    """The paragraph the assistant and the coder context carry: which numbers are certified,
+    """The paragraph the assistant and the agent context carry: which numbers are certified,
     which are still being proved, and the honest instruction about the ones that are not.
 
     Without this the model writes its own query against a system it has never reconciled

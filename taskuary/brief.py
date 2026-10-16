@@ -6,7 +6,7 @@ the task id and title, the objective, the triage checklist, the owner's explicit
 repository when there is one, the latest complete substantive conversation (the chain as stored,
 history included, cleaned and budgeted the way triage reads it), the attachments on the machine -
 and the revision of the context it was built from, so a worker's result can be checked against
-what it actually read. Rules ride separately: AGENT.md for both kinds, CODER.md on top for coding.
+what it actually read. Rules ride separately: AGENT.md for both kinds, CODING.md on top for coding.
 """
 from .store import task_ref
 

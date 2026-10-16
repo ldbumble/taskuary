@@ -40,7 +40,7 @@ class ProcedureTests(unittest.TestCase):
             self.assertEqual((out['playbook'], out['kind']), ('pto-request', kind))
 
     def test_a_pto_request_becomes_a_general_task_with_its_procedure_and_no_coder(self):
-        s = MemoryStore(); s.set_setting('coder_auto_enabled', '1', 't'); s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s = MemoryStore(); s.set_setting('coding_auto_enabled', '1', 't'); s.upsert_agent('coding', 'coding', 'cli', '{}')
         llm = lambda *a, **k: json.dumps({'intent': 'task', 'kind': 'general', 'why': 'a PTO request', 'playbook': 'pto-request'})
         spawned = []
         with mock.patch.object(ingest, '_spawn', side_effect=lambda f, *a: spawned.append(f.__name__)):

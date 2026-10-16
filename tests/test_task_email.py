@@ -83,7 +83,7 @@ def test_regenerate_writes_an_owner_started_email_again_but_never_an_agents(s):
     from taskuary import server
     tid = work(s)
     out, _ = email(s, tid)
-    theirs = slots.draft(s, tid, 'Written by the agent.', to='paula@northwind.example', subject='x', agent='coder')['review_id']
+    theirs = slots.draft(s, tid, 'Written by the agent.', to='paula@northwind.example', subject='x', agent='coding')['review_id']
     old, server.store = server.store, s
     try:
         with mock.patch('taskuary.outbox.draft_message', return_value='Hi Erin, it is live - the template is attached.'):

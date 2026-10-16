@@ -1,7 +1,7 @@
 """The handbook: on by default, written on close, and gated where it counts.
 
 It shipped switched OFF and nobody noticed. `handbook.enabled()` reads the connector card when
-one exists, and every card is seeded Active 0 - so on every install that ever ran, coder.wrap
+one exists, and every card is seeded Active 0 - so on every install that ever ran, wrapup.wrap
 skipped learn_from_session, `--learned` was refused and the Social tab could only hold what a
 person typed. The docstring said "Default ON" the whole time.
 
@@ -53,7 +53,7 @@ class WrittenOnClose(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'fix the export', 'Kind': 'coding'}, 'o')
         out = handbook.learn_from_session(
-            s, tid, 'ran the tests; they need pyodbc installed first', 'coder',
+            s, tid, 'ran the tests; they need pyodbc installed first', 'coding',
             llm=self._llm({'entries': [{'earned': True,
                                         'why_earned': 'Repeated test isolation showed the native driver was the hidden prerequisite.',
                                         'title': 'The tests need pyodbc installed first',
@@ -65,14 +65,14 @@ class WrittenOnClose(unittest.TestCase):
     def test_nothing_is_the_usual_answer_and_is_accepted(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'x', 'Kind': 'coding'}, 'o')
-        self.assertEqual(handbook.learn_from_session(s, tid, 'did the thing', 'coder',
+        self.assertEqual(handbook.learn_from_session(s, tid, 'did the thing', 'coding',
                                                      llm=self._llm({'entries': []})), [])
 
     def test_a_routine_fact_without_hard_earned_evidence_is_rejected(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'x', 'Kind': 'coding'}, 'o')
         out = handbook.learn_from_session(
-            s, tid, 'answered a quick question', 'coder',
+            s, tid, 'answered a quick question', 'coding',
             llm=self._llm({'entries': [{'title': 'A quick fact', 'topic': 'general',
                                         'kind': 'howto', 'body': 'Routine output.'}]}))
         self.assertEqual(out, [])
@@ -82,13 +82,13 @@ class WrittenOnClose(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'x', 'Kind': 'coding'}, 'o')
         def boom(system, user, **kw): raise RuntimeError('no brain')
-        self.assertEqual(handbook.learn_from_session(s, tid, 'transcript', 'coder', llm=boom), [])
+        self.assertEqual(handbook.learn_from_session(s, tid, 'transcript', 'coding', llm=boom), [])
 
     def test_an_empty_transcript_asks_nothing(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'x', 'Kind': 'coding'}, 'o')
         called = []
-        handbook.learn_from_session(s, tid, '   ', 'coder', llm=lambda *a, **k: called.append(1))
+        handbook.learn_from_session(s, tid, '   ', 'coding', llm=lambda *a, **k: called.append(1))
         self.assertEqual(called, [])
 
 
@@ -195,8 +195,8 @@ class VotedOn(unittest.TestCase):
 
     def test_one_vote_per_voter_and_the_second_press_does_not_stack(self):
         s = MemoryStore()
-        p = handbook.post(s, 'The census lives in the old view', 'not the new one', 'census', 'gotcha', 'coder')
-        handbook.vote(s, p['LoreId'], 1, 'coder'); handbook.vote(s, p['LoreId'], 1, 'coder')
+        p = handbook.post(s, 'The census lives in the old view', 'not the new one', 'census', 'gotcha', 'coding')
+        handbook.vote(s, p['LoreId'], 1, 'coding'); handbook.vote(s, p['LoreId'], 1, 'coding')
         self.assertEqual(s.lore_get(p['LoreId'])['Score'], 1)
         handbook.vote(s, p['LoreId'], 1, 'codex')
         self.assertEqual(s.lore_get(p['LoreId'])['Score'], 2)
@@ -206,13 +206,13 @@ class VotedOn(unittest.TestCase):
     def test_new_idea_and_technical_solve_are_real_filterable_tags(self):
         s = MemoryStore()
         idea = handbook.post(s, 'Make launches reversible', '', 'launch', 'new_idea', 'assistant')
-        solve = handbook.post(s, 'Bound retries by elapsed time', '', 'importers', 'technical_solve', 'coder')
+        solve = handbook.post(s, 'Bound retries by elapsed time', '', 'importers', 'technical_solve', 'coding')
         self.assertEqual([p['LoreId'] for p in s.lore_posts(kind='new_idea')], [idea['LoreId']])
         self.assertEqual([p['LoreId'] for p in s.lore_posts(kind='technical_solve')], [solve['LoreId']])
 
     def test_below_zero_it_leaves_social_and_the_seed_prompt_and_an_upvote_brings_it_back(self):
         s = MemoryStore()
-        p = handbook.post(s, 'The nightly export runs at 2am', '', 'census', 'system', 'coder')
+        p = handbook.post(s, 'The nightly export runs at 2am', '', 'census', 'system', 'coding')
         self.assertIn('nightly export', handbook.block(s, 'when does the nightly export run'))
         out = handbook.vote(s, p['LoreId'], -1, 'owner')
         self.assertEqual(out['Status'], 'downvoted')
@@ -223,7 +223,7 @@ class VotedOn(unittest.TestCase):
 
     def test_saying_what_is_already_there_is_an_upvote_not_a_second_post(self):
         s = MemoryStore()
-        first = handbook.post(s, 'Adjustment rows take the first line date, not the batch date', 'so they post to the wrong month', 'payroll', 'gotcha', 'coder')
+        first = handbook.post(s, 'Adjustment rows take the first line date, not the batch date', 'so they post to the wrong month', 'payroll', 'gotcha', 'coding')
         # the writer says it is the same fact (same_as) - code no longer guesses it from shared words (2026-10-11)
         again = handbook.post(s, 'Adjustment rows take the first line date rather than the batch date', 'check the batch header', 'payroll', 'gotcha', 'codex',
                               same_as=first['LoreId'])
@@ -233,7 +233,7 @@ class VotedOn(unittest.TestCase):
         self.assertEqual(s.lore_count()['posts'], 1)
         self.assertEqual([c['Body'] for c in s.lore_comments(first['LoreId'])], ['check the batch header'])
         # a different fact on the same shelf is its own post
-        other = handbook.post(s, 'Payroll closes on the first Wednesday', '', 'payroll', 'decision', 'coder')
+        other = handbook.post(s, 'Payroll closes on the first Wednesday', '', 'payroll', 'decision', 'coding')
         self.assertFalse(other['merged'])
 
     def test_a_post_is_a_line_not_a_report(self):
@@ -245,17 +245,17 @@ class VotedOn(unittest.TestCase):
 
     def test_the_seed_block_names_each_entry_so_an_agent_can_vote_on_it(self):
         s = MemoryStore()
-        p = handbook.post(s, 'The AP importer needs pyodbc before its tests mean anything', '', 'importers', 'gotcha', 'coder')
+        p = handbook.post(s, 'The AP importer needs pyodbc before its tests mean anything', '', 'importers', 'gotcha', 'coding')
         blk = handbook.block(s, 'run the AP importer tests')
         self.assertIn(f"#{p['LoreId']} [importers] (+0)", blk)
         self.assertIn('--upvote <id>', blk)
 
     def test_top_promotes_votes_then_discussion(self):
         s = MemoryStore()
-        discussed = handbook.post(s, 'The importer has a documented retry window', '', 'importers', author='coder')
+        discussed = handbook.post(s, 'The importer has a documented retry window', '', 'importers', author='coding')
         s.lore_comment(discussed['LoreId'], 'Confirmed during the September close.', 'analyst')
         s.lore_comment(discussed['LoreId'], 'The same window held during October.', 'owner')
-        quiet = handbook.post(s, 'The importer emits a completion marker', '', 'importers', author='coder')
+        quiet = handbook.post(s, 'The importer emits a completion marker', '', 'importers', author='coding')
 
         # Discussion promotes an otherwise equal entry, even when the quiet one is newer.
         self.assertEqual([p['LoreId'] for p in s.lore_posts(sort='top')][:2],

@@ -8,24 +8,24 @@ from taskuary import docsync, learn, llm
 class TemplateTests(unittest.TestCase):
     def test_docs_seeded_from_templates(self):
         s = MemoryStore()
-        soul, coder = s.get_doc('soul'), s.get_doc('coder')
+        soul, coding = s.get_doc('soul'), s.get_doc('coding')
         # the OPEN-SOURCE docs read as a person, not token soup: John Smith is the example.
         # A real owner converts every mention at once - via retoken + the one setting.
-        self.assertIn('John Smith', soul); self.assertIn('John', coder)
+        self.assertIn('John Smith', soul); self.assertIn('John', coding)
         self.assertEqual(s.owner()['owner'], 'the owner')       # the example is not an identity
         s.set_setting('owner_name', 'Dana Reyes', 'owner')
         s.set_setting('owner_email', 'dana@northwind.example', 'owner')
         from taskuary.store import retoken_doc
-        for name in ('soul', 'coder'):                          # what _heal_owner_docs does at launch
+        for name in ('soul', 'coding'):                         # what _heal_owner_docs does at launch
             s.save_doc(name, retoken_doc(retoken_doc(s.get_doc(name), 'John Smith', 'john.smith@example.com'),
                                          'Dana Reyes', 'dana@northwind.example'), 'test')
         self.assertIn('Dana Reyes', s.doc('soul'))
         self.assertIn('dana@northwind.example', s.doc('soul'))
-        self.assertIn('Dana is', s.doc('coder'))                # {{owner_first}}, in prose
+        self.assertIn('Dana is', s.doc('coding'))               # {{owner_first}}, in prose
         self.assertNotIn('John', s.doc('soul'))
         self.assertNotIn('{{owner', s.doc('soul'))              # nothing unresolved reaches the AI
         self.assertIn(docsync.CONN_START, soul)
-        self.assertIn('Closing out', coder)      # no report contract: the transcript IS the report
+        self.assertIn('Closing out', coding)     # no report contract: the transcript IS the report
         self.assertTrue(s.get_doc('digest'))
 
     def test_untouched_template_docs_track_shipped_improvements(self):
@@ -62,13 +62,13 @@ class LightModelTests(unittest.TestCase):
         from unittest import mock
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli',
+        s.upsert_agent('coding', 'coding', 'cli',
                        json.dumps({'cmd': 'claude', 'model': 'opus', 'light_model': 'haiku'}))
         seen = {}
         def fake_run_cli(prof, prompt, trace, resume=None):
             seen.update(prof); return ('{"intent":"fyi","why":"x"}', None, None)
         with mock.patch('taskuary.agents.run_cli', fake_run_cli):
-            out = llm.make_cli_llm(s, 'coder')('sys', 'user')
+            out = llm.make_cli_llm(s, 'coding')('sys', 'user')
         self.assertEqual(seen['model'], 'haiku')                  # the cheap gear reads the mail
         self.assertIn('fyi', out)
         # codex has no smaller model on a ChatGPT plan - its light gear is reasoning effort
@@ -81,7 +81,7 @@ class LightModelTests(unittest.TestCase):
         # and the coding session still gets the big one
         from taskuary.terminal import agent_argv
         with mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']):
-            self.assertIn('opus', agent_argv(json.loads(s.get_agent('coder')['Config'])))
+            self.assertIn('opus', agent_argv(json.loads(s.get_agent('coding')['Config'])))
 
 
 class DocSyncTests(unittest.TestCase):

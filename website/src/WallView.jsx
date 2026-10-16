@@ -140,7 +140,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       const t = tasks[s.taskId] || {};
       const report = typeof wrote?.report === "string" ? wrote.report : "";
       setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`, drafting: false,
-        line: report.replace(/^CODER REPORT\s*/, "").split("\n").map((x) => x.trim()).find(Boolean)?.replace(/[.\s]+$/, "") || "" });   // the notice adds its own full stop
+        line: report.replace(/^(?:AGENT|CODER) REPORT\s*/, "").split("\n").map((x) => x.trim()).find(Boolean)?.replace(/[.\s]+$/, "") || "" });   // the notice adds its own full stop
       setSessions((ss) => (ss || []).filter((x) => x.sid !== s.sid));
       setOrder((o) => o.filter((sid) => sid !== s.sid));
     } catch (e) {

@@ -40,7 +40,7 @@ class CliNameTests(unittest.TestCase):
 class DefaultBrainTests(unittest.TestCase):
     def store(self):
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
         s.upsert_agent('analyst', 'analysis', 'cli', json.dumps({'cmd': 'claude'}))
         return s
 
@@ -48,7 +48,7 @@ class DefaultBrainTests(unittest.TestCase):
         """The owner's rule: general agents use the same brain as coding by default."""
         s = self.store()
         s.set_setting('default_brain', 'claude', 'owner')
-        self.assertEqual(hub_agents.brain_for(s, 'coder'), 'claude')
+        self.assertEqual(hub_agents.brain_for(s, 'coding'), 'claude')
         self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'claude')
 
     def test_a_role_may_be_overridden_in_settings(self):
@@ -58,7 +58,7 @@ class DefaultBrainTests(unittest.TestCase):
         s.set_setting('default_brain', 'claude', 'owner')
         s.set_setting('profile_brains', json.dumps({'analyst': 'codex'}), 'owner')
         self.assertEqual(hub_agents.brain_for(s, 'analyst'), 'codex')
-        self.assertEqual(hub_agents.brain_for(s, 'coder'), 'claude')
+        self.assertEqual(hub_agents.brain_for(s, 'coding'), 'claude')
 
     def test_a_broken_override_falls_back_rather_than_failing(self):
         s = self.store()
@@ -68,7 +68,9 @@ class DefaultBrainTests(unittest.TestCase):
 
     def test_an_unset_default_falls_back_to_the_legacy_profile_setting(self):
         """Nothing regresses on upgrade: blank means "whatever default_agent was already running"."""
-        s = self.store()
+        s = MemoryStore()
+        # LEGACY data on purpose: `default_agent` named the coding profile by its old name, before brains named tools
+        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
         s.set_setting('default_agent', 'coder', 'owner')
         self.assertEqual(hub_agents.default_brain(s), 'claude')
 
@@ -76,7 +78,7 @@ class DefaultBrainTests(unittest.TestCase):
 class SessionBrainTests(unittest.TestCase):
     def setup(self, brain: str):
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'provider': 'cli:claude'}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
         s.set_setting('default_brain', brain, 'owner')
         cfg = {'cli_connections': {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex', 'args': ['exec']}}}
         return s, cfg
@@ -85,12 +87,12 @@ class SessionBrainTests(unittest.TestCase):
         """The profile still says claude; settings say codex, and settings win. A profile has
         nothing to do with which brain runs it."""
         s, cfg = self.setup('codex')
-        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg).get('cmd'), 'codex')
+        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg).get('cmd'), 'codex')
 
     def test_an_unconfigured_brain_leaves_the_profile_alone(self):
         """A half-migrated install must still be able to start an agent at all."""
         s, cfg = self.setup('nobody-has-this')
-        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg), {})
+        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg), {})
 
     def test_no_brain_chosen_leaves_the_profile_alone(self):
         """Blank means the owner has not moved to the brain layer, and brain_for would be GUESSING
@@ -104,25 +106,25 @@ class SessionBrainTests(unittest.TestCase):
         """What the picker chooses is a BRAIN now, and it beats both the role override and the
         default - otherwise "start a session with codex" would resolve the default and run claude."""
         s, cfg = self.setup('claude')
-        s.set_setting('profile_brains', json.dumps({'coder': 'claude'}), 'owner')
-        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg, want='codex').get('cmd'), 'codex')
+        s.set_setting('profile_brains', json.dumps({'coding': 'claude'}), 'owner')
+        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg, want='codex').get('cmd'), 'codex')
 
     def test_a_role_override_alone_is_enough_to_choose(self):
         s, cfg = self.setup('')
-        s.set_setting('profile_brains', json.dumps({'coder': 'codex'}), 'owner')
-        self.assertEqual(hub_agents.brain_command(s, 'coder', cfg).get('cmd'), 'codex')
+        s.set_setting('profile_brains', json.dumps({'coding': 'codex'}), 'owner')
+        self.assertEqual(hub_agents.brain_command(s, 'coding', cfg).get('cmd'), 'codex')
 
     def test_the_brain_brings_its_own_headless_flags(self):
         s, cfg = self.setup('codex')
-        self.assertIn('exec', hub_agents.brain_command(s, 'coder', cfg).get('args') or [])
+        self.assertIn('exec', hub_agents.brain_command(s, 'coding', cfg).get('args') or [])
 
     def test_the_transcript_records_which_brain_ran(self):
         """Which brain ran is a fact of the SESSION - the task is never stamped with one."""
         s = MemoryStore()
         tid = s.create_task({'Title': 'x', 'Kind': 'coding', 'Status': 'open'}, 'owner')
-        s.add_transcript(tid, 'sid1', 'some output', agent='coder', cwd='C:/repo', brain='copilot')
+        s.add_transcript(tid, 'sid1', 'some output', agent='coding', cwd='C:/repo', brain='copilot')
         row = s.resumable_session(tid) or s._one('SELECT * FROM transcript WHERE Sid=?', ('sid1',))
-        self.assertEqual((row['Agent'], row['Brain']), ('coder', 'copilot'))
+        self.assertEqual((row['Agent'], row['Brain']), ('coding', 'copilot'))
 
 
 class WhatRanItTests(unittest.TestCase):
@@ -149,17 +151,17 @@ class WhatRanItTests(unittest.TestCase):
     def test_a_coding_session_is_named_by_the_brain_its_transcript_recorded(self):
         c, s = self.client()
         tid = s.create_task({'Title': 'fix the importer', 'Kind': 'coding', 'Status': 'open'}, 'router')
-        s.add_transcript(tid, 'sid9', 'output', agent='coder', cwd='C:/repo', brain='claude')
+        s.add_transcript(tid, 'sid9', 'output', agent='coding', cwd='C:/repo', brain='claude')
         d = c.get(f'/api/tasks/{tid}').json()
         self.assertEqual(d['ranOn'], {'brain': 'claude', 'model': ''})
         self.assertEqual(d['transcript']['brain'], 'claude')
 
     def test_the_later_session_is_the_one_that_ran_it(self):
-        """The task in the report had both: yesterday's coder on claude, this morning's researcher
+        """The task in the report had both: yesterday's coding session on claude, this morning's researcher
         on Azure. The card must name the one that just closed."""
         c, s = self.client()
         tid = s.create_task({'Title': 'Vendor asks for SAML SSO', 'Kind': 'general', 'Status': 'open'}, 'router')
-        s.add_transcript(tid, 'sidA', 'output', agent='coder', cwd='C:/repo', brain='claude')
+        s.add_transcript(tid, 'sidA', 'output', agent='coding', cwd='C:/repo', brain='claude')
         cid = s.save_connector({'Type': 'azure_openai', 'Name': 'Azure OpenAI', 'Active': 1, 'ConfigJson': '{}'}, 'owner')
         s.save_session(tid, f'connector:{cid}', 'gpt-5.4', '', 'ctx')
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['ranOn']['brain'], 'Azure OpenAI')
@@ -205,6 +207,7 @@ class GearByJobTests(unittest.TestCase):
 
 
 @mock.patch.object(hub_agents, 'runs_here', lambda profile: True)     # what it was running is installed
+@mock.patch.object(hub_agents, 'connection_brains', lambda store, cfg=None: [('claude', {'cmd': 'claude'})])   # ...and connected: a brain is the tool
 class SwitchTests(unittest.TestCase):
     """Step 2 left the brain layer opt-in - brain_command acts only on a brain the owner chose, so
     nothing regressed. This is the line that moves an install onto it, naming exactly what it was
@@ -212,6 +215,7 @@ class SwitchTests(unittest.TestCase):
 
     def store(self):
         s = MemoryStore()
+        # LEGACY data on purpose: the install this switch moves still names its profile `coder` in `default_agent`
         s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
         s.set_setting('default_agent', 'coder', 'owner')
         return s
@@ -248,14 +252,14 @@ class GearTests(unittest.TestCase):
 
     def cfg(self):
         return {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'opus', 'light_model': 'haiku'}},
-                'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude'}}}
+                'agents': {'coding': {'kind': 'coding'}}}
 
     def test_gears_belong_to_the_connection(self):
         self.assertEqual(clic.gears(self.cfg(), 'claude'), {'model': 'opus', 'light_model': 'haiku'})
 
     def test_resolving_a_profile_takes_the_connection_gears(self):
         c = self.cfg()
-        got = clic.resolve(c, c['agents']['coder'])
+        got = clic.resolve(c, c['agents']['coding'], 'claude')      # the brain the caller chose for it
         self.assertEqual((got['model'], got['light_model']), ('opus', 'haiku'))
 
     def test_one_brain_two_gears_is_still_one_brain(self):
@@ -269,15 +273,16 @@ class GearTests(unittest.TestCase):
 
     def test_gears_already_on_a_profile_are_lifted_onto_its_connection(self):
         """Adding them to COMMAND_FIELDS makes resolve() DROP whatever the profile holds, so an
-        install that already has a provider would silently lose the models the owner chose."""
+        install that already has a provider would silently lose the models the owner chose. LEGACY data: a profile
+        carrying `provider` is exactly what this migration exists to read."""
         c = {'cli_connections': {'claude': {'cmd': 'claude'}},
-             'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'opus', 'light_model': 'haiku'}}}
+             'agents': {'coding': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'opus', 'light_model': 'haiku'}}}
         clic.migrate(c)
         self.assertEqual(clic.gears(c, 'claude'), {'model': 'opus', 'light_model': 'haiku'})
-        self.assertNotIn('model', c['agents']['coder'])
+        self.assertNotIn('model', c['agents']['coding'])
 
     def test_a_connection_that_already_has_gears_is_not_overwritten(self):
         c = {'cli_connections': {'claude': {'cmd': 'claude', 'model': 'mine'}},
-             'agents': {'coder': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'theirs'}}}
+             'agents': {'coding': {'kind': 'coding', 'provider': 'cli:claude', 'model': 'theirs'}}}
         clic.migrate(c)
         self.assertEqual(clic.gears(c, 'claude')['model'], 'mine')

@@ -85,7 +85,7 @@ class WholeOpenBoxTests(unittest.TestCase):
                            'Summary': 'Extend the monthly pull to a full year, one workbook per site.'}, 'owner')
         s.set_task_checklist(t, ['Pull 2024', 'Reconcile against the ledger'], 'owner')
         s.add_comment(t, 'owner', 'owner', 'Keep it throwaway; do not push.')
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nPulled 2024; 2023 flagged as built from bad data.')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT\nPulled 2024; 2023 flagged as built from bad data.')
         prompt = self.ask(s, key=f'task:{t}')
         for want in ("THE TASK'S DESCRIPTION: Extend the monthly pull to a full year", 'Pull 2024', 'Reconcile against the ledger',
                      'Keep it throwaway; do not push.', '2023 flagged as built from bad data'):

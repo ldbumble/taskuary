@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -121,7 +121,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coder(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
+<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -184,7 +184,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>as</code> (optional) - a profile from agents.list, only when one fits</li>
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="coder"><code>coder</code><a class="anchor" href="#coder" aria-label="Link to this section">#</a></h3>
+<p class="runs">Waits for your yes on a card.</p><h3 id="coding-agent"><code>coding_agent</code><a class="anchor" href="#coding-agent" aria-label="Link to this section">#</a></h3>
 <p>Send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.</p>
 <ul>
 <li><code>text</code> - what is wanted</li>

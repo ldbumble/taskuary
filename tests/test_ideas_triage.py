@@ -79,7 +79,7 @@ class SharedVerdictTests(unittest.TestCase):
         it sat linked to that task for two hours, judged three times, creating nothing. The owner closed
         TQ-0482 at 15:17; the idea was re-said with fresh wording 38 seconds later, its Sig changed, and
         the re-judge read 'linked task not active' as 'about no task at all' - opening TQ-0487 on the
-        very mail just closed, with a coder on it. A closed task is still the task this idea is about."""
+        very mail just closed, with a coding agent on it. A closed task is still the task this idea is about."""
         s = MemoryStore()
         tid = s.create_task({'Title': 'Gail moreno annual epr- aug 2026', 'Kind': 'coding', 'Status': 'in_progress'}, 'router')
         mid = s.add_message({'TaskId': tid, 'ExternalId': 'graph:epr', 'ConversationId': 'thread:epr', 'Channel': 'email',
@@ -97,7 +97,7 @@ class SharedVerdictTests(unittest.TestCase):
         self.assertEqual(len(s.list_tasks()), 1, 'a closed task is not "no task": the idea opened a duplicate')
         self.assertEqual(a['triage']['linked_task'], tid, 'the verdict still names the task the idea is about')
         self.assertEqual(a.get('tid'), tid, 'the re-say kept the link instead of dropping it')
-        spawn.assert_not_called()                                                  # and no coder was sent at the closed work
+        spawn.assert_not_called()                                                  # and no coding agent was sent at the closed work
 
     def test_the_owners_own_click_still_opens_the_follow_up_the_check_refused_to(self):
         """The idea stays a live suggestion on a closed task (funnel keeps it: a closed source task does

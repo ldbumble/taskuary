@@ -2,9 +2,9 @@
 first: its Stop payload lists them (`from_hook`); a Claude that does not send that list is read off its own
 transcript instead (`pending` - the Stop hook names it: `transcript_path`).
 
-Stop is the end of a RESPONSE. A coder that starts a long pull in the background, arms a monitor on it and says
+Stop is the end of a RESPONSE. An agent that starts a long pull in the background, arms a monitor on it and says
 "re-pulling Jan 2024 now" ends its turn there, and the pane sits at a bare prompt with "1 shell, 1 monitor still
-running" under it - so every surface read "coder is waiting on you" while the work went on (the owner, 2026-10-01:
+running" under it - so every surface read "the agent is waiting on you" while the work went on (the owner, 2026-10-01:
 "since there is a sub agent doing work the main chat might wait but the process is still going"). When a job
 ends Claude is woken by its notification, takes a turn, and Stops again, so each Stop re-reads this.
 

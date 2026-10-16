@@ -123,7 +123,7 @@ class ReviewTests(unittest.TestCase):
 
 
 class PushBaseTests(unittest.TestCase):
-    """"What a push would carry" has to mean it. CODER.md tells agents to commit locally and
+    """"What a push would carry" has to mean it. CODING.md tells agents to commit locally and
     stop, so the finished state of a task is a CLEAN working tree with commits waiting - and
     a reviewer measuring against HEAD called that "nothing changed"."""
 

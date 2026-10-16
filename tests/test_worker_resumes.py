@@ -3,7 +3,7 @@
 A request was closed only by an explicit `answered` event, which the answer ROUTE writes. Answering
 in the pane - the ordinary way - writes no such event, so one permission prompt made a session read
 "stopped - waiting on you" for the rest of its life. TQ-0500 sat at the top of Work under that
-sentence while the coder was mid-search, twenty minutes and four prompts later (the owner,
+sentence while the coding agent was mid-search, twenty minutes and four prompts later (the owner,
 2026-09-11: "when i input another prompt it does not pick up its coding again").
 
 `working` IS the owner speaking: hooks.py records it on UserPromptSubmit. A request from before the

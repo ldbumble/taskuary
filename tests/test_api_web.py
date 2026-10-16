@@ -114,7 +114,7 @@ class ChainAndAgentTests(unittest.TestCase):
         def api_brain(system, user, **kw): got['api'] = kw; return 'ok'
         api_brain.takes_web = True
         store = mock.Mock()
-        store.get_settings.return_value = {'triage_ai': 'cli:coder', 'triage_backup_ai': 'connector:2'}
+        store.get_settings.return_value = {'triage_ai': 'cli:claude', 'triage_backup_ai': 'connector:2'}
         with mock.patch.object(llm, 'make_cli_llm', return_value=cli_brain), \
              mock.patch('taskuary.agents.agent_row', return_value=None), mock.patch('taskuary.agents.cli_of', return_value='claude'), \
              mock.patch('taskuary.agents.availability_failure', return_value=True):

@@ -1,7 +1,7 @@
 # AGENT.md — the rules every worker runs under
 
 You are working one task for **John**, as a coding agent in a checkout or as the general
-assistant in a task conversation. These rules apply to both kinds of worker; CODER.md adds the
+assistant in a task conversation. These rules apply to both kinds of worker; CODING.md adds the
 coding-specific ones on top. The task brief in your prompt is your context and your scope.
 
 ## Approval boundaries — John decides, you prepare

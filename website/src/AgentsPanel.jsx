@@ -176,7 +176,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
   const save = async () => {
     setSaving(true); setErr("");
     const name = draft.name.trim();
-    const p = { purpose: draft.purpose.trim(), kind: draft.kind, rules_doc: draft.rulesDoc || (draft.kind === "coding" ? "coder" : name),
+    const p = { purpose: draft.purpose.trim(), kind: draft.kind, rules_doc: draft.rulesDoc || (draft.kind === "coding" ? "coding" : name),
       triage_enabled: draft.triageEnabled, provider: draft.provider, model: draft.model.trim() };
     try {
       const { data } = await api.put(`/api/agents/${encodeURIComponent(name)}`, p);
@@ -230,8 +230,8 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
           {[...new Set([...PROFILE_KINDS, draft.kind])].map((k) => <MenuItem key={k} value={k}>{k}</MenuItem>)}
         </TextField>
         <TextField select label="Instructions document" SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }} value={draft.rulesDoc} onChange={(e) => setDraft({ ...draft, rulesDoc: e.target.value })}>
-          <MenuItem value="">{draft.kind === "coding" ? "Shared CODER.md" : "Own document with starter instructions"}</MenuItem>
-          {[...new Set(["coder", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
+          <MenuItem value="">{draft.kind === "coding" ? "Shared CODING.md" : "Own document with starter instructions"}</MenuItem>
+          {[...new Set(["coding", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
         </TextField>
         <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label="Available to triage for new tasks" />
         <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>

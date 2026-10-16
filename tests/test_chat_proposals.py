@@ -24,9 +24,9 @@ def ago(hours=0): return (datetime.now() - timedelta(hours=hours)).strftime('%Y-
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
     for k in ('calendar_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
-    s.set_setting('coder_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
+    s.set_setting('coding_auto_enabled', '1', 't'); s.set_setting('team_domains', 'ours.com', 't'); s.set_setting('owner_email', 'owner@ours.com', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
     return s
 
@@ -71,7 +71,7 @@ class ProposalTests(unittest.TestCase):
     def test_a_decision_is_a_proposal_the_owner_confirms_not_an_action_the_words_took(self):
         s, tid, mid, item = asked()
         with mock.patch.object(ingest, '_spawn') as spawn:
-            out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')
+            out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['status']), ('task.create_from_message', mid, 'coding', 'proposed'))
         self.assertEqual(p['label'], 'Send to the coding agent'); self.assertIn(f'TQ-{tid:04d}', p['summary'])
@@ -82,7 +82,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_confirming_runs_it_once_and_a_second_click_is_the_same_receipt(self):
         s, tid, mid, item = asked()
-        out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')
+        out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')
         with mock.patch.object(server, 'dispatch_message', return_value={'taskId': tid, 'ref': f'TQ-{tid:04d}', 'dispatch': 'started'}) as dispatch:
             r1 = run(s, out['proposal']); r2 = run(s, out['proposal'])
         self.assertEqual((r1.status_code, r1.json()['status']), (200, 'done'))
@@ -102,7 +102,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_a_correction_before_the_click_revises_the_same_proposal(self):
         s, tid, mid, item = asked()
-        first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
+        first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']
         second = say(s, 'no - a regular agent, it is just reading', key=item['key'], model='A regular agent then.\nCALL: {"kind": "regular_agent", "params": {}}')['proposal']
         self.assertEqual((second['id'], second['version'], second['params']['kind']), (first['id'], 2, 'general'))
         self.assertEqual(second['label'], 'Send to a regular agent')
@@ -118,7 +118,7 @@ class ProposalTests(unittest.TestCase):
 
     def test_a_failed_handler_is_reported_and_settles_nothing(self):
         s, tid, mid, item = asked()
-        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
+        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']
         with mock.patch.object(server, 'dispatch_message', side_effect=RuntimeError('agent did not start')):
             r = run(s, p)
         self.assertEqual((r.status_code, r.json()['status']), (200, 'error')); self.assertIn('agent did not start', r.json()['error'])
@@ -218,7 +218,7 @@ class ExecutionTests(unittest.TestCase):
 
     def test_a_hand_off_with_nothing_on_the_table_proposes_a_new_task(self):
         s = store()
-        out = say(s, 'look into why the bulk approve fix did not stick', model='On it.\nCALL: {"kind": "coder", "params": {"text": "look into why the bulk approve fix did not stick"}}')
+        out = say(s, 'look into why the bulk approve fix did not stick', model='On it.\nCALL: {"kind": "coding_agent", "params": {"text": "look into why the bulk approve fix did not stick"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'coding')); self.assertIn('bulk approve', p['params']['text'])
         self.assertEqual(s.list_tasks(active_only=True), [])
@@ -243,12 +243,12 @@ class HandoffTests(unittest.TestCase):
 
     def _proposed(self):
         s, tid, mid, item = asked()
-        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coder", "params": {}}')['proposal']
+        p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']
         return s, tid, mid, item, p
 
     def test_a_hand_off_that_starts_is_receipted_moving_on_and_the_task_stays_in_unread_as_working(self):
         s, tid, mid, item, p = self._proposed()
-        started = {'dispatch': 'session', 'agent': 'coder', 'model': None, 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+        started = {'dispatch': 'session', 'agent': 'coding', 'model': None, 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
         with mock.patch.object(server, 'dispatch_message', return_value=started):
             r = run(s, p).json()
         self.assertEqual((r['status'], r['outcome']['started']), ('done', True))
@@ -257,14 +257,14 @@ class HandoffTests(unittest.TestCase):
         self.assertTrue(any("It's being worked on now - moving on" in (c.get('Body') or '') for c in general.chat_rows(s, dock['TaskId'])))
         self.assertNotIn(item['key'], {k for k, st in s.funnel_states().items() if st.get('Status') == 'done'})   # nothing settled
         s.update_task(tid, {'Status': 'in_progress'}, 'router')
-        live = [{'taskId': tid, 'sid': 's1', 'agent': 'coder', 'label': 'coder', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]
+        live = [{'taskId': tid, 'sid': 's1', 'agent': 'coding', 'label': 'coding', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading']}]
         with mock.patch.object(terminal, 'live_sessions', return_value=live):
             rows = funnel.build(s, keep_surfaced=True)['items']
         self.assertEqual([(i['key'], i['lane']) for i in rows if i.get('tid') == tid], [(f'agent:{tid}', 'working')])   # visible, Working
 
     def test_a_repository_still_to_choose_keeps_the_item_in_place_and_the_same_confirmation_resumes(self):
         s, tid, mid, item, p = self._proposed()
-        needs = {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': 'coder', 'taskId': tid, 'ref': f'TQ-{tid:04d}',
+        needs = {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': 'coding', 'taskId': tid, 'ref': f'TQ-{tid:04d}',
                  'reason': 'could not tell which checkout - pick the repository'}
         with mock.patch.object(server, 'dispatch_message', return_value=needs):
             r = run(s, p).json()

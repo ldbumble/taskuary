@@ -20,6 +20,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import session_artifacts
+from .wrapup import REPORTS
 
 THOUGHT_N, SAID_N, YOU_N, TARGET_N = 6000, 20000, 3000, 300
 MAX_STEPS = 800
@@ -242,7 +243,7 @@ def _saved_path(tid: int, sid: str) -> Path:
 
 
 def save(store, tid: int, sid: str, cli: str, ext: str, screen: str = '') -> dict:
-    """Snapshot a session's steps beside the task (coder.wrap), so the record outlives the CLI's own log."""
+    """Snapshot a session's steps beside the task (wrapup.wrap), so the record outlives the CLI's own log."""
     steps, source = cli_steps(cli, ext)
     if not steps: steps, source = screen_steps(screen), 'screen'
     rec = {'sid': sid, 'cli': cli, 'ext': ext, 'source': source, 'steps': _bound(steps)}
@@ -269,9 +270,9 @@ _REPORT = re.compile(r'^(Determination|Actions|Summary):[ \t]*', re.M)
 
 
 def parse_report(body: str) -> dict:
-    """A CODER REPORT comment, back into its parts: decided / changed / summary, and the session's LAST MESSAGE.
+    """An AGENT REPORT comment (CODER REPORT on older rows), back into its parts: decided / changed / summary, and the session's LAST MESSAGE.
     A general chat's note is its last answer and nothing else, so it is all `last`."""
-    rep, _, last = re.sub(r'^(CODER REPORT|HANDOVER NOTE)\n?', '', str(body or '')).strip().partition('\n\nLAST MESSAGE\n')
+    rep, _, last = re.sub(r'^(AGENT REPORT|CODER REPORT|HANDOVER NOTE)\n?', '', str(body or '')).strip().partition('\n\nLAST MESSAGE\n')
     parts = _REPORT.split(rep)
     if len(parts) < 3: return {'last': (last or rep).strip()}
     f = dict(zip(parts[1::2], (x.strip() for x in parts[2::2])))
@@ -318,7 +319,7 @@ def record(store, tid: int) -> dict:
         if not rec:
             steps, source = cli_steps(r.get('Brain'), r.get('ExtId'))
             rec = {'steps': _bound(steps), 'source': source} if steps else {'steps': screen_steps(r.get('Text')), 'source': 'screen'}
-        sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'coder', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
+        sessions.append({'sid': r.get('Sid'), 'by': r.get('Agent') or 'agent', 'cli': r.get('Brain') or '', 'cwd': r.get('Cwd') or '',
                          'at': _when(r.get('CreatedAt')), 'source': rec.get('source') or '', 'steps': rec.get('steps') or []})
     chat = general.chat_rows(store, tid)
     if chat and any(c.get('ActorType') == general.ASSISTANT_TYPE for c in chat):
@@ -329,7 +330,7 @@ def record(store, tid: int) -> dict:
                          'at': _when(chat[-1].get('CreatedAt')), 'source': 'conversation', 'steps': general_steps(store, tid)})
     sessions.sort(key=lambda s: s['at'])
     for c in store.list_comments(tid):
-        if str(c.get('Body') or '').startswith('CODER REPORT') and (s := _nearest(sessions, c.get('CreatedAt'))):
+        if str(c.get('Body') or '').startswith(REPORTS) and (s := _nearest(sessions, c.get('CreatedAt'))):
             rep = parse_report(c['Body'])
             if _keeps_last(s, rep): rep['last'] = s['report']['last']
             s['report'] = rep | {'by': c.get('Actor') or '', 'at': _when(c.get('CreatedAt'))}

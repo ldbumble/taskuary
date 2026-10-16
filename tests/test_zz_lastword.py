@@ -7,13 +7,13 @@ whether a second model reconstructs one from the scrollback.
 import json, unittest
 from unittest import mock
 
-from taskuary import coder, general, selfclose, terminal, witness, workerstate as ws
+from taskuary import wrapup, general, selfclose, terminal, witness, workerstate as ws
 import tests.test_assistant_reactions as T
 
 
 class LastWordTests(unittest.TestCase):
 
-    # ── the coding agent: three sources, in priority order (coder.wrap, PW-230) ──────────────
+    # ── the coding agent: three sources, in priority order (wrapup.wrap, PW-230) ──────────────
     def test_claude_stop_hook_carries_the_final_message_into_the_witness(self):
         w = witness.Witness()
         for n in witness.claude_notes({'hook_event_name': 'Stop',
@@ -59,8 +59,8 @@ class LastWordTests(unittest.TestCase):
             out = T.arrive(s, llm=T.brain('task', 'coding'))
         tid = out['task_id']
         order = []
-        with mock.patch.object(terminal, 'transcript_for', return_value=('$ ran the thing', 'coder', 'sid-1')), \
-             mock.patch.object(coder, 'report_from_transcript', side_effect=lambda *a, **k: {'summary': 'from scrollback'}), \
+        with mock.patch.object(terminal, 'transcript_for', return_value=('$ ran the thing', 'coding', 'sid-1')), \
+             mock.patch.object(wrapup,'report_from_transcript', side_effect=lambda *a, **k: {'summary': 'from scrollback'}), \
              mock.patch.object(terminal, 'close', side_effect=lambda *a, **k: order.append('close')), \
              mock.patch.object(terminal, 'session_for', return_value=None):
             real_add = s.add_comment
@@ -68,7 +68,7 @@ class LastWordTests(unittest.TestCase):
                 if 'REPORT' in str(body).upper() or 'penny' in str(body): order.append('save')
                 return real_add(tid_, actor, kind, body, *a, **k)
             with mock.patch.object(s, 'add_comment', side_effect=watched):
-                try: coder.wrap(s, tid, close=True, actor='owner', final_message='Reconciled to the penny.')
+                try: wrapup.wrap(s, tid, close=True, actor='owner', final_message='Reconciled to the penny.')
                 except Exception as e: self.skipTest(f'wrap needs more of the world than this fixture has: {e}')
         if 'save' in order and 'close' in order:
             self.assertLess(order.index('save'), order.index('close'), order)
@@ -91,7 +91,7 @@ class LastWordTests(unittest.TestCase):
         with mock.patch.object(general, 'session_for', return_value=fake), \
             mock.patch.object(general, 'handles', return_value=True), \
              mock.patch.object(terminal, 'close') as closed:
-            out = coder.wrap(s, tid, close=True, actor='owner')
+            out = wrapup.wrap(s, tid, close=True, actor='owner')
         self.assertEqual(out['report'], 'Final: go with vendor B.')     # the last word is the report
         self.assertEqual(s.get_task(tid)['Status'], 'done')
         self.assertTrue(closed.called)

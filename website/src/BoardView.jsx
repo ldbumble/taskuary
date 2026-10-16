@@ -20,7 +20,7 @@ import { agentName, saidFromTail } from "./agentWork.js";
 import { isAgentKind, isGeneralKind } from "./autostart.js";
 import { onLive } from "./live.js";
 import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, ROLES, card, hoverable, mono } from "./theme.jsx";
-import { ChannelIcon, ActionChip, useAgents, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane, TaskuaryMark, assignedAgent } from "./ui.jsx";
+import { ChannelIcon, ActionChip, useAgents, codingProfile, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane, TaskuaryMark, assignedAgent } from "./ui.jsx";
 import { AGENT } from "./taskLifecycle.js";
 import QueuedStart from "./QueuedStart.jsx";
 import { LANE_META, KIND_META } from "./funnelPile.js";
@@ -31,7 +31,7 @@ import { remindWaiting } from "./taskFilter.js";
 // never give before: with the field left blank Taskuary still GUESSED a checkout, so a general
 // question opened in whichever repo scored highest and the agent went looking for code to change.
 
-// "coder · running" says nothing you can act on. How long it has been going, and what it is
+// "coding · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
 const elapsed = (since) => {
   if (!since) return "";
@@ -46,7 +46,7 @@ const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] |
 // separately named workers indistinguishable on the Board.
 const AGENT_HUES = { claude: "#7d9a7c", codex: "#6f8a6e", gemini: "#55697a",
                      cursor: "#6f8a6e", copilot: "#8a8276" };
-// 'coder' says nothing about which model family answers - resolve every display through
+// a profile name says nothing about which model family answers - resolve every display through
 // the profile's actual command, so the board speaks CLI names (claude, codex, gemini)
 export const cliName = (name, cmds = {}) =>
   String(cmds[name] || name || "").split(/[\\/]/).pop().replace(/\.(cmd|exe|bat|ps1)$/i, "").toLowerCase();
@@ -402,9 +402,9 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 // the thing that helps you run Taskuary, not of the agent working this task
                 const chat = isGeneralKind(t.Kind);
                 // WHICH CODING AGENT has it, which is no longer the role: every coding task's
-                // role is `coder`, so the name worth showing is the BRAIN. A live session knows
+                // role is the one coding profile, so the name worth showing is the BRAIN. A live session knows
                 // exactly what it launched (`cli`); an idle one takes the brain settings name.
-                const brain = live[t.TaskId]?.cli || brains[assignedAgent(t.Assignee) || "coder"] || "";
+                const brain = live[t.TaskId]?.cli || brains[assignedAgent(t.Assignee) || codingProfile(agents, kinds)] || "";
                 const badge = agentBadge(chat ? agentName(t) : (brain || live[t.TaskId]?.AgentName || t.RunAgent),
                   t.RunStatus, !!live[t.TaskId], cmds);
                 return (

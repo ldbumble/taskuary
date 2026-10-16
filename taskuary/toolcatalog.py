@@ -226,7 +226,7 @@ DECISIONS = {
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits; '
                         '`new`: true when the job is NOT about the item on the table - it becomes a task of its own'),
-    'coder':           ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
+    'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
                         '`new`: true when the job is NOT about the item on the table'),
     'not_ours':        'file it, just this once - its card asks whether from now on, or as a rule',
@@ -290,7 +290,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coder': 'text, as?, new?',
+HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

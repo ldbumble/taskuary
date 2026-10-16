@@ -9,7 +9,7 @@ import { agentRuns } from "../src/taskFilter.js";
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 
 test("an item an agent is working - or a live session holds - reads as running; a stopped or saved one does not", () => {
-  assert.equal(agentRuns({ kind: "message", working: "coder" }), true);
+  assert.equal(agentRuns({ kind: "message", working: "coding" }), true);
   assert.equal(agentRuns({ kind: "agent", sid: "s1", lane: "working" }), true);
   assert.equal(agentRuns({ kind: "agent", sid: "s1", lane: "stopped" }), false);
   assert.equal(agentRuns({ kind: "agent", sid: "s1", paused: true }), false);

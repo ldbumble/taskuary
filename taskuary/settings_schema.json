@@ -3,7 +3,7 @@
   "_panel_owned": "Keys a CARD on the page already owns, so the knob list must not also offer them as a bare box. Every aidefaults.SLOTS key and its model_setting belongs here - tests/test_settings_schema.py fails if one is missing, which is what `assistant_ai` (d3bde8bd) and then `judge_ai` both did: a real setting with no KNOB_META entry falls through to the empty 'Other' group as an unlabelled text box, which is the one place nobody would look for it.",
   "panel_owned": [
     "triage_ai",
-    "default_agent",
+    "default_brain",
     "concierge_ai",
     "concierge_model",
     "assistant_ai",
@@ -18,7 +18,7 @@
     "Assistant",
     "Assistant on your phone",
     "Advisor",
-    "Coder agent",
+    "Coding agent",
     "Agent permissions",
     "Notifications",
     "Attachments & images",
@@ -98,7 +98,7 @@
         "github"
       ],
       "desc": "Which channels get a drafted reply at all. Switch one off and its questions just file.",
-      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the coder wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
+      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the agent wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
     },
     "calendar_enabled": {
       "group": "Replies",
@@ -202,7 +202,7 @@
       "group": "Triage & agents",
       "label": "Default AI for agents",
       "type": "text",
-      "desc": "Which AI program runs an agent's work when its role does not name one. A role (coder, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
+      "desc": "Which AI program runs an agent's work when its role does not name one. A role (coding, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
       "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both."
     },
     "backup_brains": {
@@ -270,7 +270,7 @@
       "help": "With \"fix in GitHub's cloud\", an outside pull request that ranking warned about, and whose review asks for changes, is fixed in GitHub's cloud instead of here. It runs a workflow in the repository: one job with a read-only token checks out exactly the reviewed head, runs Claude Code there (tests, builds) and hands back a patch; a second job, which never runs their code, pushes it to taskuary/pr-<number>. Taskuary opens the fix's pull request with your token so your CI runs on it, and Merge merges it with the contributor's commits.\n\nThe repository needs the workflow (Taskuary adds it when you press Set up) and one secret, CLAUDE_CODE_OAUTH_TOKEN - run `claude setup-token` and paste the result under the repository's Settings -> Secrets and variables -> Actions. The secret sits beside the stranger's code in that throwaway job: it is revocable, and it cannot reach your repository or this machine."
     },
     "answer_to_agent": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Hand answers to the working agent",
       "type": "select",
       "options": [
@@ -282,7 +282,7 @@
       "help": "Only a LIVE session is ever typed into. If the agent already exited nothing happens and the answer simply waits on the task, so `auto` cannot lose anything.\n\nThe reason this is a choice rather than always-on: `auto` puts someone else's words into your agent's session without you reading them first. That is usually what you want on your own team's mail and rarely what you want from a stranger's reply, and Taskuary cannot tell the difference well enough to decide for you."
     },
     "git_flow": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "How finished work lands",
       "type": "select",
       "options": [
@@ -293,7 +293,7 @@
       "help": "pr (default) = a DRAFT pull request from the task's branch; it merges only when you approve the task's close-out (Merge), or when you merge it on GitHub yourself. direct = the commits already in the checkout are pushed straight onto the default branch — no PR, no review ceremony, which is usually what you want on your own repository.\n\nDirect mode is deliberately narrow: it pushes commits that ALREADY EXIST. A dirty checkout is refused rather than committed for you (Taskuary will not write a commit message over work nobody has read), nothing ahead of the remote is simply 'nothing to do', and a rejected push is reported for you to pull and rebase — it never force-pushes.\n\nEither way 'Agents may push / deploy' on the GitHub card is what allows anything to leave the machine at all, and CI watching follows the work to wherever it landed."
     },
     "ci_watch": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Watch CI on the task's pull request",
       "type": "select",
       "options": [
@@ -305,35 +305,35 @@
       "help": "Once a task has a draft pull request (open it from the task, or let the agent propose one), every sync refreshes its checks.\n\nfeedback = a failing build is typed into the live session — 'these checks failed, fix the cause and push again, do not merge' — and recorded on the task; if no session is live the task returns to 'open' so it lands on you. watch = the state is shown on the proof card but nothing is handed back. off (default) = no polling at all.\n\nEach distinct failure reaches the agent ONCE per commit, never on every poll. Taskuary opens drafts; a merge waits for your yes on the task's close-out."
     },
     "proposals_enabled": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Agents may propose actions",
       "type": "switch",
       "desc": "An agent can ASK to open a PR, comment publicly, close an issue or run a tool — each waits for your approval.",
       "help": "High-impact actions come off the auto-approve road entirely. Instead of doing them, the agent writes a typed proposal in its transcript (TASKUARY-PROPOSE {\"action\": \"open_pr\", …}); when the session wraps up, each valid one becomes a pending review saying what it wants and why. Approving RUNS it; rejecting does nothing.\n\nEvery proposal is re-validated at execution, so approving never grants a permission you have switched off — an open_pr proposal still needs 'Agents may push / deploy', a public comment still needs the GitHub card's reply switch. Malformed or unpermitted proposals are refused and recorded on the task rather than dropped silently."
     },
     "waitroom_drip": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Tell-the-agent notes land one per stop",
       "type": "switch",
       "desc": "On: a queue of prompts drips in - each time the agent stops, the next one is typed in, the rest wait their turn. Off: everything queued goes in as one batch.",
       "help": "The waiting room is a funnel: paste twenty prompts and each becomes its own note, in order. With the drip on, the agent gets one at a time with its full attention - it is told how many wait behind it and that the next comes when it stops again, so it never goes looking. Turn it off to hand over the whole list in one message instead."
     },
-    "coder_auto_enabled": {
-      "group": "Coder agent",
+    "coding_auto_enabled": {
+      "group": "Coding agent",
       "label": "Auto-start the coding agent",
       "type": "switch",
       "desc": "Every new coding task immediately opens a live CLI session in its repository. Off: the task waits on the Board for you to send it.",
       "help": "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way."
     },
     "general_auto_enabled": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Auto-start the assistant on general tasks",
       "type": "switch",
       "desc": "Every new general task (research, a question to think through, a job with no keyboard) opens its own assistant session with the ask already put. Off: the task waits for you to open it.",
       "help": "Both worker kinds start by themselves by default; each has its own switch. The same holds apply to both: a first-time sender waits for your click (release it from the task), a coding job whose repository is unclear waits for your choice, and a missing AI provider is said on the task instead of failing quietly. A hold never hides the task - it is still triaged and on the Board."
     },
     "trust_own_domain": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Who may start a worker without you",
       "type": "flags",
       "flags": {
@@ -353,29 +353,29 @@
       "desc": "An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.",
       "help": "Three separate switches until 2026-09-16, which meant reading all three to know the answer to one question.\n\nyour own domains — every connected mailbox's domain and the owner address.\n\npeople you have written to — checked in your own records first, then asked of the mail server once per address and remembered. Earlier INCOMING mail is never evidence: a stranger's second message is still a stranger's. A lookup that fails is not proof either way, so the task says so and waits.\n\npeople you talk with in chats — someone you have answered in a one-to-one chat, or vouched for by releasing or trusting their task. A group chat is not a room of people you trust. Taskuary sees your own lines in Teams, WhatsApp and iMessage; in Slack, Telegram, Discord and the chat servers it cannot, so there trust comes only from vouching.\n\nTurn all three off and nothing ever starts by itself; every task waits on the Board for you. Turning them off does not stop triage, drafting or filing - only the unattended start."
     },
-    "coder_context_file": {
-      "group": "Coder agent",
+    "agent_context_file": {
+      "group": "Coding agent",
       "label": "Write the agent a context file",
       "type": "switch",
       "desc": "Each session gets ~/.taskuary/context/TQ-xxxx.md: this sender's recent mail and what you last wrote them, the topic elsewhere, your calendar, the assistant's read, the learned profile, the whole thread - and the reports of closed tasks on the same sender, subject or repo. The seed says 'read it first'.",
       "help": "The seed prompt is one command line (Windows caps it at 32,767 characters, and when it overflows the ask is what gets cut), so the two-line read rides in the prompt and the rest lives in this file. It is written under Taskuary's own home, never inside a checkout - a stray file in a shared checkout gets staged. Off: the seed carries what it always did and no file is written."
     },
     "agent_hooks": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Write Claude Code hooks into your checkouts",
       "type": "switch",
       "desc": "Taskuary adds four hook entries to .claude/settings.local.json in each repository a session opens, so the Board reads the agent's real tool calls instead of guessing from the screen. Switch it off to leave your checkouts untouched — the Board then falls back to reading the terminal.",
       "help": "The decision here is whether Taskuary may WRITE to your repositories, not whether the Board should be accurate — it should, which is why this ships on.\n\nThe file is the project-LOCAL settings Claude itself gitignores, so nothing is committed. Existing hooks are kept and only Taskuary's own entries (marked by the /api/hooks/claude endpoint) are replaced. Removing them by hand is safe; they are rewritten the next time a session opens.\n\nCLAUDE CODE ONLY. The hook format is Claude's, so on codex, copilot, qwen, devin or any other CLI this switch does nothing at all — those sessions are read from the terminal whatever it says."
     },
     "agent_self_close": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Let a finished agent close its own task",
       "type": "switch",
       "desc": "An agent that says it has finished wraps itself up: the report is written from its transcript and the reply to whoever asked is drafted for your approval. A session you opened yourself is yours to complete.",
       "help": "Done was a button, which meant a task finished at 2am produced no report and the person who asked heard nothing until somebody opened the tab. The agent knows it has finished long before you look, so it says so.\n\nEvery session is told about one command in its prompt: taskuary --done with one sentence. That closes the task, files the report from what is on screen, and drafts the reply - which still waits for YOUR approval before it leaves. A session that merely stops talking never closes anything.\n\nOne exception, and the task decides it: when you start or continue a session on a task yourself, the task is marked stay:open. There the command is refused - the agent's sentence is filed on the task and you mark it done.\n\nOff: the Done button, exactly as before."
     },
     "auto_sessions": {
-      "group": "Coder agent",
+      "group": "Coding agent",
       "label": "Agents at once",
       "type": "number",
       "desc": "How many unattended agent sessions may run together. The rest queue.",

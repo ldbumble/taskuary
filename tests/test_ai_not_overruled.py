@@ -58,7 +58,7 @@ def test_the_answer_to_the_asking_agent_runs_at_once_by_the_tool_road_too():
     s = MemoryStore()
     tid = s.create_task({'Title': 'Ship the release', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
     item = {'key': f'agent:{tid}', 'kind': 'agent', 'lane': 'blocked', 'tid': tid, 'ref': task_ref(tid), 'title': 'Ship the release',
-            'agent': 'coder', 'asking': True, 'choices': ['main', 'dev'], 'who': 'coder'}
+            'agent': 'coding', 'asking': True, 'choices': ['main', 'dev'], 'who': 'coding'}
     line = 'Main it is.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'agent.answer', 'params': {'text': 'Build from main.'}})
     with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch('taskuary.workerstate.answer_open', return_value={'delivered': True}):
         out = concierge.say(s, 'use main', item=item, llm=lambda *a, **k: line)

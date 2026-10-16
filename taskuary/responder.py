@@ -9,7 +9,7 @@ sat in the queue undrafted - and the fallback was worse: the *coding* agent, ope
 repo, to write two sentences of email.
 
 Every reply comes through `write_draft`: the mail that only ever needed an answer, and the
-mail a coder just finished the work behind. The coder reports what it did; the reply is
+mail an agent just finished the work behind. The agent reports what it did; the reply is
 written here either way, so the sender always hears one voice.
 """
 import re
@@ -75,7 +75,7 @@ EMAIL = ('This is EMAIL. Use the greeting, sign-off, and exact recurring signatu
 NOT_YET = ('If the request cannot be answered by a reply alone - it needs work doing - say in one '
            'line that you will pick it up, and stop. Not who will do it, not how, and never that '
            'you are unable to.')
-# the coder has already closed the thread: this reply reports an outcome, never promises one
+# the agent has already closed the thread: this reply reports an outcome, never promises one
 # the owner said what this reply says. Every caller that passes one passes THEIR words - the chase that wrote follow-ups is
 # gone - and framing them as a follow-up ("nudge in one or two sentences") under "why you are writing again" made "thanks,
 # I'll go through it tonight" come back as the report mailed again (2026-10-06)
@@ -392,11 +392,12 @@ def resolution_of(store, task_id: int):
 
     Prefer the exact final agent response saved in the long-form artifact. Older sessions do not
     have that section, so their filed transcript is the fallback; only legacy records with neither
-    retain the compact CODER REPORT. This is also what makes Review -> Redraft lossless.
+    retain the compact AGENT REPORT (CODER REPORT on older rows). This is also what makes Review -> Redraft lossless.
     """
     from .selfclose import DONE_SAID
     notes = list(reversed(store.list_comments(task_id)))
-    report = next((c['Body'] for c in notes if str(c.get('Body') or '').startswith('CODER REPORT')), None)
+    from .wrapup import is_report
+    report = next((c['Body'] for c in notes if is_report(c.get('Body'))), None)
     if not report:
         return None
     # THE REPORT AND THE DONE NOTE RIDE WITH IT, always: the final response alone was the agent's last line - "The reply above

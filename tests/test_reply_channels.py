@@ -7,7 +7,7 @@ task page still offered "Read the draft in Review" - because the wrap-up endpoin
 import json, unittest
 from unittest import mock
 
-from taskuary import coder, outbound
+from taskuary import wrapup, outbound
 from taskuary.store import MemoryStore
 
 
@@ -77,12 +77,12 @@ class DiscordReplyTests(unittest.TestCase):
 
 
 class FinishTests(unittest.TestCase):
-    """coder.finish is the truth, and the UI promises exactly what it did: a channel that cannot carry the
+    """wrapup.finish is the truth, and the UI promises exactly what it did: a channel that cannot carry the
     reply still gets its draft (the always-draft rule, PW-237) - Send is hidden and the reason said."""
     def test_github_replies_off_still_drafts_but_cannot_send(self):
         s = MemoryStore(); tid, mid = task_with(s, 'github')
         with mock.patch('taskuary.responder.write_draft', return_value='hi'):
-            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+            out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id'], out['can_send']), (True, mid, False))
         self.assertIn('GitHub replies are off', out['send_block'])
         self.assertEqual(len(s.list_reviews('pending')), 1)
@@ -92,7 +92,7 @@ class FinishTests(unittest.TestCase):
         s = MemoryStore(); s.set_setting('reply_channels', 'email', 't')
         tid, _ = task_with(s, 'discord')
         with mock.patch('taskuary.responder.write_draft', return_value='hi') as wd:
-            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+            out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         wd.assert_called_once()
         self.assertEqual((out['drafting'], out['can_send']), (True, False))
         self.assertIn('Settings', out['send_block'])
@@ -100,7 +100,7 @@ class FinishTests(unittest.TestCase):
     def test_a_report_row_drafts_nothing_because_nobody_sent_it(self):
         s = MemoryStore(); tid, _ = task_with(s, 'report')
         with mock.patch('taskuary.responder.write_draft') as wd:
-            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+            out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['can_send']), (False, False))
         self.assertEqual(s.get_task(tid)['Status'], 'done')
@@ -108,7 +108,7 @@ class FinishTests(unittest.TestCase):
     def test_email_still_drafts(self):
         s = MemoryStore(); tid, mid = task_with(s, 'email')
         with mock.patch('taskuary.responder.write_draft', return_value='hi'):
-            out = coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')
+            out = wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'agent')
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(len(s.list_reviews('pending')), 1)
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
@@ -122,10 +122,10 @@ class WrapEndpointTests(unittest.TestCase):
         c = TestClient(server.app)
         tid, _ = task_with(server.store, channel)
         if tid_out is not None: tid_out.append(tid)
-        # the wrap-up itself lives in coder.wrap now, not in the route - the route is one line
+        # the wrap-up itself lives in wrapup.wrap now, not in the route - the route is one line
         # over it, so that a stop hook and `taskuary --done` can end a task the same way
         with mock.patch.object(terminal, 'transcript_for', return_value=('did the work', 'claude', None)), \
-             mock.patch.object(coder, 'report_from_transcript', return_value={'summary': 'fixed', 'determination': '', 'actions': ''}), \
+             mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'fixed', 'determination': '', 'actions': ''}), \
              mock.patch('taskuary.responder.write_draft', return_value='hi'):
             return c.post(f'/api/tasks/{tid}/wrap', json=body or {'close': True}).json()
 
@@ -137,7 +137,7 @@ class WrapEndpointTests(unittest.TestCase):
         out = self._wrap('email', {'close': False, 'no_reply': True}, tid)
         self.assertFalse(out['drafting'])
         self.assertEqual(server.store.pending_review(tid[0], live_only=False), None)
-        self.assertTrue(any(str(c.get('Body') or '').startswith('CODER REPORT') for c in server.store.list_comments(tid[0])))
+        self.assertTrue(any(str(c.get('Body') or '').startswith(wrapup.REPORT) for c in server.store.list_comments(tid[0])))
 
     def test_github_wrap_by_the_owner_closes_instead_of_drafting_what_cannot_be_sent(self):
         # the owner said Done (2026-09-07): a draft nobody can send must not hold the task open
@@ -155,9 +155,9 @@ class WrapEndpointTests(unittest.TestCase):
         from taskuary import terminal
         with mock.patch.object(terminal, 'session_for', return_value=None), \
              mock.patch.object(terminal, 'transcript_for', return_value=('full transcript', 'claude', None)), \
-             mock.patch.object(coder, 'report_from_transcript', return_value=compact), \
+             mock.patch.object(wrapup, 'report_from_transcript', return_value=compact), \
              mock.patch('taskuary.responder.write_draft', return_value='draft') as write:
-            coder.wrap(s, tid, close=True, actor='owner', final_message=final)
+            wrapup.wrap(s, tid, close=True, actor='owner', final_message=final)
         source = write.call_args.args[3]
         self.assertNotIn('Only item 1 fits on the card.', source)
         for n in range(1, 9):

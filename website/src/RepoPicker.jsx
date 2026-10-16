@@ -15,7 +15,8 @@ import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.js
 // lets Taskuary guess again (and it will pick something), where this says there is nothing to pick.
 const NO_REPO = "none";
 
-export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
+// `agent` is the coding profile when the caller knows it; blank lets the server find the profile of kind coding
+export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
   const [rows, setRows] = useState(null);
   const [picked, setPicked] = useState(null);
   const [why, setWhy] = useState("");
@@ -23,7 +24,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const load = () => api.get(`/api/tasks/${taskId}/repos`, { params: { agent } })
+  const load = () => api.get(`/api/tasks/${taskId}/repos`, { params: agent ? { agent } : {} })
     .then(({ data }) => { setRows(data.data || []); setPicked(data.picked); setWhy(data.why || ""); })
     .catch(() => setRows([]));
   useEffect(() => { setRows(null); setOpen(null); setPath(""); setErr(""); load(); }, [taskId, agent]);
@@ -35,7 +36,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
     setBusy(true); setErr("");
     try {
       const { data } = await api.put(`/api/tasks/${taskId}/repo`,
-        { repo: r.repo, path: withPath || null, agent, restart: !!hasSession });
+        { repo: r.repo, path: withPath || null, ...(agent ? { agent } : {}), restart: !!hasSession });
       setOpen(null); load(); onDone?.(data);
     } catch (e) { setErr(e?.response?.data?.detail || "Could not set the repo"); }
     setBusy(false);
@@ -112,7 +113,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
                 <Typography variant="caption" sx={{ color: r.found ? "#47654a" : "#55697a", display: "block", mb: 0.5 }}>
                   {r.found
                     ? `Found a checkout of ${r.repo} (matched by its git remote) — confirm or correct the path.`
-                    : `Where is ${r.repo} checked out on this machine? Saved on the ${agent} agent, so every
+                    : `Where is ${r.repo} checked out on this machine? Saved on the ${agent || "coding"} agent, so every
                        future task routed here uses it.`}
                 </Typography>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
@@ -138,7 +139,7 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
       </Typography>
       {picked && (
         <Button size="small" sx={{ fontSize: 10.5, color: DIM }} disabled={busy}
-          onClick={async () => { setBusy(true); await api.put(`/api/tasks/${taskId}/repo`, { repo: null, agent }); setBusy(false); load(); onDone?.({}); }}>
+          onClick={async () => { setBusy(true); await api.put(`/api/tasks/${taskId}/repo`, { repo: null, ...(agent ? { agent } : {}) }); setBusy(false); load(); onDone?.({}); }}>
           unpin — let Taskuary choose again
         </Button>
       )}
@@ -153,12 +154,12 @@ export const RepoPicker = ({ taskId, agent = "coder", hasSession, onDone }) => {
 // pinned on the task, else Taskuary's own pick - and the parent pins the choice before it starts the session.
 export { namedRepo };   // now in repoNames.js, so the New card's picker and a test can import it without JSX
 
-export const RepoSelect = ({ taskId, agent = "coder", instruction = "", value, onChange }) => {
+export const RepoSelect = ({ taskId, agent = "", instruction = "", value, onChange }) => {
   const [data, setData] = useState(null);
   const [manual, setManual] = useState(false);
   useEffect(() => {
     let live = true; setData(null); setManual(false);
-    api.get(`/api/tasks/${taskId}/repos`, { params: { agent } }).then(({ data: d }) => live && setData(d)).catch(() => live && setData({ data: [] }));
+    api.get(`/api/tasks/${taskId}/repos`, { params: agent ? { agent } : {} }).then(({ data: d }) => live && setData(d)).catch(() => live && setData({ data: [] }));
     return () => { live = false; };
   }, [taskId, agent]);
   const rows = data?.data || [];

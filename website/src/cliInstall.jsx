@@ -7,7 +7,7 @@
 // as bare "claude" works tomorrow; one saved as the path the installer just reported works now.
 //
 // What gets posted is the row's `install` - the RECIPE it is an install of - never its name: a
-// profile is named for its job, and every install ships one called "coder".
+// profile is named for its job, and every install ships one called "coding".
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Typography } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";

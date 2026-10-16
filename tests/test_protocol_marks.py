@@ -31,7 +31,7 @@ class VerdictClassTests(unittest.TestCase):
 
     def test_a_colleague_at_info_is_a_person_on_the_timeline(self):
         """No header, and the model says person: the info@ address and the footer no longer make it promo or automated."""
-        s = MemoryStore(); s.set_setting('coder_auto_enabled', '0', 't')
+        s = MemoryStore(); s.set_setting('coding_auto_enabled', '0', 't')
         llm = lambda system, user, **k: json.dumps({'intent': 'fyi', 'why': 'keeps you posted', 'title': 'Q3 figures posted',
                                                      'summary': 'Erin posted them.', 'sender_class': 'person'})
         with mock.patch.object(ingest, '_spawn'):

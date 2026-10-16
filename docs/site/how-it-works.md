@@ -144,7 +144,7 @@ facts already in the store: did more mail arrive on the thread, did the task reo
 person deliver and when, did the ignored sender's mail become work anyway. No model runs in the
 sweep. What the facts mean is reflection's: it reads the resolved rows as evidence (`out` ids,
 beside the `mem`, `rv` and `task` ids above) and writes habits into `LEARNED.md` with the same
-grammar and the same decay - "green PR from the coder: you merge it, 8 of 8". A derived line never
+grammar and the same decay - "green PR from the coding agent: you merge it, 8 of 8". A derived line never
 acts on its own: it changes which button comes first and what a proposal says, and deleting it
 from `LEARNED.md` is the whole undo. The whole of it - every input, the two clocks, the ledger's
 row kinds and verdicts - is on [The Advisor](advisor).
@@ -154,7 +154,7 @@ row kinds and verdicts - is on [The Advisor](advisor).
 Taskuary's behaviour is plain Markdown under **Settings → Docs**. These are not configuration files
 around the edges — they are what the models are actually told.
 
-![The eight operator documents and who reads them: TRIAGE, STYLE and JOB can be generated from three months of your mail; SOUL, CODER and COUNSEL you write; LEARNED and DIGEST write themselves](img/operator-docs.svg "Three are read out of your mailbox, three you write, two write themselves.")
+![The eight operator documents and who reads them: TRIAGE, STYLE and JOB can be generated from three months of your mail; SOUL, CODING and COUNSEL you write; LEARNED and DIGEST write themselves](img/operator-docs.svg "Three are read out of your mailbox, three you write, two write themselves.")
 
 | Document | Purpose | Read by |
 |---|---|---|
@@ -163,12 +163,12 @@ around the edges — they are what the models are actually told.
 | `TRIAGE.md` | What makes something a task, a reply or an FYI | triage |
 | `STYLE.md` | Greeting, tone, length, phrasing | reply drafts |
 | `COUNSEL.md` | How the assistant speaks, and how readily it takes a position | the assistant, the morning brief, replies |
-| `CODER.md` | How coding agents work and close out | coding agents |
+| `CODING.md` | How coding agents work and close out | coding agents |
 | `LEARNED.md` | The profile learned from your verdicts; always below `SOUL.md` | triage, replies, coding agents |
 | `DIGEST.md` | The current morning brief | you |
 | Playbooks | One page per kind of job: when it starts, which connections it uses, the steps, what an agent may do alone, what counts as done | triage's `when` line, and the agent working it |
 
-Playbooks are the ones that grow. `CODER.md` is the playbook for code; every other kind of job —
+Playbooks are the ones that grow. `CODING.md` is the playbook for code; every other kind of job —
 a card charge to post as a bill, a new hire to set up — gets its own page the first time an agent
 does it. On close, Taskuary asks whether that was a kind of job that will recur, and drafts the
 playbook onto the task.

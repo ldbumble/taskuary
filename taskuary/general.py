@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import llm as llm_mod
+from . import llm as llm_mod, wrapup
 
 
 USER_TYPE = 'assistant_user'
@@ -113,19 +113,11 @@ def handles(task: dict | None) -> bool:
 
 
 def provider_options(store) -> list:
-    """Every configured CLI login first, then optional API/local-model connectors."""
+    """Every connected CLI tool first - one each, by the tool's own key - then the API/local-model connectors. Never a profile:
+    a profile is instructions on whichever brain runs it (the owner, 2026-10-15: "it's models or cli tools only")."""
     out = []
     from .clis import KNOWN
     labels = {k['cmd']: k['label'] for k in KNOWN}
-    for row in store.list_agents():
-        try: cfg = json.loads(row.get('Config') or '{}')
-        except ValueError: cfg = {}
-        cmd = re.split(r'[\\/]', str(cfg.get('cmd') or row['Name']))[-1].lower().rsplit('.', 1)[0]
-        label = labels.get(cmd) or cmd or row['Name']
-        if row['Name'] != cmd: label += f" · {row['Name']}"
-        out.append({'id': f"cli:{row['Name']}", 'pick': f"cli:{row['Name']}", 'type': 'cli', 'cmd': cmd,
-                    'label': f'{label} (your CLI)', 'model': cfg.get('model') or ''})
-    # ...and every connected CLI no profile runs on: a brain without a worker (agents.agent_row)
     from . import agents as hub_agents
     for key, conn in hub_agents.connection_brains(store):
         cmd = hub_agents.cli_of(conn, key)
@@ -150,28 +142,15 @@ def _web(brain) -> dict:
 
 
 def brain_options(store, keep: str = '') -> list:
-    """The brains a general hand-off can choose - ONE ENTRY PER CLI, then the API connectors.
-
-    provider_options lists a `cli:` entry per worker ROW, so five profiles backed by Claude read as
-    five providers; a hand-off asks which BRAIN runs the job, which is not the same question as which
-    PROFILE it is (the 2026-09-16 split). The value stays a `cli:<profile>` pick because that is what
-    make_cli_llm resolves - the representative row is where the command lives - so choosing a brain
-    here needs no second namespace and no change to what a session saves.
-    """
+    """The brains a general hand-off can choose - one entry per CLI tool that runs here, then the API connectors. A hand-off
+    asks which BRAIN runs the job; which PROFILE it is, is a separate question (the 2026-09-16 split)."""
     from . import agents as hub_agents, climodels
     options = provider_options(store)
     by_pick = {o['pick']: o for o in options}
-    out = []
-    for row in hub_agents.cli_agent_options(store):
-        o = by_pick.get(f"cli:{row['value']}")
-        # not installed is not a choice - the same rule the coding brain list follows
-        if o and row.get('ready'):
-            out.append({**o, 'label': f"{row['cli']} (your CLI)", 'agent': row['value'],
-                        'models': climodels.catalog(row['cli'])['models']})
-    # connected CLIs no profile runs on - already one per CLI, so only the install check applies
     brains = dict(hub_agents.connection_brains(store))
-    out += [{**o, 'label': f"{o['cmd']} (your CLI)", 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
-            for o in options if o.get('connection') and hub_agents.runs_here(brains.get(o['pick'][4:]))]
+    # not installed is not a choice - the same rule the coding brain list follows
+    out = [{**o, 'label': f"{o['cmd']} (your CLI)", 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
+           for o in options if o.get('type') == 'cli' and hub_agents.runs_here(brains.get(o['pick'][4:]))]
     out += [o for o in options if o.get('type') != 'cli']
     # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude
     # profiles into one entry would otherwise blank the dropdown of a chat running on the fourth.
@@ -200,7 +179,7 @@ def walk_pick(store, task: dict = None) -> str:
     pick = concierge.pick(store)
     if pick.startswith('cli:') or not _browser_task(task): return pick
     clis = [o['pick'] for o in provider_options(store) if o.get('type') == 'cli']
-    want = f'cli:{hub_agents.default_agent(store)}'
+    want = f'cli:{hub_agents.default_brain(store)}'
     return want if want in clis else (clis[0] if clis else '')
 
 
@@ -258,7 +237,7 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
         if native: wanted = native['pick']
         else:
             from . import agents as hub_agents
-            wanted = f'cli:{hub_agents.default_agent(store)}'
+            wanted = f'cli:{hub_agents.default_brain(store)}'
     choice = next((o for o in options if o['pick'] == wanted), None) or (options[0] if options else None)
     if not choice: return '', '', model or ''
     saved_model = store.get_setting('assistant_model') if not explicit else ''
@@ -394,7 +373,7 @@ def dock_snapshot(store) -> str:
         comments = store.list_comments(t['TaskId'])
         last = next((c for c in reversed(comments)
                      if c.get('ActorType') in ('agent', ASSISTANT_TYPE)
-                     or str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE'))), None)
+                     or str(c.get('Body') or '').startswith((*wrapup.REPORTS, 'HANDOVER NOTE'))), None)
         if last:
             output.append(f"- {task_ref(t['TaskId'])} | {one_line(t.get('Title'), 160)} | {one_line(last.get('Body'), 460)}")
         if len(output) >= 10: break
@@ -418,14 +397,15 @@ def _task_files(store, tid: int) -> list[dict]:
 def report_note(store, tid: int):
     """What the agent did, for a general session as for a coding one (the owner, 2026-10-09: "general agent should also have
     the summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). A coding session
-    ends with a CODER REPORT note - its summary and LAST MESSAGE - and that note is what the task card shows; a chat ended
-    with nothing but its turns unless the owner pressed Save and end session (coder.wrap) - closed by the agent or put away, it
+    ends with an AGENT REPORT note - its summary and LAST MESSAGE - and that note is what the task card shows; a chat ended
+    with nothing but its turns unless the owner pressed Save and end session (wrapup.wrap) - closed by the agent or put away, it
     left no result. Its last answer, filed verbatim (no model boils the conversation down), once: the same answer is not filed twice."""
     last = next((str(c.get('Body') or '').strip() for c in reversed(chat_rows(store, tid)) if c.get('ActorType') == ASSISTANT_TYPE), '')
     if not last: return None
-    body = f'CODER REPORT\n{last}'
-    filed = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith('CODER REPORT')), '')
-    return None if filed.strip() == body else store.add_comment(tid, 'assistant', 'agent', body)
+    filed = next((c.get('Body') for c in reversed(store.list_comments(tid)) if wrapup.is_report(c.get('Body'))), None)
+    # by its body, not its marker: an answer filed under the old word is the same answer
+    if filed is not None and wrapup.report_body(filed) == last: return None
+    return store.add_comment(tid, 'assistant', 'agent', f'{wrapup.REPORT}\n{last}')
 
 
 def _own_file(raw: str, paths: list):
@@ -1136,8 +1116,7 @@ class GeneralSession:
             _show_files(self.store, self.task_id, showing, paths)
             files = _files_to_attach(self.store, self.task_id, named, paths)
             if drafted or files:
-                from . import coder
-                out = coder.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files)
+                out = wrapup.agent_reply(self.store, self.task_id, drafted or '', 'assistant', files=files)
                 if not out.get('ok'): logger.info(f"assistant reply draft not saved on task {self.task_id}: {out.get('why')}")
                 for w in out.get('not_attached') or []: self.store.add_comment(self.task_id, 'assistant', 'agent', f'Not attached to the reply - {w}')
             reply, drafts = selfclose.draft_markers(reply)
@@ -1147,7 +1126,7 @@ class GeneralSession:
                     out = slots.draft(self.store, self.task_id, body, attrs.get('to', ''), attrs.get('subject', ''), attrs.get('slot', ''), 'assistant')
                     if not out.get('ok'): logger.info(f"assistant email draft not saved on task {self.task_id}: {out.get('why')}")
             # TASKUARY-PROPOSE: a write it may not make by itself (a read-level connection) waits on the task for the owner,
-            # the way a coding session's proposals do (coder.finish)
+            # the way a coding session's proposals do (wrapup.finish)
             from . import proposals
             if proposals.MARK in reply and self.store.get_setting('proposals_enabled', '1') == '1':
                 try: proposals.collect(self.store, self.task_id, reply, 'assistant')
@@ -1179,7 +1158,7 @@ class GeneralSession:
             self.store.audit('task', self.task_id, 'assistant_reply', 'assistant', 'agent',
                              {'provider': self.provider, 'model': self.model, 'chars': len(reply)})
             self._emit(f'\x1b[1;32massistant>\x1b[0m {reply}\r\n\r\n')
-            # AFTER the turn is filed, and off this thread: closing runs coder.wrap, which closes
+            # AFTER the turn is filed, and off this thread: closing runs wrapup.wrap, which closes
             # this very session - doing it inline would kill the pty from inside its own answer.
             # A close marker only has meaning for source-backed work: there is an inbound
             # message/event waiting for a completed answer. A conversation the owner opened

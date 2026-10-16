@@ -5,7 +5,7 @@ it opened, the issue somebody filed, the document it indexed. Any of them can co
 telling it to go and send something, and the whole design of this app rests on the promise that
 nothing leaves without the owner pressing a button.
 
-That promise was made in PROSE. SOUL.md says what the agents may do, CODER.md says not to push,
+That promise was made in PROSE. SOUL.md says what the agents may do, CODING.md says not to push,
 the seed prompt says ask before assuming - and every one of those is a paragraph the same
 untrusted text sits next to and can argue with. An instruction is not a control. A model that
 has been talked into believing the owner wants an immediate reply will find the local API,

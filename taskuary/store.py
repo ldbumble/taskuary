@@ -124,13 +124,13 @@ def email_from_soul(soul: str):
     return (mt.group('email') or '').strip() if mt else ''
 
 def set_owner(store, new: str, email=None, actor: str = 'owner') -> dict:
-    """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and CODER.md refer to the owner nine times
+    """Your name, in ONE place (server.put_owner, and setup's About your work). SOUL.md and CODING.md refer to the owner nine times
     between them: every literal occurrence of the OLD name becomes a {{owner}} token, so the documents never drift again."""
     was = store.owner()
     changed = []
     # 'the owner' is the fallback when no name is known, and real prose says those words - never retokenized
     if was['owner'] in ('the owner', '') or '{{' in was['owner']: was = {**was, 'owner': '', 'owner_email': ''}
-    for doc in ('soul', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel'):
+    for doc in ('soul', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel'):
         raw = store.get_doc(doc)
         if not raw: continue
         tokened = retoken_doc(raw, was['owner'], was['owner_email'])
@@ -171,10 +171,10 @@ INTERNAL_TASK_BASE = 1_000_000_000
 def task_ref(task_id): return f'TQ-{int(task_id):04d}'
 def is_goal(t) -> bool: return bool((t or {}).get('DoneWhen'))      # a goal is a task with a done-when sentence (spec 2026-10-12)
 def auto_code_enabled(src) -> bool:
-    """Does new coding work start its agent by itself? ONE read of `coder_auto_enabled` (a store or its settings
+    """Does new coding work start its agent by itself? ONE read of `coding_auto_enabled` (a store or its settings
     dict), missing = the seeded default. Four readers used to disagree: three read missing as off, one as on."""
     cfg = src if isinstance(src, dict) else src.get_settings()
-    return str(cfg.get('coder_auto_enabled', DEFAULT_SETTINGS['coder_auto_enabled'])) == '1'
+    return str(cfg.get('coding_auto_enabled', DEFAULT_SETTINGS['coding_auto_enabled'])) == '1'
 def _now(): return datetime.now().isoformat(sep=' ', timespec='seconds')
 def _cfg_type(cj) -> str:
     try: return str((json.loads(cj or '{}') or {}).get('type') or '')
@@ -559,11 +559,15 @@ PILE_BLIND_SETTINGS = (
     'assistant_last_undo',       # concierge.LAST_UNDO - what the phone's Undo pill runs
 )
 
+# Settings whose key changed: (old, new), moved once as the store opens (Store.__init__) so an install keeps its value.
+# The coding agent's switches were named for one special profile, and no profile is special (2026-10-15).
+SETTING_RENAMES = (('coder_auto_enabled', 'coding_auto_enabled'), ('coder_context_file', 'agent_context_file'))
+
 # Out of the box Taskuary WORKS the mail: a job goes to the coding agent, a question gets a
 # draft. Both stop short of anything leaving the building - a draft waits for you to send it,
 # and a session is one you watch - so ON is a safe default and OFF was just a slower start.
 DEFAULT_SETTINGS = {'attach_threshold': '0.42',
-                    'feed_days': '14', 'intent_classify_enabled': '1', 'coder_auto_enabled': '1',
+                    'feed_days': '14', 'intent_classify_enabled': '1', 'coding_auto_enabled': '1',
                     'chat_keep_days': '15',        # archived assistant chats expire after this many days (retention.py, PW-158)
                     'fyi_batch': '4',             # how many fyi the assistant reads out together (funnel.fyi_batch_size)
                     'general_auto_enabled': '1',    # general tasks open their assistant session by themselves (PW-069)
@@ -603,14 +607,16 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # the conversational assistant has its own saved brain. API connectors are
                     # the fast/native path; a CLI remains available for tool-heavy work.
                     'assistant_ai': '', 'assistant_model': '',
-                    # the coder's context file (context.py): history, past work and the brief, written to
+                    # the agent's context file (context.py): history, past work and the brief, written to
                     # ~/.taskuary/context/TQ-xxxx.md and pointed at from the seed - not crammed into it
-                    'coder_context_file': '1',
+                    'agent_context_file': '1',
                     'agent_hooks': '1',           # Claude Code tells the Board what it is doing, through its own hooks (hooks.py)
                     'timeline_fade': 'normal',    # older Timeline rows rest quieter - off | gentle | normal | sharp
                     'waitroom_drip': '1',         # queued notes land one per stop (a funnel of prompts), not all at once
-                    # which CLI agent works tasks when nothing names one - pickers list it first
-                    'default_agent': 'coder',
+                    # LEGACY: the profile whose CLI worked tasks before brains named tools. Seeded blank - the coding
+                    # profile is found by its kind (agents.coding_role), the CLI by default_brain; an old value is
+                    # read once by agents.migrate_brain_settings and then cleared
+                    'default_agent': '',
                     # the worker general work lands on when triage names none - an AP rep's `ap` (roles.py)
                     'default_profile': '',
                     # WHICH CLI runs a worker session - coding and general alike. Blank derives
@@ -880,7 +886,7 @@ class SQLiteStore:
             if 'ContextRevision' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN ContextRevision TEXT')
             if 'Stale' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN Stale INTEGER DEFAULT 0')
             # who wrote the draft: 'agent:<name>' when the agent that did the work wrote it itself
-            # (coder.agent_reply), NULL when the responder did - the end of the run keeps the former
+            # (wrapup.agent_reply), NULL when the responder did - the end of the run keeps the former
             if 'DraftBy' not in rvcols: self.cx.execute('ALTER TABLE review ADD COLUMN DraftBy TEXT')
             # Approval is not a provider receipt. Keep the in-flight claim and the exact
             # attempted payload separate from the UI's pending/approved review status.
@@ -1088,6 +1094,11 @@ class SQLiteStore:
             except sqlite3.OperationalError as e:
                 self.kb_fts = False; logger.warning(f'no FTS5 in this sqlite build - knowledge search falls back to LIKE: {e}')
             self.msg_fts = self.kb_fts and self._open_msg_fts()
+            # renamed keys keep the owner's value: moved BEFORE the seed below, or the new name is seeded first and the old
+            # value is stranded. OR IGNORE leaves a new name that already exists alone; the old row goes either way.
+            for old, new in SETTING_RENAMES:
+                self.cx.execute('UPDATE OR IGNORE setting SET Name=? WHERE Name=?', (new, old))
+                self.cx.execute('DELETE FROM setting WHERE Name=?', (old,))
             for k, v in DEFAULT_SETTINGS.items():
                 self.cx.execute('INSERT OR IGNORE INTO setting (Name, Value) VALUES (?,?)', (k, v))
             for t, n in (('outlook', 'Outlook mail'), ('teams', 'Microsoft Teams'),
@@ -1173,7 +1184,7 @@ class SQLiteStore:
                 if vault.sealed(new := vault.seal(sec)): self.cx.execute('UPDATE connector SET Secret=? WHERE ConnectorId=?', (new, cid))
             # The handbook ships ON - handbook.enabled has said so since it was written - but its
             # card is seeded like every other, at Active 0, and enabled() reads the card when one
-            # exists. So the feature was off on every install that ever ran: coder.wrap skipped
+            # exists. So the feature was off on every install that ever ran: wrapup.wrap skipped
             # learn_from_session, `--learned` was refused, and the Hub tab could only ever hold
             # what a person typed. Flip it once and remember that we did, so an owner who turns it
             # off later does not find it back on after a restart.
@@ -1209,7 +1220,7 @@ class SQLiteStore:
                          else ' - whoever sends it' if 'whoever sends it' in r['Note'] else '')
                 line = f'{when}: "{subj or topic or ""}"' + (f' from {who}' if who else '') + f'{about} - {verdict}'
                 self.cx.execute('UPDATE memory SET Note=? WHERE MemoryId=?', (line, r['MemoryId']))
-            for name in ('soul', 'job', 'agent', 'coder', 'digest', 'learned', 'triage', 'style', 'counsel',
+            for name in ('soul', 'job', 'agent', 'coding', 'digest', 'learned', 'triage', 'style', 'counsel',
                          'researcher', 'analyst', 'coordinator', 'marketer', 'trader', 'assistant'):
                 f = Path(__file__).parent / 'templates' / f'{name}.md'
                 if f.exists():
@@ -1221,8 +1232,8 @@ class SQLiteStore:
                     # boundaries forever because edited docs correctly stop following templates.
                     # Empty carries no owner intent to preserve: restore the complete default, and
                     # let the interview replace it only after the owner actually answers.
-                    # ...and not only SOUL: CODER.md went blank on a live install (2026-09-01) and
-                    # every coder session ran with no rules until somebody looked. Empty is empty.
+                    # ...and not only SOUL: CODING.md went blank on a live install (2026-09-01) and
+                    # every coding session ran with no rules until somebody looked. Empty is empty.
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedBy='template', UpdatedAt=? "
                                     "WHERE Name=? AND TRIM(IFNULL(Content,''))=''",
                                     (txt, _now(), name))
@@ -1235,7 +1246,7 @@ class SQLiteStore:
             # WRONG shipped rule stays wrong forever on exactly the installs that use the product most.
             # TRIAGE.md told the model "a stranger's pull request or issue is fyi - never task", so every
             # PR on the owner's own repository was filed, and ingest carried a regex gate to override it;
-            # the gate named no `kind`, so all twelve went to the assistant instead of the coder. The gate
+            # the gate named no `kind`, so all twelve went to the assistant instead of the coding agent. The gate
             # is gone and the template says what a PR is - but a doc whose UpdatedBy is anything but
             # 'template' would never see it. One surgical replacement of the sentence that was wrong,
             # whoever owns the document: everything else in it stays exactly as the owner left it.
@@ -1712,7 +1723,7 @@ class SQLiteStore:
             self._exec("UPDATE idea SET Status='done', DecidedBy='task', DecidedAt=? WHERE Status IN ('open','snoozed') AND "
                        "IdeaId IN (SELECT CAST(substr(SourceRef,16) AS INTEGER) FROM task WHERE TaskId=? AND SourceRef LIKE 'assistant:idea:%')",
                        (_now(), task_id))
-        # ...and Done is the whole job. A coder finished TQ-0646 with `--done` and the card kept three
+        # ...and Done is the whole job. An agent finished TQ-0646 with `--done` and the card kept three
         # open boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be
         # that, no? same if it's saved manually"). Dropped leaves them: nothing was done.
         if fields.get('Status') == 'done':
@@ -3780,7 +3791,7 @@ class SQLiteStore:
             FROM task t
             LEFT JOIN comment c ON c.CommentId=(SELECT MAX(c2.CommentId) FROM comment c2
                 WHERE c2.TaskId=t.TaskId AND (c2.ActorType='assistant_agent'
-                    OR c2.Body LIKE 'HANDOVER NOTE%' OR c2.Body LIKE 'CODER REPORT%'))
+                    OR c2.Body LIKE 'HANDOVER NOTE%' OR c2.Body LIKE 'AGENT REPORT%' OR c2.Body LIKE 'CODER REPORT%'))
             LEFT JOIN transcript tr ON tr.TranscriptId=(SELECT MAX(tr2.TranscriptId) FROM transcript tr2 WHERE tr2.TaskId=t.TaskId)
             WHERE COALESCE(t.SourceRef,'') NOT IN ('assistant:dock','assistant:concierge')
                 AND (t.Status IN ('open','waiting','in_progress') OR (t.Status='done'
@@ -3875,7 +3886,7 @@ class SQLiteStore:
         row = self._one("SELECT * FROM setting WHERE Name='general_auto_enabled'")
         seeded = row is None or not row.get('UpdatedBy')
         changed = False
-        if seeded and cfg.get('coder_auto_enabled') == '0':
+        if seeded and cfg.get('coding_auto_enabled') == '0':
             self.set_setting('general_auto_enabled', '0', 'upgrade'); changed = True
         elif row is None: self.set_setting('general_auto_enabled', '1', 'upgrade')
         self.set_setting('auto_start_upgraded', '1', 'upgrade')
@@ -4111,7 +4122,7 @@ class SQLiteStore:
     def add_route(self, mid, tid, decision, score, reason, candidates, routed_by='router',
                   raw_output=None, parse_error=None, verdict=None):
         # the verdict's sender_class outranks the headers' guess on the message itself, so every reader of a row
-        # (the chip, the Advisor, the evening brief, the coder's hold) sees the model's word without a join
+        # (the chip, the Advisor, the evening brief, the coding agent's hold) sees the model's word without a join
         sc = (verdict or {}).get('sender_class') if isinstance(verdict, dict) else None
         if sc in ('person', 'automated', 'bulk') and mid: self._exec('UPDATE message SET SenderClass=? WHERE MessageId=?', (sc, mid))
         if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
@@ -5035,7 +5046,7 @@ class SQLiteStore:
     def delete_doc(self, name): self._exec('DELETE FROM doc WHERE Name=?', (name,))
     def doc(self, name):
         """The document as the AI should read it: {{owner}} and friends filled in. The name used to
-        be typed into six places across SOUL.md and three more in CODER.md, so changing it changed
+        be typed into six places across SOUL.md and three more in CODING.md, so changing it changed
         one of them - a doc that half calls you by name and half calls you John Smith."""
         return render_doc(self.get_doc(name) or '', self.owner())
     def get_doc_row(self, name): return self._one('SELECT Name, Content, UpdatedBy, UpdatedAt FROM doc WHERE Name=?', (name,))
@@ -5165,7 +5176,7 @@ class SQLiteStore:
         from .categories import category_of, team_domains_of
         team = team_domains_of(self.get_settings())
         for r in rows: r['Category'] = category_of(r, team)
-        # NEEDS_YOU (SQL) only sees `run` rows; a coder in a LIVE pty session is working the task
+        # NEEDS_YOU (SQL) only sees `run` rows; an agent in a LIVE pty session is working the task
         # just as much, and the row said "needs you - no agent is working it" over a running
         # console. Working carries the agent's name so the chip can say who.
         live, parked = {r['TaskId']: r.get('AgentName') or 'agent' for r in self.running_runs()}, {}
@@ -5174,7 +5185,7 @@ class SQLiteStore:
             observed_live = hub_term.live_sessions(tail=0) if live_state is _LIVE_UNSET else live_state
             for t in observed_live:
                 if not t.get('taskId'): continue
-                live[t['taskId']] = t.get('agent') or t.get('label') or 'coder'
+                live[t['taskId']] = t.get('agent') or t.get('label') or 'agent'
                 # "an agent has it" and "an agent stopped and is waiting on you" are opposite
                 # facts and the row wore the same chip for both, so a session sitting on an
                 # unanswered question read as work in progress for as long as nobody looked.

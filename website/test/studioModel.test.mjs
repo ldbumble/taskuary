@@ -16,7 +16,7 @@ test("the studio seats live work first and keeps waiting work visible", () => {
 test("a real run name and task state drive the character", () => {
   const task = { Status: "in_progress", Kind: "coding", Assignee: "agent:fallback", RunStatus: "running" };
   const live = { AgentName: "codex", StartedAt: "2026-09-10 12:00:00" };
-  assert.equal(studioAgentName(task, live, [{ Name: "coder" }]), "codex");
+  assert.equal(studioAgentName(task, live, [{ Name: "coding" }]), "codex");
   assert.equal(studioPose(task), "type");
   assert.deepEqual(studioTaskState(task, live, [], Date.parse("2026-09-10T12:14:00")), {
     agent: "codex", label: "working · 14m", tone: "working", pose: "type",

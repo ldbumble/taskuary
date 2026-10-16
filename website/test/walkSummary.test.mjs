@@ -18,7 +18,7 @@ test("the groups are the rail's bands, in the rail's order, under the rail's nam
 });
 
 test("a finished agent's task is On you, as on the rail - not an agent waiting (the owner's screenshot, 2026-10-02)", () => {
-  const done = it("report", "agentdone", { agent: "coder", title: "Investigate the export" });
+  const done = it("report", "agentdone", { agent: "coding", title: "Investigate the export" });
   assert.equal(groupOf(done), "task");
   assert.equal(summarize([done]).groups[0].word, "On you");
 });
@@ -41,7 +41,7 @@ test("a drafted reply says it is ready, everything else says its lane's word", (
 test("a report's sender is its own title, so the row says Report instead of saying it twice", () => {
   assert.equal(whoOf({ kind: "report", lane: "report", who: "AP ageing over 30 days", title: "AP ageing over 30 days, weekly - 5 rows" }), "Report");
   assert.equal(whoOf({ kind: "asked", who: "Erin Blake", title: "Q3 numbers" }), "Erin Blake");
-  assert.equal(whoOf({ kind: "agent", agent: "coder", title: "Reconcile the August GL export" }), "coder");
+  assert.equal(whoOf({ kind: "agent", agent: "coding", title: "Reconcile the August GL export" }), "coding");
 });
 
 test("every group the opener draws has a colour role - a missing one crashed the page (2026-09-24)", () => {
@@ -55,7 +55,7 @@ test("a row reads cleanly: its task number, the agent on an agent row, an addres
   assert.equal(refOf({ tid: 887 }), "TQ-0887");
   assert.equal(refOf({ ref: "TQ-0018", tid: 18 }), "TQ-0018");
   assert.equal(refOf({ title: "no task yet" }), "");
-  assert.equal(whoOf({ kind: "agent", lane: "stopped", who: "You", agent: "coder", title: "Why so many emails" }), "coder");
+  assert.equal(whoOf({ kind: "agent", lane: "stopped", who: "You", agent: "coding", title: "Why so many emails" }), "coding");
   assert.equal(whoOf({ kind: "fyi", lane: "fyi", who: "noreply-securityapp@vendor.example", title: "Vendor Create" }), "securityapp");
   assert.equal(whoOf({ kind: "asked", who: "erin@northwind.example", title: "Q3 numbers" }), "erin");
   const twice = { lane: "fyi", kind: "fyi", who: "alerts@vendor.example", title: "Vendor Create - 0 created" };
@@ -69,21 +69,21 @@ test("a row reads cleanly: its task number, the agent on an agent row, an addres
 });
 
 test("a band's box names an agent's task, never the profile running it", () => {
-  const rows = [{ key: "a", lane: "blocked", kind: "agent", agent: "coder", who: "Alex Doyle", title: "Investigate the missing ledger exports for the north region" },
+  const rows = [{ key: "a", lane: "blocked", kind: "agent", agent: "coding", who: "Alex Doyle", title: "Investigate the missing ledger exports for the north region" },
     { key: "b", lane: "reply", kind: "mail", who: "Erin Blake", title: "Budget question" }];
   const g = gistOf({ rows });
-  assert.ok(!/\bcoder\b/.test(g), g);
+  assert.ok(!/\bcoding\b/.test(g), g);
   assert.match(g, /^Investigate the missing ledger exports…, Erin Blake$/);
 });
 
 test("a row with no sender but the agent names its task too, never the profile", () => {
-  const g = gistOf({ rows: [{ key: "t", lane: "yours", kind: "task", agent: "coder", who: "", title: "Recurring export timeout" }] });
+  const g = gistOf({ rows: [{ key: "t", lane: "yours", kind: "task", agent: "coding", who: "", title: "Recurring export timeout" }] });
   assert.equal(g, "Recurring export timeout");
 });
 
 test("an agent's finished work names the task, whatever field holds the agent", () => {
   // the live shape: kind agentdone, who is the profile, no agent field
-  const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coder", agent: null, title: "Recurring export timeout failures" }] });
+  const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coding", agent: null, title: "Recurring export timeout failures" }] });
   assert.equal(g, "Recurring export timeout failures");
 });
 

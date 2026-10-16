@@ -79,7 +79,7 @@ test("the card under a line is decided by kind, one card per kind", () => {
 
 test("a dispatched message follows its task into the live agent row", () => {
   const card = { key: "msg:44", tid: 358, kind: "todo", lane: "asked" };
-  const working = { key: "agent:358", tid: 358, kind: "todo", lane: "working", agent: "coder", sid: "abc" };
+  const working = { key: "agent:358", tid: 358, kind: "todo", lane: "working", agent: "coding", sid: "abc" };
   assert.equal(currentItemFromPile(card, { current: null, items: [working] }), working);
   assert.equal(followsItem(card, working), true);
   assert.equal(cardFor(working), "agent");
@@ -368,7 +368,7 @@ test("the waving agent is the one lane sized to be seen", () => {
 });
 
 // THE TASKS RAIL AND THE WORK RAIL SAY THE SAME THING. The rail used to paint everything that was
-// not done, dropped or busy with one red "needs you" chip, so a coder parked on a question and a
+// not done, dropped or busy with one red "needs you" chip, so an agent parked on a question and a
 // reply waiting for your yes were indistinguishable (the owner, 2026-09-22). These two words must
 // never collapse into one again, and they are the vocabulary's, not this rail's.
 test("a waving agent and a waiting reply are two different words", () => {

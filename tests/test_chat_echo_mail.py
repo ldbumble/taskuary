@@ -43,10 +43,10 @@ class EchoTests(unittest.TestCase):
 
     def test_the_reply_answers_the_chat_line_not_its_newer_mail_copy(self):
         """Close out mailed the copy's no-reply address, signed like an email, over a chat line (2026-09-29)."""
-        from taskuary import coder
+        from taskuary import wrapup
         s = MemoryStore()
         a = chat(s); notice(s)
-        self.assertEqual(coder.reply_target(s, a['task_id']), a['message_id'])
+        self.assertEqual(wrapup.reply_target(s, a['task_id']), a['message_id'])
 
     def test_the_chat_line_after_its_notification_joins_the_mails_task(self):
         s = MemoryStore()

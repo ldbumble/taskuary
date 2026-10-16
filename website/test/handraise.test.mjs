@@ -67,7 +67,7 @@ test("a replacement session already asking raises independently", () => {
 });
 
 test("an interactive session wins over a duplicate headless run row", () => {
-  const run = { TaskId: 247, AgentName: "coder", kind: "run", RunId: 8, StartedAt: "2026-08-30 00:00:00" };
+  const run = { TaskId: 247, AgentName: "coding", kind: "run", RunId: 8, StartedAt: "2026-08-30 00:00:00" };
   let t = advanceHandRaises({}, [session(), run]);
   t = advanceHandRaises(t.state, [run, session({ phase: "parked", waiting: true })]);
   assert.equal(t.raises.length, 1);

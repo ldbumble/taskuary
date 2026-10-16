@@ -50,7 +50,7 @@ def _legacy_picture(path: Path):
             ('quarter-close', '# Custom synthetic procedure\nNever replace this file.', 'fixture-owner', now)))
         cx.execute('INSERT INTO task VALUES (41,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                    ('Preserve the synthetic historical task', 'Owner-edited baseline summary', 'coding', 'open', 'high',
-                    'agent:fixture-coder', 'email', 'fixture:legacy', 'owner:custom', 'fixture-owner', now,
+                    'agent:fixture-agent', 'email', 'fixture:legacy', 'owner:custom', 'fixture-owner', now,
                     'fixture-owner', now, None))
         messages = (
             (71, 'fixture:legacy:surfaced', 'Synthetic historical request', 'Keep the message body and its history across migrations.'),
@@ -72,9 +72,9 @@ def _legacy_picture(path: Path):
             (111, 41, 'fixture-owner', 'human', 'Preserve this owner history turn.', now),
             (112, 41, 'assistant', 'assistant_agent', 'Preserve this assistant history turn.', now)))
         cx.execute('''INSERT INTO run VALUES
-            (121,41,'fixture-coder','done','Use only synthetic inputs.','[]','Synthetic run completed.',NULL,
+            (121,41,'fixture-agent','done','Use only synthetic inputs.','[]','Synthetic run completed.',NULL,
              'fixture-provider-session','synthetic diff','fixture-owner',?,?,?)''', (now, now, now))
-        cx.execute("INSERT INTO transcript VALUES (131,41,'fixture-session','fixture-coder',?,'synthetic terminal history',?)",
+        cx.execute("INSERT INTO transcript VALUES (131,41,'fixture-session','fixture-agent',?,'synthetic terminal history',?)",
                    (str(path.parent), now))
         cx.executemany('INSERT INTO funnel_state VALUES (?,?,?,?,?,?)', (
             ('msg:71', 'surfaced', None, 'owner saw this exact item', 'fixture-owner', now),
@@ -100,7 +100,7 @@ def _assert_preserved(reopened: SQLiteStore, expected):
 
     detail = reopened.task_detail(41)
     for key, value in {'TaskId': 41, 'Summary': 'Owner-edited baseline summary', 'Priority': 'high',
-                       'Assignee': 'agent:fixture-coder', 'Tags': 'owner:custom'}.items():
+                       'Assignee': 'agent:fixture-agent', 'Tags': 'owner:custom'}.items():
         assert detail['task'][key] == value
     assert [(row['MessageId'], row['BodyText']) for row in detail['messages']] == [
         (71, 'Keep the message body and its history across migrations.'),

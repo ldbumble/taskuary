@@ -64,7 +64,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         self.assertEqual((pending[0]['TaskId'], pending[0]['Kind']), (out['task_id'], 'draft'))
 
-    def test_coder_auto_dispatch_when_enabled(self):
+    def test_coding_auto_dispatch_when_enabled(self):
         """Auto-dispatch is for CODING tasks: _auto_code opens a CLI session in a repository,
         so it only makes sense where there is a repository to work in. The body here carries a
         real code signal; see test_non_code_work_waits_for_you for the other half."""
@@ -76,14 +76,14 @@ class CoreTests(unittest.TestCase):
             def start(self): self.t(*self.a)
 
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('coding_auto_enabled', '1', 't')
         # auto-dispatch starts a live session, like every other way work starts here
         with mock.patch.object(ing, 'threading') as th,              mock.patch('taskuary.terminal.start_on_task') as start:
             th.Thread = InlineThread
             out = ingest_message(s, self.msg(external_id='ac1', body='the importer throws an exception, see jobs/import.py'), llm=CODING_LLM)
         start.assert_called_once()
         self.assertEqual(start.call_args.args[1], out['task_id'])
-        self.assertTrue(any('auto-started a live coder session' in c['Body'] for c in s.list_comments(out['task_id'])))
+        self.assertTrue(any('auto-started a live coding session' in c['Body'] for c in s.list_comments(out['task_id'])))
 
     def test_work_the_brain_calls_general_goes_on_your_list(self):
         """`kind` routes the task and triage alone decides it (owner, 2026-08-30): general means
@@ -91,7 +91,7 @@ class CoreTests(unittest.TestCase):
         a click rather than buying a session that can only say "nothing to do here"."""
         from unittest import mock
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('coding_auto_enabled', '1', 't')
         general = lambda *a, **k: '{"intent": "task", "kind": "general", "why": "nobody can type this"}'
         with mock.patch('taskuary.ingest._spawn') as spawn:
             out = ingest_message(s, self.msg(external_id='ac3'), llm=general)
@@ -99,13 +99,13 @@ class CoreTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))     # a real task, just yours
 
-    def test_a_task_the_brain_gave_no_kind_is_general_and_starts_no_coder(self):
+    def test_a_task_the_brain_gave_no_kind_is_general_and_starts_no_coding_agent(self):
         """The owner's newer call (2026-09-05, PW-067) replaces "err toward the coding agent" for
         an UNNAMED kind: a task the brain did not label is general - an assistant can read and think
         about anything - and no coding session starts on a guess. An explicit `coding` still does."""
         from unittest import mock
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('coding_auto_enabled', '1', 't')
         with mock.patch('taskuary.ingest._spawn') as spawn, \
              mock.patch('taskuary.general.provider_options', return_value=[]):
             out = ingest_message(s, self.msg(external_id='ac4'), llm=TASK_LLM)
@@ -115,7 +115,7 @@ class CoreTests(unittest.TestCase):
         spawn.assert_not_called()
         self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
-    def test_a_first_time_email_sender_never_starts_the_coder_by_itself(self):
+    def test_a_first_time_email_sender_never_starts_the_coding_agent_by_itself(self):
         """The one road from a stranger's text to an agent on this machine with nobody in between
         was the auto-start. Email now gates it on the SENDER (senders.py): known = your own
         domain, has written before, or your mailbox has written to them (Sent Items, asked of the
@@ -124,7 +124,7 @@ class CoreTests(unittest.TestCase):
         from unittest import mock
         from taskuary import senders
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('coding_auto_enabled', '1', 't')
         s.set_setting('owner_email', 'dana@northwind.example', 't')
         # distinct subjects and bodies: a look-alike would ATTACH to the first task and never reach the create path
         texts = {'e1': ('importer crash', 'the importer throws an exception in jobs/import.py'),
@@ -200,7 +200,7 @@ class CoreTests(unittest.TestCase):
         a real task is filed and waits for the owner to start it."""
         from unittest import mock
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '0', 'owner')
+        s.set_setting('coding_auto_enabled', '0', 'owner')
         with mock.patch('taskuary.terminal.start_on_task') as start:
             out = ingest_message(s, self.msg(external_id='ac2'), llm=TASK_LLM)
         start.assert_not_called()
@@ -211,18 +211,18 @@ class CoreTests(unittest.TestCase):
         nothing with it. Neither one sends anything: a draft waits for approval, and a session
         is one you are watching."""
         d = store_mod.DEFAULT_SETTINGS
-        self.assertEqual(d['coder_auto_enabled'], '1')
+        self.assertEqual(d['coding_auto_enabled'], '1')
         self.assertNotIn('auto_draft_enabled', d)                          # every question is drafted - no setting (2026-09-25)
-        self.assertEqual(MemoryStore().get_settings()['coder_auto_enabled'], '1')
+        self.assertEqual(MemoryStore().get_settings()['coding_auto_enabled'], '1')
 
     def test_one_read_of_auto_start_with_the_seeded_default(self):
         """Missing read as off in ingest and the assistant but on in the funnel's line: one accessor, missing = seeded '1'."""
         self.assertTrue(store_mod.auto_code_enabled({}))
-        self.assertTrue(store_mod.auto_code_enabled({'coder_auto_enabled': '1'}))
-        self.assertFalse(store_mod.auto_code_enabled({'coder_auto_enabled': '0'}))
-        s = MemoryStore(); s.set_setting('coder_auto_enabled', '0', 'owner')
+        self.assertTrue(store_mod.auto_code_enabled({'coding_auto_enabled': '1'}))
+        self.assertFalse(store_mod.auto_code_enabled({'coding_auto_enabled': '0'}))
+        s = MemoryStore(); s.set_setting('coding_auto_enabled', '0', 'owner')
         self.assertFalse(store_mod.auto_code_enabled(s))
-        self.assertEqual(store_mod.DEFAULT_SETTINGS['coder_auto_enabled'], '1')
+        self.assertEqual(store_mod.DEFAULT_SETTINGS['coding_auto_enabled'], '1')
 
     def test_out_of_the_box_timeline_fade_is_normal(self):
         self.assertEqual(store_mod.DEFAULT_SETTINGS['timeline_fade'], 'normal')
@@ -241,7 +241,7 @@ class CoreTests(unittest.TestCase):
 
         s = MemoryStore()
         s.set_setting('auto_draft_enabled', '1', 't')
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')     # the only agent, and NOT for this
+        s.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')    # the only agent, and NOT for this
         seen = {}
         def fake_llm(system, user, **kw):
             seen['system'], seen['user'] = system, user
@@ -329,7 +329,7 @@ class CoreTests(unittest.TestCase):
         s.save_source({'Channel': 'github', 'Address': 'o/repo', 'ConnectorId': gh['ConnectorId'], 'Active': 1}, 'o')
         issues = [{'number': 7, 'title': 'Export dies on empty ledger', 'body': 'stack trace here',
                    'user': {'login': 'jsmith'}, 'updated_at': '2026-08-18T09:00:00Z', 'html_url': 'https://gh/7'},
-                  {'number': 8, 'title': '[TQ-0004] coder task', 'body': 'opened by taskuary itself',
+                  {'number': 8, 'title': '[TQ-0004] coding task', 'body': 'opened by taskuary itself',
                    'user': {'login': 'bot'}, 'updated_at': '2026-08-18T09:01:00Z', 'html_url': 'https://gh/8'}]
         with mock.patch('taskuary.github.list_items', return_value=issues) as li:
             self.assertEqual(channels.poll_channels(s), 0)          # ...so nothing polls it
@@ -385,7 +385,7 @@ class CoreTests(unittest.TestCase):
         tid = out['task_id']
         row = lambda: next(m for m in s.feed() if m['MessageId'] == out['message_id'])
         self.assertEqual(row()['NeedsYou'], 1)                       # nobody has touched it yet
-        rid = s.start_run(tid, 'coder', 'work it', 'o')
+        rid = s.start_run(tid, 'coding', 'work it', 'o')
         self.assertEqual(row()['NeedsYou'], 0)                       # an agent IS working it
         s.update_run(rid, {'Status': 'done'}, finished=True)
         self.assertEqual(row()['NeedsYou'], 1)                       # it stopped and left it open - yours
@@ -510,8 +510,8 @@ class CoreTests(unittest.TestCase):
         oa = next(c for c in s.list_connectors() if c['Type'] == 'openai')
         s.save_connector({'ConnectorId': oa['ConnectorId'], 'Active': 1, 'Secret': 'sk-x'}, 'o')
         self.assertTrue(callable(llm.build_llm(s)))                 # auto: the cloud key
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude", "cwd": "C:/repo", "timeout": 9000}')
-        s.set_setting('triage_ai', 'cli:coder', 'o')
+        s.upsert_agent('claude', 'coding', 'cli', '{"cmd": "claude", "cwd": "C:/repo", "timeout": 9000}')
+        s.set_setting('triage_ai', 'cli:claude', 'o')
         with mock.patch('taskuary.agents.run_cli', return_value=('{"intent": "task", "why": "x"}', None, None)) as rc:
             self.assertEqual(llm.build_llm(s)('sys', 'usr'), '{"intent": "task", "why": "x"}')
         prof = rc.call_args[0][0]
@@ -629,7 +629,7 @@ class CoreTests(unittest.TestCase):
         from taskuary.agents import run_cli
         from taskuary.clis import preset_args
         from taskuary.terminal import agent_argv
-        # config.toml said [agents.coder] cmd = "claude" and nothing else -> bare `claude -p`, and a
+        # config.toml said [agents.coding] cmd = "claude" and nothing else -> bare `claude -p`, and a
         # non-interactive claude with no permission flag denied every tool call of a scheduled report
         for cmd in ('claude', r'C:\Users\me\AppData\Roaming\npm\claude.cmd', '/usr/local/bin/claude'):
             with mock.patch('taskuary.agents._resolve_cmd', return_value=['X']), \
@@ -790,7 +790,7 @@ class CoreTests(unittest.TestCase):
 
     def test_report_comes_from_the_transcript_and_survives_a_missing_ai(self):
         from unittest import mock
-        from taskuary.coder import report_from_transcript
+        from taskuary.wrapup import report_from_transcript
         s = MemoryStore()
         tid = s.create_task({'Title': 'importer', 'Kind': 'coding'}, 'o')
         seen = {}
@@ -847,7 +847,7 @@ class CoreTests(unittest.TestCase):
         reply-only mail turns that report into the draft you approve - and the draft has to
         survive the close, which used to supersede it on the spot."""
         from unittest import mock
-        from taskuary.coder import finish
+        from taskuary.wrapup import finish
         s = MemoryStore()
         tid = s.create_task({'Title': 'importer is down', 'Kind': 'coding'}, 'o')
         # a real ingest always stamps the channel (the push API defaults it to 'api'), and the
@@ -871,7 +871,7 @@ class CoreTests(unittest.TestCase):
         """The task card's compact report must not become a lossy reply source. A real session
         answered eight separate issues; all eight have to reach the responder with room to write."""
         from unittest import mock
-        from taskuary import coder, responder
+        from taskuary import wrapup, responder
         s = MemoryStore()
         tid = s.create_task({'Title': 'Review all eight import issues', 'Kind': 'coding'}, 'o')
         s.add_message({'TaskId': tid, 'ExternalId': 'eight-1', 'Channel': 'email',
@@ -885,7 +885,7 @@ class CoreTests(unittest.TestCase):
             return final
         compact = {'summary': 'Issue 1 was checked.', 'determination': '', 'actions': ''}
         with mock.patch('taskuary.llm.build_llm', return_value=fake_llm):
-            coder.finish(s, tid, compact, complete_result=coder.reply_source('ignored', final))
+            wrapup.finish(s, tid, compact, complete_result=wrapup.reply_source('ignored', final))
         for n in range(1, 9):
             self.assertIn(f'Issue {n}: completed with result {n}.', seen['user'])
         self.assertIn('EVERY distinct question', seen['system'])
@@ -893,7 +893,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(seen['tokens'], responder.COMPLETE_REPLY_TOKENS)
 
     def test_finishing_with_nobody_to_reply_to_just_closes(self):
-        from taskuary.coder import finish
+        from taskuary.wrapup import finish
         s = MemoryStore()
         tid = s.create_task({'Title': 'my own note', 'Kind': 'coding'}, 'o')
         self.assertEqual(finish(s, tid, {'summary': 'did it'})['drafting'], False)
@@ -995,7 +995,7 @@ class CoreTests(unittest.TestCase):
 
     def test_split_never_hands_the_new_task_an_agent_but_keeps_your_own_name_on_it(self):
         s, tid, _mid = self._two_job_task()
-        s.update_task(tid, {'Assignee': 'agent:coder'}, 'owner')
+        s.update_task(tid, {'Assignee': 'agent:coding'}, 'owner')
         self.assertIsNone(s.get_task(reshape.split_task(s, tid, {'title': 'the other job'}))['Assignee'])
         s.update_task(tid, {'Assignee': 'owner'}, 'owner')
         self.assertEqual(s.get_task(reshape.split_task(s, tid, {'title': 'mine too'}))['Assignee'], 'owner')
@@ -1100,7 +1100,7 @@ class CoreTests(unittest.TestCase):
         a = s.create_task({'Title': 'a'}, 'owner'); b = s.create_task({'Title': 'b'}, 'owner')
         for src, dst in ((a, a), (a, 9999), (9999, b)):
             with self.assertRaises(ValueError): reshape.merge_tasks(s, src, dst)
-        s.start_run(a, 'coder', 'go', 'owner')
+        s.start_run(a, 'coding', 'go', 'owner')
         with self.assertRaises(ValueError): reshape.merge_tasks(s, a, b)
 
     def test_merge_candidates_rank_the_task_it_is_really_a_copy_of(self):

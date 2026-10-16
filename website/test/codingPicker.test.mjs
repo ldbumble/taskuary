@@ -1,6 +1,6 @@
 // A repository dialog asks WHICH CLI, not which worker.
 //
-// Both shipped coding workers carry rules_doc "coder", so `coder` and `codex` are one job on two
+// Both shipped coding workers carry rules_doc "coding", so `coding` and `codex` are one job on two
 // CLIs - and the menu listed them beside researcher, analyst, coordinator, marketer and trader,
 // under a label promising "which CLI works it" (the owner, 2026-09-14: "for coding there is no need
 // to choose profile. That's for general. Coding is the profile for coding sessions").
@@ -19,7 +19,7 @@ test("the coding picker filters to coding workers and names them by their CLI", 
   // The brain layer (33e452f5) answered this question at the source instead of translating at the
   // menu: a coding picker now lists BRAINS, which already are CLIs, so the `cliOf` map this used to
   // assert on has nothing left to do. Same promise, one fewer indirection - and the choice it
-  // writes is the brain, never the role, because every coding task's role is `coder`.
+  // writes is the brain, never the role, because every coding task's role is the coding profile.
   // ...and a brain the machine no longer has is still what this task NAMES: the list used to fall
   // back to brains[0], so filtering to installed brains would have shown a CLI nobody chose.
   assert.match(picker, /const list = coding \? \(brain && !brains\.includes\(brain\) \? \[brain, \.\.\.brains\] : brains\) : roles;/);

@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import browserview, coder, general, handbook, llm, responder, server, terminal, waitroom
+from taskuary import browserview, wrapup, general, handbook, llm, responder, server, terminal, waitroom
 from taskuary.store import MemoryStore
 
 
@@ -23,6 +23,16 @@ def connect_openai(store):
     store.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test',
                           'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
     return row['ConnectorId']
+
+
+def connect_cli(test, **conns):
+    """Connect CLI tools as brains for one test. A brain is a tool (`cli:claude`), never a profile row: config.toml's
+    cli_connections is where it lives, so that is what is patched - and conftest's empty connection_brains put back."""
+    from taskuary import agents, config
+    real = config.load
+    for p in (mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': conns}),
+              mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains))):
+        p.start(); test.addCleanup(p.stop)
 
 
 class SharedSessionTests(unittest.TestCase):
@@ -45,8 +55,8 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_setup_walkthrough_uses_a_tool_cli_and_starts_its_own_browser(self):
         store = MemoryStore()
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
-            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        connect_cli(self, claude={
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']})
         cid = connect_openai(store)
         store.set_setting('assistant_ai', f'connector:{cid}', 'owner')
         tid = store.create_task({'Title': 'Connect Zoho', 'Summary': 'Walk me through Zoho Invoice',
@@ -55,25 +65,25 @@ class SharedSessionTests(unittest.TestCase):
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(general.threading, 'Thread') as thread:
             session = general.start_session(store, tid)
-        self.assertEqual(session.pick, 'cli:my-claude')     # the saved API chat cannot drive a browser
+        self.assertEqual(session.pick, 'cli:claude')     # the saved API chat cannot drive a browser
         self.assertIs(thread.call_args.kwargs['target'], browserview.start)
         # ...on the page the task's browser was last on - none yet, so a blank tab (browserview.keep_page)
         self.assertEqual(thread.call_args.kwargs['args'], (session.sid, 'about:blank'))
 
     def test_setup_cli_gets_the_same_visible_browser_without_a_checkout(self):
         store = MemoryStore()
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
-            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        connect_cli(self, claude={
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']})
         tid = store.create_task({'Title': 'Connect Zoho', 'Summary': 'Walk me through Zoho Invoice',
                                  'Kind': 'general', 'Status': 'open', 'SourceRef': 'assistant:setup',
                                  'Tags': browserview.WANTS}, 'owner')
         seen = {}
         def answer(system, user, **kwargs):
             seen.update(system=system, user=user, kwargs=kwargs); return 'Zoho is open beside us.'
-        session = general.GeneralSession(store, tid, pick='cli:my-claude')
+        session = general.GeneralSession(store, tid, pick='cli:claude')
         with mock.patch.object(browserview, 'start', return_value=True), \
              mock.patch.object(llm, 'build_llm', return_value=answer) as build:
-            session.send_prompt('Open Zoho', pick='cli:my-claude')
+            session.send_prompt('Open Zoho', pick='cli:claude')
         self.assertTrue(build.call_args.kwargs['cli_tools'])
         env = build.call_args.kwargs['extra_env']
         self.assertEqual(env['AGENT_BROWSER_SESSION'], browserview.session_name(session.sid))
@@ -83,13 +93,13 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_browser_walkthrough_cli_keeps_tools_in_scratch_and_receives_session_env(self):
         store = MemoryStore()
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({
-            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']}))
+        connect_cli(self, claude={
+            'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions']})
         seen = {}
         def run_cli(profile, prompt, trace, resume=None, **kwargs):
             seen.update(profile=profile, kwargs=kwargs); return 'done', None, None
         with mock.patch('taskuary.agents.run_cli', side_effect=run_cli):
-            brain = llm.make_cli_llm(store, 'my-claude', cli_tools=True,
+            brain = llm.make_cli_llm(store, 'claude', cli_tools=True,
                                      extra_env={'AGENT_BROWSER_SESSION': 'tq-one'})
             brain('system', 'user')
         self.assertIn('--dangerously-skip-permissions', seen['profile']['args'])
@@ -107,7 +117,7 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_native_api_is_the_fast_default_when_assistant_choice_is_blank(self):
         store = MemoryStore()
-        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        connect_cli(self, codex={'cmd': 'codex'})
         cid = connect_openai(store)
         store.set_setting('assistant_ai', '', 'owner')
         pick, _label, model = general._selected(store)
@@ -117,7 +127,7 @@ class SharedSessionTests(unittest.TestCase):
         store = MemoryStore(); tid = general_task(store)
         handbook.post(store, 'Customer launches need operations approval',
                       'Ask the operations owner before fixing the date.', 'customer-launch',
-                      'decision', 'coder')
+                      'decision', 'agent')
         _system, user = general._prompt(store, tid)
         self.assertIn('FROM HUB', user)
         self.assertIn('Customer launches need operations approval', user)
@@ -125,7 +135,7 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_cli_assistant_is_told_to_file_nontechnical_company_knowledge(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        connect_cli(self, codex={'cmd': 'codex'})
         seen = {}
         def answer(system, user, **kwargs):
             seen['system'] = system
@@ -133,7 +143,7 @@ class SharedSessionTests(unittest.TestCase):
         # start_session REGISTERS the session in terminal.SESSIONS (process-wide) - left there, a live
         # fake on task 1 made every later test that looks a session up by task id find this one
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(llm, 'build_llm', return_value=answer):
-            session = general.start_session(store, tid, pick='cli:my-codex')
+            session = general.start_session(store, tid, pick='cli:codex')
             session.send_prompt('Plan the launch')
         self.assertIn('Hub is a high-signal commons', seen['system'])
         self.assertIn('substantial investigation', seen['system'])
@@ -203,15 +213,15 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_configured_cli_login_is_a_first_class_assistant_provider(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex', 'model': 'gpt-test'}))
+        connect_cli(self, codex={'cmd': 'codex', 'model': 'gpt-test'})
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'Done through the CLI.') as build:
-            session = general.start_session(store, tid, pick='cli:my-codex')
-            reply = session.send_prompt('Research this', pick='cli:my-codex')
+            session = general.start_session(store, tid, pick='cli:codex')
+            reply = session.send_prompt('Research this', pick='cli:codex')
         self.assertEqual(reply, 'Done through the CLI.')
-        self.assertEqual((session.pick, session.model), ('cli:my-codex', 'gpt-test'))
+        self.assertEqual((session.pick, session.model), ('cli:codex', 'gpt-test'))
         self.assertIn('your CLI', session.provider)
-        self.assertEqual(build.call_args.kwargs['pick'], 'cli:my-codex')
+        self.assertEqual(build.call_args.kwargs['pick'], 'cli:codex')
 
     def test_one_session_persists_chat_and_exposes_the_terminal_contract(self):
         store = MemoryStore(); tid = general_task(store); cid = connect_openai(store)
@@ -240,7 +250,7 @@ class SharedSessionTests(unittest.TestCase):
                                  'Subject': 'Complete the form', 'FromName': 'Robin',
                                  'BodyText': 'Please fill out the attached PAM form.'})
         store.attach_message(mid, tid)
-        store.upsert_agent('my-codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        connect_cli(self, codex={'cmd': 'codex'})
         seen = {}
         with TemporaryDirectory() as tmp:
             image = Path(tmp) / 'pam.png'; image.write_bytes(b'\x89PNG\r\n\x1a\nproof')
@@ -251,8 +261,8 @@ class SharedSessionTests(unittest.TestCase):
                 return 'I have the email and its form.'
             with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
                  mock.patch.object(llm, 'build_llm', return_value=answer):
-                session = general.start_session(store, tid, pick='cli:my-codex')
-                session.send_prompt('Take this task', pick='cli:my-codex')
+                session = general.start_session(store, tid, pick='cli:codex')
+                session.send_prompt('Take this task', pick='cli:codex')
         self.assertIn('Please fill out the attached PAM form.', seen['user'])
         self.assertIn('pam.png', seen['user'])
         self.assertIn(str(image.resolve()), seen['user'])
@@ -271,7 +281,7 @@ class SharedSessionTests(unittest.TestCase):
 
     def test_session_state_keeps_busy_and_the_live_tool_trace_for_a_returning_view(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
         entered, release = threading.Event(), threading.Event()
 
         def fake_build(*args, trace=None, **kwargs):
@@ -284,7 +294,7 @@ class SharedSessionTests(unittest.TestCase):
 
         with mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', side_effect=fake_build):
-            session = general.start_session(store, tid, pick='cli:my-claude')
+            session = general.start_session(store, tid, pick='cli:claude')
             worker = threading.Thread(target=lambda: session.send_prompt('Compare them'), daemon=True)
             worker.start(); self.assertTrue(entered.wait(2))
             live = session.info()
@@ -299,7 +309,7 @@ class SharedSessionTests(unittest.TestCase):
     def test_an_owner_started_conversation_does_not_close_itself_after_answering(self):
         store = MemoryStore(); tid = general_task(store)
         session = general.GeneralSession(store, tid)
-        session.pick, session.provider = 'cli:coder', 'coder'
+        session.pick, session.provider = 'cli:claude', 'claude'
         answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
         with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), \
              mock.patch.object(session, '_close_out') as close:
@@ -313,7 +323,7 @@ class SharedSessionTests(unittest.TestCase):
                                  'Subject': 'Please compare these', 'BodyText': 'Compare them'})
         store.attach_message(mid, tid)
         session = general.GeneralSession(store, tid)
-        session.pick, session.provider = 'cli:coder', 'coder'
+        session.pick, session.provider = 'cli:claude', 'claude'
         answer = 'Here is the comparison.\n[[TASKUARY-DONE]] Finished the comparison.'
         timer = mock.Mock()
         with mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: answer), \
@@ -338,7 +348,7 @@ class GeneralApiTests(unittest.TestCase):
 
     def test_one_click_turns_the_discussion_into_a_daily_agent_prompt(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
         store.add_comment(tid, 'owner', general.USER_TYPE, 'Research the facilities and cite every source.')
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I compared the current sources and listed the gaps.')
         made = json.dumps({'title': 'Facility ownership watch',
@@ -346,12 +356,12 @@ class GeneralApiTests(unittest.TestCase):
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
             response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report',
-                                                   json={'pick': 'cli:my-claude'})
+                                                   json={'pick': 'cli:claude'})
         self.assertEqual(response.status_code, 200)
         src = store.get_source(response.json()['sourceId'])
         cfg = json.loads(src['ConfigJson'])
         self.assertEqual((src['Channel'], src['Active'], cfg['type']), ('report', 1, 'agent'))
-        self.assertEqual((cfg['agent'], cfg['daily_at'], cfg['origin_task_id']), ('my-claude', '08:00', tid))
+        self.assertEqual((cfg['agent'], cfg['daily_at'], cfg['origin_task_id']), ('claude', '08:00', tid))
         self.assertIn('current facility ownership', cfg['prompt'])
         self.assertEqual(response.json()['mode'], 'prompt')
         self.assertTrue(any('Created daily recurring report' in c['Body'] for c in store.list_comments(tid)))
@@ -360,13 +370,13 @@ class GeneralApiTests(unittest.TestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
         store.add_comment(tid, 'owner', general.USER_TYPE, 'Build the full recurring review.')
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Done, with sources and a stable structure.')
         made = json.dumps({'title': 'Deep operations review', 'prompt': 'Check the current systems.\n' + ('Detailed step. ' * 250)})
         with TemporaryDirectory() as tmp, mock.patch('taskuary.config.home', return_value=Path(tmp)), \
              mock.patch.object(server, 'store', store), mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
-            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:my-claude'})
+            response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:claude'})
             cfg = response.json()['config']
             skill = Path(tmp) / 'skills' / cfg['skill'] / 'SKILL.md'
             self.assertTrue(skill.is_file())
@@ -376,19 +386,19 @@ class GeneralApiTests(unittest.TestCase):
 
     def test_report_still_gets_an_editable_prompt_when_model_selection_fails(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
         store.add_comment(tid, 'owner', general.USER_TYPE, 'Check this every weekday.')
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'I checked it and cited the result.')
         with mock.patch.object(server, 'store', store), \
              mock.patch.object(llm, 'build_llm', side_effect=RuntimeError('provider unavailable')):
             response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report',
-                                                   json={'pick': 'cli:my-claude'})
+                                                   json={'pick': 'cli:claude'})
         self.assertEqual(response.status_code, 200)
         self.assertIn('original requests to preserve', response.json()['config']['prompt'].lower())
 
     def test_stream_exposes_cli_work_before_the_final_answer(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
 
         def fake_build(*args, trace=None, cancel=None, **kwargs):
             def brain(system, user, **brain_kwargs):
@@ -401,7 +411,7 @@ class GeneralApiTests(unittest.TestCase):
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', side_effect=fake_build):
             response = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/stream',
-                json={'text': 'Research this', 'pick': 'cli:my-claude'})
+                json={'text': 'Research this', 'pick': 'cli:claude'})
         events = [json.loads(line) for line in response.text.splitlines()]
         self.assertEqual(response.headers['content-type'].split(';')[0], 'application/x-ndjson')
         self.assertEqual([e['type'] for e in events],
@@ -411,13 +421,13 @@ class GeneralApiTests(unittest.TestCase):
 
     def test_api_accepts_the_existing_cli_agent_connection(self):
         store = MemoryStore(); tid = general_task(store)
-        store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_cli(self, claude={'cmd': 'claude'})
         with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: 'CLI answer'):
             out = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/messages',
-                                               json={'text': 'Plan it', 'pick': 'cli:my-claude'}).json()
+                                               json={'text': 'Plan it', 'pick': 'cli:claude'}).json()
         self.assertEqual(out['reply'], 'CLI answer')
-        self.assertEqual(out['session']['pick'], 'cli:my-claude')
+        self.assertEqual(out['session']['pick'], 'cli:claude')
 
     def test_api_starts_and_resumes_the_same_session(self):
         store = MemoryStore(); tid = general_task(store, 'research'); cid = connect_openai(store)
@@ -451,17 +461,17 @@ class GeneralApiTests(unittest.TestCase):
             result = TestClient(server.app).post(f'/api/tasks/{tid}/wrap', json={'close': True}).json()
         self.assertEqual((result['wrap'], result['report']), ('done', 'The finished plan'))
         self.assertEqual(store.get_task(tid)['Status'], 'done')
-        filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
-        self.assertEqual(filed, ['CODER REPORT\nThe finished plan'])      # verbatim: not a paraphrase of it
+        filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith(wrapup.REPORT)]
+        self.assertEqual(filed, [f'{wrapup.REPORT}\nThe finished plan'])      # verbatim: not a paraphrase of it
 
     def test_saving_the_same_conversation_twice_files_one_result(self):
         """The button is offered until a result exists, and a stale page can press it twice."""
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The finished plan')
         with mock.patch.object(responder, 'write_draft'):
-            coder.wrap(store, tid, close=False, actor='owner')
-            coder.wrap(store, tid, close=False, actor='owner')
-        filed = [c for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
+            wrapup.wrap(store, tid, close=False, actor='owner')
+            wrapup.wrap(store, tid, close=False, actor='owner')
+        filed = [c for c in store.list_comments(tid) if str(c['Body']).startswith(wrapup.REPORT)]
         self.assertEqual(len(filed), 1)
 
     def test_a_general_task_that_ends_drafts_the_reply_the_sender_gets(self):
@@ -476,7 +486,7 @@ class GeneralApiTests(unittest.TestCase):
         store.attach_message(mid, tid)
         store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'The dashboard still points at the legacy accounts.')
         with mock.patch.object(responder, 'write_draft') as write_draft:
-            out = coder.wrap(store, tid, close=True, actor='assistant')
+            out = wrapup.wrap(store, tid, close=True, actor='assistant')
         review = store.pending_review(tid, 'draft_reply')
         self.assertTrue(out['drafting'])
         self.assertEqual(review['MessageId'], mid)
@@ -490,8 +500,8 @@ class GeneralApiTests(unittest.TestCase):
         def with_api(store):
             connect_openai(store); return None
         def with_cli(store):
-            store.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
-            return 'cli:my-claude'
+            connect_cli(self, claude={'cmd': 'claude', 'args': ['-p']})
+            return 'cli:claude'
         for backend, connect in (('api', with_api), ('cli', with_cli)):
             with self.subTest(backend=backend):
                 store = MemoryStore(); tid = general_task(store); pick = connect(store)
@@ -507,8 +517,8 @@ class GeneralApiTests(unittest.TestCase):
                 self.assertEqual(store.get_task(tid)['Status'], 'done')
                 # the answer itself is the filed result, whichever backend gave it - and only once,
                 # though the pause before it wrote a note of its own
-                filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith('CODER REPORT')]
-                self.assertEqual(filed, ['CODER REPORT\nThe finished plan'])
+                filed = [str(c['Body']) for c in store.list_comments(tid) if str(c['Body']).startswith(wrapup.REPORT)]
+                self.assertEqual(filed, [f'{wrapup.REPORT}\nThe finished plan'])
 
     def test_pause_closes_a_general_session_and_keeps_its_conversation(self):
         store = MemoryStore(); tid = general_task(store); connect_openai(store)
@@ -534,13 +544,21 @@ class BrainOptionsTests(unittest.TestCase):
 
     def store(self):
         s = MemoryStore()
-        for name, kind in (('coder', 'coding'), ('researcher', 'research'), ('analyst', 'analysis')):
+        for name, kind in (('coding', 'coding'), ('researcher', 'research'), ('analyst', 'analysis')):
             s.upsert_agent(name, kind, 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('gone', 'research', 'cli', json.dumps({'cmd': 'not-on-this-machine-at-all'}))
         return s
+
+    def connected(self, **conns):
+        """Brains are the connected CLI tools; the profiles in store() are instructions and must never show up as brains."""
+        from taskuary import agents
+        connect_cli(self, **(conns or {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'},
+                                         'qwen': {'cmd': r'C:\npm\qwen.CMD'}, 'devin': {'cmd': 'devin'}}))
+        p = mock.patch.object(agents, 'runs_here', side_effect=lambda prof: agents.cli_of(prof) in ('claude', 'codex', 'qwen'))
+        p.start(); self.addCleanup(p.stop)
 
     def test_one_entry_per_cli_not_one_per_profile(self):
         """Three profiles on Claude are ONE brain. The picker listed them as three providers."""
+        self.connected(claude={'cmd': 'claude'})
         got = general.brain_options(self.store())
         self.assertEqual([o['label'] for o in got if o.get('type') == 'cli'], ['claude (your CLI)'])
         self.assertEqual(len({o['pick'] for o in got}), len(got))
@@ -548,31 +566,24 @@ class BrainOptionsTests(unittest.TestCase):
         self.assertTrue(all(m['id'] and m['label'] for o in got if o.get('type') == 'cli' for m in o['models']))
 
     def test_a_brain_that_is_not_installed_is_not_offered(self):
-        self.assertEqual([o['pick'] for o in general.brain_options(self.store()) if o.get('type') == 'cli'],
-                         ['cli:coder'])
+        self.connected(claude={'cmd': 'claude'}, gone={'cmd': 'not-on-this-machine-at-all'})
+        self.assertEqual([o['pick'] for o in general.brain_options(self.store()) if o.get('type') == 'cli'], ['cli:claude'])
 
     def test_a_pick_already_in_use_never_vanishes_from_its_own_picker(self):
-        """Collapsing the list must not blank the dropdown of a chat running on the fourth profile."""
-        got = general.brain_options(self.store(), keep='cli:analyst')
-        self.assertEqual(got[0]['pick'], 'cli:analyst')
-        self.assertIn('cli:coder', [o['pick'] for o in got])
-        # a pick that means nothing is not invented back into the list
-        self.assertNotIn('cli:nobody', [o['pick'] for o in general.brain_options(self.store(), keep='cli:nobody')])
-
-    def connected(self):
-        """Six brains connected, every profile on claude: the chat offered claude and nothing else."""
-        from taskuary import agents, config
-        conns = {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}, 'qwen': {'cmd': r'C:\npm\qwen.CMD'}, 'devin': {'cmd': 'devin'}}
-        for p in (mock.patch.object(config, 'load', return_value={'cli_connections': conns}),
-                  mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains)),
-                  mock.patch.object(agents, 'runs_here', side_effect=lambda prof: agents.cli_of(prof) in ('claude', 'codex', 'qwen'))):
-            p.start(); self.addCleanup(p.stop)
+        """A chat running on a connected CLI that stopped starting keeps it in its dropdown, rather than blanking."""
+        self.connected()
+        got = general.brain_options(self.store(), keep='cli:devin')
+        self.assertEqual(got[0]['pick'], 'cli:devin')
+        self.assertIn('cli:claude', [o['pick'] for o in got])
+        # a pick that means nothing is not invented back into the list - nor is a profile's name
+        for keep in ('cli:nobody', 'cli:analyst'):
+            self.assertNotIn(keep, [o['pick'] for o in general.brain_options(self.store(), keep=keep)])
 
     def test_a_connected_cli_no_profile_runs_on_is_still_a_brain(self):
         self.connected()
         got = [o for o in general.brain_options(self.store()) if o.get('type') == 'cli']
         # installed ones only (devin is connected but not on this machine), and claude still once
-        self.assertEqual([o['pick'] for o in got], ['cli:coder', 'cli:codex', 'cli:qwen'])
+        self.assertEqual([o['pick'] for o in got], ['cli:claude', 'cli:codex', 'cli:qwen'])
         self.assertEqual([o['label'] for o in got], ['claude (your CLI)', 'codex (your CLI)', 'qwen (your CLI)'])
 
     def test_a_connection_pick_resolves_like_a_profile(self):

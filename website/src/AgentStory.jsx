@@ -9,7 +9,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { BORDER, DIM, FAINT, INK, PALETTE, mono } from "./theme.jsx";
 import { hhmm, storyAlarm } from "./agentStory.js";
 
-// the other kinds' sentences already name the agent ("It was handed to coder…", "coder ran on this…")
+// the other kinds' sentences already name the agent ("It was handed to coding…", "coding ran on this…")
 const LEAD = { held: "did not start", interrupted: "was cut off" };
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 const link = { fontSize: 11, minHeight: 0, p: 0, minWidth: 0 };

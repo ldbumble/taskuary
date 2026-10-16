@@ -47,7 +47,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread, { isChatTask } from "./ChatThread.jsx";
-import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -166,7 +166,7 @@ const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
 // One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·
-// coder" spent three words saying an agent has it.
+// coding" spent three words saying an agent has it.
 const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent · /, "");
 // The checklist is already on every list row - store.list_tasks selects t.* and the Checklist
 // column rides along - so the rail draws progress without a request per task.
@@ -262,7 +262,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [repos, setRepos] = useState([]);
   const sessionAlive = !!detail?.session?.alive;
   const hasRunningRun = (detail?.runs || []).some((r) => r.Status === "running");
-  const hasCoderReport = (detail?.comments || []).some((c) => /^CODER REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
+  const hasAgentReport = (detail?.comments || []).some((c) => /^(?:AGENT|CODER) REPORT(?:\r?\n|$)/.test(String(c.Body || "").trimStart()));
   const hasTranscript = !!detail?.transcript;
   const detailTaskStatus = detail?.task?.Status;
   useEffect(() => {
@@ -356,21 +356,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...and the OPEN task with it. A session can be started from anywhere - the Assistant's
     // "send to the coding agent", the Board, a second window - and the detail poll only runs
     // once something is already known to be live, so a task sitting open on this page could
-    // never learn it had an agent (TQ-0500: the Board showed a live coder session while this
+    // never learn it had an agent (TQ-0500: the Board showed a live coding session while this
     // page offered to start one, which would have made a second).
     return onLive("task-changed", () => { if (selRef.current) loadDetail(selRef.current); });
   }, [active, loadDetail]);
   // the roster is user-config - default to whatever actually exists. A GENERAL task's blank is an answer, not a gap: it means
-  // "the profile it has", and filling it with agents[0] sent `coder` - which the dispatch refuses on a non-coding task (422), so
-  // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want coder profile always")
+  // "the profile it has", and filling it with the roster's first name sent the coding profile - which the dispatch refuses on a non-coding task (422), so
+  // Send to agent failed on every general task nobody had assigned a role (the owner, 2026-10-07: "we don't want the coding profile always")
   const generalTask = isGeneralKind(detail?.task?.Kind);
   // the profile a blank pick runs (general.py: the role triage gave, else the assistant's own)
   const ownProfile = (agents.includes(assignedAgent(detail?.task?.Assignee)) && assignedAgent(detail?.task?.Assignee)) || (agents.includes("assistant") ? "assistant" : "");
   useEffect(() => {
     // ...and nor is a hand-off's: on a reply or a coding task, "Use non-coding agent" left blank was refilled with the
     // roster's first role, so a task with no profile showed - and would have started - a researcher (2026-10-15)
-    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff) && !run.agent)) setRun((r) => ({ ...r, agent: agents[0], model: "" }));
-  }, [agents, run.agent, generalTask, handOff]);
+    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff) && !run.agent)) setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), model: "" }));
+  }, [agents, kinds, run.agent, generalTask, handOff]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
     const task = detail?.task;
@@ -378,9 +378,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     pickerTask.current = task.TaskId;
     setHandOff(false);                  // another task opens on its own question, not the last one's hand-off
     const owned = assignedAgent(task.Assignee);
-    // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name
-    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) ? "" : agents[0], model: "" }));
-  }, [selected, detail?.task, agents]);
+    // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name;
+    // a coding task from the profile of kind coding, else blank and the server finds it
+    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) ? "" : codingProfile(agents, kinds), model: "" }));
+  }, [selected, detail?.task, agents, kinds]);
   // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then
   // opens its first row - that message must survive the hop.
@@ -393,14 +394,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const running = hasRunningRun || sessionAlive;
     if (sessionAlive) sessionSettleUntil.current = Date.now() + 120000;
     const settling = detailTaskStatus === "in_progress" && hasTranscript
-      && (hasCoderReport || Date.now() < sessionSettleUntil.current);
+      && (hasAgentReport || Date.now() < sessionSettleUntil.current);
     if (!((running || wrapping || settling) && selected)) return undefined;
 
     // Terminal bytes already travel over their own websocket. Turning each output frame into a
     // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
     // The surrounding lifecycle state only needs a calm check; the terminal remains fully live.
     return pollWhileActive(active, () => loadDetail(selected), 3000);
-  }, [active, detailTaskStatus, hasCoderReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
+  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
   const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
   // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
@@ -427,7 +428,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     finally { setPosting(false); }
   };
   // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
-  // the reply to whoever asked (coder.wrap -> finish(keep_open=True)); completing the task stays a
+  // the reply to whoever asked (wrapup.wrap -> finish(keep_open=True)); completing the task stays a
   // separate control, because what the work was worth is the owner's verdict and not the run's.
   const wrapUp = async () => {
     if (!canWrap) return;
@@ -510,7 +511,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // minutes, and with it went the only handle these buttons had - so a task whose CLI had
   // finished on its own could never be closed out. The transcript is filed when a session ends.
   // ...and general work has no transcript at all: the chat IS the record, so a conversation that
-  // has answered can be closed out after its provider session is gone (coder.py, 2026-09-07).
+  // has answered can be closed out after its provider session is gone (wrapup.py, 2026-09-07).
   const hasGeneralHistory = (detail?.comments || []).some((c) =>
     c.ActorType === "assistant_user" || c.ActorType === "assistant_agent");
   const canWrap = !!term || !!detail?.transcript || hasGeneralHistory;
@@ -534,7 +535,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // exactly what Done and Pause need, and `for_task` only ever returns a live one.
   // ...and only THIS task's. Switching tasks clears `term` while `detail` still holds the previous
   // task until its reload lands, so this adopted that task's live session - and nothing cleared it
-  // once the new detail arrived without one: a done task showed another task's coder working.
+  // once the new detail arrived without one: a done task showed another task's agent working.
   useEffect(() => {
     const live = detail?.session;
     if (live?.alive && live.taskId === selected && live.sid !== term?.sid) setTerm(live);
@@ -609,10 +610,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const reminded = (out) => { onReminded?.(out); loadTasks(); onChanged?.(); };
   const dismiss = () => onClose?.();
   // The report is identified by its durable marker, not the actor label. Named coding agents
-  // appear as coder/claude/codex in the record; requiring ActorType === "agent" hid valid results.
+  // appear as coding/claude/codex in the record; requiring ActorType === "agent" hid valid results.
   const report = [...(detail?.comments || [])].reverse().find((c) => {
     const body = String(c.Body || "").trimStart();
-    return /^CODER REPORT(?:\r?\n|$)/.test(body) && body.replace(/^CODER REPORT/, "").trim();
+    return /^(?:AGENT|CODER) REPORT(?:\r?\n|$)/.test(body) && body.replace(/^(?:AGENT|CODER) REPORT/, "").trim();
   });
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   const liveRun = (detail?.runs || []).find((r) => r.Status === "running");
@@ -620,7 +621,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // (so the whole page goes compact and the terminal gets the room) and "is this a coding CLI
   // with a diff to review". A general session is live but not coding, so it failed the test and
   // took the ROOMY block layout: a heading, then a near-empty band with one right-aligned
-  // button, then the brain pill under a rule - three stacked rows where the coder gets one, on
+  // button, then the brain pill under a rule - three stacked rows where a running agent gets one, on
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
@@ -651,7 +652,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   const sessionView = liveSession && !peek;
   // ...and a stage you opened by hand does not outlive the session you opened it on. The agent
-  // finishes, its wrap-up writes the reply (coder.wrap), and the page went on showing the closed
+  // finishes, its wrap-up writes the reply (wrapup.wrap), and the page went on showing the closed
   // pane with that draft folded away below (the owner, 2026-09-22: "when you hit session closed a
   // reply should automatically pop up"). Cleared, focusStage picks - and a draft ready outranks all.
   useEffect(() => { if (!liveSession) { setPeek(false); setOpenStage(null); } }, [liveSession]);
@@ -756,10 +757,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the triage verdict behind THIS task, for "Where this came from"
   const sourceRoute = (detail?.routes || []).find((r) => r.MessageId === sourceMessage?.MessageId);
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
-  // document (every coding task's role is `coder`), a BRAIN is the CLI that runs it, and the model
+  // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
   // session names the CLI it was ASKED to run; otherwise the roster says which brain the role uses.
-  const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? "coder" : "");
+  const runRole = assignedAgent(t?.Assignee) || (t?.Kind === "coding" ? codingProfile(agents, kinds) : "");
   // NAME THE BRAIN, NOT THE PRODUCT. `term.cli` is hardcoded to the string "taskuary" on every
   // general session (general.info), so the one card that could not say which brain was running
   // read "brain taskuary" - the product's own name, on the row whose whole job is to answer that
@@ -858,14 +859,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setStartingAgent("coding"); setErr("");
     try {
       // the repository chosen in the panel is pinned first - the tag is the override the start obeys
-      if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, agent: run.agent || "coder" });
+      if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, ...(run.agent ? { agent: run.agent } : {}) });
       // ANOTHER AGENT WHILE ONE RUNS (Run another agent): the live one is paused first - its handover is filed for the next
       // session, no report and no reply draft - since the dispatch refuses a second worker on a task (409)
       if (term?.alive) { await api.post(`/api/tasks/${id}/pause`, {}); if (!stale(id)) setTerm(null); }
       // one shared dispatch for coding too (PW-216): the kind switch, the live-worker check (409), the unknown
       // agent (422) and the repository come from the same road the general button and the assistant use -
       // no Kind PATCH before a terminal, so a failed start never leaves a relabelled, unstarted task
-      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent, brain: run.brain || null,
+      const data = await runOperation(api, "dispatch.prepare", id, { kind: "coding", agent: run.agent || null, brain: run.brain || null,
         model: run.model || null, instructions: withImages(run.instruction.trim(), runPics.paths) || null });
       if (!stale(id)) setTerm(data?.session || null);
       if (!stale(id)) {
@@ -1089,7 +1090,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Box>) }}
                         sx={{ mt: 0.85, bgcolor: "#fff", "& .MuiInputBase-root": { alignItems: "flex-start" } }} />
                       <ImageTray pics={runPics} sx={{ mt: 0.75 }} />
-                      {!handOff && <RepoSelect taskId={selected} agent={run.agent || "coder"} instruction={run.instruction}
+                      {!handOff && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
                         value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
                         {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
@@ -1578,8 +1579,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
                     heading, chip, controls - while the stopped card answered with a heading, a
                     sentence under it, and a row of buttons under that: three lines for the same
-                    question (the owner, 2026-09-17: "can we also keep the agent header simple and
-                    short like it is when coder is active"). The bar rides IN the heading now, so
+                    question (the owner, 2026-09-17: keep the stopped header as short as the
+                    one a running agent gets). The bar rides IN the heading now, so
                     the sentence and the row that held it both go. */}
                 {/* a queued start: what it waits for, or why it could not start - with Start now and Cancel (T10) */}
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
@@ -1591,11 +1592,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
                   <Box sx={{ minWidth: 0, flex: liveSession ? "0 1 auto" : "initial" }}>
-                    {/* the agent by NAME, not by which binary is running: "Agent running · Claude Code
-                        · coder (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
+                    {/* the agent by NAME, not by which binary is running: "Agent running · <CLI>
+                        · <profile> (your CLI)" named a product and a profile (the owner, 2026-09-08) */}
                     {/* A LIVE SESSION IS NOT A WORKING ONE. This asked only whether a pty existed,
-                        so the heading read "coder is working" directly above its own chip saying
-                        "agent · needs you" - on a coder that had been parked on a question for an
+                        so the heading read "<agent> is working" directly above its own chip saying
+                        "agent · needs you" - on an agent that had been parked on a question for an
                         hour (the owner, 2026-09-11, TQ-0499). agentState is the session's own word
                         (taskLifecycle.agentPhase); the heading now says what the chip says. */}
                     <WorkflowHeading number="2" title={!term?.alive ? "Agent work"
@@ -1710,7 +1711,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
-                      {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. Every coding task's role is `coder`.">
+                      {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. A coding task's role is the coding profile.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
                       {brainPill && <Box sx={{ ...chipBtnStatic }}
                         title={brainPill === detail?.ranOn?.brain
@@ -1735,7 +1736,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       </Typography>
                       <IconButton aria-label="Close repository picker" size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>
-                    <RepoPicker taskId={selected} agent={term?.agent || run.agent || "coder"}
+                    <RepoPicker taskId={selected} agent={term?.agent || run.agent}
                       hasSession={!!term?.alive}
                       onDone={(data) => {
                         loadDetail(selected); loadTasks(); findTerm(selected);

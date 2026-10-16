@@ -180,8 +180,8 @@ class EffortFlagTests(unittest.TestCase):
     def test_the_assistant_runs_low_unless_its_pick_names_an_effort(self):
         from taskuary import concierge
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
-        s.set_setting('concierge_ai', 'cli:coder', 't')
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+        s.set_setting('concierge_ai', 'cli:claude', 't')
         seen = []
         with mock.patch('taskuary.llm.make_cli_llm', side_effect=lambda st, name, model, **kw: seen.append(model)):
             s.set_setting('concierge_model', 'claude-sonnet-5', 't'); concierge.brain(s, fast=True)

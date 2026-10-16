@@ -9,7 +9,7 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 test("the agent doing the work is named, and never called the assistant", () => {
   assert.equal(agentName({ Kind: "research" }), "Research");
   assert.equal(agentName({ Kind: "marketing" }), "Marketing");
-  assert.equal(agentName({ Kind: "coding" }), "Coder");
+  assert.equal(agentName({ Kind: "coding" }), "Coding");
   // an explicitly assigned worker outranks the kind of work
   assert.equal(agentName({ Kind: "research", Assignee: "agent:Atlas" }), "Atlas");
   // a person owning it is not the agent's name; the kind still is

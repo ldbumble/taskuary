@@ -19,7 +19,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
-from taskuary import coder, general, selfclose, server
+from taskuary import wrapup, general, selfclose, server
 from taskuary.store import MemoryStore
 
 c = TestClient(server.app)
@@ -86,7 +86,7 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
     def test_send_it_to_a_coding_agent_still_makes_a_coding_task(self):
         mid = _msg('export is broken', 'the nightly export dropped a facility')
         with mock.patch('taskuary.server.start_session', return_value={'sid': 'x'}):
-            d = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'}).json()
+            d = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding'}).json()
         self.assertEqual(_task(d['taskId'])['Kind'], 'coding')
 
     def test_explicit_coding_choice_corrects_an_existing_general_task(self):
@@ -100,7 +100,7 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
         with mock.patch.object(general, 'start_session', return_value=session) as regular, \
              mock.patch.object(server, 'start_session', return_value={'sid': 'coding-1'}) as coding:
             d = c.post(f'/api/messages/{mid}/dispatch',
-                       json={'agent': 'coder', 'kind': 'coding'}).json()
+                       json={'agent': 'coding', 'kind': 'coding'}).json()
         self.assertEqual((d['dispatch'], d['taskId']), ('session', tid))
         self.assertEqual(_task(tid)['Kind'], 'coding')
         coding.assert_called_once()
@@ -149,11 +149,11 @@ class TheDoorsThatAreNotChats(unittest.TestCase):
         mid = _msg('security app account', 'the login screen is empty')
         with mock.patch('taskuary.server.start_session',
                         side_effect=HTTPException(422, 'I could not tell which checkout this belongs in')):
-            response = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'})
+            response = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding'})
         self.assertEqual(response.status_code, 200)
         d = response.json()
         self.assertEqual(d['dispatch'], 'needs_repo')
-        self.assertEqual(d['agent'], 'coder')
+        self.assertEqual(d['agent'], 'coding')
         self.assertEqual(_task(d['taskId'])['Kind'], 'coding')
         self.assertIn('which checkout', d['reason'])
 
@@ -165,7 +165,7 @@ class TheConversationWorks(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'which vendor', 'Kind': 'general', 'Summary': 'Two quotes.'}, 'o')
         sess = general.GeneralSession(s, tid)
-        sess.pick, sess.provider, sess.model = 'cli:coder', 'coder', ''
+        sess.pick, sess.provider, sess.model = 'cli:claude', 'claude', ''
         return s, tid, sess, mock.patch.object(general.llm_mod, 'build_llm',
                                                return_value=lambda system, user, **kw: reply)
 
@@ -180,7 +180,7 @@ class TheConversationWorks(unittest.TestCase):
         self.assertIn('second quote', hist[1]['content'][0]['text'])
 
     def test_the_conversation_is_the_tasks_own_record(self):
-        """No synthetic CODER REPORT for a chat - the turns ARE the record, on the task."""
+        """No synthetic AGENT REPORT for a chat - the turns ARE the record, on the task."""
         s, tid, sess, patched = self._chat()
         with patched:
             sess.send_prompt('go on then')
@@ -223,10 +223,10 @@ class ItClosesAndSaysSo(unittest.TestCase):
         self.assertEqual(general.assigned_role(server.store, server.store.get_task(d['taskId'])), 'researcher')
 
     def test_a_coding_profile_cannot_be_handed_a_non_coding_task(self):
-        """CODER.md in a chat is not a worker, it is a coding agent with no checkout."""
+        """CODING.md in a chat is not a worker, it is a coding agent with no checkout."""
         mid = _msg('talk it through', 'Which way should we go?')
         with mock.patch.object(general, 'start_session') as start:
-            r = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general', 'agent': 'coder'})
+            r = c.post(f'/api/messages/{mid}/dispatch', json={'kind': 'general', 'agent': 'coding'})
         self.assertEqual(r.status_code, 422)
         self.assertIn('coding profile', r.json()['detail'])
         start.assert_not_called()
@@ -235,13 +235,13 @@ class ItClosesAndSaysSo(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'which vendor', 'Kind': 'general'}, 'o')
         sess = general.GeneralSession(s, tid)
-        sess.pick, sess.provider, sess.model = 'cli:coder', 'coder', ''
+        sess.pick, sess.provider, sess.model = 'cli:claude', 'claude', ''
         with mock.patch.object(general.llm_mod, 'build_llm',
                                return_value=lambda system, user, **kw: 'Recommended the second quote.'):
             sess.send_prompt('decide it')
         with mock.patch.object(general, 'session_for', return_value=sess), \
              mock.patch('taskuary.terminal.close'):
-            out = coder.wrap(s, tid, close=True, actor='owner')
+            out = wrapup.wrap(s, tid, close=True, actor='owner')
         self.assertEqual(out['wrap'], 'done')
         self.assertIn('second quote', out['report'])              # its own last word, not a summary
         self.assertEqual(s.get_task(tid)['Status'], 'done')

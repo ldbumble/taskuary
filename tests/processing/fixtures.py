@@ -82,8 +82,8 @@ def processing_picture() -> ProcessingPicture:
         'Channel': 'email', 'SourceName': 'fixture-inbox@example.test', 'Subject': 'Choose the fixture format',
         'FromName': 'Robin Example', 'FromEmail': 'robin@example.test', 'SentAt': _ago(2),
         'BodyText': 'Should the synthetic export use CSV or JSON?', 'Status': 'routed'})
-    waiting_session = {'sid': 'fixture-session', 'taskId': waiting_task, 'agent': 'fixture-coder',
-                       'label': 'fixture-coder', 'alive': True, 'waiting': True}
+    waiting_session = {'sid': 'fixture-session', 'taskId': waiting_task, 'agent': 'fixture-agent',
+                       'label': 'fixture-agent', 'alive': True, 'waiting': True}
 
     duplicate_task = store.create_task({'Title': 'Synthetic assistant conversation', 'Kind': 'general'}, 'fixture')
     duplicate_comment = store.add_comment_once(

@@ -18,8 +18,8 @@ import { fmtStamp, rebase } from "./demoClock.js";
 import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
 const demoRecord = (detail) => {
-  const sessions = (detail?.comments || []).filter((c) => String(c.Body || "").startsWith("CODER REPORT")).map((c, i) => {
-    const [rep, last = ""] = String(c.Body).replace(/^CODER REPORT\n?/, "").split(/\n\nLAST MESSAGE\n/);
+  const sessions = (detail?.comments || []).filter((c) => /^(?:AGENT|CODER) REPORT/.test(String(c.Body || ""))).map((c, i) => {
+    const [rep, last = ""] = String(c.Body).replace(/^(?:AGENT|CODER) REPORT\n?/, "").split(/\n\nLAST MESSAGE\n/);
     const part = (k) => (new RegExp(`^${k}:[ \\t]*(.*)$`, "m").exec(rep) || [])[1] || "";
     const report = { decided: part("Determination"), changed: part("Actions"), summary: part("Summary"), last: last.trim() };
     return { sid: `demo-${i}`, by: c.Actor, cli: detail.transcript?.brain || c.Actor, at: String(c.CreatedAt || "").replace("T", " ").slice(0, 19),
@@ -65,7 +65,7 @@ if (!numbersWorkflow) {
     43: ["slack", "Erin Blake", "@erin", "Heads up: the payroll portal moved to single sign-on", "From Monday the payroll portal signs in through the company login. Nothing to do unless your bookmark breaks."],
     44: ["email", "Paula Vance", "pvance@vendor.example", "Badge printer quote", "Following up on the badge printer quote from last week - it is valid until Friday. Want me to hold it?"],
   };
-  // the coder's task in the recording, by what it is - its number moves whenever the seed does
+  // the coding agent's task in the recording, by what it is - its number moves whenever the seed does
   const gl = (state["/api/tasks"]?.data || []).find((t) => t.Title === "Reconcile the August GL export")?.TaskId || 4;
   const one = (state["/api/messages/one"] ||= {});
   for (const [mid, [channel, who, from, subject, body]] of Object.entries(said))
@@ -79,7 +79,7 @@ if (!numbersWorkflow) {
     { key: "msg:43", kind: "fyi", lane: "fyi", title: said[43][3], who: said[43][1], when: at(new Date()), why: "an announcement - nothing to do", mid: 43, channel: "slack", preview: said[43][4] },
     { key: "idea:badges", kind: "idea", lane: "forgotten", title: "The badge printer quote has gone quiet", who: "Paula Vance", when: scripted(["2026-09-01 14:00:00"])[0],
       why: "no reply since Monday; the quote runs out Friday", idea_kind: "cold", channel: "assistant", action: { type: "followup", mid: 44 }, mid: 44 },
-    { key: `agentdone:${gl}`, kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coder", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
+    { key: `agentdone:${gl}`, kind: "agentdone", lane: "report", title: "Reconcile the August GL export", who: "coding", when: at(new Date()), tid: gl, ref: `TQ-${String(gl).padStart(4, "0")}`,
       summary: "Found the two inter-company rows the export dropped; the fix is on a branch with a test.", channel: "github" },
   );
 }
@@ -108,7 +108,7 @@ const read = (url) => {
     return { data: taskRows().filter((task) => ["open", "waiting", "in_progress"].includes(task.Status)
       && !["assistant:dock", "assistant:concierge"].includes(task.SourceRef)).flatMap((task) => {
       const detail = state["/api/tasks/detail"]?.[task.TaskId];
-      const last = [...(detail?.comments || [])].reverse().find((c) => c.ActorType === "assistant_agent" || /^(CODER REPORT|HANDOVER NOTE)/.test(c.Body || ""));
+      const last = [...(detail?.comments || [])].reverse().find((c) => c.ActorType === "assistant_agent" || /^((?:AGENT|CODER) REPORT|HANDOVER NOTE)/.test(c.Body || ""));
       if (!last && !detail?.transcript) return [];
       const review = reviews.find((r) => r.TaskId === task.TaskId && r.Status === "pending");
       return [{ taskId: task.TaskId, title: task.Title, recap: (last?.Body || task.Summary || "Saved work is available.").slice(0, 600),
@@ -210,12 +210,12 @@ const taskRows = () => (state["/api/tasks"]?.data) || [];
 const assistantBox = (taskId) => {
   const key = `${taskId}:assistant`;
   const box = state["/api/tasks/detail"][key] ||= { messages: [], providers: [], session: null };
-  box.session ||= { sid: `demo${taskId}`, alive: true, provider: "Claude Code · coder (your CLI)",
-    label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:coder", busy: false,
+  box.session ||= { sid: `demo${taskId}`, alive: true, provider: "Claude Code",
+    label: "Taskuary assistant", mode: "assistant", model: "", pick: "cli:claude", busy: false,
     trace: [], trace_revision: 0 };
   if (numbersWorkflow && Number(taskId) === NUMBERS_TASK) {
     box.session.provider = box.providers.find(p => p.id === box.session.pick)?.label || box.providers[0].label;
-    if (box.session.pick === "cli:coder") box.session.pick = "cli:analyst";
+    if (box.session.pick === "cli:claude") box.session.pick = "cli:analyst";
   }
   return box;
 };
@@ -275,8 +275,8 @@ const demoReply = (taskId, asked) => {
 const scriptedItemLine = (item) => {
   if (!item) return "The scripted demo pipe is clear. Nothing here connects to a mailbox, an agent, or an AI.";
   if (item.kind === "agent") return item.asking
-    ? `${item.agent || "The coder"} is waiting on you on ${item.ref} - one choice: ${item.preview || item.why}`
-    : `${item.ref} is still with ${item.agent || "the coder"}. Nothing needs you there until it stops.`;
+    ? `${item.agent || "The coding agent"} is waiting on you on ${item.ref} - one choice: ${item.preview || item.why}`
+    : `${item.ref} is still with ${item.agent || "the coding agent"}. Nothing needs you there until it stops.`;
   if (item.kind === "review") return `${item.who || "The sender"} is waiting on \u201c${item.title}\u201d. The invented draft is ready below; approving it in this demo sends nothing.`;
   if (item.kind === "report") return `${item.title} landed normally. Open the recorded report below if you want the detail.`;
   if (item.kind === "idea") return `I would keep an eye on \u201c${item.title}\u201d. ${item.why}.`;
@@ -317,7 +317,7 @@ const scriptedNext = (key = null, only = null) => {
 const scriptedSay = (asked, key) => {
   const text = String(asked || "").trim();
   if (/^(next|what(?:'s| is) next|keep going)\b/i.test(text)) return scriptedNext(null, null);
-  if (/\b(coder|agent|census|manager)\b/i.test(text)) return scriptedNext(scriptedAssistant.pile.items.find((i) => i.kind === "agent" && i.asking)?.key || null, null);
+  if (/\b(coding|agent|census|manager)\b/i.test(text)) return scriptedNext(scriptedAssistant.pile.items.find((i) => i.kind === "agent" && i.asking)?.key || null, null);
   let decision = null;
   if (/\b(approve|send it|looks good)\b/i.test(text)) decision = { verb: "approve" };
   else if (/\b(later|not now)\b/i.test(text)) decision = { verb: "later" };
@@ -527,10 +527,10 @@ const write = (method, url, body) => {
       const taskId = row?.TaskId || item?.tid || ++nextId;
       scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item && candidate.key !== `agent:${taskId}`);
       scriptedAssistant.pile.items.push({ ...(item || {}), key: `agent:${taskId}`, kind: "agent", lane: "working", tid: taskId,
-        ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coder", working: "coder", asking: false,
+        ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coding", working: "coding", asking: false,
         why: "the scripted demo shows this as handed off; no agent was started" });
       scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
-      return { taskId, ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coder", demo: true };
+      return { taskId, ref: `TQ-${String(taskId).padStart(4, "0")}`, agent: "coding", demo: true };
     }
     if (verb === "not-mine") {
       scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((candidate) => candidate !== item);
@@ -587,8 +587,8 @@ const write = (method, url, body) => {
     const id = Number(m[1]);
     const detail = state["/api/tasks/detail"]?.[m[1]];
     if (!detail) throw new Error("task not found");
-    const report = [...(detail.comments || [])].reverse().find((c) => String(c.Body || "").startsWith("CODER REPORT"));
-    const agent = detail.transcript?.agent || report?.Actor || "coder";
+    const report = [...(detail.comments || [])].reverse().find((c) => /^(?:AGENT|CODER) REPORT/.test(String(c.Body || "")));
+    const agent = detail.transcript?.agent || report?.Actor || "coding";
     const sid = `continued${id}`;
     const cwd = detail.transcript?.cwd || detail.runs?.find((r) => r.AgentName === agent)?.Cwd || "~/northwind/importers";
     const instruction = String(body?.instruction || "").trim();

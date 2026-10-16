@@ -4,7 +4,7 @@ import json, os, sys, tempfile, pytest
 from pathlib import Path
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import guard, server, terminal, origin, llm, agents, floor, cli, coder, selfclose, hooks
+from taskuary import guard, server, terminal, origin, llm, agents, floor, cli, wrapup, selfclose, hooks
 from taskuary.store import MemoryStore
 
 # CI's machines have no AI CLI on them: these tests are about what a session is ALLOWED to do, never whether claude is
@@ -89,7 +89,7 @@ def test_a_stranger_token_uses_its_own_task_s_doors(monkeypatch):
     monkeypatch.setattr(floor, 'check', lambda p, tid, store=None: {})
     assert c.post(f'/api/hooks/claude/floor?task={t}', json={}, headers=ST(t)).status_code == 200
     assert c.post(f'/api/hooks/claude/floor?task={other}', json={}, headers=ST(t)).status_code == 403
-    monkeypatch.setattr(coder, 'agent_reply', lambda s, tid, text, agent, files=(): {'ok': True, 'tid': tid})
+    monkeypatch.setattr(wrapup, 'agent_reply', lambda s, tid, text, agent, files=(): {'ok': True, 'tid': tid})
     assert c.post('/api/agent/reply', json={'task_id': t, 'text': 'hi'}, headers=ST(t)).json() == {'ok': True, 'tid': t}
     assert c.post('/api/agent/reply', json={'task_id': other, 'text': 'hi'}, headers=ST(t)).status_code == 403
     assert c.post('/api/hooks/claude', json={}, headers=ST(t)).status_code == 200
@@ -116,7 +116,7 @@ def test_owner_and_agent_access_is_unchanged():
     for p in ('/api/settings', '/api/connectors', f'/api/messages/{mid}', '/api/tasks'):
         assert c.get(p).status_code == 200, p                          # the owner (conftest's default header)
         assert c.get(p, headers=AGENT()).status_code == 200, p         # the shared agent token, no proof: owner sessions rely on it
-    assert c.post('/api/board/notes', json={'body': 'a line for the others', 'agent': 'coder'}, headers=AGENT()).status_code != 403
+    assert c.post('/api/board/notes', json={'body': 'a line for the others', 'agent': 'coding'}, headers=AGENT()).status_code != 403
     assert c.post('/api/reviews/1/decide', json={'verb': 'approve'}, headers=AGENT()).status_code == 403
 
 
@@ -124,7 +124,7 @@ def test_owner_and_agent_access_is_unchanged():
 def test_a_stranger_session_env_carries_the_stranger_token_and_never_the_shared_one():
     shared = SRV()['agent_token']
     with mock.patch('taskuary.config.load', return_value=server.cfg):
-        own, st = terminal.session_env('coder', 7, 'C:/w'), terminal.session_env('coder', 7, 'C:/w', stranger=True)
+        own, st = terminal.session_env('coding', 7, 'C:/w'), terminal.session_env('coding', 7, 'C:/w', stranger=True)
     assert own[guard.AGENT_ENV] == shared and own[guard.TASK_ENV] == guard.task_proof(SRV(), 7)     # the owner's: as before
     assert st[guard.AGENT_ENV] == guard.stranger_token(SRV(), 7) and guard.TASK_ENV not in st
     assert shared not in json.dumps(st) and st['TASKUARY_TASK'] == '7' and st['TASKUARY_URL']
@@ -143,16 +143,16 @@ def test_a_term_in_auto_mode_hands_its_pty_the_stranger_token(tmp_path):
     _Pty.made.clear(); shared = SRV()['agent_token']
     with mock.patch.object(terminal, '_WinPty' if os.name == 'nt' else '_UnixPty', _Pty), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
             mock.patch('taskuary.config.load', return_value=server.cfg):
-        terminal.Term(argv, str(tmp_path), 't', 7, 'coder', mode='auto'); terminal.Term(argv, str(tmp_path), 't', 7, 'coder')
+        terminal.Term(argv, str(tmp_path), 't', 7, 'coding', mode='auto'); terminal.Term(argv, str(tmp_path), 't', 7, 'coding')
     (st, strict), (own, full) = _Pty.made
     assert strict and st[guard.AGENT_ENV] == guard.stranger_token(SRV(), 7) and shared not in json.dumps(st)
     assert not full and own[guard.AGENT_ENV] == shared and own[guard.TASK_ENV] == guard.task_proof(SRV(), 7)
 
 def _store(cmd='claude'):
-    s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': cmd})); return s
+    s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': cmd})); return s
 
 def _headless(s, t, **kw):
-    brain = llm.make_cli_llm(s, 'coder', cli_tools=True, task_id=t, **kw)
+    brain = llm.make_cli_llm(s, 'coding', cli_tools=True, task_id=t, **kw)
     with mock.patch.object(agents, 'run_cli', return_value=('ok', 'sid', '')) as run, mock.patch('taskuary.config.load', return_value=server.cfg):
         brain('', 'hi')
     return run.call_args
@@ -181,7 +181,7 @@ def test_the_session_settings_hooks_carry_the_stranger_token():
 
 def test_taskuary_reply_from_a_stranger_session_authenticates_with_its_token(monkeypatch):
     t, _ = _task()
-    with mock.patch('taskuary.config.load', return_value=server.cfg): env = terminal.session_env('coder', t, stranger=True)
+    with mock.patch('taskuary.config.load', return_value=server.cfg): env = terminal.session_env('coding', t, stranger=True)
     for k, v in env.items(): monkeypatch.setenv(k, v)
     monkeypatch.delenv(guard.TASK_ENV, raising=False)
     from taskuary import config
@@ -222,7 +222,7 @@ def test_a_stranger_token_in_the_socket_header_is_refused_on_a_tokened_install(m
 
 def _pane(s, t, tmp_path):
     with mock.patch.object(terminal, 'Term') as T, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
-        terminal.open_session(s, 'coder', task_id=t, cwd=str(tmp_path))
+        terminal.open_session(s, 'coding', task_id=t, cwd=str(tmp_path))
     return T.call_args.args[0]
 
 def test_a_stranger_batch_runs_in_auto_mode_under_the_floor(tmp_path):

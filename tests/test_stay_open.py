@@ -55,7 +55,7 @@ class TheTaskDecidesWhetherItsAgentMayClose(unittest.TestCase):
         s = MemoryStore()
         tid = _task(s, selfclose.STAY_TAG)
         with mock.patch.object(selfclose, '_wrap') as w:
-            out = selfclose.declare(s, tid, 'fixed the export', 'coder')
+            out = selfclose.declare(s, tid, 'fixed the export', 'coding')
         self.assertFalse(out['closed']); self.assertEqual(out['why'], selfclose.OWNER_ENDS)
         w.assert_not_called()
         self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
@@ -66,7 +66,7 @@ class TheTaskDecidesWhetherItsAgentMayClose(unittest.TestCase):
         s = MemoryStore()
         tid = _task(s)
         with mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as w:
-            out = selfclose.declare(s, tid, 'fixed the export', 'coder')
+            out = selfclose.declare(s, tid, 'fixed the export', 'coding')
         self.assertTrue(out['closed']); w.assert_called_once()
         self.assertIn('The agent closed this itself: fixed the export', [c['Body'] for c in s.list_comments(tid)])
 

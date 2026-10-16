@@ -145,13 +145,14 @@ class TheSessionRunsOnIt(unittest.TestCase):
         return tid
 
     def test_the_seed_carries_the_playbook_and_says_it_is_not_code(self):
-        s = MemoryStore(); s.save_doc('coder', '# Coder rules\n- ZZMARKCODERZZ', 'owner')
+        s = MemoryStore(); s.save_doc('coding', '# Coding rules\n- ZZMARKCODINGZZ', 'owner')
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))     # the profile a coding task runs under, by its kind
         seed = terminal.seed_text(s, self._task(s))
         self.assertIn('PLAYBOOK "Post a card transaction as an AP bill"', seed)
         self.assertIn('ASK FIRST: a new vendor', seed)
         self.assertIn('ZZMARKPLAYBOOKZZ', seed)
         self.assertIn('NOT A CODE CHANGE', seed)
-        self.assertIn('ZZMARKCODERZZ', seed)          # the closing-out and wall rules still ride
+        self.assertIn('ZZMARKCODINGZZ', seed)          # the closing-out and wall rules still ride
         # a task without the tag gets none of it
         self.assertNotIn('PLAYBOOK', terminal.seed_text(s, self._task(s, tags='')))
 
@@ -218,11 +219,11 @@ class DraftedOnClose(unittest.TestCase):
         self.assertIsNone(playbooks.draft(s, tid, SESSION, llm=llm))
 
     def test_wrap_asks_the_question(self):
-        """coder.wrap is the one on-close road; the draft rides in its `proposed` list."""
-        from taskuary import coder
+        """wrapup.wrap is the one on-close road; the draft rides in its `proposed` list."""
+        from taskuary import wrapup
         s = MemoryStore(); tid = self._task(s)
-        with mock.patch('taskuary.terminal.transcript_for', return_value=(SESSION, 'coder', None)),              mock.patch.object(coder, 'report_from_transcript', return_value={'summary': 'posted the bill', 'resolution': 'done'}),              mock.patch.object(coder, 'resolution_text', return_value='posted the bill'),              mock.patch('taskuary.handbook.enabled', return_value=False),              mock.patch('taskuary.llm.build_llm', return_value=_llm_saying({'playbook': {'slug': 'card-bill', 'text': BILL}})[0]):
-            out = coder.wrap(s, tid, close=False, actor='owner')
+        with mock.patch('taskuary.terminal.transcript_for', return_value=(SESSION, 'coding', None)),              mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'posted the bill', 'resolution': 'done'}),              mock.patch.object(wrapup, 'resolution_text', return_value='posted the bill'),              mock.patch('taskuary.handbook.enabled', return_value=False),              mock.patch('taskuary.llm.build_llm', return_value=_llm_saying({'playbook': {'slug': 'card-bill', 'text': BILL}})[0]):
+            out = wrapup.wrap(s, tid, close=False, actor='owner')
         self.assertIn('write_playbook', [p['action'] for p in out['proposed']])
 
 
@@ -245,7 +246,7 @@ class OverTheApi(unittest.TestCase):
         # agents read playbooks (they ride in the seed anyway) and never write them: they propose
         self.assertTrue(guard.denied('PUT', '/api/playbooks/bill'))
         self.assertTrue(guard.denied('DELETE', '/api/playbooks/bill'))
-        self.assertTrue(guard.denied('PUT', '/api/doc/coder'))            # the old pattern named /api/docs/, the Swagger path
+        self.assertTrue(guard.denied('PUT', '/api/doc/coding'))            # the old pattern named /api/docs/, the Swagger path
         self.assertFalse(guard.denied('GET', '/api/playbooks'))
         self.assertEqual(c.delete(f"/api/playbooks/{r['slug']}").json(), {'ok': True})
         self.assertEqual(c.get(f"/api/playbooks/{r['slug']}").status_code, 404)

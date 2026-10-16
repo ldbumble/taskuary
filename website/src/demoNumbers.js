@@ -48,9 +48,9 @@ export function installNumbersWorkflow(state, assistant, at = Date.now()) {
   state['/api/feed'].data = [{ ...message, Preview: NUMBERS_REQUEST, Title: task.Title, TaskKind: 'general', TaskStatus: 'open', MsgStatus: 'routed',
     Decision: 'create', RouteDecision: 'create', RouteReason: 'Current internal figures → general assistant with the analyst profile', Category: 'task', NeedsYou: 1,
     ChainSize: 1, CanSend: true, ReviewId: null, ReviewStatus: null, HasDraft: 0 }];
-  state['/api/tasks/detail'][`${NUMBERS_TASK}:assistant`] = { messages: [], session: null, defaultPick: 'cli:analyst', providers: [
-    { id: 'cli:analyst', pick: 'cli:analyst', type: 'cli', label: 'Claude Code · general assistant', model: '' },
-    { id: 'cli:codex', pick: 'cli:codex', type: 'cli', label: 'Codex · general assistant', model: '' },
+  state['/api/tasks/detail'][`${NUMBERS_TASK}:assistant`] = { messages: [], session: null, defaultPick: 'cli:claude', providers: [
+    { id: 'cli:claude', pick: 'cli:claude', type: 'cli', label: 'Claude Code', model: '' },
+    { id: 'cli:codex', pick: 'cli:codex', type: 'cli', label: 'Codex', model: '' },
     { id: '9', pick: '9', type: 'ollama', label: 'Local model · Ollama', model: '' },
   ] };
   const item = { key: `msg:${NUMBERS_MESSAGE}`, kind: 'asked', lane: 'asked', title: message.Subject, who: 'Ruth Bennett', when: created,

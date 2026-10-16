@@ -50,13 +50,13 @@ class TheDoorsAreShutTests(unittest.TestCase):
     def test_no_tool_runs_against_anything(self):
         with on():
             self.assertTrue(demo.refuse('POST', '/api/tools/run'))
-            self.assertTrue(demo.refuse('POST', '/api/agents/coder/test'))
+            self.assertTrue(demo.refuse('POST', '/api/agents/coding/test'))
 
     def test_no_cli_starts_on_the_machine_this_is_hosted_on(self):
         with on():
             self.assertTrue(demo.refuse('POST', '/api/terminals'))
             self.assertTrue(demo.refuse('DELETE', '/api/terminals/abc'))
-            self.assertTrue(demo.refuse('PUT', '/api/agents/coder'))
+            self.assertTrue(demo.refuse('PUT', '/api/agents/coding'))
 
     def test_nothing_is_fetched_or_received(self):
         with on():

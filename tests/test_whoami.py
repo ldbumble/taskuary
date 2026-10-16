@@ -126,7 +126,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(c_api.get('/api/board/notes').json()['owner'], server.store.owner()['owner'])
         r = c_api.patch('/api/whoami', json={'owner_telegram': '@alex'}).json()
         self.assertEqual(r['facts']['owner_telegram'], '@alex')
-        self.assertEqual(c_api.patch('/api/whoami', json={'coder_auto_enabled': '0'}).status_code, 422)   # never a back door into settings
+        self.assertEqual(c_api.patch('/api/whoami', json={'coding_auto_enabled': '0'}).status_code, 422)   # never a back door into settings
         pv = c_api.get('/api/whoami/avatar', params={'style': 'grid', 'seed': 'abc'}).json()
         self.assertTrue(pv['svg'].startswith('<svg')); self.assertEqual((pv['style'], pv['seed']), ('grid', 'abc'))
         self.assertEqual(c_api.get('/api/whoami/avatar', params={'style': 'neon'}).status_code, 422)

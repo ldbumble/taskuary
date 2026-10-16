@@ -1,5 +1,5 @@
-"""The setup wizard's CLI rows (clis.detect): a configured profile is shown as the CLI it runs,
-and says whether that CLI is even on this machine."""
+"""The setup wizard's CLI rows (clis.detect): one row per CLI TOOL, never per profile - a profile is instructions on
+whichever tool runs it (the owner, 2026-10-15) - and each says whether that CLI is even on this machine."""
 import json, unittest
 from unittest import mock
 
@@ -8,19 +8,21 @@ from taskuary.store import MemoryStore
 
 
 class DetectTests(unittest.TestCase):
-    def test_a_profile_named_coder_running_claude_is_claude_code(self):
+    def test_a_profile_running_claude_marks_claude_code_configured_and_gets_no_row(self):
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p']}))
         with mock.patch('shutil.which', return_value=None):
             rows = {r['name']: r for r in clis.detect(s)}
-        r = rows['coder']
-        self.assertEqual((r['label'], r['profile'], r['cmd'], r['installed'], r['path']), ('Claude Code', 'coder', 'claude', False, ''))
+        self.assertNotIn('coding', rows)
+        r = rows['claude']
+        self.assertEqual((r['label'], r['cmd'], r['configured'], r['installed'], r['path']), ('Claude Code', 'claude', True, False, ''))
+        self.assertFalse(rows['codex']['configured'])                       # nothing here runs it
 
-    def test_an_installed_profile_shows_its_path(self):
+    def test_an_installed_cli_shows_its_path(self):
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        with mock.patch('shutil.which', side_effect=lambda c, **k: r'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd' if c == 'claude' else None):
-            r = next(x for x in clis.detect(s) if x['name'] == 'coder')
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        with mock.patch('shutil.which', side_effect=lambda c, **k: r'C:\Users\me\AppData\Roaming\npm\claude.cmd' if c == 'claude' else None):
+            r = next(x for x in clis.detect(s) if x['name'] == 'claude')
         self.assertTrue(r['installed']); self.assertIn('claude.cmd', r['path'])
 
 

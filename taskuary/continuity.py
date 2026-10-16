@@ -40,7 +40,7 @@ def previous_work(store, limit=5):
         if tid in general.OPENING or (session and (getattr(session, 'mode', '') != 'assistant' or session.busy)): continue
         review = reviews.get(tid)
         if row['Status'] == 'done' and not review: continue
-        recap = re.sub(r'^(HANDOVER NOTE|CODER REPORT)\s*', '', row.get('Recap') or '').strip()
+        recap = re.sub(r'^(HANDOVER NOTE|AGENT REPORT|CODER REPORT)\s*', '', row.get('Recap') or '').strip()
         recap = recap or 'A saved session is available. Continue from its existing work and handover.'
         result.append({'taskId': tid, 'title': row['Title'], 'recap': recap[:600],
                        'lastWorkedAt': row['LastWorkedAt'], 'action': 'review' if review else 'resume',
@@ -68,7 +68,7 @@ RESUME_PROMPT = (
 def last_agent_turn(store, tid) -> str:
     """When the agent last spoke on this task: its newest reply or report, or the saved conversation's own stamp."""
     said = [c['CreatedAt'] for c in store.list_comments(tid) if c.get('CreatedAt') and (c.get('ActorType') == 'assistant_agent'
-            or str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE')))]
+            or str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'HANDOVER NOTE')))]
     saved = (store.saved_session(tid) or {}).get('UpdatedAt')
     return max([s for s in [*said, saved] if s] or [''])
 

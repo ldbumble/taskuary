@@ -23,13 +23,22 @@ from taskuary.store import MemoryStore
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-    s.set_setting('general_auto_enabled', '1', 't'); s.set_setting('coder_auto_enabled', '1', 't')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
+    s.set_setting('general_auto_enabled', '1', 't'); s.set_setting('coding_auto_enabled', '1', 't')
     return s
 
 
+def connect_claude(test):
+    """Claude Code connected as a brain - a CLI tool in config.toml's cli_connections, never a profile row."""
+    from taskuary import agents, config
+    real = config.load
+    for p in (mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': {'claude': {'cmd': 'claude'}}}),
+              mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains))):
+        p.start(); test.addCleanup(p.stop)
+
+
 def browser_job(s, **cfg):
-    base = {'type': 'agent', 'title': 'Daily time card', 'agent': 'coder', 'browser': True, 'daily_at': '08:00',
+    base = {'type': 'agent', 'title': 'Daily time card', 'agent': 'claude', 'browser': True, 'daily_at': '08:00',
             'prompt': 'Open the portal, read today\'s message in the secure area, and report it.'}
     base.update(cfg)
     return s.save_source({'Channel': 'report', 'Address': base['title'], 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps(base)}, 'o')
@@ -77,13 +86,13 @@ class PromotionTests(unittest.TestCase):
     def _promote(self, tags):
         s = store(); tid = s.create_task({'Title': 'Daily time card', 'Summary': 'Read the portal message',
                                           'Kind': 'general', 'Status': 'open', 'Tags': tags}, 'owner')
-        s.upsert_agent('my-claude', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        connect_claude(self)
         s.add_comment(tid, 'owner', general.USER_TYPE, 'Read the message in the secure area every morning.')
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Signed in and read it; here is today\'s message.')
         made = json.dumps({'title': 'Daily time card', 'prompt': 'Open the portal and report the secure-area message.'})
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
              mock.patch.object(llm, 'build_llm', return_value=lambda *a, **k: made):
-            r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:my-claude'})
+            r = TestClient(server.app).post(f'/api/tasks/{tid}/assistant/report', json={'pick': 'cli:claude'})
         self.assertEqual(r.status_code, 200, r.text)
         return s, json.loads(s.get_source(r.json()['sourceId'])['ConfigJson'])
 
@@ -125,7 +134,7 @@ class ABrowserJobNeedsHandsTests(unittest.TestCase):
     handed to the quick API brain the chat prefers, which cannot run a command at all (2026-09-15)."""
 
     def _store_with_both(self):
-        s = store()
+        s = store(); connect_claude(self)
         row = s.get_connector_by_type('openai')
         s.save_connector({'ConnectorId': row['ConnectorId'], 'Active': 1, 'Secret': 'sk-test',
                           'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')

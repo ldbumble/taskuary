@@ -1,6 +1,6 @@
 """Credentials that arrive in the mail must not leave in a prompt.
 
-A colleague pastes an API key into an email; triage reads that mail, the coder is handed the
+A colleague pastes an API key into an email; triage reads that mail, the coding agent is handed the
 thread verbatim (`agents.task_context` writes `BodyText` straight into the prompt), and the key
 is now in a request to Anthropic, OpenAI or Azure. The leak is on the way OUT, on the very first
 prompt - long before any transcript is stored.
@@ -9,7 +9,7 @@ So the message row keeps the owner's mail intact (it is their inbox; a portal co
 vendor has to stay readable) and the scrub happens at the three doors a prompt can leave by.
 
 The one rule that is easy to get wrong: a git SHA is 40 hex characters. A catch-all
-"long hex string" pattern blanks out every commit hash in a coder prompt - which is what the
+"long hex string" pattern blanks out every commit hash in a coding agent prompt - which is what the
 chat scrub did until it came here. Entropy only counts when the line says it holds a secret.
 """
 import unittest
@@ -63,7 +63,7 @@ class WhatCountsAsACredentialTests(unittest.TestCase):
 
 
 class WhatMustSurviveTests(unittest.TestCase):
-    """Over-redaction is a bug too: the coder reads these."""
+    """Over-redaction is a bug too: the coding agent reads these."""
 
     def test_a_git_sha_is_not_a_secret(self):
         sha = 'da8dae0012ab34cd56ef7890abcdef1234567890'

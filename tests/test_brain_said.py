@@ -1,4 +1,4 @@
-"""The Assistant says which tool and model run each brain (the owner, 2026-10-15: "it's not set to coder. it's to a specific
+"""The Assistant says which tool and model run each brain (the owner, 2026-10-15: "it's not set to coding agent. it's to a specific
 model"), and knows the page they are set on ("can you find me the setting for assistant ai brain")."""
 import unittest
 from unittest import mock

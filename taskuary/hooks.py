@@ -2,7 +2,7 @@
 
 A live session is a pty: the Board sees a terminal, not tool calls. Hooks fix that without touching
 the agent. Claude Code and Codex fire the same event schema; each event's JSON reaches us and becomes
-a worker event (workerstate.py), so a surface reads "Edit taskuary/server.py · 4s" or "coder is stuck -
+a worker event (workerstate.py), so a surface reads "Edit taskuary/server.py · 4s" or "the agent is stuck -
 rate limit" instead of guessing from the screen. Off with the agent_hooks setting.
 
 TWO TRANSPORTS, measured on the owner's box 2026-09-20. Claude runs a hook's command in a shell with the
@@ -364,7 +364,7 @@ def _events(t, p: dict) -> None:
         elif ev == 'PostToolUseFailure': close(('approval_needed',), 'decided in the pane')
         elif ev == 'PostToolUse':
             # PostToolUse fires once the tool has COMPLETED - and AskUserQuestion completes when the owner
-            # has answered it in the pane. Recorded as an open request, the question said "coder asked you
+            # has answered it in the pane. Recorded as an open request, the question said "the agent asked you
             # something" from the moment it was answered until the next prompt, while the pane plainly
             # worked on (TQ-0631, 2026-09-18: input_needed at 14:23:55, turn_end at 14:29:52, no answer
             # between). It goes on the record as what it is: asked, and answered.
@@ -379,12 +379,12 @@ def _events(t, p: dict) -> None:
                         ws.record(st, tid, sid, 'answered', request_id=rid, text=str(answers.get(text) or 'answered in the pane'), source='hook')
             # ...and a tool that RAN had its permission. The notification's request had nothing to close it
             # once the owner clicked yes in the pane - no hook fires for that - so the card said "stopped and
-            # is waiting on you" over a coder mid-search, until its next prompt.
+            # is waiting on you" over an agent mid-search, until its next prompt.
             close(('approval_needed',), 'granted in the pane')
         elif ev == 'PermissionRequest':
             if str(p.get('tool_name') or '') == 'AskUserQuestion':
                 # a QUESTION, not a permission: Claude asks leave to run the tool that asks (measured 2026-09-20),
-                # so every surface read "coder needs your approval: AskUserQuestion {json}" over a chooser of
+                # so every surface read "the agent needs your approval: AskUserQuestion {json}" over a chooser of
                 # two plain options, and the chat had nothing to pick from. Recorded as what it is, with its
                 # choices, under the id PostToolUse closes it by once the owner has picked.
                 g = _group(p)
@@ -435,7 +435,7 @@ def _events(t, p: dict) -> None:
             ws.record(st, tid, sid, 'turn_end', text=said[:4000], source='hook')
             try:                                        # the ledger: what the owner does next after a stop (outcomes.py); never breaks a hook
                 from . import advisor, ci, outcomes
-                agent = getattr(t, 'agent', '') or 'coder'
+                agent = getattr(t, 'agent', '') or 'agent'
                 # ...and the Advisor hears of it once per stretch - unless the turn ASKED: then the ask below is the event, and a
                 # stop judged here would be stale the moment the question is recorded (the review, 2026-10-12)
                 if outcomes.stopped(st, tid, f'agent:{agent}', facts={'pr': bool(ci.pr_of(st, tid)), 'agent': agent}) and not asks:
@@ -537,7 +537,7 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
         free = [x for x in mine if not getattr(x, 'ext_id', '')]
         # ...and only by a session STARTING. Any event used to claim it, so another CLI already running in the folder -
         # the owner's own, or this checkout's other agents - took the pane with its next prompt or Stop and spoke for
-        # the task from then on (2026-09-28: the owner's questions drawn as the coder asking). A pane's own CLI opens
+        # the task from then on (2026-09-28: the owner's questions drawn as the agent asking). A pane's own CLI opens
         # with SessionStart; one already running never sends it. Claude panes are named at launch (terminal.
         # open_session); this is Codex's road until its rollout names the thread (witness).
         if str(payload.get('hook_event_name') or '') != 'SessionStart': return {'bound': False}

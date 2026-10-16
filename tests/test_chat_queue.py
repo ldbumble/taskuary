@@ -20,7 +20,7 @@ from taskuary.store import MemoryStore
 def _session(s, tid, reply='ok', delay=0.0):
     """A session whose brain takes `delay` seconds to answer."""
     sess = general.GeneralSession(s, tid)
-    sess.pick, sess.provider, sess.model = 'cli:coder', 'coder', ''
+    sess.pick, sess.provider, sess.model = 'cli:claude', 'coding', ''
     def brain(system, user, **kw):
         time.sleep(delay)
         return reply
@@ -79,7 +79,7 @@ class TakingTurnsTests(unittest.TestCase):
     def test_the_lock_is_given_back_when_the_brain_fails(self):
         """A failed answer must not wedge the conversation shut."""
         sess = general.GeneralSession(self.s, self.tid)
-        sess.pick, sess.provider = 'cli:coder', 'coder'
+        sess.pick, sess.provider = 'cli:claude', 'coding'
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=mock.Mock(side_effect=RuntimeError('boom'))):
             with self.assertRaises(RuntimeError): sess.send_prompt('one')
         with mock.patch.object(general.llm_mod, 'build_llm', return_value=lambda *a, **k: 'fine'):
@@ -136,7 +136,7 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         self.s = MemoryStore()
         self.tid = self.s.create_task({'Title': 'chat', 'Kind': 'general'}, 'o')
         self.sess = general.GeneralSession(self.s, self.tid)
-        self.sess.pick, self.sess.provider = 'cli:coder', 'coder'
+        self.sess.pick, self.sess.provider = 'cli:claude', 'coding'
 
     def _brain(self, sid='sess-1', fail_on_resume=False):
         seen = []
@@ -187,7 +187,7 @@ class AFinishedSessionTests(unittest.TestCase):
     def test_an_ended_session_stops_occupying_its_task(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'chat', 'Kind': 'general'}, 'o')
-        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:coder', 'label': 'coder', 'model': ''}]):
+        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'label': 'coding', 'model': ''}]):
             first = general.start_session(s, tid)
             first.close()
             second = general.start_session(s, tid)
@@ -198,7 +198,7 @@ class AFinishedSessionTests(unittest.TestCase):
         from taskuary import terminal
         s = MemoryStore()
         tid = s.create_task({'Title': 'chat', 'Kind': 'general'}, 'o')
-        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:coder', 'label': 'coder', 'model': ''}]):
+        with mock.patch.object(general, 'provider_options', return_value=[{'pick': 'cli:claude', 'label': 'coding', 'model': ''}]):
             live = general.start_session(s, tid)
         self.assertEqual(general.drop_session(tid), 0)
         self.assertIn(live.sid, terminal.SESSIONS)

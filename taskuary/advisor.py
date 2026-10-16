@@ -125,7 +125,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
     if target_kind == 'task':
         # what the agent itself last said and is asking: the card's preview is the sender's mail, so five stops in a row were
-        # judged "stop the agent" over a coder whose last words were "the reply above is ready for you to review and send"
+        # judged "stop the agent" over an agent whose last words were "the reply above is ready for you to review and send"
         from . import workerstate
         try: st = workerstate.status(store, int(target_id))
         except Exception: st = {}
@@ -256,7 +256,7 @@ def _payload(r: dict) -> dict:
 
 def _at_work(store, target_kind: str, target_id) -> bool:
     """An agent at work on the task is nothing for the owner to do. Its continue writes no event the revision sees until the
-    prompt lands, so "the coder stopped and is waiting on you" stood over a coder already continued (the owner, 2026-10-13)."""
+    prompt lands, so "the agent stopped and is waiting on you" stood over an agent already continued (the owner, 2026-10-13)."""
     if target_kind != 'task': return False
     from . import workerstate
     try: return workerstate.status(store, int(target_id)).get('state') == 'working'

@@ -160,19 +160,19 @@ export const personName = (name) => {
   return n;
 };
 const capital = (s) => { const t = String(s || "").trim(); return t ? t[0].toUpperCase() + t.slice(1) : ""; };
-// WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28: "not sure why it says coder"): a terminal
-// agent codes, a chat one does general work; the profile shows beside it only when it says more than that
-const PLAIN_PROFILE = new Set(["coder", "coding", "claude", "codex", "agent", "assistant", "general", "regular", "the agent"]);
+// WHAT AN AGENT IS, never the profile's bare name (the owner, 2026-09-28, puzzled by a bare profile name on a card): a terminal
+// agent codes, a chat one does general work; the profile shows beside it only when it says more than that.
+const PLAIN_PROFILE = new Set(["coding", "claude", "codex", "agent", "assistant", "general", "regular", "the agent"]);
 export function agentLabel(card, name) {
   const p = String(name || card?.working || card?.agent || "").trim();
   const chat = ["chat", "assistant"].includes(String(card?.mode || "")) || p.toLowerCase() === "assistant";
   const kind = chat ? "General agent" : "Coding agent";
   return p && !PLAIN_PROFILE.has(p.toLowerCase()) ? `${kind} · ${p}` : kind;
 }
-// the report an agent files (coder.py): Summary is what it found, Actions what it did, Determination its verdict -
+// the report an agent files (wrapup.py: AGENT REPORT, CODER REPORT on older rows): Summary is what it found, Actions what it did, Determination its verdict -
 // the evidence the move is decided on, where one sentence ("PR #81 was reviewed and approved") is not enough
 export function readReport(body) {
-  const text = String(body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/, "").split(/\n\s*LAST MESSAGE\s*\n/)[0];
+  const text = String(body || "").replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\s*/, "").split(/\n\s*LAST MESSAGE\s*\n/)[0];
   const field = (k) => ((text.match(new RegExp(`^\\s*${k}:\\s*(.+)$`, "im")) || [])[1] || "").trim();
   return { summary: field("Summary"), actions: field("Actions"), verdict: field("Determination"), text: text.trim() };
 }
@@ -189,7 +189,7 @@ export function subjectLine(msg) {
   return s.replace(/^((re|fw|fwd):\s*)+/i, "");
 }
 const restOf = (summary) => String(summary || "").trim().split(/(?<=[.!?])\s+/).slice(1).join(" ");
-export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^(CODER REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
+export const reportOf = (doc) => (doc?.comments || []).slice().reverse().find((c) => /^((?:AGENT|CODER) REPORT|HANDOVER NOTE)/.test(String(c.Body || "")));
 const TASK_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><polyline points="8.5 12 11 14.5 15.5 9.5" /></svg>;
 const CODE_GLYPH = <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 7 3 12 8 17" /><polyline points="16 7 21 12 16 17" /></svg>;
 
@@ -859,7 +859,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         kind: agentKind,
       });
       if (data.dispatch === "needs_repo") {
-        setRepoAsk({ taskId: data.taskId, agent: data.agent || "coder" });
+        setRepoAsk({ taskId: data.taskId, agent: data.agent || "" });
       } else {
         setRepoAsk(null);
         const who = agentKind === "coding" ? (data.agent || "the coding agent") : (data.agent || "the regular agent");
@@ -869,7 +869,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       const msg = errText(e);
       // Compatibility with an older server response when this card already knows its task.
       if (card.tid && /could not tell which checkout|no local path/i.test(msg))
-        setRepoAsk({ taskId: card.tid, agent: "coder" });
+        setRepoAsk({ taskId: card.tid, agent: "" });   // blank: the server finds the coding profile
       else setErr(msg);
     }
     setBusy("");
@@ -1019,7 +1019,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
             : "writes one for you to approve here - nothing is sent."} />
       ) : card.kind === "fyi" && <div className="tq-card-note">Nothing to decide - it only wants you to know.</div>}
       <Foot openTask={onOpenTask} close={card} onDone={onDone}
-        covers={[...(own || mineAlone ? [suggestedKind === "coding" ? "coder" : "regular_agent"] : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
+        covers={[...(own || mineAlone ? (suggestedKind === "coding" ? ["coding_agent", "coder"] : ["regular_agent"]) : ["reply"]), ...(mineAlone ? ["reply", "not_ours"] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
       {repoAsk && (
         <div className="tq-card-full" style={{ marginTop: 8 }}>
@@ -1221,7 +1221,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coder", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title="Proposes filing just this one - nothing is filed until you confirm" sx={quiet}>Not ours</Button>}

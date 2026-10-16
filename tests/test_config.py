@@ -11,7 +11,7 @@ from taskuary import config, cli
 class TomlTests(unittest.TestCase):
     def test_round_trip(self):
         cfg = {'server': {'host': '127.0.0.1', 'port': 7787},
-               'agents': {'coder': {'cmd': 'claude', 'args': ['-p', '--output-format', 'json'],
+               'agents': {'coding': {'cmd': 'claude', 'args': ['-p', '--output-format', 'json'],
                                     'resume_args': ['--resume'], 'timeout': 1500,
                                     'cwd_map': {'you/your-repo': 'C:/src/your-repo'}}},
                'github': {'token': 'ghp_x"quote', 'default_repo': 'a/b'}}

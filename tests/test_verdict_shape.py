@@ -121,8 +121,8 @@ class SchemaOnTheWireTests(unittest.TestCase):
         blow up on the keyword, or triage could not pass one at all."""
         from taskuary.store import MemoryStore
         s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        brain = llm_mod.make_cli_llm(s, 'coder')
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        brain = llm_mod.make_cli_llm(s, 'coding')
         self.assertIs(brain.takes_want, False)          # said out loud: it is the one worth rechecking
         with mock.patch('taskuary.agents.run_cli', return_value=('{"intent": "fyi"}', None, None)):
             self.assertEqual(brain('sys', 'usr', want={'name': 'v'}), '{"intent": "fyi"}')

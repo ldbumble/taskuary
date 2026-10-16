@@ -8,8 +8,8 @@ from taskuary.store import MemoryStore
 
 def store(cmd, fast=None):
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': cmd, 'args': ['exec'] if cmd == 'codex' else ['-p']}))
-    s.set_setting('concierge_ai', 'cli:coder', 't')
+    s.upsert_agent(cmd, 'general', 'cli', json.dumps({'cmd': cmd, 'args': ['exec'] if cmd == 'codex' else ['-p']}))
+    s.set_setting('concierge_ai', f'cli:{cmd}', 't')
     if fast: s.set_setting('concierge_fast', fast, 't')
     return s
 

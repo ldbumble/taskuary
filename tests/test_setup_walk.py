@@ -16,12 +16,12 @@ from fastapi.testclient import TestClient
 from taskuary import concierge, general, server, terminal
 from taskuary.store import MemoryStore
 
-ONE_CLI = [{'pick': 'cli:coder', 'type': 'cli', 'cmd': 'claude', 'label': 'Claude Code (your CLI)', 'model': ''}]
+ONE_CLI = [{'pick': 'cli:claude', 'type': 'cli', 'cmd': 'claude', 'label': 'Claude Code (your CLI)', 'model': ''}]
 
 
 def store():
     s = MemoryStore()
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
     return s
 
 
@@ -144,23 +144,34 @@ class WalkBrainTests(unittest.TestCase):
     2026-09-24: "of course use default, so if ai api then use that"). It used to prefer codex BY NAME,
     which nobody had chosen and no setting could move."""
 
+    def connect(self, s):
+        """Claude and Codex connected - brains are CLI tools, never profile rows - and Claude named the default brain, so
+        which one is default is this test's fact and not whichever happens to be on PATH."""
+        from taskuary import agents, config
+        real, conns = config.load, {'claude': {'cmd': 'claude'}, 'codex': {'cmd': 'codex'}}
+        for p in (mock.patch.object(config, 'load', side_effect=lambda: {**real(), 'cli_connections': conns}),
+                  mock.patch.object(agents, 'connection_brains', getattr(agents.connection_brains, 'real', agents.connection_brains))):
+            p.start(); self.addCleanup(p.stop)
+        s.set_setting('default_brain', 'claude', 'owner')
+        return s
+
     def test_a_walk_takes_the_assistants_brain_even_an_api_one(self):
-        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        s = self.connect(store())
         pick = api_brain(s); s.set_setting(concierge.AI_KEY, pick, 'owner')
         self.assertEqual(general.walk_pick(s, SETUP), pick)
         self.assertEqual(general.walk_pick(s, SETUP), concierge.pick(s))
 
     def test_with_nothing_chosen_it_is_the_default_cli_not_codex(self):
-        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
-        self.assertEqual(general.walk_pick(s, SETUP), 'cli:coder')
+        s = self.connect(store())
+        self.assertEqual(general.walk_pick(s, SETUP), 'cli:claude')
 
     def test_a_browser_task_still_needs_hands_so_an_api_choice_falls_to_the_default_cli(self):
         # a repeat workflow on the API brain answered "opening the secure area cannot be done from
         # here" (2026-09-15): only a CLI can run agent-browser
-        s = store(); s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        s = self.connect(store())
         s.set_setting(concierge.AI_KEY, api_brain(s), 'owner')
         with mock.patch.object(general, '_browser_task', return_value=True):
-            self.assertEqual(general.walk_pick(s, BROWSER), 'cli:coder')
+            self.assertEqual(general.walk_pick(s, BROWSER), 'cli:claude')
         s.set_setting(concierge.AI_KEY, 'cli:codex', 'owner')        # ...and a CLI choice is kept
         with mock.patch.object(general, '_browser_task', return_value=True):
             self.assertEqual(general.walk_pick(s, BROWSER), 'cli:codex')
@@ -171,11 +182,10 @@ class WalkBrainTests(unittest.TestCase):
         self.assertEqual(general.default_pick(s, SETUP), general.walk_pick(s, SETUP))
 
     def test_provider_options_says_which_cli_each_choice_actually_runs(self):
-        s = MemoryStore()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
-        s.upsert_agent('codex', 'coding', 'cli', json.dumps({'cmd': 'codex'}))
+        s = self.connect(MemoryStore())
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))      # a profile: instructions, not a choice
         cmds = {o['pick']: o.get('cmd') for o in general.provider_options(s) if o['type'] == 'cli'}
-        self.assertEqual(cmds, {'cli:coder': 'claude', 'cli:codex': 'codex'})
+        self.assertEqual(cmds, {'cli:claude': 'claude', 'cli:codex': 'codex'})
 
 
 class WalkProcedureTests(unittest.TestCase):

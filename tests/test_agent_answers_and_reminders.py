@@ -16,8 +16,8 @@ class QuestionGetsThroughAReminderTests(unittest.TestCase):
                        'FromEmail': 'erin@northwind.example', 'SentAt': ago(1), 'BodyText': 'Is it fixed?', 'Status': 'routed'})
         remind.set_reminder(s, t, '1 week')
         s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
-        quiet = [{'taskId': t, 'agent': 'coder', 'sid': 's1', 'waiting': False, 'tail': []}]
-        asking = [{'taskId': t, 'agent': 'coder', 'sid': 's1', 'waiting': True, 'state': 'asking', 'line': 'coder asked you: which branch?', 'tail': []}]
+        quiet = [{'taskId': t, 'agent': 'coding', 'sid': 's1', 'waiting': False, 'tail': []}]
+        asking = [{'taskId': t, 'agent': 'coding', 'sid': 's1', 'waiting': True, 'state': 'asking', 'line': 'coding asked you: which branch?', 'tail': []}]
         rail = lambda live: [i['unread'] for i in processing_unread.build(s, live_state=live, include_read=True)['items'] if i.get('tid') == t]
         self.assertEqual(rail(quiet), [False], 'put away while it works quietly')
         self.assertEqual(rail(asking), [True], 'a new question gets through')
@@ -40,7 +40,7 @@ class PhoneSavesALateAnswerTests(unittest.TestCase):
     def test_an_answer_to_an_agent_that_stopped_asking_is_saved_for_it(self):
         s = MemoryStore()
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        item = {'kind': 'agent', 'tid': t, 'agent': 'coder', 'asking': True, 'choices': ['main', 'release']}
+        item = {'kind': 'agent', 'tid': t, 'agent': 'coding', 'asking': True, 'choices': ['main', 'release']}
         with mock.patch.object(ws, 'answer_open', return_value={'delivered': False, 'state': 'no_request'}), \
              mock.patch.object(waitroom, 'add', return_value={'queued': True}) as saved:
             said = ra.answer_the_agent(s, item, 'main', True)

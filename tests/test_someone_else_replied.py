@@ -8,7 +8,7 @@ looking there.
 These cover the signal: who counts as somebody else, who does not, that it survives a channel
 with no conversation id, and that it actually reaches the prompt.
 """
-import unittest
+import json, unittest
 
 from taskuary import ingest
 from taskuary.store import MemoryStore
@@ -165,7 +165,7 @@ class RepoWorkTests(unittest.TestCase):
     It used not to be. Five of five contributor PRs came back `fyi`, so a regex gate in
     decided_intent answered "work by construction" before the model was asked. The gate named no
     `kind`, an unnamed kind is `general`, and so the rescue routed every PR to the ASSISTANT
-    instead of the coder - #36 through #47, twelve in a row, until 2026-09-16. The rule the gate
+    instead of the coding agent - #36 through #47, twelve in a row, until 2026-09-16. The rule the gate
     was overriding was in TRIAGE.md all along ("a stranger's pull request or issue is fyi - never
     task"): the document and the code said opposite things and the code won by running first.
 
@@ -189,16 +189,17 @@ class RepoWorkTests(unittest.TestCase):
             ingest.ingest_message(MemoryStore(), self._gh(head), llm=lambda *a, **k: called.append(1) or '{"intent": "fyi", "why": "x"}')
             self.assertTrue(called, head)
 
-    def test_a_pull_request_the_model_calls_coding_reaches_the_coder(self):
-        """The verdict travels: kind -> Kind on the task -> the coder's own role."""
+    def test_a_pull_request_the_model_calls_coding_reaches_the_coding_profile(self):
+        """The verdict travels: kind -> Kind on the task -> the profile whose kind is coding (agents.coding_role)."""
         for head in self.HEADS:
             store = MemoryStore()
+            store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
             out = ingest.ingest_message(
                 store, self._gh(head),
                 llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a pull request asks for review"}')
             self.assertEqual(out['status'], 'created', head)
             t = store.get_task(out['task_id'])
-            self.assertEqual((t['Kind'], t['Assignee']), ('coding', 'agent:coder'), head)
+            self.assertEqual((t['Kind'], t['Assignee']), ('coding', 'agent:coding'), head)
 
     def test_the_shipped_rule_tells_the_model_a_pr_is_coding(self):
         """The gate is gone, so TRIAGE.md is the only thing left saying this - if the wording is

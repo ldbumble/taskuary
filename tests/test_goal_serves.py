@@ -50,7 +50,7 @@ class ServesTests(unittest.TestCase):
 
     def test_a_held_step_gets_the_mail_and_keeps_its_box(self):
         s = MemoryStore(); g, ids = goal(s)
-        c = s.create_task({'Title': 'Ray: schema sign-off', 'Status': 'waiting', 'Assignee': 'agent:coder'}, 'owner'); s.link_step(g, ids[1], c, 'owner')
+        c = s.create_task({'Title': 'Ray: schema sign-off', 'Status': 'waiting', 'Assignee': 'agent:coding'}, 'owner'); s.link_step(g, ids[1], c, 'owner')
         out = ingest_one(s, mail(verdict(serves={'task': g, 'step': ids[1], 'done': True}), 'ray@northwind.example', 'Ray Colton', 'Schema v2'))
         self.assertEqual(out['task_id'], c); self.assertFalse(s.goal_steps(g)[1]['done'])
         self.assertEqual(list(s.step_arrivals(g)), [ids[1]])

@@ -12,7 +12,7 @@ message on that conversation does afterwards:
                              A CHAT carries nothing forward: a room is a relationship, and
                              "nothing to do here" is about the line it was said on. That
                              verdict still reaches the classifier as evidence.
-  - task, but no agent    -> reclassified to a reply: the follow-up joins the task, no coder
+  - task, but no agent    -> reclassified to a reply: the follow-up joins the task, no agent starts
   - sent to a coding agent -> the follow-up joins that task; nothing re-triages it
 """
 import unittest
@@ -34,7 +34,7 @@ def setUpModule():
     these messages and every assertion here would be about that task instead."""
     global _shared
     _shared, server.store = server.store, MemoryStore()
-    server.store.set_setting('coder_auto_enabled', '0', 'test')
+    server.store.set_setting('coding_auto_enabled', '0', 'test')
 
 
 def tearDownModule():
@@ -145,9 +145,9 @@ class NotATaskTests(unittest.TestCase):
 
 class TaskWithoutAgentTests(unittest.TestCase):
     """Triage called it coding work; the owner says it only needs an answer."""
-    def test_reclassified_to_reply_the_follow_up_joins_the_task_and_no_coder_starts(self):
+    def test_reclassified_to_reply_the_follow_up_joins_the_task_and_no_agent_starts(self):
         conv = 'AAQkADNj-payroll-thread'
-        with mock.patch.object(server.hub_term, 'start_on_task') as coder:
+        with mock.patch.object(server.hub_term, 'start_on_task') as start:
             first = push(1, conv=conv, channel='email', from_email='gw@corp.com', subject='Payroll file imports', kind='coding',
                          body='The payroll import crashes with KeyError: EmployeeId on every file, please fix it.')
             self.assertEqual(first['status'], 'created')
@@ -158,18 +158,18 @@ class TaskWithoutAgentTests(unittest.TestCase):
             self.assertIn('over-reached', learned.call_args[0][1])
             pend = [x for x in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if x['TaskId'] == tid]
             self.assertEqual(len(pend), 1)
-            server.store.set_setting('coder_auto_enabled', '1', 'test')
+            server.store.set_setting('coding_auto_enabled', '1', 'test')
             try:
                 asked = []
                 second = push(2, conv=conv, channel='email', from_email='gw@corp.com', subject='Re: Payroll file imports',
                               body='Any update on this?', sent_at=stamp(hours=3), calls=asked)
             finally:
-                server.store.set_setting('coder_auto_enabled', '0', 'test')
+                server.store.set_setting('coding_auto_enabled', '0', 'test')
             self.assertEqual((second['status'], second['task_id']), ('attached', tid))
             # the follow-up IS judged now - what a reply on an open task is, is triage's call (the
             # owner, 2026-09-03) - and a verdict of work leaves it attached, with no agent on a reply task
             self.assertEqual(len(asked), 1)
-            coder.assert_not_called()                                # a reply task never gets an agent
+            start.assert_not_called()                                # a reply task never gets an agent
 
 
 class SentToAgentTests(unittest.TestCase):
@@ -179,12 +179,12 @@ class SentToAgentTests(unittest.TestCase):
         first = push(1, conv=conv, channel='email', from_email='reports@vendor.com', subject='Process Check - FAILED',
                      body='Spendly export failed: LedgerBalance mismatch on 3 rows', intent='fyi')
         self.assertEqual((first['status'], first['task_id']), ('filed', None))
-        server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
-        with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as coder, \
+        server.store.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
+        with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as start, \
              mock.patch('taskuary.learn.learn_from') as learned:
-            r = c.post(f"/api/messages/{first['message_id']}/dispatch", json={'agent': 'coder'}).json()
+            r = c.post(f"/api/messages/{first['message_id']}/dispatch", json={'agent': 'coding'}).json()
         tid = r['taskId']
-        self.assertEqual(coder.call_args[0][1:3], (tid, 'coder'))
+        self.assertEqual(start.call_args[0][1:3], (tid, 'coding'))
         self.assertIn('under-reached', learned.call_args[0][1])      # the miss in the other direction is a lesson too
         asked = []
         second = push(2, conv=conv, channel='email', from_email='reports@vendor.com', subject='Re: Process Check - FAILED',

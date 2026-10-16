@@ -95,7 +95,7 @@ class FloatingAssistantTests(unittest.TestCase):
         store.add_route(mid, tid, 'create', .9, 'Dana asked for a corrected file', [], 'router')
         store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'DraftText': 'Attached.',
                           'Status': 'pending'})
-        store.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nCorrected the CSV escaping and added a regression test.')
+        store.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nCorrected the CSV escaping and added a regression test.')
         snapshot = general.dock_snapshot(store)
         self.assertIn('NEEDS THE OWNER NOW', snapshot)
         self.assertIn('Export still broken', snapshot)

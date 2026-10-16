@@ -303,7 +303,7 @@ class ReadsTests(unittest.TestCase):
         s = T.store()
         if workers: s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         if soul: s.save_doc('soul', soul, 'owner')
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger', 'northwind/portal': 'C:/x/portal'}}))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'can you do this for me', llm=lambda system, user, **kw: answer)
         return s, out, out.get('proposal') or {}
@@ -332,16 +332,16 @@ class ReadsTests(unittest.TestCase):
                 + '- **northwind/portal**: the expense portal' + chr(10))
         # NAMED - by the model off the map, or in the owner's own words - the card is set for that checkout, and waits for
         # the press like every hand-off typed in words (the owner, 2026-10-01)
-        _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
+        _s, out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "fix the login crash in the fan mobile app", "as": "ledger"}}', soul=soul)
         self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params']['repo']), (None, True, 'northwind/ledger'))
         # NOT named by the model: the picker, nothing guessed onto it from the words - "ledger" in the brief is the model's to read
         # off the list it is shown, never a regex's (2026-10-08)
-        _s, out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
+        _s, out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "fix the login crash in the ledger app"}}', soul=soul)
         self.assertEqual((prop.get('auto'), prop.get('clear'), prop['params'].get('repo')), (None, False, None))
-        _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "fix the login crash in the fan mobile app"}}', soul=soul)
+        _s, _out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "fix the login crash in the fan mobile app"}}', soul=soul)
         self.assertFalse(prop.get('auto'))
         self.assertIsNone(prop['params'].get('repo'))
-        _s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "tidy up the code", "as": "nowhere"}}', soul=soul)          # not on the map
+        _s, _out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "tidy up the code", "as": "nowhere"}}', soul=soul)          # not on the map
         self.assertFalse(prop.get('auto'))
 
     def test_a_checkout_nobody_named_is_picked_on_the_card_and_the_pick_is_where_it_opens(self):
@@ -350,7 +350,7 @@ class ReadsTests(unittest.TestCase):
         from taskuary import operations
         soul = ('# SOUL.md' + chr(10) + '## Repository map' + chr(10) + '- **northwind/ledger**: the fan mobile app' + chr(10)
                 + '- **northwind/portal**: the expense portal' + chr(10))
-        s, _out, prop = self._handoff('CALL: {"kind": "coder", "params": {"text": "tidy up the dashboard code"}}', soul=soul)
+        s, _out, prop = self._handoff('CALL: {"kind": "coding_agent", "params": {"text": "tidy up the dashboard code"}}', soul=soul)
         self.assertFalse(prop.get('auto'))
         self.assertEqual(set(prop['repo_choices']), {'northwind/ledger', 'northwind/portal'})
         picked = operations.revise(s, prop['id'], {**prop['params'], 'repo': 'northwind/portal'}, 'owner')
@@ -367,11 +367,11 @@ class ReadsTests(unittest.TestCase):
                 + '- **northwind/portal**: the expense portal' + chr(10))
         s = T.store()
         s.save_doc('soul', soul, 'owner')
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
+        s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/l', 'northwind/portal': 'C:/x/p'}}))
         seen = []
         def model(system, user, **kw):
             seen.append(system)
-            return 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload", "as": "portal"}}'
+            return 'CALL: {"kind": "coding_agent", "params": {"text": "fix the receipt upload", "as": "portal"}}'
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload', llm=model)
         self.assertIn('REPOSITORIES a coding job can open in', seen[0]); self.assertIn('northwind/portal', seen[0])
@@ -382,12 +382,12 @@ class ReadsTests(unittest.TestCase):
         # ...and naming none is the picker, nothing guessed onto it from the words
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'start a coding agent on portal to fix the receipt upload',
-                                llm=lambda system, user, **kw: 'CALL: {"kind": "coder", "params": {"text": "fix the receipt upload"}}')
+                                llm=lambda system, user, **kw: 'CALL: {"kind": "coding_agent", "params": {"text": "fix the receipt upload"}}')
         prop = out.get('proposal') or {}
         self.assertFalse(prop.get('clear'), prop); self.assertIsNone(prop['params'].get('repo'))
         # ...and the model names a checkout by its FULL name, slash and all - a bracket that could not hold a '/'
         # left the whole DECIDE line unread and printed it to the owner as the reply
-        self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'CALL: {"kind": "coder", "params": {"text": "fix it", "as": "northwind/portal"}}')[1]['as'], 'northwind/portal')
+        self.assertEqual(concierge.parse_decision('On it.' + chr(10) + 'CALL: {"kind": "coding_agent", "params": {"text": "fix it", "as": "northwind/portal"}}')[1]['as'], 'northwind/portal')
 
     def test_a_brain_that_answers_nothing_never_says_no_ai_is_connected(self):
         s = self._task()
@@ -492,7 +492,7 @@ class AppReadTests(unittest.TestCase):
         self.assertIn('outlook', concierge.read_op(s, 'connection.read', {'name': 'mailbox'}))
         self.assertIn('Teams - type teams', concierge.read_op(s, 'connection.read', {'name': 'teams'}))   # off, but readable by name
         self.assertIn('No connection by that name', concierge.read_op(s, 'connection.read', {'name': 'zzzz'}))
-        self.assertIn('coder', concierge.read_op(s, 'agents.list', {}))
+        self.assertIn('coding', concierge.read_op(s, 'agents.list', {}))
 
     def test_knowledge_search_reads_the_hub_and_the_kept_facts(self):
         """"Which sites do we run" was offered as "I can look it up in Company Hub" - and then searched

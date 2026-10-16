@@ -1,6 +1,6 @@
 """Every "Settings → X" the app prints names a place the Settings page actually has. The Ollama, OpenRouter
 and Meta how-tos sent you to "Settings → Triage & routing" to pick a brain that lives in "Triage & agents",
-and the Assistant tab brain's help put the default coding agent under "Coder agent" - the same place
+and the Assistant tab brain's help put the default coding agent under "Coding agent agent" - the same place
 written four ways, two of them wrong (the 2026-10-11 copy audit). The places come from the files the page
 draws itself from (settings_schema.json, SettingsView.jsx's PAGES, settingsMap.js), never a list kept here."""
 import json, re, unittest
@@ -54,7 +54,7 @@ class SettingsPathTests(unittest.TestCase):
         k = s['knobs']
         for key in ('triage_ai', 'default_agent'): self.assertEqual(k[key]['group'], k['concierge_ai']['group'])
         self.assertNotIn('(Triage & routing)', k['concierge_ai']['help'])
-        self.assertNotIn('(Coder agent)', k['concierge_ai']['help'])
+        self.assertNotIn('(Coding agent)', k['concierge_ai']['help'])
         # Triage & agents is stacked BEFORE Triage & routing, so the brain is above the switch, not below it
         self.assertLess(s['groups'].index(k['triage_ai']['group']), s['groups'].index(k['intent_classify_enabled']['group']))
         self.assertNotIn('brain below', k['intent_classify_enabled']['help'])

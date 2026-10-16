@@ -8,21 +8,21 @@ import { fileURLToPath } from "node:url";
 import { afterConfirm, afterExecute, isHandoff } from "../src/proposalCard.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-const coder = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, params: { kind: "coding" }, label: "Send to the coding agent", settles: true, key: "msg:7", ref: "TQ-0007" };
+const coding = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, params: { kind: "coding" }, label: "Send to the coding agent", settles: true, key: "msg:7", ref: "TQ-0007" };
 
 test("a started hand-off advances; one that needs a repository asks and keeps the item", () => {
-  assert.equal(isHandoff(coder), true);
-  assert.equal(isHandoff({ ...coder, params: { kind: "task" } }), false);
-  const started = afterExecute(coder, { status: "done", outcome: { dispatch: "session", started: true, agent: "coder" } });
+  assert.equal(isHandoff(coding), true);
+  assert.equal(isHandoff({ ...coding, params: { kind: "task" } }), false);
+  const started = afterExecute(coding, { status: "done", outcome: { dispatch: "session", started: true, agent: "coding" } });
   assert.deepEqual([started.settle, started.handoff, started.status], [true, true, "done"]);
-  const chat = afterExecute({ ...coder, params: { kind: "general" } }, { status: "done", outcome: { taskId: 7, chat: true } });
+  const chat = afterExecute({ ...coding, params: { kind: "general" } }, { status: "done", outcome: { taskId: 7, chat: true } });
   assert.equal(chat.handoff, true);
-  const existing = afterExecute(coder, { status: "done", outcome: { dispatch: "session", started: false, existing: true } });
+  const existing = afterExecute(coding, { status: "done", outcome: { dispatch: "session", started: false, existing: true } });
   assert.equal(existing.handoff, false);
-  const repo = afterExecute(coder, { status: "error", error: "TQ-0007 needs a repository first - pick one", outcome: { dispatch: "needs_repo", taskId: 7, agent: "coder" } });
-  assert.deepEqual([repo.settle, repo.status, repo.repo], [false, "error", { taskId: 7, agent: "coder" }]);
+  const repo = afterExecute(coding, { status: "error", error: "TQ-0007 needs a repository first - pick one", outcome: { dispatch: "needs_repo", taskId: 7, agent: "coding" } });
+  assert.deepEqual([repo.settle, repo.status, repo.repo], [false, "error", { taskId: 7, agent: "coding" }]);
   assert.match(repo.receipt, /Not started/);
-  const failed = afterExecute(coder, { status: "error", error: "agent did not start" });
+  const failed = afterExecute(coding, { status: "error", error: "agent did not start" });
   assert.deepEqual([failed.settle, failed.repo], [false, undefined]);
 });
 
@@ -32,7 +32,7 @@ test("the page advances without settling on a started hand-off, and the card ask
   assert.match(view, /if \(step === "advance"\) advance\(\);/);
   assert.match(view, /else if \(step === "settle"\) await done\(null\);/);
   assert.match(view, /else \{ if \(step === "offer"\) clearTable\(\); loadPile\(\); \}/);
-  assert.equal(afterConfirm(coder, { settle: true, handoff: true, status: "done" }, coder.key), "advance");
+  assert.equal(afterConfirm(coding, { settle: true, handoff: true, status: "done" }, coding.key), "advance");
   assert.match(view, /repo: out\.repo \|\| null/);
   const card = read("ProposalCard.jsx");
   assert.match(card, /import \{ RepoPicker \} from "\.\/RepoPicker\.jsx"/);
@@ -41,9 +41,9 @@ test("the page advances without settling on a started hand-off, and the card ask
 });
 
 test("a started hand-off with its task OPENS that task on the table, and the walk waits (2026-10-01: \"why did it just close it?\")", () => {
-  const out = afterExecute({ ...coder, params: { kind: "general" } }, { status: "done", outcome: { taskId: 9, chat: true } });
+  const out = afterExecute({ ...coding, params: { kind: "general" } }, { status: "done", outcome: { taskId: 9, chat: true } });
   assert.deepEqual([out.handoff, out.tid], [true, 9]);
-  assert.equal(afterConfirm(coder, out, coder.key), "watch");
+  assert.equal(afterConfirm(coding, out, coding.key), "watch");
   assert.match(read("AssistantView.jsx"), /if \(step === "watch"\) \{ clearTable\(\); loadPile\(\); openTaskCard\(\{ tid: out\.tid \}\); \}/);
 });
 
@@ -58,7 +58,7 @@ test("a card that asks its own question: each answer is the button that does it,
 });
 
 test("an agent started from the owner's own words opens its new task too (2026-10-01)", () => {
-  const fromWords = { ...coder, kind: "task.create_from_text", params: { kind: "coding", text: "stop the mails" }, key: null, tid: null, ref: null, settles: false };
+  const fromWords = { ...coding, kind: "task.create_from_text", params: { kind: "coding", text: "stop the mails" }, key: null, tid: null, ref: null, settles: false };
   assert.equal(isHandoff(fromWords), true);
   const out = afterExecute(fromWords, { status: "done", outcome: { taskId: 930, ref: "TQ-0930", kind: "coding" } });
   assert.deepEqual([out.handoff, out.tid], [true, 930]);

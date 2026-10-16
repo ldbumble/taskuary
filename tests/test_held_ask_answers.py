@@ -26,7 +26,7 @@ PERMISSION = ['Bash command', '  rm -rf build/', 'Do you want to proceed?',
 
 
 def pane(tid, store, working=True):
-    t = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coder', label='coder', argv=['claude'], last=1.0,
+    t = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=['claude'], last=1.0,
                         ext_id='sess-1', resumed_from='', store=store, witness=SimpleNamespace(note=lambda n: None), written=[],
                         n=0, tail=lambda n=3: ['✻ Pondering… (esc to interrupt)'], status_tail=lambda n=6: ['✻ Pondering… (esc to interrupt)'])
     t.write = t.written.append

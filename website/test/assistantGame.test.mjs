@@ -23,8 +23,8 @@ test("the boss's health is what you have not seen - read in the chat counts, a w
 });
 
 test("the matchmaker routes on the judged kind and the agents you have, never on words", () => {
-  const agents = [{ Name: "coder", Kind: "coding" }, { Name: "helper", Kind: "general" }];
-  assert.equal(matchFor({ lane: "asked", kind: "todo", coding: true }, agents).who, "coder");
+  const agents = [{ Name: "coding", Kind: "coding" }, { Name: "helper", Kind: "general" }];
+  assert.equal(matchFor({ lane: "asked", kind: "todo", coding: true }, agents).who, "coding");
   assert.equal(matchFor({ lane: "yours", kind: "todo" }, agents).who, "helper");
   assert.equal(matchFor({ lane: "approve" }, agents).verb, "approve");
   assert.equal(matchFor({ lane: "fyi" }, agents).who, "nobody");

@@ -1417,7 +1417,7 @@ owner approval. Pending implementation.
   reply from the saved final result and verified current conversation, recording
   the context revision used. Preserve the completed worker result independently
   of draft generation success and keep a failed draft visibly retryable.
-- [x] <a id="pw-237"></a>**PW-237** Bring coder.finish() into line with the approved always-draft rule: when
+- [x] <a id="pw-237"></a>**PW-237** Bring wrapup.finish() into line with the approved always-draft rule: when
   a reply is needed, unsupported/disabled sending must not suppress the draft.
   Hide Send and explain why it is unavailable; retain backend send restrictions.
   Outbound sending remains subject to owner approval, not agent completion.

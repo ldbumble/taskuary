@@ -5,7 +5,7 @@ from taskuary import server, triage
 from taskuary.store import MemoryStore
 
 def test_every_verdict_is_asked_for_danger():
-    for kw in ({}, {'repos': ['northwind/ledger'], 'candidates': [], 'playbooks': ['x'], 'profiles': ['coder'], 'same': True, 'goals': True}):
+    for kw in ({}, {'repos': ['northwind/ledger'], 'candidates': [], 'playbooks': ['x'], 'profiles': ['coding'], 'same': True, 'goals': True}):
         sch = triage.verdict_schema(**kw)['schema']
         assert 'danger' in sch['required'] and sch['properties']['danger']['type'] == ['string', 'null']
 

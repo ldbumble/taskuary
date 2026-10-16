@@ -4,7 +4,7 @@ yes-gated review, and the task is not done until it is answered. See docs/how-a-
 import json, unittest
 from unittest import mock
 
-from taskuary import ci, coder, concierge, github, proposals, verdicts
+from taskuary import ci, wrapup, concierge, github, proposals, verdicts
 from taskuary.store import MemoryStore
 
 OPEN = {'number': 7, 'url': 'https://github.com/northwind/ledger/pull/7', 'head': 'fix-export', 'sha': 'abc1234def',
@@ -37,12 +37,12 @@ def with_pr(s, **over):
 
 
 def finish(s, tid, pr=OPEN, **kw):
-    prev, coder.REFRESH = coder.REFRESH, None
+    prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed - it runs tonight.'), \
              mock.patch.object(github, 'pr', return_value=pr):
-            return coder.finish(s, tid, {'summary': 'the export reads the new view', 'outcome': 'did_work'}, None, 'coder', **kw)
-    finally: coder.REFRESH = prev
+            return wrapup.finish(s, tid, {'summary': 'the export reads the new view', 'outcome': 'did_work'}, None, 'coding', **kw)
+    finally: wrapup.REFRESH = prev
 
 
 def closeout_setting(s, repo=None, **choices):
@@ -389,7 +389,7 @@ class ContributorPullRequestTests(unittest.TestCase):
 
     def test_a_task_finished_before_the_close_out_existed_is_offered_it_once(self):
         s = armed(MemoryStore()); tid = self._reviewed(s, 'waiting')
-        s.add_comment(tid, 'coder', 'agent', 'The agent closed this itself: PR #84 reviewed: accept')
+        s.add_comment(tid, 'coding', 'agent', 'The agent closed this itself: PR #84 reviewed: accept')
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
             self.assertEqual(proposals.backfill(s), 1)
             verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject')
@@ -406,14 +406,14 @@ class ContributorPullRequestTests(unittest.TestCase):
 
     def test_an_open_saved_task_with_its_reply_ready_is_backfilled(self):
         s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: accept')
+        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: accept')
         s.add_review({'TaskId': tid, 'Kind': 'draft_reply', 'Status': 'pending', 'DraftText': 'Merging this one.'})
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
             self.assertEqual(proposals.backfill(s), 1)
 
     def test_an_open_task_without_a_reply_is_not_backfilled(self):
         s = armed(MemoryStore()); tid = self._reviewed(s, 'open')
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nDetermination: half done')
+        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nDetermination: half done')
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'number': 84}):
             self.assertEqual(proposals.backfill(s), 0)
 

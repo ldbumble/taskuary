@@ -199,7 +199,7 @@ def isolated_runtime_boundaries():
 
     # Auto-dispatch ships on.  In a suite, both coding and general execution stop at the process
     # boundaries below; switching this off also prevents routine ingest tests from trying at all.
-    server.store.set_setting('coder_auto_enabled', '0', 'test')
+    server.store.set_setting('coding_auto_enabled', '0', 'test')
 
     real_request = requests.sessions.Session.request
     real_async_request = httpx.AsyncClient.request
@@ -466,7 +466,7 @@ def isolated_runtime_boundaries():
 @pytest.fixture(autouse=True)
 def no_connection_brains():
     """A test's brains are the agent rows IT wrote. agents.connection_brains reads config.toml, and the
-    test home's carries the `claude` connection cli_connections.migrate split off the default coder
+    test home's carries the `claude` connection cli_connections.migrate split off the default coding agent
     profile - so a bare MemoryStore "with no CLI" suddenly had one. A test about connection brains
     patches config.load and puts the real function back: `agents.connection_brains.real`."""
     from taskuary import agents

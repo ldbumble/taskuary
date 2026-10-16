@@ -87,7 +87,7 @@
 <div class="entry">
       <a class="page" href="./settings">Settings reference</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Settings reference's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coder-agent">Coder agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
+      <div class="secs" hidden><a class="sec" href="./settings#how-to-read-this">How to read this</a><a class="sec" href="./settings#triage-agents">Triage &amp; agents</a><a class="sec" href="./settings#triage-routing">Triage &amp; routing</a><a class="sec" href="./settings#replies">Replies</a><a class="sec" href="./settings#assistant">Assistant</a><a class="sec" href="./settings#assistant-on-your-phone">Assistant on your phone</a><a class="sec" href="./settings#advisor">Advisor</a><a class="sec" href="./settings#coding-agent">Coding agent</a><a class="sec" href="./settings#agent-permissions">Agent permissions</a><a class="sec" href="./settings#notifications">Notifications</a><a class="sec" href="./settings#attachments-images">Attachments &amp; images</a><a class="sec" href="./settings#sync-startup">Sync &amp; startup</a><a class="sec" href="./settings#display">Display</a><a class="sec" href="./settings#routing-policies">Routing policies</a><a class="sec" href="./settings#verdicts-notes">Verdicts &amp; notes</a><a class="sec" href="./settings#audit-integrity">Audit integrity</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./faq">FAQ</a>
@@ -454,15 +454,17 @@ alone.</p>
 <h2 id="profiles-and-playbooks">Profiles and playbooks<a class="anchor" href="#profiles-and-playbooks" aria-label="Link to this section">#</a></h2>
 <p>Two levels, and the difference is worth holding onto:</p>
 <ul>
-<li>A <strong>profile</strong> is a worker — which CLI, which model, which flags. Install one from a skill or
-configure it on the connector card.</li>
+<li>A <strong>brain</strong> is what does the thinking — a CLI tool (Claude Code, Codex, …) or an API connector, with
+the model chosen on that connection.</li>
+<li>A <strong>profile</strong> is instructions — a role&#39;s rules, laid on whichever brain runs it. It names no CLI
+and no model. Install one from a skill or write one on <strong>Settings → Docs</strong>.</li>
 <li>A <strong>playbook</strong> is a job — when it starts, which connections it uses, the steps, what an agent
 may do alone, what to ask first, and what counts as done.</li>
 </ul>
-<p><code>CODER.md</code> is the playbook for code. Every other kind of recurring job gets its own page the
+<p><code>CODING.md</code> is the playbook for code. Every other kind of recurring job gets its own page the
 first time an agent does it: on close, Taskuary asks whether that will recur and drafts the
 playbook onto the task. Approve it, and the next message like it is matched to that playbook by
-triage, and the agent is seeded from it instead of from <code>CODER.md</code>&#39;s repository rules.</p>
+triage, and the agent is seeded from it instead of from <code>CODING.md</code>&#39;s repository rules.</p>
 <p>Each connector card lists the playbooks that name it, and the words themselves are edited on the
 <strong>Settings → Docs</strong>.</p>
 <h2 id="the-task-view-and-the-board">The task view and the Board<a class="anchor" href="#the-task-view-and-the-board" aria-label="Link to this section">#</a></h2>
@@ -553,7 +555,7 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 </tr>
 <tr>
 <td><strong>Goals</strong></td>
-<td>A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row (&quot;3 of 7 · coder on step 5 · Ray owes step 4&quot;) unless one is your move, which is a row of its own under On you</td>
+<td>A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row (&quot;3 of 7 · coding agent on step 5 · Ray owes step 4&quot;) unless one is your move, which is a row of its own under On you</td>
 <td>For later while it is quiet, with its date in the time column; never gone until it is done</td>
 </tr>
 <tr>

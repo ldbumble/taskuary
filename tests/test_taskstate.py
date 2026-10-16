@@ -18,7 +18,7 @@ def row(s, tid, **extra): return {**s.get_task(tid), **extra}
 class StateTests(unittest.TestCase):
     def test_the_list_says_what_the_rail_says(self):
         s = MemoryStore()
-        t = task(s, Assignee='agent:coder')
+        t = task(s, Assignee='agent:coding')
         self.assertEqual(taskstate.state(s, row(s, t)), 'queued')                      # handed on, nothing started
         s.tag_task(t, terminal.SAVED, True, 'owner')
         self.assertEqual(taskstate.state(s, row(s, t)), 'saved')                       # you ended its session
@@ -44,13 +44,13 @@ class StateTests(unittest.TestCase):
         self.assertEqual(taskstate.state(s, row(s, t, ReviewStatus='pending')), 'approve')
 
     def test_a_queued_start_stays_waiting_to_start_even_when_it_failed(self):
-        s = MemoryStore(); t = task(s, Assignee='agent:coder')
+        s = MemoryStore(); t = task(s, Assignee='agent:coding')
         self.assertEqual(taskstate.state(s, row(s, t), queued={'State': 'failed'}), 'queued')
 
     def test_who_closed_it_decides_agent_finished(self):
         s = MemoryStore(); t = task(s)
-        s.add_comment(t, 'coder', 'agent', 'The agent closed this itself: fixed.')
-        s.update_task(t, {'Status': 'done'}, 'coder')
+        s.add_comment(t, 'coding', 'agent', 'The agent closed this itself: fixed.')
+        s.update_task(t, {'Status': 'done'}, 'coding')
         self.assertEqual(taskstate.state(s, row(s, t)), 'agentdone')
         s.update_task(t, {'Status': 'done'}, 'owner')                                  # you edited it last
         self.assertEqual(taskstate.state(s, row(s, t)), 'closed')
@@ -74,7 +74,7 @@ class MakeATaskTests(unittest.TestCase):
         self.assertNotIn('mine', on(mine))
         self.assertIn('already a task', concierge.cannot(mine, 'mine', s))
         # ...but on a task an agent holds it takes it back, and says so
-        s.update_task(t, {'Assignee': 'agent:coder'}, 'o')
+        s.update_task(t, {'Assignee': 'agent:coding'}, 'o')
         self.assertEqual([c['label'] for c in concierge.chips_for(s, mine) if c['verb'] == 'mine'], ['Take it myself'])
 
     def test_an_idea_or_an_fyi_that_already_has_its_task_is_not_offered_make_a_task(self):

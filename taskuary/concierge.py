@@ -35,7 +35,7 @@ MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
 READ_ROUNDS = 3          # a bucket, then a look-up, then one more - never an open-ended crawl (tools are disclosed on demand)
 LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
              'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
-             'say so in one line and CALL the hand-off: regular_agent to research or read, coder for work in a repository.')
+             'say so in one line and CALL the hand-off: regular_agent to research or read, coding_agent for work in a repository.')
 NEWLINE = chr(10)
 # Introducing an item is a FACT - who wrote, what was done, what you need to do - and the pipe knows all
 # three. So 'next' asks no model: it is instant, and it can never describe the wrong item (the owner,
@@ -56,17 +56,22 @@ _OPTIONS = re.compile(r'\n?\s*OPTIONS:\s*(.+?)\s*$', re.I | re.S)
 # It exists for the targets a verb cannot say: a SET, described rather than listed.
 _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
-VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coder', 'regular_agent', 'mine', 'close', 'stop_agent',
+VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
          'rerun', 'setup', 'done', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
+# The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
+# profile of kind coding on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
+# now; the model is never shown the old one.
+VERB_ALIAS = {'coder': 'coding_agent'}
+def canon_verb(v): return VERB_ALIAS.get(v, v) if isinstance(v, str) else v
 # The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
 # CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
 # that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
 # The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
 # and the typed sentence already run, so a chip, a button and a sentence are one road.
 CHIP_WORDS = {'chase': 'Chase them', 'let_go': 'Let it go', 'elsewhere': 'They answered elsewhere',
-              'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coder': 'Send to a coding agent',
+              'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coding_agent': 'Send to a coding agent',
               'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
               'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
               'not_ours_kind': 'No more ideas like this', 'archive': 'Archive it', 'close': 'Mark done',
@@ -169,7 +174,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'reply': "I'll draft that - nothing goes out until you say so.", 'approve': 'Sending it as drafted. Moving on.',
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
-            'remember': "Remembered. Moving on.", 'coder': "Handed off - the code work starts now, and what it finds comes back here.",
+            'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
             'regular_agent': "Handed off - work on it starts now, and the answer comes back here.",
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
@@ -213,9 +218,6 @@ def pick(store) -> str:
     if chosen: return chosen
     from . import agents as hub_agents
     if (dflt := hub_agents.default_pick(store)): return dflt          # the default brain, as everywhere else
-    if store.list_agents():
-        try: return f'cli:{hub_agents.default_agent(store)}'
-        except Exception as e: logger.debug(f'concierge: no default agent - {e}')
     return general._selected(store)[0]
 
 
@@ -412,7 +414,7 @@ def _task_whole(store, tid: int) -> str:
     if notes:
         out.append('ITS NOTES (oldest first):\n' + '\n'.join(
             f"  {str(c.get('CreatedAt') or '')[:16]} {c.get('Actor') or '?'}: "
-            f"{_cut(c.get('Body'), 1500 if str(c.get('Body') or '').lstrip().startswith('CODER REPORT') else 300)}" for c in notes))
+            f"{_cut(c.get('Body'), 1500 if str(c.get('Body') or '').lstrip().startswith(('AGENT REPORT', 'CODER REPORT')) else 300)}" for c in notes))
     return _cut('\n'.join(out), 7000)
 
 
@@ -559,7 +561,7 @@ def parse_call(text: str) -> tuple[str, dict | None]:
     # CLEARING NAMES ITS SET (2026-10-08): the old `clear` verb carried the owner's sentence, and a word list swept whatever its words
     # matched. The model names the set with pipe.clear `select` - handed that tool's description, it calls again
     if kind == 'clear': return text[:m.start()].strip(), {'kind': 'tools.describe', 'params': {'kind': 'pipe.clear', 'why': 'clearing names its set: pipe.clear with `select`'}}
-    if kind in toolcatalog.DECISIONS: return (text or '').strip(), None     # a decision: parse_decision's
+    if canon_verb(kind) in toolcatalog.DECISIONS: return (text or '').strip(), None     # a decision: parse_decision's
     why = toolcatalog.valid(kind, params)
     if why:
         logger.info(f'concierge: refusing that CALL - {why}')
@@ -581,7 +583,7 @@ def parse_decision(text: str) -> tuple[str, dict | None]:
     if not m: return (text or '').strip(), None
     try: got = json.loads(m.group(1))
     except ValueError: return (text or '').strip(), None
-    verb, p = str(got.get('kind') or '').lower(), got.get('params') or {}
+    verb, p = canon_verb(str(got.get('kind') or '').lower()), got.get('params') or {}
     # a tool that does not exist at all is no line to show the owner either; an operation is parse_call's
     if verb not in toolcatalog.DECISIONS and verb not in toolcatalog.PURPOSE and verb not in toolcatalog.READS:
         return text[:m.start()].strip(), None
@@ -620,7 +622,7 @@ NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 
          'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
          'chase': 'key', 'let_go': 'key', 'elsewhere': 'key'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
-             'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coder': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
+             'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to a regular agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
              'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere'}
 
@@ -656,7 +658,7 @@ def _live_task(store, item) -> bool:
 
 
 # an idea's words and what each does to the idea (assistant.act) - the page's Remind me posts its own day
-IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coder': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
+IDEA_ACT = {'mine': 'task', 'regular_agent': 'agent', 'coding_agent': 'agent', 'not_ours': 'dismiss', 'not_ours_kind': 'dismiss_kind'}
 
 
 def cannot(item: dict | None, verb: str, store=None) -> str:
@@ -678,9 +680,9 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         return (f"There is nothing to approve yet - no reply has been drafted on {what}. Say reply and what to tell them, "
                 'and it lands here for your yes.')
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
-    if verb in ('coder', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
+    if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
         return f"{what} is already being worked on - press Continue to add to it instead of handing it off again."
-    if verb == 'coder' and store is not None:
+    if verb == 'coding_agent' and store is not None:
         gone = no_agent(store)
         if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
                          'Set it up under Connections, then say it again. Nothing has changed.')
@@ -819,7 +821,7 @@ def table_actions(store, item: dict | None, chips: list = None) -> str:
 # the table, must be one of its buttons - the chips under the line, or its own page's (a task's Send to agent while no agent
 # holds it). Anything else is answered in words. The other verbs carry their own guard (cannot, NEEDS).
 BUTTON_OF = {'not_ours_sender': 'not_ours', 'not_ours_remember': 'not_ours', 'block_sender': 'not_ours', 'archive': 'not_ours',
-             'coder': 'regular_agent'}
+             'coding_agent': 'regular_agent'}
 OP_BUTTON = {'message.file': 'not_ours', 'message.archive': 'not_ours', 'preference.exclude_sender': 'not_ours',
              'preference.sender_rule': 'not_ours'}
 BUTTONED = frozenset({'not_ours', 'mine', 'regular_agent'})
@@ -837,7 +839,7 @@ def table_op_verb(call: dict | None) -> str | None:
     kind, p = (call or {}).get('kind') or '', (call or {}).get('params') or {}
     if any(p.get(f) for f in ('target', 'mid', 'ref', 'on')): return None
     if kind in OP_BUTTON: return OP_BUTTON[kind]
-    if kind == 'task.create_from_message': return {'coding': 'coder', 'general': 'regular_agent'}.get(str(p.get('kind') or ''), 'mine')
+    if kind == 'task.create_from_message': return {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(p.get('kind') or ''), 'mine')
     return None
 
 
@@ -1707,7 +1709,7 @@ def read_op(store, kind: str, params: dict) -> str:
     if kind == 'repos.list':
         from . import terminal as term
         repos = term.repo_map(store)
-        return ('repositories (name one in `as` on a coder hand-off only when sure):' + NEWLINE
+        return ('repositories (name one in `as` on a coding_agent hand-off only when sure):' + NEWLINE
                 + NEWLINE.join(f'- {r}: {d}' for r, d in repos.items())) if repos else 'No repositories are set up.'
     if kind == 'tools.list': return toolcatalog.bucket_list(str(p.get('bucket') or ''))
     if kind == 'tools.describe':
@@ -1782,16 +1784,16 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     kind, params = call['kind'], dict(call.get('params') or {})
     if toolcatalog.is_read(kind): raise ValueError(f'{kind} is a look-up, not something to confirm')
     it = item or {}
-    # ONE ROAD TO AN AGENT. The model reaches a hand-off two ways - DECIDE coder/regular_agent, or this tool with
+    # ONE ROAD TO AN AGENT. The model reaches a hand-off two ways - DECIDE coding_agent/regular_agent, or this tool with
     # kind coding/general - and only the first chose the worker, the checkout and whether to start at once: the
     # same "research this" was a started researcher on one run and a bare confirm card on the next (the 2026-09-24
     # chat audit). This call takes the decision's road.
     if kind == 'task.create_from_text':
-        # ...and the hand-off's own NAME is not a kind: "coder" fell through to a card labelled "Start a regular agent" that
+        # ...and the hand-off's own NAME is not a kind: its old name fell through to a card labelled "Start a regular agent" that
         # waited for a yes (the 2026-09-29 replay, 2 runs in 3). The two verb names are the kinds they name; anything
         # else the model must fix itself, never a silent regular agent.
         k = str(params.get('kind') or '').strip().lower()
-        params['kind'] = {'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
+        params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
         if params['kind'] not in ('task', 'coding', 'general'):
             raise CallMiss(f"task.create_from_text kind is task, coding or general - not {k or 'nothing'}. Nothing was started.")
     # ...and a new to-do never names a task that is already open: "Remind me about the Payworth invoice (TQ-0005) tomorrow at
@@ -1802,11 +1804,11 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             if t and t.get('Status') not in ('done', 'dropped'):
                 raise CallMiss(f"{task_ref(t['TaskId'])} is already an open task - a reminder about it is task.defer on it (ref, until), "
                                "anything else is that task's own action. Nothing was made.")
-    # ...and so is a dispatch's: "Start an agent on it" carried kind "coder" and failed at the press with "kind must be general
+    # ...and so is a dispatch's: "Start an agent on it" carried the old hand-off name as its kind and failed at the press with "kind must be general
     # or coding" - the verb's name is the kind it names, as it is on task.create_from_text (2026-10-06)
     if kind == 'dispatch.prepare' and params.get('kind') is not None:
         k = str(params.get('kind') or '').strip().lower()
-        params['kind'] = {'coder': 'coding', 'regular_agent': 'general', 'regular': 'general'}.get(k, k)
+        params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general', 'regular': 'general'}.get(k, k)
         if params['kind'] not in ('general', 'coding'):
             raise CallMiss(f"dispatch.prepare kind is coding or general - not {k or 'nothing'}. Nothing was started.")
     # ...and a watch's `what` is one of four words: "a new reply from Gail Moreno" was proposed, said "Doing it now", and then
@@ -1814,7 +1816,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
-        verb = 'coder' if params['kind'] == 'coding' else 'regular_agent'
+        verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
                'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
         # TYPED WORDS NEVER START AN AGENT (the owner, 2026-10-01): a hand-off in words is a card he presses, however clear
@@ -2124,7 +2126,7 @@ def close_task(store, tid: int, actor: str = 'owner') -> bool:
     return True
 
 
-# What "set something up" opens. It used to be a CODING task on the default agent, which sent a coder
+# What "set something up" opens. It used to be a CODING task on the default agent, which sent a coding agent
 # into a checkout to build what the app already has: asked to set up the Zoho invoice integration -
 # a connector card and a report, both shipped - it opened a session in the wrong repository entirely
 # (the owner, 2026-09-03: "This was big mistake... it doesn't need coding agent just a regular agent
@@ -2167,7 +2169,7 @@ def setup_task(store, text: str, actor: str = 'owner', title: str = '', kind: st
                agent_job: bool = False, repo: str = None, profile: str = None) -> dict:
     """'Set up a report that...': a task with the owner's words in it, opened for the agent that can
     walk them through it. `kind` is 'general' for a walk-through and 'coding' for a hand-off the owner
-    asked for (concierge's `coder` verb), which is the only path that starts an agent in a checkout."""
+    asked for (concierge's `coding_agent` verb), which is the only path that starts an agent in a checkout."""
     from . import asks, ingest
     text = str(text or '').strip()
     if not text: raise ValueError('say what to set up')
@@ -2407,7 +2409,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
 # Picking another answer re-proposes through the same road (/api/concierge/propose), so nothing runs until confirmed.
 ALTS = {'not_ours': (('not_ours', 'Just this once'), ('not_ours_sender', 'From now on - triage learns this sender'),
                      ('block_sender', 'A rule in Settings - it never reaches triage')),
-        'agent': (('coder', 'A coding agent'), ('regular_agent', 'A non-coding agent'))}
+        'agent': (('coding_agent', 'A coding agent'), ('regular_agent', 'A non-coding agent'))}
 # ...and on an ADVISOR IDEA there is no sender to learn: how far means this one, or this kind of idea (the owner, 2026-10-02:
 # "feedback on assistant ideas ... does it teach it anything? we should have that") - the kind is a lesson the Advisor reads
 IDEA_ALTS = (('not_ours', 'Just this one'), ('not_ours_kind', 'No more ideas like this'))
@@ -2431,14 +2433,14 @@ def triage_agent(store, item: dict) -> str:
     if not kind and item.get('mid'):
         try: kind = str(operations.verdict_of_message(store, store.get_message(item['mid']) or {})[0] or '')
         except Exception: kind = ''
-    return 'coder' if kind == 'coding' else 'regular_agent'
+    return 'coding_agent' if kind == 'coding' else 'regular_agent'
 
 
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
 # the button's label, whether confirming it settles the item on the table). Nothing here runs on the words;
 # the confirmed proposal runs through server._run_operation, the same handler every entry point uses.
 PROPOSALS = {
-    'coder': ('task.create_from_message', 'Send to the coding agent', True), 'regular_agent': ('task.create_from_message', 'Send to a regular agent', True),
+    'coding_agent': ('task.create_from_message', 'Send to the coding agent', True), 'regular_agent': ('task.create_from_message', 'Send to a regular agent', True),
     'mine': ('task.create_from_message', 'Put it on my list', True),
     'not_ours': ('message.file', 'File it', True), 'not_ours_remember': ('preference.exclude_sender', 'File it and remember this kind', True),
     'not_ours_sender': ('preference.exclude_sender', 'Ignore this sender from now on', True),
@@ -2467,7 +2469,7 @@ AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue',     # settle
         # the phone used to skip the AI for this and sent "next" to the agent (the owner, 2026-10-08: "ai should match to pill action")
         'answer_agent')
 # the verbs that start or resume an agent: a press of their button runs them, typed words only ever PROPOSE them
-AGENT_STARTS = ('coder', 'regular_agent', 'continue')
+AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue')
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
@@ -2595,7 +2597,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     """The owner's decision as a proposal row (operations.propose): the exact target and parameters, a label
     for its button, and the line that says what WILL happen. A decision that changes the proposal already on the
     table revises it (a new confirmation version) instead of stacking a second one (PW-123)."""
-    verb = decision['verb']; kind, label, settles = PROPOSALS[verb]
+    verb = VERB_ALIAS.get(decision['verb'], decision['verb']); kind, label, settles = PROPOSALS[verb]   # a stale page still sends `coder`
     d_text = (decision.get('text') or '').strip()
     it = item or {}
     target, params, note, clear, choices = None, {}, '', False, []
@@ -2605,8 +2607,8 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     if it.get('kind') == 'idea' and it.get('idea') and verb in IDEA_ACT:
         kind, target, params, clear = 'idea.act', it['idea'], {'verb': IDEA_ACT[verb]}, True
         label = op_label(kind, params)
-    elif verb in ('coder', 'regular_agent', 'mine'):
-        want = {'coder': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
+    elif verb in ('coding_agent', 'regular_agent', 'mine'):
+        want = {'coding_agent': 'coding', 'regular_agent': 'general', 'mine': 'task'}[verb]
         if it.get('mid'): target, params = it['mid'], {'kind': want, 'instructions': d_text or None}
         elif verb == 'mine': raise ValueError('nothing is on the table to put on your list')
         else:
@@ -2619,7 +2621,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
             # a coding job names its checkout on the card, and the one confirmed is the one it opens in
             if want == 'coding':
                 from . import terminal as term
-                # CLEAR is a repository somebody NAMED - the model off the map (coder[ledger]) or the owner's own
+                # CLEAR is a repository somebody NAMED - the model off the map (coding_agent[ledger]) or the owner's own
                 # words. A best word-match is only a guess: the issue-920 ask scored 0.10 for one checkout against
                 # 0.0 for the rest and was in neither of them, so a guess goes on the card and waits for a yes.
                 # THE MODEL NAMES IT - it is shown every repository (_system) - and code checks the name is one of them. The owner's
@@ -2734,13 +2736,14 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
     the target is explicit. From a card it never settles what is on the table and the entry's siblings are not
     touched; from the chips under the composer (`table`) the entry IS the table, so a plain verb runs at once and
     settles it, exactly as the typed word would."""
+    verb = canon_verb(verb)
     if verb not in PROPOSALS: raise ValueError(f'{verb} is not something a card proposes')
     item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
     if not item: raise ValueError('that one is not in the pipe any more')
     # kind routes the task (2026-08-30): the Send to agent BUTTON goes where triage would send it (2026-09-25); a
     # coding agent asked for by name still goes to the regular agent when the task is general work
     if verb == 'regular_agent' and not text and not exact: verb = triage_agent(store, item)     # exact: the card's own answer
-    elif verb == 'coder' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
+    elif verb == 'coding_agent' and item.get('tid') and (store.get_task(item['tid']) or {}).get('Kind') == 'general': verb = 'regular_agent'
     tid = general.dock_task(store, actor)[0]['TaskId']
     why = cannot(item, verb, store)
     if why: raise ValueError(why)
@@ -3559,7 +3562,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # A JOB OF ITS OWN: "how many open invoices does Harbor Supply have?" over Erin's export bug - the model said it was leaving
     # TQ-0001 alone and called regular_agent with its own brief, and the card handed Erin's bug to the analyst with the AP
     # question as instructions (2026-10-06). `new` is the model saying so; the brief becomes a task of its own.
-    if decision and decision.get('new') and verb in ('coder', 'regular_agent') and str(decision.get('text') or '').strip():
+    if decision and decision.get('new') and verb in ('coding_agent', 'regular_agent') and str(decision.get('text') or '').strip():
         target_item, elsewhere = None, False
     # WORDS TO AN AGENT THAT ASKED are its answer: "reply to Marcus: yes, Thursday at 2 works" landed on the agent parked on
     # Marcus's task with "are you free Thursday at 2?", and was refused as "nothing to reply to" (2026-10-06)
@@ -3576,7 +3579,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # ...but "create an agent to research X" over a card with no message behind it (a meeting, an idea) is a NEW job in the
     # owner's words, not the card's hand-off - it still comes back as a proposal for his yes (2026-10-02: the meeting lost
     # its Send to agent button, and the typed road must not go with it)
-    own_job = verb in ('coder', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid')
+    own_job = verb in ('coding_agent', 'regular_agent') and str((decision or {}).get('text') or '').strip() and not (target_item or {}).get('mid')
     if decision and verb and target_item and not elsewhere and not own_job and not is_button(store, target_item, verb):
         if not reply: reply, options = _in_words(llm, system, table, text, verb)
         decision = verb = None

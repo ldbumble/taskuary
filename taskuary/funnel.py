@@ -14,6 +14,7 @@ from pathlib import Path
 from loguru import logger
 
 from .store import task_ref, auto_code_enabled
+from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
 from .autoreply import is_auto
 from .funnel_presentation import present as _present
@@ -374,7 +375,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # A REPLY IS NOT THE WORK. NeedsYou is zeroed once the owner has answered the thread or the
         # ball is in the sender's court (store.NEEDS_YOU) - true of a message waiting on a reply, and
         # false of an open task with work still in it. TQ-0588 was an open coding task assigned to
-        # the coder with nothing ticked off, and it left the rail completely the moment the owner
+        # the coding agent with nothing ticked off, and it left the rail completely the moment the owner
         # replied to the mail that started it: not in your task, not in agents working, filed into
         # fyi behind seventy rows (the owner, 2026-09-16: "2 tasks on in progress ... only showing
         # one"). Real work standing open is its own reason to be on the rail.
@@ -491,7 +492,7 @@ def hold_for_repo(store, tid, reason=''):
 def news_since_agent(store, tid) -> dict | None:
     """The message somebody sent AFTER the agent's last session ended - what an open task is about now - or None.
 
-    A coder finished, the task closed, and days later the sender wrote again: the task reopened, correctly, and then
+    An agent finished, the task closed, and days later the sender wrote again: the task reopened, correctly, and then
     opened on the old session's "You ended the session - its report is written" as if that were the news (the owner,
     2026-10-12: "it has to be clear what is going on ... it was reopened since x happened so reopen coding session")."""
     from . import terminal
@@ -555,12 +556,12 @@ def not_started_why(store, tid) -> str:
         return f'{who} ran on this and stopped without finishing it.' + old
     # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
     # the very thing the task card reads to offer "Continue previous work". Only runs were consulted
-    # here, so two tasks a coder had actually worked and walked away from reported "it was handed to
-    # coder and nothing has started it" for six hours (TQ-0588/0589, 2026-09-16: transcripts from
-    # copilot and from coder, no run rows, no live session). A transcript IS proof that it ran.
+    # here, so two tasks an agent had actually worked and walked away from reported "it was handed to
+    # an agent and nothing has started it" for six hours (TQ-0588/0589, 2026-09-16: transcripts from
+    # copilot and from the coding profile, no run rows, no live session). A transcript IS proof that it ran.
     # ...but a session that FINISHED did not leave anything: it said it was done and wrote its report, and the task came
-    # back only because somebody wrote again (TQ-1040, 2026-10-12: a coder closed its task, the reply went out, the sender
-    # answered, and the step said the coder "left without finishing" over its own finished record)
+    # back only because somebody wrote again (TQ-1040, 2026-10-12: an agent closed its task, the reply went out, the sender
+    # answered, and the step said the agent "left without finishing" over its own finished record)
     if session_finished(store, tid):
         return f'{who} finished its last session - its record is below. Nothing has started on what came in since.' + old
     if store.last_transcript(tid):
@@ -670,8 +671,8 @@ def session_saved(store, tid) -> bool:
 def agent_left(store, tid) -> bool:
     """An agent HAD this and is gone: the interrupted tag, a run that stopped, or a transcript with nothing
     live behind it - the first three causes not_started_why names, in its order. The lane word for that
-    is `stopped`, never `queued`: a restart killed the coder's session on TQ-0616, the task list said
-    interrupted / needs you, and the rail said "handed to coder, not started yet" (2026-09-17)."""
+    is `stopped`, never `queued`: a restart killed the agent's session on TQ-0616, the task list said
+    interrupted / needs you, and the rail said "handed to an agent, not started yet" (2026-09-17)."""
     from . import terminal
     t = store.get_task(tid) or {}
     if news_since_agent(store, tid): return False        # what is open now is the message, not the session that went before it
@@ -690,7 +691,7 @@ def session_finished(store, tid) -> bool:
     run = [e for e in evs if str(e['Sid']) == sid]
     if any(e['Kind'] == 'finished' for e in run): return True
     began = str(run[0].get('CreatedAt') or '')
-    return bool(began) and any(str(c.get('Body') or '').startswith('CODER REPORT') and str(c.get('CreatedAt') or '') >= began
+    return bool(began) and any(str(c.get('Body') or '').startswith(REPORTS) and str(c.get('CreatedAt') or '') >= began
                                for c in store.list_comments(tid) or [])
 
 
@@ -721,10 +722,10 @@ def reply_to(store, tid) -> int | None:
 
 
 def agent_found(store, tid) -> str:
-    """What the agent that worked this task said it found - the CODER REPORT's summary line - so the
+    """What the agent that worked this task said it found - the AGENT REPORT's summary line - so the
     assistant can say 'the agent looked; here is what it found' before asking for the yes."""
     if not tid: return ''
-    rep = next((c for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE'))), None)
+    rep = next((c for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith((*REPORTS, 'HANDOVER NOTE'))), None)
     if not rep: return ''
     m = _REPORT_SUMMARY.search(rep['Body'])
     return _short(m.group(1) if m else rep['Body'].split('\n', 1)[-1], 300)
@@ -1202,7 +1203,7 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     from . import terminal as term
     # Keep the live session's identity on the working row. The message row used to change only its
     # key/lane, so the Assistant knew something was in hand but its card still had no sid, tail or
-    # agent and rendered as "coding - nobody on it" after the coder was started from Tasks/Board.
+    # agent and rendered as "coding - nobody on it" after the agent was started from Tasks/Board.
     if live_state is _LIVE_UNSET:
         try: live_by_tid = {t['taskId']: t for t in term.live_sessions(tail=6) if t.get('taskId')}
         except Exception: live_by_tid = {}
@@ -1567,7 +1568,7 @@ def on_you(item: dict) -> bool:
 
 def leads(item: dict) -> bool:
     """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or On you. A shown
-    row whose lane on_you does not name (a saved coder session the owner had just closed) sat FIRST under On you on the rail while
+    row whose lane on_you does not name (a saved coding session the owner had just closed) sat FIRST under On you on the rail while
     the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk are
     one order, so what the rail puts on you is walked in its place."""
     return on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
@@ -1792,7 +1793,7 @@ def reset_walk(store):
 
     An AGENT waiting on you is the exception to "read stays read": it is the one lane that blocks
     work, and having been shown it once in yesterday's chat is not an answer. A new chat surfaced
-    two fyi about lunch while a coder sat parked on a question (the 2026-09-03 break test), because
+    two fyi about lunch while an agent sat parked on a question (the 2026-09-03 break test), because
     a blocked row must come back with the new chat."""
     # ...but a notice the owner put down stays down: a new chat does not raise a finished agent again (PW-166)
     for k, st in store.funnel_states().items():

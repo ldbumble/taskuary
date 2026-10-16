@@ -15,7 +15,7 @@ So the only per-CLI knowledge left is WHICH NAMES may be started, and that stays
 reason cliinstall.RECIPES is closed: this runs a program on the owner's machine.
 
 A set-up IS a setup task, for the reasons aisetup already argues: the owner types secrets into it,
-so nothing is filed on the task; Done is a plain close (coder.wrap routes Kind='setup' to
+so nothing is filed on the task; Done is a plain close (wrapup.wrap routes Kind='setup' to
 aisetup.finish); and it belongs on the Board, because an agent working is an agent working
 wherever it started.
 

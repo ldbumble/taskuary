@@ -179,7 +179,7 @@ def deliver(store, tid: int) -> dict:
             from . import agents as hub_agents
             previous = store.last_transcript(tid) or {}
             agent = previous.get('Agent') or hub_agents.default_agent(store)
-            # Reopening a task is continuity, not a new dispatch decision: keep the coder and
+            # Reopening a task is continuity, not a new dispatch decision: keep the profile and
             # checkout that already know this work. A missing old profile is allowed to fail
             # visibly rather than silently handing private context to a different configured CLI.
             term.start_on_task(store, tid, agent, instruction=batch(notes, after_restart=True, remaining=left),

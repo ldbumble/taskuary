@@ -117,7 +117,7 @@ class BatchTests(unittest.TestCase):
         four tasks (the owner, 2026-10-13)."""
         pr(self.s, 'northwind/portal', 1, 0.5)
         self.drain(); first = self.batch_of('northwind/portal')
-        self.s.add_transcript(first, 's1', 'screen', agent='coder')
+        self.s.add_transcript(first, 's1', 'screen', agent='coding')
         pr(self.s, 'northwind/portal', 9, 1.0)
         with mock.patch.object(batch, 'start') as started: self.drain()
         self.assertEqual(self.batch_of('northwind/portal'), first)

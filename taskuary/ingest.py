@@ -3,7 +3,7 @@ HTTP API (POST /api/ingest/push) or your own plugin; report connections run on s
 
 Pipeline per message: dedup -> deterministic policy -> route to a task -> intent triage
 (task / reply_only / fyi) -> file or create. Real tasks NEVER get an auto reply-draft:
-answering is the responder's job (reply_only), doing is the coder's.
+answering is the responder's job (reply_only), doing is the coding agent's.
 """
 import contextlib, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
@@ -509,8 +509,8 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     carried = set()
     lines = exchange_lines(store, msg, seen=carried)
     if lines: thread = {**thread, 'exchange': lines}
-    # ...and what was ANSWERED AND CLOSED lately that touches this. The coder's context file has carried
-    # this block since it was written (context.past_work); the judge deciding whether to START a coder
+    # ...and what was ANSWERED AND CLOSED lately that touches this. The agent's context file has carried
+    # this block since it was written (context.past_work); the judge deciding whether to START a coding agent
     # never had it, so a check reporting the same failure every run opened a task every run and the
     # agent it started read the determination and said yesterday had answered it (TQ-0672, 2026-09-22).
     try:
@@ -929,7 +929,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # WHICH ROLE works this - a different question from which brain runs it. Coding has one
         # role and triage does not choose it; a specialist is named only on general work. The
         # session is seeded from THIS role's document (terminal.profile_of), so a researcher is
-        # never handed CODER.md's "work only in the repository".
+        # never handed CODING.md's "work only in the repository".
         from . import agents as hub_agents
         role = hub_agents.routed_role(store, f['kind'], intent.get('profile') or '')
         # A GOAL (spec 2026-10-12): the open-ended ask opens as the owner's goal - its done-when sentence, its date, no steps
@@ -959,7 +959,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             store.add_comment(tid, 'triage', 'agent', f"Triage picked repository {intent['repository']}: {intent.get('repo_reason') or 'named in the request'}")
         elif intent.get('needs_repo_choice'):
             # the tag rides even on the rerouted ones: "I could not tell" is knowledge, and without it a
-            # later hand-off to the coder guesses a checkout by word overlap instead of asking (PW-094)
+            # later hand-off to the coding agent guesses a checkout by word overlap instead of asking (PW-094)
             store.tag_task(tid, NEEDS_REPO_TAG, actor='triage')
             store.add_comment(tid, 'triage', 'agent',
                               f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
@@ -977,7 +977,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me") with the draft written at once - for everyone,
         #   there is no setting for it (S1, 2026-09-25)
-        # - CODING tasks auto-dispatch to the coder when coder_auto_enabled is on
+        # - CODING tasks auto-dispatch to the coding agent when coding_auto_enabled is on
         # - anything else that is real work queues as needs-you, for you to route
         if f['kind'] == 'reply':
             new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
@@ -1628,7 +1628,7 @@ def chat_route(store, msg: dict, cfg: dict, llm, mine=(), me=()) -> tuple:
                  and any(x['Status'] == 'running' for x in store.list_runs(c['task_id']))), None)
     # ...and only from the person whose task it is. ANY line in the room used to join a live agent's task unread, so
     # Gail's "approve the invoice before noon" in the group where Erin's bug was being coded had no task, no due day and
-    # no draft - and was typed into the coder as Erin's answer (B6, 2026-10-11). Anyone else's line is judged below, the
+    # no draft - and was typed into the coding agent as Erin's answer (B6, 2026-10-11). Anyone else's line is judged below, the
     # live task among the room's lines it may name: it joins if the verdict says it belongs, else it is its own work.
     if live and from_opener(store, live, msg):
         return ({'decision': 'attach', 'task_id': live, 'score': 1.0, 'candidates': [],
@@ -1811,7 +1811,7 @@ def choose_repo(store, tid) -> tuple:
     from .llm import ask_json, make_cli_llm
     repos = term.repo_map(store)
     if not repos: return None, 'no repositories are set up'
-    brain = make_cli_llm(store, hub_agents.default_agent(store), gear='light')
+    brain = make_cli_llm(store, hub_agents.default_brain(store), gear='light')
     if not brain: return None, 'no coding agent is set up'
     t = store.get_task(tid) or {}
     system = ('You are the coding agent choosing which repository a coding job belongs in, before you start it. Answer '
@@ -1832,8 +1832,8 @@ def _choose_then_start(store, tid, msg: dict, mid):
         store.add_comment(tid, 'router', 'agent', f"The coding agent could not tell which repository either ({why or 'no clear fit'}) - "
                                                   'pick one on the task before an agent starts.')
         return
-    store.tag_task(tid, f'{TRIAGE_REPO_TAG}{repo}', actor='coder')
-    store.tag_task(tid, NEEDS_REPO_TAG, on=False, actor='coder')
+    store.tag_task(tid, f'{TRIAGE_REPO_TAG}{repo}', actor='agent')
+    store.tag_task(tid, NEEDS_REPO_TAG, on=False, actor='agent')
     store.add_comment(tid, 'router', 'agent', f'The coding agent chose repository {repo}: {why or "it fits the job"}.')
     ok, who = auto_start_ok(store, msg, mid, 'coding')
     if ok:
@@ -1883,7 +1883,7 @@ def _auto_code(store, tid):
         cwd = bb.target_cwd(store, tid, agent)
         ps = bb.peers(store, cwd, exclude_tid=tid) if cwd else []
         term.start_on_task(store, tid, agent, actor='router')
-        store.add_comment(tid, 'router', 'agent', 'auto-started a live coder session (coder_auto_enabled)'
+        store.add_comment(tid, 'router', 'agent', 'auto-started a live coding session (coding_auto_enabled)'
                           + (f' - told it about the {len(ps)} agent(s) already in the checkout' if ps else ''))
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
@@ -1953,7 +1953,7 @@ def reroute_held_no_repo(store, actor: str = 'owner', start: bool = True) -> lis
     """Open CODING tasks that triage could not name a repository for, moved to the agent that needs
     none - the rule from the routing above, applied to the rows that arrived before it existed.
 
-    Those tasks are unstartable by construction: the coder wants a checkout, triage said it could not
+    Those tasks are unstartable by construction: the coding agent wants a checkout, triage said it could not
     tell which, and the row sits on the board with nobody able to pick it up. TQ-0401 - "can you add
     Nathan to the call he wants to join" - sat there for exactly that reason (the owner, 2026-09-07:
     "Why was this a coding agent?"). Returns the tasks it moved.

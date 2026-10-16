@@ -19,7 +19,7 @@ from taskuary.testing import Factory
 CWD = r'C:\code\repo'
 
 
-def live(tid, sid='run1', cwd=CWD, agent='coder', argv=('claude',), ext_id=''):
+def live(tid, sid='run1', cwd=CWD, agent='coding', argv=('claude',), ext_id=''):
     return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, agent=agent, label=agent, argv=list(argv), last=1.0,
                            ext_id=ext_id, started='2026-09-20 09:00:00', typed=[], files=lambda: [], tail=lambda n=3: [],
                            idle=lambda: 0.0, witness=SimpleNamespace(note=lambda n: None), store=None)
@@ -56,7 +56,7 @@ class StopFailureTests(Base):
         req = st['requests'][-1]
         self.assertEqual(req['kind'], 'stalled')
         self.assertIn('rate limit', req['text']); self.assertIn('3pm', req['text'])
-        self.assertIn('rate limit', ws.request_line('coder', req))
+        self.assertIn('rate limit', ws.request_line('coding', req))
 
     def test_a_stall_outranks_an_older_question(self):
         """A question cannot be answered through a wall; what is actually blocking leads."""
@@ -116,7 +116,7 @@ class QuestionAndPermissionTests(Base):
         st = self.state()
         self.assertEqual(st['state'], 'input_needed')
         self.assertEqual((st['requests'][0]['text'], st['requests'][0]['choices']), ('alpha or beta?', ['alpha', 'beta']))
-        self.assertEqual(ws.request_line('coder', st['requests'][0]), 'coder asked you: alpha or beta?')
+        self.assertEqual(ws.request_line('coding', st['requests'][0]), 'coding asked you: alpha or beta?')
         # the generic notification that follows a few seconds later is the same stop, not a second one
         self.fire('Notification', notification_type='permission_prompt', message='Claude needs your permission')
         self.assertEqual(len(self.state()['requests']), 1)
@@ -210,16 +210,16 @@ class FailedToolTests(Base):
         self.assertEqual(self.state()['requests'], [])
 
     def test_another_claude_in_the_folder_never_speaks_for_a_bound_pane(self):
-        """The owner's own CLI beside a resumed coder: its question is not the coder's."""
-        self.session(ext_id='coder-thread')
+        """The owner's own CLI beside a resumed coding agent: its question is not the coding agent's."""
+        self.session(ext_id='agent-thread')
         out = self.fire('PermissionRequest', sid='owners-own', tool_name='AskUserQuestion',
                         tool_input={'questions': [{'question': 'Build it?', 'options': [{'label': 'yes'}]}]})
         self.assertFalse(out['bound']); self.assertEqual(self.state()['requests'], [])
 
 
 class OnlyItsOwnSessionTests(Base):
-    """2026-09-28: a resumed coder pane was claimed by the first hook from ANY claude in the folder - the owner's own
-    CLI, then this checkout's other agent - and their questions were drawn as the coder asking."""
+    """2026-09-28: a resumed coding agent pane was claimed by the first hook from ANY claude in the folder - the owner's own
+    CLI, then this checkout's other agent - and their questions were drawn as the coding agent asking."""
     def test_a_running_cli_in_the_folder_cannot_claim_an_unnamed_pane(self):
         t = self.session(argv=('codex',), ext_id='')
         for ev in ('UserPromptSubmit', 'Stop', 'Notification', 'PermissionRequest'):
@@ -257,7 +257,7 @@ class SessionLifeTests(Base):
         """The one idempotent place that already knows a run ended (release_task) now says so on the
         worker record too - so a question left open by a dead run stops reading as open for ever."""
         self.s.update_task(self.tid, {'Status': 'in_progress'}, 'test')
-        self.s.start_run(self.tid, 'coder', 'fix the cron', 'owner')          # a running row, as a live pty leaves one
+        self.s.start_run(self.tid, 'coding', 'fix the cron', 'owner')          # a running row, as a live pty leaves one
         ws.record(self.s, self.tid, 'run1', 'input_needed', request_id='q1', text='Staging or prod?', source='hook')
         self.assertEqual(self.state()['state'], 'input_needed')
         term.release_task(self.s, self.tid)

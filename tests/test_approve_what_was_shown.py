@@ -7,7 +7,7 @@ new draft - or new recipients, or a file attached - on the same thread passed it
 import json, unittest
 from unittest import mock
 
-from taskuary import coder, concierge, operations, remote_assistant, verdicts
+from taskuary import wrapup, concierge, operations, remote_assistant, verdicts
 from taskuary.store import MemoryStore
 
 JID = '15551234567@s.whatsapp.net'
@@ -32,7 +32,7 @@ class ProposalTests(unittest.TestCase):
     def test_a_new_draft_after_the_proposal_refuses_the_yes(self):
         s, item = a_draft()
         op = operations.propose(s, 'review.approve', item['rid'])
-        coder.agent_reply(s, item['tid'], B, 'claude')
+        wrapup.agent_reply(s, item['tid'], B, 'claude')
         out, ran = self.confirm(s, op)
         self.assertEqual(out['status'], 'stale'); self.assertFalse(ran, 'draft B went out under the yes given to draft A')
         self.assertTrue(out.get('draft_changed')); self.assertIn('draft changed', out['error'])
@@ -72,7 +72,7 @@ class PhoneTests(unittest.TestCase):
     def test_a_draft_rewritten_after_the_phone_showed_it_is_not_sent(self):
         s, item = a_draft()
         act = self.shown(s, item)
-        coder.agent_reply(s, item['tid'], B, 'claude')                     # the session's --reply, before the owner's "1"
+        wrapup.agent_reply(s, item['tid'], B, 'claude')                     # the session's --reply, before the owner's "1"
         text, ran = self.pick(s, item, act)
         self.assertFalse(ran, 'draft B went out under the yes given to draft A')
         self.assertIn('draft changed', text); self.assertIn(B, text)      # ...and the new one is shown, to say yes to
@@ -81,7 +81,7 @@ class PhoneTests(unittest.TestCase):
         """Typed words propose; the confirm lands later. operations.execute refuses it, and the phone shows what waits now."""
         s, item = a_draft()
         op = operations.propose(s, 'review.approve', item['rid'])
-        coder.agent_reply(s, item['tid'], B, 'claude')
+        wrapup.agent_reply(s, item['tid'], B, 'claude')
         done = operations.execute(s, op['id'], op['version'], lambda: self.fail('sent'))
         with mock.patch.object(concierge, 'surface', return_value={'say': 'Erin is owed a reply.', 'item': item}):
             text = remote_assistant._ran(s, {**op, 'key': item['key'], 'settles': True}, done, item, 'owner')

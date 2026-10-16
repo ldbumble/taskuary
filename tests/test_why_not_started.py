@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from taskuary import funnel, funnel_selection, terminal
+from taskuary import funnel, funnel_selection, terminal, wrapup
 from taskuary.store import MemoryStore
 
 
@@ -50,7 +50,7 @@ class WhyNotStartedTests(unittest.TestCase):
 
     def test_auto_start_switched_off_is_named_as_the_reason(self):
         s = MemoryStore(); t = handed(s)
-        s.set_setting('coder_auto_enabled', '0', 'owner')
+        s.set_setting('coding_auto_enabled', '0', 'owner')
         self.assertIn('Auto-start is off', funnel.not_started_why(s, t))
 
     def test_with_no_other_reason_it_still_says_nobody_is_on_it(self):
@@ -103,7 +103,7 @@ class FyiBatchSettingTests(unittest.TestCase):
 class AgentStoryTests(unittest.TestCase):
     """The agent step tells "never started" from "did half and was cut off" (the owner, 2026-10-11)."""
     def held_pr(self, s):
-        t = handed(s, who='agent:coder')
+        t = handed(s, who='agent:coding')
         mid = s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'pat@vendor.example', 'Subject': 'Fix the docs',
                              'BodyText': 'one line', 'SentAt': ago(0), 'Status': 'routed'})
         s.add_route(mid, t, 'create', 0.0, 'triage: task - review it · not auto-worked: first message from '
@@ -118,7 +118,7 @@ class AgentStoryTests(unittest.TestCase):
 
     def test_a_restart_mid_run_says_when_how_far_in_and_what_it_last_said(self):
         from taskuary import workerstate as ws
-        s = MemoryStore(); t = handed(s, who='agent:coder', Status='in_progress')
+        s = MemoryStore(); t = handed(s, who='agent:coding', Status='in_progress')
         ws.record(s, t, 's1', 'working', source='hook')
         ws.record(s, t, 's1', 'turn_end', text='Read the diff.\n- one line changed', source='hook')
         terminal.release_task(s, t, 'startup')
@@ -132,7 +132,7 @@ class AgentStoryTests(unittest.TestCase):
 
     def test_only_the_last_session_is_told(self):
         from taskuary import workerstate as ws
-        s = MemoryStore(); t = handed(s, who='agent:coder', Status='in_progress')
+        s = MemoryStore(); t = handed(s, who='agent:coding', Status='in_progress')
         ws.record(s, t, 'old', 'turn_end', text='the first try', source='hook')
         ws.record(s, t, 'old', 'stopped', source='hook')
         ws.record(s, t, 'new', 'working', source='hook')
@@ -153,41 +153,41 @@ if __name__ == '__main__':
 
 
 class FinishedIsNotLeftTests(unittest.TestCase):
-    """A coder closed its task itself, the reply went out, the sender wrote again and the task reopened - and the step said
-    the coder "left without finishing" over its own finished record (2026-10-12)."""
+    """A coding agent closed its task itself, the reply went out, the sender wrote again and the task reopened - and the step said
+    the agent "left without finishing" over its own finished record (2026-10-12)."""
 
     def ran(self, s, t, finish=True):
         from taskuary import workerstate as ws
         ws.record(s, t, 's1', 'working', source='hook')
         ws.record(s, t, 's1', 'turn_end', text='Found it: the primary address is wrong.', source='hook')
         if finish: ws.record(s, t, 's1', 'finished', source='hook')
-        s.add_transcript(t, 's1', 'screen text', agent='coder')
+        s.add_transcript(t, 's1', 'screen text', agent='coding')
 
     def test_a_session_that_finished_did_not_leave(self):
-        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t)
+        s = MemoryStore(); t = handed(s, who='agent:coding'); self.ran(s, t)
         self.assertFalse(funnel.agent_left(s, t))
         why = funnel.not_started_why(s, t)
         self.assertIn('finished its last session', why)
         self.assertNotIn('left without finishing', why)
 
     def test_a_report_written_after_it_began_is_a_finish_too(self):
-        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t, finish=False)
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT\nDetermination: done.')
+        s = MemoryStore(); t = handed(s, who='agent:coding'); self.ran(s, t, finish=False)
+        s.add_comment(t, 'agent', 'agent', f'{wrapup.REPORT}\nDetermination: done.')
         self.assertFalse(funnel.agent_left(s, t))
 
     def test_a_session_that_walked_away_still_left(self):
-        s = MemoryStore(); t = handed(s, who='agent:coder'); self.ran(s, t, finish=False)
+        s = MemoryStore(); t = handed(s, who='agent:coding'); self.ran(s, t, finish=False)
         self.assertTrue(funnel.agent_left(s, t))
         self.assertIn('left without finishing', funnel.not_started_why(s, t))
 
 
 class NewsAfterTheAgentTests(unittest.TestCase):
-    """A coder's session ended, the task closed, and days later the sender wrote again: the task reopened and opened on the
+    """A coding agent's session ended, the task closed, and days later the sender wrote again: the task reopened and opened on the
     old session's "You ended the session" (2026-10-12). The message is what the task is about now."""
 
     def setUp(self):
-        self.s = MemoryStore(); self.t = handed(self.s, who='agent:coder')
-        self.s.add_transcript(self.t, 's1', 'screen text', agent='coder')
+        self.s = MemoryStore(); self.t = handed(self.s, who='agent:coding')
+        self.s.add_transcript(self.t, 's1', 'screen text', agent='coding')
         self.s.tag_task(self.t, terminal.SAVED, True, 'owner')
         self.s._exec("UPDATE transcript SET CreatedAt=? WHERE TaskId=?", (ago(5), self.t))
 

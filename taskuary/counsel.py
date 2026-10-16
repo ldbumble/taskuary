@@ -1,7 +1,7 @@
 """What the hub already knows about a message - the dossier - and what a calendar invite is.
 
 Every voice that speaks for or to the owner reads the same history: the reply drafter (responder.history_block),
-the assistant's post (assistant.prep) and the coder's context file (context.build) all call dossier() -
+the assistant's post (assistant.prep) and the agent's context file (context.build) all call dossier() -
 this sender's recent mail, what the owner last wrote them, the same topic on other threads, open tasks it
 touches, the calendar around it. Cheap: five local reads and one calendar fetch.
 
@@ -234,7 +234,7 @@ def migrate(store) -> str:
         store.save_doc('counsel', new, 'template'); return 'replaced'
     added = []
     # ...an owner's own copy keeps every word but the one sentence that sent READING a database to the coding agent
-    # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coder, 2026-10-06)
+    # (the owner, 2026-10-05: data is coding when it CHANGES; "open AP over 90 days" went to the coding agent, 2026-10-06)
     if MARKER in cur and MATCH_MARKER in cur and _CODING_WAS in _squash(cur):
         cur = re.sub(r'\s+'.join(map(re.escape, _CODING_WAS.split())), _CODING_NOW, cur, count=1)
         added.append('reading-is-not-coding')

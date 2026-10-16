@@ -198,7 +198,7 @@ ASSIST = [
     ('user', 'what is actually waiting on me this morning?'),
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
-- **{gl} - month-end short by 4,180.** The coder is on the export; it found the four inter-company transfers the export drops.
+- **{gl} - month-end short by 4,180.** The coding agent is on the export; it found the four inter-company transfers the export drops.
 - **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
 - **{q3} - Sam wants the Q3 numbers.** Also drafted.
 
@@ -326,15 +326,15 @@ def seed(store) -> int:
         from_name=ruth[0], from_email=ruth[1], sent_at=f.ago(hours=7),
         body='Are we still moving AP over on Thursday? I need to tell the team.',
         draft='Thursday still works - the export will be reconciled by Wednesday night.').tid
-    # the agent mid-run: Marcus's month-end difference, handed to the coder
+    # the agent mid-run: Marcus's month-end difference, handed to a coding agent
     gl = f.task(title='Reconcile the August GL export', status='in_progress', kind='coding')
     gm = f.message(task_id=gl, subject='Reconcile the August GL export', from_name=marcus[0], from_email=marcus[1],
                    body='Can the export be reconciled against the bank feed? Flag anything that does not match - '
                         'the close is Thursday.', sent_at=f.ago(hours=6), conversation_id='email:gl-export')
     f.route(gm, gl, 'create', 'a reconciliation with a clear check: a coding agent can run it')
-    f.run(gl, agent='coder')
+    f.run(gl, agent='coding')
     refs['gl'] = gl
-    # ONE GOAL (spec 2026-10-12): an outcome with a date, its steps tasks of their own - one done by the coder, one waiting
+    # ONE GOAL (spec 2026-10-12): an outcome with a date, its steps tasks of their own - one done by a coding agent, one waiting
     # on a person past its day, the rest not started. Dana's census migration.
     g = f.task(title='Migrate the census export off the old portal', status='open', kind='task',
                DoneWhen='the nightly census lands in the new ledger for all three sites, and the old portal\'s export is switched off',
@@ -422,9 +422,9 @@ def seed(store) -> int:
         store.add_comment(chat, 'Dana' if role == 'user' else 'assistant',
                           general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body.format(**names))
     for kind, agent, body in (
-        ('working', 'coder', 'on the month-end export - tools/gl_export.py is mine for the next hour'),
+        ('working', 'coding', 'on the month-end export - tools/gl_export.py is mine for the next hour'),
         ('note', 'codex', 'the bank feed keeps inter-company transfers; the export drops them. That is the 4,180'),
-        ('ready', 'coder', 'export fixed, 14 tests green - safe to build on'),
+        ('ready', 'coding', 'export fixed, 14 tests green - safe to build on'),
         ('summary', 'the wall', '2026-08-30 - the AP importer needs pyodbc installed before its tests mean anything; '
                                 'the census sync is behind a VPN and will not run from a laptop'),
     ):
@@ -435,28 +435,28 @@ def seed(store) -> int:
     for topic, kind, title, body, votes in (
         ('customer-launch', 'new_idea', 'Give every customer launch a reversible dry-run',
          'A rehearsal exposes ownership and data gaps before a date is promised. Keep the rollback path visible and ask operations to sign off.',
-         (('assistant', 1), ('coder', 1))),
+         (('assistant', 1), ('coding', 1))),
         ('importers', 'technical_solve', 'Bound retries by elapsed time, not only attempt count',
          'Backoff intervals vary by provider, so attempt counts created wildly different outages. Use an elapsed-time budget and preserve the final response for diagnosis.',
-         (('coder', 1), ('codex', 1))),
+         (('coding', 1), ('codex', 1))),
         ('importers', 'gotcha', 'The AP importer needs pyodbc on the box before its tests mean anything',
          'Without the driver every test passes vacuously - the SQL Server fixtures skip. pip install pyodbc, then run the suite.',
-         (('coder', 1), ('codex', 1), ('gemini', 1))),
+         (('coding', 1), ('codex', 1), ('gemini', 1))),
         ('gl-export', 'gotcha', 'The bank feed keeps inter-company transfers; the GL export drops them',
          'That is the recurring month-end gap. Reconcile against the feed with the transfers flagged, never silently included.',
-         (('codex', 1), ('coder', 1))),
+         (('codex', 1), ('coding', 1))),
         ('census', 'system', 'The census sync runs behind the office VPN and will not run from a laptop',
          'It reads the old view (census_v1), not the new dashboard tables. Run it from the ops box or over the VPN.',
-         (('coder', 1),)),
+         (('coding', 1),)),
         ('payroll', 'decision', 'Finance closes on the first Wednesday, not the first business day',
          'Decided with the CFO in July so the bank feed has settled. Anything asking for numbers before then gets the previous month.',
          ()),
     ):
-        author = 'assistant' if kind == 'new_idea' else 'coder'
+        author = 'assistant' if kind == 'new_idea' else 'coding'
         lid = hub.post(store, title, body, topic, kind, author)['LoreId']
         for who, d in votes: hub.vote(store, lid, d, who)
         if kind == 'new_idea':
-            store.lore_comment(lid, 'This would also give sales a concrete readiness signal before confirming a date.', 'coder')
+            store.lore_comment(lid, 'This would also give sales a concrete readiness signal before confirming a date.', 'coding')
             store.lore_comment(lid, 'Try it on the next two launches and compare escaped issues.', 'owner')
         elif kind == 'technical_solve':
             store.lore_comment(lid, 'The same elapsed-time budget should apply to report polling.', 'assistant')
@@ -543,9 +543,9 @@ class Replay:
     answers all three - so the demo shows an agent working without a CLI, a repository or a
     machine to run either on.
     """
-    mode, argv, cwd, agent, cli = 'demo', [], '', 'coder', 'demo'
+    mode, argv, cwd, agent, cli = 'demo', [], '', 'coding', 'demo'
 
-    def __init__(self, store, task_id: int, label: str = 'coder', lines=None):
+    def __init__(self, store, task_id: int, label: str = 'coding', lines=None):
         import uuid
         self.sid = uuid.uuid4().hex[:12]
         self.store, self.task_id, self.label = store, task_id, label

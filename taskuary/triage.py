@@ -12,7 +12,7 @@ import re as _re
 # session, general opens a non-coding conversation, and task leaves the job on the owner's list.
 # Nothing downstream re-reads the mail
 # to second-guess it - no keyword, sender or category rule anywhere else (owner, 2026-08-30,
-# after a training reminder got a coder run: the exception is "clearly not a coding job",
+# after a training reminder got a coding run: the exception is "clearly not a coding job",
 # and it is judged here, in a document that can be argued with).
 # This text also ships as templates/triage.md - the editable TRIAGE.md doc that overrides it
 # (see classify_intent's `system` param). It stays here too as the fallback for a blanked doc.
@@ -568,7 +568,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
 
     `playbooks` is the menu of the owner's playbooks (playbooks.menu: slug, title and `when` each).
     A message that is an instance of one is answered with its slug, and that slug is what seeds
-    the session with the playbook instead of a coder's repository rules. Matching is a judgement
+    the session with the playbook instead of the coding profile's repository rules. Matching is a judgement
     about the message, so it is made here, by the model that read it - never by a keyword rule."""
     raw_answer, parse_error = None, None
     if llm:

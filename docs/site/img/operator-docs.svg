@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-  <title>The eight operator documents and who reads them: TRIAGE, STYLE, JOB, SOUL, CODER, COUNSEL, LEARNED, and DIGEST.</title>
-  <desc>TRIAGE, STYLE and JOB are generated from three months of mail or written by hand. SOUL, CODER and COUNSEL you write. LEARNED and DIGEST write themselves. TRIAGE, STYLE, SOUL and LEARNED guide triage and reply drafts. JOB, SOUL and COUNSEL guide the Assistant. CODER and LEARNED guide coding agents. DIGEST is the owner's morning brief.</desc>
+  <title>The eight operator documents and who reads them: TRIAGE, STYLE, JOB, SOUL, CODING, COUNSEL, LEARNED, and DIGEST.</title>
+  <desc>TRIAGE, STYLE and JOB are generated from three months of mail or written by hand. SOUL, CODING and COUNSEL you write. LEARNED and DIGEST write themselves. TRIAGE, STYLE, SOUL and LEARNED guide triage and reply drafts. JOB, SOUL and COUNSEL guide the Assistant. CODING and LEARNED guide coding agents. DIGEST is the owner's morning brief.</desc>
   <!-- The app palette: oat paper, slate brand, sage second, warm ink. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
@@ -27,7 +27,7 @@
   <rect x="34" y="252" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
   <text x="118" y="276" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">SOUL.md</text>
   <rect x="34" y="300" width="168" height="38" rx="7" fill="#fffdfb" stroke="#55697a" stroke-width="1.3"/>
-  <text x="118" y="324" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">CODER.md</text>
+  <text x="118" y="324" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">CODING.md</text>
   <rect x="34" y="348" width="168" height="38" rx="7" fill="#fffdfb" stroke="#6f8a6e" stroke-width="1.3"/>
   <text x="118" y="372" text-anchor="middle" font-size="13" font-weight="700" fill="#262521">COUNSEL.md</text>
 

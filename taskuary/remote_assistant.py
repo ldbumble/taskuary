@@ -365,7 +365,7 @@ def push_alerts(store, force: bool = False) -> int:
 
 
 # ── the phone never drops you ─────────────────────────────────────────────────────────────────────────────────────
-# "Told coder: ..." and "Continuing TQ-… - it comes back here when it stops or asks" were the last words the chat ever said: the
+# "Told <the agent>: ..." and "Continuing TQ-… - it comes back here when it stops or asks" were the last words the chat ever said: the
 # by-the-way push runs only while the walk is HANDED to the phone, and an owner who simply talks to it never hands it over. The
 # agent finished, wrote its draft, and the chat sat silent (the owner, 2026-10-08: "it never sends close out email draft to
 # whatsapp?" - "make sure the assistant on the phone never just drops you"). So work handed to an agent FROM a chat is a promise
@@ -1495,8 +1495,8 @@ def more_text(store, item: dict | None) -> str:
     if item.get('kind') == 'agentdone' and item.get('tid'):
         # what the agent FOUND, in full - the card's line is its summary, and it asks "want to see the final report?"
         rep = next((c['Body'] for c in reversed(store.list_comments(int(item['tid'])) or [])
-                    if str(c.get('Body') or '').startswith(('CODER REPORT', 'The agent closed this itself'))), '')
-        return rep.split('\n', 1)[-1].strip() if rep.startswith('CODER REPORT') else rep
+                    if str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'The agent closed this itself'))), '')
+        return rep.split('\n', 1)[-1].strip() if rep.startswith(('AGENT REPORT', 'CODER REPORT')) else rep
     msg, body, is_report = _body(store, item)
     if not body: return ''
     if is_report:
@@ -1515,7 +1515,7 @@ THEN = {'approve': 'sends the draft above, in your name.',
         'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
         'reply': 'writes a draft for you to approve here - nothing is sent.',
         'regular_agent': 'hands it to an agent - triage picks a coding or a non-coding one, and you can switch before it starts.',
-        'coder': 'starts a coding agent on it; it comes back here when it stops.',
+        'coding_agent': 'starts a coding agent on it; it comes back here when it stops.',
         'mine': 'puts it on your own list - no agent starts.',
         'stop_agent': 'saves what the agent did and ends its session; the task stays open.',
         'close': 'ends the task - it stops coming back.'}
@@ -1528,7 +1528,7 @@ _DOWN = ('close', 'not_ours', 'not_ours_sender', 'block_sender', 'done')
 
 
 # the words that answer "who should take it?" - the move of a task nobody is on (move_title)
-_HAND = ('regular_agent', 'coder')
+_HAND = ('regular_agent', 'coding_agent')
 
 
 def primary(out: dict) -> dict | None:
@@ -1577,7 +1577,8 @@ _CHANNEL_WORDS = {'email': 'Email', 'github': 'GitHub', 'whatsapp': 'WhatsApp', 
                   'sms': 'Text', 'discord': 'Discord', 'google_chat': 'Google Chat', 'assistant': 'Advisor', 'gitlab': 'GitLab'}
 _VIA = {'whatsapp': 'on WhatsApp', 'teams': 'in Teams', 'slack': 'in Slack', 'telegram': 'on Telegram', 'sms': 'by text',
         'github': 'on GitHub', 'discord': 'on Discord', 'google_chat': 'in Google Chat'}
-_PLAIN_PROFILE = {'coder', 'coding', 'claude', 'codex', 'agent', 'assistant', 'general', 'regular', 'the agent', ''}
+# a profile whose name only repeats the kind, the CLI or the word agent says nothing the label does not already say
+_PLAIN_PROFILE = {'coding', 'claude', 'codex', 'agent', 'assistant', 'general', 'regular', 'the agent', ''}
 RULE = '──────────'
 # THE TASK PAGE'S THREE COLOURS, as a chat can wear them (the owner, 2026-09-28: "make sure whatsapp/telegram matches
 # this new color scheme"): 1 the task in slate, 2 the agent in sage, 3 you in tan - the card's avatars, as dots
@@ -1608,7 +1609,7 @@ def is_own(item: dict | None) -> bool:
 
 
 def agent_label(item: dict | None, name: str = None) -> str:
-    """What an agent IS - never the profile's bare name ("coder"); the profile only when it says more."""
+    """What an agent IS - never the profile's bare name ("coding"); the profile only when it says more."""
     it = item or {}
     p = str(name or it.get('working') or it.get('agent') or '').strip()
     kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' else 'Coding agent'
@@ -1626,10 +1627,10 @@ def last_result(store, tid, n: int = 600) -> str:
 
 
 def agent_report(store, tid) -> dict:
-    """The report an agent files (coder.py): Summary = what it found, Actions = what it did, Determination = its verdict."""
+    """The report an agent files (wrapup.py): Summary = what it found, Actions = what it did, Determination = its verdict."""
     if store is None or not tid: return {}
     try: rep = next((str(c.get('Body') or '') for c in reversed(store.list_comments(int(tid)) or [])
-                     if str(c.get('Body') or '').startswith(('CODER REPORT', 'HANDOVER NOTE'))), '')
+                     if str(c.get('Body') or '').startswith(('AGENT REPORT', 'CODER REPORT', 'HANDOVER NOTE'))), '')
     except Exception as e:
         logger.debug(f'the phone could not read the agent report: {e}')
         return {}

@@ -14,7 +14,7 @@ that sentence, and swallowing it would be the worse bug.
 import unittest
 from unittest import mock
 
-from taskuary import coder
+from taskuary import wrapup
 from taskuary.store import MemoryStore
 
 NOTICE = ('Your PhishGuard assignment "Common Scams and How to Avoid Them" is outstanding, due '
@@ -35,7 +35,7 @@ class NoOpEndingTests(unittest.TestCase):
     def test_a_robots_notice_with_nothing_done_drafts_no_reply(self):
         s = MemoryStore(); tid, _ = task_with(s, 'alerts@phishguard.example', sender='automated')
         with mock.patch('taskuary.responder.write_draft') as wd:
-            out = coder.finish(s, tid, NOOP, None, 'coder')
+            out = wrapup.finish(s, tid, NOOP, None, 'coding')
         wd.assert_not_called()
         self.assertEqual((out['drafting'], out['message_id']), (False, None))
         self.assertEqual((s.list_reviews('pending'), s.get_task(tid)['Status']), ([], 'done'))
@@ -46,7 +46,7 @@ class NoOpEndingTests(unittest.TestCase):
         """The half that keeps this honest: "nothing was wrong" IS the reply they are waiting for."""
         s = MemoryStore(); tid, mid = task_with(s, 'ap@client.com', 'Is the importer broken again?')
         with mock.patch('taskuary.responder.write_draft', return_value='I looked - it is running fine.'):
-            out = coder.finish(s, tid, NOOP, None, 'coder')
+            out = wrapup.finish(s, tid, NOOP, None, 'coding')
         self.assertEqual((out['drafting'], out['message_id']), (True, mid))
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
 
@@ -59,21 +59,21 @@ class NoOpEndingTests(unittest.TestCase):
             seen.append((s.get_task(tid)['Status'], len(s.list_reviews('pending'))))
             return 'It is fixed.'
         with mock.patch('taskuary.responder.write_draft', side_effect=drafting):
-            coder.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coder')
+            wrapup.finish(s, tid, {'summary': 'fixed', 'outcome': 'did_work'}, None, 'coding')
         self.assertEqual(seen, [('waiting', 1)])
 
     def test_work_actually_done_always_drafts_however_it_came_in(self):
         s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com', sender='automated')
         rep = {'summary': 'fixed the feed', 'outcome': 'did_work'}
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
-            self.assertEqual(coder.finish(s, tid, rep, None, 'coder')['message_id'], mid)
+            self.assertEqual(wrapup.finish(s, tid, rep, None, 'coding')['message_id'], mid)
 
     def test_a_report_with_no_outcome_field_drafts_as_before(self):
         """Absent means did_work. An older report, a degraded one, or a model that ignored the
         field must never cost somebody their answer."""
         s = MemoryStore(); tid, mid = task_with(s, 'noreply@vendor.com', sender='automated')
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.'):
-            self.assertEqual(coder.finish(s, tid, {'summary': 'fixed'}, None, 'coder')['message_id'], mid)
+            self.assertEqual(wrapup.finish(s, tid, {'summary': 'fixed'}, None, 'coding')['message_id'], mid)
 
     def test_a_held_draft_means_somebody_is_waiting(self):
         """Triage drafted a reply and it was held when the session started - that is standing
@@ -83,7 +83,7 @@ class NoOpEndingTests(unittest.TestCase):
                             'Reason': 'needs a reply'})
         s.hold_reviews(tid, 'the agent is looking at it')
         with mock.patch('taskuary.responder.write_draft', return_value='hi'):
-            self.assertTrue(coder.finish(s, tid, NOOP, None, 'coder')['drafting'])
+            self.assertTrue(wrapup.finish(s, tid, NOOP, None, 'coding')['drafting'])
 
 
 class ReportOutcomeTests(unittest.TestCase):
@@ -93,9 +93,9 @@ class ReportOutcomeTests(unittest.TestCase):
         j = ('{"determination": "a training reminder", "actions": "nothing", '
              '"summary": "nothing to do here", "outcome": "nothing_to_do"}')
         with mock.patch('taskuary.llm.build_llm', return_value=lambda sy, u, **kw: j):
-            rep = coder.report_from_transcript(s, tid, 'Read the mail. Nothing to do here.')
+            rep = wrapup.report_from_transcript(s, tid, 'Read the mail. Nothing to do here.')
         self.assertEqual(rep['outcome'], 'nothing_to_do')
-        self.assertNotIn('outcome', coder.resolution_text(rep).lower())   # a flag, not prose
+        self.assertNotIn('outcome', wrapup.resolution_text(rep).lower())   # a flag, not prose
 
     def test_anything_but_the_flag_reads_as_work_done(self):
         s = MemoryStore()
@@ -103,7 +103,7 @@ class ReportOutcomeTests(unittest.TestCase):
         for val in ('did_work', 'unsure', ''):
             with mock.patch('taskuary.llm.build_llm',
                             return_value=lambda sy, u, **kw: '{"summary": "s", "outcome": "%s"}' % val):
-                self.assertNotIn('outcome', coder.report_from_transcript(s, tid, 'did it'))
+                self.assertNotIn('outcome', wrapup.report_from_transcript(s, tid, 'did it'))
 
 
 if __name__ == '__main__':

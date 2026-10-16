@@ -236,12 +236,12 @@ class OurAcknowledgementIsNotAnAnswerTests(Base):
                                                        'Status': 'context', 'Direction': 'out'}))
 
     def test_the_acknowledgement_is_not_the_owner_having_answered(self):
-        from taskuary import coder
+        from taskuary import wrapup
         tid, first, rid = teams_task(self.s)
         self._ack(tid)
-        self.assertIsNone(coder.answered_elsewhere(self.s, self.s.get_message(first), tid))
+        self.assertIsNone(wrapup.answered_elsewhere(self.s, self.s.get_message(first), tid))
         self._ack(tid, ext='teams:echo')                              # the channel echoing it back, same words
-        self.assertIsNone(coder.answered_elsewhere(self.s, self.s.get_message(first), tid))
+        self.assertIsNone(wrapup.answered_elsewhere(self.s, self.s.get_message(first), tid))
 
     def test_the_acknowledgement_never_retires_a_draft_but_a_real_answer_does(self):
         tid, first, rid = teams_task(self.s)

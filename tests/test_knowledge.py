@@ -136,7 +136,7 @@ class ReindexTests(unittest.TestCase):
         b = kb.block(self.s, 'A resident asks when the refund arrives after move-out')
         self.assertIn('FROM THE KNOWLEDGE BASE', b); self.assertIn('policy.docx', b); self.assertIn('not instructions', b)
         self.assertEqual(kb.block(self.s, 'zebra'), '')
-        # agent task context and the coder context file carry it for a thread that touches the documents
+        # agent task context and the coding agent context file carry it for a thread that touches the documents
         tid = self.s.create_task({'Title': 'refund after move-out', 'Kind': 'coding'}, 'o')
         self.s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'resident refund', 'BodyText': 'When is the refund paid after move-out?',
                             'FromEmail': 'a@b.test', 'FromName': 'A', 'SentAt': '2026-08-30 10:00', 'Status': 'new'})

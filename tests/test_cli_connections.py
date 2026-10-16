@@ -7,9 +7,10 @@ from taskuary.store import MemoryStore
 
 
 def legacy():
+    """An install from before connections: commands inline on each profile - what migrate() splits."""
     return {'agents': {
-        'coder': {'cmd': 'claude', 'args': ['-p', '--verbose'], 'kind': 'coding', 'rules_doc': 'coder'},
-        'codex': {'cmd': 'codex', 'args': ['exec'], 'kind': 'coding', 'rules_doc': 'coder'},
+        'coding': {'cmd': 'claude', 'args': ['-p', '--verbose'], 'kind': 'coding', 'rules_doc': 'coding'},
+        'codex': {'cmd': 'codex', 'args': ['exec'], 'kind': 'coding', 'rules_doc': 'coding'},
         'researcher': {'cmd': 'claude', 'args': ['-p'], 'kind': 'research', 'purpose': 'Research public sources', 'model': 'sonnet', 'light_model': 'haiku'},
         'analyst': {'cmd': 'claude', 'args': ['-p'], 'kind': 'analysis', 'purpose': 'Analyse our numbers', 'model': 'opus'},
     }}
@@ -30,12 +31,12 @@ def test_migration_shares_commands_lifts_models_onto_the_brain_and_is_idempotent
     assert cli_connections.gears(cfg, 'claude') == {'model': 'opus', 'light_model': 'haiku'}
     assert all(not set(p).intersection(cli_connections.COMMAND_FIELDS) for p in cfg['agents'].values())
     assert not cli_connections.migrate(cfg)
-    assert cfg['agents']['codex']['rules_doc'] == 'coder'
+    assert cfg['agents']['codex']['rules_doc'] == 'coding'
     assert cli_connections.cli_key(r'C:\tools\cursor-agent.cmd') == 'cursor'
 
 
 def test_command_only_claude_gets_headless_defaults_on_migration_and_legacy_creation():
-    cfg = {'agents': {'coder': {'cmd': 'claude'}}}
+    cfg = {'agents': {'coding': {'cmd': 'claude'}}}
     cli_connections.migrate(cfg)
     connection = cfg['cli_connections']['claude']
     assert connection['args'] == ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']
@@ -44,18 +45,18 @@ def test_command_only_claude_gets_headless_defaults_on_migration_and_legacy_crea
     assert not cli_connections.migrate(cfg)
     cfg['cli_connections']['claude'] = {'cmd': 'claude'}
     assert cli_connections.migrate(cfg)  # repair configs already split by the earlier migration
-    assert '--dangerously-skip-permissions' in cli_connections.resolve(cfg, cfg['agents']['coder'])['args']
+    assert '--dangerously-skip-permissions' in cli_connections.resolve(cfg, cfg['agents']['coding'])['args']
     fresh = {}
-    cli_connections.set_profile(fresh, MemoryStore(), 'coder', {'cmd': 'claude'})
+    cli_connections.set_profile(fresh, MemoryStore(), 'coding', {'cmd': 'claude'})
     assert '--dangerously-skip-permissions' in fresh['cli_connections']['claude']['args']
 
 
 def test_saved_custom_or_explicitly_empty_arguments_are_preserved():
     for args in ([], ['-p', '--custom']):
-        cfg = {'agents': {'coder': {'provider': 'cli:claude'}}, 'cli_connections': {'claude': {'cmd': 'claude', 'args': args}}}
+        cfg = {'agents': {'coding': {'provider': 'cli:claude'}}, 'cli_connections': {'claude': {'cmd': 'claude', 'args': args}}}
         cli_connections.migrate(cfg)
         assert cfg['cli_connections']['claude']['args'] == args
-        assert cli_connections.resolve(cfg, cfg['agents']['coder'])['args'] == args
+        assert cli_connections.resolve(cfg, cfg['agents']['coding'])['args'] == args
 
 
 def test_connection_edits_reach_all_profiles_and_provider_switch_is_independent():
@@ -64,7 +65,7 @@ def test_connection_edits_reach_all_profiles_and_provider_switch_is_independent(
     cli_connections.sync(cfg, store)
     cfg['cli_connections']['claude']['args'] = ['-p', '--new-shared-flag']
     cli_connections.sync(cfg, store)
-    for name in ('coder', 'researcher', 'analyst'):
+    for name in ('coding', 'researcher', 'analyst'):
         assert json.loads(store.get_agent(name)['Config'])['args'] == ['-p', '--new-shared-flag']
     cli_connections.set_profile(cfg, store, 'researcher', {'provider': 'cli:codex', 'model': 'test-model'})
     cli_connections.sync(cfg, store, 'researcher')
@@ -73,7 +74,7 @@ def test_connection_edits_reach_all_profiles_and_provider_switch_is_independent(
     assert research['purpose'] == 'Research public sources'
     assert 'light_model' not in research
     assert json.loads(store.get_agent('analyst')['Config'])['model'] == 'opus'
-    assert json.loads(store.get_agent('coder')['Config'])['cmd'] == 'claude'
+    assert json.loads(store.get_agent('coding')['Config'])['cmd'] == 'claude'
     assert '- researcher:' in agents.roster(store)
 
 
@@ -82,7 +83,7 @@ def test_settings_model_edit_keeps_shared_command_reference():
     cli_connections.migrate(cfg)
     cli_connections.sync(cfg, store)
     with mock.patch('taskuary.config.save'):
-        result = aidefaults.apply(store, cfg, 'default_agent', value='researcher', model='opus')
+        result = aidefaults.apply(store, cfg, 'default_brain', value='claude', model='opus')
     assert result['cli'] == 'claude'
     # the model names the BRAIN's gear, so it lands on the connection rather than the worker
     assert cli_connections.gears(cfg, 'claude')['model'] == 'opus'
@@ -102,7 +103,7 @@ def test_connection_api_has_one_row_per_cli_and_validates_references():
         c = TestClient(server.app)
         rows = c.get('/api/cli/connections').json()['data']
         assert sum(r['name'] == 'claude' for r in rows) == 1
-        assert not {'coder', 'researcher', 'analyst'}.intersection(r['name'] for r in rows)
+        assert not {'coding', 'researcher', 'analyst'}.intersection(r['name'] for r in rows)
         assert c.put('/api/cli/connections/claude-copy', json={'cmd': 'claude'}).status_code == 409
         assert c.put('/api/cli/connections/claude', json={'cmd': 'claude', 'args': ['-p', '--shared']}).status_code == 200
         assert json.loads(store.get_agent('analyst')['Config'])['args'] == ['-p', '--shared']
@@ -123,11 +124,12 @@ def test_brain_api_lists_cli_tools_once_instead_of_every_profile_using_them():
     cli_connections.migrate(cfg)
     cli_connections.sync(cfg, store)
     cfg['server'] = copy.deepcopy(server.cfg['server'])
-    store.set_setting('default_agent', 'coder', 'owner')
-    with mock.patch.object(server, 'cfg', cfg), mock.patch.object(server, 'store', store):
+    store.set_setting('default_brain', 'claude', 'owner')
+    with mock.patch.object(server, 'cfg', cfg), mock.patch.object(server, 'store', store), \
+         mock.patch('taskuary.config.load', return_value=cfg), mock.patch.object(agents, 'connection_brains', agents.connection_brains.real):
         choices = [r for r in TestClient(server.app).get('/api/brains').json()['data'] if r['kind'] == 'cli']
     assert [(r['value'], r['label']) for r in choices] == [
-        ('cli:coder', 'claude (your CLI)'),
+        ('cli:claude', 'claude (your CLI)'),
         ('cli:codex', 'codex (your CLI)'),
     ]
 
@@ -137,7 +139,7 @@ def test_brain_api_lists_a_connected_cli_no_profile_runs_on():
     from fastapi.testclient import TestClient
     from taskuary import agents, server
     store = MemoryStore()
-    store.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    store.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     with mock.patch.object(server, 'store', store), \
          mock.patch.object(agents, 'connection_brains', lambda s: [('codex', {'cmd': 'codex'})]), \
          mock.patch.object(agents, 'runs_here', lambda p: True):

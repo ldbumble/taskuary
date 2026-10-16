@@ -1,4 +1,4 @@
-"""The coder's context file: what the hub knows about a task, written where the agent can read it.
+"""The agent's context file: what the hub knows about a task, written where the agent can read it.
 
 The seed prompt (terminal.seed_text) is one command line. Windows caps it at 32,767 characters
 and when it overflows the ASK is what gets cut - so the seed carries the ask, the rules and a two-
@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import task_ref
+from .wrapup import is_report, report_body
 
 PAST = 5                 # closed tasks worth carrying
 THREAD_CHARS = 15000     # the whole thread, newest first, capped - never what is new since the last run. A file, not the seed: no tty limit
@@ -27,8 +28,7 @@ def _short(s, n): return ' '.join(str(s or '').split())[:n]
 
 
 def _report(store, tid: int) -> str:
-    return next((str(c.get('Body') or '')[len('CODER REPORT'):].strip() for c in reversed(store.list_comments(tid))
-                 if str(c.get('Body') or '').startswith('CODER REPORT')), '')
+    return next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
 
 
 def past_work(store, msgs: list, title: str = '', repo: str = None, limit: int = PAST) -> list:
@@ -203,7 +203,7 @@ def recent_closures(store, msg: dict, days: int = RECENT_DAYS, limit: int = RECE
     """What was answered and closed RECENTLY that touches this arriving message - the same thread,
     the same sender, or two words of the same subject - newest first, each with how it ended.
 
-    This is past_work aimed one step earlier. The coder has had this block since it was written;
+    This is past_work aimed one step earlier. The coding agent has had this block since it was written;
     triage never has, so a condition that repeats - a scheduled check reporting the same two Spendly
     export failures every run - was judged new work every morning, an agent was started, and the
     agent read the determination in its own context file and reported that yesterday had already
@@ -315,7 +315,7 @@ def is_new(m: dict, since: str) -> bool:
 def write(store, tid: int, msgs: list = None, repo: str = None):
     """Write ~/.taskuary/context/TQ-xxxx.md and return its path - or None when there is nothing
     worth a file, the setting is off, or the disk refused (the seed then simply carries no pointer)."""
-    if store.get_setting('coder_context_file', '1') != '1': return None
+    if store.get_setting('agent_context_file', '1') != '1': return None
     try:
         text = build(store, tid, msgs, repo)
         if not text: return None

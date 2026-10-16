@@ -22,7 +22,7 @@ from taskuary.store import MemoryStore
 from taskuary.testing import Factory
 
 
-def fake_session(tid, alive=True, phase='working', agent='coder'):
+def fake_session(tid, alive=True, phase='working', agent='coding'):
     return SimpleNamespace(alive=alive, task_id=tid, cwd=r'C:\code\repo', agent=agent, label=agent, started='2026-09-06 09:00:00',
                            files=lambda: [], info=lambda tail=0: {'sid': 'fake', 'taskId': tid}, phase=lambda: phase, waiting=lambda: phase == 'parked')
 
@@ -51,7 +51,7 @@ class CapacityTests(Base):
         term.SESSIONS['x'] = fake_session(t4, alive=False)                          # ended: not counted
         self.assertEqual(bb.live_count(), 3)
         self.s.set_setting('auto_sessions', '3', 't')
-        t5 = self.task('e'); self.s.enqueue_dispatch(t5, None, 'coder', 'slot')
+        t5 = self.task('e'); self.s.enqueue_dispatch(t5, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task') as start: bb.drain(self.s)
         start.assert_not_called()
         self.assertEqual((self.row(t5)['Attempts'] or 0, self.row(t5).get('State') or 'waiting'), (0, 'waiting'))   # a capacity wait is not an attempt
@@ -59,7 +59,7 @@ class CapacityTests(Base):
 
 class RetryTests(Base):
     def test_a_transient_failure_is_retried_with_backoff_and_stops_after_three_attempts(self):
-        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('pty spawn failed')) as start:
             bb.drain(self.s)
             row = self.row(tid)
@@ -81,7 +81,7 @@ class RetryTests(Base):
         self.assertTrue(self.timer.called)                                         # the retry was scheduled, not left to luck
 
     def test_a_transient_failure_that_recovers_clears_the_queue(self):
-        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('busy')): bb.drain(self.s)
         self.due(tid)
         with mock.patch.object(term, 'start_on_task', return_value={'sid': 's1'}): bb.drain(self.s)
@@ -89,7 +89,7 @@ class RetryTests(Base):
 
     def test_a_configuration_failure_needs_you_at_once(self):
         for err in ('unknown agent: codex', 'no repository for this task - pick one', 'permission denied for the checkout'):
-            tid = self.task(err[:10]); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+            tid = self.task(err[:10]); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
             with mock.patch.object(term, 'start_on_task', side_effect=ValueError(err)) as start: bb.drain(self.s)
             row = self.row(tid)
             self.assertEqual((row['Attempts'], row['State']), (1, 'failed'), err)
@@ -99,7 +99,7 @@ class RetryTests(Base):
             start.assert_not_called()
 
     def test_the_budget_and_backoff_are_persisted_and_a_restart_only_rearms_the_timer(self):
-        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('boom')): bb.drain(self.s)
         row = dict(self.row(tid))
         self.timer.reset_mock()
@@ -109,18 +109,18 @@ class RetryTests(Base):
 
     def test_other_queued_tasks_proceed_while_one_backs_off(self):
         t1, t2 = self.task('failing'), self.task('fine')
-        self.s.enqueue_dispatch(t1, None, 'coder', 'slot'); self.s.enqueue_dispatch(t2, None, 'coder', 'slot')
+        self.s.enqueue_dispatch(t1, None, 'coding', 'slot'); self.s.enqueue_dispatch(t2, None, 'coding', 'slot')
         def first(s, tid, *a, **k):
             if tid == t1: raise RuntimeError('boom')
         started = []
         with mock.patch.object(term, 'start_on_task', side_effect=first): bb.drain(self.s)
         self.assertEqual(self.row(t1)['State'], 'retrying'); self.assertIsNone(self.row(t2))   # t2 started in the same pass
-        self.s.enqueue_dispatch(t2, None, 'coder', 'slot')                                # queued again while t1 backs off
+        self.s.enqueue_dispatch(t2, None, 'coding', 'slot')                                # queued again while t1 backs off
         with mock.patch.object(term, 'start_on_task', side_effect=lambda s, tid, *a, **k: started.append(tid)): bb.drain(self.s)
         self.assertEqual(started, [t2]); self.assertIsNone(self.row(t2)); self.assertEqual(self.row(t1)['State'], 'retrying')
 
     def test_a_bookkeeping_failure_after_the_session_started_is_not_a_failed_start_and_never_duplicates_it(self):
-        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         live = fake_session(tid)
         def start(store, task_id, *a, **k):
             term.SESSIONS['live'] = live
@@ -153,7 +153,7 @@ class OwnerControlsTests(Base):
         self.c = TestClient(server.app)
 
     def exhausted(self):
-        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coder', 'slot')
+        tid = self.task(); self.s.enqueue_dispatch(tid, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task', side_effect=ValueError('unknown agent: x')): bb.drain(self.s)
         self.assertEqual(self.row(tid)['State'], 'failed'); return tid
 
@@ -171,7 +171,7 @@ class OwnerControlsTests(Base):
     def test_every_restored_deadline_is_armed_not_only_the_earliest(self):
         """PW-088/089: one timer for the earliest deadline, and the later one waited for an unrelated event."""
         t1, t2 = self.task('a'), self.task('b')
-        for t in (t1, t2): self.s.enqueue_dispatch(t, None, 'coder', 'slot')
+        for t in (t1, t2): self.s.enqueue_dispatch(t, None, 'coding', 'slot')
         with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('boom')): bb.drain(self.s)
         later = (datetime.now() + timedelta(seconds=90)).strftime('%Y-%m-%d %H:%M:%S')
         self.s._exec('UPDATE dispatchq SET NextAt=? WHERE TaskId=?', (later, t2))   # as two failures at different times would sit

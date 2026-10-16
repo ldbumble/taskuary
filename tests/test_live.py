@@ -329,7 +329,7 @@ class LiveSocketTests(unittest.TestCase):
                 tid = s.create_task({'Title': 'run-poke', 'Status': 'open'}, 't')
                 live.flush()
                 tab.sent.clear()
-                s.start_run(tid, 'coder', 'go', 't')
+                s.start_run(tid, 'coding', 'go', 't')
                 live.flush()
                 for _ in range(20):
                     await asyncio.sleep(0)

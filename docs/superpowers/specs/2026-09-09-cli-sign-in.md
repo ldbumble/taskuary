@@ -45,7 +45,7 @@ Alex's framing, and the one the codebase already agrees with: *"you are making a
 like a task spawn… maybe it will show up on tasks and board as setup coding window."* Two
 objections were raised against making it a real Task and both turned out to be already handled:
 
-- **`Done` would draft a reply to nobody.** It does not — `coder.py:268` routes `Kind == 'setup'`
+- **`Done` would draft a reply to nobody.** It does not — `wrapup.py:268` routes `Kind == 'setup'`
   to `aisetup.finish`, *"a plain close — no report, no proposals, no reply draft."*
 - **A transcript full of typed secrets would be filed on the task.** It is not —
   `Term.keep_transcript = False` exists for exactly this, and `keep()` returns early on it.

@@ -17,7 +17,7 @@ def test_search_finds_a_task_by_its_ref_with_or_without_the_padding():
 
 
 def test_the_coders_own_pull_request_is_skipped_at_any_width():
-    # past TQ-9999 a four-digit pattern stopped recognising the coder's own PRs, and the poll took them in as new work
+    # past TQ-9999 a four-digit pattern stopped recognising the coding agent's own PRs, and the poll took them in as new work
     assert channels.TQ_ISSUE.match('[TQ-0796] Fix the export') and channels.TQ_ISSUE.match('[TQ-10000] Fix the export')
     assert not channels.TQ_ISSUE.match('Fix TQ-0796')
 

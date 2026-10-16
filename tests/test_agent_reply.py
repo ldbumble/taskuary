@@ -12,7 +12,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import coder, selfclose, server
+from taskuary import wrapup, selfclose, server
 from taskuary.store import MemoryStore
 
 REP = {'summary': 'fixed the export', 'outcome': 'did_work', 'determination': '', 'actions': ''}
@@ -35,51 +35,51 @@ def kept(s, tid):
 
 
 class NoHook(unittest.TestCase):
-    def setUp(self): self._prev, coder.REFRESH = coder.REFRESH, None
-    def tearDown(self): coder.REFRESH = self._prev
+    def setUp(self): self._prev, wrapup.REFRESH = wrapup.REFRESH, None
+    def tearDown(self): wrapup.REFRESH = self._prev
 
 
 class AgentReplyTests(NoHook):
     def test_the_agents_reply_is_the_tasks_pending_reply(self):
         s = MemoryStore(); tid, mid = task_with(s)
-        out = coder.agent_reply(s, tid, OWN, 'coder')
+        out = wrapup.agent_reply(s, tid, OWN, 'coding')
         rv = s.get_review(out['review_id'])
-        self.assertEqual((rv['Status'], rv['DraftText'], rv['DraftBy'], rv['MessageId']), ('pending', OWN, 'agent:coder', mid))
+        self.assertEqual((rv['Status'], rv['DraftText'], rv['DraftBy'], rv['MessageId']), ('pending', OWN, 'agent:coding', mid))
 
     def test_finishing_keeps_it_and_no_second_model_redrafts(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        coder.agent_reply(s, tid, OWN, 'coder')
+        wrapup.agent_reply(s, tid, OWN, 'coding')
         with mock.patch('taskuary.responder.write_draft') as redraft:
-            out = coder.finish(s, tid, REP, None, 'coder')
+            out = wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_not_called()
         self.assertTrue(out['drafting'])
         rvs = s.list_reviews('pending')
         self.assertEqual(len(rvs), 1); self.assertEqual(rvs[0]['DraftText'], OWN)
-        self.assertIn("coder's own reply", rvs[0]['Reason'])
+        self.assertIn("coding's own reply", rvs[0]['Reason'])
 
     def test_without_one_the_responder_drafts_as_before(self):
         s = MemoryStore(); tid, _ = task_with(s)
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed.') as redraft:
-            coder.finish(s, tid, REP, None, 'coder')
+            wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_called_once()
 
     def test_a_triage_draft_held_for_the_session_is_the_one_it_fills(self):
         s = MemoryStore(); tid, mid = task_with(s)
         held = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'held', 'Reason': 'held while the agent works'})
-        out = coder.agent_reply(s, tid, OWN, 'coder')
+        out = wrapup.agent_reply(s, tid, OWN, 'coding')
         self.assertEqual(out['review_id'], held)
         self.assertEqual(s.get_review(held)['Status'], 'pending')
         self.assertEqual(len([r for r in s.list_reviews('pending') if r['TaskId'] == tid]), 1)
 
     def test_an_ai_redraft_takes_the_mark_off_so_finishing_redrafts_again(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        rid = coder.agent_reply(s, tid, OWN, 'coder')['review_id']
+        rid = wrapup.agent_reply(s, tid, OWN, 'coding')['review_id']
         s.update_review_draft(rid, 'An AI rewrite.', None)                       # "Draft with AI" pressed
-        self.assertFalse(coder.agent_drafted(s.get_review(rid)))
+        self.assertFalse(wrapup.agent_drafted(s.get_review(rid)))
 
     def test_nobody_to_answer_keeps_it_as_the_result(self):
         s = MemoryStore(); tid, _ = task_with(s, inbound=False)
-        out = coder.agent_reply(s, tid, OWN, 'coder')
+        out = wrapup.agent_reply(s, tid, OWN, 'coding')
         self.assertEqual((out['ok'], out['saved']), (True, 'result')); self.assertEqual(s.list_reviews('pending'), [])
         self.assertIn(OWN, kept(s, tid))
 
@@ -90,7 +90,7 @@ class AgentReplyTests(NoHook):
         tid = s.create_task({'Title': 'AP clerk checklist', 'Kind': 'general', 'Status': 'in_progress'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'own-1', 'Channel': 'own', 'Subject': 'AP clerk checklist',
                        'FromName': 'You', 'BodyText': 'write a short checklist', 'Status': 'routed'})
-        out = coder.agent_reply(s, tid, OWN, 'assistant')
+        out = wrapup.agent_reply(s, tid, OWN, 'assistant')
         self.assertEqual(s.list_reviews('pending'), [])
         # ...but the answer is what the owner asked for: refusing it threw a whole review away (2026-10-06)
         self.assertEqual(out['saved'], 'result'); self.assertIn(OWN, kept(s, tid))
@@ -98,7 +98,7 @@ class AgentReplyTests(NoHook):
     def test_the_run_record_carries_the_answer(self):
         from taskuary import session_artifacts
         s = MemoryStore(); tid, _ = task_with(s, inbound=False)
-        coder.agent_reply(s, tid, OWN, 'coder')
+        wrapup.agent_reply(s, tid, OWN, 'coding')
         art = session_artifacts.coding(s, tid, 'Summary: reviewed it', 'transcript', final_message='Saved the reply file.')
         body = session_artifacts.confined(art['Path']).read_text(encoding='utf-8')
         self.assertLess(body.index(OWN), body.index('## Session result'))
@@ -126,26 +126,26 @@ class AttachTests(NoHook):
 
     def test_the_file_rides_with_the_reply(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        out = coder.agent_reply(s, tid, 'Hi Dana - the list is attached.', 'coder', files=[('review.xlsx', self.XLSX)])
+        out = wrapup.agent_reply(s, tid, 'Hi Dana - the list is attached.', 'coding', files=[('review.xlsx', self.XLSX)])
         self.assertEqual(out['attached'], ['review.xlsx'])
         (f,) = envelope(s, out['review_id'])
         self.assertEqual((f['name'], f['size']), ('review.xlsx', len(self.XLSX)))
 
     def test_attach_alone_adds_to_the_reply_already_saved(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        rid = coder.agent_reply(s, tid, OWN, 'coder')['review_id']
-        out = coder.agent_reply(s, tid, '', 'coder', files=[('review.xlsx', self.XLSX)])
+        rid = wrapup.agent_reply(s, tid, OWN, 'coding')['review_id']
+        out = wrapup.agent_reply(s, tid, '', 'coding', files=[('review.xlsx', self.XLSX)])
         self.assertEqual(out['review_id'], rid); self.assertEqual(s.get_review(rid)['DraftText'], OWN)
         self.assertEqual([f['name'] for f in envelope(s, rid)], ['review.xlsx'])
 
     def test_attach_alone_with_no_reply_says_so(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        out = coder.agent_reply(s, tid, '', 'coder', files=[('review.xlsx', self.XLSX)])
+        out = wrapup.agent_reply(s, tid, '', 'coding', files=[('review.xlsx', self.XLSX)])
         self.assertFalse(out['ok']); self.assertIn('--reply', out['why'])
 
     def test_a_file_that_cannot_ride_says_why(self):
         s = MemoryStore(); tid, _ = task_with(s)
-        out = coder.agent_reply(s, tid, OWN, 'coder', files=[('empty.csv', b'')])
+        out = wrapup.agent_reply(s, tid, OWN, 'coding', files=[('empty.csv', b'')])
         self.assertEqual(out['attached'], []); self.assertIn('empty.csv', out['not_attached'][0])
 
     def test_the_shell_door_carries_bytes_not_a_path(self):

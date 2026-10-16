@@ -15,7 +15,7 @@ test("the wall knows the owner by the name the server sends with the notes", () 
   assert.equal(isOwnerAuthor("Alex Doyle", "Alex Doyle"), true);
   assert.equal(isOwnerAuthor(" alex doyle ", "Alex Doyle"), true);
   assert.equal(isOwnerAuthor("Alex Doyle", "Erin Blake"), false);
-  assert.equal(isOwnerAuthor("coder", "Alex Doyle"), false);
+  assert.equal(isOwnerAuthor("coding", "Alex Doyle"), false);
   assert.equal(isOwnerAuthor("", ""), false);
 });
 

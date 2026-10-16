@@ -67,7 +67,7 @@ def test_a_slot_draft_is_never_the_tasks_reply(s):
 
 
 # ── closing waits for every slot ─────────────────────────────────────────────────────────
-from taskuary import coder, operations, outbound, verdicts
+from taskuary import wrapup, operations, outbound, verdicts
 
 SENT = {'channel': 'email', 'to': ['x@example.com'], 'cc': []}
 
@@ -162,9 +162,9 @@ def test_a_new_inbound_message_does_not_block_a_slot(s):
 
 def test_a_finished_run_with_slots_open_waits_instead_of_closing(s):
     tid = typed(s, FOUR[:2]); draft(s, tid, 0)
-    prev, coder.REFRESH = coder.REFRESH, None
-    try: coder.finish(s, tid, {'summary': 'checked', 'outcome': 'did_work'})
-    finally: coder.REFRESH = prev
+    prev, wrapup.REFRESH = wrapup.REFRESH, None
+    try: wrapup.finish(s, tid, {'summary': 'checked', 'outcome': 'did_work'})
+    finally: wrapup.REFRESH = prev
     assert s.get_task(tid)['Status'] == 'waiting'
     assert [r['Status'] for r in s._rows('SELECT Status FROM review WHERE TaskId=?', (tid,))] == ['pending']
 
@@ -288,7 +288,7 @@ def test_a_triaged_message_that_asks_for_emails_gets_slots():
                           'summary': 'Marcus Reed wants Erin and Gail told where the tabs stand.', 'checklist': ['Tell Erin and Gail'],
                           'outputs': [{'to': 'erin@northwind.example', 'about': 'the tabs'}, {'to': 'Gail Moreno', 'about': 'the tabs'}]})
     st, prev = MemoryStore(), server.store
-    server.store = st; st.set_setting('coder_auto_enabled', '0', 'test')
+    server.store = st; st.set_setting('coding_auto_enabled', '0', 'test')
     try:
         body = {'external_id': 'slots-1', 'channel': 'teams', 'conversation_id': 'teams:19:slots@thread.v2', 'from_name': 'Marcus Reed',
                 'subject': 'Tab updates', 'body': 'Could you let Erin and Gail know where each tab stands?',
@@ -321,7 +321,7 @@ def test_a_triaged_chat_message_never_owes_its_sender_an_email():
                           'summary': 'Erin Blake wants the logins fixed.', 'checklist': ['Fix the logins'],
                           'outputs': [{'to': 'Erin Blake', 'about': 'status on the logins'}]})
     st, prev = MemoryStore(), server.store
-    server.store = st; st.set_setting('coder_auto_enabled', '0', 'test')
+    server.store = st; st.set_setting('coding_auto_enabled', '0', 'test')
     try:
         body = {'external_id': 'slots-sender-1', 'channel': 'teams', 'conversation_id': 'teams:19:sender@thread.v2',
                 'from_name': 'Blake, Erin at Northwind', 'subject': 'Logins', 'body': 'His logins are blank - can you look?',
@@ -561,7 +561,7 @@ def test_a_display_name_and_address_keep_only_the_address_as_the_recipient():
 
 def test_an_agent_draft_to_a_display_name_sends_to_the_address(s):
     tid = typed(s, [])
-    out = slots.draft(s, tid, 'Tab 1 is fine.', to='Paula Vance <paula@northwind.example>', agent='coder')
+    out = slots.draft(s, tid, 'Tab 1 is fine.', to='Paula Vance <paula@northwind.example>', agent='coding')
     rv = s.get_review(out['review_id'])
     assert json.loads(rv['Deliver'])['to'] == ['paula@northwind.example'] and slots.all_(s, tid)[0]['out']['to'] == 'paula@northwind.example'
 
@@ -609,14 +609,14 @@ def _finish_with_a_written_email(s, written=None):
     """A mail task whose agent wrote the email it was asked for (to someone else), then finished."""
     tid, mid, rid = mail_task(s)
     s.decide_review(rid, 'no_reply', None, 'owner', 'cleared for the test')
-    slots.draft(s, tid, 'Passing you the import failure.', to='gail@northwind.example', agent='coder')
-    prev, coder.REFRESH = coder.REFRESH, None
+    slots.draft(s, tid, 'Passing you the import failure.', to='gail@northwind.example', agent='coding')
+    prev, wrapup.REFRESH = wrapup.REFRESH, None
     try:
-        with mock.patch.object(coder, 'raise_reply') as raised:
-            if written is None: coder.finish(s, tid, {'summary': 'handed it to Gail', 'outcome': 'did_work'})
+        with mock.patch.object(wrapup, 'raise_reply') as raised:
+            if written is None: wrapup.finish(s, tid, {'summary': 'handed it to Gail', 'outcome': 'did_work'})
             else:
-                with mock.patch.object(slots, 'written', return_value=written): coder.finish(s, tid, {'summary': 'x', 'outcome': 'did_work'})
-    finally: coder.REFRESH = prev
+                with mock.patch.object(slots, 'written', return_value=written): wrapup.finish(s, tid, {'summary': 'x', 'outcome': 'did_work'})
+    finally: wrapup.REFRESH = prev
     return tid, raised
 
 

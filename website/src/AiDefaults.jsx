@@ -43,7 +43,7 @@ const Model = ({ slot, onSave }) => {
 // typographic, and the line that matters most, "what will actually run", is the loudest thing
 // in the card rather than a caption under two dropdowns.
 const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
-  const isAgent = slot.key === "default_agent";
+  const isAgent = slot.key === "default_brain";     // the coding CLI: a tool, chosen from the connected CLIs
   // The judge is the one slot that may be pointed at a model which cannot write, so it is the one
   // picker that shows them. Its own blank row already means "auto" (the report's own brain), so
   // the brains' auto entry — same empty value — is dropped rather than offered twice.

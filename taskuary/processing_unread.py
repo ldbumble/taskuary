@@ -65,7 +65,7 @@ def _arrived_after_close(task, view) -> bool:
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
 OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time', 'forgotten')
-# a goal's CHILD in one of these lanes is told by the goal's row ("coder on step 5 · Ray owes step 4"), not by a row of its
+# a goal's CHILD in one of these lanes is told by the goal's row ("coding on step 5 · Ray owes step 4"), not by a row of its
 # own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
 FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
 # what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
@@ -180,7 +180,7 @@ def names(item) -> list:
 
 
 def holder_name(assignee: str) -> str:
-    """Who holds a step, as a name: 'person:ray.colton@northwind.example' -> 'Ray Colton', 'agent:coder' -> 'coder'."""
+    """Who holds a step, as a name: 'person:ray.colton@northwind.example' -> 'Ray Colton', 'agent:coding' -> 'coding'."""
     who = str(assignee or '')
     if who.startswith('agent:'): return who.split(':', 1)[1]
     if who.startswith('person:'): return ' '.join(p[:1].upper() + p[1:] for p in re.split(r'[._-]+', who.split(':', 1)[1].split('@')[0]) if p)
@@ -252,7 +252,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # owner's own work (A10, 2026-09-25)
     from .processing_all import _has_conversation
     # NEWS AFTER THE AGENT (the owner, 2026-10-12): a sender wrote again after the agent's last session - the task is that
-    # message now, on you, not "handed to coder" nor "you ended the session" from days before
+    # message now, on you, not "handed to an agent" nor "you ended the session" from days before
     news = funnel.news_since_agent(store, tid) if active and tid and not workers else None
     queued = active and not workers and not persisted_working and not news and (
         str(task.get('Assignee') or '').startswith('agent:') or funnel.general_not_started(task, _has_conversation(view, tid), view.get('routes', []))
@@ -456,7 +456,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # owner closed stays closed and gone.
     finished = _agent_finished(store, tid, active, review, processing_all._stamp(read.get('last_read_at')) or read_at, now)
     if finished:
-        from .coder import no_one_behind
+        from .wrapup import no_one_behind
         card.update(kind='agentdone', lane='report', who=finished['who'], summary=finished['summary'], closed=True,
                     why='the agent finished and closed it - read what it found')
         # work the owner started here has nobody behind it to answer (a brief typed in the chat)

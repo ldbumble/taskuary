@@ -89,14 +89,14 @@ class GithubIngestTests(unittest.TestCase):
         'Reply to issue/PR authors'). The always-draft rule (PW-237): the draft is raised either way;
         with the switch off it cannot be SENT from here - Send is hidden, the reason said, and the
         owner's exit is Close without sending - but the answer itself is never suppressed."""
-        from taskuary import coder
+        from taskuary import wrapup
         for on, status, reviews in ((False, 'waiting', 1), (True, 'waiting', 1)):
             s = self._store(on)
             tid = s.create_task({'Title': 'pr work', 'Kind': 'coding'}, 'o')
             s.add_message({'TaskId': tid, 'ExternalId': 'gh:o/app#5', 'Channel': 'github',
                            'FromEmail': 'x@users.noreply.github.com', 'Status': 'routed'})
             with mock.patch('taskuary.llm.build_llm', return_value=None):
-                coder.finish(s, tid, {'summary': 'merged'})
+                wrapup.finish(s, tid, {'summary': 'merged'})
             self.assertEqual(s.get_task(tid)['Status'], status)
             self.assertEqual(len([r for r in s.list_reviews('pending') if r['TaskId'] == tid]), reviews)
 
@@ -162,7 +162,7 @@ class GithubIngestTests(unittest.TestCase):
         from taskuary.store import MemoryStore
         from taskuary.ingest import ingest_message
         s = MemoryStore()
-        s.set_setting('coder_auto_enabled', '1', 't')
+        s.set_setting('coding_auto_enabled', '1', 't')
         s.set_setting('owner_email', 'me@work.example', 't')      # the mail below is from a colleague: a KNOWN sender (senders.py gates strangers)
         spawned = []
         task_llm = lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "work"}'   # explicit: an unnamed kind is general (PW-067)
@@ -370,7 +370,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'open')
 
     def test_closing_the_task_ticks_every_box_and_dropping_it_ticks_none(self):
-        """The reverse door. A coder finished TQ-0646 with `--done` and the closed card kept three open
+        """The reverse door. A coding agent finished TQ-0646 with `--done` and the closed card kept three open
         boxes, as if the work were still owed (the owner, 2026-09-18: "part of --done should be that,
         no? same if it's saved manually"). Done means done, whoever says it; dropped means nothing was."""
         boxes = lambda tid: [i['done'] for i in json.loads(c.get(f'/api/tasks/{tid}').json()['task']['Checklist'])]
@@ -566,15 +566,16 @@ class ApiTests(unittest.TestCase):
                 'cwd_map': {'o/r': 'C:/src/r'}, 'kind': 'coding',
                 'purpose': 'writes and changes code, in a repository'}
         self.assertEqual(c.put('/api/agents/uitest', json=prof).json(),
-                         {'ok': True, 'rules_doc': 'coder', 'triage_available': True})
+                         {'ok': True, 'rules_doc': 'coding', 'triage_available': True})
         # the model names the BRAIN's gear, so it lands on the connection and leaves the worker:
         # a profile has nothing to do with which model runs it (the 2026-09-16 spec)
-        role = {k: v for k, v in prof.items() if k != 'model'}
+        role = {k: v for k, v in prof.items() if k not in ('model', 'provider')}
         self.assertEqual(c.get('/api/agents').json()['config']['uitest'], role)
         self.assertTrue(any(a['Name'] == 'uitest' for a in c.get('/api/agents').json()['data']))
         self.assertEqual(config.load()['agents']['uitest'], role)  # written to config.toml
         self.assertEqual(config.load()['cli_connections']['uitest-cli']['model'], 'sonnet')
-        self.assertEqual(c.put('/api/agents/bad', json={'args': []}).status_code, 422)
+        self.assertEqual(json.loads(server.store.get_setting('profile_brains'))['uitest'], 'uitest-cli')   # the CLI is the role's brain
+        self.assertEqual(c.put('/api/agents/bad', json={'provider': 'cli:not-connected'}).status_code, 422)   # a brain that is not there
         self.assertEqual(c.delete('/api/agents/uitest').json(), {'ok': True})
         self.assertNotIn('uitest', config.load().get('agents', {}))
         self.assertEqual(c.delete('/api/cli/connections/uitest-cli').status_code, 200)
@@ -601,7 +602,7 @@ class ApiTests(unittest.TestCase):
             disk = tomllib.loads(path.read_text(encoding='utf-8'))
             self.assertTrue(disk['server'].pop('agent_token', None))     # minted on load, belongs on disk
             self.assertEqual(disk['server'], stored)
-            self.assertEqual(disk['agents']['overlay-api']['provider'], 'cli:echo')
+            self.assertNotIn('provider', disk['agents']['overlay-api'])     # a profile names no CLI; echo is its brain
             self.assertEqual(disk['cli_connections']['echo']['cmd'], 'echo')
         finally:
             server.cfg['server'] = old_server
@@ -720,10 +721,11 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'trigger,wat'}).status_code, 422)
         finally:
             c.post('/api/connectors', json={'ConnectorId': cid, 'Roles': 'tool'})
-        b = c.get('/api/brains').json()
+        with mock.patch.object(server.hub_agents, 'connection_brains', lambda store, cfg=None: [('claude', {'cmd': 'claude'})]):
+            b = c.get('/api/brains').json()
         self.assertNotIn('', [x['value'] for x in b['data']])          # no "auto - first connector" (2026-09-24)
         anthropic_value = f"connector:{rows['anthropic']['ConnectorId']}"
-        self.assertIn('cli:coder', [x['value'] for x in b['data']])  # your coding CLI can be the brain
+        self.assertIn('cli:claude', [x['value'] for x in b['data']])  # your connected CLI tool can be the brain
         # no key saved = not a choice: fifteen greyed rows buried the CLIs under the fold (2026-09-24)
         self.assertNotIn(anthropic_value, [x['value'] for x in b['data']])
 
@@ -831,7 +833,7 @@ class ApiTests(unittest.TestCase):
     def test_dispatch_validates(self):
         tid = c.post('/api/tasks', json={'Title': 'd'}).json()['taskId']
         self.assertEqual(c.post(f'/api/tasks/{tid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
-        self.assertEqual(c.post('/api/tasks/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
+        self.assertEqual(c.post('/api/tasks/999999/dispatch', json={'agent': 'coding'}).status_code, 404)
 
     def test_message_dispatch_promotes_and_runs(self):
         """'Send to coding agent' from the timeline: a filed message (report/ignored mail)
@@ -841,20 +843,20 @@ class ApiTests(unittest.TestCase):
         mid = out['message_id']
         self.assertIsNone(out['task_id'])
         self.assertEqual(c.get(f'/api/messages/{mid}').json()['Subject'], 'Process Check - FAILED')
-        server.store.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
+        server.store.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
         # sending it to an agent opens a REAL session on the task - there is no pipe behind
         # any button, so the owner can always read, interrupt and answer what it is doing
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1'}) as d:
-            r = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder', 'instruction': 'find why it failed'}).json()
+            r = c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding', 'instruction': 'find why it failed'}).json()
         tid = r['taskId']
         self.assertEqual((r['ref'], r['dispatch']), (f'TQ-{tid:04d}', 'session'))
-        self.assertEqual(d.call_args[0][1:5], (tid, 'coder', None, 'find why it failed'))   # your prompt is typed in
+        self.assertEqual(d.call_args[0][1:5], (tid, 'coding', None, 'find why it failed'))   # your prompt is typed in
         self.assertEqual([m['MessageId'] for m in server.store.list_messages(tid)], [mid])
         # a second send reuses the task it already made instead of forking a new one
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's1', 'existing': True}):
-            self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coder'}).json()['taskId'], tid)
+            self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'coding'}).json()['taskId'], tid)
         self.assertEqual(c.post(f'/api/messages/{mid}/dispatch', json={'agent': 'ghost'}).status_code, 422)
-        self.assertEqual(c.post('/api/messages/999999/dispatch', json={'agent': 'coder'}).status_code, 404)
+        self.assertEqual(c.post('/api/messages/999999/dispatch', json={'agent': 'coding'}).status_code, 404)
         self.assertEqual(c.get('/api/messages/999999').status_code, 404)
 
     def test_not_mine_writes_memory_and_triage_reads_it(self):
@@ -1034,7 +1036,7 @@ class ApiTests(unittest.TestCase):
         self.assertIs(rv['CanSend'], False)
 
     def test_a_waiting_agent_can_ask_the_sender_and_leave_the_task_waiting(self):
-        """Clarification is a separate reviewed reply, not the coder's final response. Sending
+        """Clarification is a separate reviewed reply, not the coding agent's final response. Sending
         it must leave the coding task open and any other pending review alone."""
         tid = server.store.create_task({'Title': 'Dashboard', 'Kind': 'coding', 'Status': 'in_progress'}, 'test')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'clarify1', 'Channel': 'email',
@@ -1099,12 +1101,12 @@ class ApiTests(unittest.TestCase):
 
     def test_done_and_doc_save_persist(self):
         # Save on a doc is a real write-read roundtrip
-        was = c.get('/api/doc/coder').json()['content']
+        was = c.get('/api/doc/coding').json()['content']
         try:
-            c.put('/api/doc/coder', json={'content': '# my coder rules v2'})
-            self.assertEqual(c.get('/api/doc/coder').json()['content'], '# my coder rules v2')
+            c.put('/api/doc/coding', json={'content': '# my coding rules v2'})
+            self.assertEqual(c.get('/api/doc/coding').json()['content'], '# my coding rules v2')
         finally:
-            c.put('/api/doc/coder', json={'content': was})
+            c.put('/api/doc/coding', json={'content': was})
         # Done on a task persists AND resolves its pending reviews with it
         tid = c.post('/api/tasks', json={'Title': 'wrap me'}).json()['taskId']
         server.store.add_review({'TaskId': tid, 'Kind': 'draft', 'Status': 'pending', 'Reason': 'r'})
@@ -1114,7 +1116,7 @@ class ApiTests(unittest.TestCase):
 
     def test_live_runs_tail(self):
         tid = c.post('/api/tasks', json={'Title': 'live'}).json()['taskId']
-        rid = server.store.start_run(tid, 'coder', 'work it', 'owner')
+        rid = server.store.start_run(tid, 'coding', 'work it', 'owner')
         server.store.update_run(rid, {'TraceJson': json.dumps(
             [{'kind': 'prompt', 'detail': 'ignored'}] + [{'kind': 'live', 'detail': f'line {i}'} for i in range(5)])})
         row = next(r for r in c.get('/api/runs/live').json()['data'] if r['RunId'] == rid)
@@ -1130,7 +1132,7 @@ class ApiTests(unittest.TestCase):
         with mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 'x'}) as start:
             out = c.post(f'/api/tasks/{tid}/code', json={'agent': 'codex', 'model': 'gpt-5-codex',
                                                          'instruction': 'just the importer'}).json()
-        self.assertEqual((out['coder'], out['agent'], out['model']), ('session', 'codex', 'gpt-5-codex'))
+        self.assertEqual((out['start'], out['agent'], out['model']), ('session', 'codex', 'gpt-5-codex'))
         self.assertEqual(start.call_args[0][1:], (tid, 'codex', 'gpt-5-codex', 'just the importer', server.ACTOR))
         self.assertEqual(c.post(f'/api/tasks/{tid}/code', json={'agent': 'ghost'}).status_code, 422)
 
@@ -1162,7 +1164,7 @@ class ApiTests(unittest.TestCase):
         """Owner-created tasks stayed open after their reply went out (0.3.2.9); the owner, 2026-09-24: "task should
         close when sending reply". Only an agent still working a task holds it open."""
         tid = c.post('/api/tasks', json={'Title': 'importer down', 'Kind': 'coding'}).json()['taskId']
-        server.store.update_task(tid, {'Status': 'waiting'}, 'coder')
+        server.store.update_task(tid, {'Status': 'waiting'}, 'agent')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:BBB', 'Channel': 'email',
                                         'SourceName': 'me@corp.com', 'FromEmail': 'ap@client.com',
                                         'BodyText': 'nothing imported', 'Status': 'routed'})
@@ -1213,7 +1215,7 @@ class ApiTests(unittest.TestCase):
     def test_promoting_one_report_run_is_not_a_standing_order_for_the_report(self):
         """A report's subject is the same every day, so a topic note from sending ONE run to an agent made every later run a task."""
         mid = server.store.add_message({'ExternalId': 'report:1:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Daily Digest',
-                                        'Subject': 'Daily Digest - coder ran a prompt - 49 lines', 'SentAt': '2026-09-29 10:04',
+                                        'Subject': 'Daily Digest - an agent ran a prompt - 49 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Top 15 list.', 'Status': 'filed'})
         before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
         with mock.patch.object(server.learn, 'learn_from') as distilled:
@@ -1223,7 +1225,7 @@ class ApiTests(unittest.TestCase):
 
     def test_a_report_run_promoted_as_standing_is_learned(self):
         mid = server.store.add_message({'ExternalId': 'report:2:2026-09-29 10:04', 'Channel': 'report', 'SourceName': 'Weekly Digest',
-                                        'Subject': 'Weekly Digest - coder ran a prompt - 12 lines', 'SentAt': '2026-09-29 10:04',
+                                        'Subject': 'Weekly Digest - an agent ran a prompt - 12 lines', 'SentAt': '2026-09-29 10:04',
                                         'BodyText': 'Numbers.', 'Status': 'filed'})
         before = {m['MemoryId'] for m in server.store.list_memories(active_only=False)}
         with mock.patch.object(server.learn, 'learn_from'):
@@ -1276,7 +1278,7 @@ class ApiTests(unittest.TestCase):
         tid = c.post('/api/tasks', json={'Title': 'live one'}).json()['taskId']
 
         class FakeTerm:
-            alive, task_id, agent, label = True, tid, 'coder', 'coder'
+            alive, task_id, agent, label = True, tid, 'coding', 'coding'
             sid, cwd, argv = 'sid1', 'C:/repo', ['claude']
             started = '2026-08-18 20:00:00'
             def __init__(self): self.last, self.file_reads = _t.time(), 0
@@ -1288,7 +1290,7 @@ class ApiTests(unittest.TestCase):
         term.SESSIONS['sid1'] = FakeTerm()
         try:
             t = next(x for x in c.get('/api/tasks').json()['data'] if x['TaskId'] == tid)
-            self.assertEqual(t['Session']['agent'], 'coder')
+            self.assertEqual(t['Session']['agent'], 'coding')
             self.assertLess(t['Session']['idle'], 5)                       # just spoke = working
             self.assertEqual(term.SESSIONS['sid1'].file_reads, 0)          # task roster never shells out to git
             live = next(r for r in c.get('/api/runs/live').json()['data'] if r['TaskId'] == tid)
@@ -1363,10 +1365,10 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.patch('/api/tasks/999999', json={'Kind': 'reply'}).status_code, 404)
 
     def test_a_reply_can_be_opened_on_any_message(self):
-        """After a coder ran (or triage filed it) there was NO way to answer from the panel -
+        """After a coding agent ran (or triage filed it) there was NO way to answer from the panel -
         nothing pending meant the draft box was unreachable. Opening a reply creates the review
         and drafts it; opening again reuses the same one."""
-        tid = c.post('/api/tasks', json={'Title': 'coder finished this', 'Kind': 'coding'}).json()['taskId']
+        tid = c.post('/api/tasks', json={'Title': 'an agent finished this', 'Kind': 'coding'}).json()['taskId']
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:REPLY1', 'Channel': 'email',
                                         'FromEmail': 'asker@corp.com', 'BodyText': 'is it fixed?', 'Status': 'routed'})
         with mock.patch('taskuary.responder.write_draft', return_value='Fixed - deploys again tonight.') as wd:

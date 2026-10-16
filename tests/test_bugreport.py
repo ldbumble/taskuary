@@ -49,8 +49,8 @@ class CollectTests(unittest.TestCase):
         self.assertEqual('source', bugreport.install_kind())          # this checkout has pyproject.toml beside the package
 
     def test_a_cli_brain_is_reported_by_its_cli_name(self):
-        self.s.upsert_agent('coder', 'cli', 'cli', json.dumps({'cmd': 'claude'}))
-        st = {'pick': 'cli:coder', 'Name': 'coder (CLI)', 'Type': 'cli', 'ready': True, 'why': ''}
+        self.s.upsert_agent('coding', 'cli', 'cli', json.dumps({'cmd': 'claude'}))
+        st = {'pick': 'cli:claude', 'Name': 'coding (CLI)', 'Type': 'cli', 'ready': True, 'why': ''}
         with mock.patch('taskuary.llm.brain_status', return_value=st):
             self.assertIn('claude (cli)', bugreport.collect(self.s, _client())['env'])
 

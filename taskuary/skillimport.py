@@ -6,7 +6,7 @@ an ordinary Taskuary profile, and an ordinary profile drives a codex session.
 
 It never becomes a PLAYBOOK. A playbook's fields are uses/alone/ask first/done when - every one about
 acting on a system - and a SKILL.md states none of them, so converting to one meant inventing `uses:`,
-which decides whether CODER.md's repository rules apply. A profile needs a purpose and a body, and
+which decides whether CODING.md's repository rules apply. A profile needs a purpose and a body, and
 both are already in the file. Nothing is guessed.
 
 This module finds and parses. It writes nothing and fetches nothing it was not pointed at.

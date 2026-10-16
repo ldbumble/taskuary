@@ -154,16 +154,16 @@ class FactsStillDecideTests(unittest.TestCase):
 
     def test_an_answer_to_a_live_agent_is_never_split_off(self):
         seen = []
-        rid = self.s.start_run(self.first['task_id'], 'coder', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
+        rid = self.s.start_run(self.first['task_id'], 'coding', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
         out = line(self.s, 'yes, the production one', f'{TODAY} 17:10:00', verdict(relationship='new', seen=seen))
         self.assertEqual((out['status'], out['task_id']), ('attached', self.first['task_id'])); self.assertEqual(seen, [])
 
     def _live(self):
-        rid = self.s.start_run(self.first['task_id'], 'coder', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
+        rid = self.s.start_run(self.first['task_id'], 'coding', 'have a look', 'owner'); self.s.update_run(rid, {'Status': 'running'})
 
     def test_another_persons_new_ask_while_the_agent_runs_is_its_own_task(self):
         """A live agent on Tess's task is no reason to swallow Gail's request in the same group: it is judged, and
-        `new` opens its own task - its title, its due day, its draft - never typed into the coder (B6, 2026-10-11)."""
+        `new` opens its own task - its title, its due day, its draft - never typed into the coding agent (B6, 2026-10-11)."""
         self._live(); self.s.set_setting('answer_to_agent', 'auto', 't'); seen = []
         def llm(system, user, **kw):
             seen.append(json.loads(user))

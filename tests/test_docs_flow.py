@@ -11,7 +11,7 @@ import unittest
 from taskuary import agents, ingest, outbound, responder, terminal
 from taskuary.store import MemoryStore
 
-MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'job', 'agent', 'coder', 'triage', 'learned', 'style')}
+MARK = {d: f'ZZMARK{d.upper()}ZZ' for d in ('soul', 'job', 'agent', 'coding', 'triage', 'learned', 'style')}
 NOTE, OFF, WNOTE = 'ZZMARKNOTEZZ', 'ZZMARKOFFZZ', 'ZZMARKWRITEZZ'   # a triage verdict, a switched-off note, a writing instruction
 
 
@@ -21,7 +21,8 @@ def seeded():
     # job_doc holds an untouched template out of prompts, so the marker needs real content around it
     s.save_doc('job', f'### What the job is\n- {MARK["job"]}: keeps the payroll import running and answers the people who depend on it.', 'owner')
     s.save_doc('agent', f'# Agent rules\n- {MARK["agent"]}', 'owner')
-    s.save_doc('coder', f'# Coder rules\n- {MARK["coder"]}', 'owner')
+    s.save_doc('coding', f'# Coding rules\n- {MARK["coding"]}', 'owner')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')      # the coding profile is found by its kind (agents.coding_role), as config seeds it
     s.save_doc('triage', f'Classify one inbound work message. Answer JSON only. {MARK["triage"]}', 'owner')
     # LEARNED.md injects its ACTIVE sections only, so the marker has to live inside one
     s.save_doc('learned', f'## Active\n- {MARK["learned"]} [s:3 | ev: rv1 | seen: 2026-08-01]', 'owner')
@@ -55,7 +56,7 @@ class DocsReachThePromptTests(unittest.TestCase):
                                   'subject': 'Please fix the export', 'body': 'Broken - please fix the export.'},
                               llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), '{"intent":"fyi","why":"x"}')[1])
         self.assertFlows(seen['p'], [MARK['triage'], MARK['soul'], MARK['job'], MARK['learned'], NOTE],
-                         forbid=[MARK['coder'], MARK['style']])
+                         forbid=[MARK['coding'], MARK['style']])
 
     def test_both_reply_paths_get_soul_style_and_writing_notes_but_not_learned_or_verdicts(self):
         """PW-058/060: a reply is written from SOUL (identity), STYLE (voice) and explicit writing instructions;
@@ -64,24 +65,24 @@ class DocsReachThePromptTests(unittest.TestCase):
         tid = _task(s, 'reply', 'Can you confirm the date?')
         seen = {}
         responder.draft_reply(s, tid, llm=lambda sysm, usr, **k: (seen.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], MARK['job'], NOTE])
+        self.assertFlows(seen['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['learned'], MARK['job'], NOTE])
         mid = s.add_message({'ExternalId': 'r2', 'Channel': 'email', 'Subject': 'quick question',
                              'FromEmail': 'a@b.com', 'BodyText': 'Can you confirm the date?', 'Status': 'filed'})
         rid = s.add_review({'MessageId': mid, 'Kind': 'draft', 'Status': 'pending'})
         seen2 = {}
         responder.draft_for_message(s, s.get_message(mid), rid,
                                     llm=lambda sysm, usr, **k: (seen2.update(p=sysm + usr), 'ok')[1])
-        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coder'], MARK['learned'], NOTE])
+        self.assertFlows(seen2['p'], [MARK['soul'], MARK['style'], WNOTE], forbid=[MARK['coding'], MARK['learned'], NOTE])
 
-    def test_the_coding_agent_gets_agent_coder_and_the_notes_but_not_soul(self):
+    def test_the_coding_agent_gets_agent_coding_and_the_notes_but_not_soul(self):
         """The notes are the part that was missing: an agent was handed the operator rules and
-        the coder rules, and none of the verdicts the owner had actually given."""
+        the coding rules, and none of the verdicts the owner had actually given."""
         s = seeded()
         # the sender is on the owner's own domain: a stranger's seed carries only the owner's own notes, never a verdict that
         # quotes mail (tests/test_stranger_live_fixes.py)
         s.set_setting('owner_email', 'owner@b.com', 't')
         # PW-184: SOUL stays with triage; JOB.md too - a worker that knows the mission starts helping with the mission instead of the ticket
-        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coder'], NOTE], forbid=[MARK['soul'], MARK['job']])
+        self.assertFlows(terminal.seed_text(s, _task(s)), [MARK['agent'], MARK['coding'], NOTE], forbid=[MARK['soul'], MARK['job']])
 
     def test_task_context_and_the_handoff_writer_carry_them_too(self):
         s = seeded()
@@ -94,11 +95,11 @@ class DocsReachThePromptTests(unittest.TestCase):
 
     def test_the_handoff_writer_carries_the_agents_whole_result(self):
         """Hand it to a person is also how a finished agent's result is sent on (2026-10-02), so the newest
-        CODER REPORT rides whole - task_context alone cut it to 300 characters."""
+        AGENT REPORT rides whole - task_context alone cut it to 300 characters."""
         s = seeded()
         tid = _task(s)
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nan older run')
-        s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\n' + 'x' * 500 + ' THE-END-OF-IT')
+        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nan older run')
+        s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\n' + 'x' * 500 + ' THE-END-OF-IT')
         seen = {}
         outbound.draft_handoff(s, tid, 'gail@northwind.example', None, llm=lambda sysm, usr, **k: (seen.update(u=usr), 'ok')[1])
         self.assertIn("The agent's result:\n" + 'x' * 500 + ' THE-END-OF-IT', seen['u'])
@@ -145,7 +146,7 @@ if __name__ == '__main__':
 
 
 class BlankDocsHeal(unittest.TestCase):
-    """CODER.md went blank on a live install and every session ran with no rules. An empty operator
+    """CODING.md went blank on a live install and every session ran with no rules. An empty operator
     document carries no intent worth keeping: reading it, saving it blank, or restarting all put
     the shipped default back."""
 
@@ -153,15 +154,15 @@ class BlankDocsHeal(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         c = TestClient(server.app)
-        server.store.save_doc('coder', '   ', 'owner')
-        r = c.get('/api/doc/coder')
-        self.assertIn('CODER.md', r.json()['content'])
-        self.assertEqual(server.store.doc_owner('coder'), 'template')
+        server.store.save_doc('coding', '   ', 'owner')
+        r = c.get('/api/doc/coding')
+        self.assertIn('CODING.md', r.json()['content'])
+        self.assertEqual(server.store.doc_owner('coding'), 'template')
 
     def test_saving_blank_means_give_me_the_default_back(self):
         from fastapi.testclient import TestClient
         from taskuary import server
         c = TestClient(server.app)
-        r = c.put('/api/doc/coder', json={'content': ''})
+        r = c.put('/api/doc/coding', json={'content': ''})
         self.assertTrue(r.json().get('restored'))
-        self.assertIn('CODER.md', server.store.get_doc('coder'))
+        self.assertIn('CODING.md', server.store.get_doc('coding'))

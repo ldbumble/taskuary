@@ -16,7 +16,7 @@ def _task(s, tags=None, status='open'):
 class Fake:
     """What open_session returns, as far as start_on_task and the route care."""
     def __init__(self, tid=None):
-        self.sid, self.cwd, self.label, self.started, self.task_id, self.alive = 'fake1', 'C:/repo', 'coder', 0.0, tid, True
+        self.sid, self.cwd, self.label, self.started, self.task_id, self.alive = 'fake1', 'C:/repo', 'coding', 0.0, tid, True
     def info(self): return {'sid': self.sid, 'taskId': self.task_id, 'alive': True}
 
 
@@ -33,14 +33,14 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
 
     def test_continue_and_start_session_mark_it_and_a_router_start_does_not(self):
         for actor, marked in (('owner', True), ('router', False)):
-            s = MemoryStore(); s.upsert_agent('coder', 'coding', 'cli', '{}'); tid = _task(s)
+            s = MemoryStore(); s.upsert_agent('coding', 'coding', 'cli', '{}'); tid = _task(s)
             seeds = []
             def fake_open(store, agent, task_id, repo, cwd, rows, cols, act, model, seed_fn=None, resume=None, **kw):
                 seeds.append(seed_fn(cwd) if seed_fn else ''); return Fake(task_id)
             with mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'open_session', side_effect=fake_open), \
                  mock.patch.object(terminal, 'guess_repo', return_value=(None, '')), \
                  mock.patch('taskuary.ownwork.ensure'):
-                terminal.start_on_task(s, tid, 'coder', actor=actor)
+                terminal.start_on_task(s, tid, 'coding', actor=actor)
             self.assertEqual(selfclose.stays_open(s, tid), marked, actor)
             # ...and the seed built for that session says the right thing about ending it
             if marked:
@@ -52,7 +52,7 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
         """The ROLE does not change because a CLI fell over - the job is the same job. What the
         chain moves through is BRAINS (the 2026-09-16 spec)."""
         s = MemoryStore(); tid = _task(s)
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
         s.set_setting('default_brain', 'claude', 'owner')
         s.set_setting('backup_brains', 'codex', 'owner')
         opened = []
@@ -69,12 +69,12 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
              mock.patch.object(terminal, 'open_session', side_effect=fake_open), \
              mock.patch.object(terminal, 'guess_repo', return_value=(None, None)), \
              mock.patch('taskuary.ownwork.ensure'):
-            terminal.start_on_task(s, tid, 'coder', actor='owner')
+            terminal.start_on_task(s, tid, 'coding', actor='owner')
             self.assertTrue(callable(opened[0][1].failover))
             opened[0][1].failover(opened[0][1], "You've hit your session limit")
 
         self.assertEqual([brain for brain, _term in opened], ['claude', 'codex'])
-        self.assertTrue(all(term.agent == 'coder' for _brain, term in opened))   # one role throughout
+        self.assertTrue(all(term.agent == 'coding' for _brain, term in opened))   # one role throughout
         self.assertIn('continuing with backup codex', '\n'.join(x['Body'] for x in s.list_comments(tid)))
 
     def test_the_terminals_route_marks_it_too(self):
@@ -83,7 +83,7 @@ class TheMarkIsSetByTheDoor(unittest.TestCase):
         c = TestClient(server.app)
         tid = _task(server.store, status='done')
         with mock.patch.object(server.hub_term, 'open_session', return_value=Fake(tid)):
-            r = c.post('/api/terminals', json={'agent': 'coder', 'task_id': tid, 'seed': True})
+            r = c.post('/api/terminals', json={'agent': 'coding', 'task_id': tid, 'seed': True})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertTrue(selfclose.stays_open(server.store, tid))
         self.assertEqual(server.store.get_task(tid)['Status'], 'in_progress')
@@ -99,11 +99,11 @@ class TheOwnerKeepsCompletion(unittest.TestCase):
         with mock.patch('taskuary.terminal.session_for', return_value=None), \
              mock.patch.object(selfclose, 'blocked', return_value=''), \
              mock.patch.object(selfclose, '_wrap', return_value={'closed': True}) as wrap:
-            out = selfclose.declare(s, tid, 'PR 33 is not ready to merge', 'coder')
+            out = selfclose.declare(s, tid, 'PR 33 is not ready to merge', 'coding')
             self.assertFalse(out['closed']); wrap.assert_not_called()
             self.assertIn('The agent says it is finished: PR 33', ' '.join(c['Body'] for c in s.list_comments(tid)))
             selfclose.unclaim(s, tid)
-            self.assertTrue(selfclose.declare(s, tid, 'PR 33 merged', 'coder')['closed']); wrap.assert_called_once()
+            self.assertTrue(selfclose.declare(s, tid, 'PR 33 merged', 'coding')['closed']); wrap.assert_called_once()
 
 
 if __name__ == '__main__':

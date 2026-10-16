@@ -28,7 +28,7 @@ def arrive(s, kind='coding', intent='task'):
 class Base(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
-        self.s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
+        self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': r'C:\code\repo'}))
         p = mock.patch.object(server, 'store', self.s); p.start(); self.addCleanup(p.stop)
         self.c = TestClient(server.app)
 

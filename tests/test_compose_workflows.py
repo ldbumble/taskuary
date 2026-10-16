@@ -13,15 +13,15 @@ def answering(payload, seen=None):
 
 def test_ai_agent_workflow_uses_a_real_configured_agent():
     store = MemoryStore()
-    store.upsert_agent('coder', 'cli', 'local', json.dumps({'cmd': 'codex'}))
+    store.upsert_agent('coding', 'cli', 'local', json.dumps({'cmd': 'codex'}))
     seen = {}
-    out = compose.compose_workflow(store, 'Have coder run the weekly access review every Monday', answering({
-        'config': {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coder',
+    out = compose.compose_workflow(store, 'Have coding run the weekly access review every Monday', answering({
+        'config': {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coding',
                    'skill': '/weekly-access-review', 'cron': '0 8 * * 1', 'deliver': {'to': 'invented'}},
-        'explain': 'Coder runs the saved skill every Monday.', 'confidence': 'high'}, seen))
-    assert out['config'] == {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coder',
+        'explain': 'Coding runs the saved skill every Monday.', 'confidence': 'high'}, seen))
+    assert out['config'] == {'type': 'agent', 'title': 'Weekly access review', 'agent': 'coding',
                              'skill': 'weekly-access-review', 'cron': '0 8 * * 1', 'access': 'write'}
-    assert seen['user']['workflow_options']['agent'] == [{'name': 'coder'}]
+    assert seen['user']['workflow_options']['agent'] == [{'name': 'coding'}]
     assert 'reports only read and summarize' in seen['system']
 
 

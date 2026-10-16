@@ -73,7 +73,7 @@ class PromptTests(unittest.TestCase):
     def test_a_goal_adds_the_goal_sentence_and_nothing_else(self):
         seen = {}
         def llm(system, user): seen['system'] = system; return json.dumps({'summary': 's', 'checklist': ['a', 'b'], 'outputs': []})
-        triage.extract_ask({'body': 'Migrate the census export. Done when: it lands. Involved: Ray, the coder'}, llm, goal=True)
+        triage.extract_ask({'body': 'Migrate the census export. Done when: it lands. Involved: Ray, the coding agent'}, llm, goal=True)
         self.assertTrue(seen['system'].startswith(triage.ASK_SYSTEM)); self.assertTrue(seen['system'].endswith(triage.GOAL_SYSTEM))
         triage.extract_ask({'body': 'plain'}, llm)
         self.assertEqual(seen['system'], triage.ASK_SYSTEM)

@@ -46,7 +46,7 @@ test("New is a card in the conversation, not a popup: the button posts it, a lin
   assert.match(browse, /<NewSheet inline open onClose=\{onClose\}/);
   assert.match(sheet, /if \(e\.key === "Escape"\) close\(\)/);                               // Esc closes the card
   assert.match(sheet, /<NewRepo agent=\{agent\}/);                                            // the checkout is chosen here
-  assert.match(sheet, /api\.put\(`\/api\/tasks\/\$\{data\.taskId\}\/repo`, \{ repo: pickd\.repo, path: pickd\.path, agent \}\)/);
+  assert.match(sheet, /api\.put\(`\/api\/tasks\/\$\{data\.taskId\}\/repo`, \{ repo: pickd\.repo, path: pickd\.path, \.\.\.\(agent \? \{ agent \} : \{\}\) \}\)/);
 });
 
 test("the picker loads the repository list once, lazily, and the words reach it on a pause", () => {

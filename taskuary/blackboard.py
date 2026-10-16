@@ -383,7 +383,7 @@ def is_permanent(err) -> bool:
     return any(k in s for k in PERMANENT)
 
 
-def record_failure(store, tid: int, err, agent: str = 'coder', label: str = 'Queued start') -> dict | None:
+def record_failure(store, tid: int, err, agent: str = '', label: str = 'Queued start') -> dict | None:
     """One failed start, wherever it happened - the queue drain or a direct auto-start: the attempt is
     counted on the queue row (made if the task was not queued yet), the owner reads what happened and
     what comes next, and the retry is scheduled rather than left to an unrelated session ending."""
@@ -447,7 +447,7 @@ def drain(store):
                     # a queued GENERAL task opens its assistant session, not a CLI (PW-069). Its failure is counted and
                     # re-armed inside; clearing the row here wrote "Started" over a launch that never happened (PW-073/085)
                     if not _start_general(store, q['TaskId']): continue
-                else: term.start_on_task(store, q['TaskId'], q.get('Agent') or 'coder', actor='router')
+                else: term.start_on_task(store, q['TaskId'], q.get('Agent') or '', actor='router')
                 store.clear_dispatch(q['TaskId'])
                 store.add_comment(q['TaskId'], 'router', 'agent', 'Started from the dispatch queue - '
                                   + ('it was parked behind ' + task_ref(b) + ' for likely overlap, which no longer queues work.' if b else 'a session slot freed up.'))
@@ -459,7 +459,7 @@ def drain(store):
                     store.add_comment(q['TaskId'], 'router', 'agent', f'Started from the dispatch queue; the bookkeeping after it failed: {str(e)[:200]}')
                     continue
                 logger.warning(f'queued dispatch failed for task {q["TaskId"]}: {e}')
-                record_failure(store, q['TaskId'], e, q.get('Agent') or 'coder')
+                record_failure(store, q['TaskId'], e, q.get('Agent') or '')
         # whatever still backs off is armed by THIS pass - a restart armed only the earliest deadline and the
         # later ones waited for an unrelated session to end (PW-088)
         schedule_due(store)

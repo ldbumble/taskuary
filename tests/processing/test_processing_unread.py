@@ -92,7 +92,7 @@ def test_words_said_about_a_task_do_not_make_it_unread_again_but_an_agents_do(st
     # passed with Next it waits in Passed - still yours, not news (2026-09-23: "if you hit next it goes to passed")
     assert [(i['key'], bool(i.get('surfaced')), i['actionable']) for i in after['items']] == [(key, True, False)], \
         'the assistant talking about it is not news'
-    store.add_comment(tid, 'coder', 'agent', 'Finished: users changed, PR opened.')
+    store.add_comment(tid, 'coding', 'agent', 'Finished: users changed, PR opened.')
     _, news = both(store)
     assert [(i['key'], bool(i.get('surfaced'))) for i in news['items']] == [(key, False)], 'an agent reporting back IS news'
 
@@ -174,7 +174,7 @@ def test_the_message_an_idea_rides_into_triage_on_is_never_a_row(store):
 
 def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_it(store):
     """The vehicle is not a row - but once triage hangs a task off it, it is the ONLY message the
-    item owns, and dropping it dropped the work with it: the Board showed a coder busy on an
+    item owns, and dropping it dropped the work with it: the Board showed a coding agent busy on an
     assistant idea that appeared on neither timeline (the owner, 2026-09-07: "shows agent working on
     a idea of a assistant but don't see it on the work timeline")."""
     stamp = datetime.now().isoformat(' ')
@@ -581,22 +581,22 @@ def test_a_batch_key_looks_up_its_members_without_carding_the_rail(store, monkey
 
 
 def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(store):
-    """A restart killed the coder's session on TQ-0616. The task list said interrupted / needs you; the
-    rail said `queued` "handed to coder, not started yet", and one look in chat cleared it from work for
+    """A restart killed the coding agent's session on TQ-0616. The task list said interrupted / needs you; the
+    rail said `queued` "handed to coding agent, not started yet", and one look in chat cleared it from work for
     an hour (2026-09-17). An agent that had it and is gone is `stopped`: the owner's to handle, on the
     rail until they do - a look is not handling it."""
-    tid = store.create_task({'Title': 'User Management', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
-    store.add_transcript(tid, 'sid-1', 'worked on it for a while', agent='coder')
+    tid = store.create_task({'Title': 'User Management', 'Assignee': 'agent:coding', 'Kind': 'coding'}, 'fixture')
+    store.add_transcript(tid, 'sid-1', 'worked on it for a while', agent='coding')
     store.tag_task(tid, terminal.INTERRUPTED, True, 'shutdown')
     _, unread = both(store)
     card = next(i for i in unread['items'] if i.get('tid') == tid)
-    assert card['lane'] == 'stopped' and 'closed while coder had this' in card['why'], card
+    assert card['lane'] == 'stopped' and 'closed while coding had this' in card['why'], card
     funnel.settle(store, card['key'], 'surfaced', read=True)
     _, after = both(store)
     kept = next(i for i in after['items'] if i.get('tid') == tid)
     assert kept['unread'] and kept['surfaced'], 'shown, marked so Next moves on, and still on the rail'
     # ...and a task nothing ever started is still the queue it always was
-    fresh = store.create_task({'Title': 'Never started', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
+    fresh = store.create_task({'Title': 'Never started', 'Assignee': 'agent:coding', 'Kind': 'coding'}, 'fixture')
     _, more = both(store)
     assert next(i for i in more['items'] if i.get('tid') == fresh)['lane'] == 'queued'
 
@@ -630,13 +630,13 @@ def test_a_start_held_for_a_repository_stays_on_the_rail_saying_so(store):
 
 
 def test_a_sender_writing_again_after_the_agent_is_on_you_saying_so(store):
-    """Not "you ended the session" from days before, and not "handed to coder" (the owner, 2026-10-12)."""
+    """Not "you ended the session" from days before, and not "handed to coding agent" (the owner, 2026-10-12)."""
     old = (datetime.now() - timedelta(days=5)).isoformat(' ')
-    tid = store.create_task({'Title': 'Access list review', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'router')
-    store.add_transcript(tid, 's1', 'screen', agent='coder')
+    tid = store.create_task({'Title': 'Access list review', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'router')
+    store.add_transcript(tid, 's1', 'screen', agent='coding')
     store._exec('UPDATE transcript SET CreatedAt=? WHERE TaskId=?', (old, tid))
     store.tag_task(tid, terminal.SAVED, True, 'owner')
     add(store, 'Re: access list', tid=tid, status='routed')
     _, unread = both(store)
     card = next(i for i in unread['items'] if i.get('tid') == tid)
-    assert card['lane'] == 'asked' and card['why'] == 'Fixture wrote again since coder finished', card
+    assert card['lane'] == 'asked' and card['why'] == 'Fixture wrote again since coding finished', card

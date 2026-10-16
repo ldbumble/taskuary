@@ -1,4 +1,4 @@
-"""The rail and the walk are one order (the owner, 2026-10-14: "the first task was skipped"). A coder session the owner had just
+"""The rail and the walk are one order (the owner, 2026-10-14: "the first task was skipped"). A coding agent session the owner had just
 closed left its task first under On you - shown once, its lane `saved` - and Walk me through my tasks went past it to the next
 unread row."""
 import unittest

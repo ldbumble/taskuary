@@ -27,7 +27,7 @@ def _run(monkeypatch, *argv):
     monkeypatch.setattr(sys, 'argv', ['taskuary', *argv]); return cli.main()
 
 def _session(monkeypatch, t, stranger):
-    with mock.patch('taskuary.config.load', return_value=server.cfg): env = terminal.session_env('coder', t, 'C:/repo', sid='s9', stranger=stranger)
+    with mock.patch('taskuary.config.load', return_value=server.cfg): env = terminal.session_env('coding', t, 'C:/repo', sid='s9', stranger=stranger)
     for k, v in env.items(): monkeypatch.setenv(k, v)
     return env
 
@@ -128,7 +128,7 @@ def test_a_stranger_s_note_goes_over_http_with_its_token_and_lands_on_its_task(m
     monkeypatch.setattr(cli, 'SQLiteStore', mock.Mock(side_effect=AssertionError('opened the database')), raising=False)
     monkeypatch.setattr(bb, 'post', mock.Mock(side_effect=AssertionError('wrote in-process')))
     sent = {}
-    def post(url, **kw): sent.update(url=url, **kw); return _Resp({'Agent': 'coder', 'Kind': 'ready'})
+    def post(url, **kw): sent.update(url=url, **kw); return _Resp({'Agent': 'coding', 'Kind': 'ready'})
     monkeypatch.setattr('requests.post', post)
     _run(monkeypatch, '--note', 'tests pass', '--kind', 'ready')
     assert sent['url'].endswith('/api/board/notes') and sent['headers']['X-Taskuary-Token'] == guard.stranger_token(SRV(), t)

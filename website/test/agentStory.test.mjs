@@ -23,9 +23,9 @@ test("only the two that wait on the owner wear the alarm colour", () => {
 });
 
 test("a step that never ran names who Start starts", () => {
-  assert.equal(startLabel(held, "coder", false), "Start coder");
-  assert.equal(startLabel(held, "coder", true), null);
-  assert.equal(startLabel({ kind: "interrupted", line: "x" }, "coder", false), null);
+  assert.equal(startLabel(held, "coding", false), "Start coding");
+  assert.equal(startLabel(held, "coding", true), null);
+  assert.equal(startLabel({ kind: "interrupted", line: "x" }, "coding", false), null);
   assert.equal(startLabel(held, "", false), null);
 });
 

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted } from "../src/proposalCard.js";
 
-const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coder",
+const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coding_agent",
   params: { kind: "coding", instructions: "check the June rows" }, label: "Send to the coding agent",
   summary: "TQ-0007 - Fix the export → coding agent", settles: true, key: "task:7", ref: "TQ-0007" };
 

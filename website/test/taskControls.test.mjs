@@ -61,8 +61,8 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
 test("the agent heading is one short line, live or not", () => {
   // A running session has always been a single strip - heading, chip, controls - and the stopped
   // card answered with a heading, a sentence under it, and a row of buttons under that (the owner,
-  // 2026-09-17: "can we also keep the agent header simple and short like it is when coder is
-  // active"). The bar rides IN the heading, so both extra lines go.
+  // 2026-09-17: keep the stopped header as short as the one a running agent
+  // gets). The bar rides IN the heading, so both extra lines go.
   const head = tasks.slice(tasks.indexOf('<WorkflowHeading number="2"'), tasks.indexOf('<WorkflowHeading number="3"'));
   assert.ok(head.includes("action={inRow ? null : stage === \"agent\" && agentBar ? agentBarRow :"),
     "the expanded card's bar is the heading's action, not a row of its own");
@@ -75,7 +75,8 @@ test("the agent card names the role and the brain, and offers no model", () => {
   // brain_for(): "what it names is a brain - never a model, never an effort" - so the card must
   // not offer one. This is also a merge guard: b8c57823 resolved TasksView.jsx to its own side
   // and dropped this row entirely, and nothing failed, because nothing covered it.
-  assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? "coder" : ""\);/);
+  // ...and a coding task's role is the profile of kind coding, found in the roster - never a hardcoded name (2026-10-15)
+  assert.match(tasks, /const runRole = assignedAgent\(t\?\.Assignee\) \|\| \(t\?\.Kind === "coding" \? codingProfile\(agents, kinds\) : ""\);/);
   // `term.cli` is the literal string "taskuary" on every general session (general.info), so the
   // pill that exists to name the brain named the PRODUCT. The session's own provider leads now.
   assert.match(tasks, /const runBrain = term\?\.provider \|\| term\?\.cli \|\| term\?\.agent \|\| detail\?\.ranOn\?\.brain \|\| \(runRole && brains\[runRole\]\) \|\| "";/);

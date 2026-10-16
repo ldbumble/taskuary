@@ -5,7 +5,7 @@ Resident Refund thread and an agent opened a session on it. At 10:11 the owner s
 task" and it was deleted - but the pty kept running, still holding task_id 34. SQLite hands a
 deleted rowid straight back, so by 12:38 that id belonged to a scheduled report, and the
 timeline showed the orphaned refund agent as "the agent working Process Error Check". Sending
-the report to a coder did nothing at all: start_on_task found a live session for task 34 and
+the report to a coding agent did nothing at all: start_on_task found a live session for task 34 and
 returned early.
 
 Two faults, tested separately: the id came back, and the session outlived its task.

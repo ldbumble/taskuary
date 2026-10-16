@@ -43,7 +43,7 @@ def migrate(cfg):
     connections = cfg.setdefault('cli_connections', {})
     profiles = cfg.setdefault('agents', {})
     # A CLI's original coding entry owns its command flags, ahead of copies seeded for roles.
-    ordered = sorted(profiles, key=lambda n: (n != 'coder', n != cli_key(profiles[n].get('cmd')), n))
+    ordered = sorted(profiles, key=lambda n: (str(profiles[n].get('kind') or 'coding') != 'coding', n != cli_key(profiles[n].get('cmd')), n))
     for name in ordered:
         profile = profiles[name]
         if profile.get('provider') or not profile.get('cmd'): continue
@@ -51,7 +51,7 @@ def migrate(cfg):
         if key not in connections:
             connections[key] = {k: copy.deepcopy(profile[k]) for k in COMMAND_FIELDS if k in profile}
         # ...and when the connection already exists, its GEARS still have to be filled from this
-        # profile before the pop below destroys them - `ordered` puts coder first, so the coding
+        # profile before the pop below destroys them - `ordered` puts the coding profile first, so the coding
         # profile's model is the one a shared brain keeps. Two profiles on one brain wanting two
         # different models is precisely what a brain having its own gears stops being expressible.
         for field in GEAR_FIELDS:
@@ -75,8 +75,11 @@ def migrate(cfg):
     return cfg != before
 
 
-def resolve(cfg, profile):
-    provider = str(profile.get('provider') or '')
+def resolve(cfg, profile, brain: str = ''):
+    """A profile's runnable row: the profile's own fields on the BRAIN its work runs on. A profile names no brain (the owner,
+    2026-10-15: "profiles ... are layered on top of any brain tool"); `brain` is the connection key the caller chose for it
+    (sync: the role's override, else the default brain). A legacy `provider` is read only when no brain is given."""
+    provider = f'cli:{brain}' if brain else str(profile.get('provider') or '')
     if not provider:
         # Old callers remain compatible during upgrades - but the GEARS belong to the brain now, so
         # a profile still naming only its command takes them from the connection that command points
@@ -88,7 +91,18 @@ def resolve(cfg, profile):
     connection = cfg.get('cli_connections', {}).get(provider[4:])
     if not connection: raise ValueError(f'CLI connection {provider[4:]!r} is not configured')
     # The connection owns commands even if an old client sends stale inline copies.
-    return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS}, **with_defaults(connection)}
+    return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS and k != 'provider'}, **with_defaults(connection)}
+
+
+def brain_of(store, cfg, worker: str, profile: dict) -> str:
+    """The connection a profile's row runs on: its role's override (profile_brains), else the default brain - when either
+    names a connection; else '' and the legacy provider decides (an install from before the brain layer)."""
+    try: over = json.loads(store.get_setting('profile_brains') or '{}')
+    except (TypeError, ValueError): over = {}
+    conns = cfg.get('cli_connections') or {}
+    for key in ((over.get(worker) if isinstance(over, dict) else ''), store.get_setting('default_brain')):
+        if str(key or '').strip() in conns: return str(key).strip()
+    return ''
 
 
 def adopt_installed(cfg, store) -> list:
@@ -102,7 +116,7 @@ def adopt_installed(cfg, store) -> list:
 
     So: a known CLI that is installed gets its CONNECTION from clis.KNOWN, which already carries the
     headless flags each one needs. It gets no worker - a CLI is a brain, and the picker offers
-    brains directly. It used to mint a coding worker named after the CLI, carrying CODER.md and
+    brains directly. It used to mint a coding worker named after the CLI, carrying CODING.md and
     the same purpose line as every other, so the only thing that varied between them was which CLI
     ran it; those clones are what put `copilot` on triage's menu and sent TQ-0588's coding work to
     it. A connection the owner edited stays edited. Returns nothing it made, which is nothing."""
@@ -126,7 +140,7 @@ def sync(cfg, store, name=None):
         if name is not None and worker != name: continue
         # a profile naming a CLI that is gone is that profile's problem, never the app's: it stopped every start with
         # "CLI connection 'claude' is not configured" (2026-10-06). It keeps its last row until a CLI is picked for it.
-        try: resolved = resolve(cfg, profile)
+        try: resolved = resolve(cfg, profile, brain_of(store, cfg, worker, profile))
         except ValueError as e:
             logger.warning(f'{worker}: {e} - pick a CLI for it under Settings'); continue
         old = json.loads((store.get_agent(worker) or {}).get('Config') or '{}')
@@ -135,24 +149,24 @@ def sync(cfg, store, name=None):
 
 
 def set_profile(cfg, store, name, body):
-    """Keep old command-based API callers working while persisting the two-layer config."""
+    """Keep old command-based API callers working while persisting the two-layer config. A profile is instructions and names
+    no CLI (the owner, 2026-10-15: "it's models or cli tools only"): a CLI the body names - `cmd` or `provider` - becomes that
+    connection and this role's brain override (profile_brains), and the model it names lands on the connection's gears."""
     current = cfg.setdefault('agents', {}).get(name) or json.loads((store.get_agent(name) or {}).get('Config') or '{}')
     profile = {**current, **body}
-    provider = str(profile.get('provider') or '')
-    if 'cmd' in body and 'provider' not in body:
-        # A legacy editor changing its executable means choosing that CLI connection.
+    picked = str(profile.pop('provider', '') or '') if 'provider' in body else ''
+    if 'cmd' in body and not picked:
         key = cli_key(body['cmd'])
-        provider = profile['provider'] = f'cli:{key}'
         cfg.setdefault('cli_connections', {}).setdefault(key, with_defaults({k: body[k] for k in COMMAND_FIELDS if k in body}))
-    if provider:
-        resolve(cfg, profile)  # reject dangling provider references before saving
-        # A model named through the profile editor is a choice about the BRAIN, so it is written
-        # where brains keep their gears. The scrub that used to live here is gone with the thing it
-        # worked around: its comment was right - "model names belong to their provider" - and now
-        # they are stored there, so a Claude model cannot follow a worker to Codex because it was
-        # never on the worker to begin with.
+        picked = f'cli:{key}'
+    if picked:
+        if not picked.startswith('cli:'): raise ValueError('Choose a configured CLI provider')
+        resolve(cfg, profile, picked[4:])  # reject a dangling connection before saving
         for field in GEAR_FIELDS:
-            if field in body: cfg.setdefault('cli_connections', {}).setdefault(provider[4:], {})[field] = body[field]
-        for key in COMMAND_FIELDS: profile.pop(key, None)
+            if field in body: cfg.setdefault('cli_connections', {}).setdefault(picked[4:], {})[field] = body[field]
+        try: over = json.loads(store.get_setting('profile_brains') or '{}')
+        except (TypeError, ValueError): over = {}
+        store.set_setting('profile_brains', json.dumps({**(over if isinstance(over, dict) else {}), name: picked[4:]}), 'owner')
+    for key in (*COMMAND_FIELDS, 'provider'): profile.pop(key, None)
     cfg['agents'][name] = profile
     return profile

@@ -1136,7 +1136,7 @@ def _cloud_explicit(store, channel) -> bool:
     github's per-repo pickers get."""
     return any(json.loads(s.get('ConfigJson') or '{}').get('mode') in ('feed', 'tasks')
                for s in store.list_sources() if s['Channel'] == channel)
-TQ_ISSUE = re.compile(r'^\[TQ-\d+\]')        # issues the coder itself opened - never ingest those back; TQ-10000 has five digits
+TQ_ISSUE = re.compile(r'^\[TQ-\d+\]')        # issues the agent itself opened - never ingest those back; TQ-10000 has five digits
 
 
 def gh_modes(src: dict, file_only: bool, roles: set | None = None) -> tuple:
@@ -1206,12 +1206,12 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
     wrap() is the same call the Done button makes: the report is written, the transcript becomes
     an artifact, proposals become reviews. The cause is said ONCE, as the router's own line on the
     task (ended_line) - a status beside the agent's write-up, never inside it. It used to ride in
-    as the wrap's LAST MESSAGE, so a PR the agent itself merged got a second CODER REPORT whose
+    as the wrap's LAST MESSAGE, so a PR the agent itself merged got a second report whose
     "last message" was this sentence, and the card swapped the agent's account of the merge for
     "was merged on GitHub" a few seconds after showing it (2026-10-12). A task that never had a
     session has nothing to wrap ('nothing to wrap up') - that refusal is expected, and must not
     leave the dead task sitting in the work list."""
-    from . import coder, proposals, selfclose, terminal as term
+    from . import wrapup, proposals, selfclose, terminal as term
     # said once: a task kept open below for its unsent reply meets this ending again on a later poll
     if not any(c.get('Body') == said for c in store.list_comments(tid)): store.add_comment(tid, 'router', 'agent', said)
     # a close-out waiting on the owner (close the issue, merge) is answered by the upstream ending itself
@@ -1230,7 +1230,7 @@ def close_upstream_ended(store, tid: int, said: str, actor: str = 'router'):
         store.update_task(tid, {'Status': 'done'}, actor)
         return
     try:
-        coder.wrap(store, tid, close=True, actor=actor, no_reply=True)   # a merged PR owes nobody a reply (A21)
+        wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True)   # a merged PR owes nobody a reply (A21)
     except ValueError as e:
         logger.info(f'TQ-{tid:04d}: nothing to wrap up ({e}) - closing it plainly')
         store.update_task(tid, {'Status': 'done'}, actor)
@@ -1355,7 +1355,7 @@ def ingest_github_issues(store, src: dict, tok: str, since, llm=None, file_only=
     GitHub's own author_association, so triage can weigh a stranger's PR on a public repo
     for what it is. Whether an item may start a coding agent by itself is the repo's 'auto'
     picker (gh_auto_ok): off by default, or the team / contributors / anyone. Issues Taskuary
-    opened for its own tasks are skipped, otherwise the coder would file work against itself."""
+    opened for its own tasks are skipped, otherwise the agent would file work against itself."""
     repo = src['Address']
     issues_mode, prs_mode = gh_modes(src, file_only, roles)
     if issues_mode == 'off' and prs_mode == 'off': return 0

@@ -16,7 +16,7 @@ from taskuary.store import MemoryStore
 def store():
     """The owner's shape: one coding role, the CLI clones beside it, and the general specialists."""
     s = MemoryStore()
-    for name in ('coder', 'codex', 'copilot'):
+    for name in ('coding', 'codex', 'copilot'):
         s.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': name, 'purpose': 'Write, review and test code in a repository.'}))
     for name, kind in (('researcher', 'research'), ('analyst', 'analysis'), ('trader', 'markets')):
         s.upsert_agent(name, kind, 'cli', json.dumps({'cmd': 'claude', 'purpose': f'{name} work'}))
@@ -29,7 +29,7 @@ def named(roster: str) -> list:
 
 class TheRosterTests(unittest.TestCase):
     def test_roster_offers_no_coding_profile(self):
-        for cli in ('coder', 'codex', 'copilot'):
+        for cli in ('coding', 'codex', 'copilot'):
             self.assertNotIn(cli, named(hub_agents.roster(store())), f'{cli} is a coding role and must not be a triage choice')
 
     def test_roster_offers_every_general_role(self):
@@ -44,14 +44,14 @@ class TheRosterTests(unittest.TestCase):
 class WhichRoleTests(unittest.TestCase):
     def test_coding_always_takes_the_coding_role(self):
         """Written, not left implied: the `agent:` prefix is what puts the row in the pipe's
-        `queued` lane - "handed to coder, not started yet" (processing_unread:76)."""
-        self.assertEqual(hub_agents.routed_role(store(), 'coding', ''), 'coder')
+        `queued` lane - "handed to coding agent, not started yet" (processing_unread:76)."""
+        self.assertEqual(hub_agents.routed_role(store(), 'coding', ''), 'coding')
 
     def test_coding_ignores_a_profile_triage_named(self):
         """TQ-0588 drew `copilot`, TQ-0586 drew `analyst`. Neither reaches the task."""
         s = store()
-        self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), 'coder')
-        self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), 'coder')
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'analyst'), 'coding')
+        self.assertEqual(hub_agents.routed_role(s, 'coding', 'copilot'), 'coding')
 
     def test_general_takes_the_named_specialist(self):
         self.assertEqual(hub_agents.routed_role(store(), 'general', 'analyst'), 'analyst')
@@ -61,12 +61,12 @@ class WhichRoleTests(unittest.TestCase):
         self.assertEqual(hub_agents.routed_role(store(), 'general', ''), '')
 
     def test_general_never_falls_through_to_coder(self):
-        self.assertNotEqual(hub_agents.routed_role(store(), 'general', ''), 'coder')
+        self.assertNotEqual(hub_agents.routed_role(store(), 'general', ''), 'coding')
 
     def test_general_refuses_a_coding_role(self):
-        """The two groups never mix. The roster cannot offer `coder` and triage validates against
+        """The two groups never mix. The roster cannot offer `coding agent` and triage validates against
         it, so this takes a hallucination to reach - which is exactly when it must not land."""
-        for cli in ('coder', 'codex', 'copilot'):
+        for cli in ('coding', 'codex', 'copilot'):
             self.assertEqual(hub_agents.routed_role(store(), 'general', cli), '')
 
     def test_kind_task_names_nobody(self):
@@ -87,12 +87,12 @@ class RepairTests(unittest.TestCase):
         a = s.create_task({'Title': 'copilot one', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:copilot'}, 'test')
         b = s.create_task({'Title': 'analyst one', 'Kind': 'coding', 'Status': 'in_progress', 'Assignee': 'agent:analyst'}, 'test')
         self.assertEqual(hub_agents.repair_role_assignees(s), 2)
-        self.assertEqual(self.rows(s)[a], 'agent:coder')
-        self.assertEqual(self.rows(s)[b], 'agent:coder')
+        self.assertEqual(self.rows(s)[a], 'agent:coding')
+        self.assertEqual(self.rows(s)[b], 'agent:coding')
 
     def test_finished_work_is_history_and_is_left_alone(self):
         """transcript.Agent says copilot actually worked TQ-0585. Rewriting a done task's stamp to
-        `coder` would make the row claim otherwise - and the repair did exactly that, once."""
+        `coding agent` would make the row claim otherwise - and the repair did exactly that, once."""
         s = store()
         for status in ('done', 'dropped'):
             t = s.create_task({'Title': status, 'Kind': 'coding', 'Status': status, 'Assignee': 'agent:copilot'}, 'test')

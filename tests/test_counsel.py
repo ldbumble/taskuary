@@ -1,5 +1,5 @@
 """The dossier (counsel.py): what the hub already knows about a sender and a topic, read by the reply
-drafter, the assistant's post and the coder's context file. These cover the dossier, the invite road
+drafter, the assistant's post and the coding agent's context file. These cover the dossier, the invite road
 through ingest (an invite files as fyi, no model asked) and the responder's history block - all offline.
 """
 import json, unittest
@@ -16,7 +16,7 @@ def _ago(days=0, hours=0): return (datetime.now() - timedelta(days=days, hours=h
 def _store():
     s = MemoryStore()
     s.set_setting('calendar_enabled', '0', 't')           # no Graph in tests
-    s.set_setting('coder_auto_enabled', '0', 't')
+    s.set_setting('coding_auto_enabled', '0', 't')
     return s
 
 

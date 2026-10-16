@@ -18,7 +18,7 @@ def store():
     s.add_report_run(wf, {'at': '2026-09-18 06:01:00', 'title': 'ADP hours export', 'failed': True, 'error': 'sign-in page'})
     s.save_connector({'Type': 'outlook', 'Name': 'Alex mailbox', 'Active': 1, 'ConfigJson': '{}', 'Secret': 'tok'}, 't')
     s.save_connector({'Type': 'teams', 'Name': 'Teams', 'Active': 0, 'ConfigJson': '{}'}, 't')
-    s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+    s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
     s.set_setting('intent_classify_enabled', '1', 't'); s.set_setting('poll_minutes', '10', 't')
     return s
 
@@ -41,7 +41,7 @@ class FactsTests(unittest.TestCase):
         c = {r['name']: r for r in appfacts.connections(store())}
         self.assertTrue(c['Alex mailbox']['active']); self.assertTrue(c['Alex mailbox']['has_secret'])
         self.assertFalse(c['Teams']['active']); self.assertFalse(c['Teams']['has_secret'])
-        self.assertEqual([a['name'] for a in appfacts.agents(store())], ['coder'])
+        self.assertEqual([a['name'] for a in appfacts.agents(store())], ['coding'])
 
     def test_find_by_name_is_case_insensitive_containment_and_id_wins(self):
         s = store()

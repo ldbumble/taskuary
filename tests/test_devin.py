@@ -42,9 +42,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(clis.report_read_args('devin', ARGS), ro)
 
     def test_a_signed_out_devin_is_told_which_login_to_run(self):
-        """The name that arrives is the PROFILE's - every install ships one called `coder` - so
+        """The name that arrives is the PROFILE's - every install ships one called `coding agent` - so
         the CLI is read off the command it runs."""
-        self.assertIn('devin auth login', agents.signed_out_msg('coder', '401 Unauthorized', 'devin'))
+        self.assertIn('devin auth login', agents.signed_out_msg('coding', '401 Unauthorized', 'devin'))
 
 
 class InstallRoadTests(unittest.TestCase):

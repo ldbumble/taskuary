@@ -87,14 +87,14 @@ def test_a_receipt_re_projects_one_root_and_the_rest_are_the_same_objects(db):
     pytest.param(lambda s, mid, tid, pid: s._exec('UPDATE message SET Subject=? WHERE MessageId=?', ('Rail 3 (edited)', mid)), id='message'),
     pytest.param(lambda s, mid, tid, pid: s.update_task(tid, {'Status': 'in_progress'}, 'fixture'), id='task'),
     pytest.param(lambda s, mid, tid, pid: s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': 'D'}), id='review'),
-    pytest.param(lambda s, mid, tid, pid: s.add_comment(tid, 'coder', 'agent', 'Finished.'), id='comment'),
-    pytest.param(lambda s, mid, tid, pid: s.add_transcript(tid, 'sid-1', 'worked', agent='coder'), id='transcript'),
+    pytest.param(lambda s, mid, tid, pid: s.add_comment(tid, 'coding', 'agent', 'Finished.'), id='comment'),
+    pytest.param(lambda s, mid, tid, pid: s.add_transcript(tid, 'sid-1', 'worked', agent='coding'), id='transcript'),
     pytest.param(lambda s, mid, tid, pid: s.set_funnel_state(f'processing:{pid}', 'surfaced'), id='funnel_state'),
     pytest.param(lambda s, mid, tid, pid: s.tag_task(tid, terminal.INTERRUPTED, True, 'shutdown'), id='task-tag'),
 ])
 def test_each_kind_of_write_moves_its_card_and_only_its_card(db, write):
     mids = [mail(db, n) for n in range(1, 6)]
-    tid = db.create_task({'Title': 'Rail task', 'Assignee': 'agent:coder', 'Kind': 'coding'}, 'fixture')
+    tid = db.create_task({'Title': 'Rail task', 'Assignee': 'agent:coding', 'Kind': 'coding'}, 'fixture')
     db._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, mids[2]))
     first = read(db)
     target = by_member(first, f'message:{mids[2]}')

@@ -15,7 +15,7 @@ the whole reason not to introduce a fourth place to set a model.
 
 The split between the two gears is the part worth keeping straight. A CLI agent has a MAIN
 model for coding sessions and a LIGHT model for the one-message jobs - triage, drafts,
-summaries, the digest (llm.make_cli_llm). Naming the same CLI as both the coder and the triage
+summaries, the digest (llm.make_cli_llm). Naming the same CLI as both the coding brain and the triage
 brain is normal and cheap; it is the light gear that keeps it cheap.
 """
 import json, re
@@ -24,13 +24,15 @@ from loguru import logger
 from . import climodels
 
 # One row per default. `gear` says WHICH of a CLI profile's two models this slot sets, and is
-# the reason a coder and a triage brain can be the same agent without fighting over one field.
+# the reason a coding brain and a triage brain can be the same agent without fighting over one field.
 SLOTS = [
     {'key': 'triage_ai', 'label': 'Triage brain', 'pick': 'brain', 'gear': 'light',
      'desc': 'Reads every inbound message and decides: a task to do, a question to answer, or FYI to file. '
              'Also runs the Advisor and writes what Taskuary remembers.',
      'why': 'One message in, one line of JSON out - so this wants your cheapest fast model, not your best one.'},
-    {'key': 'default_agent', 'label': 'Default coding CLI', 'pick': 'agent', 'gear': 'main',
+    # the CLI tool itself, never a profile (the owner, 2026-10-15: "it's models or cli tools only") - it held `default_agent`,
+    # a profile name, which is how a profile came to be read as a brain
+    {'key': 'default_brain', 'label': 'Default coding CLI', 'pick': 'cli', 'gear': 'main',
      'desc': 'Works the tasks. Start session, Send to coding agent and auto-dispatch all use this one.',
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
@@ -62,20 +64,29 @@ SLOTS = [
 SLOT = {s['key']: s for s in SLOTS}
 
 
-def _prof(cfg, store, name: str) -> dict:
-    """An agent's editable profile - config.toml first, the store row as the fallback, which is
-    the same order put_agent writes them in."""
-    p = (cfg.get('agents') or {}).get(name)
-    if p: return dict(p)
-    row = store.get_agent(name)
-    try: return json.loads(row.get('Config') or '{}') if row else {}
-    except ValueError: return {}
+def _conn(cfg, key: str) -> dict:
+    """The CLI connection a brain key names, with its shipped defaults - the brain itself."""
+    from .cli_connections import with_defaults
+    c = (cfg.get('cli_connections') or {}).get(str(key or ''))
+    return with_defaults(c) if c is not None else {}
 
 
-def _cli_of(cfg, store, name: str) -> str:
+def _cli_of(cfg, key: str) -> str:
+    """The executable family behind a CLI brain - its model catalogue is keyed by it (cursor's connection runs cursor-agent)."""
     from .clis import _base
-    from .cli_connections import resolve
-    return _base(resolve(cfg, _prof(cfg, store, name)).get('cmd') or name)
+    return _base(_conn(cfg, key).get('cmd') or key)
+
+
+def _save_gear(store, cfg, key: str, field: str, value: str) -> None:
+    """A model belongs to the BRAIN - the CLI connection - never to a profile (the 2026-09-16 spec; the owner, 2026-10-15).
+    Empty clears it. The profile rows are execution snapshots of their connection, so they are refreshed after."""
+    from . import config
+    from .cli_connections import sync
+    conns = cfg.setdefault('cli_connections', {})
+    if value: conns.setdefault(key, {})[field] = value
+    elif key in conns: conns[key].pop(field, None)
+    config.save(cfg)
+    sync(cfg, store)
 
 
 def ai_connectors(store) -> list:
@@ -102,17 +113,16 @@ def resolve(store, cfg, slot_key: str) -> dict:
            # field reads as "the provider's default" instead of as something not set up yet
            'default_hint': '', 'owner': '', 'owner_link': '', 'ready': True, 'note': ''}
 
-    if s['pick'] == 'agent':
-        name = value or ''
-        prof = _prof(cfg, store, name)
-        cli = _cli_of(cfg, store, name) if name else ''
+    if s['pick'] == 'cli':
+        from .agents import default_brain
+        key = value or default_brain(store)
+        cli = _cli_of(cfg, key) if key else ''
         cat = climodels.catalog(cli)
-        model, effort = climodels.split_pick(_gears(cfg, store, name).get('model') or '')
-        out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
-                   owner=f'the {cli} coding profile' if cli else '', owner_link='agents', cli=cli,
-                   display=cli,
-                   ready=bool(name))
-        if not name: out['note'] = 'no coding agent configured yet'
+        model, effort = climodels.split_pick(str(_conn(cfg, key).get('model') or ''))
+        out.update(value=key, model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
+                   owner=f'the {key} connection' if key else '', owner_link='agents', cli=cli, display=key, default=not value,
+                   ready=bool(key))
+        if not key: out['note'] = 'no CLI connected yet'
         return out
 
     # the judge: blank has a second meaning here (the report's own brain, which is what this did
@@ -147,15 +157,16 @@ def resolve(store, cfg, slot_key: str) -> dict:
         if value: out.update(value=value, default=True)
     if value.startswith('cli:'):
         from .llm import ASSISTANT_DEFAULT, LIGHT_DEFAULT
-        name = value[4:]
-        prof, cli = _prof(cfg, store, name), _cli_of(cfg, store, name)
+        from .agents import brain_key
+        key = brain_key(store, value, cfg)
+        conn, cli = _conn(cfg, key), _cli_of(cfg, key)
         cat = climodels.catalog(cli)
-        light = str(_gears(cfg, store, name).get('light_model') or '')
+        light = str(conn.get('light_model') or '')
         if slot_key == 'concierge_ai':
-            # what concierge.brain runs: its own model, else the Assistant default - never the profile's light model,
+            # what concierge.brain runs: its own model, else the Assistant default - never the brain's light model,
             # which is triage's (this card said "the coding model, the expensive gear" while every turn ran on haiku)
             light, dflt, owner = str(settings.get(s['model_setting']) or ''), ASSISTANT_DEFAULT.get(cli, ''), 'this page'
-        else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {name} profile (light model)'
+        else: dflt, owner = LIGHT_DEFAULT.get(cli, ''), f'the {key} connection (light model)'
         model, effort = ('', light[7:]) if light.startswith('effort:') else climodels.split_pick(light)
         if slot_key == 'concierge_ai' and not effort:
             from .llm import ASSISTANT_EFFORT
@@ -169,7 +180,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
         from .agents import runs_here
         # a brain that does not start is not "what will run": the card said claude while triage failed on it
-        if not runs_here({'cmd': prof.get('cmd') or cli}): out.update(ready=False, note=f"'{cli}' is not installed on this machine")
+        if not runs_here({'cmd': conn.get('cmd') or cli}): out.update(ready=False, note=f"'{cli}' is not installed on this machine")
         return out
 
     c = store.get_connector(int(value[10:])) if value.startswith('connector:') and value[10:].isdigit() else auto_target(store)
@@ -193,9 +204,9 @@ def resolve(store, cfg, slot_key: str) -> dict:
 
 def said(store, slot_key: str, cfg=None) -> str:
     """One brain in the owner's words: the CLI tool or AI connection and the model it runs - "Claude Code, claude-sonnet-5-5".
-    Never the setting's raw value: `cli:coder` named a profile, so the Assistant told the owner it ran on "coder" while every
-    turn ran Claude Code on sonnet, and a blank slot read "auto" (the owner, 2026-10-15: "it's not set to coder. it's to a
-    specific model")."""
+    Never the setting's raw value: a `cli:<profile>` pick named a profile, so the Assistant told the owner it ran on that profile's
+    name while every turn ran Claude Code on sonnet, and a blank slot read "auto" (the owner, 2026-10-15: it is set to a specific
+    model, not to a profile)."""
     from .clis import KNOWN
     try:
         if cfg is None:
@@ -259,10 +270,9 @@ def state(store, cfg) -> dict:
     """Every slot, plus the options each picker offers."""
     from . import agents as hub_agents
     agents = [a['Name'] for a in store.list_agents()]
-    preferred = [str(store.get_setting('default_agent') or 'coder')]
     return {'slots': [resolve(store, cfg, s['key']) for s in SLOTS], 'agents': agents,
             'judge_options': judge_options(store),
-            'agent_options': hub_agents.cli_agent_options(store, preferred=preferred, coding_only=True)}
+            'agent_options': hub_agents.cli_agent_options(store, preferred=[hub_agents.default_brain(store)])}
 
 
 def judge_options(store) -> list:
@@ -277,51 +287,6 @@ def judge_options(store) -> list:
              'label': f"{c['Name'] or 'TypeSafe Jev'} — decisions only, no text"}
             for c in store.list_connectors() if c['Type'] == 'typesafe' and c['Active']]
     return out
-
-
-def _brain_key(cfg, store, name: str) -> str:
-    """The cli_connections key behind a worker - its provider, which is the brain's own name.
-    Not `_cli_of`: that is the executable's basename, and cursor's connection is keyed `cursor`
-    while its command is `cursor-agent`."""
-    from .cli_connections import cli_key
-    prof = _prof(cfg, store, name)
-    provider = str(prof.get('provider') or '')
-    return provider[4:] if provider.startswith('cli:') else cli_key(prof.get('cmd') or name)
-
-
-def _gears(cfg, store, name: str) -> dict:
-    """The brain's gears, falling back to the worker's own while an install is mid-upgrade.
-
-    `migrate` lifts them onto the connection at boot, but a config handed in before that has run -
-    or by an older API caller - still carries them on the profile, and reading nothing would look
-    to the owner like their model had been forgotten. Step 3 of the spec removes the fallback with
-    the field itself."""
-    from .cli_connections import GEAR_FIELDS, gears
-    on_brain, prof = gears(cfg, _brain_key(cfg, store, name)), _prof(cfg, store, name)
-    return {f: on_brain.get(f) or str(prof.get(f) or '') for f in GEAR_FIELDS}
-
-
-def _save_profile(store, cfg, name: str, prof: dict) -> None:
-    """Mirror put_agent exactly - config.toml AND the store row, or the two drift and whichever
-    is read first wins.
-
-    A GEAR set here belongs to the BRAIN, not to the worker, so it is written on the connection the
-    profile points at. Left on the profile it would be dropped by resolve() the moment anything
-    read it back - model and light_model are command fields now (the 2026-09-16 spec)."""
-    from . import config
-    from .cli_connections import GEAR_FIELDS, sync
-    key = _brain_key(cfg, store, name)
-    for field in GEAR_FIELDS:
-        # a key PRESENT and empty means "clear it" - which is why apply no longer pops it: popped,
-        # a cleared gear was indistinguishable from one nobody set, and the brain kept the old model
-        if key and field in prof:
-            conns = cfg.setdefault('cli_connections', {})
-            if prof[field]: conns.setdefault(key, {})[field] = prof[field]
-            elif key in conns: conns[key].pop(field, None)
-        prof.pop(field, None)
-    cfg.setdefault('agents', {})[name] = prof
-    config.save(cfg)
-    sync(cfg, store, name)
 
 
 def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor: str = 'owner') -> dict:
@@ -341,21 +306,19 @@ def apply(store, cfg, slot_key: str, value=None, model=None, effort=None, actor:
         from .agents import default_pick
         now = default_pick(store)
 
-    if s['pick'] == 'agent':
-        if not now: raise ValueError('no coding agent is configured to set a model on')
-        prof = _prof(cfg, store, now)
-        prof['model'] = f'{model}@{effort}' if (model and effort) else model
-        _save_profile(store, cfg, now, prof)
+    if s['pick'] == 'cli':
+        from .agents import default_brain
+        key = now or default_brain(store)
+        if not key: raise ValueError('no CLI is connected to set a model on')
+        _save_gear(store, cfg, key, 'model', f'{model}@{effort}' if (model and effort) else model)
     elif now.startswith('cli:') and slot_key == 'concierge_ai':
         store.set_setting(s['model_setting'], f'effort:{effort}' if (effort and not model) else model, actor)
     elif now.startswith('cli:'):
-        name = now[4:]
-        prof = _prof(cfg, store, name)
+        from .agents import brain_key
         # codex on a ChatGPT plan has no smaller model, so its cheap gear is effort alone -
         # that is what `effort:<level>` spells, and llm.make_cli_llm turns it into the flag.
         light = f'effort:{effort}' if (effort and not model) else (f'{model}@{effort}' if (model and effort) else model)
-        prof['light_model'] = light
-        _save_profile(store, cfg, name, prof)
+        _save_gear(store, cfg, brain_key(store, now, cfg), 'light_model', light)
     else:
         setting = s.get('model_setting')
         if setting:                                     # the assistant keeps a plain override

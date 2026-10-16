@@ -25,7 +25,7 @@ TRANSCRIPT_SYSTEM = (
     'that includes looking and reporting that the problem is not real.')
 
 
-def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'coder') -> dict:
+def report_from_transcript(store, task_id: int, transcript: str, agent: str = '') -> dict:
     """The report, written from what is already on screen. The agent is never asked for prose:
     by the time you click Done you are done talking to it, and a transcript cannot argue. No AI
     configured (or a bad answer) files the transcript tail itself - the record never disappears."""
@@ -49,6 +49,14 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = 'c
         logger.warning(f'transcript report failed for task {task_id}: {e}')
         return blank | {'summary': transcript[-2000:]}
 
+
+# The note a finished session files. It was named for one special profile, and no profile is special (the owner, 2026-10-15);
+# databases still hold the old marker, so every reader takes both.
+REPORT = 'AGENT REPORT'
+REPORTS = (REPORT, 'CODER REPORT')
+REPORT_RE = re.compile(r'^(?:AGENT|CODER) REPORT')
+def is_report(body) -> bool: return str(body or '').startswith(REPORTS)
+def report_body(body) -> str: return REPORT_RE.sub('', str(body or ''), count=1).strip()
 
 PAUSE_MARKER = 'HANDOVER NOTE'
 PAUSE_SYSTEM = (
@@ -264,7 +272,7 @@ def freshen(store, task_id: int, mid: int) -> dict:
     return {'state': 'fresh', 'mid': mid}
 
 
-def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'coder',
+def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'agent',
            complete_result: str = None, owner_done: bool = False, keep_open: bool = False, no_reply: bool = False) -> dict:
     """The end of finished work: the conversation is refreshed, the ask reassessed, and the responder
     drafts the reply the sender gets from the saved result and the thread as it stands; the task waits
@@ -400,7 +408,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
     if task.get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, actor)
     # General work already has a durable, turn-by-turn record in task comments. It does not need a
-    # coding-transcript summarizer or a synthetic CODER REPORT; close the shared session and the
+    # coding-transcript summarizer or a synthetic AGENT REPORT; close the shared session and the
     # task, leaving that conversation intact.
     # The CONVERSATION is the record, not the provider session: an API turn's session is over the
     # moment it answers, and wrapping up then fell through to the coding path below and refused
@@ -414,7 +422,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # called it and wrote nothing but a human note, so pressing save on a conversation (now "Save and end session")
         # left no result anywhere: the card still read `in conversation`, the button was still on
         # offer, and every reader of a task's outcome - the pipe's line, the responder's draft, the
-        # next session's context - looks for a CODER REPORT comment and found none (the owner,
+        # next session's context - looks for an AGENT REPORT comment and found none (the owner,
         # 2026-09-17: "save the conversation result does nothing?").
         # It is still not a SUMMARY: nothing is asked of a model here, and no transcript is boiled
         # down. The answer the assistant already gave is filed verbatim, under the one marker every
@@ -474,7 +482,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # ticked whichever item's words it contained or was contained by - "- [x] Fix it" ticked "Fix it" and also "Fix it
     # tomorrow after the review". Nothing in the brief gives the agent an item id to report, so there is no honest match;
     # a close ticks every box (store.update_task, done-ticks-every-box) and a wrap that leaves the task open leaves them.
-    store.add_comment(tid, agent, 'agent', f'CODER REPORT\n{report}' + (f'\n\nLAST MESSAGE\n{final_message}' if final_message else ''))
+    store.add_comment(tid, agent, 'agent', f'{REPORT}\n{report}' + (f'\n\nLAST MESSAGE\n{final_message}' if final_message else ''))
     if found: term.close(found)              # done means done - the pty and its shells go too, once the result is safe
     store.add_comment(tid, actor, 'human', 'Closed the session - wrapped up from what was on screen.')
     # anything the agent PROPOSED becomes a pending review here, at the one moment its whole
@@ -545,7 +553,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         store.update_review_reason(rid, why, run_id)
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
-                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'coder finished the work - reply awaiting approval'})
+                                'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'the agent finished the work - reply awaiting approval'})
     if (held or live) and (held or live).get('MessageId') != mid: store.update_review_message(rid, mid)
     rv = store.get_review(rid) or {}
     if agent_drafted(rv):
@@ -570,7 +578,7 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
             from . import outbox
             outbox.redraft_review(store, store.get_review(rid), src)
         else:
-            responder.write_draft(store, task_id, rid, src, 'coder')
+            responder.write_draft(store, task_id, rid, src, 'agent')
     except Exception as e: logger.warning(f'reply draft failed for task {task_id}: {e}')
     # a refresh that failed is an unresolved freshness state the owner sees: the draft waits, stale, for one that succeeds
     if fresh.get('state') == 'unresolved': store.mark_review_stale(rid)

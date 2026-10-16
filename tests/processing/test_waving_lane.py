@@ -1,7 +1,7 @@
 """An agent that stopped and is waiting on you wears its own word.
 
 The lane table has always had one for it - funnelPile.LANE_META.blocked, the 👋 - but `row_lane`
-never returned `blocked`: with `AgentWaiting` set it fell into `approve`, so a parked coder wore
+never returned `blocked`: with `AgentWaiting` set it fell into `approve`, so a parked coding agent wore
 "needs your yes", the same pill a drafted reply wears. Both are the owner's task (band 2, "your
 task", which is right); they are not the same thing to do (the owner, 2026-09-11).
 """
@@ -9,8 +9,8 @@ from taskuary.processing_all import row_lane
 
 
 def _waiting(**over):
-    row = {'TaskStatus': 'in_progress', 'Working': 'coder', 'AgentWaiting': True, 'NeedsYou': 1,
-           'Assignee': 'agent:coder'}
+    row = {'TaskStatus': 'in_progress', 'Working': 'coding', 'AgentWaiting': True, 'NeedsYou': 1,
+           'Assignee': 'agent:coding'}
     row.update(over)
     return row
 
@@ -24,18 +24,18 @@ def test_a_drafted_reply_still_needs_your_yes():
 
 
 def test_a_waving_agent_outranks_a_draft_sitting_on_the_same_row():
-    """Both are true at once when a coder parks on a task that also has a draft waiting. The
+    """Both are true at once when a coding agent parks on a task that also has a draft waiting. The
     agent is the thing blocking work, so it is the thing the row says."""
     assert row_lane(_waiting(ReviewStatus='pending')) == 'blocked'
 
 
 def test_an_agent_still_working_is_not_waving():
-    assert row_lane({'TaskStatus': 'in_progress', 'Working': 'coder', 'AgentWaiting': False,
-                     'Assignee': 'agent:coder'}) == 'working'
+    assert row_lane({'TaskStatus': 'in_progress', 'Working': 'coding', 'AgentWaiting': False,
+                     'Assignee': 'agent:coding'}) == 'working'
 
 
 def test_handed_over_and_not_started_is_still_queued():
-    assert row_lane({'TaskStatus': 'open', 'Assignee': 'agent:coder'}) == 'queued'
+    assert row_lane({'TaskStatus': 'open', 'Assignee': 'agent:coding'}) == 'queued'
 
 
 def test_the_waving_row_stays_in_the_owner_s_level():

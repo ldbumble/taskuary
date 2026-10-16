@@ -237,7 +237,7 @@ LEARN_SYSTEM = (
     'actually found out. Nothing to add: {"entries": []}.')
 
 
-def learn_from_session(store, task_id: int, transcript: str, agent: str = 'coder', llm=None,
+def learn_from_session(store, task_id: int, transcript: str, agent: str = 'agent', llm=None,
                        cwd: str = '', repo: str = '', existing: list = None) -> list:
     """The on-close road. Returns the entries written (usually none). Never raises: a handbook
     entry is a bonus, and a session that finished must still close if this fails."""
@@ -320,7 +320,7 @@ def enabled(store) -> bool:
 
 # ── what the session is told ────────────────────────────────────────────────────────────
 # There is no SEED_LINE any more. Telling an agent HOW to write an entry is a standing rule, and
-# standing rules live in CODER.md (templates/coder.md), which already rides in the prompt under a
+# standing rules live in CODING.md (templates/coding.md), which already rides in the prompt under a
 # cap - so the rule costs nothing extra, where an unconditional seed line was paid for by every
 # session forever. What the handbook already KNOWS still goes in the seed: that is block(), and it
 # is about this task rather than about the rules.

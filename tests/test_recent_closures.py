@@ -4,7 +4,7 @@ A scheduled check reported the same two Spendly export failures every run. Yeste
 cause (two facilities divested, SPENDLY closed their accounts, nothing to fix) and the task closed. The
 next run opened a fresh coding task and started a fresh agent - which read that determination in its
 own context file and reported that the previous day had already handled it (TQ-0668 -> TQ-0672,
-2026-09-22). The block existed; only the coder was ever shown it. Now the judge is shown it first.
+2026-09-22). The block existed; only the coding agent was ever shown it. Now the judge is shown it first.
 """
 import json, unittest
 from datetime import datetime, timedelta
@@ -17,7 +17,7 @@ def ago(days, hours=0):
     return (datetime.now() - timedelta(days=days, hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
 
 
-DETERMINATION = ('CODER REPORT\nDetermination: The export failures are SPENDLY-side business closures for divested '
+DETERMINATION = ('AGENT REPORT\nDetermination: The export failures are SPENDLY-side business closures for divested '
                  'facilities Fairview (66) and Lakeside (67), not token expiry. No code fix was needed.')
 
 
@@ -26,7 +26,7 @@ def _closed_task(s, title, when, conv=None, sender=None, status='done', report=D
     if conv or sender:
         s.add_message({'ExternalId': f'x{tid}', 'Channel': 'report', 'ConversationId': conv,
                        'FromEmail': sender, 'Subject': title, 'SentAt': when, 'TaskId': tid, 'BodyText': 'b'})
-    if report: s.add_comment(tid, 'coder', 'agent', report)
+    if report: s.add_comment(tid, 'coding', 'agent', report)
     s.update_task(tid, {'Status': status}, 'owner')
     s.cx.execute('UPDATE task SET ClosedAt=? WHERE TaskId=?', (when, tid))
     return tid
@@ -40,7 +40,7 @@ class RecentClosureTests(unittest.TestCase):
         self.assertEqual(hit['ref'], f'TQ-{tid:04d}')
         self.assertEqual((hit['why'], hit['how']), ('the same thread', 'done'))
         self.assertIn('divested', hit['ended'])
-        self.assertNotIn('CODER REPORT', hit['ended'], 'the label is not the finding')
+        self.assertNotIn('AGENT REPORT', hit['ended'], 'the label is not the finding')
 
     def test_the_window_closes(self):
         """Three days (context.RECENT_DAYS): a check that repeats does it in hours, and last week's

@@ -79,10 +79,10 @@ def state(store) -> dict:
     step = ('done' if brain['ready'] and inbound and items else 'ai' if not (brain['ready'] and chosen)
             else 'email' if not inbound else 'reading')
     sorting = _sorting(store)
-    # the AI, not the profile that runs it: a fresh install's brain is `coder` on claude, and step 2 said "coder is ready"
+    # the AI by its own name - a CLI pick names the tool (agents.brain_key reads an old profile pick as the tool it ran)
     from . import agents
     pick, raw = str(brain.get('pick') or ''), (brain.get('Name') or '').replace(' (CLI)', '')
-    via = next((o['cli'] for o in agents.cli_agent_options(store) if f"cli:{o.get('value')}" == pick), '') if pick.startswith('cli:') else ''
+    via = agents.brain_key(store, pick) if pick.startswith('cli:') else ''
     cli = via or next((k['name'] for k in found if k['name'] == raw or k['name'] in pick), '')
     name = PLAIN[cli][0] if cli in PLAIN else raw
     # ...kept past step 1 too: Change brings the AI cards back, and a pick that fails there must still say why (2026-10-15)

@@ -26,7 +26,7 @@ export function suggestion(line, label, verb) {
 /* WHEN THE STRIP SPEAKS (the owner, 2026-10-13: "there should not be an updated advisor comment when it's refreshing ... not while
    waiting or walking through things"). Only the line read for the item on the table NOW - a line read for the item before
    it stood over the next one until the new read came back - and only while nothing is in flight. An agent at work is
-   nothing for the owner to do: "the coder stopped and is waiting on you" stood over a coder that had been continued. */
+   nothing for the owner to do: "the agent stopped and is waiting on you" stood over an agent that had been continued. */
 export function adviceShown(advice, item, busy) {
   if (!advice?.verb || !advice.line || busy || !item?.key || advice.for !== item.key) return null;
   return item.lane === "working" ? null : advice;

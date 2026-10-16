@@ -17,7 +17,7 @@ from taskuary import agents, climodels, continuity, hooks, server, terminal, wit
 from taskuary.store import MemoryStore
 
 
-def coder(store, name='claude', cmd='claude'):
+def coding(store, name='claude', cmd='claude'):
     store.upsert_agent(name, 'coding', 'cli', json.dumps({'cmd': cmd, 'args': ['-p']}))
 
 
@@ -27,7 +27,7 @@ def task(store, **fields):
 
 
 def pane(store, tid, cwd, sid='pane-1', cli='claude'):
-    return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, agent='coder', label='coder',
+    return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, agent='coding', label='coding',
                            argv=[cli], last=1.0, ext_id='', witness=witness.Witness(), store=store,
                            files=lambda: [], tail=lambda n=3: [])
 
@@ -82,16 +82,16 @@ def test_a_resumed_codex_pane_takes_the_rollout_forked_from_its_thread(tmp_path)
 
 def test_filing_the_transcript_keeps_the_session_id_the_hook_already_saved(tmp_path):
     store = MemoryStore(); tid = task(store)
-    store.note_session_id(tid, 'pane-1', 'claude-thread', 'coder', str(tmp_path))
-    store.add_transcript(tid, 'pane-1', 'what was on the screen', 'coder', str(tmp_path))
+    store.note_session_id(tid, 'pane-1', 'claude-thread', 'coding', str(tmp_path))
+    store.add_transcript(tid, 'pane-1', 'what was on the screen', 'coding', str(tmp_path))
     row = store.resumable_session(tid)
     assert (row['ExtId'], row['Text']) == ('claude-thread', 'what was on the screen')
 
 
 def test_the_newest_session_carrying_an_id_is_the_one_offered(tmp_path):
     store = MemoryStore(); tid = task(store)
-    store.note_session_id(tid, 'pane-1', 'first-thread', 'coder', str(tmp_path))
-    store.add_transcript(tid, 'pane-2', 'a session that never bound an id', 'coder', str(tmp_path))
+    store.note_session_id(tid, 'pane-1', 'first-thread', 'coding', str(tmp_path))
+    store.add_transcript(tid, 'pane-2', 'a session that never bound an id', 'coding', str(tmp_path))
     assert store.resumable_session(tid)['ExtId'] == 'first-thread'
 
 
@@ -122,7 +122,7 @@ def test_a_cli_that_lets_us_name_the_conversation_is_told_its_name(cmd, expected
 
 
 def test_a_pane_records_the_name_we_gave_it_before_it_has_said_anything(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), \
          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'Term') as Term:
         # a real Term carries these; a MagicMock would hand bind_ext a mock store to write into
@@ -136,7 +136,7 @@ def test_a_pane_records_the_name_we_gave_it_before_it_has_said_anything(tmp_path
 
 
 def test_a_resumed_pane_is_not_also_handed_a_new_name(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), \
          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'Term') as Term:
         terminal.open_session(store, 'claude', tid, None, str(tmp_path), actor='owner',
@@ -146,8 +146,8 @@ def test_a_resumed_pane_is_not_also_handed_a_new_name(tmp_path):
 
 def test_a_resumed_pane_is_bound_to_the_conversation_it_reopens(tmp_path):
     """Blank until a hook named it, a resumed pane went to whichever claude in the folder spoke first - the owner's
-    own CLI, whose questions were then drawn as the coder's (2026-09-28)."""
-    store = MemoryStore(); coder(store); tid = task(store)
+    own CLI, whose questions were then drawn as the coding agent's (2026-09-28)."""
+    store = MemoryStore(); coding(store); tid = task(store)
     with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']),          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'Term') as Term:
         Term.return_value.sid, Term.return_value.task_id, Term.return_value.store = 'pane-9', tid, store
         Term.return_value.agent, Term.return_value.cwd, Term.return_value.ext_id = 'claude', str(tmp_path), ''
@@ -157,7 +157,7 @@ def test_a_resumed_pane_is_bound_to_the_conversation_it_reopens(tmp_path):
 
 
 def test_a_resumed_pane_carries_the_resume_flag_and_types_its_prompt(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     with mock.patch.object(agents, '_resolve_cmd', return_value=['claude']), \
          mock.patch.dict(terminal.SESSIONS, {}, clear=True), mock.patch.object(terminal, 'Term') as Term:
         terminal.open_session(store, 'claude', tid, None, str(tmp_path), actor='owner',
@@ -174,7 +174,7 @@ def test_the_resumed_seed_is_the_resume_prompt_and_the_owner_s_words_only():
 
 
 def test_continuing_a_coding_session_reopens_that_conversation_not_a_new_one(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     store.note_session_id(tid, 'pane-1', 'claude-thread', 'claude', str(tmp_path))
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
@@ -186,7 +186,7 @@ def test_continuing_a_coding_session_reopens_that_conversation_not_a_new_one(tmp
 
 
 def test_continuing_a_finished_coding_task_puts_it_back_in_progress(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store, Status='done')
+    store = MemoryStore(); coding(store); tid = task(store, Status='done')
     store.note_session_id(tid, 'pane-1', 'claude-thread', 'claude', str(tmp_path))
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
@@ -196,7 +196,7 @@ def test_continuing_a_finished_coding_task_puts_it_back_in_progress(tmp_path):
 
 
 def test_a_dismissed_task_is_still_refused(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store, Status='dropped')
+    store = MemoryStore(); coding(store); tid = task(store, Status='dropped')
     store.note_session_id(tid, 'pane-1', 'claude-thread', 'claude', str(tmp_path))
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
@@ -206,7 +206,7 @@ def test_a_dismissed_task_is_still_refused(tmp_path):
 
 
 def test_nothing_saved_refuses_rather_than_quietly_starting_a_fresh_agent(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     store.add_transcript(tid, 'pane-1', 'a session that never bound an id', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True), \
          mock.patch.object(server.hub_term, 'start_on_task') as start:
@@ -216,7 +216,7 @@ def test_nothing_saved_refuses_rather_than_quietly_starting_a_fresh_agent(tmp_pa
 
 
 def test_a_checkout_that_moved_refuses_rather_than_resuming_in_the_wrong_tree(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     gone = str(tmp_path / 'deleted-checkout')
     store.note_session_id(tid, 'pane-1', 'claude-thread', 'claude', gone)
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', gone)
@@ -228,7 +228,7 @@ def test_a_checkout_that_moved_refuses_rather_than_resuming_in_the_wrong_tree(tm
 
 
 def test_the_task_detail_says_which_session_can_be_continued(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     store.note_session_id(tid, 'pane-1', 'claude-thread', 'claude', str(tmp_path))
     store.add_transcript(tid, 'pane-1', 'what was on the screen', 'claude', str(tmp_path))
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
@@ -246,7 +246,7 @@ def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the
     store.remember_trust('whatsapp', 'gabi', 'you vouched for them')     # a trusted sender: this is about the resume, not the floor
     first = store.add_message({'TaskId': tid, 'ExternalId': 'w1', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
                                'FromName': 'Gabi', 'SentAt': '2026-09-24 14:53:24', 'BodyText': 'When updating, this is what I got', 'Status': 'routed'})
-    store._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt) VALUES (?, 's1', 'coder', 'did the work', '2026-09-24 14:57:40')", (tid,))
+    store._exec("INSERT INTO transcript (TaskId, Sid, Agent, Text, CreatedAt) VALUES (?, 's1', 'coding', 'did the work', '2026-09-24 14:57:40')", (tid,))
     later = store.add_message({'TaskId': tid, 'ExternalId': 'w2', 'Channel': 'whatsapp', 'ConversationId': 'wa:gabi',
                                'FromName': 'Gabi', 'SentAt': '2026-09-24 15:00:47', 'BodyText': 'It says AI not set up but it is', 'Status': 'routed'})
     # when each REACHED the thread (context.is_new): a moment after it was sent, as ingest stamps it
@@ -264,7 +264,7 @@ def test_a_resumed_session_is_told_what_arrived_since_its_last_run_and_where_the
 
 def test_continuing_resumes_on_the_cli_that_made_the_conversation_not_the_default(tmp_path):
     """A codex conversation id handed to the default brain ran `claude --resume <codex id>`: 'No conversation found'."""
-    store = MemoryStore(); coder(store); tid = task(store)
+    store = MemoryStore(); coding(store); tid = task(store)
     store.note_session_id(tid, 'pane-1', 'codex-thread', 'claude', str(tmp_path), 'codex')
     with mock.patch.object(server, 'store', store), mock.patch.dict(terminal.SESSIONS, {}, clear=True),          mock.patch.object(server.hub_term, 'start_on_task', return_value={'sid': 's2'}) as start:
         TestClient(server.app).post(f'/api/tasks/{tid}/continue-session')
@@ -272,7 +272,7 @@ def test_continuing_resumes_on_the_cli_that_made_the_conversation_not_the_defaul
 
 
 def test_a_failed_resume_on_the_wrong_cli_does_not_rename_the_conversation(tmp_path):
-    store = MemoryStore(); coder(store); tid = task(store)
-    store.add_transcript(tid, 'pane-1', 'codex worked', 'coder', str(tmp_path), 'codex-thread', brain='codex')
-    store.add_transcript(tid, 'pane-2', 'No conversation found', 'coder', str(tmp_path), 'codex-thread', brain='claude')
+    store = MemoryStore(); coding(store); tid = task(store)
+    store.add_transcript(tid, 'pane-1', 'codex worked', 'coding', str(tmp_path), 'codex-thread', brain='codex')
+    store.add_transcript(tid, 'pane-2', 'No conversation found', 'coding', str(tmp_path), 'codex-thread', brain='claude')
     assert store.resumable_session(tid)['Brain'] == 'codex'

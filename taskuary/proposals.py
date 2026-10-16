@@ -82,7 +82,7 @@ ACTIONS = {
 # What a proposal may touch: routing and visibility only. Never a permission that lets anything OUT
 # (agent_push_enabled, github_replies_ok, reply channels), never a token, key, model or document.
 SETTING_ALLOW = {
-    'coder_auto_enabled': 'start the coding agent automatically on new coding work',
+    'coding_auto_enabled': 'start the coding agent automatically on new coding work',
     'intent_classify_enabled': 'let the brain classify inbound mail at all',
     'answer_to_agent': 'what happens when an answer arrives for a waiting agent (auto / ask / off)',
     'poll_minutes': 'how often the mailboxes are read',
@@ -164,13 +164,13 @@ def validate(store, p: dict) -> tuple:
     return True, words
 
 
-def collect(store, task_id: int, transcript: str, actor='coder') -> list:
+def collect(store, task_id: int, transcript: str, actor='agent') -> list:
     """Turn an agent's proposals into pending reviews. Returns what was queued; refusals are
     recorded on the task so a refused proposal is visible, not silently dropped."""
     return [m for p in parse(transcript) for m in [queue(store, task_id, p, actor)] if m]
 
 
-def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
+def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not."""
     ok, why = validate(store, p)
     if not ok:
@@ -189,7 +189,7 @@ def queue(store, task_id: int, p: dict, actor='coder') -> dict | None:
 # ── the close-out ────────────────────────────────────────────────────────────────────────
 # What FINISHES a task depends on where it lives (the owner, 2026-09-27): mail is closed out by the reply, a pull
 # request the agent opened by merging it, an issue by closing it with a comment. So a finished agent's task is not
-# done until that last act is approved - the same yes-gated review as any proposal, raised by coder.finish. The
+# done until that last act is approved - the same yes-gated review as any proposal, raised by wrapup.finish. The
 # words (the summary, the closing comment) are the card's text; the act is plain code on the owner's click.
 # ONE button word for every system (the owner, 2026-09-27: "if we have button to close out per system it will be endless")
 # - "Close out" - and per action only the sentence saying what it does there. A new connector adds a line here, never a word.
@@ -313,11 +313,12 @@ def backfill(store) -> int:
 
 def _report(store, tid: int) -> str:
     """The agent's filed result - the summary a close-out raised after the finish carries."""
-    b = next((str(c.get('Body') or '') for c in reversed(store.list_comments(tid)) if str(c.get('Body') or '').startswith('CODER REPORT')), '')
-    return b[len('CODER REPORT'):].split('\n\nLAST MESSAGE', 1)[0].strip()
+    from .wrapup import is_report, report_body
+    b = next((report_body(c.get('Body')) for c in reversed(store.list_comments(tid)) if is_report(c.get('Body'))), '')
+    return b.split('\n\nLAST MESSAGE', 1)[0].strip()
 
 
-def closeout(store, tid: int, p: dict, text: str = '', actor='coder'):
+def closeout(store, tid: int, p: dict, text: str = '', actor='agent'):
     """Queue the close-out `closeout_due` named. `text` is what the card shows and the owner may edit:
     the summary a merge is squashed with, or the comment an issue is closed with."""
     if closeout_pending(store, tid): return None
@@ -337,7 +338,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
             store.update_task(tid, {'Status': 'waiting'}, actor)
         return
     if _action(rv) not in CLOSEOUT:
-        # a proposal a finished agent left waiting (coder.finish): once the last one is answered, yes or no, the task ends
+        # a proposal a finished agent left waiting (wrapup.finish): once the last one is answered, yes or no, the task ends
         if (store.get_task(tid) or {}).get('Status') == 'waiting' and not owed(store, tid) and \
                 store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='awaits_proposals' LIMIT 1", (tid,)):
             closed_out(store, tid, actor, 'Every proposal is answered.')

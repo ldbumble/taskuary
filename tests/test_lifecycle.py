@@ -1,6 +1,6 @@
 """The whole loop, one scenario, no model: a mail arrives and is triaged -> it is in the pipe -> the chat
 opens with the day -> the owner starts and the item comes out onto the table -> the owner hands it to the
-coder in words -> the coder works (in hand, at the top), stops to ask (front, card), finishes (the watcher
+coding agent in words -> the coding agent works (in hand, at the top), stops to ask (front, card), finishes (the watcher
 says so, offers the report) -> its reply waits for the yes -> approving sends and closes the task -> the
 pipe is empty and says so. Every state is asserted where the owner would see it: the pile, the chat, the
 task. If any link breaks, this is the test that says which."""
@@ -20,8 +20,8 @@ def ago(hours=0, minutes=0): return (datetime.now() - timedelta(hours=hours, min
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
-        self.s.upsert_agent('coder', 'coding', 'cli', '{}')     # config.toml seeds one at boot
-        for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): self.s.set_setting(k, '0', 't')
+        self.s.upsert_agent('coding', 'coding', 'cli', '{}')     # config.toml seeds one at boot
+        for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): self.s.set_setting(k, '0', 't')
         funnel.invalidate(); funnel.forget_states()
         self.no_model = mock.patch.object(concierge, 'brain', return_value=None); self.no_model.start(); self.addCleanup(self.no_model.stop)
 
@@ -50,7 +50,7 @@ class LifecycleTests(unittest.TestCase):
         #    word of the ask, and only the click on its button starts the agent (PW-123/124)
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             said = concierge.say(s, 'send it to the coding agent and find out why the old fix did not stick', key=f'msg:{m}',
-                                 llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coder", "params": {"text": "find out why the old fix did not stick"}}')
+                                 llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coding_agent", "params": {"text": "find out why the old fix did not stick"}}')
         self.assertIsNone(said['decision']); prop = said['proposal']
         self.assertEqual((prop['kind'], prop['target'], prop['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('old fix did not stick', prop['params']['instructions'])
@@ -62,11 +62,11 @@ class LifecycleTests(unittest.TestCase):
         self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
         self.assertIn('Nothing has been started', said['say'])                                            # the proposal says what WILL happen
         self.assertIn('Done - Send to the coding agent', self.chat()[-1][1])                                # ...and the receipt what did
-        # 5. the coder works: the item rides at the top, in hand, under the agent's key; the watcher says so.
+        # 5. the coding agent works: the item rides at the top, in hand, under the agent's key; the watcher says so.
         # The watcher only believes a state that HOLDS (funnel.DWELL, so a moment of quiet is not "it
         # stopped") - this walk changes state on purpose, line by line, so it opts out of the wait.
         dwell = mock.patch.object(funnel, 'DWELL', 0); dwell.start(); self.addCleanup(dwell.stop)
-        working = [{'taskId': t, 'agent': 'coder', 'label': 'coder', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading…']}]
+        working = [{'taskId': t, 'agent': 'coding', 'label': 'coding', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': ['reading…']}]
         s.update_task(t, {'Status': 'in_progress'}, 'router')
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             funnel.announce(s)                                                   # first look remembers
@@ -82,9 +82,9 @@ class LifecycleTests(unittest.TestCase):
             out = concierge.surface(s)
         self.assertEqual(out['item']['kind'], 'agent'); self.assertIn('asked you: Remove Bulk Deny as well?', out['say'])
         # 7. it finishes with a report and drafts the reply; the watcher offers the report, the pipe holds the draft
-        s.add_comment(t, 'coder', 'agent', 'CODER REPORT' + chr(10) + 'Summary: removed Bulk Approve and Deny; deployed.')
+        s.add_comment(t, 'coding', 'agent', 'AGENT REPORT' + chr(10) + 'Summary: removed Bulk Approve and Deny; deployed.')
         r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - both are off now.', 'Status': 'pending'})
-        s.update_task(t, {'Status': 'waiting'}, 'coder')
+        s.update_task(t, {'Status': 'waiting'}, 'coding')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
         self.assertEqual([(i['kind'], i['lane']) for i in p['items']], [('review', 'approve')])
@@ -119,7 +119,7 @@ class LifecycleTests(unittest.TestCase):
         s.add_route(m, t, 'create', .9, 'a concrete ask', [], 'router')
         with mock.patch.object(funnel, 'DWELL', 0), mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             self.assertEqual(funnel.pile(s, force=True)['events'], [])       # Assistant is already watching
-        live = [{'taskId': t, 'agent': 'coder', 'label': 'coder', 'sid': 'live123', 'mode': 'terminal',
+        live = [{'taskId': t, 'agent': 'coding', 'label': 'coding', 'sid': 'live123', 'mode': 'terminal',
                  'started': ago(), 'idle': 1, 'waiting': False, 'tail': ['working on it']}]
         s.update_task(t, {'Status': 'in_progress'}, 'owner')
         with mock.patch.object(funnel, 'DWELL', 0), mock.patch('taskuary.terminal.live_sessions', return_value=live):
@@ -127,7 +127,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual([e['kind'] for e in p['events']], ['working'])
         item = next(i for i in p['items'] if i.get('tid') == t)
         self.assertEqual((item['key'], item['lane'], item['agent'], item['sid']),
-                         (f'agent:{t}', 'working', 'coder', 'live123'))
+                         (f'agent:{t}', 'working', 'coding', 'live123'))
 
     def test_the_page_walks_the_same_loop(self):
         s = self.s

@@ -242,7 +242,7 @@ Expected: PASS.
 **Files:**
 - Modify: `taskuary/proposals.py` (`closed_out` ~:201)
 - Modify: `taskuary/verdicts.py` (`decide` ~:368-500, `_settle_task_after_sent_reply` ~:278)
-- Modify: `taskuary/coder.py` (`finish` ~:307)
+- Modify: `taskuary/wrapup.py` (`finish` ~:307)
 - Test: `tests/test_close_slots.py`
 
 **Interfaces:**
@@ -252,7 +252,7 @@ Expected: PASS.
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_close_slots.py`)
 
 ```python
-from taskuary import coder, operations, proposals, verdicts, outbound
+from taskuary import wrapup, operations, proposals, verdicts, outbound
 
 
 def draft(s, tid, i, text='Tab is fine.'):
@@ -322,9 +322,9 @@ def test_the_reply_lookup_never_picks_a_slot_draft(s):
 
 def test_a_finished_run_with_slots_open_waits_instead_of_closing(s):
     tid = typed(s, FOUR[:2]); draft(s, tid, 0)
-    prev, coder.REFRESH = coder.REFRESH, None
-    try: coder.finish(s, tid, {'summary': 'checked', 'outcome': 'did_work'})
-    finally: coder.REFRESH = prev
+    prev, wrapup.REFRESH = wrapup.REFRESH, None
+    try: wrapup.finish(s, tid, {'summary': 'checked', 'outcome': 'did_work'})
+    finally: wrapup.REFRESH = prev
     assert s.get_task(tid)['Status'] == 'waiting'
     assert [r['Status'] for r in s._rows("SELECT Status FROM review WHERE TaskId=?", (tid,))] == ['pending']
 ```
@@ -404,7 +404,7 @@ with
         return
 ```
 
-- [ ] **Step 6: `coder.finish` - a run with open slots waits**
+- [ ] **Step 6: `wrapup.finish` - a run with open slots waits**
 
 Change the status line (~:307):
 ```python
@@ -417,7 +417,7 @@ Change the status line (~:307):
 Run: `python -m pytest tests/test_close_slots.py tests/test_review_delivery_safety.py tests/test_verdict_paths.py tests/test_agent_reply.py -q -p no:cacheprovider`
 Expected: PASS.
 
-- [ ] **Step 8: Commit** - `taskuary/slots.py taskuary/proposals.py taskuary/verdicts.py taskuary/coder.py tests/test_close_slots.py`, message `A task with output slots closes when the last one is sent`.
+- [ ] **Step 8: Commit** - `taskuary/slots.py taskuary/proposals.py taskuary/verdicts.py taskuary/wrapup.py tests/test_close_slots.py`, message `A task with output slots closes when the last one is sent`.
 
 ---
 

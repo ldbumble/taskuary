@@ -12,7 +12,7 @@ class ReposBlockTests(unittest.TestCase):
         s = MemoryStore()
         s.save_doc('soul', '## Repo map\n- **northwind/ledger**: the finance backend - payroll and AR jobs\n'
                            '- **northwind/portal**: the customer portal\n', 't')
-        s.upsert_agent('coder', 'cli', 'claude', json.dumps({'cwd_map': {'northwind/ledger': 'C:/src/ledger'}}))
+        s.upsert_agent('coding', 'cli', 'claude', json.dumps({'cwd_map': {'northwind/ledger': 'C:/src/ledger'}}))
         block = general.repos_block(s)
         self.assertIn('- northwind/ledger - the finance backend - payroll and AR jobs\n  checkout on this machine: C:/src/ledger', block)
         self.assertIn('- northwind/portal - the customer portal (no local checkout)', block)
@@ -35,7 +35,7 @@ class StrangerGetsNoBackgroundTests(unittest.TestCase):
         s = MemoryStore()
         s.save_doc('job', '## The job\n- Runs month-end close for the finance team.', 't')
         s.save_doc('soul', '## Repo map\n- **northwind/ledger**: the finance backend\n', 't')
-        s.upsert_agent('coder', 'cli', 'claude', json.dumps({'cwd_map': {'northwind/ledger': 'C:/src/ledger'}}))
+        s.upsert_agent('coding', 'cli', 'claude', json.dumps({'cwd_map': {'northwind/ledger': 'C:/src/ledger'}}))
         tid = s.create_task({'Title': 'Look at this invoice', 'Kind': 'general', 'Status': 'open'}, 'o')
         s.cx.execute('UPDATE task SET OriginBase=? WHERE TaskId=?', (origin, tid)); s.cx.commit()
         return s, tid
@@ -56,7 +56,7 @@ class StrangerGetsNoBackgroundTests(unittest.TestCase):
 
 
 class AssistantProfileTests(unittest.TestCase):
-    """The general assistant has a profile of its own, like the coder (the owner, 2026-10-14): SOUL/JOB, then AGENT.md, then
+    """The general assistant has a profile of its own, like the coding agent (the owner, 2026-10-14): SOUL/JOB, then AGENT.md, then
     ASSISTANT.md - or the profile triage picked. It ran on AGENT.md alone when triage named no role."""
     def test_general_work_with_no_role_reads_assistant_md_and_a_named_role_reads_its_own(self):
         from taskuary import agents
@@ -75,5 +75,5 @@ class AssistantProfileTests(unittest.TestCase):
     def test_it_is_a_shipped_profile(self):
         from taskuary import agents
         self.assertEqual(agents.DEFAULT_PROFILES['assistant']['kind'], 'general')
-        cfg = {'agents': {'coder': {'cmd': 'claude', 'kind': 'coding'}}}
+        cfg = {'agents': {'coding': {'cmd': 'claude', 'kind': 'coding'}}}
         self.assertIn('assistant', agents.seed_profiles(cfg))

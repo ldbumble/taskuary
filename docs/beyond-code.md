@@ -20,11 +20,11 @@ needs exactly what fixing a bug needs, and the three things are the same three:
 1. **A connection** - something the agent can read from and write to. For code that is a checkout
    and GitHub. For AP it is the card feed in and QuickBooks out.
 2. **A playbook** - how *this company* does *this kind* of job, and where the line is between
-   "just do it" and "ask". For code that is CODER.md. For AP it does not exist yet.
+   "just do it" and "ask". For code that is CODING.md. For AP it does not exist yet.
 3. **A receipt** - what it did, with ids, so the owner can check and undo. For code that is a diff,
    tests and a PR. For AP it is the bill number, the vendor, the amount, the period.
 
-Where the current design falls short is (2): there is one playbook, CODER.md, and it is about code.
+Where the current design falls short is (2): there is one playbook, CODING.md, and it is about code.
 "Work ONLY in the repository the task names" is the wrong first rule for a bill.
 
 ## Creating a playbook with AI
@@ -66,7 +66,7 @@ done when: the bill exists in QuickBooks and its DocNumber is on the task
 
 **Triage learns a new road: `playbook`.** Today `kind` decides *who* works a task (coding = agent,
 general = chat, reply = the drafter). A task that matches a playbook's `when` is seeded with
-SOUL.md + **that playbook** - and CODER.md only when the playbook is about code. The seed prompt's
+SOUL.md + **that playbook** - and CODING.md only when the playbook is about code. The seed prompt's
 shape does not change; what rides in it does. `context.py` already builds the per-task context
 file; the playbook is one more section.
 
@@ -102,7 +102,7 @@ the period was open. A thin card still says what is missing.
 2. **Playbooks** - *built (taskuary/playbooks.py, 2026-09-02)*: the folder, the Docs-tab shelf and a
    Playbooks section on every connector card (one file, two doors), the menu triage is shown (it
    answers `"playbook": "<slug>"` and the task is tagged `playbook:<slug>`), the seed block that
-   outranks CODER.md's repository rules, the whole page in the context file, and the on-close
+   outranks CODING.md's repository rules, the whole page in the context file, and the on-close
    question whose answer is a `write_playbook` proposal on the task - editable there, filed only on
    approval. An agent may propose one itself the same way.
 3. **A card feed in.** Two roads, cheapest first:
@@ -160,7 +160,7 @@ adjusted into it, and a write never replaces an existing document unless the cal
 ## What this is not
 
 - Not a workflow builder. No boxes and arrows; a playbook is a page of prose the agent reads, the
-  same way CODER.md is. If a step needs code, the agent writes the code.
+  same way CODING.md is. If a step needs code, the agent writes the code.
 - Not a second agent. The CLI the owner already pays for does the work; QuickBooks is a tool it
   calls through Taskuary, gated like every other tool.
 - Not automatic on day one. Every new kind of job is done once with the owner watching, and only

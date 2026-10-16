@@ -299,9 +299,9 @@ class ApiTests(unittest.TestCase):
         from taskuary import server
         s = MemoryStore(); tid = task(s)
         asking = FakeTerm(tid, idle=terminal.IDLE_WAITING + 3, tail=['Which repo should I use?'])
-        asking.cwd, asking.agent, asking.label, asking.started = 'x', 'coder', 'coder', ''
+        asking.cwd, asking.agent, asking.label, asking.started = 'x', 'coding', 'coding', ''
         state = {'state': None}
-        def info(tail=0): return {'sid': 'a', 'taskId': tid, 'alive': True, 'idle': asking._idle, 'files': [], 'agent': 'coder', 'label': 'coder',
+        def info(tail=0): return {'sid': 'a', 'taskId': tid, 'alive': True, 'idle': asking._idle, 'files': [], 'agent': 'coding', 'label': 'coding',
                                   'started': '', 'tail': asking.tail(tail), **state}
         asking.info = info
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {'a': asking}, clear=True):

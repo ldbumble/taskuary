@@ -79,7 +79,7 @@ class ContinueBringsTheMailTests(unittest.TestCase):
     def test_a_coding_agents_instruction_is_the_owners_note_alone(self):
         s, tid = reopened()
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coder'}, '')), \
+             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding'}, '')), \
              mock.patch.object(server, 'continue_session', return_value={'session': 'sid'}) as reopen:
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'scope the build'})
             TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={})

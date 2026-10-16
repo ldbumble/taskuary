@@ -18,8 +18,8 @@ def store():
     s = MemoryStore()
     # an install has a coding agent - config.toml seeds it at boot. Without one the assistant now
     # says so instead of receipting a hand-off the dispatch would 422 on (2026-09-03).
-    s.upsert_agent('coder', 'coding', 'cli', '{}')
-    for k in ('calendar_enabled', 'coder_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    s.upsert_agent('coding', 'coding', 'cli', '{}')
+    for k in ('calendar_enabled', 'coding_auto_enabled', 'learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
     funnel.invalidate(); funnel.forget_states(); funnel._CACHE.update(cands_at=0.0, cands=[])
     return s
 
@@ -224,7 +224,7 @@ class TurnTests(unittest.TestCase):
         for words in ('what did Dana send about the export?', 'show me the Lee chat', 'thanks, next'):
             self.assertEqual(concierge._resolve_named(s, words, None), '?', "words are the model's to resolve, never a guess here")
         old = s.create_task({'Title': 'Rename the flag', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
-        s.add_comment(old, 'claude', 'agent', 'CODER REPORT\nSummary: renamed it in three places.')
+        s.add_comment(old, 'claude', 'agent', 'AGENT REPORT\nSummary: renamed it in three places.')
         pulled = concierge.surface(s, key=f'task:{old}', llm=lambda *a, **k: 'That one is renamed in three places.')
         self.assertEqual((pulled['item']['kind'], pulled['item']['tid']), ('task', old)); self.assertIn('renamed it', pulled['item']['summary'])
         concierge.surface(s, llm=lambda *a, **k: 'first')               # Dana's is on the table
@@ -292,9 +292,9 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
         self.assertIn('confirm below', out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
-        out = concierge.say(s, 'tell her the file is with the coder, Friday', key=f'review:{r}',
-                            llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the coder, Friday\"}}")
-        self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the coder, Friday')); self.assertIsNone(out.get('proposal'))
+        out = concierge.say(s, 'tell her the file is with the developer, Friday', key=f'review:{r}',
+                            llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the developer, Friday\"}}")
+        self.assertEqual(_verb(out['decision']), ('reply', 'the file is with the developer, Friday')); self.assertIsNone(out.get('proposal'))
         told = lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"mention the Friday delivery\"}}"
         out = concierge.say(s, 'can you mention the Friday delivery in the response', key=f'review:{r}', llm=told)
         self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'mention the Friday delivery'})
@@ -318,8 +318,10 @@ class DecisionTests(unittest.TestCase):
         self.assertIn('renew the Cardinal contract', p['params']['text']); self.assertNotIn('Nothing is on the table', out['say'])
 
     def test_the_contract_line_is_parsed_and_the_words_alone_decide_nothing(self):
-        self.assertEqual(concierge.parse_decision('On it.\nCALL: {"kind": "coder", "params": {"text": "find out why the fix did not stick, and add an admin login"}}')[1],
-                         {'verb': 'coder', 'text': 'find out why the fix did not stick, and add an admin login'})
+        self.assertEqual(concierge.parse_decision('On it.\nCALL: {"kind": "coding_agent", "params": {"text": "find out why the fix did not stick, and add an admin login"}}')[1],
+                         {'verb': 'coding_agent', 'text': 'find out why the fix did not stick, and add an admin login'})
+        # a model still saying the verb's legacy name "coder" is read as the same hand-off (VERB_ALIAS)
+        self.assertEqual(concierge.parse_decision('On it.\nCALL: {"kind": "coder", "params": {"text": "x"}}')[1]['verb'], 'coding_agent')
         self.assertEqual(concierge.parse_decision('Filing that one.\nCALL: {"kind": "not_ours", "params": {"on": "payroll portal outage"}}')[1],
                          {'verb': 'not_ours', 'text': '', 'on': 'payroll portal outage'})
         self.assertEqual(concierge.parse_decision('Sure.\nCALL: {"kind": "bogus", "params": {}}'), ('Sure.', None))
@@ -345,9 +347,9 @@ class DecisionTests(unittest.TestCase):
 class BrainTests(unittest.TestCase):
     def test_the_cli_is_the_default_brain_on_its_light_gear_and_picks_its_conversation_back_up(self):
         s = store()
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude", "model": "opus"}')
-        patcher = mock.patch('taskuary.agents.default_agent', return_value='coder'); patcher.start(); self.addCleanup(patcher.stop)   # whatever this machine has installed
-        self.assertEqual(concierge.pick(s), 'cli:coder'); self.assertTrue(concierge.is_cli(s))
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
+        patcher = mock.patch('taskuary.agents.default_pick', return_value='cli:claude'); patcher.start(); self.addCleanup(patcher.stop)   # whatever this machine has installed
+        self.assertEqual(concierge.pick(s), 'cli:claude'); self.assertTrue(concierge.is_cli(s))
         seen = {}
         def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None):
             seen.update(name=name, model=model, cwd=cwd, resume=resume, keep=keep)
@@ -363,11 +365,11 @@ class BrainTests(unittest.TestCase):
             self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: approve the draft below, or redraft it.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
             self.assertTrue(str(seen['keep']).startswith(f'{concierge.LIVE_KEY}:'))    # one live CLI process per chat (clipool)
             self.assertIn('I am Taskuary', seen['system'])
             concierge.say(s, 'and when did she send it?', key=f'review:{r}')                            # ...and the same conversation, resumed
-            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('coder', 'sonnet@low', 'sess-1', None))   # tools off
+            self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', 'sess-1', None))   # tools off
             self.assertNotIn('WHAT YOU CAN DO YOURSELF', seen['system'])                                # ...so it is not told it has any
             tid = general.dock_task(s)[0]['TaskId']
             self.assertEqual(concierge._sid(s, tid), 'sess-1')
@@ -382,13 +384,13 @@ class BrainTests(unittest.TestCase):
         self.assertFalse(concierge.is_cli(s))                                                           # the owner's choice HERE wins
         with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True):
             c = TestClient(server.app)
-            self.assertEqual(c.post('/api/concierge/ai', json={'pick': ''}).json()['pick'], 'cli:coder')   # back to the default
+            self.assertEqual(c.post('/api/concierge/ai', json={'pick': ''}).json()['pick'], 'cli:claude')   # back to the default
             self.assertEqual(c.get('/api/concierge').json()['model'], 'sonnet')
 
     def test_codex_gets_medium_effort_and_the_assistant_model_is_its_own_not_triages(self):
         s = store()
         s.upsert_agent('codex', 'coding', 'cli', '{"cmd": "codex"}')
-        patcher = mock.patch('taskuary.agents.default_agent', return_value='codex'); patcher.start(); self.addCleanup(patcher.stop)
+        patcher = mock.patch('taskuary.agents.default_pick', return_value='cli:codex'); patcher.start(); self.addCleanup(patcher.stop)
         seen = {}
         def fake_make(store_, name, model=None, cwd=None, **kw):
             seen['model'] = model; seen['light'] = json.loads(store_.get_agent(name)['Config']).get('light_model')
@@ -487,7 +489,7 @@ class StaysOnSubjectTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         seen = {}
-        wander = lambda sy, u, **k: seen.update(u=u) or "Robin asked 13 hours ago to deploy gpt-4.1 (TQ-0312); I'd push it to the coder."
+        wander = lambda sy, u, **k: seen.update(u=u) or "Robin asked 13 hours ago to deploy gpt-4.1 (TQ-0312); I'd push it to the coding agent."
         out = concierge.surface(s, llm=wander)
         self.assertEqual(out['item']['rid'], r)
         self.assertIn('Dana wrote on email', out['say']); self.assertNotIn('Robin', out['say'])   # the facts, not Robin
@@ -584,7 +586,7 @@ class ThreadTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?', key=f'review:{r}',
-                            llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coder", "params": {"text": "look into that server and what the file looks like"}}')
+                            llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coding_agent", "params": {"text": "look into that server and what the file looks like"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('server', p['params']['instructions'])
@@ -595,8 +597,8 @@ class ThreadTests(unittest.TestCase):
 class FastLaneTests(unittest.TestCase):
     def test_introductions_take_the_fast_lane_and_typed_asks_the_full_cli(self):
         s = store()
-        s.upsert_agent('coder', 'coding', 'cli', '{"cmd": "claude"}')
-        patcher = mock.patch('taskuary.agents.default_agent', return_value='coder'); patcher.start(); self.addCleanup(patcher.stop)
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
+        patcher = mock.patch('taskuary.agents.default_pick', return_value='cli:claude'); patcher.start(); self.addCleanup(patcher.stop)
         calls = []
         def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None):
             calls.append(cwd); f = lambda *a, **k: 'Dana wrote on email.'; f.session_id = ''; return f
@@ -613,10 +615,10 @@ class FastLaneTests(unittest.TestCase):
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make), mock.patch.object(concierge.llm_mod, 'build_llm', return_value=lambda *a, **k: 'quick') as b:
             self.assertEqual(concierge.brain(s, fast=True)(None, None), 'Dana wrote on email.')
             self.assertFalse(b.called)
-        self.assertEqual(concierge.pick(s), 'cli:coder')
+        self.assertEqual(concierge.pick(s), 'cli:claude')
         # ...but a CLI the owner CHOSE is not swapped for the connector: the Assistant set to Claude answered on
         # Azure every turn (2026-09-24). The set-up composer rides the same chosen brain.
-        s.set_setting(concierge.AI_KEY, 'cli:coder', 'owner')
+        s.set_setting(concierge.AI_KEY, 'cli:claude', 'owner')
         calls.clear()
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make), mock.patch.object(concierge.llm_mod, 'build_llm', return_value=lambda *a, **k: 'quick') as b:
             self.assertEqual(concierge.brain(s, fast=True)(None, None), 'Dana wrote on email.')
@@ -658,7 +660,7 @@ class SetupAndTroubleTests(unittest.TestCase):
         self.assertIn('Zoho invoices', t['Summary'])
         self.assertEqual([i['text'] for i in s.task_checklist(out['taskId'])],
                          ["set up a report that pulls last month's Zoho invoices every Monday"])
-        self.assertIn('needs:browser', t['Tags'])          # the walkthrough owns the visible browser, not a coder
+        self.assertIn('needs:browser', t['Tags'])          # the walkthrough owns the visible browser, not a coding agent
         self.assertFalse(spawn.called)                       # nobody is sent into a checkout
         # said in the chat, a set-up is a PROPOSAL: the walk-through opens on the click, never on the words (here the
         # set-up sort says it needs digging - a form-shaped one would be a report proposal instead, test_chat_setup.py)
@@ -672,7 +674,7 @@ class SetupAndTroubleTests(unittest.TestCase):
             made = run(s, p).json()['outcome']
         self.assertEqual(s.get_task(made['taskId'])['Kind'], 'general'); self.assertFalse(spawn.called)
         self.assertIn('walk-through', last_receipt(s)); self.assertIn('nothing built', last_receipt(s))
-        # ...and a hand-off the owner asks for by name IS the coder, in a checkout
+        # ...and a hand-off the owner asks for by name IS the coding agent, in a checkout
         with mock.patch('taskuary.ingest._spawn') as spawn:
             made = concierge.setup_task(s, 'find out why the export drops inter-company rows', kind='coding')
         self.assertEqual(s.get_task(made['taskId'])['Kind'], 'coding'); self.assertTrue(spawn.called)
@@ -814,7 +816,7 @@ class OpeningTests(unittest.TestCase):
     def test_a_new_chat_opens_with_the_day_once_and_the_walk_starts_on_a_button(self):
         s = store()
         t, m, r = drafted(s)
-        s.add_comment(t, 'claude', 'agent', 'CODER REPORT\nSummary: regenerated the export; rows now match.')
+        s.add_comment(t, 'claude', 'agent', 'AGENT REPORT\nSummary: regenerated the export; rows now match.')
         seen = {}
         fake = lambda system, user, **kw: seen.update(user=user) or "Let's go through what we have today: one reply waiting for your yes, nothing on the calendar."
         out = concierge.open_day(s, llm=fake)
@@ -976,7 +978,7 @@ class FyiHandOffTests(unittest.TestCase):
     the owner's own list."""
     def test_an_fyi_card_offers_both_agents_and_the_coding_one_proposes_from_the_message(self):
         s = store()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
         mid = s.add_message({'ExternalId': 'n1', 'Channel': 'email', 'Subject': 'Nightly job - 0 created, 1 NOT created',
                              'FromName': 'Nightly job', 'FromEmail': 'jobs@northwind.example', 'SentAt': '2026-09-24 13:00:00',
                              'BodyText': 'NOT created (1): already exists', 'Status': 'filed'})
@@ -984,19 +986,19 @@ class FyiHandOffTests(unittest.TestCase):
         with mock.patch.object(concierge, 'no_agent', return_value=''):
             verbs = [c['verb'] for c in concierge.chips_for(s, item)]
             # ONE button now, Send to agent (2026-09-25): the card's own question picks coding or not
-            self.assertIn('regular_agent', verbs); self.assertNotIn('coder', verbs)
+            self.assertIn('regular_agent', verbs); self.assertNotIn('coding_agent', verbs)
             dock = general.dock_task(s, 'owner')[0]['TaskId']
-            prop = concierge.propose_for(s, dock, {'verb': 'coder', 'text': 'stop it emailing on every run'}, item,
+            prop = concierge.propose_for(s, dock, {'verb': 'coding_agent', 'text': 'stop it emailing on every run'}, item,
                                          'send this to the coding agent')
         self.assertEqual((prop['kind'], prop['target']), ('task.create_from_message', mid))
         self.assertEqual(prop['params']['kind'], 'coding')
-        self.assertEqual([(x['verb'], x['current']) for x in prop['alts']], [('coder', True), ('regular_agent', False)])
+        self.assertEqual([(x['verb'], x['current']) for x in prop['alts']], [('coding_agent', True), ('regular_agent', False)])
 
     def test_send_to_agent_goes_where_triage_would_send_it(self):
         s = store()
-        s.upsert_agent('coder', 'coding', 'cli', json.dumps({'cmd': 'claude'}))
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
         t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
-        self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'coder')
+        self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'coding_agent')
         s.update_task(t, {'Kind': 'general'}, 'o')
         self.assertEqual(concierge.triage_agent(s, {'tid': t}), 'regular_agent')
 

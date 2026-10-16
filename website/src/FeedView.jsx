@@ -40,7 +40,7 @@ import { SIDE_NAV } from "./sideNav.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, CcRow, ChoiceRow, CoderReport, Confirm, DiffBlock, ProofCard, SendToAgent, NotMine, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, RefChip, CcRow, ChoiceRow, AgentReport, Confirm, DiffBlock, ProofCard, SendToAgent, NotMine, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -1362,7 +1362,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
     setSkipped(data.affected || 0);
     setTimeout(() => onSkipped?.(), 1400);          // let the count land, then drop the rows
   };
-  const rep = [...(detail?.comments || [])].reverse().find((c) => String(c.Body || "").trimStart().startsWith("CODER REPORT"));
+  const rep = [...(detail?.comments || [])].reverse().find((c) => /^(?:AGENT|CODER) REPORT/.test(String(c.Body || "").trimStart()));
   const diffRun = (detail?.runs || []).find((r) => r.DiffText);
   // an ACTION is a proposal, not a reply - it has its own card and must never fill this tab
   const livePending = (detail?.reviews || []).find((r) => r.Status === "pending" && r.Kind !== "action");
@@ -1522,7 +1522,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
   const roadLine = failedTriage && triage.choose
     ? "Triage could not classify it, so no task was created. Choose what should happen below."
     : triage.line;
-  const reportText = String(rep?.Body || "").replace(/^(CODER REPORT|HANDOVER NOTE)\s*/i, "").trim();
+  const reportText = String(rep?.Body || "").replace(/^((?:AGENT|CODER) REPORT|HANDOVER NOTE)\s*/i, "").trim();
   const reportResult = ((/(?:^|\n)Summary:[ \t]*([^\n]+)/im.exec(reportText) ||
     /(?:^|\n)Result:[ \t]*([^\n]+)/im.exec(reportText) || [])[1] || cleanText(reportText)).trim();
   // a generated body carries its own structure (a lead, then a list); flattening the whole thing
@@ -1760,7 +1760,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                     <>
                       <PanelLabel>Agent result</PanelLabel>
                       <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
-                        <CoderReport body={rep.Body} />
+                        <AgentReport body={rep.Body} />
                       </Box>
                       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
                         Finished by {rep.Actor || "the coding agent"}{rep.CreatedAt ? ` · ${fmtDateTime(rep.CreatedAt)}` : ""}

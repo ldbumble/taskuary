@@ -46,7 +46,7 @@ class OneRoadTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coder'}, '')), \
+             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding'}, '')), \
              mock.patch.object(server, 'continue_session', return_value={'session': 'sid'}) as reopen:
             out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'run the tests first'}).json()
         self.assertTrue(out['resumed']); self.assertEqual(reopen.call_args[0][1].instruction, 'run the tests first')
@@ -63,7 +63,7 @@ class OneRoadTests(unittest.TestCase):
         s = MemoryStore()
         tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open'}, 'o')
         with mock.patch.object(server, 'store', s), mock.patch('taskuary.general.handles', return_value=False), \
-             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coder', 'Brain': 'codex'}, '')), \
+             mock.patch.object(server, '_resumable', return_value=({'Agent': 'coding', 'Brain': 'codex'}, '')), \
              mock.patch.object(server, 'continue_session', side_effect=HTTPException(422, 'codex is out of sessions')), \
              mock.patch.object(server, 'continue_task', return_value={'session': 'sid'}) as fresh:
             out = TestClient(server.app).post(f'/api/tasks/{tid}/continue-work', json={'note': 'check the E09 mails'}).json()

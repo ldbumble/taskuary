@@ -9,6 +9,7 @@ saying "done" after somebody deleted the mailbox.
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -246,10 +247,13 @@ class ACliCountsAsABrainTests(unittest.TestCase):
     def test_detection_finds_what_is_on_PATH_and_what_is_configured(self):
         from taskuary import clis
         s = _fresh()
-        s.upsert_agent('my-own-cli', 'coding', 'cli', '{"cmd": "whatever"}')
+        s.upsert_agent('coding', 'coding', 'cli', '{"cmd": "claude"}')
         found = {x['name']: x for x in clis.detect(s)}
-        self.assertIn('my-own-cli', found)                       # configured here, so offered
-        self.assertTrue(found['my-own-cli']['configured'])
+        # a profile is instructions on a tool, never a CLI of its own: only the tools are listed, and the
+        # one a row runs reads as configured (the owner, 2026-10-15)
+        self.assertNotIn('coding', found)
+        self.assertTrue(found['claude']['configured'])
+        self.assertFalse(found['codex']['configured'])
         for x in found.values():
             self.assertIn('installed', x)
         # the flags are not decoration: a headless claude without them blocks on an approval
@@ -453,21 +457,33 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
         from taskuary import agents as hub_agents
         return next((o['value'] for o in hub_agents.cli_agent_options(server.store) if o['cli'] == cli), '')
 
-    def test_a_cli_with_a_profile_behind_it_actually_ticks_the_ai_row(self):
-        """The whole point of the endpoint. `claude` is a connection; `coder` is the profile that
-        runs it, and only the profile name resolves to anything."""
+    def _connected(self, *keys):
+        """These CLIs connected and installed - a brain is the CONNECTION (agents.agent_row), never a profile."""
+        from taskuary import agents, config
+        stack = ExitStack()
+        stack.enter_context(mock.patch.object(agents, 'connection_brains', agents.connection_brains.real))   # conftest stubs it out
+        real = config.load()                       # the rest of the config stays: the token gate reads allowed_hosts from it
+        stack.enter_context(mock.patch.object(config, 'load', return_value={**real, 'cli_connections': {k: {'cmd': k} for k in keys}}))
+        stack.enter_context(mock.patch('taskuary.agents.runs_here', return_value=True))
+        return stack
+
+    def test_a_connected_cli_actually_ticks_the_ai_row(self):
+        """The whole point of the endpoint. `claude` is a connection, and the connection is the brain:
+        `cli:claude` is what is stored, and it resolves with no profile behind it (2026-10-15)."""
+        from taskuary import agents as hub_agents
         was = self._was()
-        try:
-            server.store.set_setting('triage_ai', '', 't')
-            out = c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
-            self.assertEqual(out.status_code, 200)
-            self.assertTrue(out.json()['adopted'])
-            self.assertEqual(self._was(), f'cli:{self._profile_of("claude")}')
-            self.assertTrue(server.store.get_agent(self._was()[4:]), 'the stored name resolves')
-            self.assertTrue(self._ai_row()['done'])
-            self.assertTrue(_step(out.json(), 'ai')['done'], 'and the answer says so on the spot')
-        finally:
-            self._restore(was)
+        with self._connected('claude'):
+            try:
+                server.store.set_setting('triage_ai', '', 't')
+                out = c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+                self.assertEqual(out.status_code, 200)
+                self.assertTrue(out.json()['adopted'])
+                self.assertEqual(self._was(), 'cli:claude')
+                self.assertTrue(hub_agents.agent_row(server.store, self._was()[4:]), 'the stored name resolves')
+                self.assertTrue(self._ai_row()['done'])
+                self.assertTrue(_step(out.json(), 'ai')['done'], 'and the answer says so on the spot')
+            finally:
+                self._restore(was)
 
     def test_a_cli_no_profile_uses_stores_nothing_at_all(self):
         """gemini is a real connection with no seeded worker behind it. A dangling `cli:gemini`
@@ -508,16 +524,18 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
 
     def test_a_second_clis_test_does_not_steal_the_brain_from_the_first(self):
         was = self._was()
-        try:
-            server.store.set_setting('triage_ai', '', 't')
-            c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
-            first = self._was()
-            out = c.post('/api/setup/adopt-brain', json={'cli': 'codex'})
-            self.assertFalse(out.json()['adopted'])
-            self.assertEqual(self._was(), first)             # the first one, untouched
-            self.assertTrue(self._ai_row()['done'])
-        finally:
-            self._restore(was)
+        with self._connected('claude', 'codex'):
+            try:
+                server.store.set_setting('triage_ai', '', 't')
+                c.post('/api/setup/adopt-brain', json={'cli': 'claude'})
+                first = self._was()
+                self.assertEqual(first, 'cli:claude')
+                out = c.post('/api/setup/adopt-brain', json={'cli': 'codex'})
+                self.assertFalse(out.json()['adopted'])
+                self.assertEqual(self._was(), first)             # the first one, untouched
+                self.assertTrue(self._ai_row()['done'])
+            finally:
+                self._restore(was)
 
     def test_a_brain_the_owner_already_picked_is_never_stomped(self):
         was = self._was()

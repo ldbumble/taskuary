@@ -55,7 +55,7 @@ const traceParts = (events, keepStart = true) => {
       if (old) tools.set(id, { ...old, result: { output: event.detail?.result || "" },
         isError: !!event.detail?.is_error });
     } else if (event.type === "start") {
-      // "Agent progress: Started Claude Code · coder (your CLI)" is the header's own words in a box
+      // "Agent progress: Started <CLI> · <profile> (your CLI)" is the header's own words in a box
       // labelled progress, and on a work window the band states who started and when (the owner's
       // screenshots, 2026-09-08). The dock has no band, so it keeps the line.
       if (keepStart) progress.push(`Started ${event.session?.provider || "the selected agent"}`);

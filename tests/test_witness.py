@@ -111,7 +111,7 @@ class HookWiringTests(unittest.TestCase):
             self.assertTrue(all(k in got['hooks'] for k in ('Stop', 'UserPromptSubmit')))
 
     def _fake(self, sid, tid, cwd=CWD, argv=('claude',), last=None):
-        t = SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, argv=list(argv), agent='coder', label='coder', last=last or time.time(),
+        t = SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=cwd, argv=list(argv), agent='coding', label='coding', last=last or time.time(),
                             started='2026-08-28 09:00:00', witness=witness.Witness(), ext_id='', files=lambda: [], tail=lambda n=3: ['screen'])
         t.idle = lambda: 0.0
         t.info = lambda tail=0: term.Term.info(t, tail)
@@ -155,7 +155,7 @@ class HookWiringTests(unittest.TestCase):
         live = next(r for r in c.get('/api/runs/live').json()['data'] if r['TaskId'] == tid)
         self.assertEqual(live['work']['tool']['name'], 'Edit'); self.assertEqual(live['work']['todos'][0]['status'], 'now')
         w = c.get(f'/api/tasks/{tid}/work', params={'diff': False}).json()
-        self.assertEqual(w['files'][0]['path'], 'taskuary/server.py'); self.assertEqual(w['prov']['by'], 'coder'); self.assertEqual(w['session']['sid'], 's1')
+        self.assertEqual(w['files'][0]['path'], 'taskuary/server.py'); self.assertEqual(w['prov']['by'], 'coding'); self.assertEqual(w['session']['sid'], 's1')
         self.assertEqual(c.post('/api/hooks/claude', content=b'not json').json(), {'bound': False})   # a hook must never trouble the agent
 
     def test_a_hook_that_hung_up_is_not_a_server_error(self):

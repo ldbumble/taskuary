@@ -43,11 +43,11 @@ test("an old task keeps its extracted work, checklist, worker, and repository", 
   const verdict = legacyTriageVerdict({
     routeReason: "triage: task - asks for a code change",
     task: { Kind: "coding", Title: "Fix exports", Summary: "Dana asked for the export fix.",
-      Assignee: "agent:coder", Tags: "urgent,repo:acme/widgets" },
+      Assignee: "agent:coding", Tags: "urgent,repo:acme/widgets" },
     checklist: [{ text: "Fix CSV quoting" }],
   });
   assert.equal(verdict.repository, "acme/widgets");
-  assert.equal(verdict.profile, "coder");
+  assert.equal(verdict.profile, "coding");
   assert.deepEqual(verdict.checklist, ["Fix CSV quoting"]);
 });
 

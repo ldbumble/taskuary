@@ -3,7 +3,7 @@
 The owner typed a task himself ("SAML SSO", channel `own`), pressed Write reply, and the drafter
 was handed a thread with no correspondent in it. So it answered HIM: its own analysis of the
 vendor's note, and under that a letter it suggested sending - all of it in the box whose button
-sends (TQ-0674, 2026-09-22). A finished session has always known better (coder.no_one_behind, which
+sends (TQ-0674, 2026-09-22). A finished session has always known better (wrapup.no_one_behind, which
 is why a scheduled report's task gets no draft); the reply door never asked.
 """
 import unittest

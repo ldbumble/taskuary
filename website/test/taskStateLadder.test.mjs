@@ -1,6 +1,6 @@
 // One verdict per task on the rail. The run row says `running` for as long as the pty is up -
 // including while the CLI waits at its prompt - so reading it first put "agent working" on a row
-// whose page header, Wall cell and toast all said the coder had stopped and was waiting (TQ-0004,
+// whose page header, Wall cell and toast all said the agent had stopped and was waiting (TQ-0004,
 // 2026-09-18). A live session speaks for itself; the run row decides only when there is none.
 import test from "node:test";
 import assert from "node:assert/strict";

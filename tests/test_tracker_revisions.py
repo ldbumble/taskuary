@@ -213,7 +213,7 @@ class GithubRevisionTests(unittest.TestCase):
         s = MemoryStore()
         self.assertEqual(self.poll(s, [gh_item()]), 1)
         n = self.poll(s, [gh_item('login drops the session after 30s, here is the repro')])
-        self.assertEqual(n, 1, 'the rewritten report is what the coder must read')
+        self.assertEqual(n, 1, 'the rewritten report is what the coding agent must read')
         self.assertEqual(len(s.feed()), 2)
 
     def test_a_comment_lands_on_the_same_conversation_as_its_issue(self):
@@ -316,11 +316,11 @@ class UpstreamEndingTests(unittest.TestCase):
         written and proposals become reviews - and the cause is the router's own line on the task,
         never the agent's LAST MESSAGE (2026-10-12: the card swapped the agent's account of its merge
         for "was merged on GitHub")."""
-        from taskuary import coder
+        from taskuary import wrapup
         s = MemoryStore()
         self.poll(s, [gh_item()])
         tid = self.open_task_on(s, 'gh:o/r#42')
-        with mock.patch.object(coder, 'wrap', return_value={'wrap': 'done'}) as w:
+        with mock.patch.object(wrapup, 'wrap', return_value={'wrap': 'done'}) as w:
             self.poll(s, [gh_item(state='closed')])
         self.assertEqual(w.call_args.kwargs.get('close'), True)
         self.assertFalse(w.call_args.kwargs.get('final_message'))

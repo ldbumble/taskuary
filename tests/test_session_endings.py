@@ -7,13 +7,13 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import coder, concierge, funnel, server, terminal
+from taskuary import wrapup, concierge, funnel, server, terminal
 from taskuary.store import MemoryStore
 
 
 def handed(s, **over):
     return s.create_task({'Title': 'Fix the nightly export', 'Kind': 'coding', 'Status': 'in_progress',
-                          'Assignee': 'agent:coder', **over}, 'triage')
+                          'Assignee': 'agent:coding', **over}, 'triage')
 
 
 class CloseIsOnPurposeTests(unittest.TestCase):
@@ -26,7 +26,7 @@ class CloseIsOnPurposeTests(unittest.TestCase):
 class SessionSavedTests(unittest.TestCase):
     def test_save_and_end_session_leaves_the_task_open_saved_and_says_so(self):
         s = MemoryStore(); tid = handed(s)
-        coder._ended(s, tid, False, 'owner')
+        wrapup._ended(s, tid, False, 'owner')
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertTrue(funnel.session_saved(s, tid))
         self.assertTrue(funnel.agent_left(s, tid))
@@ -35,23 +35,23 @@ class SessionSavedTests(unittest.TestCase):
 
     def test_closing_the_task_is_not_a_saved_session(self):
         s = MemoryStore(); tid = handed(s)
-        coder._ended(s, tid, True, 'owner')
+        wrapup._ended(s, tid, True, 'owner')
         self.assertFalse(funnel.session_saved(s, tid))
 
 
 class RealReasonTests(unittest.TestCase):
     def test_waiting_to_start_names_the_queue(self):
         s = MemoryStore(); tid = handed(s, Status='open')
-        s.enqueue_dispatch(tid, None, 'coder', 'all slots busy')
+        s.enqueue_dispatch(tid, None, 'coding', 'all slots busy')
         self.assertIn('next in line', funnel.not_started_why(s, tid))
-        s.dispatch_failed(tid, 'coder is not installed', permanent=True)
-        self.assertIn('could not start: coder is not installed', funnel.not_started_why(s, tid))
+        s.dispatch_failed(tid, 'coding is not installed', permanent=True)
+        self.assertIn('could not start: coding is not installed', funnel.not_started_why(s, tid))
 
 
 class CancelTakesTheAgentOffTests(unittest.TestCase):
     def test_cancel_leaves_the_task_yours(self):
         s = MemoryStore(); tid = handed(s, Status='open')
-        s.enqueue_dispatch(tid, None, 'coder', 'all slots busy')
+        s.enqueue_dispatch(tid, None, 'coding', 'all slots busy')
         with mock.patch.object(server, 'store', s):
             self.assertEqual(TestClient(server.app).delete(f'/api/tasks/{tid}/dispatch').status_code, 200)
         self.assertFalse(s.get_task(tid).get('Assignee'))
@@ -94,11 +94,11 @@ class MergedPullRequestOwesNoReplyTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Export fix', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         s.add_message({'TaskId': tid, 'ExternalId': 'gh-1', 'Channel': 'github', 'Subject': 'Fix the export', 'FromName': 'Erin Blake',
                        'FromEmail': 'erin@northwind.example', 'BodyText': 'PR opened', 'Status': 'routed'})
-        prev, coder.REFRESH = coder.REFRESH, None
+        prev, wrapup.REFRESH = wrapup.REFRESH, None
         try:
             with mock.patch('taskuary.responder.write_draft', return_value='Merged, thanks.') as draft:
-                out = coder.finish(s, tid, {'summary': 'merged', 'outcome': 'did_work'}, None, 'coder', no_reply=True)
-        finally: coder.REFRESH = prev
+                out = wrapup.finish(s, tid, {'summary': 'merged', 'outcome': 'did_work'}, None, 'coding', no_reply=True)
+        finally: wrapup.REFRESH = prev
         draft.assert_not_called()
         self.assertFalse(out.get('drafting'))
         self.assertEqual(s.list_reviews('pending'), [])

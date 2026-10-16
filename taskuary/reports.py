@@ -248,7 +248,7 @@ def _outline(body: str) -> str:
 
 
 def run_agent(cfg):
-    """{"agent": "coder", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
+    """{"agent": "researcher", "skill": "weekly-user-review", "prompt": "...", "cwd": "C:/repo", "model": "..."} -
     the AI itself as the source: a coding CLI agent (Connections -> AI CLI agents) runs your saved
     SKILL (a slash command - "/weekly-user-review") and/or a prompt, on the schedule, and what it
     answers is the report. "cwd" is optional: a project-level skill lives in its repo, a user-level
@@ -262,11 +262,10 @@ def run_agent(cfg):
     skill, prompt = str(cfg.get('skill') or '').strip().lstrip('/'), str(cfg.get('prompt') or '').strip()
     if not skill and not prompt: raise RuntimeError('give the agent a skill (/name) or a prompt - or both')
     # A workflow is not a code change, so the CODING agent is the wrong thing to fall back to (the
-    # owner, 2026-09-10: "workflows should not be coder always as well. it's not code"). An unnamed
-    # workflow goes to whoever takes work by default - a setting the owner controls, and one that
-    # already refuses to name a CLI this machine cannot start.
+    # owner, 2026-09-10: a workflow is not code, so it should not always go to the coding agent). An unnamed
+    # workflow runs on the default brain - a CLI tool, no profile - since default_agent is now the coding profile.
     from . import agents as hub_agents
-    name = str(cfg.get('agent') or hub_agents.default_agent(store)).strip()
+    name = str(cfg.get('agent') or hub_agents.default_brain(store)).strip()
     # Agent-backed reports are read-only even when their source lives in a repository folder.
     # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
     writes = cfg.get('access') == 'write'

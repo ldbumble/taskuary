@@ -71,8 +71,8 @@ def test_an_approve_lane_with_emails_says_how_many(s):
 
 
 def test_a_closed_ask_is_finished_with_the_agents_summary(s):
-    tid = made(s); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: checked all four tabs, two hold items.')
-    s.update_task(tid, {'Status': 'done'}, 'coder')
+    tid = made(s); s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nSummary: checked all four tabs, two hold items.')
+    s.update_task(tid, {'Status': 'done'}, 'coding')
     with rail():
         lane, says = asks.state(s, tid)
     assert lane == 'finished' and 'two hold items' in says
@@ -126,8 +126,8 @@ def test_working_is_never_said_but_is_remembered(s):
 
 
 def test_finishing_is_said_with_the_summary(s):
-    tid = made(s); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: all four tabs checked.')
-    s.update_task(tid, {'Status': 'done'}, 'coder')
+    tid = made(s); s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nSummary: all four tabs checked.')
+    s.update_task(tid, {'Status': 'done'}, 'coding')
     with at(s, tid, 'working'): line = asks.check(s, tid)
     assert line and 'all four tabs checked' in line
 
@@ -234,7 +234,7 @@ def test_the_block_is_capped_and_short(s):
 
 
 def test_a_finished_ask_leaves_the_block_once_it_is_off_the_rail(s):
-    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coding')
     assert 'TQ-0001' in asks.block(s, [{'tid': tid, 'lane': 'saved', 'why': 'finished'}])
     assert asks.block(s, []) == ''
 
@@ -245,7 +245,7 @@ def test_no_asks_no_block(s):
 
 def test_the_look_up_lists_older_and_finished_asks(s):
     from taskuary import lookups
-    a = made(s, 'Check the four tabs'); b = made(s, 'Research vendor pricing'); s.update_task(a, {'Status': 'done'}, 'coder')
+    a = made(s, 'Check the four tabs'); b = made(s, 'Research vendor pricing'); s.update_task(a, {'Status': 'done'}, 'coding')
     with rail():
         both, open_ = lookups.read(s, 'asks.list', {'status': 'all'}), lookups.read(s, 'asks.list', {})
     assert 'Check the four tabs' in both and 'Research vendor pricing' in both
@@ -272,7 +272,7 @@ def cand(tid=None, mid=None, conv='conv-1', kind='followup'):
 
 
 def test_a_candidate_on_a_task_told_an_hour_ago_is_dropped_and_25h_later_comes_back(s):
-    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')       # closed: only the window holds it back now
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coding')       # closed: only the window holds it back now
     s._exec('UPDATE task SET AskedTold=?, AskedToldAt=?, ClosedAt=? WHERE TaskId=?', ('finished', hours_ago(1), hours_ago(30), tid))
     assert asks.not_just_said(s, [cand(tid=tid)], 24) == []
     s._exec('UPDATE task SET AskedToldAt=? WHERE TaskId=?', (hours_ago(25), tid))
@@ -325,7 +325,7 @@ def test_the_block_reads_the_rail_it_is_given_and_never_rebuilds(s):
 
 
 def test_a_finished_ask_leaves_the_block_once_seen_even_if_the_full_build_keeps_it(s):
-    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coder')
+    tid = made(s); s.update_task(tid, {'Status': 'done'}, 'coding')
     with mock.patch('taskuary.funnel.full_items', return_value=[{'tid': tid, 'lane': 'saved', 'why': 'finished'}]):
         assert asks.block(s, []) == ''                                   # read: off the unread rail
         assert 'TQ-0001' in asks.block(s, [{'tid': tid, 'lane': 'saved', 'why': 'finished'}])
@@ -380,8 +380,8 @@ def test_the_advisor_skips_threads_tied_to_an_open_ask(s):
 
 
 def test_told_lines_carry_the_agents_summary(s):
-    tid = made(s, 'Check the four tabs'); s.add_comment(tid, 'coder', 'agent', 'CODER REPORT\nSummary: two tabs hold items.')
-    s.update_task(tid, {'Status': 'done'}, 'coder')
+    tid = made(s, 'Check the four tabs'); s.add_comment(tid, 'coding', 'agent', 'AGENT REPORT\nSummary: two tabs hold items.')
+    s.update_task(tid, {'Status': 'done'}, 'coding')
     s._exec('UPDATE task SET AskedTold=?, AskedToldAt=? WHERE TaskId=?', ('finished', hours_ago(2), tid))
     assert 'two tabs hold items' in asks.told_lines(s)
 
@@ -523,9 +523,9 @@ def test_a_reminder_that_cannot_be_said_never_breaks_the_sync(s):
 
 def test_an_ask_closed_reopened_and_closed_again_is_said_again(s):
     tid = made(s)
-    s.update_task(tid, {'Status': 'done'}, 'coder')
+    s.update_task(tid, {'Status': 'done'}, 'coding')
     with rail(): assert asks.check(s, tid)
-    s.update_task(tid, {'Status': 'open'}, 'owner'); s.update_task(tid, {'Status': 'done'}, 'coder')
+    s.update_task(tid, {'Status': 'open'}, 'owner'); s.update_task(tid, {'Status': 'done'}, 'coding')
     s._exec("UPDATE task SET ClosedAt=? WHERE TaskId=?", ('2099-01-01 00:00:00', tid))   # closed after it was told
     with rail(): assert asks.check(s, tid)
 

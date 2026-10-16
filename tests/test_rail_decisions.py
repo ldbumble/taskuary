@@ -115,8 +115,8 @@ class StoppedGoesToPassedTests(unittest.TestCase):
     def test_next_puts_a_stopped_agent_in_passed_and_the_quiet_hours_bring_it_back(self):
         from taskuary import concierge
         s, settle = settled()
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
-        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'o')
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
@@ -138,8 +138,8 @@ class AStopAfterNextIsYoursTests(unittest.TestCase):
         a Next pressed before the agent stopped (or asked again) filed the new stop straight into Passed."""
         from taskuary import concierge
         s, settle = settled()
-        s.upsert_agent('coder', 'coding', 'cli', '{}')
-        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coder'}, 'o')
+        s.upsert_agent('coding', 'coding', 'cli', '{}')
+        t = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export', who='Omar Keller', email='omar@northwind.example', hours=3, tid=t)
         s.add_route(mid, t, 'route', 1.0, 'triage: coding', [], 'triage')
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
@@ -240,7 +240,7 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
         Passed - off the rail for three hours while the task list still showed it."""
         from taskuary import concierge
         s, settle = settled()
-        t = s.create_task({'Title': 'Merge the export fix', 'Kind': 'coding', 'Status': 'waiting', 'Assignee': 'agent:coder'}, 'o')
+        t = s.create_task({'Title': 'Merge the export fix', 'Kind': 'coding', 'Status': 'waiting', 'Assignee': 'agent:coding'}, 'o')
         mid = mail(s, 'export fix', who='Omar Keller', email='omar@northwind.example', hours=1, tid=t)
         s.add_review({'MessageId': mid, 'TaskId': t, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Merged, thanks.'})
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()

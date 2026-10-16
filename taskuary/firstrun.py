@@ -106,7 +106,8 @@ def state(store) -> dict:
     todo = {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step]
     return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,
             'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt,
-            'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': about(store)['done'], 'dismissed': store.get_setting(DISMISSED) == '1'}
+            'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': about(store)['done'],
+            'more_connected': more_connected(store), 'dismissed': store.get_setting(DISMISSED) == '1'}
 
 
 # ONE PICK IS THE AI (the owner, 2026-10-14: "this is only triage ai not the other ai's"): the four brains - triage, general
@@ -326,10 +327,24 @@ SIG_MAILS, IN_MAILS = 12, 40            # sent mails whose ends are read for the
 SYS_DOMAINS, SYS_TOPICS = 40, 40        # the vendors and the returning subjects the systems are read from
 
 
+def more_connected(store) -> int:
+    """Connections switched on beyond the AI, the mail and Taskuary's own Hub - what ticks More connections on the rail, which never
+    ticked however many were set up (the owner, 2026-10-16: "why is it still not checked, what checks it?")."""
+    from .llm import AI_TYPES
+    skip = {*AI_TYPES, *(t for t, _l, _s in MAIL), *GENERIC}
+    return sum(1 for c in store.list_connectors() if c.get('Active') and c.get('Type') not in skip)
+
+
+# HOW FILES MOVE OR WHERE THEY SIT, NOT A SYSTEM ONE WORKS IN - and Taskuary's own: never offered as "systems you work in" nor
+# suggested as the next connection ("SFTP is the best next connection" - the owner, 2026-10-16: "remove this sftp because it can be
+# many systems"). Each is still on the Connections page for whoever needs it.
+GENERIC = ('sftp', 'smb_file', 'knowledge', 'handbook')
+
+
 def _offered() -> list:
     from pathlib import Path
     cards = json.loads((Path(__file__).parent / 'connectorcatalog.json').read_text(encoding='utf-8'))['cards']
-    return list(dict.fromkeys(c['title'] for c in cards if c.get('group') in ABOUT_GROUPS))
+    return list(dict.fromkeys(c['title'] for c in cards if c.get('group') in ABOUT_GROUPS and c['type'] not in GENERIC))
 
 
 def _saved(store) -> dict:
@@ -534,14 +549,14 @@ def suggest_connections(store) -> dict:
     by = {c['type']: c for c in cards}
     connected = {c['Type'] for c in store.list_connectors() if c.get('Active')}
     rows = lambda types: [{'type': t, 'title': by[t]['title'], 'group': by[t]['group'], 'planned': bool(by[t].get('planned'))}
-                          for t in dict.fromkeys(types) if t in by and t not in connected]
+                          for t in dict.fromkeys(types) if t in by and t not in connected and t not in GENERIC]
     a = about(store)
     try:
         from . import llm as llm_mod
         user = '\n'.join([f"ROLE: {' at '.join(x for x in (a['role'], a['org']) if x) or '(not said)'}",
                           f"SYSTEMS THEY WORK IN: {', '.join(a['systems']) or '(none named)'}", f"JOB.md:\n{(store.get_doc('job') or '')[:3000]}",
                           'CARDS (type: title - section, planned when not connectable yet):',
-                          *[f"{c['type']}: {c['title']} - {c['group']}{' (planned)' if c.get('planned') else ''}" for c in cards],
+                          *[f"{c['type']}: {c['title']} - {c['group']}{' (planned)' if c.get('planned') else ''}" for c in cards if c['type'] not in GENERIC],
                           f"CONNECTED: {', '.join(sorted(connected)) or '(none)'}"])
         ans = llm_mod.ask_json(llm_mod.build_llm(store), CONN_SYSTEM, user, want=CONN_WANT, max_tokens=1200)
         d = ans.data if isinstance(ans.data, dict) else {}

@@ -133,9 +133,16 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ...and ADVICE COMES WITH ITS BUTTON (the owner, 2026-10-15: "making buttons available when necessary"): each connection the
   // Advisor names opens its section on the Connections page below; one Taskuary cannot connect yet gets no button
   // every one it names that can be connected - it named five and gave three buttons (the Advisor audit, 2026-10-15)
-  const suggested = view === "other" ? (connSug?.picks || []).filter((x) => !x.planned).slice(0, 5)
-    .map((x) => ({ id: `setup:open:${x.type}`, group: "decide", tone: "s", label: x.title, title: `${x.title} - under ${x.group}`,
-      run: () => setBrowseSt({ section: x.group, open: null }) })) : [];
+  // ...and NOT AS BUTTONS IN THE ROW: the row keeps its own moves (the owner, 2026-10-16: "No such buttons. If it suggest systems
+  // then you can do it in search ... don't like new buttons besides for what there was before") - the picks it can connect are
+  // typed into the catalogue's own search, so their cards are what the page shows
+  const typed = useRef(false);
+  useEffect(() => {
+    const names = (connSug?.picks || []).filter((x) => !x.planned).slice(0, 5).map((x) => x.title);
+    if (view !== "other" || typed.current || !names.length) return;
+    typed.current = true;
+    setBrowseSt({ q: names.join(", "), section: null, open: null });
+  }, [view, connSug]);
   // ...and the fix the line names is a button too (the Advisor audit, 2026-10-15): "Press Install" and "Press Change" named buttons
   // setup did not have - an AI to install, and a brain failing on the real mail, which only Back three times could reach
   const fixRow = !st ? [] : [
@@ -150,7 +157,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ...and SETUP COMPLETE has its one big button on the canvas (SetupDone), nothing in the row
   const navShown = view === "done" ? [] : view === "about" ? nav.filter((m) => m.id === "finish") : nav;
   useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...suggested], navShown.length + fixRow.length + suggested.length > 0);
+    ...VERB[m.id], tone: toneOf(m) })), ...fixRow], navShown.length + fixRow.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step

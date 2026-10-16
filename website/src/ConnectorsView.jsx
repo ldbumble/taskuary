@@ -1578,11 +1578,14 @@ function AlchemyWalletGuide({ onBack, onData }) {
 // `browse` (the assistant canvas, CanvasBrowse.jsx): draw the catalogue's groups, cards and one connector's detail through
 // the canvas's frame instead of this tab's rail - same data, same cards, same detail, same controls.
 export default function ConnectorsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
+  // a search handed in by whoever opened the page (setup's suggestions) lands in the box, where the owner can change it
+  const asked = browseState?.q;
   const [connectors, setConnectors] = useState(null);
   const [sources, setSources] = useState([]);
   const [types, setTypes] = useState([]);
   const [drivers, setDrivers] = useState([]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(asked || "");
+  useEffect(() => { if (asked) setQ(asked); }, [asked]);
   const [group, setGroup] = useState(GROUP_TITLES[0]);   // which catalog section the rail has open
   const [open, setOpen] = useState(null);   // {kind:'channel',id} | {kind:'rtype',rtype,SourceId?} | {kind:'agents'}
   const [syncing, setSyncing] = useState(false);
@@ -1768,7 +1771,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
   ];
-  const hits = q ? groups.flatMap((g) => g.cards.filter((c) => c.haystack.toLowerCase().includes(q.toLowerCase()))
+  // several names at once, comma-separated: setup types the Advisor's picks here (FirstRun) - "Sage Intacct, QuickBooks Online"
+  const terms = q.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  const hits = terms.length ? groups.flatMap((g) => g.cards.filter((c) => terms.some((x) => c.haystack.toLowerCase().includes(x)))
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
   const shown = groups.find((g) => g.title === group) || groups[0];

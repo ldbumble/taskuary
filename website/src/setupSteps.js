@@ -13,7 +13,9 @@ export const stepsOf = (st, shown = "") => {
     { key: "ai", label: "Your AI", done: st.step !== "ai", sub: st.step !== "ai" ? st.brain?.name || "" : "" },
     { key: "mail", label: "Your email", done: mailIn, sub: mailIn ? (st.step === "reading" ? "connected - sorting your mail" : "connected") : "" },
     { key: "about", label: "About your work", done: !!st.about_done, sub: st.about_done ? "saved" : "" },
-    { key: "other", label: "More connections", done: false, optional: true, sub: "optional" },
+    // ticked by what is connected beyond the AI and the mail - optional, but it never ticked however many were set up (2026-10-16)
+    { key: "other", label: "More connections", done: (st.more_connected || 0) > 0, optional: true,
+      sub: st.more_connected ? `${st.more_connected} connected` : "optional" },
     { key: "finish", label: "Finish", done: !!st.dismissed,
       // on Setup complete the move is its big Go to my day, not a Finish setup in the row (SetupDone)
       sub: ready ? (shown === "finish" ? "ready - Go to my day" : "ready - Finish setup is below") : "after AI, email and About your work" },

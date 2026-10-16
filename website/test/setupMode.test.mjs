@@ -28,8 +28,8 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
 test("Finish setup and Walk me through my tasks are row verbs, and both finish setup on the server", () => {
   const fr = read("FirstRun.jsx");
   assert.match(fr, /useVerbs\("setup", \[\.\.\.navShown\.map\(/);
-  // the Advisor's suggestions are buttons too: each connectable one opens its section; never "press Next" in its line
-  assert.match(fr, /id: `setup:open:\$\{x\.type\}`/);
+  // the Advisor's suggestions are typed into the catalogue's search, never buttons (2026-10-16); never "press Next" in its line
+  assert.doesNotMatch(fr, /setup:open:/);
   assert.doesNotMatch(fr, /or press Next/);
   assert.match(fr, /walk: \{ label: "Walk me through my tasks"/);
   assert.match(fr, /finish: \{ label: reopened \? "Back to my day" : "Finish setup"/);

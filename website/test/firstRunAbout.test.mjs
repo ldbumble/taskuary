@@ -56,3 +56,16 @@ test("an AI connected on the Connections page says so, and the one in use leads 
   assert.match(fr, /\["on", "Your AI - it sorts your mail"\]/);
   assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(\(c\) => c\.title === inUse\)/);
 });
+
+// "No such buttons. If it suggest systems then you can do it in search ... don't like new buttons besides for what there was before"
+// (the owner, 2026-10-16) - and More connections ticks once something beyond the AI and the mail is connected
+test("More connections suggests in the catalogue's search, never as row buttons, and ticks by what is connected", async () => {
+  const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
+  assert.doesNotMatch(fr, /setup:open:/, "no suggestion buttons in the row");
+  assert.match(fr, /setBrowseSt\(\{ q: names\.join\(", "\), section: null, open: null \}\)/);
+  assert.match(cv, /const terms = q\.split\(","\)/);
+  assert.match(cv, /const \[q, setQ\] = useState\(asked \|\| ""\);/);
+  const { stepsOf } = await import("../src/setupSteps.js");
+  const other = (n) => stepsOf({ step: "done", about_done: true, more_connected: n }).find((r) => r.key === "other");
+  assert.equal(other(0).done, false); assert.equal(other(3).done, true); assert.equal(other(3).sub, "3 connected");
+});

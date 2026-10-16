@@ -223,6 +223,23 @@ class SuggestConnectionsTests(unittest.TestCase):
         self.assertEqual(out, {'line': "Workday and Salesforce can't be connected yet - nothing else fits your work for now.", 'picks': []})
         self.assertIn('can be connected now', brain.system)
 
+    def test_more_connections_counts_what_is_connected_beyond_the_ai_and_the_mail(self):
+        """The rail never ticked More connections, however many were set up - it was optional, so never done (the owner, 2026-10-16:
+        "i have many more connections setup, why is it still not checked")."""
+        self.assertEqual(firstrun.more_connected(self.s), 0)
+        for t in ('outlook', 'azure_openai', 'handbook', 'intacct', 'teams'):
+            cid = self.s.get_connector_by_type(t)['ConnectorId']; self.s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
+        self.assertEqual(firstrun.more_connected(self.s), 2)                     # Sage Intacct and Teams: not the AI, the mail or the Hub
+
+    def test_a_generic_transfer_or_storage_card_is_never_a_system_or_a_suggestion(self):
+        """"SFTP is the best next connection" - SFTP is how files move, not a system one works in (the owner, 2026-10-16: "remove
+        this sftp because it can be many systems")."""
+        self.assertFalse({'SFTP', 'Network file share'} & set(firstrun.about(self.s)['offered']))
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda system, user, **kw: json.dumps(
+                {'line': 'Connect SFTP and Sage Intacct.', 'picks': ['sftp', 'smb_file', 'intacct']})):
+            out = firstrun.suggest_connections(self.s)
+        self.assertEqual([p['type'] for p in out['picks']], ['intacct'])
+
     def test_with_no_ai_the_systems_ticked_are_matched_to_the_catalogue(self):
         with mock.patch('taskuary.llm.build_llm', side_effect=RuntimeError('no brain')):
             out = firstrun.suggest_connections(self.s)

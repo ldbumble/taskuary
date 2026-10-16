@@ -140,9 +140,8 @@ function SinceBlock({ onOpen, onReading }) {
   const pending = !d || d.reading || dg.writing;
   useEffect(() => { onReading?.(!d || !!d.reading); }, [d, onReading]);
   useEffect(() => { if (!d || !pending) return undefined; const id = setTimeout(() => read().catch(() => {}), 4000); return () => clearTimeout(id); }, [d, pending, read]);
-  // ...and TODAY'S DIGEST IS OPEN on the screen the day opens on - once, so Fold it stays folded
-  const shownFor = useRef(null);
-  useEffect(() => { if (dg.today && dg.text && shownFor.current !== dg.at) { shownFor.current = dg.at; setOpen(true); } }, [dg.today, dg.text, dg.at]);
+  // ...and THE DIGEST OPENS FOLDED: the day's card is the view, "See the full digest" opens it (the owner, 2026-10-16: "the morning
+  // digest should open closed not open so this is the view") - only Write a fresh one, asked for, opens it by itself
   // "Write a fresh one" runs the report now (about twenty seconds) and the folded line follows it until the new one is in
   const fresh = async () => {
     if (!dg.source_id || writing.startsWith("Writing")) return;

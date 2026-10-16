@@ -42,12 +42,12 @@ test("the opening card carries what changed and the digest, folded, on its top",
 });
 
 // the owner, 2026-10-14: "put the digest right away on load and the numbers ... in loading mode - same for morning digest until it shows up"
-test("the opening card loads in place: counts and the digest say they are coming, and today's digest opens itself", () => {
+test("the opening card loads in place: counts and the digest say they are coming, and the digest opens folded", () => {
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx"), turns = read("assistantTurns.js");
   assert.match(view, /spin\("Reading what came in…"\)/);
   assert.match(view, /: "Writing today's digest…"\)\}/);
   assert.match(view, /dg\.waiting \? `Not written yet - \$\{dg\.waiting\} email/, "queued by Finish, it says it waits on the mail");
-  assert.match(view, /if \(dg\.today && dg\.text && shownFor\.current !== dg\.at\)/, "today's digest is open, once");
+  assert.doesNotMatch(view, /shownFor\.current !== dg\.at/, "the digest opens folded - See the full digest opens it");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
   assert.match(cards, /loading \? "counting…" : total/);
   assert.match(turns, /turn\.card\?\.kind === "brief"/, "the opener filled in its place is redrawn, not skipped by id");

@@ -16,8 +16,9 @@ const oneLine = (s) => String(s || "").replace(/\s+/g, " ").trim();
 // "RE: Fwd: the export" and "the export" are one email thread when the mail carries no thread id
 const bareSubject = (s) => oneLine(s).replace(/^((re|fw|fwd|aw|sv)\s*:\s*)+/i, "").toLowerCase();
 
-// ONE CONVERSATION, ONE GROUP: the thread id the channel gave it, else the chat (SourceName) or the subject. Groups read oldest
-// first, as do the messages inside them - the approved canvas puts the first message on top and the latest under it.
+// ONE CONVERSATION, ONE GROUP: the thread id the channel gave it, else the chat (SourceName) or the subject. NEWEST FIRST (the
+// owner, 2026-10-16: "yes newest first for messages"): the conversation that moved last leads, and inside one the latest message
+// is on top and the one that started it at the bottom. `first` and `last` stay the opening and the latest message.
 export function groupConversations(messages = [], { ms = (s) => Date.parse(s) || 0, clean = (s) => s } = {}) {
   const groups = new Map();
   for (const m of [...messages].sort((a, b) => ms(a.SentAt) - ms(b.SentAt))) {
@@ -28,10 +29,10 @@ export function groupConversations(messages = [], { ms = (s) => Date.parse(s) ||
     groups.get(key).msgs.push({ ...m, who: senderOf(m), excerpt: oneLine(clean(m.ReadText ?? m.BodyText)).slice(0, 240) });
   }
   return [...groups.values()].map((g) => {
-    const first = g.msgs[0], people = new Set(g.msgs.map((m) => m.who));
+    const first = g.msgs[0], last = g.msgs[g.msgs.length - 1], people = new Set(g.msgs.map((m) => m.who));
     const title = isChat(g.channel) ? first.SourceName || first.Subject || first.who : first.Subject || first.SourceName || first.who;
-    return { ...g, title: oneLine(title), count: g.msgs.length, people: people.size, first, last: g.msgs[g.msgs.length - 1] };
-  });
+    return { ...g, msgs: [...g.msgs].reverse(), title: oneLine(title), count: g.msgs.length, people: people.size, first, last };
+  }).sort((a, b) => ms(b.last.SentAt) - ms(a.last.SentAt));
 }
 
 // the names behind "· · · 21 more": who wrote them, most frequent first, the rest counted
@@ -41,12 +42,12 @@ export const namesOf = (msgs, max = 3) => {
   const names = [...n.entries()].sort((a, b) => b[1] - a[1]).map(([w]) => w);
   return names.length > max ? `${names.slice(0, max).join(", ")} and ${names.length - max} more` : names.join(", ");
 };
-// A LONG CONVERSATION SHOWS ITS ENDS: the message that started it and the latest `keep`, with how many are between and who wrote them
+// A LONG CONVERSATION SHOWS ITS ENDS: the latest `keep` on top, how many are between and who wrote them, then the message that started it
 export function previewRows(group, keep = 2, all = false) {
   const ms = group?.msgs || [];
   if (all || ms.length <= keep + 2) return ms.map((m) => ({ m }));
-  const hid = ms.slice(1, ms.length - keep);
-  return [{ m: ms[0] }, { gap: hid.length, names: namesOf(hid) }, ...ms.slice(-keep).map((m) => ({ m }))];
+  const hid = ms.slice(keep, ms.length - 1);
+  return [...ms.slice(0, keep).map((m) => ({ m })), { gap: hid.length, names: namesOf(hid) }, { m: ms[ms.length - 1] }];
 }
 // how many messages the previews leave out - none means there is nothing for "Show all" to add
 export const hidden = (groups, keep = 2) => groups.reduce((n, g) => n + (g.count > keep + 2 ? g.count - keep - 1 : 0), 0);

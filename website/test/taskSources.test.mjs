@@ -1,5 +1,5 @@
 // Section 1 of the task view (the redesign, 2026-10-16): the header's read-only "Triage decided" pills and "Came from",
-// the task's messages as conversations - the first message and the latest two, with what is between counted.
+// the task's messages as conversations, newest first - the latest two, what is between counted, and the first message.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,36 +12,38 @@ const thread = (n, conv = "t-310") => Array.from({ length: n }, (_, i) => mail({
   FromName: ["Backend monitor", "Ray Colton", "Paula Vance", "Gail Moreno"][i % 4], SentAt: `2026-10-${String(9 + Math.floor(i / 10)).padStart(2, "0")} 08:${String(i % 60).padStart(2, "0")}:00`,
   BodyText: `message ${i}` }));
 
-test("messages group by conversation, oldest first, with the thread's subject and who took part", () => {
+test("messages group by conversation, newest first, with the thread's subject and who took part", () => {
   const ms = [...thread(5), mail({ ConversationId: "t-map", Subject: "Field mapping", FromName: "Paula Vance", SentAt: "2026-10-08 09:00:00", BodyText: "went live" }),
     { MessageId: ++id, Channel: "whatsapp", SourceName: "Northwind payroll group", FromName: "Erin Blake", SentAt: "2026-10-10 09:06:00", BodyText: "312 is out too" },
     { MessageId: ++id, Channel: "whatsapp", SourceName: "Northwind payroll group", Status: "context", SentAt: "2026-10-10 09:07:00", BodyText: "on it" }];
   const g = groupConversations(ms);
-  assert.deepEqual(g.map((x) => x.title), ["Field mapping", "Export failing", "Northwind payroll group"]);
+  assert.deepEqual(g.map((x) => x.title), ["Northwind payroll group", "Export failing", "Field mapping"], "the conversation that moved last leads");
   assert.equal(g[1].count, 5);
   assert.equal(g[1].people, 4);
-  assert.equal(g[2].msgs[1].who, "You", "your own line in a chat is yours");
-  assert.equal(groupMeta(g[2]), "WhatsApp · 2 messages · 2 people");
-  assert.equal(groupMeta(g[0]), "Email · 1 message");
+  assert.equal(g[0].msgs[0].who, "You", "the latest line is on top, and your own line in a chat is yours");
+  assert.equal(g[0].first.who, "Erin Blake", "first is still the message that started it");
+  assert.equal(groupMeta(g[0]), "WhatsApp · 2 messages · 2 people");
+  assert.equal(groupMeta(g[2]), "Email · 1 message");
   assert.equal(cameFromLabel(g), "Came from · 8 messages in 3 conversations");
-  assert.equal(cameFromLabel(g.slice(0, 1)), "Came from · 1 message");
+  assert.equal(cameFromLabel(g.slice(0, 1)), "Came from · 2 messages");
 });
 
 test("a thread with no id still holds together by its subject, Re: and Fwd: taken off", () => {
   const g = groupConversations([mail({ Subject: "Invoice 41", SentAt: "2026-10-01" }), mail({ Subject: "RE: Fwd: Invoice 41", SentAt: "2026-10-02" }),
     mail({ Subject: "Something else", SentAt: "2026-10-03" })]);
-  assert.deepEqual(g.map((x) => x.count), [2, 1]);
+  assert.deepEqual(g.map((x) => x.count), [1, 2], "Something else moved last, so it leads");
 });
 
-test("a long conversation shows its first message and the latest two, and counts what is between and who wrote it", () => {
+test("a long conversation shows the latest two on top, counts what is between and who wrote it, then the first message", () => {
   const [g] = groupConversations(thread(24));
   const rows = previewRows(g);
   assert.equal(rows.length, 4);
-  assert.equal(rows[0].m.excerpt, "message 0");
-  assert.equal(rows[1].gap, 21);
-  assert.match(rows[1].names, /Ray Colton|Paula Vance|Gail Moreno|Backend monitor/);
-  assert.deepEqual(rows.slice(2).map((r) => r.m.excerpt), ["message 22", "message 23"]);
-  assert.equal(previewRows(g, 2, true).length, 24, "Show all draws every one");
+  assert.deepEqual(rows.slice(0, 2).map((r) => r.m.excerpt), ["message 23", "message 22"]);
+  assert.equal(rows[2].gap, 21);
+  assert.match(rows[2].names, /Ray Colton|Paula Vance|Gail Moreno|Backend monitor/);
+  assert.equal(rows[3].m.excerpt, "message 0");
+  assert.equal(previewRows(g, 2, true)[0].m.excerpt, "message 23", "Show all draws every one, newest first");
+  assert.equal(previewRows(g, 2, true).length, 24);
   assert.equal(hidden([g]), 21);
 });
 

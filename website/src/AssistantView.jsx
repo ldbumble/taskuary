@@ -1984,7 +1984,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         {/* the same walk the header chip opens. It lives here as well because the header
             hides its chip on a phone, and this block is what a phone shows - without it the
             one door to the set-up guidance was absent on the device it is most needed on. */}
-        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={() => setFirstRun(true)}
+        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={() => setupRef.current?.()}
           title="A walk through every part of Taskuary — one step at a time, no AI needed">Set up Taskuary</button>
         {/* RUN, not set up: setting things up is Set up Taskuary's job; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
@@ -2004,7 +2004,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   );
   // SETUP REOPENS THE SETUP, on the canvas (the owner, 2026-10-15: "restart the initial walk through from the button on top - not the
   // pop up one"): every question open, the day back on Back to my day
-  setupRef.current = () => setFirstRun(true);
+  // ...but the browser demo has no setup to run - it cannot connect an inbox - so its door is the install note (setup() above), never
+  // a setup that waits on "Getting set up…" for good (the browser CI, 2026-10-15)
+  setupRef.current = () => (DEMO ? setup() : setFirstRun(true));
   const actions = { done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
@@ -2208,7 +2210,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </div>
           )}
           {err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>}
-          {hanging && <Typography sx={{ color: "#6e685f", fontSize: 12.5, mb: 1 }} data-tq-hanging="">Press <b>Next</b> below to continue.</Typography>}
+          {/* the floor's Next is the filled button under the chat - no line telling the owner to press it (the owner, 2026-10-15: "Don't be
+              dumb like saying click next to move on if it's obvious") */}
         </div>
       </div>
       )}
@@ -2235,7 +2238,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {/* ONE PANEL, THREE LAYERS (the owner, 2026-10-13: "i thought there will be one border around all 3"): the Advisor's
               suggestion, the row whose filled button it picked, and the box - one border, the box its floor */}
           <div className="tq-dock">
-          {firstRun ? <SetupLine /> : <AdvisorNext advice={shownAdvice} />}
+          {firstRun ? <SetupLine /> : <AdvisorNext advice={shownAdvice} onPropose={(a) => proposeDirect(a.verb, a.for || a.key, true, a.revision)} />}
           <ActionRow advised={shownAdvice} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>

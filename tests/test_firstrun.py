@@ -167,7 +167,7 @@ class StateTests(unittest.TestCase):
         # what is next, in the words the rail and the top bar's chip say - one source for all three
         self.assertEqual(at(False, [], [])['todo'], 'pick your AI')
         done = at(True, ['Work mail'], [{'MessageId': 1}])
-        self.assertIn('Any other connection', done['next']); self.assertIn('Walk me through my tasks', done['next'])
+        self.assertIn('optional', done['next']); self.assertNotIn('Walk me through my tasks', done['next'])   # a button setup does not offer is not named (Advisor audit, 2026-10-15)
         self.assertEqual(done['todo'], '')
         s.set_setting('triage_ai', 'cli:codex', 'owner')
         self.assertEqual(at(True, [], [])['todo'], 'connect your email')

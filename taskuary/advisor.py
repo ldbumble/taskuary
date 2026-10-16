@@ -75,7 +75,12 @@ SYSTEM = (
     "longer wanted; when it has finished something for the owner to review or send, the move is the one that reviews or sends it. If none of the verbs offered is the right move, say nothing - a "
     "wrong suggestion is worse than none. The line is at most 80 characters, so it is read whole. "
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
-    "\"evidence\": [\"<ids from the lines below>\"]}.")
+    "\"evidence\": [\"<ids from the lines below>\"]}. "
+    "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
+    "item's own facts make right (a person waiting on them: answer; nothing for them to do: close or let go; work an agent left: "
+    "continue or review it) and say why in plain words - say nothing only when no verb offered fits at all.")
+# the event every item on the table gets, when no other event judged it at its current revision (Advisor audit, 2026-10-15)
+SHOWN = 'item.shown'
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
                                          'evidence': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['verb', 'line', 'evidence']}
 _EV = re.compile(r'^(out|mem|rv|task)\d+$')
@@ -265,6 +270,10 @@ def for_key(store, key: str) -> dict:
     if not tgt or _at_work(store, *tgt): return {}
     rev = revision(store, *tgt); r = row(store, tgt[0], tgt[1], rev)
     if r and int(r.get('Tier') or 1) < 2: notice(store, r['Event'], tgt[0], tgt[1], tier=2)
+    # NEVER LEFT GUESSING (the owner, 2026-10-15: "the advisor ... should be guiding at all times never leaving it guessing"): only
+    # eight events ever judged an item, so a fresh email or a task that moved since its last event had an empty bar for good. The
+    # item on the table is judged now, at this revision, once - the line arrives by the `advice` live event the page already reads
+    if not r: notice(store, SHOWN, tgt[0], tgt[1], tier=2)
     return _payload(r) if r and r.get('Verb') else {}
 
 

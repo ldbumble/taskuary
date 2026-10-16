@@ -653,3 +653,6 @@
 .tq-welcome .tq-day-agenda .ev.cal-note { grid-template-columns: minmax(0, 1fr); }
 .tq-welcome .tq-day-agenda .ev.cal-note .s { white-space: normal; }
 .tq-day-agenda .cal-go { align-self: flex-start; }
+/* the Advisor's own button, when the move it names has none on the row (ActionRow.AdvisorNext `own`) - beside its line, Why? after */
+.tq-next .tq-next-go { flex: 0 0 auto; min-height: 30px; padding: 0 14px; font-size: 12.5px; }
+.tq-next-err { color: #8a3646; font-weight: 400; }

@@ -63,9 +63,13 @@ test("the strip gives the suggestion, not the move's name: a lead-in that is the
   assert.equal(suggestion("You usually merge these.", "Mark done", "close"), "You usually merge these.");
 });
 
-test("the strip has no NEXT tag and no button of its own - the buttons are the row's - and Why? opens the Advisor's reasoning", () => {
+// ...a button of its own ONLY for a move the row has no button for at all (the Advisor audit, 2026-10-15: "making buttons available
+// when necessary") - Not ours, Take it myself, Chase were right answers hidden for want of one
+test("the strip has no NEXT tag, uses the row's buttons, brings its own only for a move the row lacks, and Why? opens the reasoning", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
-  assert.doesNotMatch(strip, /NEXT|className="tq-ab/);
+  assert.doesNotMatch(strip, /NEXT/);
+  assert.match(strip, /\{own && <button type="button" className="tq-ab p tq-next-go"/);
+  assert.match(strip, /const own = !onRow && onPropose \?/);
   assert.match(strip, /suggestion\(advice\.line, advice\.label, advice\.verb\)/);
   assert.match(strip, /className="tq-next-why"[^>]*>Why\?<\/button>/);
   assert.match(strip, /api\.get\("\/api\/advice\/notes", \{ params: \{ key: advice\.key/);
@@ -79,7 +83,14 @@ test("the clock menu offers the Advisor's notes for the item on the table", () =
 
 test("a move the row cannot make is no advice: a greyed or missing button draws no strip", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
-  assert.match(strip, /if \(!onRow\) return null;/);
+  assert.match(strip, /if \(!onRow && advisedAny\(verbs\.list, advice\)\) return null;/, "a greyed button: no line");
   const list = [v("stop_agent", "agent", { label: "Save and end session", disabled: true }), v("next", "next")];
   assert.equal(advisedIn(list, { verb: "stop_agent", label: "Save and end session" }), null, "greyed: nothing to fill, so nothing to say");
+});
+
+test("advised Send fills only a button that sends, and the card's other words for an act still match", () => {
+  const list = [v("approve", "decide", { label: "Refresh the draft" }), v("remind", "decide", { label: "Remind me" }), v("next", "next")];
+  assert.equal(advisedIn(list, { verb: "approve", label: "Send & close" }), null, "Refresh the draft is not Send");
+  assert.equal(advisedIn([v("approve", "decide", { label: "Send & close" })], { verb: "approve", label: "Send & close" })?.label, "Send & close");
+  assert.equal(advisedIn(list, { verb: "defer", label: "Remind me later" })?.label, "Remind me", "defer is the row's Remind me");
 });

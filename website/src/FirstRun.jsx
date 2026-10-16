@@ -87,7 +87,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     if (view !== "other" || connSug) return undefined;
     let on = true;
     api.post("/api/setup/first-run/suggest-connections", {}, { timeout: 120_000 })
-      .then(({ data }) => on && setConnSug(data || { line: "", picks: [] })).catch(() => on && setConnSug({ line: "", picks: [] }));
+      .then(({ data }) => on && setConnSug(data || { line: "", picks: [] })).catch(() => on && setConnSug({ line: "", picks: [], failed: true }));
     return () => { on = false; };
   }, [view, connSug]);
   const connLine = connSug?.line || "";
@@ -116,6 +116,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     window.dispatchEvent(new Event("tq-setup-changed")); go?.();
   };
   const reopened = revisit || !!st?.dismissed;
+  const fix = st?.fix;
+  const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
   const nav = navMoves(st, view, reopened);
   const VERB = {
     back: { label: "Back", tone: "s", run: () => go(prevOf(view)), title: "The step before" },
@@ -128,11 +130,24 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ▾, and Back, Walk and Finish as one kind put Finish setup behind it on the last step
   // ...and ADVICE COMES WITH ITS BUTTON (the owner, 2026-10-15: "making buttons available when necessary"): each connection the
   // Advisor names opens its section on the Connections page below; one Taskuary cannot connect yet gets no button
-  const suggested = view === "other" ? (connSug?.picks || []).filter((x) => !x.planned).slice(0, 3)
+  // every one it names that can be connected - it named five and gave three buttons (the Advisor audit, 2026-10-15)
+  const suggested = view === "other" ? (connSug?.picks || []).filter((x) => !x.planned).slice(0, 5)
     .map((x) => ({ id: `setup:open:${x.type}`, group: "decide", tone: "s", label: x.title, title: `${x.title} - under ${x.group}`,
       run: () => setBrowseSt({ section: x.group, open: null }) })) : [];
+  // ...and the fix the line names is a button too (the Advisor audit, 2026-10-15): "Press Install" and "Press Change" named buttons
+  // setup did not have - an AI to install, and a brain failing on the real mail, which only Back three times could reach
+  const fixRow = !st ? [] : [
+    ...(view === "ai" && fix?.fix === "install" && fixed?.install && !busy ? [{ id: "setup:install", group: "decide", tone: "p", label: `Install ${fixed.title}`,
+      title: "Installs it on this computer, then checks it works", run: () => install(fixed) }] : []),
+    ...(view !== "ai" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
+      title: "Back to Your AI, to pick one that sorts your mail", run: () => go("ai") }] : []),
+  ];
+  // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
+  const toneOf = (m) => (fixRow.length && m.id !== "back" ? "s" : m.id === "finish" && view !== "other" ? "s" : VERB[m.id].tone);
   useVerbs("setup", [...nav.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id] })), ...suggested], nav.length > 0);
+    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...suggested], nav.length > 0);
+  // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
+  useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
   useEffect(() => {
     if (!view) return;
@@ -225,6 +240,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     } catch (e) { setBusy(""); setSaid(""); setErr(`${ai.title} didn't install: ${errText(e)} Click its card to try again, or pick another AI.`); }
   };
 
+  // the bar is never blank: while setup loads it says so, or what went wrong
+  if (!st) lineRef.current = err || "Getting set up…";
   if (!st) return <Box sx={{ p: 2, display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={16} />
     <Typography sx={{ color: DIM }}>{err || "Getting set up…"}</Typography></Box>;
 
@@ -232,7 +249,6 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
   const card = (c, simple) => connCardOf(c, sources, () => setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })), true);
   // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
-  const fix = st.fix;
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
     : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install"
       : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : "Not answering"]
@@ -269,13 +285,18 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${st.sorting} email${st.sorting === 1 ? "" : "s"} to go; no need to wait.`
     : " Your mail is being read in the background - no need to wait.") : "";
   const finishWord = reopened ? "Back to my day" : "Finish setup";
+  // the brain failing on the real mail, said the same on every step - the server's own line only came with its "reading" step
+  const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting your mail - ${st.ai_error}.` : "";
   lineRef.current = said || err || {
-    ai: fix?.why || (st.step === "ai" ? "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
+    ai: fix?.why || (aiErr ? `${aiErr} Pick another AI below - it is checked on a test email first.` : st.step === "ai" ? "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
       : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch.`),
-    mail: doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
+    // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
+    // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
+    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
       : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
-    about: `Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything.${sortingLine}`,
-    other: st.ai_error ? st.next : connSug ? (connLine || "Nothing else is needed - connect more here any time, from Connections.")
+    about: aiErr ? `${aiErr} Change AI picks one that does.` : `Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything.${sortingLine}`,
+    other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
+      : "Nothing else is needed - connect more here any time, from Connections."))
       : "Looking at what you told me about your work to suggest what to connect…",
   }[q];
   const voice = byType(VOICE_TYPES).map((c) => card(c, true));
@@ -285,7 +306,6 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
   const focus = !open && focusOf({ ...st, step: q === "ai" ? "ai" : st.step }, planBusy ? "" : busy, browse, signing ? `c${signing.cid}` : planBusy ? busy : null);
-  const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
   const check = () => (fix?.key ? planCheck(Number(fix.key.slice(1))) : fixed && pick(fixed));
   // the login ended: check it, and if it still fails the Sign in button is back rather than a pane that has exited
   const ended = () => { setPane(null); check(); };

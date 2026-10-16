@@ -44,7 +44,7 @@ test("a step on the rail takes the canvas back to it", () => {
 
 test("the top bar keeps Setup after setup is done, and it opens the setup canvas", () => {
   assert.match(read("SetupWizard.jsx"), /data-tq-setup-open=""/);
-  assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => setFirstRun\(true\);/);
+  assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => \(DEMO \? setup\(\) : setFirstRun\(true\)\);/);
 });
 
 // "i went back to change the ai but could not go forward again to my email without clicking the sidebar ... while it's loading the

@@ -70,12 +70,19 @@ const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the same id (the task registers `reply`, `continue`), the
 // chip's own words, or the act behind them when the card words it differently - the advisor's Reply is the task's "Write reply"
 // (it drew a second Reply on the strip, 2026-10-13), Mark done is its `close`, a draft's Send is its `approve`
+// ...the same act under the card's own id: Remind me is the row's Snooze, ending the agent its End, a fresh agent its Start
+const ALIAS = { defer: ["remind"], stop_agent: ["save-end"], regular_agent: ["start-agent", "send-general"] };
 const sameAct = (v, pick) => {
   const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase(), id = String(v.id || "");
-  return id === pick?.verb || id.endsWith(`:${pick?.verb}`) || (want && l === want)
-    || (pick?.verb === "close" && isDone(v)) || (pick?.verb === "approve" && l.startsWith("send"));
+  // ADVISED SEND IS A SEND: the draft's button keeps its `approve` id while it reads Refresh the draft, Mark done or Checking
+  // delivery…, and the line said "Send" over the one that was not (the Advisor audit, 2026-10-15)
+  if (pick?.verb === "approve" && !l.startsWith("send") && !l.startsWith("run") && !l.startsWith("merge") && !l.startsWith("close")) return false;
+  return id === pick?.verb || id.endsWith(`:${pick?.verb}`) || (want && l === want) || (pick?.verb === "close" && isDone(v))
+    || (ALIAS[pick?.verb] || []).some((a) => id === a || id.endsWith(`:${a}`));
 };
 export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disabled && v.group !== "next" && sameAct(v, pick)) || null : null);
+// the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
+export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
 
 export function rowOf({ list, ref }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g);

@@ -138,6 +138,11 @@ async def _lifespan(_app):
         from . import firstrun as _firstrun
         try: _firstrun.settle_existing(store)         # a working install is not sent back into setup by the new Finish button
         except Exception as e: logger.warning(f'first-run finish flag not settled: {e}')
+    else:
+        # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
+        # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)
+        from . import firstrun as _firstrun
+        store.set_setting(_firstrun.DISMISSED, '1', 'demo')
     if not _open_drain_workers(store):
         raise RuntimeError('previous triage drain still owns this store')
     # the demo builds its world and puts agents on the board BEFORE anything else runs - and

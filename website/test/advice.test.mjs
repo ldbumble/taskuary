@@ -32,7 +32,7 @@ test("the strip speaks only for the item on the table, at rest, and never over a
 test("the page draws the gated line, starts each item with none, and drops a read the table outran", async () => {
   const fs = await import("node:fs"), path = await import("node:path");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} \/>/);
+  assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{\(a\) => proposeDirect\(a\.verb, a\.for \|\| a\.key, true, a\.revision\)\} \/>/);
   assert.match(src, /advised=\{shownAdvice\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);

@@ -240,6 +240,15 @@ class ReadTests(_Rail):
         s.update_task(t, {'Status': 'waiting'}, 'owner')
         with mock.patch.object(advisor, 'notice'): self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
 
+    def test_the_item_on_the_table_is_judged_when_no_event_ever_was(self):
+        """Never left guessing (the Advisor audit, 2026-10-15): only eight events judged an item, so a task that moved since its last
+        one had an empty bar for good. Read for the table, it is judged at its revision - once."""
+        s = MemoryStore(); t = self._stopped_task(s)
+        with mock.patch.object(advisor, 'notice') as n:
+            self.assertEqual(advisor.for_key(s, f'task:{t}'), {})
+        self.assertEqual((n.call_args.args[1], n.call_args.kwargs.get('tier')), (advisor.SHOWN, 2))
+        self.assertIn('item.shown', advisor.SYSTEM)                               # the prompt owes it a next step
+
     def test_the_prompt_carries_what_the_agent_said_and_asks(self):
         # the card's preview is the sender's mail: without the agent's own words a finished draft read as "stop the agent"
         from taskuary import workerstate as ws

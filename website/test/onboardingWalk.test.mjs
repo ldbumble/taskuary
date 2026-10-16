@@ -164,7 +164,7 @@ test("the walk is reachable on a phone", () => {
   const view = read("AssistantView.jsx");
   const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-welcome"') + 3200);
   const entry = welcome.slice(welcome.lastIndexOf("<button", welcome.indexOf("Set up Taskuary")), welcome.indexOf("Set up Taskuary"));
-  assert.ok(entry.includes("onClick={() => setFirstRun(true)}"), "the welcome block reopens the setup canvas, as the top bar does");
+  assert.ok(entry.includes("onClick={() => setupRef.current?.()}"), "the welcome block reopens the setup canvas, as the top bar does");
   assert.doesNotMatch(entry, /tq-phone-hide/, "and it is not hidden on the device that needs it");
 });
 

@@ -92,10 +92,10 @@ def state(store) -> dict:
     ai_error = str(store.get_setting('triage_last_error') or store.get_setting('triage_last_unusable') or '').strip() if step in ('reading', 'done') else ''
     nxt = {'ai': fix['why'] if fix else ask,
            'email': f"{name or 'Your AI'} is ready. What email do you have? Click it below - Microsoft 365 is one sign-in.",
-           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Press Change to pick another AI." if ai_error
+           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI below picks one that does." if ai_error
                        else f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
-           'done': "You're set up. Any other connection you'd like to set up? Click it below - or press Walk me through my tasks."}[step]
+           'done': "You're set up. Anything else you connect is optional."}[step]
     # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15)
     todo = {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step]
     return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,

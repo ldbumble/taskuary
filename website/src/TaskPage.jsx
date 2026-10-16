@@ -42,7 +42,7 @@ import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
-import { askLine, cameFromLabel, channelName, groupConversations, groupMeta, headerFacts, hidden, previewRows, triageLine } from "./taskSources.js";
+import { cameFromLabel, channelName, groupConversations, groupMeta, headerFacts, hidden, previewRows, triageLine } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -191,6 +191,20 @@ const askedAgo = (t) => {
 
 // A GOAL'S STEPS (spec 2026-10-12): the checklist, each box with the task behind it. Start makes a box a task of its own;
 // a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).
+// ONE PART OF THE TASK SECTION, its name in its own column (the owner, 2026-10-16: "no line but we need way to show came from|to do|
+// the ask are separate sections"): the label column sets each part apart without drawing a rule; at phone width it sits above
+function Part({ label, sub, subTitle, children, ...rest }) {
+  return (
+    <Box {...rest} sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "112px minmax(0, 1fr)" }, columnGap: 2, rowGap: 0.4, minWidth: 0 }}>
+      <Box sx={{ pt: { sm: 0.2 }, minWidth: 0 }}>
+        <Typography sx={{ color: INK, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{label}</Typography>
+        {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
+      </Box>
+      <Box sx={{ minWidth: 0, maxWidth: 900 }}>{children}</Box>
+    </Box>
+  );
+}
+
 function GoalSteps({ task, onOpenTask, onChanged }) {
   const [steps, setSteps] = useState([]);
   const [draft, setDraft] = useState("");
@@ -775,8 +789,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
   const opener = [...inbound].sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt))[0];
-  const askText = cleanText(t?.Summary || verdict?.summary || opener?.ReadText || opener?.BodyText || "") || taskAsk;
-  const ask = askLine(askText);
+  // THE ASK IS TRIAGE'S SUMMARY, whole (the owner, 2026-10-16: "the ask should be the triage summary") - its first sentence alone
+  // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
+  const askText = cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "") || taskAsk;
   const made = t ? `from ${t.Source || "manual"} · created ${timeAgo(t.CreatedAt)}${t.CreatedBy ? ` by ${t.CreatedBy}` : ""}` : "";
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
@@ -1358,30 +1373,26 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
                       <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>Task</Typography>
                     </Box>
-                    <Box sx={{ pl: { xs: 0, sm: 4.25 }, minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
+                    <Box sx={{ pl: { xs: 0, sm: 4.25 }, minWidth: 0, display: "flex", flexDirection: "column", gap: 2.75 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
                           strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
                       {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
                       {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
-                      {ask.line && <Box sx={{ minWidth: 0 }}>
-                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The ask</Typography>
-                        <Typography title={ask.cut ? askText : undefined} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, maxWidth: 900, overflowWrap: "anywhere",
-                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ask.line}</Typography>
-                      </Box>}
+                      {askText && <Part label="The ask" data-tq-ask="">
+                        <Typography title={askText} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere",
+                          display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{askText}</Typography>
+                      </Part>}
                       {/* TO DO - the checklist triage drew from the ask (PW-075): boxes are progress on the list, never task completion -
                           closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a
                           manual task ticking these off IS the work (the owner, 2026-09-16). A batch lists its items, a goal its steps. */}
-                      {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
-                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
-                      {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
-                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
+                      {/* a batch's items and a goal's steps are its to-do too, named the same way (the owner, 2026-10-16: "it's not 3 sections") */}
+                      {detail?.batch && <Part label="To do" data-tq-todo=""><BatchItems taskId={t?.TaskId} items={detail.batch}
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
+                      {t?.DoneWhen && <Part label="Steps" data-tq-todo=""><GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} /></Part>}
                       {!t?.DoneWhen && todo.length > 0 && (
-                        <Box sx={{ maxWidth: 900 }}>
-                          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.25 }}>
-                            <Typography sx={{ ...label }}>To do</Typography>
-                            <Typography variant="caption" sx={{ color: FAINT }} title={progressLine(todo)}>{todo.filter((i) => i.done).length} of {todo.length}</Typography>
-                          </Box>
+                        <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="">
                           {todo.map((i) => (
                             <Box key={i.id} onClick={() => tickItem(i)}
                               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
@@ -1393,15 +1404,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               </Typography>
                             </Box>
                           ))}
-                        </Box>
+                        </Part>
                       )}
                       {/* CAME FROM - the task's messages as the conversations they are: each one's first message and its latest two, with
                           how many are between and who wrote them. It replaces "Where this came from" and the stack of later messages under
                           the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
                           its message in full under it, as the old disclosure did. */}
-                      <Box data-tq-came-from="" sx={{ minWidth: 0, maxWidth: 900 }}>
-                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
-                          <Typography sx={{ ...label }}>{cameFromLabel(sources) || "Came from"}</Typography>
+                      <Part label="Came from" sub={cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
+                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
@@ -1504,7 +1514,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             the image on the task incoming message") - unless its message is open above, which shows them already */}
                         {inbound[0]?.MessageId && openMsg !== inbound[0].MessageId && <Box sx={{ mt: 0.6 }}>
                           <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
-                      </Box>
+                      </Part>
                     </Box>
                     </Box>}
                   </Box>

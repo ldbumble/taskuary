@@ -67,6 +67,14 @@ class LayerProfilesTests(unittest.TestCase):
         got = json.loads(s.get_source(sid)['ConfigJson'])
         self.assertEqual((got['agent'], got['ai_brain']), ('coding', 'cli:claude,connector:7'))
 
+    def test_a_start_that_failed_on_the_old_name_stops_saying_so(self):
+        cfg, s, tid = legacy()
+        agents.layer_profiles(cfg, s)
+        s._exec("INSERT INTO dispatchq (TaskId, Agent, Reason, State, LastError) VALUES (?, 'coder', 'start failed', 'failed', 'unknown agent: coder')", (tid,))
+        s._exec("INSERT INTO dispatchq (TaskId, Agent, Reason, State, LastError) VALUES (?, 'coding', 'start failed', 'failed', 'repo missing')", (tid,))
+        agents.layer_profiles(cfg, s)
+        self.assertEqual([r['LastError'] for r in s._rows('SELECT LastError FROM dispatchq')], ['repo missing'])   # a real failure stays
+
     def test_an_owners_own_coding_profile_is_never_overwritten(self):
         cfg, s, _ = legacy()
         cfg['agents']['coding'] = {'kind': 'coding', 'purpose': 'mine'}

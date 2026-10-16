@@ -926,6 +926,10 @@ def _retire_old_name(store) -> None:
         except Exception: pass                              # a table an older or in-memory store does not have
     try: store._exec("UPDATE OR IGNORE lore_vote SET Actor='coding' WHERE Actor='coder'"); store._exec("DELETE FROM lore_vote WHERE Actor='coder'")
     except Exception: pass
+    # ...and a start that FAILED on the old name has no cause left once it is gone: its row kept saying "unknown agent: coder - Start
+    # fails the same way until it is fixed" over a task Start would now run (2026-10-16). It goes; the task reads not started.
+    try: store._exec("DELETE FROM dispatchq WHERE State='failed' AND LastError LIKE 'unknown agent: coder%'")
+    except Exception: pass
     if str(store.get_setting('default_profile') or '') == 'coder': store.set_setting('default_profile', 'coding', 'migration')
     # ...and the reports that name it: one with agent `coder` failed "no CLI agent named 'coder'" after the rename, and one whose
     # brain was `cli:coder` would have too (2026-10-16). The agent becomes `coding`; the brain, the tool coding runs on.

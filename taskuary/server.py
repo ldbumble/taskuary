@@ -172,6 +172,10 @@ async def _lifespan(_app):
     # No interactive or headless worker survives into this process. Repair any persisted
     # in-progress/running flags before the Board and funnel get their first read.
     hub_term.recover_after_restart(store)
+    # ...and a batch whose close waited on a turn the restart ended (batch.TAG) closes now, its report from the saved transcript
+    from . import batch as _batch
+    try: _batch.recover_later(store)
+    except Exception as e: logger.warning(f'pending batch closes not recovered: {e}')
     from . import wabridge
     try:
         wabridge.start_configured(store)      # the launch grace is spent by the first poll (wabridge.ready), never here

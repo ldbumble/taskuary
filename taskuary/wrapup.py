@@ -471,7 +471,9 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     now_, cut_ = getattr(wit, 'said_now', None), getattr(wit, 'cut_off', None)
     witnessed = now_() if callable(now_) else getattr(wit, 'said', '')
     witnessed = witnessed if isinstance(witnessed, str) else ''
-    cut = bool(getattr(live, 'alive', False)) and callable(cut_) and cut_() is True and not spoken
+    # ...live or not: a session that died on its own mid-turn was cut off just the same, and its object (kept until reaped) still
+    # holds the witness that says so (batch: a close waiting on the turn when the CLI crashed)
+    cut = live is not None and callable(cut_) and cut_() is True and not spoken
     # ...and the whole final TURN beside it (witness.turn_text): a `--done` sentence is a summary, and the reply the agent wrote
     # just before it was in neither - the drafter wrote a placeholder from "the reply above is ready" (2026-10-13)
     spoken, witnessed = spoken.strip(), witnessed.strip()

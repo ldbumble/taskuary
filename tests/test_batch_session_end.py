@@ -31,12 +31,13 @@ class SessionTest(unittest.TestCase):
         self.tid = batch.create(self.s, 'github', 'northwind/ledger', [self.s.get_message(pr(self.s, 'northwind/ledger', n)) for n in (1, 2)])
         self.sess = SimpleNamespace(sid='s1', task_id=self.tid, alive=True, started=0, started_ts=0, n=5000, agent='coding', witness=None)
         term.SESSIONS['s1'] = self.sess
-        self.wraps, self.later = [], []
+        self.wraps, self.later, self.ticks = [], [], []
         def wrap(store, tid, **k):
             self.wraps.append(k); store.update_task(tid, {'Status': 'done'}, k.get('actor') or 'x'); self.sess.alive = False
             return {'wrap': 'done'}
         self.p = [mock.patch.object(batch, '_next'), mock.patch.object(wrapup, 'wrap', side_effect=wrap),
-                  mock.patch.object(batch, '_later', side_effect=self.later.append)]   # the grace after a turn: run by flush()
+                  mock.patch.object(batch, '_later', side_effect=self.later.append),   # the grace after a turn: run by flush()
+                  mock.patch.object(batch, '_tick', side_effect=self.ticks.append)]    # the pending close's poll: run by tick()
         for p in self.p: p.start()
         batch.forget(self.tid)
 
@@ -48,6 +49,10 @@ class SessionTest(unittest.TestCase):
 
     def flush(self):
         while self.later: self.later.pop(0)()
+
+    def tick(self, n=1):
+        for _ in range(n):
+            if self.ticks: self.ticks.pop(0)()
 
 
 class MidTurnTests(SessionTest):
@@ -112,6 +117,126 @@ class MidTurnTests(SessionTest):
             seed = batch.seed(self.s, self.tid, 'northwind/ledger')
         self.assertNotIn('Do NOT run --done', seed)
         self.assertIn('taskuary --done', seed)
+
+
+class PendingCloseTests(SessionTest):
+    """A close that waits on the turn is a tag on the task (batch.TAG), not only a note in memory: a restart keeps it, and a
+    session that ends on its own while it waits is wrapped - a report from its transcript - before the batch closes."""
+    def settle_mid_turn(self):
+        ws.record(self.s, self.tid, 's1', 'working', source='hook')
+        for n in (1, 2): batch.report(self.s, self.tid, n, 'Done.', settled=True)
+
+    def restart(self):
+        "What a restart leaves: no session, no memory - the transcript the session filed, and the task's own row."
+        self.s.add_transcript(self.tid, 's1', '$ gh pr view 2\nNothing to do.', agent='coding')
+        term.SESSIONS.pop('s1', None); batch.forget(self.tid)
+        term.recover_after_restart(self.s)
+        return batch.recover(self.s)
+
+    def test_a_deferred_close_is_written_on_the_task_and_cleared_when_it_closes(self):
+        self.settle_mid_turn()
+        self.assertTrue(self.s.task_has_tag(self.tid, batch.TAG))
+        ws.record(self.s, self.tid, 's1', 'turn_end', text='Both settled.', source='hook'); self.flush()
+        self.assertFalse(self.s.task_has_tag(self.tid, batch.TAG))
+
+    def test_a_pending_close_survives_a_restart_and_closes_with_a_report(self):
+        self.settle_mid_turn()
+        self.assertEqual(self.restart(), 1)
+        self.assertEqual(len(self.wraps), 1, 'closed through the wrap - its record from the saved transcript - not a bare flip')
+        self.assertTrue(self.wraps[0]['close'])
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+        self.assertFalse(self.s.task_has_tag(self.tid, batch.TAG))
+        self.assertFalse(self.s.task_has_tag(self.tid, term.INTERRUPTED), 'its work was done, not interrupted')
+
+    def test_the_startup_call_starts_a_thread_only_when_a_close_waits(self):
+        with mock.patch.object(batch.threading, 'Thread') as th:
+            batch.recover_later(self.s)
+            self.assertEqual(th.call_count, 0, 'an ordinary launch starts nothing')
+            self.settle_mid_turn()
+            self.assertEqual(batch.waiting(self.s), [self.tid])
+            batch.recover_later(self.s)
+            self.assertEqual(th.call_count, 1)
+
+    def test_a_restart_with_an_item_reopened_since_keeps_the_batch_open(self):
+        self.settle_mid_turn()
+        batch.arrived(self.s, self.tid, self.s.batch_items(self.tid)[0]['ConversationId'], 'gail-moreno')
+        self.assertEqual(self.restart(), 0)
+        self.assertEqual(self.wraps, [])
+        self.assertNotIn(self.s.get_task(self.tid)['Status'], ('done', 'dropped'))
+        self.assertFalse(self.s.task_has_tag(self.tid, batch.TAG), 'a close no longer due is not kept')
+
+    def test_a_waiting_session_that_dies_is_wrapped_before_the_batch_closes(self):
+        self.settle_mid_turn()
+        self.sess.alive = False                                                  # the CLI crashed mid-turn
+        ws.record(self.s, self.tid, 's1', 'disconnected', text='the session ended', source='terminal')
+        self.flush()
+        self.assertEqual(len(self.wraps), 1, 'the report is filed from the transcript, never a bare close')
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+
+    def test_a_session_that_dies_without_a_word_is_found_by_the_poll(self):
+        self.settle_mid_turn()
+        self.sess.alive = False                                                  # no event at all: the pty simply went
+        self.tick(3)
+        self.assertEqual(len(self.wraps), 1)
+        self.tick(3)
+        self.assertEqual(len(self.wraps), 1, 'once')
+
+
+class Pane(SimpleNamespace):
+    "A CLI that sends no hook events: all the app has is its pane - what it shows and how long since it printed."
+    def tail(self, n=4): return self.lines[-n:]
+    def idle(self): return self.quiet
+
+
+class HooklessTests(SessionTest):
+    """mid_turn for a CLI with no hook transport reads the pane (terminal.stable_phase_of): busy while it prints or its
+    prompt is not back, idle once it has sat quiet at its prompt - and the pending close is re-checked by a poll, since no
+    turn_end will ever come."""
+    WORKING, PROMPT = ['Reviewing pull request 2', '⠋ Working… (esc to interrupt)'], ['Both settled.', '› ']
+
+    def setUp(self):
+        super().setUp()
+        self.sess = Pane(sid='s1', task_id=self.tid, alive=True, started=0, started_ts=0, n=5000, agent='coding', witness=None,
+                         lines=list(self.WORKING), quiet=0.2)
+        term.SESSIONS['s1'] = self.sess
+        p = mock.patch.object(term, 'PHASE_DWELL', 0); p.start(); self.p.append(p)
+
+    def test_a_printing_pane_is_mid_turn(self):
+        self.assertTrue(batch.mid_turn(self.s, self.tid))
+
+    def test_a_quiet_pane_whose_prompt_has_not_come_back_is_mid_turn(self):
+        self.sess.quiet = 30                                                     # a long tool call: silent, still in its turn
+        for _ in range(3): self.assertTrue(batch.mid_turn(self.s, self.tid))
+
+    def test_a_pane_quiet_at_its_prompt_is_not(self):
+        self.sess.lines, self.sess.quiet = list(self.PROMPT), 10
+        batch.mid_turn(self.s, self.tid)                                         # the latch: the prompt has to hold
+        self.assertFalse(batch.mid_turn(self.s, self.tid))
+
+    def test_a_pane_at_its_prompt_that_just_printed_is_mid_turn(self):
+        self.sess.lines, self.sess.quiet, self.sess._phase_stable = list(self.PROMPT), 0.5, 'parked'
+        self.assertTrue(batch.mid_turn(self.s, self.tid))
+
+    def test_settling_the_last_item_mid_turn_waits_and_the_poll_closes_it_once_the_pane_is_idle(self):
+        for n in (1, 2): batch.report(self.s, self.tid, n, 'Done.', settled=True)
+        self.assertEqual(self.wraps, [], 'no hook said the turn was over - the pane says it is not')
+        self.tick(3)
+        self.assertEqual(self.wraps, [], 'still printing')
+        self.sess.lines, self.sess.quiet = list(self.PROMPT), 10
+        self.tick(5)
+        self.assertEqual(len(self.wraps), 1)
+        self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
+
+    def test_a_pane_already_idle_at_its_prompt_closes_at_the_settle(self):
+        self.sess.lines, self.sess.quiet, self.sess._phase_stable = list(self.PROMPT), 10, 'parked'
+        for n in (1, 2): batch.act(self.s, self.tid, n, 'settle')
+        self.assertEqual(len(self.wraps), 1)
+
+    def test_events_the_screen_wrote_are_not_a_hook_transport(self):
+        ws.record(self.s, self.tid, 's1', 'answered', request_id='r1', text='answered in the pane', source='screen')
+        self.sess.lines, self.sess.quiet = list(self.PROMPT), 10
+        batch.mid_turn(self.s, self.tid)
+        self.assertFalse(batch.mid_turn(self.s, self.tid))
 
 
 class WrapOnceTests(unittest.TestCase):
@@ -211,6 +336,22 @@ class LastMessageTests(unittest.TestCase):
         rep = next(c['Body'] for c in s.list_comments(tid) if wrapup.is_report(c['Body']))
         self.assertNotIn('I recommend merging', rep)
         self.assertIn('LAST MESSAGE', rep)
+        self.assertIn('still working', rep)
+        wrapup.forget(tid)
+
+    def test_a_session_that_died_mid_turn_says_it_was_cut_off(self):
+        s = MemoryStore(); tid = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
+        wrapup.forget(tid)
+        w = witness.Witness()
+        w.note({'k': 'done', 'text': 'I recommend merging it - waiting on you.'}); w.note({'k': 'turn'})
+        dead = SimpleNamespace(sid='sid-d', alive=False, witness=w)            # it exited on its own; its object is still here
+        with mock.patch.object(term, 'transcript_for', return_value=('$ gh pr merge 7', 'coding', 'sid-d')), \
+             mock.patch.object(term, 'close'), mock.patch.object(term, 'session_for', return_value=dead), \
+             mock.patch('taskuary.handbook.enabled', return_value=False), mock.patch('taskuary.playbooks.draft', return_value=None), \
+             mock.patch.object(wrapup, 'report_from_transcript', return_value={'summary': 'Merged it.'}):
+            wrapup.wrap(s, tid, close=True, actor='router', no_reply=True)
+        rep = next(c['Body'] for c in s.list_comments(tid) if wrapup.is_report(c['Body']))
+        self.assertNotIn('I recommend merging', rep)
         self.assertIn('still working', rep)
         wrapup.forget(tid)
 

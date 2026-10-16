@@ -432,13 +432,17 @@ def set_item(store, tid, conv, actor: str = 'agent', **fields) -> bool:
 # a TOOL CALL inside its own turn - so the settle that closed the batch wrapped the session from inside that very call. The CLI
 # timed out waiting on the wrap, retried, the retry wrapped it again, and the session died mid-turn with its last word lost.
 # The rule (the owner): a batch may close when its work is done, never while its agent is still working. Mid-turn - by the
-# run's own word (workerstate: a prompt in flight, an answer delivered, background work, a question open) - the close waits
-# for the turn to end (workerstate.record's turn_end calls turn_ended) or for the agent's own `--done`.
+# run's own word (workerstate: a prompt in flight, an answer delivered, background work, a question open), or by its pane for a
+# CLI that sends no hook events - the close waits for the turn to end (workerstate.record's turn_end calls turn_ended; a poll
+# re-reads the pane and the pty for the CLIs no turn_end comes from) or for the agent's own `--done`.
 _PENDING, _CLOSING = {}, set()          # task id -> who settled it, for a close waiting on the turn; task ids being closed now
 _LOCK = threading.Lock()
 BUSY = ('working', 'input_needed', 'approval_needed', 'stalled')
 GRACE = 2.0                             # seconds after a turn ends before closing: the Stop hook's own follow-ups (a background
                                         # job, a question) land first
+TAG = 'close:turn-end'                  # _PENDING's durable copy on the task: memory does not survive a restart (recover)
+POLL = 3.0                              # seconds between re-reads of a session a close waits on; idle on two in a row closes it
+QUIET = 3.0                             # a pane that printed within this many seconds is still working, whatever it shows
 
 
 def forget(tid) -> None:
@@ -446,10 +450,16 @@ def forget(tid) -> None:
 
 
 def mid_turn(store, tid) -> bool:
-    """Is a live session on this task in the middle of a turn? Its own word decides; a run that has said nothing is not."""
+    """Is a live session on this task in the middle of a turn? Its own word decides when it has hooks; a CLI that sends none
+    is read off its pane - busy while it prints or its prompt is not back (terminal.stable_phase_of's latch, the dwell
+    included), idle only once it has sat quiet at its prompt."""
     from . import terminal as term, workerstate as ws
-    if not getattr(term.session_for(tid), 'alive', False): return False
-    return ws.status(store, tid).get('state') in BUSY
+    t = term.session_for(tid)
+    if not getattr(t, 'alive', False): return False
+    # ...the screen records questions as events too (workerstate.screen_request): those are not a hook transport, and an
+    # 'answered' the pane wrote would read `working` for good
+    if any(e.get('Source') != 'screen' for e in ws.events(store, tid, t.sid)): return ws.status(store, tid).get('state') in BUSY
+    return t.idle() < QUIET or term.stable_phase_of(t) != 'parked'
 
 
 def close_if_settled(store, tid, actor: str = 'router') -> bool:
@@ -465,6 +475,7 @@ def close_if_settled(store, tid, actor: str = 'router') -> bool:
         busy = mid_turn(store, tid)
         if busy: _PENDING[tid] = actor
         else: _CLOSING.add(tid)
+    if busy: store.tag_task(tid, TAG, True, actor); _watch(store, tid)
     store.add_comment(tid, 'router', 'agent', 'Every item of this batch is settled.'
                       + (' It closes when the agent finishes its turn.' if busy else ''))
     if busy: return False
@@ -474,13 +485,17 @@ def close_if_settled(store, tid, actor: str = 'router') -> bool:
     return True
 
 
-def _close(store, tid, actor):
+def _close(store, tid, actor, waited=False):
+    """The batch's ending: its session wrapped - the report from the transcript - then closed. A close that WAITED on the turn
+    wraps even a session gone since (it died mid-wait, or the app restarted): its saved transcript is the record, and the wrap
+    says when the turn was cut off. One wrap per session holds there (wrapup._wrapped_before) if someone wrapped it already."""
     from . import wrapup, terminal as term
     wrapped = False
-    if getattr(term.session_for(tid), 'alive', False):
+    if waited or getattr(term.session_for(tid), 'alive', False):
         try: wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True); wrapped = True
         except Exception as e: logger.warning(f'{task_ref(tid)}: the batch ending failed ({e}) - closing it plainly')
     if not wrapped and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
+    store.tag_task(tid, TAG, False, actor)          # after the close: an app gone mid-wrap tries again at its next start
     _next(store)
 
 
@@ -488,23 +503,69 @@ def _later(f):
     threading.Timer(GRACE, f).start()
 
 
+def _tick(f):
+    t = threading.Timer(POLL, f); t.daemon = True; t.start()
+
+
+def _try_close(store, tid) -> bool:
+    """The close that waited on the turn, now - unless the session is busy again (False: still waiting). True when nothing waits
+    any more: closed, or no longer due (an item reopened since; the task closed meanwhile by the agent's `--done`)."""
+    with _LOCK:
+        if tid not in _PENDING: return True
+        if mid_turn(store, tid): return False
+        actor = _PENDING.pop(tid); _CLOSING.add(tid)
+    try:
+        its = store.batch_items(tid)
+        if its and not any(i['State'] in OPEN for i in its) and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+            _close(store, tid, actor, waited=True); return True
+        store.tag_task(tid, TAG, False, actor)
+    except Exception as e: logger.warning(f'{task_ref(tid)}: the batch did not close at the end of the turn ({e})')
+    finally:
+        with _LOCK: _CLOSING.discard(tid)
+    return True
+
+
 def turn_ended(store, tid) -> None:
     """The agent's turn ended (or its run did): a close that waited on it happens now - unless the session is busy again by
     then, when the next turn's end gets it. Off the hook's thread: a wrap writes the report with the AI."""
-    if tid not in _PENDING: return
-    def go():
-        with _LOCK:
-            if tid not in _PENDING or mid_turn(store, tid): return
-            actor = _PENDING.pop(tid); _CLOSING.add(tid)
-        try:
-            its = store.batch_items(tid)
-            # an item reopened meanwhile (a comment on it) keeps the batch open; a task closed meanwhile (the agent's --done) is done
-            if its and not any(i['State'] in OPEN for i in its) and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-                _close(store, tid, actor)
-        except Exception as e: logger.warning(f'{task_ref(tid)}: the batch did not close at the end of the turn ({e})')
-        finally:
-            with _LOCK: _CLOSING.discard(tid)
-    _later(go)
+    if tid in _PENDING: _later(lambda: _try_close(store, tid))
+
+
+def _watch(store, tid, idle=False) -> None:
+    """No turn_end comes from a CLI without hooks, nor from a pty that simply went: while a close waits, the session is read
+    again every POLL seconds, and closes once it has read idle twice running - one quiet read is a pause, not an ending."""
+    def tick():
+        if tid not in _PENDING: return
+        now = not mid_turn(store, tid)
+        if not (now and idle and _try_close(store, tid)): _watch(store, tid, now)
+    _tick(tick)
+
+
+def recover(store) -> int:
+    """At startup: a close that waited on a turn when the app went down. No session survives a restart, so that turn is over -
+    the batch closes through its normal ending, the report written from the transcript the session filed. Returns how many
+    closed."""
+    from . import terminal as term
+    n = 0
+    for tid in waiting(store):
+        with _LOCK: _PENDING.setdefault(tid, 'router')
+        before = (store.get_task(tid) or {}).get('Status')
+        _try_close(store, tid)
+        if before not in ('done', 'dropped') and (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'):
+            store.tag_task(tid, term.INTERRUPTED, False, 'router'); n += 1     # its work was done: the restart cut nothing short
+    return n
+
+
+def waiting(store) -> list:
+    "Tasks whose close waits on a turn, by the durable mark (TAG) - one indexed-enough read, no task rows built."
+    rows = store._rows("SELECT TaskId FROM task WHERE ','||REPLACE(IFNULL(Tags,''),' ',',')||',' LIKE ?", (f'%,{TAG},%',))
+    return [r['TaskId'] for r in rows if store.task_has_tag(r['TaskId'], TAG)]
+
+
+def recover_later(store) -> None:
+    """The startup call: the lookup here, the closes on a thread of their own (a wrap writes its report with the AI) - and no
+    thread at all when nothing waits, which is every launch but the one after a close was cut short."""
+    if waiting(store): threading.Thread(target=recover, args=(store,), daemon=True, name='batch-recover').start()
 
 
 def _next(store):

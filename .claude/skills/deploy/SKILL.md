@@ -1,8 +1,8 @@
 ---
 name: deploy
 description: >
-  Cut and publish a Taskuary release: bump the version in all six places, run the three
-  gates, rebuild the committed UI, push, wait for CI on that exact commit, then tag so the
+  Cut and publish a Taskuary release: freeze scope, bump the version in all seven places, run the
+  fast local gates, rebuild the committed UI, push, wait for CI on that exact commit, then tag so the
   publish workflow uploads to PyPI. Use when asked to deploy, release, ship, publish, "push
   to PyPI", cut a version, or bump the tag. Encodes the ordering that keeps a permanent PyPI
   number from going out broken.
@@ -18,6 +18,22 @@ ordered so that nothing irreversible happens until the reversible things have al
 **Tag only after CI is green on the exact commit you are about to tag.** The tag fires
 `.github/workflows/publish.yml`, and that upload is permanent. Pushing `master` is cheap and
 reversible; pushing a tag is not.
+
+## Keep it to one round (about 20 minutes)
+
+Release 0.3.9.2 took over an hour of rounds (2026-10-16): every change added mid-release restarted a
+10-minute local suite and a 15-minute CI run, and a browser test nobody ran locally turned CI red.
+
+- **Freeze scope.** Once the release starts, nothing new goes in. A request that arrives mid-release is
+  done AFTER the tag, in the next release - say so, do not fold it in.
+- **CI is the gate, not the local full suite.** CI runs pytest on six machines and nothing is tagged
+  until it is green. Locally run the FAST gates (§4) - not a 10-minute `pytest` that CI repeats.
+- **Run the browser tests locally when the UI changed.** `npm run test:browser` is the CI job nobody
+  runs by hand, and it finds buttons by their label or tooltip: a renamed tooltip broke it on 0.3.9.2.
+  Before pushing, `grep -rn "<old label or title>" website/browser/` for any UI text you changed.
+- **Tell the other sessions.** Another Claude session may push to the same master. `ListAgents`, then
+  `SendMessage` each one: "release starting - push now or hold until I say the tag is out". A push
+  between your CI run and your tag lands untagged; one before it forces a rebase.
 
 ## 1. Know whose work you are shipping
 
@@ -99,13 +115,28 @@ public demo too, or taskuary.com keeps serving the old number even though the JS
 cd website && npm run build:demo && cd ..     # writes site/demo, also committed
 ```
 
-## 4. Run all three gates
+## 4. Run the fast gates
 
 ```bash
-python -m pytest -q          # FROM THE REPO ROOT
-cd website && npm test && cd ..
-node --test taskuary/whatsapp/*.test.mjs
+python -m pytest -q tests/<the files your change touches>      # FROM THE REPO ROOT - targeted, seconds
+cd website && npm test && cd ..                                  # ~2 min, all of it
+cd website && npm run test:browser && cd ..                      # when the UI changed (~5 min); CI runs it
+node --test taskuary/whatsapp/*.test.mjs                         # CI does NOT run these
 ```
+
+**The full `python -m pytest -q` (~10 min) still runs once, on the commit you will tag** - start it in
+the background the moment the release commit is made, and do the rest while it runs. Skipping it
+on 0.3.9.2 cost a whole CI round: some pytest tests read the JSX source between fixed lines
+(`tests/test_every_card_is_reachable.py` slices ConnectorsView.jsx), so a web-only change can fail
+pytest on all six machines. What to skip is the REPEAT run after every small fix - a fix to one
+test file is checked by that file. Rules that cost a round when broken:
+
+- **Never rebuild the bundle while a pytest run is going.** `tests/test_floor_wave_b.py` reads the
+  built files and fails when they are replaced mid-run - a false red that cost a rerun.
+- **`-p no:cacheprovider` has no `--lf`.** Grep the run for `^FAILED` so a failure is named, or a
+  rerun is the only way to learn which test it was.
+- **Node 20 has no `--test-timeout`** - wrap a hang-prone run in `timeout 600` instead. A timer test
+  (`website/test/visible.test.mjs`) once hung a whole `node --test` run for 18 minutes.
 
 - **From the repo root.** `pytest` in `website/` prints `no tests ran` and exits 5 — that is a
   failure, not a pass.
@@ -152,6 +183,12 @@ git push origin master
 gh run watch "$(gh run list --branch master --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
 gh run view <id> --json jobs -q '.jobs[] | "\(.conclusion)\t\(.name)"'
 ```
+
+Pushed and rejected because another session pushed first: `git fetch && git rebase origin/master`.
+The committed bundle conflicts every time - do not merge it: take theirs, rebuild, fold it in:
+`git rm -rq --cached taskuary/web; rm -rf taskuary/web; git checkout HEAD -- taskuary/web; git add -A taskuary/web;
+GIT_EDITOR=true git rebase --continue`, then `npm run build` (and `build:demo`) and `git commit --amend --no-edit`.
+A merged PR that touched `website/src` without rebuilding needs the same rebuild before you push.
 
 Confirm the run's `headSha` is the commit you mean — an automated `Downloads:` commit (a daily
 cron, `.github/workflows/downloads.yml`) can land between your push and your check. If it does and

@@ -567,12 +567,9 @@
 /* an earlier item, folded to its title line - click it and it is back on the table */
 .tq-fold { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-top: 2px; padding: 8px 14px;
   border: 1px solid #e1dcd5; border-radius: 10px; background: #fffdfb; font: 400 12px 'IBM Plex Sans', system-ui, sans-serif;
-  color: #6e685f; text-align: left; cursor: pointer; }
-.tq-fold:hover { border-color: #cbd4dc; }
+  color: #6e685f; text-align: left; }
 .tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: #746e64; letter-spacing: .02em; }
 .tq-fold b { min-width: 0; font-weight: 600; color: #2f3a42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-fold .grow { flex: 1; }
-.tq-fold .again { flex-shrink: 0; font-size: 11px; }
 /* a browse card sits in the conversation at the canvas's width, like the task view */
 .tq-browse-line { margin: 0 0 14px; }
 /* SEE MORE IN ONE SCREEN (the owner, 2026-09-29: "fill up more width and more height for tasks ... same for all items"): the

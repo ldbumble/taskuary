@@ -712,17 +712,15 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>
           )}
-          {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE, and clicking it puts it back on the table (the canvas redesign) */}
+          {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE - a record of the walk, not a door. "Open again" brought it to the bottom as the
+              current item, and reopening it in place would leave two current items when the assistant, the bar and Next all work
+              the last one (the owner, 2026-10-16: "maybe just remove the open again button"); asking for it brings it back */}
           {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && (
-            // ...when it HAS a key to come back by: a keyless proposal's "open again" reopened null, which pulled the next item
-            // in the pipe onto the table - an unrelated task (2026-10-06)
-            <button type="button" className="tq-fold" data-tq-folded={m.card.key} title={m.card.key ? "Put it back on the table" : undefined}
-              disabled={actions.busy || !m.card.key} onClick={() => m.card.key && actions.reopen(m.card.key, live && !canvas?.browsing)}>
+            <div className="tq-fold" data-tq-folded={m.card.key}>
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
-              <span className="grow" />{!!m.card.key && <span className="again">open again</span>}
-            </button>
+            </div>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner

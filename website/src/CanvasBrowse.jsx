@@ -34,12 +34,8 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
   const opened = !!detail;
   useEffect(() => { if (live && opened) one.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, opened, openLabel]);
   useEffect(() => { if (live && section != null) root.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [live, section]);
-  // an earlier browse card is one line, and clicking it browses there again (a new card, at the bottom)
-  if (!live) return (
-    <button type="button" className="tq-fold" onClick={onReopen || undefined} title={`Browse ${title} again`}>
-      <b>{title}</b><span className="grow" /><span className="again">open again</span>
-    </button>
-  );
+  // an earlier browse card is one line - a record, not a door, like every folded item on the canvas (the owner, 2026-10-16)
+  if (!live) return <div className="tq-fold"><b>{title}</b></div>;
   return (
     <Box ref={root} sx={{ display: "flex", flexDirection: "column", gap: 1.25, scrollMarginTop: "8px" }}>
       {/* 1. sections */}

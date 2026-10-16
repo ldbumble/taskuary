@@ -182,6 +182,16 @@ class StateTests(unittest.TestCase):
             st = firstrun.state(s)
         self.assertEqual(st['brain']['name'], 'Claude'); self.assertNotIn('coding', st['next'])
 
+    def test_an_ai_connected_on_the_connections_page_says_so(self):
+        """Every CLI read "Not set up - on this computer" while Connections had them all connected: only the one sorting the mail
+        said Connected (the owner, 2026-10-16: "why does it say not setup when they are all setup??")."""
+        s = MemoryStore()
+        with mock.patch('taskuary.setup._ai', return_value={'ready': True, 'Name': 'x', 'pick': ''}), \
+             mock.patch('taskuary.setup._inbound', return_value=[]), mock.patch('taskuary.setup._first_items', return_value=[]), detect(), \
+             mock.patch('taskuary.config.load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}}):
+            ais = firstrun.state(s)['ais']
+        self.assertTrue(next(a for a in ais if a['name'] == 'codex')['connected'])
+
     def test_each_step_is_a_plain_question(self):
         s = MemoryStore()
         def at(ready, inbound, items):

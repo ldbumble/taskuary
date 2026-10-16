@@ -49,3 +49,10 @@ test("the first time About your work is saved, setup is complete: confetti and o
   assert.match(done, /prefers-reduced-motion: reduce/);
   assert.match(read("setupSteps.js"), /shown === "finish" \? "ready - Go to my day"/);
 });
+
+test("an AI connected on the Connections page says so, and the one in use leads the shelf", () => {
+  const fr = read("FirstRun.jsx");
+  assert.match(fr, /: ai\.connected \? \["on", "Connected - click to make it your AI"\]/);
+  assert.match(fr, /\["on", "Your AI - it sorts your mail"\]/);
+  assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(\(c\) => c\.title === inUse\)/);
+});

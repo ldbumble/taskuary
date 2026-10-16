@@ -260,7 +260,9 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
     : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install"
       : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : "Not answering"]
-    : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Connected"]
+    : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts your mail"]
+    // connected on the Connections page, just not the one sorting the mail: it read "Not set up" (the owner, 2026-10-16)
+    : ai.connected ? ["on", "Connected - click to make it your AI"]
     : ["off", ai.installed ? "Not set up - on this computer" : "Not installed - click to install"]);
   const cliCards = st.ais.map((ai) => {
     const [state, words] = stateOf(ai);
@@ -275,7 +277,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : fix?.key === planKey ? "Signed in · not answering" : "Not set up"}`
       + " · sign in with your ChatGPT account",
     go: busy || signing ? undefined : () => planSignin(plan) };
-  const ai = [...(planCard ? [planCard] : []), ...cliCards, ...byType(SETUP_AI).map((c) => card(c, true))];
+  const all = [...(planCard ? [planCard] : []), ...cliCards, ...byType(SETUP_AI).map((c) => card(c, true))];
+  // the AI in use leads the shelf, even one from More AI: the cards showed four others while the line named Azure OpenAI
+  const inUse = st.step !== "ai" && st.brain?.name;
+  const ai = inUse ? [...all.filter((c) => c.title === inUse), ...all.filter((c) => c.title !== inUse)] : all;
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
   const other = byType(OTHER_TYPES).map((c) => card(c, false));
   const conn = open && conns.find((c) => c.ConnectorId === open.id);

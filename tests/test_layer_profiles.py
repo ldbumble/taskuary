@@ -57,6 +57,16 @@ class LayerProfilesTests(unittest.TestCase):
         agents.layer_profiles(cfg, s)
         self.assertEqual(s.get_task(late)['Assignee'], 'agent:coding')
 
+    def test_a_report_naming_the_old_profile_is_repaired_on_the_next_start(self):
+        """A report's own agent and brain still said `coder` after the rename: "Report failed: no CLI agent named 'coder'" (2026-10-16)."""
+        cfg, s, _ = legacy()
+        agents.layer_profiles(cfg, s)
+        sid = s.save_source({'Channel': 'report', 'Address': 'Morning repos', 'Active': 1,
+                             'ConfigJson': json.dumps({'title': 'Morning repos', 'agent': 'coder', 'ai_brain': 'cli:coder,connector:7'})}, 'owner')
+        agents.layer_profiles(cfg, s)
+        got = json.loads(s.get_source(sid)['ConfigJson'])
+        self.assertEqual((got['agent'], got['ai_brain']), ('coding', 'cli:claude,connector:7'))
+
     def test_an_owners_own_coding_profile_is_never_overwritten(self):
         cfg, s, _ = legacy()
         cfg['agents']['coding'] = {'kind': 'coding', 'purpose': 'mine'}

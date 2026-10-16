@@ -421,6 +421,8 @@ RETRY_STATUS = (429, 500, 502, 503, 504)   # the ENDPOINT's problem; a 4xx is th
 RETRY_TRIES = 3                            # attempts per call - bounded: a poll thread waits on this
 RETRY_WAIT = (1, 4)                        # seconds before attempt 2, then before attempt 3
 RETRY_WAIT_MAX = 30                        # a longer Retry-After is an outage, not a pause
+# a reasoning deployment on a report's prompt answered past 60s, and every such report failed "Read timed out" (2026-10-16)
+CONNECT_TIMEOUT, READ_TIMEOUT = 15, 180
 
 
 class JsonAnswer(NamedTuple):
@@ -480,6 +482,8 @@ def post_retrying(url, headers, body, timeout):
     for attempt in range(RETRY_TRIES):
         if attempt: sleep(retry_wait(last, attempt))
         try: r = requests.post(url, headers=headers, json=body, timeout=timeout)
+        # an answer that is slow is not a blip: asking again queues the same work, and tripled the wait (2026-10-16)
+        except requests.ReadTimeout: raise
         except requests.RequestException as e: last = e; continue
         if r.status_code not in RETRY_STATUS: return r
         last = r
@@ -662,8 +666,9 @@ def make_llm(t, cfg: dict, key: str):
                 for tok_param in ('max_completion_tokens', 'max_tokens'):
                     body = {'messages': msgs, tok_param: max_tokens,
                             **({'model': model} if model else {}), **({'response_format': fmt} if fmt else {})}
-                    # a local model may spend its first call loading weights off disk - give it room
-                    r = post_retrying(url, headers, body, 180 if t == 'ollama' else 60)
+                    # a local model may spend its first call loading weights off disk, a reasoning deployment its time on a long
+                    # prompt - room to answer, and a quick give-up on an endpoint that is not there
+                    r = post_retrying(url, headers, body, (CONNECT_TIMEOUT, READ_TIMEOUT))
                     if r.status_code == 200:
                         ch = (r.json().get('choices') or [{}])[0]
                         said = ((ch.get('message') or {}).get('content') or '')

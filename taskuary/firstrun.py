@@ -66,9 +66,13 @@ def state(store) -> dict:
     ais = [k for k in found if (k['name'] in OFFERED or k['installed']) and k['name'] in clis.READONLY]
     ais.sort(key=lambda k: (k['name'] not in OFFERED, not k['installed'], OFFERED.index(k['name']) if k['name'] in OFFERED else 9))
     # the three most people pay for lead; any other CLI on this machine is offered under "more", never in the first glance
+    # connected on the Connections page is its own fact, apart from being the one that sorts the mail: every CLI read "Not set up"
+    # while Connections had them all connected (the owner, 2026-10-16)
+    from . import config as config_mod
+    linked = set((config_mod.load() or {}).get('cli_connections') or {})
     ais = [{'name': k['name'], 'title': PLAIN.get(k['name'], (k['label'], ''))[0], 'sub': PLAIN.get(k['name'], ('', 'Already on this computer'))[1],
             'installed': k['installed'], 'install': k['install'] if k.get('installable') else '', 'setup': k.get('setup') or '',
-            'why_not': k.get('why_not') or '', 'more': k['name'] not in OFFERED} for k in ais]
+            'why_not': k.get('why_not') or '', 'more': k['name'] not in OFFERED, 'connected': k['name'] in linked} for k in ais]
     by = lambda t: (store.get_connector_by_type(t) or {}).get('ConnectorId')
     keys = [{'type': t, 'title': label, 'sub': where, 'cid': by(t)} for t, label, where in KEYS if by(t)]
     mail = [{'type': t, 'title': label, 'sub': sub, 'cid': by(t)} for t, label, sub in MAIL if by(t)]

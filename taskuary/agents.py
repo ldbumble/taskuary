@@ -927,6 +927,18 @@ def _retire_old_name(store) -> None:
     try: store._exec("UPDATE OR IGNORE lore_vote SET Actor='coding' WHERE Actor='coder'"); store._exec("DELETE FROM lore_vote WHERE Actor='coder'")
     except Exception: pass
     if str(store.get_setting('default_profile') or '') == 'coder': store.set_setting('default_profile', 'coding', 'migration')
+    # ...and the reports that name it: one with agent `coder` failed "no CLI agent named 'coder'" after the rename, and one whose
+    # brain was `cli:coder` would have too (2026-10-16). The agent becomes `coding`; the brain, the tool coding runs on.
+    tool = str(store.get_setting('default_brain') or '').strip()
+    for src in store.list_sources(active_only=False):
+        if src.get('Channel') != 'report': continue
+        try: was = json.loads(src.get('ConfigJson') or '{}')
+        except ValueError: continue
+        if not isinstance(was, dict): continue
+        now = {**was, **({'agent': 'coding'} if was.get('agent') == 'coder' else {})}
+        if tool and 'cli:coder' in str(was.get('ai_brain') or '').split(','):
+            now['ai_brain'] = ','.join(f'cli:{tool}' if p == 'cli:coder' else p for p in str(was['ai_brain']).split(','))
+        if now != was: store.save_source({'SourceId': src['SourceId'], 'ConfigJson': json.dumps(now)}, 'migration')
 
 
 def brain_command(store, role: str, cfg: dict = None, want: str = None) -> dict:

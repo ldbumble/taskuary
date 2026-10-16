@@ -301,7 +301,7 @@ class LocalAndOpenRouterTests(unittest.TestCase):
         self.assertEqual(seen['url'], 'http://127.0.0.1:11434/v1/chat/completions')
         self.assertNotIn('Authorization', seen['headers'])
         self.assertEqual(seen['body']['model'], 'llama3.2')
-        self.assertEqual(seen['timeout'], 180)                   # room for a cold model load
+        self.assertEqual(seen['timeout'][1], 180)                # room for a cold model load
         # base_url reaches any OpenAI-compatible local server - LM Studio, llama.cpp, vLLM
         s.save_connector({'ConnectorId': ol['ConnectorId'],
                           'ConfigJson': '{"model": "m", "base_url": "http://127.0.0.1:1234/"}'}, 'o')
@@ -665,6 +665,18 @@ class TransientBrainTests(unittest.TestCase):
         import requests as rq
         with self.replies(rq.ConnectionError('connection reset')), self.assertRaises(rq.ConnectionError): self.fn('s', 'u')
         self.assertEqual(len(self.calls), llm.RETRY_TRIES)
+
+    def test_a_slow_answer_is_waited_for_once_not_three_times(self):
+        """A reasoning deployment took past 60s on a report's prompt: the read timed out, was sent twice more, and the report failed
+        three minutes later on "Read timed out. (read timeout=60)" (2026-10-16). It gets longer to answer - and one try, since
+        asking again only queues the same slow work."""
+        import requests as rq
+        seen = []
+        def post(url, headers=None, json=None, timeout=None):
+            seen.append(timeout); raise rq.ReadTimeout('read timed out')
+        with mock.patch('taskuary.llm.requests.post', side_effect=post), self.assertRaises(rq.ReadTimeout): self.fn('s', 'u')
+        self.assertEqual(seen, [(llm.CONNECT_TIMEOUT, llm.READ_TIMEOUT)])
+        self.assertGreaterEqual(llm.READ_TIMEOUT, 180)
 
     def test_the_endpoint_says_when_to_come_back(self):
         """A 429 always carries Retry-After - honour it over our own spacing, but never sleep a

@@ -15,8 +15,6 @@
 
 **A personal AI assistant for your job.** Mail, chats and tickets become tasks, the agents you already use (Claude Code, Codex, Gemini) do the work, and nothing goes out until you approve. Open source, runs on your machine, no subscription.
 
-Compared with hosted assistants like Fyxer, Taskuary is free and open source, runs on your machine, and hands the work to agents you already use.
-
 ![The Assistant's Game view: an office where every task, message and agent is a figure, opening on the whole floor and zooming into each room - the Agent Floor, the Meeting Room where people wait on you, the Gym, the Coffee Room, the Memory Archive, and the Assistant Core.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 Taskuary is early—currently **v0.3.9.3**—so breaking changes are still possible before 1.0.

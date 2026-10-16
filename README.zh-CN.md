@@ -14,8 +14,6 @@
 
 **一个为你的工作服务的个人 AI 助手。** 邮件、聊天和工单变成任务，由你已经在用的智能体（Claude Code、Codex、Gemini）完成，未经你批准，什么都不会发出。开源，在你的电脑上运行，无需订阅。
 
-与 Fyxer 等托管助手相比，Taskuary 免费开源，在你的电脑上运行，并把工作交给你已经在用的智能体。
-
 ![助手的游戏视图：每个任务、消息和智能体都是办公室里的一个人物，先展示整层办公室，再依次放大到各个房间。](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/hero.webp?v=smooth)
 
 Taskuary 仍处于早期阶段，目前为 **v0.3.9.3**，1.0 之前可能出现不兼容变更。

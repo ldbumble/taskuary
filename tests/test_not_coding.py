@@ -95,7 +95,7 @@ class DispatchGateTests(unittest.TestCase):
         self.assertIn('yours to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])   # unnamed kind: the owner's list (2026-09-23)
         s2, _out2, _ = self._ingest('export down', 'The export is broken and the deploy failed.',
                                     llm=lambda *a, **k: '{"intent": "task", "kind": "coding", "why": "a broken job"}', classify='1')
-        self.assertIn('sent to the coding agent', s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertTrue(s2._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'].startswith('triage: work for the coding agent'))
 
 
 class HarmlessExitTests(unittest.TestCase):

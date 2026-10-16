@@ -92,7 +92,8 @@ def idea_reason(idea: dict) -> str:
     intent = triage.get('intent')
     if triage.get('error') or triage.get('pending') or intent not in ('task', 'reply_only', 'fyi'): return ''
     why = str(triage.get('why') or '').strip()
-    return f'triage: {intent}' + (f' - {why}' if why else '')
+    from .categories import route_head
+    return f"triage: {route_head(intent, triage.get('kind') or '')}" + (f' - {why}' if why else '')
 
 
 def _has_conversation(view, tid) -> bool:

@@ -43,14 +43,14 @@ def test_a_judged_idea_repeats_its_verdict_on_the_row(db):
     an_idea(db, 'k1', 'The 14:44 error check discards are a duplicate of an existing vendor id.',
             {'intent': 'fyi', 'why': 'an informational note that asks for no action'})
     row = next(r for k, r in rows(db).items() if k.startswith('idea:'))
-    assert row['RouteReason'] == 'triage: fyi - an informational note that asks for no action'
+    assert row['RouteReason'] == 'triage: nothing to do - an informational note that asks for no action'
 
 
 def test_the_verdict_names_the_road_it_chose(db):
     an_idea(db, 'k2', 'Paula is still waiting on the PAM review.',
             {'intent': 'task', 'why': 'someone is waiting on an answer'})
     row = next(r for k, r in rows(db).items() if k.startswith('idea:'))
-    assert row['RouteReason'] == 'triage: task - someone is waiting on an answer'
+    assert row['RouteReason'] == 'triage: yours to do - someone is waiting on an answer'      # no kind named: the owner's
     assert row['Lane'] == 'asked', 'the lane and the reason must agree about the same verdict'
 
 

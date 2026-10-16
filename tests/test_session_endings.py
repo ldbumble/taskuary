@@ -43,9 +43,9 @@ class RealReasonTests(unittest.TestCase):
     def test_waiting_to_start_names_the_queue(self):
         s = MemoryStore(); tid = handed(s, Status='open')
         s.enqueue_dispatch(tid, None, 'coding', 'all slots busy')
-        self.assertIn('next in line', funnel.not_started_why(s, tid))
+        self.assertIn('Waiting its turn. Every agent slot is busy', funnel.not_started_why(s, tid))
         s.dispatch_failed(tid, 'coding is not installed', permanent=True)
-        self.assertIn('could not start: coding is not installed', funnel.not_started_why(s, tid))
+        self.assertIn("Couldn't start: coding is not installed. This is a setup problem", funnel.not_started_why(s, tid))
 
 
 class CancelTakesTheAgentOffTests(unittest.TestCase):

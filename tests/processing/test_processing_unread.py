@@ -590,7 +590,7 @@ def test_an_interrupted_agent_task_is_stopped_work_that_a_look_does_not_clear(st
     store.tag_task(tid, terminal.INTERRUPTED, True, 'shutdown')
     _, unread = both(store)
     card = next(i for i in unread['items'] if i.get('tid') == tid)
-    assert card['lane'] == 'stopped' and 'closed while coding had this' in card['why'], card
+    assert card['lane'] == 'stopped' and 'closed while the coding agent had this' in card['why'], card
     funnel.settle(store, card['key'], 'surfaced', read=True)
     _, after = both(store)
     kept = next(i for i in after['items'] if i.get('tid') == tid)
@@ -639,4 +639,4 @@ def test_a_sender_writing_again_after_the_agent_is_on_you_saying_so(store):
     add(store, 'Re: access list', tid=tid, status='routed')
     _, unread = both(store)
     card = next(i for i in unread['items'] if i.get('tid') == tid)
-    assert card['lane'] == 'asked' and card['why'] == 'Fixture wrote again since coding finished', card
+    assert card['lane'] == 'asked' and card['why'] == 'Fixture wrote again since the coding agent finished', card

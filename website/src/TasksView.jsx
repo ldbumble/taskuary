@@ -424,7 +424,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
                 {/* A START THAT FAILED says so on the row, with the error (T10) - it said "starts by itself when it can" */}
                 {task.State === "queued" && task.Queued?.state === "failed" && (
                   <Typography noWrap title={task.Queued.lastError || ""} sx={{ fontSize: 10.5, mt: 0.45, color: ALERT, fontWeight: 600 }}>
-                    could not start{task.Queued.lastError ? ` - ${task.Queued.lastError}` : ""}
+                    couldn't start{task.Queued.lastError ? `: ${task.Queued.lastError}` : ""}{task.Queued.permanent ? " - a setup problem, Start won't fix it" : ""}
                   </Typography>
                 )}
                 {(list.length > 0 || asked) && (

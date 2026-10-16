@@ -24,7 +24,33 @@ a mailing list, and they must not wear the same tag.
 # footer said "please do not reply" was "automated", and the Advisor never spoke about either (the owner, 2026-10-11:
 # "everything should be ai"). No verdict and no header is a PERSON - a robot is never assumed, because a person filed
 # as one is never looked at again.
+import re
+
 SENDER_CLASSES = ('person', 'automated', 'bulk')
+
+# THE ROUTE RECORD LEADS WITH WHOSE IT IS. It led with the classifier's label - "triage: task - ..." - and "task" reads
+# as "on you" on work triage had handed to the assistant or the coding agent (the owner, 2026-10-16). Rows written
+# before keep the old label, so every reader goes through route_intent, which knows both.
+def agent_word(kind) -> str: return 'the coding agent' if str(kind or '') == 'coding' else 'the assistant'
+
+def route_head(intent, kind='', repo='') -> str:
+    "'nothing to do' | 'needs a reply' | 'work for the coding agent in org/app' | 'work for the assistant' | 'yours to do'."
+    if intent == 'fyi': return 'nothing to do'
+    if intent == 'reply_only': return 'needs a reply'
+    if kind in ('coding', 'general'): return f'work for {agent_word(kind)}' + (f' in {repo}' if repo and kind == 'coding' else '')
+    return 'yours to do'
+
+_HEAD = re.compile(r'triage: (task|reply_only|fyi|yours to do|work for |needs a reply|nothing to do)')
+_HEAD_INTENT = {'yours to do': 'task', 'work for ': 'task', 'needs a reply': 'reply_only', 'nothing to do': 'fyi'}
+
+def route_intent(reason) -> str:
+    "'task' | 'reply_only' | 'fyi' | '' - the verdict a route reason records, in either wording."
+    m = _HEAD.search(str(reason or ''))
+    return _HEAD_INTENT.get(m.group(1), m.group(1)) if m else ''
+
+def route_why(reason) -> str:
+    "Triage's own reason with the head taken off: 'triage: yours to do - she asks for X · ...' -> 'she asks for X · ...'."
+    return re.sub(r'^triage:\s*[^·]*?\s-\s', '', str(reason or ''), count=1)
 CHAT = {'teams', 'slack', 'telegram', 'whatsapp', 'imessage', 'discord',
         'mattermost', 'rocketchat', 'matrix', 'google_chat'}
 
@@ -71,7 +97,7 @@ def category_of(r: dict, team_domains=()) -> str:
     if st == 'filed':
         # only an fyi verdict earns a "nothing to do, here is who said it" tag; a message filed
         # because triage failed, or because you already ruled on the thread, is just filed
-        if not reason.startswith('triage: fyi'): return 'filed'
+        if not (reason.startswith('triage:') and route_intent(reason) == 'fyi'): return 'filed'
         return {'person': 'info', 'automated': 'automated', 'bulk': 'promo'}[sender_class(r, team_domains)]
     kind = r.get('TaskKind') or ''
     if kind == 'reply': return 'review'

@@ -56,8 +56,9 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual((t['Kind'], t['Status']), ('general', 'open'))      # a real task, on the Board
         self.assertEqual(spawned, ['_auto_general'])
         reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('sent to the assistant', reason)
-        self.assertNotIn('sent to the coding agent', reason)                 # it was not
+        self.assertTrue(reason.startswith('triage: work for the assistant'), reason)
+        self.assertIn('the assistant was set to start by itself', reason)
+        self.assertNotIn('coding agent', reason)                             # it was not
 
     def test_a_plain_task_is_nobodys_but_yours(self):
         s = store()
@@ -65,8 +66,8 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'task')
         self.assertEqual(spawned, [])
         reason = s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason']
-        self.assertIn('yours to do', reason)
-        self.assertNotIn('sent to the coding agent', reason)
+        self.assertTrue(reason.startswith('triage: yours to do'), reason)
+        self.assertNotIn('coding agent', reason)
 
     def test_coding_still_goes_straight_to_the_agent(self):
         """The rule that must not move: err toward the agent for anything a keyboard can do."""

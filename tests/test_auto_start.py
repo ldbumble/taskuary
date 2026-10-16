@@ -52,7 +52,9 @@ class AutoStartTests(unittest.TestCase):
         s = store()
         out, spawned = ingested(s, mail(), 'general')
         self.assertEqual(spawned, ['_auto_general'])
-        self.assertIn('sent to the assistant', last_reason(s))
+        # the record leads with whose it is, and says the start was set going - not that it started (a thread may yet fail)
+        self.assertTrue(last_reason(s).startswith('triage: work for the assistant - '), last_reason(s))
+        self.assertIn('the assistant was set to start by itself', last_reason(s))
         self.assertEqual(s.get_task(out['task_id'])['Kind'], 'general')
 
     def test_coding_still_opens_its_cli(self):
@@ -63,17 +65,17 @@ class AutoStartTests(unittest.TestCase):
     def test_a_personal_task_starts_nothing(self):
         s = store()
         _out, spawned = ingested(s, mail(), 'task')
-        self.assertEqual(spawned, []); self.assertIn('yours to do', last_reason(s))
+        self.assertEqual(spawned, []); self.assertTrue(last_reason(s).startswith('triage: yours to do'), last_reason(s))
 
     def test_each_kind_has_its_own_switch_and_off_keeps_the_work_visible_for_a_click(self):
         s = store(general_auto_enabled='0')
         out, spawned = ingested(s, mail(), 'general')
         self.assertEqual(spawned, [])
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
-        self.assertIn('auto-start is off for the assistant (Settings)', last_reason(s))
+        self.assertIn('held for you: Starting the assistant by itself is switched off in Settings.', last_reason(s))
         s2 = store(coding_auto_enabled='0')
         _out, spawned = ingested(s2, mail(external_id='c1'), 'coding')
-        self.assertEqual(spawned, []); self.assertIn('auto-dispatch is off (Settings)', last_reason(s2))
+        self.assertEqual(spawned, []); self.assertIn('Starting the coding agent by itself is switched off in Settings.', last_reason(s2))
         _out, spawned = ingested(s2, mail(external_id='g1', conversation_id='AAQk-2'), 'general')    # the other switch is untouched
         self.assertEqual(spawned, ['_auto_general'])
 
@@ -85,15 +87,19 @@ class AutoStartTests(unittest.TestCase):
                 out = ingest_message(s, mail(from_email='stranger@evil.example'), llm=llm_says(kind))
             self.assertEqual(spawn.call_args_list, [], kind)
             self.assertTrue(s.task_has_tag(out['task_id'], ingest.HOLD_TAG), kind)
-            self.assertTrue(any('not auto-started' in c and 'first message from' in c for c in comments(s, out['task_id'])), kind)
-            self.assertIn('not auto-worked: first message from stranger@evil.example', last_reason(s))
+            # one whole sentence naming the sender, then ONE next step - not "send it yourself if real" and a second one
+            note = next(c for c in comments(s, out['task_id']) if c.startswith('Waiting for you:'))
+            self.assertIn('Sam (stranger@evil.example) is not on your domain and you have never written to them', note)
+            self.assertTrue(note.endswith(f"If it is real, start {'the coding agent' if kind == 'coding' else 'the assistant'}, or do it yourself."), note)
+            self.assertNotIn('send it yourself', note)
+            self.assertIn('held for you: Sam (stranger@evil.example) is not on your domain', last_reason(s))
 
     def test_no_configured_assistant_provider_is_a_visible_hold_not_a_crash(self):
         s = store()
         out, spawned = ingested(s, mail(), 'general', providers=())
         self.assertEqual(spawned, [])
-        self.assertIn('no assistant provider is configured', last_reason(s))
-        self.assertTrue(any('not auto-started' in c for c in comments(s, out['task_id'])))
+        self.assertIn('No AI is set up for the assistant', last_reason(s))
+        self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith('Start the assistant, or do it yourself.') for c in comments(s, out['task_id'])))
 
     def test_coding_with_no_repository_stays_coding_and_the_coding_agent_is_asked_which(self):
         """Coding stays coding (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it
@@ -150,7 +156,7 @@ class AutoStartTests(unittest.TestCase):
         s = store()
         with mock.patch.object(server, 'store', s):
             out, _spawned = ingested(s, mail(), 'general', providers=())     # held: no provider
-            self.assertTrue(any('not auto-started' in c for c in comments(s, out['task_id'])))
+            self.assertTrue(any(c.startswith('Waiting for you:') for c in comments(s, out['task_id'])))
             r = TestClient(server.app).post(f"/api/messages/{out['message_id']}/file", json={'learn': False}).json()
         self.assertTrue(r['taskDeleted']); self.assertIsNone(s.get_task(out['task_id']))
 
@@ -185,7 +191,7 @@ class WorkerTests(unittest.TestCase):
             ingest._auto_general(s, tid)
         start.assert_called_once(); session.send_prompt.assert_called_once()
         self.assertIn('board meeting', session.send_prompt.call_args[0][0])
-        self.assertTrue(any('auto-started the assistant' in c for c in comments(s, tid)))
+        self.assertTrue(any(c == 'The assistant started by itself.' for c in comments(s, tid)))
         with mock.patch.object(general, 'start_session', return_value=session), mock.patch.object(general, 'history', return_value=[{'role': 'owner'}]):
             ingest._auto_general(s, tid)                                          # a live conversation is reused, not re-asked
         session.send_prompt.assert_called_once()
@@ -195,7 +201,7 @@ class WorkerTests(unittest.TestCase):
         tid = s.create_task({'Title': 'board meeting', 'Summary': ASK, 'Kind': 'general'}, 'triage')
         with mock.patch.object(general, 'start_session', side_effect=RuntimeError('no CLI login')):
             ingest._auto_general(s, tid)
-        self.assertTrue(any('Assistant start failed: no CLI login' in c for c in comments(s, tid)))
+        self.assertTrue(any("The assistant couldn't start: no CLI login - trying again at" in c for c in comments(s, tid)))
         self.assertEqual(s.get_task(tid)['Status'], 'open')
 
     def test_a_full_house_queues_the_general_task_like_a_coding_one(self):

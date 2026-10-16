@@ -159,12 +159,14 @@ puts a row there and what takes it off.</p>
 </tbody></table>
 <p>Three of those — <code>coding</code>, <code>general</code>, <code>task</code> — are <em>kinds</em> stored on the task, and the kind is
 what routes the work. <code>reply</code> is a kind too. <code>fyi</code> creates nothing at all.</p>
-<p>Only <code>coding</code> is ever dispatched automatically. A conversation you did not ask for is noise, and
-a <code>task</code> is yours by definition, so both land on the Board and wait for your click.</p>
+<p><code>coding</code> and <code>general</code> can start an agent by themselves, when Settings allow it and the sender is
+someone Taskuary trusts; anything else waits for your Start. A <code>task</code> is yours by definition:
+nothing works it.</p>
 <div class="callout note"><p class="eyebrow">What &quot;general&quot; means</p><p>It means the assistant&#39;s conversation: there is nothing to type at a system, but thinking,
-reading or research would help — weigh an option, make sense of a thread, work out what to ask.
-Work a person genuinely has to do in the world (sit a course, sign a form, attend, decide) is the
-<code>task</code> road instead.</p>
+reading or research an assistant can do and hand back — lay out the options, make sense of a
+thread, work out what to ask. Work a person genuinely has to do in the world (sit a course, sign a
+form, attend, decide), or something asked of you as yourself (your own invite, your own opinion),
+is the <code>task</code> road instead.</p>
 </div><h2 id="what-triage-actually-decides">What triage actually decides<a class="anchor" href="#what-triage-actually-decides" aria-label="Link to this section">#</a></h2>
 <p>The verdict is the <em>last</em> thing that happens, not the first. Eleven checks run in a fixed order,
 and only two of them ask a model anything. A <strong>gate</strong> is deterministic: same input, same answer,

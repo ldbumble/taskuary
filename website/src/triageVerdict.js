@@ -1,3 +1,14 @@
+// THE ROUTE RECORD LEADS WITH WHOSE IT IS (categories.route_head): "triage: work for the assistant - ...". Rows written
+// before say "triage: task - ...", so the verdict is read in either wording - here, and nowhere else by regex.
+const HEAD = /^triage:\s*(task|reply_only|fyi|yours to do|work for |needs a reply|nothing to do)/i;
+const HEAD_INTENT = { "yours to do": "task", "work for ": "task", "needs a reply": "reply_only", "nothing to do": "fyi" };
+export const routeIntent = (reason) => {
+  const m = HEAD.exec(String(reason || ""));
+  return m ? HEAD_INTENT[m[1].toLowerCase()] || m[1].toLowerCase() : "";
+};
+// triage's own reason, the head taken off: "triage: yours to do - she asks for X · ..." -> "she asks for X · ..."
+export const routeWhy = (reason) => String(reason || "").replace(/^triage:\s*[^\u00b7]*?\s-\s/, "");
+
 const DISPLAY_KEYS = new Set([
   "intent", "kind", "profile", "playbook", "why", "title", "summary", "checklist",
   "repository", "needs_repo_choice", "repo_reason", "relationship", "related_message_ids",
@@ -25,9 +36,9 @@ export const latestTriageVerdict = (routes = []) => {
 
 export const legacyTriageVerdict = ({ routeReason = "", routes = [], task = {}, checklist = [] } = {}) => {
   const savedRoute = [...routes].reverse()
-    .find((route) => /^triage:\s*(task|reply_only|fyi)/i.test(String(route?.Reason || "")));
+    .find((route) => routeIntent(route?.Reason));
   const reason = String(savedRoute?.Reason || routeReason || "");
-  const intent = (/^triage:\s*(task|reply_only|fyi)/i.exec(reason) || [])[1];
+  const intent = routeIntent(reason);
   if (!intent) return null;
   const repository = String(task?.Tags || "").split(",").map((value) => value.trim())
     .find((value) => value.toLowerCase().startsWith("repo:"));
@@ -40,7 +51,7 @@ export const legacyTriageVerdict = ({ routeReason = "", routes = [], task = {}, 
     title: task?.Title || "",
     summary: task?.Summary || "",
     checklist: items,
-    why: reason.replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0],
+    why: routeWhy(reason).split(" · ")[0],
     repository: repository ? repository.slice(5) : "",
   };
 };

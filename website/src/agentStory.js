@@ -10,8 +10,10 @@ export const storyAlarm = (kind) => kind === "held" || kind === "interrupted";
 export const storyShown = (story, { alive, liveRun, queued, closed } = {}) =>
   !!story?.line && !alive && !liveRun && !closed && !(queued && story.kind === "queued");
 
-// "Start coding" for a step that never ran: "Start an agent" read as if nobody had been chosen
-export const startLabel = (story, who, ran) => !ran && story && ["held", "idle"].includes(story.kind) && who ? `Start ${who}` : null;
+// "Start the coding agent" for a step that never ran: "Start an agent" read as if nobody had been chosen, and "Start coder"
+// named a profile as if it were a worker (the owner, 2026-10-16) - the button says what the agent IS, by the task's kind
+export const agentWord = (kind) => (kind === "coding" ? "the coding agent" : "the assistant");
+export const startLabel = (story, kind, ran) => !ran && story && ["held", "idle"].includes(story.kind) ? `Start ${agentWord(kind)}` : null;
 
 export const hhmm = (ts) => String(ts || "").slice(11, 16);
 

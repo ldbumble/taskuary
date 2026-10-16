@@ -300,7 +300,7 @@ def test_an_auto_start_that_is_refused_says_so_on_the_task_and_does_not_retry(mo
     monkeypatch.setattr(blackboard, 'drain_later', lambda *a, **k: None)
     with mock.patch.object(terminal, 'Term'), mock.patch.dict(terminal.SESSIONS, {}, clear=True): ingest._auto_code(s, t)   # never raises into the poller
     said = ' '.join(c['Body'] for c in s.list_comments(t))
-    assert 'no built-in reviewer' in said and 'no automatic retry' in said
+    assert 'no built-in reviewer' in said and 'Start fails the same way until it is fixed' in said and 'try again' not in said
 
 def test_release_all_wakes_a_held_permit_with_a_deny():
     s = MemoryStore(); t = _stranger(s); out = []

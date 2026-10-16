@@ -896,11 +896,12 @@ def _verdict_why(item: dict) -> str:
     """Triage's own reason, with the verdict word it opens with trimmed off - "triage filed it as
     fyi - triage: fyi - an automated notification" says it twice (the owner, 2026-09-04: "ask we
     processed as fyi because of x")."""
+    from .categories import route_why
     w = (item.get('why') or '').strip()
-    for pre in ('triage: fyi -', 'triage: fyi', 'triage:'):
-        if w.lower().startswith(pre):
-            w = w[len(pre):].lstrip(' -·')
-            break
+    if w.lower().startswith('triage:'): w = route_why(w)
+    for pre in ('triage: fyi', 'triage: nothing to do', 'triage:'):    # a head with no reason after it
+        if w.lower().startswith(pre): w = w[len(pre):]; break
+    w = w.lstrip(' -·')
     return f' - {w}' if w else ''
 
 
@@ -979,6 +980,10 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         return ALL_DONE
     if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
+        # A HELD START IS WHAT HAPPENED (the owner, 2026-10-16): "nothing has been done with it yet" was said over work the
+        # sender gate held, a start that failed and a real queue alike - the task's own sentence says which, and what to do
+        idle = item.get('why_idle') if item.get('lane') == 'queued' and item['kind'] in ('asked', 'todo') else ''
+        if idle: return f"{frm}. No agent has started on it. {idle}"
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
         done = (f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
                 'I read it as needing a reply' if item['kind'] == 'review' else 'something is ready to run, waiting for your yes' if item['kind'] == 'action' else

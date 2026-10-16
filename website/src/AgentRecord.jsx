@@ -123,7 +123,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
 // THE ONE BLOCK on the Agent work step for a session that is not running: the state in a sentence (`story`, from
 // funnel.agent_story: ended by you, cut off by a restart, stopped), what happened, and More. With no record to show it is the
 // story alone.
-export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, who = "", folded = false, inChat = false }) => {
+export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = null, folded = false, inChat = false }) => {
   const [rec, setRec] = useState(null);
   useEffect(() => {
     let live = true;
@@ -135,13 +135,13 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   if (folded) {
     const lead = now ? plain(cardParts(now, draft).lead) : "";
     return story ? <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
-      <StoryLine kind={story.kind} line={story.line} who={who} />
+      <StoryLine kind={story.kind} line={story.line} />
       {lead && <Typography sx={{ mt: 0.4, pl: 3, fontSize: 13, lineHeight: 1.45, color: DIM, overflow: "hidden",
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{lead}</Typography>}
     </Box> : null;
   }
   if (!rec) return <CircularProgress size={12} />;
-  if (!now && !pages.length) return story ? <AgentStory story={story} who={who} /> : null;
+  if (!now && !pages.length) return story ? <AgentStory story={story} /> : null;
   const { state, since } = recordHead(story, rec.ended);
   // the run's last words stand in for a session whose own log kept none; a conversation's answers are the chat under the card,
   // so there it is only the working behind them (a card over the chat said the answer a second time)
@@ -150,7 +150,7 @@ export const AgentRecord = ({ taskId, pages = [], draft = "", stamp, story = nul
   if (chat && !state && !pages.length && !moreParts(s, { earlier: before.length }).length) return null;
   return (
     <Box sx={{ width: "100%", bgcolor: PANEL, px: 1.35, py: 1.15, border: `1px solid ${BORDER}`, borderRadius: 1.5 }}>
-      {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} who={who} /></Box>}
+      {state && <Box sx={{ mb: 1, pb: 1, borderBottom: `1px solid ${BORDER}` }}><StoryLine kind={state.kind} line={state.line} /></Box>}
       {s && !chat ? <RunSummaries sessions={[s, ...before]} pages={pages}
           full={<SessionRecord s={s} draft={draft} startOpen timeline={story?.steps || []} since={since} earlier={before} />} />
         : s ? <SessionRecord s={s} pages={pages} draft={draft} timeline={story?.steps || []} since={since} earlier={before} inChat={chat} />

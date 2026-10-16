@@ -345,7 +345,7 @@ class ThreadVerdictTests(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
         self.assertEqual(row['NeedsYou'], 0)
-        self.assertIn('triage: fyi', row['RouteReason']); self.assertNotIn('already ruled', row['RouteReason'])
+        self.assertIn('triage: nothing to do', row['RouteReason']); self.assertNotIn('already ruled', row['RouteReason'])
         self.assertIn('Priya will take care of this one', seen['sys'])
 
     def test_a_follow_up_that_asks_the_owner_something_new_opens_work_again(self):

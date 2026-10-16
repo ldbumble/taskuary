@@ -205,7 +205,7 @@ class TheBrainsReadEachOther(unittest.TestCase):
         s = MemoryStore()
         line(s, 'the agent isnt working on my dashboard', ago(0), brain())
         head = assistant._people_context(s)[0].splitlines()[0]
-        self.assertIn('triage said: "triage: task', head)
+        self.assertIn('triage said: "triage: work for the coding agent', head)
 
 
 if __name__ == '__main__':

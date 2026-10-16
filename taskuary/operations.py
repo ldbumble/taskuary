@@ -114,8 +114,10 @@ def verdict_of_message(store, m: dict) -> tuple:
     routes = store.message_routes(m['MessageId']) or []
     last = routes[-1] if routes else {}
     reason = str(last.get('Reason') or '')
-    if 'triage: fyi' in reason: return 'fyi', last.get('RouteId')
-    if 'triage: reply_only' in reason: return 'reply', last.get('RouteId')
+    from .categories import route_intent
+    said = route_intent(reason)
+    if said == 'fyi': return 'fyi', last.get('RouteId')
+    if said == 'reply_only': return 'reply', last.get('RouteId')
     if m.get('TaskId'):
         kind = str((store.get_task(m['TaskId']) or {}).get('Kind') or '').lower()
         return (kind if kind in ('coding', 'general', 'task') else 'task'), last.get('RouteId')

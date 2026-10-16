@@ -13,11 +13,14 @@ from .policy import evaluate
 from .triage import classify_intent
 from .store import task_ref, auto_code_enabled, _now
 from . import remind, senders
+from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
 # it is exactly as durable as it needs to be - the feed row reads it to say "held · new sender",
 # the release drops it, and nothing else in the schema had to move.
 HOLD_TAG = 'hold:new-sender'
+# the route record's clause for a start that waits for the owner - funnel.not_started_why reads the sentence after it
+HELD = 'held for you:'
 
 
 # What the agent is TOLD about work from each kind of source. An email needs nothing -
@@ -146,8 +149,8 @@ def gh_hold_why(store, msg: dict) -> str:
     from .batch import association
     assoc = association(msg.get('body'))
     who = _GH_WHO.get(assoc, assoc.lower().replace('_', ' '))
-    return (f"it is from {who}, and {repo} starts an agent by itself only for {_GH_WHOM.get(mode, mode) if mode in GH_AUTO else 'nobody'}"
-            ' - it waits for you to press Start, and a free slot will not start it')
+    return (f"It is from {who}, and {repo} starts an agent by itself only for {_GH_WHOM.get(mode, mode) if mode in GH_AUTO else 'nobody'}"
+            ', so a free slot will not start it.')
 
 
 def _from_row(r: dict, store=None) -> dict:
@@ -186,16 +189,22 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     Sent Items search no task already staying on the Board should pay for. A hold is about the
     unattended start only: the task is still triaged, shown and dispatchable by hand."""
     cfg = store.get_settings()
+    said = senders._said
     if kind == 'general':
-        if cfg.get('general_auto_enabled', '1') != '1': return False, 'auto-start is off for the assistant (Settings) - open it from the task'
+        if cfg.get('general_auto_enabled', '1') != '1': return False, said('Starting the assistant by itself is switched off in Settings.')
         from . import general
-        if not general.provider_options(store): return False, 'no assistant provider is configured (Settings -> AI) - open it from the task once one is'
+        if not general.provider_options(store): return False, said('No AI is set up for the assistant to run on yet (Settings, AI).')
     elif kind == 'coding':
-        if not auto_code_enabled(cfg): return False, 'auto-dispatch is off (Settings) - start the session from the task'
-    else: return False, 'a person has to do this one - on your list for you'
-    ok, why = senders.known(store, msg, exclude_mid=mid, deep=True)
-    if ok or not why.startswith('first message from'): return ok, why
-    return False, f'{why} - not one of your domains, and this mailbox has never written to them; send it yourself if real'
+        if not auto_code_enabled(cfg): return False, said('Starting the coding agent by itself is switched off in Settings.')
+    else: return False, said('A person has to do this one, so it is on your list.')
+    return senders.known(store, msg, exclude_mid=mid, deep=True)
+
+
+def held_note(who, kind: str) -> str:
+    """The task's line for a start that waited: the reason as its own sentence, then the one thing the owner can do. A
+    stranger's hold was told "send it yourself if real" AND "send it to the coding agent yourself" - two next steps."""
+    go = f'start {agent_word(kind)}, or do it yourself.'
+    return f"Waiting for you: {who} " + (f'If it is real, {go}' if getattr(who, 'stranger', False) else go[:1].upper() + go[1:])
 
 
 # One drain at a time: a conversation's second line must find the task its first one opened.
@@ -893,7 +902,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if intent['intent'] == 'fyi':
             mid = _land(store, msg, None, 'filed')
             store.add_route(mid, None, 'file', None,
-                            f"triage: fyi - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',
+                            f"triage: {route_head('fyi')} - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',
                             verdict=_stored_verdict(intent))
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
         # a question is reply-needed whatever the channel can carry (PW-042): sending capability
@@ -977,7 +986,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # the agents actually pick work up here:
         # - reply tasks ALWAYS enter the review queue ("needs me") with the draft written at once - for everyone,
         #   there is no setting for it (S1, 2026-09-25)
-        # - CODING tasks auto-dispatch to the coding agent when coding_auto_enabled is on
+        # - CODING and GENERAL tasks start their agent by themselves when Settings and the sender allow it
         # - anything else that is real work queues as needs-you, for you to route
         if f['kind'] == 'reply':
             new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
@@ -1002,7 +1011,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             if ok:
                 # the trust rule that let it through is said on the task (PW-080), so 'why did an agent start on
                 # a stranger's mail' has an answer
-                store.add_comment(tid, 'router', 'agent', f'Unattended start allowed: {who}.')
+                store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
                 if f['kind'] == 'coding': _spawn(_auto_code, store, tid)
                 else: _spawn(_auto_general, store, tid, advisor_brief(store, msg, mid))
             else:
@@ -1013,11 +1022,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # button, instead of a task that merely looks like nobody got round to it. The
                 # tag rides on the task because that is what the feed row and the release both
                 # read (senders.known decided it; HOLD_TAG only records the decision).
-                if who.startswith('first message from'): store.tag_task(tid, HOLD_TAG)
-                worker = 'Coding agent' if f['kind'] == 'coding' else 'Assistant'
-                if not no_repo: store.add_comment(tid, 'router', 'agent', f'{worker} not auto-started: {who}. '
-                                                          + ('Send it to the coding agent yourself if an agent can do it.' if f['kind'] == 'coding'
-                                                             else 'Open it from the task when you want the assistant on it.'))
+                if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
+                if not no_repo: store.add_comment(tid, 'router', 'agent', held_note(who, f['kind']))
                 store.audit('task', tid, 'auto_code_held', actor, 'agent', {'from': msg.get('from_email'), 'why': who})
     # the route row is the JUDGEMENT's record, and the timeline panel quotes it verbatim: the
     # verdict leads (what the classifier decided and why), routing explains new-vs-attached,
@@ -1029,14 +1035,17 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the
         # Timeline quotes this verbatim, so the panel would have stated a lie under the verdict.
+        # ...and the tail says what is TRUE when it is written: the start was only spawned, so it says the agent was set
+        # going, never that it started - a queued or a failed start writes its own line on the task
         act = (('a reply draft goes to the task for you' + (f' - {unsendable}, so it cannot be sent from here' if unsendable else '')) if f['kind'] == 'reply'
-               else 'yours to do - nothing is working it' if f['kind'] == 'task'
-               else f'not auto-worked: {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
-               else 'not auto-worked: github items queue for you to promote' if msg.get('no_auto')
-               else f'not auto-worked: {held}' if held
-               else 'sent to the coding agent' if f['kind'] == 'coding'
-               else 'sent to the assistant')
-        reason = (f"triage: {intent['intent']}" + (f" - {intent['why']}" if intent.get('why') else '')
+               else 'on your list - no agent works it' if f['kind'] == 'task'
+               else f'{HELD} {gh_hold_why(store, msg)}' if msg.get('no_auto') and msg.get('channel') == 'github'
+               else f'{HELD} items from {senders.channel_name(msg.get("channel")) or "this channel"} wait for you to start them.' if msg.get('no_auto')
+               else 'the coding agent is choosing the repository, then starts if it may' if no_repo
+               else f'{HELD} {held}' if held
+               else f'{agent_word(f["kind"])} was set to start by itself')
+        head = route_head(intent['intent'], f['kind'], intent.get('repository') or '')
+        reason = (f"triage: {head}" + (f" - {intent['why']}" if intent.get('why') else '')
                   + (f" · playbook {intent['playbook']}" if intent.get('playbook') else '')
                   + _notes_note()
                   + f" · {r['reason']} · {act}")
@@ -1219,7 +1228,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
     # a closed task comes back only with new work (see ingest_message): a reply or a comment on it is kept, and it stays closed
     if intent.get('intent') == 'fyi' or (closed and intent.get('intent') != 'task'):
         mid = _land(store, msg, tid, 'filed')
-        store.add_route(mid, tid, 'attach', 1.0, f"triage: {intent.get('intent')}, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it"
+        store.add_route(mid, tid, 'attach', 1.0, f"triage: {route_head(intent.get('intent'), t.get('Kind') or '')}, the same as {ref} - {intent.get('why') or 'nothing new'} · kept on it"
                         + (', which stays closed' if closed else '') + notes_note,
                         [], 'triage', verdict=_stored_verdict(intent))
         store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same, nothing new")
@@ -1227,7 +1236,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
         return {'status': 'filed', 'task_id': tid, 'message_id': mid}
     mid = _land(store, msg, tid, 'routed')
     if closed: _reopen(store, tid, msg, actor)
-    store.add_route(mid, tid, 'attach', 1.0, f"triage: {intent['intent']} - the same as {ref}, joined to it"
+    store.add_route(mid, tid, 'attach', 1.0, f"triage: {route_head(intent['intent'], t.get('Kind') or '')} - the same as {ref}, joined to it"
                     + (' and reopened' if closed else '') + f" - {intent.get('why') or ''}" + notes_note, [], 'triage',
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
@@ -1837,10 +1846,11 @@ def _choose_then_start(store, tid, msg: dict, mid):
     store.add_comment(tid, 'router', 'agent', f'The coding agent chose repository {repo}: {why or "it fits the job"}.')
     ok, who = auto_start_ok(store, msg, mid, 'coding')
     if ok:
-        store.add_comment(tid, 'router', 'agent', f'Unattended start allowed: {who}.')
+        store.add_comment(tid, 'router', 'agent', f'Starting by itself: {who}')
         _auto_code(store, tid)
     else:
-        store.add_comment(tid, 'router', 'agent', f'Coding agent not auto-started: {who}. Send it to the coding agent yourself if an agent can do it.')
+        if getattr(who, 'stranger', False): store.tag_task(tid, HOLD_TAG)
+        store.add_comment(tid, 'router', 'agent', held_note(who, 'coding'))
 
 
 def _auto_code(store, tid):
@@ -1873,9 +1883,7 @@ def _auto_code(store, tid):
     cap = auto_sessions(store)
     if bb.live_count() >= cap:
         store.enqueue_dispatch(tid, None, agent, f'{cap} agent sessions are already live')
-        store.add_comment(tid, 'router', 'agent',
-                          f'Queued: {cap} agent sessions are already live - '
-                          'it starts by itself when one ends.')
+        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {cap} agents are already running, and it starts by itself when one ends.')
         return
     try:
         # similar work in the same checkout is a BRIEFING, not a queue (PW-171): the agent starts and is
@@ -1883,11 +1891,11 @@ def _auto_code(store, tid):
         cwd = bb.target_cwd(store, tid, agent)
         ps = bb.peers(store, cwd, exclude_tid=tid) if cwd else []
         term.start_on_task(store, tid, agent, actor='router')
-        store.add_comment(tid, 'router', 'agent', 'auto-started a live coding session (coding_auto_enabled)'
-                          + (f' - told it about the {len(ps)} agent(s) already in the checkout' if ps else ''))
+        store.add_comment(tid, 'router', 'agent', 'The coding agent started by itself'
+                          + (f' - told it about the {len(ps)} other agent(s) working in the same checkout.' if ps else '.'))
     except Exception as e:
         logger.warning(f'auto dispatch failed for task {tid}: {e}')
-        bb.record_failure(store, tid, e, agent, label='Auto-start')   # counted, said, and retried on a bounded budget (PW-085)
+        bb.record_failure(store, tid, e, agent, label='The coding agent')   # counted, said, and retried on a bounded budget (PW-085)
 
 
 def _is_raw_body(summary: str, body: str) -> bool:
@@ -2010,7 +2018,7 @@ def _auto_general(store, tid, brief: str = None):
     cap = auto_sessions(store)
     if bb.live_count() >= cap:
         store.enqueue_dispatch(tid, None, 'assistant', f'{cap} agent sessions are already live')
-        store.add_comment(tid, 'router', 'agent', f'Queued: {cap} agent sessions are already live - it starts by itself when one ends.')
+        store.add_comment(tid, 'router', 'agent', f'Waiting its turn: {cap} agents are already running, and it starts by itself when one ends.')
         return
     _start_general(store, tid, brief)
 
@@ -2024,8 +2032,8 @@ def _start_general(store, tid, brief: str = None) -> bool:
         t = store.get_task(tid) or {}
         session = general.start_session(store, tid, actor='router')
         fresh = not general.history(store, tid)
-        store.add_comment(tid, 'router', 'agent', 'auto-started the assistant on this task (general_auto_enabled)'
-                          + ('' if fresh else ' - the conversation already open on it continues'))
+        store.add_comment(tid, 'router', 'agent', 'The assistant started by itself'
+                          + ('.' if fresh else ' - it carries on the conversation already open here.'))
         if fresh:
             ask = (brief or str(t.get('Summary') or '').strip() or str(t.get('Title') or '').strip())
             if ask: session.send_prompt(ask)
@@ -2033,7 +2041,7 @@ def _start_general(store, tid, brief: str = None) -> bool:
     except Exception as e:
         logger.warning(f'assistant auto-start failed for task {tid}: {e}')
         from . import blackboard as bb
-        bb.record_failure(store, tid, e, 'assistant', label='Assistant start')
+        bb.record_failure(store, tid, e, 'assistant', label='The assistant')
         return False
 
 

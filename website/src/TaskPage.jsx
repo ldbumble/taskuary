@@ -1624,15 +1624,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
                               title="Opens the agent step so you can choose a harness, a model and a prompt."
                               onClick={() => setOpenStage("agent")}>
-                              {report || detail?.transcript ? "Run another agent" : startLabel(story, agentName(t), false) || "Start an agent"}</Button>
+                              {report || detail?.transcript ? "Run another agent" : startLabel(story, t.Kind, false) || "Start an agent"}</Button>
                           )}
                         </Box>
                       : null} />
                   </Box>
                   {/* folded with no record, the step says its one sentence; open with none, the story is the whole account (storyPlace) */}
-                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} who={agentName(t)} compact={storyAt === "line"} />}
+                  {(storyAt === "line" || storyAt === "story") && <AgentStory story={story} compact={storyAt === "line"} />}
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
-                  {storyAt === "summary" && <AgentRecord {...recordProps} story={story} who={agentName(t)} folded />}
+                  {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
                   {stage === "agent" && <>
                   {term?.alive && !inRow && (
                     // on a phone the two buttons take their own row: sharing one with the heading, they
@@ -1675,7 +1675,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {!sessionView && hasRecord && (
                     <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}`, "&:empty": { display: "none" } }}>
                       {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
-                      <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} who={agentName(t)} inChat={workspaceMode === "general"} />
+                      <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"} />
                       {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
                     </Box>
                   )}

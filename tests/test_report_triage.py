@@ -23,7 +23,7 @@ class ReportTriageTests(unittest.TestCase):
             reports.run_report_source(s, src, llm=FYI_LLM)
         m = s._rows("SELECT * FROM message WHERE Channel='report'")[0]
         self.assertEqual((m['Status'], m['TaskId']), ('filed', None)); self.assertEqual(s.list_tasks(), [])
-        self.assertIn('triage: fyi', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertIn('triage: nothing to do', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
 
     def test_a_new_run_retires_the_one_before_it(self):
         """Seven "Process Error Check - 0 rows" stacked up in the reports band say nothing the

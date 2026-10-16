@@ -6,6 +6,7 @@ read policy, history windows, or an independent size limit after activation.
 import copy
 import json
 import re
+from .categories import agent_word
 from datetime import date, datetime, timedelta
 
 from . import processing_all, proposals
@@ -374,18 +375,18 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
     elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)   # folded below, once the lane is final
     if news:
-        who = str(task.get('Assignee') or '').split(':', 1)[-1] or 'the agent'
+        who = agent_word(task.get('Kind'))                 # what it IS - a profile's name is not a worker
         frm = str(news.get('FromName') or news.get('FromEmail') or 'they').split(' at ')[0]
         card.update(lane='asked' if card['lane'] in ('queued', 'saved', 'stopped') else card['lane'], why=f'{frm} wrote again since {who} finished')
-    if queued and card['lane'] in ('asked', 'yours'):
-        card.update(lane='queued', why=f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'the regular agent'}, not started yet")
     # ...and WHY it has not started, which the lane word cannot say. "waiting to start" reads as a
-    # queue that clears itself; every cause underneath it needs the owner instead (2026-09-14).
+    # queue that clears itself; every cause underneath it needs the owner instead (2026-09-14). The row says
+    # which in a few words: "handed to coder, not started yet" sat on a task held for the owner, that
+    # nothing would ever start (the owner, 2026-10-16) - held, failed and a real queue are three facts.
+    idle = funnel.idle_state(store, card['tid']) if card.get('tid') and (card['lane'] == 'queued' or queued and card['lane'] in ('asked', 'yours')) else None
+    if queued and card['lane'] in ('asked', 'yours'): card.update(lane='queued', why=(idle or {}).get('row') or 'not started yet')
     if card['lane'] == 'queued' and card.get('tid'):
-        card['why_idle'] = funnel.not_started_why(store, card['tid'])
-        if not card.get('why'):
-            card['why'] = f"handed to {str(task.get('Assignee') or '').split(':', 1)[-1] or 'an agent'}, not started yet"
-        if funnel.held_for_repo(task): card['why'] = 'not started - pick a repository for it'
+        card['why_idle'] = idle['line']
+        if not card.get('why') or funnel.held_for_repo(task): card['why'] = idle['row'] or 'not started yet'
         # ...unless an agent HAD it and is gone. That is not a queue that will clear itself, it is work
         # that stopped, and the owner is the only one who moves it: `stopped`, wearing the cause as its
         # word (the owner, 2026-09-17: "stopped should stay on stopped and shown to user to handle").

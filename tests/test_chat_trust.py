@@ -29,13 +29,14 @@ def test_a_group_member_the_owner_never_talked_with_alone_is_a_stranger():
     s = _store(); _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno')
     mid = _line(s, 'slack:group', 'Ray Colton')
     ok, why = senders.known(s, _msg('Ray Colton'), exclude_mid=mid)
-    assert not ok and why == 'a member of a slack chat you have not talked with one-to-one'
+    # a whole sentence: who, which channel (capitalised), and what follows from it (the owner, 2026-10-16)
+    assert not ok and why == "Ray Colton wrote in Slack, and you haven't talked with them one-to-one there, so no agent starts on their words by itself."
 
 def test_the_same_person_after_a_one_to_one_conversation_with_the_owner_is_trusted():
     s = _store(); _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno')
     _dm(s, 'slack:dm', 'Ray Colton'); _mine(s, 'slack:dm')
     mid = _line(s, 'slack:group', 'ray colton')
-    assert senders.known(s, _msg('Ray Colton'), exclude_mid=mid) == (True, 'someone you talk with in slack')
+    assert senders.known(s, _msg('Ray Colton'), exclude_mid=mid) == (True, 'You talk with Ray Colton one-to-one on Slack.')
     assert not senders.known(s, _msg('Ray Colton', ch='teams'), exclude_mid=mid)[0]      # another channel is another room
 
 def test_their_own_first_line_is_not_the_owner_talking_with_them():
@@ -54,7 +55,7 @@ def test_the_owner_s_own_chat_line_is_trusted():
 
 def test_a_vouched_for_sender_is_trusted_next_time():
     s = _store(); s.remember_trust('slack', 'ray colton', 'released by the owner')
-    assert senders.known(s, _msg('Ray Colton')) == (True, 'you vouched for them')
+    assert senders.known(s, _msg('Ray Colton')) == (True, 'You vouched for Ray Colton.')
 
 def test_switched_off_only_the_owner_is_trusted():
     s = _store(trust_non_email='0'); s.remember_trust('slack', 'ray colton', 'x')

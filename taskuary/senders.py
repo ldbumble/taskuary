@@ -53,6 +53,30 @@ def auth(msg: dict) -> str:
     return (meta.get('auth') if isinstance(meta, dict) else None) or 'none'
 
 
+# THE SENTENCE IS THE ANSWER. These were fragments pasted after a colon - "assistant did not start: a member of a
+# whatsapp chat you have not talked with one-to-one." - read on a task page by an owner who could not tell who, which
+# chat or what to do (2026-10-16). Each is now a whole sentence naming the person and the channel; the caller adds what
+# the owner can do next, and an allow-sentence reads after "Starting by itself:".
+class Said(str):
+    "A trust verdict's sentence. `.stranger` marks the first-time-sender rule, which ingest tags as a hold - by flag, not by its words."
+    stranger = False
+
+def _said(text: str, stranger: bool = False) -> Said:
+    s = Said(text); s.stranger = stranger
+    return s
+
+_CH = {'whatsapp': 'WhatsApp', 'imessage': 'iMessage', 'google_chat': 'Google Chat', 'rocketchat': 'Rocket.Chat'}
+def channel_name(ch) -> str: ch = str(ch or ''); return _CH.get(ch.lower(), ch[:1].upper() + ch[1:])
+NOBODY = 'so no agent starts on their words by itself'
+
+
+def _person(msg: dict, addr: str = '') -> str:
+    "'Erin Blake (erin@vendor.example)', else the address - whoever the message says wrote it."
+    name = ' '.join(str(msg.get('from_name') or '').split())
+    if name and '@' not in name: return f'{name} ({addr})' if addr else name
+    return addr or name or 'This sender'
+
+
 def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     """(may this sender start a worker unattended, why). Three rules, each a Settings switch (PW-079
     to PW-081): a chat person the owner talks with (or a workspace item); the owner's own domains; and
@@ -63,37 +87,42 @@ def known(store, msg: dict, exclude_mid=None, deep: bool = False) -> tuple:
     cfg = store.get_settings()
     on = lambda k: cfg.get(k, '1') == '1'
     from .store import OWN_CHANNELS
-    if msg.get('channel') in OWN_CHANNELS: return True, "Taskuary's own report"          # X3: never "a chat you control"
     ch = msg.get('channel') or ''
+    if ch in OWN_CHANNELS:                                                                # X3: never "a chat you control"
+        return True, _said('Taskuary wrote this report.' if ch == 'report' else "Taskuary's assistant wrote this.")
     from .ingest import CHAT_CHANNELS
     if ch.lower() in CHAT_CHANNELS: return _chat_known(store, msg, ch.lower(), exclude_mid, on('trust_non_email'))
     # a tracker, an alert or the local API is a workspace item, not a room of people - and GitHub has its own gate (GH_AUTO)
     if ch != 'email':
-        return (True, 'a chat inside a workspace you control') if on('trust_non_email') else \
-               (False, 'a chat sender - chat channels are not trusted for unattended starts (Settings)')
+        return (True, _said(f'It came from {channel_name(ch) or "a workspace"}, a workspace you control.')) if on('trust_non_email') else \
+               (False, _said(f'Starting an agent from {channel_name(ch) or "this channel"} is switched off in Settings, {NOBODY}.'))
     addr = (msg.get('from_email') or '').strip().lower()
-    if not addr or '@' not in addr: return False, 'no sender address'
+    if not addr or '@' not in addr: return False, _said('This message has no sender address, so no agent starts on it by itself.')
+    who = _person(msg, addr)
     # before any rule that reads the address: a forged From would otherwise borrow a colleague's trust, or the owner's own
-    if auth(msg) == 'fail': return False, f'{addr} failed sender verification (DMARC/DKIM) - the From address may be forged'
-    if addr in own_addresses(store): return True, 'your own address'
+    if auth(msg) == 'fail':
+        return False, _said(f'{addr} failed sender verification (DMARC/DKIM), so the From address may be forged and no agent starts on it by itself.')
+    if addr in own_addresses(store): return True, _said('It came from your own address.')
     # a public mail domain is everybody's: an owner on gmail.com made every stranger there 'your own domain'
     if _domain(addr) in own_domains(store) - PUBLIC_MAIL:
-        return (True, 'your own domain') if on('trust_own_domain') else \
-               (False, f'{addr} is on your own domain, and own-domain trust is switched off (Settings)')
-    if not on('trust_sent_history'): return False, f'first message from {addr} - Sent Items evidence is switched off (Settings)'
+        return (True, _said(f'{addr} is on your own domain.')) if on('trust_own_domain') else \
+               (False, _said(f'{who} is on your own domain, but trusting your own domain is switched off in Settings, {NOBODY}.'))
+    if not on('trust_sent_history'):
+        return False, _said(f'{who} is new here, and checking your Sent Items for people you know is switched off in Settings, {NOBODY}.', True)
     mailbox = (msg.get('source_name') or '').strip().lower()
-    if store.trusted_sender(mailbox, addr): return True, 'in your Sent Items'
-    if store.wrote_to_locally(mailbox, addr, exclude_mid): return True, 'you have written to them'
+    sent = _said(f'You have written to {addr} before - it is in your Sent Items.')
+    if store.trusted_sender(mailbox, addr): return True, sent
+    if store.wrote_to_locally(mailbox, addr, exclude_mid): return True, _said(f'You have written to {addr} before.')
     if deep:
         try: hit = wrote_to(store, mailbox, addr)
         except Exception as e:
             logger.warning(f'could not check Sent Items of {mailbox} for {addr}: {e}')
-            return False, (f'could not check the Sent Items of {mailbox or "this mailbox"} ({str(e)[:120]}) - '
-                           'not proof either way; send it yourself if real')
+            return False, _said(f'Taskuary could not check the Sent Items of {mailbox or "this mailbox"} ({str(e)[:120]}), '
+                                f'so it cannot tell whether you know {who}, and no agent starts on their words by itself.')
         if hit:
             store.remember_trust(mailbox, addr, 'in your Sent Items')
-            return True, 'in your Sent Items'
-    return False, f'first message from {addr}'
+            return True, sent
+    return False, _said(f'{who} is not on your domain and you have never written to them, {NOBODY}.', True)
 
 
 def chat_key(msg: dict) -> str:
@@ -110,13 +139,14 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     """A chat is trusted per PERSON, not per room: anyone in a connected group chat could start an agent with full
     permissions. The owner's own line; someone the owner has talked with one-to-one in this channel; or someone the
     owner vouched for (release, Trust this task). Switched off, only the owner."""
-    if _is_own(msg): return True, 'your own words'
-    if not on: return False, 'a chat sender - only you are trusted in chats (Settings)'
-    who = chat_key(msg)
-    if not who: return False, f'a {ch} chat sender nobody can name'
-    if store.trusted_sender(ch, who): return True, 'you vouched for them'
-    if store.talked_one_to_one(ch, who, exclude_mid): return True, f'someone you talk with in {ch}'
-    return False, f'a member of a {ch} chat you have not talked with one-to-one'
+    if _is_own(msg): return True, _said('These are your own words.')
+    who, room = chat_key(msg), channel_name(ch)
+    name = ' '.join(str(msg.get('from_name') or msg.get('FromName') or '').split()) or who
+    if not on: return False, _said(f'{name or "Someone"} wrote in {room}, where only your own messages start an agent by themselves (Settings).')
+    if not who: return False, _said(f'Nobody can tell who wrote this in {room}, so no agent starts on it by itself.')
+    if store.trusted_sender(ch, who): return True, _said(f'You vouched for {name}.')
+    if store.talked_one_to_one(ch, who, exclude_mid): return True, _said(f'You talk with {name} one-to-one on {room}.')
+    return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one there, {NOBODY}.")
 
 
 def vouch(store, rows) -> None:

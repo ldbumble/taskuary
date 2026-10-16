@@ -9,8 +9,6 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { BORDER, DIM, FAINT, INK, PALETTE, mono } from "./theme.jsx";
 import { hhmm, storyAlarm } from "./agentStory.js";
 
-// the other kinds' sentences already name the agent ("It was handed to coding…", "coding ran on this…")
-const LEAD = { held: "did not start", interrupted: "was cut off" };
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 const link = { fontSize: 11, minHeight: 0, p: 0, minWidth: 0 };
 
@@ -20,12 +18,14 @@ export function StoryChip({ kind, text }) {
     color: hot ? PALETTE.oxblood : PALETTE.slate, bgcolor: hot ? "#f3e6e8" : "#e6ebef" }}>{text}</Box> : null;
 }
 
-// the state in one sentence: what happened to the session and what you can do about it
-export const StoryLine = ({ kind, line, who }) => (
+// the state in one sentence: what happened to the session and what you can do about it. The server's sentence is whole
+// and leads with its state ("Waiting for you.", "Couldn't start."): the profile's name and a verb glued in front named a
+// profile as the actor over a reason fragment (the owner, 2026-10-16), so nothing is added here
+export const StoryLine = ({ kind, line }) => (
   <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
     <ErrorOutlineIcon sx={{ fontSize: 16, mt: 0.25, flex: "none", color: storyAlarm(kind) ? PALETTE.oxblood : PALETTE.slate }} />
     <Typography sx={{ fontSize: 13.5, lineHeight: 1.45, color: INK }}>
-      {who && LEAD[kind] && <b style={{ fontWeight: 600 }}>{who} {LEAD[kind]}: </b>}{line}
+      {line}
     </Typography>
   </Box>);
 
@@ -39,13 +39,13 @@ export const Timeline = ({ steps }) => (
   </Box>);
 
 // folded (`compact`) the step says its one sentence; open, the last thing it said leads and the timeline is behind More
-export default function AgentStory({ story, who, compact = false }) {
+export default function AgentStory({ story, compact = false }) {
   const [more, setMore] = useState(false);
   if (!story?.line) return null;
   const steps = compact ? [] : story.steps || [], said = !compact && story.said;
   return (
     <Box sx={{ mt: 1, pl: { xs: 0, sm: 4 } }}>
-      <StoryLine kind={story.kind} line={story.line} who={who} />
+      <StoryLine kind={story.kind} line={story.line} />
       {(said || steps.length > 0) && (
         <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
           {said && <>

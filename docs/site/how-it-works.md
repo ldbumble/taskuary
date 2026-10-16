@@ -34,14 +34,16 @@ Every message gets exactly one verdict, and there are only five places it can go
 Three of those — `coding`, `general`, `task` — are *kinds* stored on the task, and the kind is
 what routes the work. `reply` is a kind too. `fyi` creates nothing at all.
 
-Only `coding` is ever dispatched automatically. A conversation you did not ask for is noise, and
-a `task` is yours by definition, so both land on the Board and wait for your click.
+`coding` and `general` can start an agent by themselves, when Settings allow it and the sender is
+someone Taskuary trusts; anything else waits for your Start. A `task` is yours by definition:
+nothing works it.
 
 :::note What "general" means
 It means the assistant's conversation: there is nothing to type at a system, but thinking,
-reading or research would help — weigh an option, make sense of a thread, work out what to ask.
-Work a person genuinely has to do in the world (sit a course, sign a form, attend, decide) is the
-`task` road instead.
+reading or research an assistant can do and hand back — lay out the options, make sense of a
+thread, work out what to ask. Work a person genuinely has to do in the world (sit a course, sign a
+form, attend, decide), or something asked of you as yourself (your own invite, your own opinion),
+is the `task` road instead.
 :::
 
 ## What triage actually decides

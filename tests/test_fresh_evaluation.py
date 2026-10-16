@@ -66,7 +66,7 @@ class RulingIsEvidenceTests(unittest.TestCase):
         self.assertEqual((out['status'], out['task_id']), ('filed', None))
         row = next(r for r in s.feed(limit=10) if r['MessageId'] == out['message_id'])
         self.assertEqual(row['NeedsYou'], 0)
-        self.assertIn('triage: fyi', row['RouteReason']); self.assertNotIn('already ruled', row['RouteReason'])
+        self.assertIn('triage: nothing to do', row['RouteReason']); self.assertNotIn('already ruled', row['RouteReason'])
 
     def test_the_colleagues_answer_is_read_too(self):
         s, _ = ruled_thread(MemoryStore()); seen = []

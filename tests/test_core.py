@@ -83,7 +83,7 @@ class CoreTests(unittest.TestCase):
             out = ingest_message(s, self.msg(external_id='ac1', body='the importer throws an exception, see jobs/import.py'), llm=CODING_LLM)
         start.assert_called_once()
         self.assertEqual(start.call_args.args[1], out['task_id'])
-        self.assertTrue(any('auto-started a live coding session' in c['Body'] for c in s.list_comments(out['task_id'])))
+        self.assertTrue(any(c['Body'] == 'The coding agent started by itself.' for c in s.list_comments(out['task_id'])))
 
     def test_work_the_brain_calls_general_goes_on_your_list(self):
         """`kind` routes the task and triage alone decides it (owner, 2026-08-30): general means
@@ -139,8 +139,8 @@ class CoreTests(unittest.TestCase):
         spawn.assert_not_called(); wt.assert_called_once()
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))                      # a task, on the Board, not worked
-        self.assertTrue(any('not auto-started' in c['Body'] for c in s.list_comments(out['task_id'])))
-        self.assertIn('this mailbox has never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
+        self.assertTrue(any(c['Body'].startswith('Waiting for you:') for c in s.list_comments(out['task_id'])))
+        self.assertIn('you have never written to them', s._rows('SELECT * FROM route ORDER BY RouteId DESC')[0]['Reason'])
         # the same stranger writes again: still a stranger. Their own first mail, held for the owner,
         # used to make the second one 'known' and start the agent the hold exists to stop (audit 2026-09-02)
         with mock.patch('taskuary.ingest._spawn') as spawn, mock.patch.object(senders, 'wrote_to', return_value=False):

@@ -49,7 +49,7 @@ import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { sourceOf, structured } from "./feedText.js";
 import { HOLD_TAG, ROADS, hasTag, roadOf, stateOf, triageSummary, verdictOf } from "./timelineState.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure } from "./sendState.js";
-import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict, relationshipLabel } from "./triageVerdict.js";
+import { extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict, relationshipLabel, routeIntent, routeWhy } from "./triageVerdict.js";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { AGENT } from "./taskLifecycle.js";
 import StateMark from "./StateMark.jsx";
@@ -1396,7 +1396,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
   // triage's OWN verdict, read off the route line it already wrote. reply_only and fyi both
   // mean "no work to do here" - so a coding agent is not the answer, and offering it first
   // made the panel argue with the reason printed at the top of the very same panel.
-  const codeless = /triage:\s*(reply_only|fyi)/.test(String(sel.RouteReason || "")) && !sel.TaskId;
+  const codeless = ["reply_only", "fyi"].includes(routeIntent(sel.RouteReason)) && !sel.TaskId;
   const history = historyOf(sel, detail);
   const st = stateOf(sel);
   const held = hasTag(sel, HOLD_TAG);
@@ -1997,7 +1997,7 @@ const TriageSummary = ({ sel, detail }) => {
   const road = roadOf(sel);
   const meta = ROADS.find((r) => r.key === road);
   const failed = triageFailed(sel);
-  const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
+  const why = routeWhy(sel.RouteReason).split(" · ")[0];
   const watch = (detail?.task || {}).Kind === "note";
   return (
     <Box sx={{ bgcolor: "#fcfaf7", border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.2, py: 0.85 }}>
@@ -2247,7 +2247,7 @@ const TriagePane = ({ sel, detail, onRefresh }) => {
   const trail = (detail?.routes || []).filter((r) => !r.MessageId || r.MessageId === sel.MessageId);
   const diagnostic = [...trail].reverse().find((r) => r.RawOutput != null || r.ParseError);
   // the sentence the classifier wrote, without the routing bookkeeping after it
-  const why = String(sel.RouteReason || "").replace(/^triage:\s*\w+\s*-\s*/, "").split(" · ")[0];
+  const why = routeWhy(sel.RouteReason).split(" · ")[0];
   const rest = String(sel.RouteReason || "").split(" · ").slice(1);
   const watch = (detail?.task || {}).Kind === "note";
   const savedVerdict = latestTriageVerdict(trail);

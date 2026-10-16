@@ -40,13 +40,14 @@ class RulesTests(unittest.TestCase):
         mid = row(s, 'rita@partner.example')
         with mock.patch.object(s, 'known_sender', return_value=True), mock.patch.object(senders, 'wrote_to', return_value=False):
             ok, why = senders.known(s, msg(), exclude_mid=mid, deep=True)
-        self.assertEqual(ok, False); self.assertIn('first message from', why); self.assertNotIn('written before', why)
+        self.assertEqual(ok, False); self.assertTrue(why.stranger)
+        self.assertIn('Rita (rita@partner.example) is not on your domain and you have never written to them', why)
 
     def test_verified_sent_history_allows_and_names_the_reason(self):
         s = store()
         with mock.patch.object(senders, 'wrote_to', return_value=True):
             ok, why = senders.known(s, msg(), deep=True)
-        self.assertEqual((ok, why), (True, 'in your Sent Items'))
+        self.assertEqual((ok, why), (True, 'You have written to rita@partner.example before - it is in your Sent Items.'))
 
     def test_a_verified_hit_is_remembered_per_mailbox_and_address_so_the_mailbox_is_asked_once(self):
         s = store()
@@ -77,16 +78,16 @@ class RulesTests(unittest.TestCase):
         ok, why = senders.known(s, msg(channel='teams', frm=None))
         self.assertEqual(ok, False); self.assertIn('Settings', why)
         s = store()
-        self.assertEqual(senders.known(s, msg(frm='sam@northwind.example'))[1], 'your own domain')
+        self.assertEqual(senders.known(s, msg(frm='sam@northwind.example'))[1], 'sam@northwind.example is on your own domain.')
         self.assertIn('one-to-one', senders.known(s, msg(channel='teams', frm=None))[1])         # a room is not a person (test_chat_trust)
 
     def test_a_public_mail_domain_is_nobodys_own_domain(self):
         """An owner on gmail.com made every stranger on gmail.com 'your own domain' and let their mail start an agent."""
         s = store(owner_email='alex.doyle@gmail.com')
         ok, why = senders.known(s, msg(frm='stranger@gmail.com'))
-        self.assertEqual((ok, why), (False, 'first message from stranger@gmail.com'))
-        self.assertEqual(senders.known(s, msg(frm='Alex.Doyle@gmail.com')), (True, 'your own address'))
-        self.assertEqual(senders.known(store(), msg(frm='sam@northwind.example'))[1], 'your own domain')   # a company domain still is
+        self.assertEqual((ok, why.stranger), (False, True)); self.assertIn('Rita (stranger@gmail.com) is not on your domain', why)
+        self.assertEqual(senders.known(s, msg(frm='Alex.Doyle@gmail.com')), (True, 'It came from your own address.'))
+        self.assertEqual(senders.known(store(), msg(frm='sam@northwind.example'))[1], 'sam@northwind.example is on your own domain.')   # a company domain still is
 
     def test_the_lookup_is_scoped_to_the_receiving_mailbox(self):
         s = store()

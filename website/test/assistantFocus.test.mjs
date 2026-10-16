@@ -26,11 +26,13 @@ test("an agent that stopped is the agent card and names who is waiting", () => {
   assert.equal(f.lead, "codex is waiting on you.");
 });
 
-test("work nobody is on is the task, and it is on you", () => {
+test("work nobody is on is the task, and its lead is the server's reason why", () => {
   const f = assistantFocus(item({ lane: "queued", agent: "codex" }));
   assert.equal(f.card, "task", "it used to be drawn as a message from a person");
-  assert.match(f.lead, /on you/);
-  assert.match(f.lead, /no agent is on it right now/);
+  assert.match(f.lead, /No agent is on this right now/);
+  // why_idle was computed and never shown, and "this one is on you" sat over a start only waiting for a slot (2026-10-16)
+  const wait = "Waiting its turn. Every agent slot is busy, and the coding agent starts on this when one frees up.";
+  assert.equal(assistantFocus(item({ lane: "queued", why_idle: wait })).lead, wait);
 });
 
 test("the lead states NOW, and never names a worker it cannot vouch for", () => {

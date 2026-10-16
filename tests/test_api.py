@@ -117,7 +117,7 @@ class GithubIngestTests(unittest.TestCase):
         s2 = self._store(True)
         self.assertEqual(ingest_message(s2, dict(ask), llm=reply_llm)['status'], 'created')
         # the route row carries the classifier's verdict verbatim - the panel's why-it's-here line
-        self.assertIn('triage: reply_only - asks a question', s2.feed()[0]['RouteReason'])
+        self.assertIn('triage: needs a reply - asks a question', s2.feed()[0]['RouteReason'])
 
     def test_approving_a_github_reply_posts_a_comment_only_when_allowed(self):
         from taskuary import outbound

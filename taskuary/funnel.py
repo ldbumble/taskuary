@@ -14,6 +14,7 @@ from pathlib import Path
 from loguru import logger
 
 from .store import task_ref, auto_code_enabled
+from .categories import agent_word
 from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
 from .autoreply import is_auto
@@ -475,7 +476,13 @@ def todays_brief(item: dict) -> bool:
     return bool(item.get('brief_today'))
 
 
-AUTO_OFF = 'not auto-worked:'          # the clause triage writes on a route it declined to start
+# the clause triage writes on a route whose start waits for the owner (ingest.HELD), and the words it used before
+AUTO_OFF, AUTO_OFF_OLD = 'held for you:', 'not auto-worked:'
+def held_clause(reason) -> str | None:
+    "The sentence after a route's hold clause, in either wording - None when the route held nothing."
+    r = str(reason or '')
+    k = next((k for k in (AUTO_OFF, AUTO_OFF_OLD) if k in r), None)
+    return r.split(k, 1)[1].strip() if k else None
 # A START THAT ASKED "WHICH REPOSITORY?" (the owner, 2026-10-12: "if i don't fill it out it should warn me at least?"): the
 # answer was a line on a sheet that closed at once, and the task said "nobody on it" as if nothing had been asked for
 HELD_REPO = 'held:repo'
@@ -485,8 +492,8 @@ def held_for_repo(t) -> bool: return HELD_REPO in re.split(r'[\s,]+', str((t or 
 def hold_for_repo(store, tid, reason=''):
     "The start stopped on a repository nobody named: the task says so until a repo is set or a session opens."
     if store.tag_task(tid, HELD_REPO, True, 'router'):
-        store.add_comment(tid, 'router', 'agent', 'Not started: it needs a repository. '
-                          + (' '.join(str(reason).split())[:200] + ' ' if reason else '') + 'Pick a repo on the task and the session starts.')
+        store.add_comment(tid, 'router', 'agent', 'Waiting for you: it needs a repository. '
+                          + (' '.join(str(reason).split())[:200] + ' ' if reason else '') + 'Pick one on the task and the coding agent starts.')
 
 
 def news_since_agent(store, tid) -> dict | None:
@@ -510,8 +517,7 @@ def news_since_agent(store, tid) -> dict | None:
 def news_line(store, tid, m=None) -> str:
     m = m or news_since_agent(store, tid) or {}
     if not m: return ''
-    t = store.get_task(tid) or {}
-    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'the agent'
+    who = agent_word((store.get_task(tid) or {}).get('Kind'))
     frm = str(m.get('FromName') or m.get('FromEmail') or 'Someone').split(' at ')[0]
     when = str(m.get('SentAt') or '')
     day = 'today' if when[:10] == datetime.now().strftime('%Y-%m-%d') else when[:10]
@@ -519,41 +525,68 @@ def news_line(store, tid, m=None) -> str:
             'Continue the session to hand it the new message, or answer it yourself.')
 
 
-def not_started_why(store, tid) -> str:
-    """Why nothing is running on a task that was handed to an agent and never began.
+def _cap(x: str) -> str: return x[:1].upper() + x[1:]
+
+def _sentence(x: str) -> str:
+    "A reason written before its words were sentences ('first message from x') read as one; a sentence is left alone."
+    x = ' '.join(str(x or '').split())
+    return x if not x or x.endswith(('.', '!', '?')) else _cap(x.rstrip(' -;,')) + '.'
+
+
+def idle_state(store, tid) -> dict:
+    """Why nothing is running on a task that was handed to an agent and never began: {'kind', 'line', 'row'}.
 
     "waiting to start" says the state and not the cause, so the owner reads it as a queue that will
     clear itself - and it will not: every reason below needs them (the owner, 2026-09-14: "if the
     agent did not start, tell the user why it did not start, or left over from yesterday").
 
+    `line` is the task page's whole sentence, led by its state - "Waiting for you.", "Couldn't start.", "Waiting its
+    turn." - and `row` the rail's few words for the same fact. The agent is named by what it IS, the assistant or the
+    coding agent: "coder could not start: unknown agent: coder" named a profile as the actor and blamed it for its own
+    absence (the owner, 2026-10-16). `kind`: news | saved | interrupted | held | failed | retrying | queued | left | idle.
+
     Structured facts first, our own written sentence last. The `interrupted` tag is the strongest -
     terminal.release_task writes it when Taskuary itself closed on top of a live worker (PW-262),
     and nothing restarts by itself. Then a run that really ran and stopped. Then triage's own words
     about why it declined to start (the first-time-sender gate writes them, and a no-reply address
-    will never clear it). Returns '' when the task is not actually idle - the caller decides who asks.
+    will never clear it). `line` is '' when the task is not actually idle - the caller decides who asks.
     """
     from . import terminal
+    from .blackboard import is_permanent, failed_line
     t = store.get_task(tid) or {}
-    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
+    agent = agent_word(t.get('Kind'))
     tags = str(t.get('Tags') or '')
     old = ' It has been waiting since yesterday.' if str(t.get('CreatedAt') or '')[:10] < datetime.now().strftime('%Y-%m-%d') else ''
+    out = lambda kind, line, row='': {'kind': kind, 'line': line, 'row': row}
     news = news_since_agent(store, tid)
-    if news: return news_line(store, tid, news)
+    if news: return out('news', news_line(store, tid, news))
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
-        return 'You ended the session - its report is written. Continue it, or mark the task done.'
+        return out('saved', 'You ended the session - its report is written. Continue it, or mark the task done.')
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
-        return f'Taskuary closed while {who} had this, so the session went with it. Nothing restarts by itself.' + old
-    if held_for_repo(t): return f'{who} did not start: it needs a repository - pick a repo and the session starts.' + old
+        return out('interrupted', f'Taskuary closed while {agent} had this, so the session went with it. Nothing restarts by itself.' + old)
+    if held_for_repo(t):
+        return out('held', f'Waiting for you. It needs a repository - pick one and {agent} starts.' + old, 'not started - pick a repository for it')
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue
     q = store.get_dispatch(tid) or {}
     if q:
-        err = ' '.join(str(q.get('LastError') or '').split())[:160]
-        if q.get('State') == 'failed': return f'{who} could not start: {err or "the start failed"}. Press Start now to try again.' + old
-        if q.get('State') == 'retrying': return f'{who} failed to start ({err or "no reason given"}) - trying again shortly.' + old
-        return f'{who} is next in line - every agent slot is busy, and it starts when one frees up.' + old
+        err = ' '.join(str(q.get('LastError') or '').split()).rstrip('.')[:160]
+        short = err.split(': ', 1)[0] if len(err) > 60 else err
+        if q.get('State') == 'failed':
+            return out('failed', failed_line(err or 'the start failed', is_permanent(err), int(q.get('Attempts') or 0)) + old,
+                       f"couldn't start: {short or 'the start failed'}")
+        if q.get('State') == 'retrying':
+            at = str(q.get('NextAt') or '')[11:16]
+            return out('retrying', f"Couldn't start yet ({err or 'no reason given'}) - trying again {f'at {at}' if at else 'shortly'}." + old,
+                       f"couldn't start yet - trying again {f'at {at}' if at else 'shortly'}")
+        # a ranked wait is not a full house: it waits for its turn in value order, with free slots or not (rank.py)
+        if q.get('Value') is not None:
+            return out('queued', 'Waiting its turn. Waiting work starts most valuable first, and this starts when it comes up.' + old,
+                       'queued - waiting its turn')
+        return out('queued', f'Waiting its turn. Every agent slot is busy, and {agent} starts on this when one frees up.' + old,
+                   'queued - starts when a slot frees')
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
-        return f'{who} ran on this and stopped without finishing it.' + old
+        return out('left', f'{_cap(agent)} ran on this and stopped without finishing it.' + old)
     # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
     # the very thing the task card reads to offer "Continue previous work". Only runs were consulted
     # here, so two tasks an agent had actually worked and walked away from reported "it was handed to
@@ -563,22 +596,25 @@ def not_started_why(store, tid) -> str:
     # back only because somebody wrote again (TQ-1040, 2026-10-12: an agent closed its task, the reply went out, the sender
     # answered, and the step said the agent "left without finishing" over its own finished record)
     if session_finished(store, tid):
-        return f'{who} finished its last session - its record is below. Nothing has started on what came in since.' + old
+        return out('left', f'{_cap(agent)} finished its last session - its record is below. Nothing has started on what came in since.' + old)
     if store.last_transcript(tid):
-        return f'{who} ran on this and left without finishing it. Continue the session, or hand it on.' + old
+        return out('left', f'{_cap(agent)} ran on this and left without finishing it. Continue the session, or hand it on.' + old)
     msg = store.last_inbound_on_task(tid) or {}
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
-        reason = str(r.get('Reason') or '')
-        if AUTO_OFF in reason:
-            said = reason.split(AUTO_OFF, 1)[1].strip().rstrip('.')
-            # the old words read as a queue that clears by itself; a GitHub hold now says who wrote it and whom the repo trusts
-            if said.startswith('github items queue') and str(msg.get('Channel') or '') == 'github':
-                from .ingest import gh_hold_why
-                said = gh_hold_why(store, {'source_name': msg.get('SourceName'), 'body': msg.get('BodyText')})
-            return 'Triage did not start it: ' + said + '.' + old
+        said = held_clause(r.get('Reason'))
+        if said is None: continue
+        # the old words read as a queue that clears by itself; a GitHub hold now says who wrote it and whom the repo trusts
+        if said.startswith('github items queue') and str(msg.get('Channel') or '') == 'github':
+            from .ingest import gh_hold_why
+            said = gh_hold_why(store, {'source_name': msg.get('SourceName'), 'body': msg.get('BodyText')})
+        return out('held', f'Waiting for you. {_sentence(said)} Start {agent}, or do it yourself.' + old, 'held for you - not started')
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
-        return f'Auto-start is off, so {who} waits for you to press Start.' + old
-    return f'It was handed to {who} and nothing has started it.' + old
+        return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you to press Start.' + old,
+                   'held for you - not started')
+    return out('idle', f'Not started yet. Nothing has started {agent} on this - press Start when you want it on it.' + old, 'not started yet')
+
+
+def not_started_why(store, tid) -> str: return idle_state(store, tid)['line']
 
 
 # the worker's own events in the owner's words - one line each on the agent step's timeline
@@ -605,13 +641,13 @@ def agent_story(store, tid) -> dict | None:
     t = store.get_task(tid) or {}
     if not t or t.get('Status') in ('done', 'dropped'): return None
     tags = [x.strip() for x in str(t.get('Tags') or '').split(',')]
-    who = str(t.get('Assignee') or '').split(':', 1)[-1] or 'an agent'
+    who = agent_word(t.get('Kind'))
     if news_since_agent(store, tid): return {'kind': 'news', 'line': news_line(store, tid)}
-    left, q, why = agent_left(store, tid), store.get_dispatch(tid), not_started_why(store, tid)
-    held = why.startswith('Triage did not start it') or held_for_repo(t)
+    left, q, st = agent_left(store, tid), store.get_dispatch(tid), idle_state(store, tid)
+    held, why = st['kind'] == 'held', st['line']
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
-    # the page leads a hold with "<agent> did not start:", so triage's own lead-in is not said twice
-    if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why.split(': ', 1)[1] if held else why}
+    # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why}
     evs = store.worker_events(tid) or []
     sid = str(evs[-1]['Sid']) if evs else None
     run = [e for e in evs if str(e['Sid']) == sid]
@@ -658,7 +694,7 @@ def general_not_started(task: dict, has_conversation: bool, routes=()) -> bool:
     start (A10, 2026-09-25). `general` is also the default kind of any task, so the route is what says it was meant for an
     agent."""
     return (str((task or {}).get('Kind') or '') == 'general' and not has_conversation
-            and any(AUTO_OFF in str(r.get('Reason') or '') for r in routes or ()))
+            and any(held_clause(r.get('Reason')) is not None for r in routes or ()))
 
 
 def session_saved(store, tid) -> bool:

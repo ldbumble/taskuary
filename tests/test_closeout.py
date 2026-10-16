@@ -473,7 +473,7 @@ class HeldPullRequestWordsTests(unittest.TestCase):
         why = ingest.gh_hold_why(s, {'source_name': 'northwind/ledger',
                                      'body': '[pull request by someone - association: FIRST_TIME_CONTRIBUTOR]\nFix'})
         self.assertIn('a first-time contributor', why); self.assertIn('the team and past contributors', why)
-        self.assertIn('press Start', why); self.assertIn('free slot will not start it', why)
+        self.assertIn('free slot will not start it', why); self.assertTrue(why.startswith('It is from') and why.endswith('.'), why)
 
 
 class WordsTests(unittest.TestCase):

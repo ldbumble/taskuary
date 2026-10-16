@@ -88,7 +88,9 @@ class MemoryTests(unittest.TestCase):
         mid = _msg('please just answer this one')
         c.post(f'/api/messages/{mid}/reclassify', json={'road': 'reply'})
         reason = (S.message_routes(mid) or [])[-1]['Reason']
-        self.assertIn('triage: reply_only', reason)               # what FeedView roadOf looks for
+        self.assertTrue(reason.startswith('triage: needs a reply'), reason)      # what FeedView roadOf reads (routeIntent)
+        from taskuary.categories import route_intent
+        self.assertEqual(route_intent(reason), 'reply_only')
         self.assertIn('you reclassified this', reason)
 
     def test_it_is_on_the_audit_trail(self):

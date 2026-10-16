@@ -11,6 +11,7 @@
 // `role: null` is a state that takes no colour at all.
 // loud: genuinely on you — at most two may ever be loud, or none of them are.
 import { says } from "./laneSays.js";
+import { routeIntent } from "./triageVerdict.js";
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
 
 // the shared table, flattened: a lane, a kind and a Timeline-only state are three PURPOSES, not
@@ -65,8 +66,8 @@ export const verdictOf = (row) => (row?.MsgStatus === "error" ? "error"
 // task, so the two are read from different places on purpose.
 export const roadOf = (sel) => {
   const r = String(sel.RouteReason || "");
-  if (/triage:\s*fyi/.test(r)) return "fyi";
-  if (/triage:\s*reply_only/.test(r) || sel.TaskKind === "reply") return "reply";
+  if (routeIntent(r) === "fyi") return "fyi";
+  if (routeIntent(r) === "reply_only" || sel.TaskKind === "reply") return "reply";
   if (sel.TaskKind === "coding") return "coding";
   if (sel.TaskKind === "note") return null;                 // you wrote it; nothing judged it
   if (sel.TaskKind === "task") return "task";               // a person has to do it in the world

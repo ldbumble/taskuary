@@ -125,7 +125,7 @@ class ArrivalsTests(unittest.TestCase):
         t = s.get_task(out['task_id'])
         self.assertEqual((t['Kind'], t['Status']), ('coding', 'open'))
         self.assertFalse(spawn.called)                                  # …held on purpose: nobody has ever written to them
-        self.assertIn('first message from', s.list_routes(out['task_id'])[-1]['Reason'])
+        self.assertIn('held for you:', s.list_routes(out['task_id'])[-1]['Reason'])
         # handed to the coding agent and held, so it is WAITING TO START - not "asked you", which claimed a
         # person had asked for something (the owner, 2026-09-16). The owner's own tasks, which no
         # agent is assigned, keep the asked lane and their kind says "on you".
@@ -1290,7 +1290,7 @@ class NeverWorkTests(unittest.TestCase):
         self.assertEqual((again['status'], again['task_id']), ('filed', None))
         self.assertIn('on this very conversation you ruled earlier', seen['sys'].lower())
         reason = s.message_routes(again['message_id'])[-1]['Reason']
-        self.assertIn('triage: fyi', reason); self.assertNotIn('already ruled', reason)
+        self.assertIn('triage: nothing to do', reason); self.assertNotIn('already ruled', reason)
 
     def test_a_playbook_instance_is_tagged_so_the_agent_works_it_that_way(self):
         s = store()

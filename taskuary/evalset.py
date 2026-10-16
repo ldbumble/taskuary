@@ -30,11 +30,11 @@ from pathlib import Path
 
 from .routing import norm_subject
 from .triage import addressed_to_you
+from .categories import route_intent
 
 LABELS = ('task', 'reply_only', 'fyi')
 RETRIES = 2                  # a model call that fails or garbles is retried this often before it counts as unusable
 ACCEPT_AFTER_DAYS = 3        # an untouched triage call this old is taken as accepted (weakly)
-_INTENT = re.compile(r'triage: (task|reply_only|fyi)')
 
 
 # ── labels: what the owner said ─────────────────────────────────────────────────────────
@@ -76,9 +76,9 @@ def _labels(store, mine=()) -> dict:
     for r in q("SELECT m.MessageId, m.Status, r.Reason, r.Decision FROM message m JOIN route r ON r.MessageId=m.MessageId "
                "WHERE r.RoutedBy IN ('router','triage') AND m.CreatedAt < ? ORDER BY r.RouteId", (cutoff,)):
         if r['MessageId'] in out: continue
-        m = _INTENT.search(r['Reason'] or '')
-        if r['Decision'] == 'file' and m: out[r['MessageId']] = ('fyi', 'accepted', True)
-        elif r['Decision'] == 'create' and m and r['Status'] == 'routed': out[r['MessageId']] = (m.group(1), 'accepted', True)
+        said = route_intent(r['Reason'])
+        if r['Decision'] == 'file' and said: out[r['MessageId']] = ('fyi', 'accepted', True)
+        elif r['Decision'] == 'create' and said and r['Status'] == 'routed': out[r['MessageId']] = (said, 'accepted', True)
     return out
 
 
@@ -87,8 +87,7 @@ def _triage_call(store) -> dict:
     out = {}
     for r in store._rows("SELECT MessageId, Decision, Reason, RoutedBy FROM route WHERE RoutedBy != 'owner' ORDER BY RouteId"):
         if r['MessageId'] in out: continue
-        m = _INTENT.search(r['Reason'] or '')
-        out[r['MessageId']] = {'decision': r['Decision'], 'intent': m.group(1) if m else None, 'by': r['RoutedBy']}
+        out[r['MessageId']] = {'decision': r['Decision'], 'intent': route_intent(r['Reason']) or None, 'by': r['RoutedBy']}
     return out
 
 

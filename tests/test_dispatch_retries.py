@@ -65,7 +65,7 @@ class RetryTests(Base):
             row = self.row(tid)
             self.assertEqual((row['Attempts'], row['State']), (1, 'retrying')); self.assertIn('pty spawn failed', row['LastError'])
             self.assertGreater(row['NextAt'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-            self.assertTrue(any('attempt 1 of 3' in c and 'retrying in' in c for c in self.comments(tid)))
+            self.assertTrue(any('try 1 of 3' in c and 'trying again at' in c for c in self.comments(tid)))
             bb.drain(self.s)                                                     # not due yet: nothing happens
             self.assertEqual(start.call_count, 1)
             self.due(tid); bb.drain(self.s)
@@ -74,7 +74,7 @@ class RetryTests(Base):
             row = self.row(tid)
             self.assertEqual((start.call_count, row['Attempts'], row['State']), (3, 3, 'failed'))
             self.assertIsNone(row['NextAt'])
-            self.assertTrue(any('could not start - needs you' in c for c in self.comments(tid)))
+            self.assertTrue(any(c.startswith("Couldn't start after 3 tries") and 'Press Start to try again' in c for c in self.comments(tid)))
             self.due(tid); bb.drain(self.s); bb.drain(self.s)
             self.assertEqual(start.call_count, 3)                                 # exhausted: automatic attempts stop
         self.assertEqual(self.s.get_task(tid)['Status'], 'open')                   # the task is kept, with its error
@@ -85,7 +85,7 @@ class RetryTests(Base):
         with mock.patch.object(term, 'start_on_task', side_effect=RuntimeError('busy')): bb.drain(self.s)
         self.due(tid)
         with mock.patch.object(term, 'start_on_task', return_value={'sid': 's1'}): bb.drain(self.s)
-        self.assertIsNone(self.row(tid)); self.assertTrue(any('Started from the dispatch queue' in c for c in self.comments(tid)))
+        self.assertIsNone(self.row(tid)); self.assertTrue(any(c.startswith('Started - ') for c in self.comments(tid)))
 
     def test_a_configuration_failure_needs_you_at_once(self):
         for err in ('unknown agent: codex', 'no repository for this task - pick one', 'permission denied for the checkout'):
@@ -93,7 +93,9 @@ class RetryTests(Base):
             with mock.patch.object(term, 'start_on_task', side_effect=ValueError(err)) as start: bb.drain(self.s)
             row = self.row(tid)
             self.assertEqual((row['Attempts'], row['State']), (1, 'failed'), err)
-            self.assertTrue(any('needs you' in c and 'no automatic retry' in c for c in self.comments(tid)), err)
+            # a setup problem says so, and never that pressing Start again would help (the owner, 2026-10-16)
+            self.assertTrue(any('setup problem' in c and 'Start fails the same way until it is fixed' in c for c in self.comments(tid)), err)
+            self.assertFalse(any('try again' in c for c in self.comments(tid)), err)
             self.due(tid)
             with mock.patch.object(term, 'start_on_task') as start: bb.drain(self.s)
             start.assert_not_called()
@@ -127,7 +129,7 @@ class RetryTests(Base):
             raise RuntimeError('comment write failed after start')                 # the launch happened; what came after did not
         with mock.patch.object(term, 'start_on_task', side_effect=start) as launch: bb.drain(self.s)
         self.assertIsNone(self.row(tid))                                            # reconciled: the session exists, the row goes
-        self.assertTrue(any('bookkeeping' in c.lower() for c in self.comments(tid)))
+        self.assertTrue(any(c.startswith('Started, but noting it afterwards failed') for c in self.comments(tid)))
         with mock.patch.object(term, 'start_on_task') as launch2: bb.drain(self.s)
         launch2.assert_not_called()
 
@@ -138,12 +140,12 @@ class RetryTests(Base):
             ingest._auto_code(self.s, tid)
         row = self.row(tid)
         self.assertEqual((row['Attempts'], row['State']), (1, 'retrying'))
-        self.assertTrue(any('Auto-start failed: pty spawn failed' in c and 'attempt 1 of 3' in c for c in self.comments(tid)))
+        self.assertTrue(any("The coding agent couldn't start: pty spawn failed" in c and 'try 1 of 3' in c for c in self.comments(tid)))
         gid = self.task('general one', 'general')
         with mock.patch.object(general, 'start_session', side_effect=RuntimeError('no CLI login')):
             ingest._auto_general(self.s, gid)
         self.assertEqual((self.row(gid)['Attempts'], self.row(gid)['State']), (1, 'retrying'))
-        self.assertTrue(any('Assistant start failed: no CLI login' in c for c in self.comments(gid)))
+        self.assertTrue(any("The assistant couldn't start: no CLI login" in c for c in self.comments(gid)))
 
 
 class OwnerControlsTests(Base):
@@ -165,8 +167,8 @@ class OwnerControlsTests(Base):
         row = self.row(tid)
         self.assertIsNotNone(row, 'the queue row survives the failed launch')
         self.assertEqual((row['State'], row['Attempts']), ('retrying', 1))
-        self.assertFalse(any('Started from the dispatch queue' in c for c in self.comments(tid)))
-        self.assertTrue(any('attempt 1 of 3' in c for c in self.comments(tid)), self.comments(tid))
+        self.assertFalse(any(c.startswith('Started') for c in self.comments(tid)))
+        self.assertTrue(any('try 1 of 3' in c for c in self.comments(tid)), self.comments(tid))
 
     def test_every_restored_deadline_is_armed_not_only_the_earliest(self):
         """PW-088/089: one timer for the earliest deadline, and the later one waited for an unrelated event."""

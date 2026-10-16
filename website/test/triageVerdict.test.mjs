@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   extraTriageFields, intentLabel, kindLabel, latestTriageVerdict, legacyTriageVerdict,
-  parseTriageVerdict, relationshipLabel,
+  parseTriageVerdict, relationshipLabel, routeIntent, routeWhy,
 } from "../src/triageVerdict.js";
 
 test("the latest saved structured triage response is decoded", () => {
@@ -66,4 +66,15 @@ test("the timeline draws the response as facts, repository, and a numbered task 
   assert.ok(view.includes("limited saved response · reconstructed"));
   assert.ok(view.includes("None — triage found no requested action."));
   assert.ok(view.includes("This route was saved without structured triage details."));
+});
+
+// the record leads with whose the work is (categories.route_head); a row written before says the classifier's label
+test("a route's verdict reads the same in the new head and the old label", () => {
+  for (const [reason, want] of [["triage: work for the coding agent in northwind/ledger - fix it · new task", "task"],
+    ["triage: work for the assistant - book it", "task"], ["triage: yours to do - sign it", "task"], ["triage: task - old", "task"],
+    ["triage: needs a reply - a question", "reply_only"], ["triage: reply_only - old", "reply_only"],
+    ["triage: nothing to do - a notice", "fyi"], ["triage: fyi - old", "fyi"], ["not ours - you said so", ""]])
+    assert.equal(routeIntent(reason), want, reason);
+  assert.equal(routeWhy("triage: work for the coding agent in org/app - the export breaks · new task"), "the export breaks · new task");
+  assert.equal(routeWhy("triage: task - old words"), "old words");
 });

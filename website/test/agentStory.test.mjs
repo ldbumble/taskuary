@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { STORY_CHIP, startLabel, storyAlarm, storyPlace, storyShown } from "../src/agentStory.js";
 
-const held = { kind: "held", line: "first message from pat@vendor.example - not one of your domains" };
+const held = { kind: "held", line: "Waiting for you. pat@vendor.example is not on your domain and you have never written to them, so no agent starts on their words by itself. Start the coding agent, or do it yourself." };
 
 test("the story shows only when nothing is live and the task is open", () => {
   assert.equal(storyShown(held), true);
@@ -22,11 +22,18 @@ test("only the two that wait on the owner wear the alarm colour", () => {
   assert.deepEqual(Object.keys(STORY_CHIP).filter(storyAlarm), ["held", "interrupted"]);
 });
 
-test("a step that never ran names who Start starts", () => {
-  assert.equal(startLabel(held, "coding", false), "Start coding");
+// by what the agent IS, from the task's kind - "Start coder" named a profile as if it were a worker (the owner, 2026-10-16)
+test("a step that never ran names what Start starts, by the task's kind", () => {
+  assert.equal(startLabel(held, "coding", false), "Start the coding agent");
+  assert.equal(startLabel(held, "general", false), "Start the assistant");
   assert.equal(startLabel(held, "coding", true), null);
   assert.equal(startLabel({ kind: "interrupted", line: "x" }, "coding", false), null);
-  assert.equal(startLabel(held, "", false), null);
+});
+
+// the server's sentence is whole and leads with its state; "<profile> did not start: " glued before a fragment is gone
+test("the story line adds no lead of its own", () => {
+  const story = readFileSync(fileURLToPath(new URL("../src/AgentStory.jsx", import.meta.url)), "utf8");
+  assert.doesNotMatch(story, /did not start|LEAD\[/);
 });
 
 // One telling of the run (the owner, 2026-10-12): with a record the sentence heads it - folded over its summary, open over it all
@@ -44,7 +51,7 @@ test("the step draws the story once: never beside the record, and its last messa
   const read = (n) => readFileSync(fileURLToPath(new URL(`../src/${n}`, import.meta.url)), "utf8");
   const page = read("TaskPage.jsx"), story = read("AgentStory.jsx");
   assert.match(page, /\(storyAt === "line" \|\| storyAt === "story"\) && <AgentStory /);
-  assert.match(page, /storyAt === "summary" && <AgentRecord \{\.\.\.recordProps\} story=\{story\} who=\{agentName\(t\)\} folded \/>/);
+  assert.match(page, /storyAt === "summary" && <AgentRecord \{\.\.\.recordProps\} story=\{story\} folded \/>/);
   assert.match(page, /<AgentRecord \{\.\.\.recordProps\} story=\{storyAt === "record" \? story : null\}/);
   assert.doesNotMatch(story.slice(story.indexOf("export default")), /PANEL2|bgcolor/, "no tinted bubble");
   assert.equal(story.match(/setMore\(/g).length, 1, "the timeline is behind one More");

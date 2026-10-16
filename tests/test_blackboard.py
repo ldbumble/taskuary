@@ -132,7 +132,7 @@ class BlackboardTests(unittest.TestCase):
         with patch.object(term, 'start_on_task', side_effect=RuntimeError('startup failed')):
             bb.drain(self.s)
         self.assertEqual([q['TaskId'] for q in self.s.queued_dispatches()], [tid])
-        self.assertTrue(any('Queued start failed: startup failed' in c['Body']
+        self.assertTrue(any("The agent couldn't start: startup failed" in c['Body']
                             for c in self.s.list_comments(tid)))
 
         def start(store, task_id, *args, **kwargs):

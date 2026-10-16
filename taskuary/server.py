@@ -661,7 +661,9 @@ def _queued_info(q):
             'behindTitle': (store.get_task(b) or {}).get('Title') if b else None,
             'reason': q.get('Reason'), 'since': q.get('CreatedAt'),
             # the retry budget (PW-085..087): waiting | retrying | failed, how many tries, the last error and the next one
-            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': q.get('LastError'), 'nextAt': q.get('NextAt')}
+            'state': q.get('State') or 'waiting', 'attempts': int(q.get('Attempts') or 0), 'lastError': q.get('LastError'), 'nextAt': q.get('NextAt'),
+            # a setup error fails every Start the same way, so the card must not offer Start as the fix (blackboard.failed_line)
+            'permanent': q.get('State') == 'failed' and blackboard.is_permanent(q.get('LastError'))}
 
 
 def _playbook_brief(task, books=None):
@@ -3073,12 +3075,20 @@ def _teach_reclassify(m: dict, was: str, road: str, background) -> int:
     return memid
 
 
+def _road_head(road: str) -> str:
+    "A road in the route record's own words (categories.route_head): the record leads with whose the work is."
+    from .categories import route_head
+    return route_head({'fyi': 'fyi', 'reply': 'reply_only'}.get(road, 'task'), road)
+
+
 def _road_now(m: dict) -> str:
     """What the funnel decided, read the way the panel reads it (FeedView roadOf)."""
     routes = store.message_routes(m['MessageId']) or []
     reason = str((routes[-1] if routes else {}).get('Reason') or '')
-    if 'triage: fyi' in reason: return 'fyi'
-    if 'triage: reply_only' in reason: return 'reply'
+    from .categories import route_intent
+    said = route_intent(reason)
+    if said == 'fyi': return 'fyi'
+    if said == 'reply_only': return 'reply'
     kind = str((store.get_task(m['TaskId']) or {}).get('Kind') or '') if m.get('TaskId') else ''
     if kind in ('coding', 'task'): return kind
     return 'general' if m.get('TaskId') else ''
@@ -3104,8 +3114,8 @@ def reclassify_message(mid: int, body: ReclassifyBody, background: BackgroundTas
     # the verdict lives - otherwise the pill still shows what triage said
     store.add_route(mid, m.get('TaskId'),
                     {'fyi': 'file', 'reply': 'reply', 'coding': 'create', 'general': 'create', 'task': 'create'}[road],
-                    None, f'triage: {"reply_only" if road == "reply" else road} - you reclassified this'
-                          + (f' (triage called it {was})' if was else '') + ' - the verdict is in memory for next time',
+                    None, f'triage: {_road_head(road)} - you reclassified this'
+                          + (f' (triage called it {_road_head(was)})' if was else '') + ' - the verdict is in memory for next time',
                     [], ACTOR)
     out = {'ok': True, 'road': road, 'changed': True, 'was': was, 'memory': memid or None}
     if road == 'fyi': file_message(mid, None, background)

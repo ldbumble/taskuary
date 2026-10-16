@@ -90,3 +90,23 @@ class CategoryTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
+
+class RouteHeadTests(unittest.TestCase):
+    """The route record leads with WHOSE the work is: "triage: task" read as "on you" on work triage handed to an agent
+    (the owner, 2026-10-16). Rows written before keep the old label, and every reader goes through route_intent."""
+    def test_the_head_says_whose_it_is(self):
+        from taskuary.categories import route_head
+        self.assertEqual(route_head('task', 'coding', 'northwind/ledger'), 'work for the coding agent in northwind/ledger')
+        self.assertEqual(route_head('task', 'general', 'northwind/ledger'), 'work for the assistant')       # a repo is coding's alone
+        self.assertEqual(route_head('task', 'task'), 'yours to do')
+        self.assertEqual((route_head('reply_only', 'reply'), route_head('fyi')), ('needs a reply', 'nothing to do'))
+
+    def test_both_wordings_read_back_as_the_verdict(self):
+        from taskuary.categories import route_intent, route_why
+        for reason, want in (('triage: work for the assistant - x', 'task'), ('triage: task - x', 'task'), ('triage: yours to do', 'task'),
+                             ('triage: needs a reply - x', 'reply_only'), ('triage: reply_only - x', 'reply_only'),
+                             ('triage: nothing to do - x', 'fyi'), ('triage: fyi - x', 'fyi'), ('not ours - x', '')):
+            self.assertEqual(route_intent(reason), want, reason)
+        self.assertEqual(route_why('triage: work for the coding agent in org/app - it breaks · new task'), 'it breaks · new task')
+        self.assertEqual(category_of({'MsgStatus': 'filed', 'RouteReason': 'triage: nothing to do - a notice', 'Channel': 'email'}), 'info')

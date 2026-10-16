@@ -283,9 +283,10 @@ export const assistantFocus = (item) => {
   // session HAD run (08:10 to 10:56 on TQ-0515), so "has not started" was false, and naming the
   // worker made it read as a chosen specialist sitting idle rather than an app that went down under
   // it (the owner, 2026-09-14: "why does the lead say codex and not 'agent has it'?"). `queued` is a
-  // statement about NOW: nothing is on it. Who, and what happened, is why_idle's to say - it knows.
+  // statement about NOW: nothing is on it. Who, and what happened, is why_idle's to say - it knows. It was computed and
+  // never shown, and the lead said "this one is on you" over a start that was only waiting for a free slot (2026-10-16).
   if (item.lane === "queued" && item.tid)
-    return { card: "task", lead: "This one is on you — no agent is on it right now." };
+    return { card: "task", lead: item.why_idle || "No agent is on this right now." };
   return { card: cardKind(item), lead: item.why || "" };
 };
 

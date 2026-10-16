@@ -26,7 +26,7 @@ class WhyNotStartedTests(unittest.TestCase):
         s = MemoryStore(); t = handed(s)
         s.tag_task(t, terminal.INTERRUPTED, True, 'shutdown')
         why = funnel.not_started_why(s, t)
-        self.assertIn('Taskuary closed while codex had this', why)
+        self.assertIn('Taskuary closed while the coding agent had this', why)     # what it IS, never the profile's name
         self.assertIn('Nothing restarts by itself', why)
 
     def test_a_run_that_stopped_without_finishing_says_so(self):
@@ -36,26 +36,58 @@ class WhyNotStartedTests(unittest.TestCase):
         self.assertIn('ran on this and stopped', funnel.not_started_why(s, t))
 
     def test_triages_own_refusal_to_start_is_quoted_back(self):
-        """The first-time-sender gate writes the sentence; a no-reply address never clears it."""
+        """The first-time-sender gate writes the sentence; a no-reply address never clears it. The page reads it whole,
+        led by its state and followed by the one thing to do - no "<agent> did not start:" glued to a fragment."""
         s = MemoryStore(); t = handed(s)
         mid = s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'no-reply@vendor.example',
                              'Subject': 'Refresh warning', 'BodyText': 'gateway deprecated',
                              'SentAt': ago(0), 'Status': 'routed'})
         s.add_route(mid, t, 'create', 0.0,
-                    'triage: task - the gateway is deprecated \u00b7 not auto-worked: first message from '
+                    'triage: work for the coding agent - the gateway is deprecated \u00b7 held for you: no-reply@vendor.example is not on '
+                    'your domain and you have never written to them, so no agent starts on their words by itself.', [], 'router')
+        st = funnel.idle_state(s, t)
+        self.assertEqual((st['kind'], st['row']), ('held', 'held for you - not started'))
+        self.assertEqual(st['line'], 'Waiting for you. no-reply@vendor.example is not on your domain and you have never written to '
+                                     'them, so no agent starts on their words by itself. Start the coding agent, or do it yourself.')
+
+    def test_a_route_written_in_the_old_words_still_reads_as_a_hold(self):
+        s = MemoryStore(); t = handed(s)
+        mid = s.add_message({'TaskId': t, 'Channel': 'email', 'FromEmail': 'no-reply@vendor.example', 'Subject': 'Refresh warning',
+                             'BodyText': 'gateway deprecated', 'SentAt': ago(0), 'Status': 'routed'})
+        s.add_route(mid, t, 'create', 0.0, 'triage: task - the gateway is deprecated \u00b7 not auto-worked: first message from '
                     'no-reply@vendor.example - not one of your domains', [], 'router')
         why = funnel.not_started_why(s, t)
-        self.assertIn('Triage did not start it:', why)
-        self.assertIn('not one of your domains', why)
+        self.assertTrue(why.startswith('Waiting for you. First message from no-reply@vendor.example - not one of your domains.'), why)
+
+    def test_a_setup_failure_says_what_is_wrong_and_never_offers_start_as_the_fix(self):
+        """The owner, 2026-10-16: "coder could not start: unknown agent: coder. Press Start now to try again." - Start
+        fails the same way every time until the agent is fixed."""
+        s = MemoryStore(); t = handed(s, who='agent:coder')
+        s.enqueue_dispatch(t, None, 'coder', 'x'); s.dispatch_failed(t, 'unknown agent: coder', permanent=True)
+        st = funnel.idle_state(s, t)
+        self.assertEqual(st['kind'], 'failed'); self.assertEqual(st['row'], "couldn't start: unknown agent: coder")
+        self.assertTrue(st['line'].startswith("Couldn't start: unknown agent: coder. This is a setup problem"), st['line'])
+        self.assertNotIn('try again', st['line']); self.assertNotIn('coder could not', st['line'])
+
+    def test_a_retrying_start_says_when_and_a_ranked_wait_is_its_turn_not_a_full_house(self):
+        s = MemoryStore(); t = handed(s)
+        s.enqueue_dispatch(t, None, 'codex', 'x'); s.dispatch_failed(t, 'pty spawn failed', backoff=(30,))
+        st = funnel.idle_state(s, t)
+        self.assertEqual(st['kind'], 'retrying'); self.assertRegex(st['line'], r"^Couldn't start yet \(pty spawn failed\) - trying again at \d\d:\d\d\.$")
+        s2 = MemoryStore(); t2 = handed(s2)
+        s2.enqueue_dispatch(t2, None, 'codex', 'ranked'); s2._exec('UPDATE dispatchq SET Value=0.4 WHERE TaskId=?', (t2,))
+        st2 = funnel.idle_state(s2, t2)
+        self.assertTrue(st2['line'].startswith('Waiting its turn.'), st2['line']); self.assertNotIn('slot is busy', st2['line'])
+        self.assertEqual(st2['row'], 'queued - waiting its turn')
 
     def test_auto_start_switched_off_is_named_as_the_reason(self):
         s = MemoryStore(); t = handed(s)
         s.set_setting('coding_auto_enabled', '0', 'owner')
-        self.assertIn('Auto-start is off', funnel.not_started_why(s, t))
+        self.assertIn('Starting the coding agent by itself is switched off', funnel.not_started_why(s, t))
 
     def test_with_no_other_reason_it_still_says_nobody_is_on_it(self):
         s = MemoryStore(); t = handed(s)
-        self.assertEqual(funnel.not_started_why(s, t), 'It was handed to codex and nothing has started it.')
+        self.assertEqual(funnel.not_started_why(s, t), 'Not started yet. Nothing has started the coding agent on this - press Start when you want it on it.')
 
     def test_work_from_before_today_says_it_has_been_waiting(self):
         s = MemoryStore(); t = handed(s)
@@ -113,8 +145,9 @@ class AgentStoryTests(unittest.TestCase):
     def test_a_hold_says_why_once_without_triages_lead_in(self):
         s = MemoryStore(); st = funnel.agent_story(s, self.held_pr(s))
         self.assertEqual(st['kind'], 'held')
-        self.assertTrue(st['line'].startswith('first message from pat@vendor.example'), st['line'])
-        self.assertNotIn('Triage did not start it', st['line'])
+        self.assertTrue(st['line'].startswith('Waiting for you. First message from pat@vendor.example'), st['line'])
+        self.assertTrue(st['line'].endswith('Start the coding agent, or do it yourself.'), st['line'])
+        self.assertNotIn('did not start', st['line'])
 
     def test_a_restart_mid_run_says_when_how_far_in_and_what_it_last_said(self):
         from taskuary import workerstate as ws

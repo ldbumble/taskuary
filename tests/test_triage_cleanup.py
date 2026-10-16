@@ -79,7 +79,7 @@ class SmallThingsTests(unittest.TestCase):
         self.assertTrue(first['task_id'])
 
     def test_taskuarys_own_report_is_named_for_what_it_is(self):
-        self.assertEqual(senders.known(MemoryStore(), {'channel': 'report'}), (True, "Taskuary's own report"))
+        self.assertEqual(senders.known(MemoryStore(), {'channel': 'report'}), (True, 'Taskuary wrote this report.'))
 
     def test_an_invite_is_still_an_invite_when_judged_later(self):
         s = MemoryStore()

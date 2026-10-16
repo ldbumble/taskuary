@@ -57,7 +57,7 @@
       "word": "waiting to start",
       "role": "working",
       "mark": "⏳",
-      "hint": "handed to an agent and not started yet"
+      "hint": "meant for an agent, and nothing is running it — the row says why: held for you, waiting its turn, or a start that failed"
     },
     {
       "key": "stopped",

@@ -120,7 +120,7 @@ class NotATaskTests(unittest.TestCase):
                      sent_at=stamp(days=10), calls=asked, intent='fyi')
         self.assertEqual((later['status'], later['task_id']), ('filed', None))
         self.assertEqual(len(asked), 1)                              # judged, not decided by the old ruling
-        self.assertIn('triage: fyi', feed_row(later['message_id'])['RouteReason'])
+        self.assertIn('triage: nothing to do', feed_row(later['message_id'])['RouteReason'])
 
     def test_the_task_level_not_a_task_still_writes_the_verdict_down(self):
         """It records the ruling (and used to write nothing at all for a chat) - it just no

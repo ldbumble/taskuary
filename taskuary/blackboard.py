@@ -383,19 +383,28 @@ def is_permanent(err) -> bool:
     return any(k in s for k in PERMANENT)
 
 
-def record_failure(store, tid: int, err, agent: str = '', label: str = 'Queued start') -> dict | None:
+def failed_line(err, permanent: bool, tries: int = 0) -> str:
+    """What a start that gave up says, wherever it is said (the task's note, the agent step). A configuration error
+    said "Press Start now to try again" over "unknown agent: coder" - and Start fails the same way every time until
+    the agent is fixed (the owner, 2026-10-16), so a permanent one says what is wrong and that Start waits on the fix."""
+    why = ' '.join(str(err or '').split()).rstrip('.')[:200] or 'no reason was given'
+    if permanent: return (f"Couldn't start: {why}. This is a setup problem, so Start fails the same way until it is fixed - "
+                          'check the agent and the repository this task uses.')
+    return f"Couldn't start{f' after {tries} tries' if tries else ''}: {why}. Press Start to try again, or Cancel."
+
+
+def record_failure(store, tid: int, err, agent: str = '', label: str = 'The agent') -> dict | None:
     """One failed start, wherever it happened - the queue drain or a direct auto-start: the attempt is
     counted on the queue row (made if the task was not queued yet), the owner reads what happened and
     what comes next, and the retry is scheduled rather than left to an unrelated session ending."""
     if not store.get_dispatch(tid): store.enqueue_dispatch(tid, None, agent, 'start failed - retrying')
     row = store.dispatch_failed(tid, str(err), is_permanent(err), BACKOFF, MAX_ATTEMPTS)
     if not row: return None
-    n, short = row['Attempts'], str(err)[:200]
-    if row['State'] == 'failed':
-        why = 'a configuration problem - no automatic retry' if is_permanent(err) else f'attempt {n} of {MAX_ATTEMPTS}'
-        store.add_comment(tid, 'router', 'agent', f'Agent could not start - needs you: {short} ({why}). Retry or cancel the queued start from the task.')
+    n, short = row['Attempts'], ' '.join(str(err).split()).rstrip('.')[:200]
+    if row['State'] == 'failed': store.add_comment(tid, 'router', 'agent', failed_line(err, is_permanent(err), n))
     else:
-        store.add_comment(tid, 'router', 'agent', f"{label} failed: {short} (attempt {n} of {MAX_ATTEMPTS}) - retrying in {row['wait']}s.")
+        at = str(row.get('NextAt') or '')[11:16]
+        store.add_comment(tid, 'router', 'agent', f"{label} couldn't start: {short} - trying again {f'at {at}' if at else 'shortly'} (try {n} of {MAX_ATTEMPTS}).")
         drain_later(store, float(row['wait']) + 0.5)
     return row
 
@@ -449,14 +458,15 @@ def drain(store):
                     if not _start_general(store, q['TaskId']): continue
                 else: term.start_on_task(store, q['TaskId'], q.get('Agent') or '', actor='router')
                 store.clear_dispatch(q['TaskId'])
-                store.add_comment(q['TaskId'], 'router', 'agent', 'Started from the dispatch queue - '
-                                  + ('it was parked behind ' + task_ref(b) + ' for likely overlap, which no longer queues work.' if b else 'a session slot freed up.'))
+                store.add_comment(q['TaskId'], 'router', 'agent', 'Started - '
+                                  + ('it was waiting behind ' + task_ref(b) + ' for likely overlap, which no longer holds work back.' if b
+                                     else 'an agent slot freed up and it was next in line.'))
             except Exception as e:
                 # a session that exists is a start that happened: what failed was the bookkeeping after it,
                 # and counting that as a failed launch would start the work twice (PW-088)
                 if term.for_task(q['TaskId']):
                     store.clear_dispatch(q['TaskId'])
-                    store.add_comment(q['TaskId'], 'router', 'agent', f'Started from the dispatch queue; the bookkeeping after it failed: {str(e)[:200]}')
+                    store.add_comment(q['TaskId'], 'router', 'agent', f'Started, but noting it afterwards failed: {str(e)[:200]}')
                     continue
                 logger.warning(f'queued dispatch failed for task {q["TaskId"]}: {e}')
                 record_failure(store, q['TaskId'], e, q.get('Agent') or '')

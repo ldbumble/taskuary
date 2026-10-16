@@ -9,7 +9,9 @@ import { ALERT, ROLES } from "./theme.jsx";
 export default function QueuedStart({ taskId, queued, onChanged, compact = false }) {
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
   if (!queued) return null;
-  const failed = queued.state === "failed", retrying = queued.state === "retrying";
+  const failed = queued.state === "failed", retrying = queued.state === "retrying", ranked = queued.value != null;
+  // a SETUP error ("unknown agent") fails every Start the same way - Start now is not the fix, and must not be offered as one
+  const setup = failed && queued.permanent;
   // a start that failed and will try again read "Waiting for a free agent slot"; and the reason was the raw exception -
   // its first line, cut short, is the part a person reads (the whole of it stays on hover)
   const why = String(queued.lastError || "").split("\n")[0].slice(0, 140);
@@ -27,16 +29,19 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
     <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.75, px: 1.1, py: 0.8, bgcolor: c.bg, border: `1px solid ${c.bd}55`,
       borderLeft: `3px solid ${c.bd}`, borderRadius: 1.25 }}>
       <Typography variant="caption" sx={{ color: c.ink, fontWeight: 600, display: "block", fontSize: compact ? 10 : 11.5, lineHeight: 1.4 }}>
-        {failed ? "⏳ Could not start" : retrying ? `⏳ Couldn't start yet - trying again${at ? ` at ${at}` : " shortly"}` : queued.behind ? `⏳ Waiting on ${queued.behind}` : "⏳ Waiting for a free agent slot"}
+        {failed ? "⏳ Couldn't start" : retrying ? `⏳ Couldn't start yet - trying again${at ? ` at ${at}` : " shortly"}` : queued.behind ? `⏳ Waiting on ${queued.behind}`
+          : ranked ? "⏳ Waiting its turn" : "⏳ Waiting for a free agent slot"}
         {!failed && queued.behindTitle ? ` — “${queued.behindTitle}”` : ""}
       </Typography>
       <Typography variant="caption" title={queued.lastError || ""} sx={{ color: c.ink, display: "block", fontSize: compact ? 9.5 : 11, lineHeight: 1.45, mt: 0.2 }}>
-        {failed ? `${why || "It ran out of tries"}. It won't try again by itself - Start now tries once more, Cancel takes it off the queue.`
+        {setup ? `${why || "The agent is not set up"}. This is a setup problem, so Start fails the same way until it is fixed - check the agent and the repository this task uses.`
+          : failed ? `${why || "It ran out of tries"}. It won't try again by itself - Start now tries once more, Cancel takes it off the queue.`
           : retrying ? `${why ? `${why}. ` : ""}Nothing to do yet - Cancel if you'd rather it didn't.`
+          : ranked ? `${queued.why ? `${queued.why} · ` : ""}waiting work starts most valuable first, and this starts when it comes up`
           : `${queued.why ? `${queued.why} · ` : queued.reason ? `${queued.reason} · ` : ""}starts by itself when a slot frees up`}
       </Typography>
       <Box sx={{ display: "flex", gap: 0.75, mt: 0.6 }}>
-        {failed && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={(e) => act(e, "retry")}
+        {failed && !setup && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={(e) => act(e, "retry")}
           sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "retry" ? "Starting…" : "Start now"}</Button>}
         <Button size="small" disabled={!!busy} onClick={(e) => act(e, "cancel")}
           sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1.1 }}>{busy === "cancel" ? "Cancelling…" : "Cancel"}</Button>

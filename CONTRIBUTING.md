@@ -36,7 +36,7 @@ regenerate the README screenshots against a demo dataset:
 | `taskuary/store.py` | SQLite store — schema, seeds, one dict-shaped contract (MemoryStore for tests) |
 | `taskuary/testing.py` | picture factory for regression tests — named Timeline/Board states, `inbound()` for ingest |
 | `taskuary/ingest.py` / `triage.py` / `routing.py` / `policy.py` | the funnel: dedupe → policy → route → AI triage |
-| `taskuary/agents.py` / `coder.py` | CLI agents: live-streamed runs, diffs, the coder report contract |
+| `taskuary/agents.py` / `wrapup.py` | CLI agents: live-streamed runs, diffs, the agent report contract |
 | `taskuary/channels.py` | Outlook / Teams / Slack / GitHub connectors + live Test probes |
 | `taskuary/reports.py` | scheduled report executors (**start here** — see below) |
 | `taskuary/llm.py` | AI connectors (Anthropic / OpenAI / Azure) → one `llm(system, user)` callable |

@@ -95,7 +95,7 @@ try {
   it shows: ${shown}`);
       }
     }
-    // The demo raises a hand every few seconds ("TQ-0004 · coder stopped and is waiting on you") and
+    // The demo raises a hand every few seconds ("TQ-0004 · the coding agent stopped and is waiting on you") and
     // the toast landed in every one of the nine pictures, bottom right, as if it were part of the tab.
     // A shot of the Settings tab is not the place to learn what a toast looks like (2026-09-18).
     await p.evaluate(() => document.querySelectorAll(".MuiSnackbar-root").forEach((el) => { el.style.display = "none"; }));

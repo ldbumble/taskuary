@@ -886,6 +886,7 @@ def layer_profiles(cfg: dict, store) -> bool:
         _rename_coding_profile(store)
     for prof in agents.values():
         if str(prof.get('rules_doc') or '') == 'coder': prof['rules_doc'] = 'coding'
+    if 'coding' in agents: _retire_old_name(store)
     if moved != over: store.set_setting('profile_brains', json.dumps(moved) if moved else '', 'migration')
     return json.dumps(agents, sort_keys=True, default=str) != before
 
@@ -909,8 +910,22 @@ def _rename_coding_profile(store) -> None:
         if doc.get('UpdatedBy') == 'template': ensure_profile_document(store, 'coding')     # an untouched copy takes the new template
         else: store.save_doc('coding', doc['Content'], doc.get('UpdatedBy') or 'owner')
     if doc: store.delete_doc('coder')
+    _retire_old_name(store)
+
+
+def _retire_old_name(store) -> None:
+    """Every place that still names the coding profile by its old name. Not only on the rename: old code running beside a
+    migrated store went on assigning new tasks to it, and those failed to start with "unknown agent" (2026-10-16) - so this
+    runs on every start, and it is three cheap UPDATEs that touch nothing once the name is gone."""
+    if store.get_agent('coder'): return                     # an owner's own profile by that name is theirs
     store._exec("UPDATE task SET Assignee='agent:coding' WHERE Assignee='agent:coder'")
-    store._exec("UPDATE transcript SET Agent='coding' WHERE Agent='coder'")
+    # who did what keeps its meaning under the new name - the queue, runs, notes, the wall and votes; the audit log is left as written
+    for table, col in (('transcript', 'Agent'), ('dispatchq', 'Agent'), ('run', 'AgentName'), ('comment', 'Actor'),
+                       ('boardnote', 'Agent'), ('outcome', 'Actor')):
+        try: store._exec(f"UPDATE {table} SET {col}='coding' WHERE {col}='coder'")
+        except Exception: pass                              # a table an older or in-memory store does not have
+    try: store._exec("UPDATE OR IGNORE lore_vote SET Actor='coding' WHERE Actor='coder'"); store._exec("DELETE FROM lore_vote WHERE Actor='coder'")
+    except Exception: pass
     if str(store.get_setting('default_profile') or '') == 'coder': store.set_setting('default_profile', 'coding', 'migration')
 
 

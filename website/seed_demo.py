@@ -25,15 +25,15 @@ fx.review(tid1, m1, reason='AI drafted a reply for your review',
     draft='Hi Sarah,\n\nYes - the Q3 vendor spend report is in the shared Finance folder (Q3/vendor-spend-2026.xlsx). The top-10 breakdown is on the second tab; total spend was $2.41M, down 6% from Q2.\n\nBest,\nJohn')
 
 # 2. coding task worked by the agent, diff attached, done
-tid2 = fx.task(title='Nightly export job writes empty CSVs', kind='coding', status='done', source='email', Assignee='agent:coder')
+tid2 = fx.task(title='Nightly export job writes empty CSVs', kind='coding', status='done', source='email', Assignee='agent:coding')
 m2 = fx.message(task_id=tid2, external_id='demo2', source_name='john.smith@example.com',
     subject='Nightly export job writes empty CSVs', from_name='Marcus Webb', from_email='marcus.webb@example.com',
     sent_at=t(3, 10), body='The nightly export produced empty files again last night. Can you take a look before tonight runs?')
 fx.route(m2, tid2, 'create', 'asks the owner to do something', by='router')
-rid = fx.run(tid2, status='done', agent='coder', instruction='Work this coding task end to end.')
+rid = fx.run(tid2, status='done', agent='coding', instruction='Work this coding task end to end.')
 s.update_run(rid, {'Result': 'Fixed: the exporter swallowed the timezone-aware cutoff. Added regression test.',
     'DiffText': 'diff --git a/export/job.py b/export/job.py\n@@ -41,7 +41,7 @@\n-    cutoff = datetime.utcnow() - timedelta(days=1)\n+    cutoff = datetime.now(timezone.utc) - timedelta(days=1)\n', 'SessionId': 'demo'}, finished=True)
-fx.comment(tid2, 'CODER REPORT\nTriage: real bug in export/job.py\nDetermination: naive/aware datetime comparison filtered out every row\nActions: fixed the cutoff, added a regression test, opened PR #142\nSummary: nightly export fixed; the next run will produce data', actor='coder')
+fx.comment(tid2, 'AGENT REPORT\nTriage: real bug in export/job.py\nDetermination: naive/aware datetime comparison filtered out every row\nActions: fixed the cutoff, added a regression test, opened PR #142\nSummary: nightly export fixed; the next run will produce data', actor='coding')
 fx.review(tid2, m2, status='approved',
     draft='Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.',
     final='Hi Marcus - found it and fixed it: a timezone bug filtered out every row. The next run is fine.')
@@ -63,14 +63,14 @@ fx.route(m7, None, 'file', 'automated notification', by='router')
 
 # 3d. coding task escalated - the amber waiting-on-you dot
 tid5 = fx.task(title='PTO import for the 7/26-8/8 payroll period', kind='coding',
-    status='in_progress', source='email', Assignee='agent:coder')
+    status='in_progress', source='email', Assignee='agent:coding')
 m8 = fx.message(task_id=tid5, external_id='demo8', source_name='john.smith@example.com',
     subject='PTO import - check date 8/17', from_name='Erin Levine', from_email='erin.levine@example.com',
     sent_at=t(4, 55), body='Please run the PTO import for the 7/26-8/8 pay period, check date 8/17.')
 fx.route(m8, tid5, 'create', 'asks the owner to do something', by='router')
-fx.review(tid5, m8, kind='escalation', reason='coder needs you: confirm reconciliation=True before the import writes payroll data')
+fx.review(tid5, m8, kind='escalation', reason='the coding agent needs you: confirm reconciliation=True before the import writes payroll data')
 
-# 3e. routed, queued for the coder - indigo
+# 3e. routed, queued for the coding agent - indigo
 tid6 = fx.task(title='Update the on-call rotation page', kind='coding', source='email')
 m9 = fx.message(task_id=tid6, external_id='demo9', source_name='john.smith@example.com',
     subject='On-call rotation page is stale', from_name='IT Helpdesk', from_email='helpdesk@example.com',

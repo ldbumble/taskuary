@@ -53,7 +53,7 @@ with world(s) as (c, _):
 s = store(); a, b, c_, d = three(s)
 with world(s) as (c, _):
     out = c.post('/api/concierge/next', json={}).json(); key = out['item']['key']
-    o = c.post('/api/concierge/say', json={'text': 'stop auto-starting the coder', 'key': key}).json()
+    o = c.post('/api/concierge/say', json={'text': 'stop auto-starting the coding agent', 'key': key}).json()
     show('setting mid-walk', f"key on table={key}", f"decision={o.get('decision')}", f"say={o['say'][:120]!r}",
          'PAGE: the "setting" branch shows the proposal card and settles NOTHING - the review stays on the table',
          f"pile: {keys(s)}")

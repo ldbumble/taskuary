@@ -68,7 +68,7 @@ BUILDERS = {'review': b_review, 'review(no draft)': lambda: b_review(''), 'todo(
 PHRASES = ['next', 'done', 'later', 'tomorrow', 'skip', 'skip it', 'approve', 'send it', 'looks good, send it', 'yes', 'ok', 'sure', 'go ahead', 'do it', 'no', 'nah',
            'reply and tell them we will look at it', 'tell them to ignore it', 'let them know we will fix it by Friday', 'tell Erin it is handled',
            'not ours', 'not my problem', 'ignore it', "don't ignore this one", 'leave it open', 'leave it with the agent', 'never again', 'that sender is spam',
-           'remember that Ravi handles refunds', 'remember to reply to him', 'send it to the coder', 'look into it', 'can you check if the report ran?',
+           'remember that Ravi handles refunds', 'remember to reply to him', 'send it to the coding agent', 'look into it', 'can you check if the report ran?',
            "I'll take it", "I'll handle this", 'mine', 'make it a task', 'close it', 'close the task', 'stop the agent', 'wrap it up', 'rerun it', 'split it',
            "what's this about?", 'who sent this?', 'summarize the thread', 'show me the draft', 'make the reply shorter', 'forward it to Erin', 'assign it to Erin',
            'ask Erin to handle it', 'delete it', 'archive it', 'snooze it', 'remind me tomorrow', 'approve and remember that Ravi handles refunds',
@@ -90,7 +90,7 @@ def snap(s):
 def diff(a, b): return {k: f"{a.get(k)} -> {b.get(k)}" for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
 
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid', 'not_ours_sender': 'mid',
-         'coder': 'mid', 'regular_agent': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid', 'answer_agent': 'tid',
+         'coding_agent': 'mid', 'regular_agent': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid', 'answer_agent': 'tid',
          'rerun': 'source_id', 'close': 'tid'}
 SETTLES = ('later', 'skip', 'next', 'done', 'closed', 'ack')     # the verbs that move the walk on
 
@@ -126,7 +126,7 @@ def page(c, cur, d, key, calls=None):
     # dispatch REFUSES to guess which agent (server.dispatch_message: 422 'Choose an agent type'),
     # because reading it off triage's kind is the bug that endpoint exists to prevent - so the page
     # names it, and the two hand-off verbs are the two answers (AssistantView.decide).
-    elif verb == 'coder': post(f'/api/messages/{mid}/dispatch', {'kind': 'coding', 'instruction': d.get('text') or None})
+    elif verb == 'coding_agent': post(f'/api/messages/{mid}/dispatch', {'kind': 'coding', 'instruction': d.get('text') or None})
     elif verb == 'regular_agent': post(f'/api/messages/{mid}/dispatch', {'kind': 'general', 'instruction': d.get('text') or None})
     # a follow-up is drafted through the pile's own door - the mail it chases may never have been a task
     elif verb == 'followup': post('/api/concierge/act', {'key': key, 'verb': 'followup'})

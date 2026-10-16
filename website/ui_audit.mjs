@@ -149,7 +149,7 @@ const inspect = (page) => page.evaluate(() => {
 
   // Docs: each document and the Playbooks shelf
   await openTab("Docs"); await stop("docs");
-  for (const d of ["TRIAGE.md", "STYLE.md", "CODER.md", "LEARNED.md"]) { if (await clickText(page, d)) await stop(`docs-${d.toLowerCase().replace(".md", "")}`); }
+  for (const d of ["TRIAGE.md", "STYLE.md", "CODING.md", "LEARNED.md"]) { if (await clickText(page, d)) await stop(`docs-${d.toLowerCase().replace(".md", "")}`); }
   if (await clickText(page, "New playbook") || await clickText(page, "Write the first playbook")) await stop("docs-new-playbook");
   else note("docs", "Playbooks shelf has no New button");
 

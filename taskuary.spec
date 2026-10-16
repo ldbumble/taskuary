@@ -36,7 +36,7 @@ def _collect(*names):
 datas, bins, hidden = _collect('winpty', 'wcwidth', 'pip', *BUNDLE)
 
 a = Analysis(['taskuary/desktop.py'],
-             # templates/ too: the operator documents (SOUL.md, CODER.md, TRIAGE.md...) seed the store
+             # templates/ too: the operator documents (SOUL.md, CODING.md, TRIAGE.md...) seed the store
              # from here, and a build without them ran every prompt with no constitution (audit 2026-09-02)
              # EVERY DATA FILE THE WHEEL SHIPS, or the exe is a different program. lanes.json is
              # read by workerstate AT IMPORT, and funnel imports workerstate - so an exe without it

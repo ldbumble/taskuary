@@ -56,7 +56,7 @@ for (const path of PATHS) {
 out["/api/doc"] = {};
 const profileDocs = Object.entries(out["/api/agents"]?.config || {})
   .map(([name, config]) => config.rules_doc || name);
-for (const name of new Set(["soul", "triage", "style", "counsel", "agent", "coder", "digest", "learned", ...profileDocs])) {
+for (const name of new Set(["soul", "triage", "style", "counsel", "agent", "coding", "digest", "learned", ...profileDocs])) {
   const r = await fetch(`${BASE}/api/doc/${name}`).catch(() => null);
   out["/api/doc"][name] = r && r.ok ? await r.json() : { content: "" };
 }

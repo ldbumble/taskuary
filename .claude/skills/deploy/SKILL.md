@@ -29,7 +29,7 @@ git status --short
 git log --oneline origin/master..HEAD      # anything of mine not yet pushed
 ```
 
-- If the owner said "push everything", the coder's in-flight work is included. Say so explicitly
+- If the owner said "push everything", the coding agent's in-flight work is included. Say so explicitly
   and list it — its own tests passing does not prove a half-built feature is finished.
 - If they did not, commit **only your own paths** and leave theirs alone. Prove a shared file
   holds only your hunks: `git diff --stat HEAD -- <file>` (do the counts match what you wrote?)

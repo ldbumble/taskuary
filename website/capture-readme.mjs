@@ -75,13 +75,13 @@ fixture['/api/cli/connections'] = { data: [
 // the wall a working morning leaves: who holds a file, what one agent found for the next, what is safe to build on
 fixture['/api/board/notes'].data = [
   [4, 'the wall', 'summary', 'the AP importer needs pyodbc installed before its tests mean anything; the census sync is behind a VPN and will not run from a laptop'],
-  [3, 'coder', 'ready', 'export fixed, 14 tests green - safe to build on'],
+  [3, 'coding', 'ready', 'export fixed, 14 tests green - safe to build on'],
   [2, 'codex', 'note', 'the bank feed keeps inter-company transfers; the export drops them. That is the 4,180'],
-  [1, 'coder', 'working', 'on the month-end export - tools/gl_export.py is mine for the next hour'],
+  [1, 'coding', 'working', 'on the month-end export - tools/gl_export.py is mine for the next hour'],
 ].map(([NoteId, Agent, Kind, Body]) => ({ NoteId, TaskId: null, Agent, Cwd: '', Kind, Body, Files: '', CreatedAt: '2026-09-03T10:20:00', ReadBy: null, Rolled: null }));
-fixture['/api/board/notes'].data.forEach(n => { if (n.Agent === 'codex') n.ReadBy = 'coder'; if (n.Agent === 'coder') n.ReadBy = 'codex'; });
+fixture['/api/board/notes'].data.forEach(n => { if (n.Agent === 'codex') n.ReadBy = 'coding'; if (n.Agent === 'coding') n.ReadBy = 'codex'; });
 fixture['/api/hub'].data[0].comments = [
-  { CommentId: 1, Author: 'coder', CreatedAt: '2026-09-03 10:12:00', Body: 'I can add a dry-run check that reports missing account mappings before anything is written.' },
+  { CommentId: 1, Author: 'coding', CreatedAt: '2026-09-03 10:12:00', Body: 'I can add a dry-run check that reports missing account mappings before anything is written.' },
   { CommentId: 2, Author: 'codex', CreatedAt: '2026-09-03 10:18:00', Body: 'Include the rollback steps in the handoff. The next agent should know how to reverse the change.' },
 ];
 // The saved demo predates the canonical Timeline endpoint. Supply its current response

@@ -19,7 +19,7 @@ EXPECT = {
     "don't ignore this one": None, 'leave it open': None, 'leave it with the agent': None,
     'never again': 'not_ours_remember', 'that sender is spam': 'not_ours_sender',
     'remember that Ravi handles refunds': 'remembered',    # Taskuary writes the row itself
-    'send it to the coder': 'coder', 'look into it': 'coder', 'can you check if the report ran?': None,
+    'send it to the coding agent': 'coding_agent', 'look into it': 'coding_agent', 'can you check if the report ran?': None,
     "I'll take it": 'mine', "I'll handle this": 'mine', 'mine': 'mine', 'make it a task': 'mine',
     'close it': 'closed', 'close the task': 'closed', 'stop the agent': 'stop_agent', 'wrap it up': 'stop_agent',
     'rerun it': 'rerun', 'split it': 'split', 'set up a weekly report on refunds': 'walkthrough',
@@ -41,7 +41,7 @@ ASSENT = {'review': 'approve', 'proposal': 'approve', 'agent-asking': 'answer_ag
 ASSENT_WORDS = ('yes', 'ok', 'sure', 'go ahead', 'do it')
 AGENT_ONLY = {'yes remove them': 'answer_agent'}
 # verbs the PAGE has an explicit branch for; anything else must not reach done(null)
-PAGE_VERBS = {'reply', 'approve', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'coder', 'mine', 'rerun',
+PAGE_VERBS = {'reply', 'approve', 'not_ours', 'not_ours_remember', 'not_ours_sender', 'coding_agent', 'mine', 'rerun',
               'close', 'closed', 'stop_agent', 'walkthrough', 'created', 'clear', 'setup', 'done', 'later', 'skip',
               'next', 'setting', 'split', 'remember', 'answer_agent', 'redraft', 'forward', 'archive', 'followup', 'ack'}
 CLAIMS = ('Sending it as drafted', 'Queued the rerun', 'Closing the task', 'Not ours, then', 'On your list',
@@ -82,7 +82,7 @@ def flags(row):
     if exp != '?' and verb != exp and not (verb is None and any(h in say.lower() for h in HONEST)):
         out.append(f'C verb {verb} != {exp}')
     if row.get('spawned') and row['phrase'] in ('can you check if the report ran?',):
-        out.append('C coder-on-a-question')
+        out.append('C coding-agent-on-a-question')
     return out
 
 

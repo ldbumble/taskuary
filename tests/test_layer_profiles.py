@@ -50,6 +50,13 @@ class LayerProfilesTests(unittest.TestCase):
         self.assertFalse(agents.layer_profiles(cfg, s))
         self.assertEqual(snap, (json.dumps(cfg, sort_keys=True), s.get_setting('profile_brains'), s.get_setting('concierge_ai')))
 
+    def test_a_task_old_code_assigned_after_the_rename_is_repaired_on_the_next_start(self):
+        cfg, s, _ = legacy()
+        agents.layer_profiles(cfg, s)
+        late = s.create_task({'Title': 'Investigate the export failure', 'Kind': 'coding', 'Assignee': 'agent:coder'}, 'test')
+        agents.layer_profiles(cfg, s)
+        self.assertEqual(s.get_task(late)['Assignee'], 'agent:coding')
+
     def test_an_owners_own_coding_profile_is_never_overwritten(self):
         cfg, s, _ = legacy()
         cfg['agents']['coding'] = {'kind': 'coding', 'purpose': 'mine'}

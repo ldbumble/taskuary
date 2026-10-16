@@ -36,6 +36,8 @@ jobs:
         os: [ubuntu-24.04, windows-latest, macos-latest]
         python: ["3.10", "3.12"]
     runs-on: ${{ matrix.os }}
+    # a hung test fails the job in minutes, with its logs, instead of holding a runner for six hours (2026-10-16)
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -43,7 +45,8 @@ jobs:
       - run: pip install -e .[dev]
       - run: pip install pyodbc
         if: runner.os == 'Windows'
-      - run: pytest -q
+      # a test past two minutes prints every thread's stack - the hang names itself in the log
+      - run: pytest -q -o faulthandler_timeout=120
       - name: Desk and load CLI
         env:
           TASKUARY_HOME: ${{ runner.temp }}/taskuary-reg

@@ -75,6 +75,45 @@ class AboutTests(unittest.TestCase):
         for seen in ('alex@northwind.example', 'Finance Systems Lead | Northwind', 'Erin Blake', 'sign off the AP accruals'):
             self.assertIn(seen, brain.user)
 
+    def test_the_systems_are_read_off_three_months_of_who_writes_not_the_last_few_mails(self):
+        """On a real mailbox the forty newest mails were alerts and the systems came back as "SFTP" and "SharePoint" (the owner,
+        2026-10-16: "the softwares mentioned in my emails were not accurate"). The model is shown which vendors write in and how
+        often, across the whole window, and told a protocol or a file share is not a system."""
+        s = MemoryStore()
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        msgs = [{'FromEmail': f'noreply@payworth.example', 'FromName': 'Payworth', 'Subject': f'Payroll import {i} failed', 'Status': 'routed',
+                 'BodyText': 'The import failed.', 'SentAt': '2026-09-01 09:00:00'} for i in range(12)]
+        msgs += [{'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake', 'Subject': 'SFTP folder for the bank file', 'Status': 'routed',
+                  'BodyText': 'Can you open the SFTP folder?', 'SentAt': '2026-10-15 09:00:00'}]
+        def brain(system, user, **kw):
+            brain.system, brain.user = system, user
+            return json.dumps({'name': '', 'org': '', 'role': '', 'systems': ['Payworth']})
+        with mock.patch('taskuary.histgen.sent_mail', return_value=([], [], 0, 'IMAP')), \
+             mock.patch('taskuary.histgen._db_window', return_value=msgs), mock.patch('taskuary.llm.build_llm', return_value=brain):
+            out = firstrun.suggest_about(s)
+        self.assertEqual(out['systems'], ['Payworth'])
+        self.assertIn('payworth.example: 12 mails', brain.user)                       # who writes in, counted over the window
+        self.assertNotIn('northwind.example: ', brain.user.split('WHO WRITES IN')[1].split('\n\n')[0])   # the owner's own domain is not a vendor
+        self.assertIn('SFTP', brain.system); self.assertIn('Never a protocol', brain.system)
+
+    def test_long_sent_mail_never_pushes_the_vendors_out_of_what_the_model_reads(self):
+        """A real mailbox's sent-mail endings ran to 39K characters and the one 16K cut came after them: the model never saw who
+        writes in, and named the one product the owner's own mail complained about (2026-10-16)."""
+        s = MemoryStore()
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        sent = [{'subject': 'Re: x', 'body': {'content': ('x' * 1500 + '\n') * 8 + 'Best,\nAlex Doyle'}} for _ in range(12)]
+        msgs = [{'FromEmail': 'noreply@payworth.example', 'FromName': 'Payworth', 'Subject': 'Payroll import failed', 'Status': 'routed',
+                 'BodyText': 'y' * 3000, 'SentAt': '2026-09-01 09:00:00'} for _ in range(60)]
+        def brain(system, user, **kw):
+            brain.user = user
+            return json.dumps({'name': 'Alex Doyle', 'org': '', 'role': '', 'systems': []})
+        with mock.patch('taskuary.histgen.sent_mail', return_value=(sent, [], 1, 'IMAP')), \
+             mock.patch('taskuary.histgen._db_window', return_value=msgs), mock.patch('taskuary.llm.build_llm', return_value=brain):
+            firstrun.suggest_about(s)
+        self.assertIn('payworth.example: 60 mails', brain.user)
+        self.assertIn('Alex Doyle', brain.user)                                       # the signature itself survives the cut
+        self.assertLess(len(brain.user), 20000)
+
     def test_a_suggestion_that_fails_says_why_and_the_form_still_works(self):
         s = MemoryStore()
         with mock.patch('taskuary.histgen.sent_mail', side_effect=RuntimeError('no mail history yet')):

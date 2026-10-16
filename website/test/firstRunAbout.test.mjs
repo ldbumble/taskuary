@@ -28,7 +28,7 @@ test("a failed email sign-in is the Advisor's line, with what to do", () => {
 
 test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is the Advisor's line", () => {
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /const navShown = view === "about" \? nav\.filter\(\(m\) => m\.id === "finish"\) : nav;/);
+  assert.match(fr, /view === "about" \? nav\.filter\(\(m\) => m\.id === "finish"\) : nav;/);
   assert.match(fr, /<FirstRunAbout again=\{!!st\.about_done\} onBack=\{\(\) => go\("mail"\)\} onLine=\{setAboutLine\}/);
   assert.match(fr, /about: aiErr \? `\$\{aiErr\} Change AI picks one that does\.` : aboutLine \|\|/);
 });
@@ -38,4 +38,14 @@ test("the job reads as a document, and Edit opens its text", () => {
   assert.match(src, /\{editing \|\| !jobText\.trim\(\)\s*\? <TextField multiline/);
   assert.match(src, /<Md text=\{jobText\} \/>/);
   assert.match(src, /\{editing \? "Done editing" : "Edit"\}/);
+});
+
+test("the first time About your work is saved, setup is complete: confetti and one big button into the day", () => {
+  const fr = read("FirstRun.jsx"), done = read("SetupDone.jsx");
+  assert.match(fr, /const first = !reopened && !st\.about_done; await reload\(\); go\(first \? "done" : "other"\);/);
+  assert.match(fr, /\{q === "done" && <SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\} \/>\}/);
+  assert.match(fr, /const navShown = view === "done" \? \[\] :/);
+  assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);
+  assert.match(done, /prefers-reduced-motion: reduce/);
+  assert.match(read("setupSteps.js"), /shown === "finish" \? "ready - Go to my day"/);
 });

@@ -15,6 +15,7 @@ import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
 import { focusOf, signinUrl } from "./firstRunFocus.js";
 import FirstRunAbout from "./FirstRunAbout.jsx";
+import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
@@ -146,7 +147,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
   const toneOf = (m) => (fixRow.length && m.id !== "back" ? "s" : m.id === "finish" && view !== "other" ? "s" : VERB[m.id].tone);
   // ABOUT YOUR WORK MOVES ITS OWN QUESTIONS (FirstRunAbout's Back and Next, one question a screen): only the way back to the day stays
-  const navShown = view === "about" ? nav.filter((m) => m.id === "finish") : nav;
+  // ...and SETUP COMPLETE has its one big button on the canvas (SetupDone), nothing in the row
+  const navShown = view === "done" ? [] : view === "about" ? nav.filter((m) => m.id === "finish") : nav;
   useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
     ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...suggested], navShown.length + fixRow.length + suggested.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
@@ -154,8 +156,9 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
   useEffect(() => {
     if (!view) return;
-    window.__tqSetupShown = view;
-    window.dispatchEvent(new CustomEvent("tq-setup-shown", { detail: view }));
+    const at = view === "done" ? "finish" : view;            // the rail's last row is where Setup complete stands
+    window.__tqSetupShown = at;
+    window.dispatchEvent(new CustomEvent("tq-setup-shown", { detail: at }));
   }, [view]);
   // THE SIGN-IN IS A STEP, NOT A TERMINAL (the owner, 2026-10-15: "terminal is broken display"): the login's link is read off its
   // screen and offered as a link; the pane stays mounted, hidden, so its end still runs the check
@@ -302,6 +305,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
       : st.mail_error ? `${st.mail_error} Fix it in the card below and press Connect again - or pick a different email.`
       : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
     about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
+    done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
       : "Nothing else is needed - connect more here any time, from Connections."))
       : "Looking at what you told me about your work to suggest what to connect…",
@@ -380,7 +384,9 @@ ${fix.detail || ""}`, screen: "Setup",
       {shelf("ai", ai, "More AI")}
       {shelf("mail", mail, "More email")}
       {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine}
-        onSaved={async () => { await reload(); go("other"); }} />}
+        onSaved={async () => { const first = !reopened && !st.about_done; await reload(); go(first ? "done" : "other"); }} />}
+      {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) */}
+      {q === "done" && <SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")} />}
       {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
     </Box>
   );

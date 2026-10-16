@@ -15,7 +15,8 @@ export const stepsOf = (st, shown = "") => {
     { key: "about", label: "About your work", done: !!st.about_done, sub: st.about_done ? "saved" : "" },
     { key: "other", label: "More connections", done: false, optional: true, sub: "optional" },
     { key: "finish", label: "Finish", done: !!st.dismissed,
-      sub: ready ? "ready - Finish setup is below" : "after AI, email and About your work" },
+      // on Setup complete the move is its big Go to my day, not a Finish setup in the row (SetupDone)
+      sub: ready ? (shown === "finish" ? "ready - Go to my day" : "ready - Finish setup is below") : "after AI, email and About your work" },
   ];
   const next = rows.find((r) => !r.done && !r.optional && (r.key !== "about" || mailIn))?.key || (ready ? "finish" : "");
   const at = shown || next;

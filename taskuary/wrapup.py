@@ -156,6 +156,18 @@ def attach_files(store, rid: int, files, agent: str = 'agent') -> dict:
     return {'attached': done, 'not_attached': why}
 
 
+def _words(t) -> str: return re.sub(r'\s+', ' ', str(t or '')).strip().lower()
+def _at(rv) -> str: return f" at {str(rv.get('DecidedAt'))[11:16]} on {str(rv.get('DecidedAt'))[:10]}" if rv.get('DecidedAt') else ''
+
+
+def already_sent(store, task_id: int, text: str):
+    """The reply on this task that went out with these very words (spacing aside), if one did."""
+    w = _words(text)
+    return next((r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status IN ('approved','edited','sent') "
+                                        "ORDER BY ReviewId DESC", (task_id,))
+                 if w and w in (_words(r.get('FinalText')), _words(r.get('DraftText')))), None)
+
+
 def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None) -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
@@ -167,6 +179,12 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         if not rv: return {'ok': False, 'why': 'there is no pending reply to attach to - save one with --reply first'}
         return {'ok': True, 'review_id': rv['ReviewId'], **attach_files(store, rv['ReviewId'], files, agent)}
     if not text: return {'ok': False, 'why': 'no reply text'}
+    # THE SAME LETTER TWICE IS A MISTAKE, never a new draft: a resumed session saved its first session's reply again after the
+    # owner had sent it, and it went back on the table aimed at the sender's "Thanks!" (2026-10-16) - one press from a resend
+    if (sent := already_sent(store, task_id, text)):
+        store.add_comment(task_id, agent, 'agent', f'{agent} saved a reply that already went out{_at(sent)} - nothing new was put on the table.')
+        return {'ok': False, 'already_sent': True, 'review_id': sent['ReviewId'],
+                'why': f'that reply already went out{_at(sent)} - nothing new was saved. Write a new one only if there is something new to say.'}
     held = store.held_review(task_id) or {}
     mid = reply_target(store, task_id) or held.get('MessageId')
     # work the owner started here (a brief typed in the chat) has only their own words behind it: the agent's

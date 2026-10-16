@@ -63,6 +63,21 @@ class AgentReplyTests(NoHook):
             wrapup.finish(s, tid, REP, None, 'coding')
         redraft.assert_called_once()
 
+    def test_a_reply_that_already_went_out_is_not_put_back_on_the_table(self):
+        # a resumed session saved its first session's reply again after the owner had sent it, and the sender's "Thanks!"
+        # got the same letter queued as a new draft (2026-10-16) - Send & close would have sent it twice
+        s = MemoryStore(); tid, mid = task_with(s)
+        rid = wrapup.agent_reply(s, tid, OWN, 'coding')['review_id']
+        s._exec("UPDATE review SET Status='approved', FinalText=?, DecidedBy='owner', DecidedAt='2026-09-06 10:00:00' WHERE ReviewId=?", (OWN, rid))
+        s.add_message({'TaskId': tid, 'ExternalId': 'x-2', 'ConversationId': 'AAQk-x', 'Channel': 'email', 'FromName': 'Dana',
+                       'FromEmail': 'dana@vendor.example', 'SentAt': '2026-09-06 11:00:00', 'BodyText': 'Thanks!', 'Status': 'routed'})
+        out = wrapup.agent_reply(s, tid, '  ' + OWN.replace(' - ', '  -  ') + chr(10), 'coding')     # the same words, spaced differently
+        self.assertFalse(out['ok']); self.assertTrue(out.get('already_sent'))
+        self.assertIn('already went out', out['why'])
+        self.assertEqual([r for r in s.list_reviews('pending') if r['TaskId'] == tid], [])
+        # ...and a different reply is still saved as usual
+        self.assertTrue(wrapup.agent_reply(s, tid, 'Glad it helped, Dana.', 'coding')['ok'])
+
     def test_a_triage_draft_held_for_the_session_is_the_one_it_fills(self):
         s = MemoryStore(); tid, mid = task_with(s)
         held = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'held', 'Reason': 'held while the agent works'})

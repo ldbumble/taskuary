@@ -100,3 +100,7 @@ test("every step has Back and Next; Next waits for the step to be done; the last
   assert.equal(frontierOf({ step: "done", about_done: true }), "other");
   assert.equal(nextOf("mail"), "about"); assert.equal(prevOf("about"), "mail"); assert.equal(prevOf("ai"), "ai");
 });
+
+test("saving About your work tells the rail and the top bar's chip, not only an AI or email step", () => {
+  assert.match(read("FirstRun.jsx"), /const at = st && `\$\{st\.step\}\|\$\{!!st\.about_done\}`;/);
+});

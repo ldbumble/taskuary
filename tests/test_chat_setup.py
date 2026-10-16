@@ -249,5 +249,5 @@ class AppPagesTests(unittest.TestCase):
         s = store()
         desk = concierge._system(s)
         self.assertIn('DO FIRST, SHOW SECOND', desk)
-        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles'): self.assertIn(link, desk)
+        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles', '#setup'): self.assertIn(link, desk)
         with concierge.delivering(concierge.PHONE): self.assertNotIn('APP PAGES', concierge._system(s))   # no canvas to open it on

@@ -178,10 +178,12 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     return () => clearTimeout(id);
   }, [st, reload]);
   // a step moved: the rail reloads and says what is next, and so does the top bar's chip (TaskHubPage listens) - it went stale
+  // ...and About your work saved is a step too: keyed on the step alone, the chip said "about your work" after it (2026-10-16)
   useEffect(() => {
-    if (!st || st.step === was.current) return;
+    const at = st && `${st.step}|${!!st.about_done}`;
+    if (!st || at === was.current) return;
     if (was.current) { onChanged?.(); window.dispatchEvent(new Event("tq-setup-changed")); setOpen(null); }
-    was.current = st.step;
+    was.current = at;
   }, [st, onChanged]);
 
   // A CLI CARD IS ONE CLICK: connect, test, make it the AI (firstrun.choose_cli) - or install it first when it is not here

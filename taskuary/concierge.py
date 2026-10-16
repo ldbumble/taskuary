@@ -1129,6 +1129,7 @@ def pages_block(store) -> str:
             # or location of that setting")
             '- the brains - which CLI tool or AI connection, at which model, runs triage, this Assistant, general agents and coding, '
             'and where report runs go: #settings=config&group=Triage%20%26%20agents\n'
+            '- setup itself - their AI, their email, the questions about their work, more connections ("set up Taskuary"): #setup\n'
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
             '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '

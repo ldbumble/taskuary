@@ -4,9 +4,14 @@
 // one reader: is a link one of ours, and open it.
 import { canvasRequestFromHash } from "./canvasLinks.js";
 
+// SETUP IS A MODE, not a page the canvas opens: its link asks for it the way the top bar's Setup does (TaskHubPage's openSetup).
+// Without one, "set up taskuary" typed in the chat was answered with a link to Company Hub (2026-10-16)
+const SETUP = "#setup";
+
 // an in-app page link - one the canvas opens - or null (a web address, a task link handled elsewhere, anything unknown)
 export const appLink = (href) => {
   const h = String(href || "").trim();
+  if (h === SETUP) return h;
   if (!h.startsWith("#") || /^#task=/.test(h)) return null;
   const req = canvasRequestFromHash(h);
   return req && req.kind === "browse" ? h : null;
@@ -26,6 +31,7 @@ export const firstAppLink = (text) => {
 export const openAppLink = (h) => {
   const want = String(h || "").replace(/^#/, "");
   if (!want) return;
+  if (`#${want}` === SETUP) { window.dispatchEvent(new Event("tq-first-run")); return; }
   if (window.location.hash.replace(/^#/, "") === want) {
     window.location.hash = "";
     setTimeout(() => { window.location.hash = want; }, 0);

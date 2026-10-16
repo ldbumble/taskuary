@@ -8,9 +8,20 @@ import { appLink, firstAppLink } from "../src/appLinks.js";
 const read = (name) => fs.readFileSync(new URL(`../src/${name}`, import.meta.url), "utf8");
 
 test("our pages are app links; the web and unknown hashes are not", () => {
-  for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#profiles"])
+  for (const h of ["#connector=intacct", "#cli-agents", "#settings=policies", "#report=new-agent", "#report=12", "#profiles", "#setup"])
     assert.equal(appLink(h), h, h);
   for (const h of ["https://example.com", "#nothing-here", "", "#task=12"]) assert.equal(appLink(h), null, h);
+});
+
+// "set up taskuary" typed in the chat was answered with a link to Company Hub - setup had no address (2026-10-16)
+test("#setup opens setup mode, the same door as the top bar's Setup", async () => {
+  const { openAppLink } = await import("../src/appLinks.js");
+  let fired = "";
+  globalThis.window = { location: { hash: "" }, dispatchEvent: (e) => { fired = e.type; } };
+  globalThis.Event = class { constructor(t) { this.type = t; } };
+  openAppLink("#setup");
+  assert.equal(fired, "tq-first-run"); assert.equal(window.location.hash, "");
+  delete globalThis.window;
 });
 
 test("a reply opens the page it names - else the one task it points at, never one of several", () => {

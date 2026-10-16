@@ -124,7 +124,7 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
                        style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
                   <Button size="small" variant="contained" disableElevation disabled={busy || !path.trim()}
                     onClick={() => choose(r, path.trim())}>Save</Button>
-                  <Button size="small" sx={{ color: DIM }} onClick={() => setOpen(null)}>cancel</Button>
+                  <Button size="small" sx={{ color: DIM }} onClick={() => setOpen(null)}>Cancel</Button>
                 </Box>
               </Box>
             )}

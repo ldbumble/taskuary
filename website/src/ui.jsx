@@ -855,7 +855,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
             ? `Matches any mail about “${topic}”, whoever sends it — the changing part of the subject is ignored.`
             : "Their mail keeps arriving — only the verdict is learned."}
         </Typography>
-        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>cancel</Button>
+        <Button size="small" sx={{ color: DIM, fontSize: 11 }} onClick={() => setOpen(false)}>Cancel</Button>
         <Button size="small" variant="contained" disableElevation
           disabled={busy || !note.trim() || (scope === "subject" && !topic.trim())} onClick={save}
           sx={{ fontSize: 11.5 }}>{busy ? "saving…" : "Not ours — remember this"}</Button>
@@ -960,7 +960,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
           it gets the full message{subject ? ` “${subject}”` : ""} + your operator docs as context
         </Typography>
-        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>cancel</Button>
+        <Button size="small" sx={{ fontSize: 11, color: DIM }} onClick={() => setOpen(false)}>Cancel</Button>
         <Button size="small" variant="contained" disableElevation disabled={busy || !agentKind} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>

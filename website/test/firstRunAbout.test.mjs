@@ -77,5 +77,5 @@ test("the email signature is a setup question and a Settings field, both with a 
   assert.match(about, /data-tq-signature-preview=""/);
   assert.match(settings, /if \(m\.type === "signature"\) return <SignatureSetting/);
   assert.match(settings, /api\.post\("\/api\/signature\/learn"/);
-  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace doesn't allow other apps/);
+  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace's policy denies it, use the Codex CLI/);
 });

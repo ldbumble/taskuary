@@ -45,8 +45,8 @@ def _b64(b: bytes) -> str: return base64.urlsafe_b64encode(b).rstrip(b'=').decod
 # WHAT OPENAI'S ERROR CODES MEAN, in the owner's words - "error_code: 3p_delegated_access_policy_denied" reached a colleague raw
 # (2026-10-16). Not documented by OpenAI; the code names a workspace (Team, Business, Enterprise, Edu) policy refusing apps.
 PLAIN = {'3p_delegated_access_policy_denied':
-         "Your ChatGPT workspace doesn't allow signing in to other apps - its admin decides that. Ask them to allow it, sign in "
-         "with a personal ChatGPT account instead, or pick another AI (the Codex CLI, or an OpenAI or Azure API key)."}
+         "Use the Codex CLI instead - your ChatGPT workspace's settings block signing in to other apps. (Its admin can change "
+         "that setting, or you can sign in with a personal ChatGPT account.)"}
 
 
 def plain_error(code: str, said: str = '') -> str:

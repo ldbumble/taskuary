@@ -53,5 +53,5 @@ class ChatGptSignInTests(unittest.TestCase):
     """OpenAI's sign-in answered "error_code: 3p_delegated_access_policy_denied" on a work account (2026-10-16): said plainly."""
     def test_a_workspace_that_refuses_other_apps_is_said_in_plain_words_with_the_way_out(self):
         why = chatgptauth.plain_error('3p_delegated_access_policy_denied')
-        self.assertIn("doesn't allow", why); self.assertIn('personal ChatGPT account', why); self.assertIn('another AI', why)
+        self.assertTrue(why.startswith('Use the Codex CLI instead')); self.assertIn('settings', why); self.assertIn('admin can change', why)
         self.assertEqual(chatgptauth.plain_error('access_denied', 'You cancelled'), 'You cancelled')

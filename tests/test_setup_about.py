@@ -9,48 +9,105 @@ from unittest import mock
 from taskuary import firstrun
 from taskuary.store import MemoryStore
 
-ANSWERS = {'name': 'Alex Doyle', 'role': 'Finance systems lead at Northwind', 'owns': 'Month-end close, vendor payments',
-           'systems': ['Workday', 'Salesforce', 'Payworth'], 'people': 'Erin Blake, Gail Moreno'}
+ANSWERS = {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance systems lead', 'systems': ['Workday', 'Salesforce', 'Payworth']}
+LEARNED = ('### What my job is\n- I run the finance systems the month-end close depends on.\n'
+           '### Who I work with\n- Erin Blake writes most about the close.')
+
+
+def learned(s, body=LEARNED):
+    """JOB.md as Generate from history leaves it - the marked block after the template's own section."""
+    from taskuary import histgen
+    s.save_doc('job', histgen._splice(s.get_doc('job') or '## The job\n', f'_generated 2026-10-16 08:00 — 9 messages_\n\n{body}',
+                                      histgen.TITLES['job']), 'histgen')
 
 
 class AboutTests(unittest.TestCase):
-    def test_the_answers_land_in_soul_and_job_and_the_name_everywhere(self):
-        s = MemoryStore()
-        with mock.patch.object(firstrun, '_learn_in_background'):
-            firstrun.save_about(s, ANSWERS)
+    """ONE QUESTION A SCREEN, AND THE JOB READ OUT OF THE MAIL (the owner, 2026-10-16: "about your work is too much on one screen ...
+    wait for email to read through all of them then let them fill out name/org/name of role/ then what they are responsible or job
+    description should be prefilled using ai from their email and ask them if it's good description")."""
+    def test_the_answers_land_where_they_are_read_and_the_name_everywhere(self):
+        s = MemoryStore(); learned(s)
+        firstrun.save_about(s, ANSWERS)
         soul, job = s.get_doc('soul'), s.get_doc('job')
         self.assertIn('## Systems I work in', soul)
         for x in ('Workday', 'Salesforce', 'Payworth'): self.assertIn(f'- {x}', soul)
         self.assertLess(soul.index('## Systems I work in'), soul.index('## Connected systems'))
-        self.assertIn('Finance systems lead at Northwind', job); self.assertIn('Month-end close', job); self.assertIn('Erin Blake', job)
+        self.assertIn('Finance systems lead', job); self.assertIn('Northwind', job)
+        self.assertIn('I run the finance systems', job)                             # the learned job, kept as it was
         self.assertEqual(s.owner()['owner'], 'Alex Doyle')
+        self.assertEqual((s.get_setting('owner_company'), s.get_setting('owner_title')), ('Northwind', 'Finance systems lead'))
         self.assertTrue(firstrun.state(s)['about_done'])
+
+    def test_the_job_as_the_owner_corrected_it_replaces_the_learned_one(self):
+        s = MemoryStore(); learned(s)
+        firstrun.save_about(s, {**ANSWERS, 'job': '### What my job is\n- I own payroll and vendor payments, end to end.'})
+        job = s.get_doc('job')
+        self.assertIn('I own payroll and vendor payments', job); self.assertNotIn('month-end close depends on', job)
+        self.assertEqual(job.count('<!-- fromhistory:start -->'), 1)
+        self.assertEqual(firstrun.about(s)['job'], '### What my job is\n- I own payroll and vendor payments, end to end.')
 
     def test_saving_again_replaces_the_answers_and_keeps_the_owners_own_lines(self):
         s = MemoryStore()
-        with mock.patch.object(firstrun, '_learn_in_background'):
-            firstrun.save_about(s, ANSWERS)
-            s.save_doc('soul', s.get_doc('soul') + '\n## My notes\n- Never wire money on a Friday.\n', 'owner')
-            firstrun.save_about(s, {**ANSWERS, 'systems': ['ADP']})
+        firstrun.save_about(s, ANSWERS)
+        s.save_doc('soul', s.get_doc('soul') + '\n## My notes\n- Never wire money on a Friday.\n', 'owner')
+        firstrun.save_about(s, {**ANSWERS, 'systems': ['ADP']})
         soul = s.get_doc('soul')
         self.assertIn('- ADP', soul); self.assertNotIn('- Workday', soul); self.assertEqual(soul.count('## Systems I work in'), 1)
         self.assertIn('Never wire money on a Friday.', soul)
         self.assertEqual(firstrun.about(s)['systems'], ['ADP'])
 
-    def test_suggestions_come_from_the_mail_and_never_overwrite_what_was_typed(self):
+    def test_the_prefill_reads_signatures_names_and_bodies_not_only_subjects(self):
+        """Read off counts and subject lines alone, the role came back "exact job title not shown in the mail" and the people as
+        bare addresses, while every signature said the title (a fresh-install walk, 2026-10-16)."""
         s = MemoryStore()
-        def brain(system, user, **kw): return json.dumps({'role': 'Finance lead', 'owns': 'Payroll and vendor payments',
-                                                          'systems': ['Workday'], 'people': 'Erin Blake'})
-        with mock.patch('taskuary.histgen.job_evidence', return_value=('PEOPLE WHO WRITE TO THE OWNER ...', 'x', [])), \
-             mock.patch('taskuary.llm.build_llm', return_value=brain):
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        msgs = [{'FromEmail': 'erin@northwind.example', 'FromName': 'Erin Blake', 'Subject': 'Month-end close', 'Status': 'routed',
+                 'BodyText': 'Can you sign off the AP accruals in Workday by Thursday?', 'SentAt': '2026-10-15 09:00:00'}]
+        sent = [{'subject': 'Re: close', 'receivedDateTime': '2026-10-14T10:00:00Z',
+                 'body': {'content': 'Hi Erin,\n\nSigned off.\n\nBest,\nAlex Doyle\nFinance Systems Lead | Northwind'}}]
+        def brain(system, user, **kw):
+            brain.user = user
+            return json.dumps({'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance Systems Lead', 'systems': ['Workday']})
+        with mock.patch('taskuary.histgen.sent_mail', return_value=(sent, [], 1, 'IMAP')), \
+             mock.patch('taskuary.histgen._db_window', return_value=msgs), mock.patch('taskuary.llm.build_llm', return_value=brain):
             out = firstrun.suggest_about(s)
-        self.assertEqual((out['role'], out['systems']), ('Finance lead', ['Workday']))
+        self.assertEqual(out, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance Systems Lead', 'systems': ['Workday']})
+        for seen in ('alex@northwind.example', 'Finance Systems Lead | Northwind', 'Erin Blake', 'sign off the AP accruals'):
+            self.assertIn(seen, brain.user)
 
     def test_a_suggestion_that_fails_says_why_and_the_form_still_works(self):
         s = MemoryStore()
-        with mock.patch('taskuary.histgen.job_evidence', side_effect=RuntimeError('no mail history yet')):
+        with mock.patch('taskuary.histgen.sent_mail', side_effect=RuntimeError('no mail history yet')):
             out = firstrun.suggest_about(s)
         self.assertIn('no mail history yet', out['error'])
+
+    def test_the_job_is_written_from_the_mail_once_the_role_is_known_and_its_state_is_said(self):
+        s = MemoryStore()
+        self.assertEqual(firstrun.job_state(s)['state'], 'none')
+        names = []
+        def gen(store, name, days=90):
+            names.append(name)
+            if name == 'job': learned(store)
+        with mock.patch('taskuary.histgen.generate', side_effect=gen):
+            firstrun.learn(s, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance systems lead'}, wait=True)
+        self.assertEqual(names, ['job', 'style'])
+        self.assertEqual((s.owner()['owner'], s.get_setting('owner_company')), ('Alex Doyle', 'Northwind'))
+        st = firstrun.job_state(s)
+        self.assertEqual(st['state'], 'ready'); self.assertTrue(st['text'].startswith('### What my job is')); self.assertNotIn('_generated', st['text'])
+
+    def test_a_job_that_cannot_be_written_says_why(self):
+        s = MemoryStore()
+        with mock.patch('taskuary.histgen.generate', side_effect=RuntimeError('no mail history to learn the job from')):
+            firstrun.learn(s, {'name': 'Alex Doyle', 'org': '', 'role': ''}, wait=True)
+        st = firstrun.job_state(s)
+        self.assertEqual(st['state'], 'failed'); self.assertIn('no mail history', st['why'])
+
+    def test_only_the_name_guessed_from_the_address_is_open_to_the_mails_suggestion(self):
+        s = MemoryStore()
+        s.set_setting('owner_name', 'Alex', 'owner')                         # read off alex@... when the mail connected
+        self.assertEqual(firstrun.about(s)['guessed'], ['name'])
+        firstrun._who(s, {'name': 'Alex Doyle'})
+        self.assertEqual(firstrun.about(s)['guessed'], [])                   # answered: a reload never puts the guess back
 
     def test_the_systems_offered_are_the_catalogues_corporate_ones(self):
         offered = firstrun.about(MemoryStore())['offered']
@@ -89,7 +146,7 @@ class FinishTests(unittest.TestCase):
         self.assertEqual(s.get_setting('first_run_dismissed'), '1')
         t = MemoryStore()
         t.set_setting('first_run_dismissed', '1', 'system')
-        with mock.patch.object(firstrun, '_learn_in_background'): firstrun.save_about(t, ANSWERS)
+        firstrun.save_about(t, ANSWERS)
         firstrun.offer_about(t)                                           # answered already: nothing to reopen
         self.assertEqual(t.get_setting('first_run_dismissed'), '1')
 
@@ -103,8 +160,7 @@ class SuggestConnectionsTests(unittest.TestCase):
     is what tells you what to do next always")."""
     def setUp(self):
         self.s = MemoryStore()
-        with mock.patch.object(firstrun, '_learn_in_background'):
-            firstrun.save_about(self.s, ANSWERS)
+        firstrun.save_about(self.s, ANSWERS)
 
     def test_the_ai_reads_the_answers_and_names_the_cards_and_their_sections(self):
         def brain(system, user, **kw):

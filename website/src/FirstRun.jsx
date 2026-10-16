@@ -69,6 +69,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const [browse, setBrowse] = useState(false);                              // "Pick a different AI": every card again
   const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
+  const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
   // ONE STEP ON THE CANVAS (setupSteps.ORDER: ai, mail, about, other), Back and Next in the row, and A STEP THAT COMPLETES MOVES ON
   // (the owner, 2026-10-15: "always have next/back button if possible and move to next step once one is complete"). Going back to
   // change the AI used to leave no way forward but the rail.
@@ -144,8 +145,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   ];
   // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
   const toneOf = (m) => (fixRow.length && m.id !== "back" ? "s" : m.id === "finish" && view !== "other" ? "s" : VERB[m.id].tone);
-  useVerbs("setup", [...nav.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...suggested], nav.length > 0);
+  // ABOUT YOUR WORK MOVES ITS OWN QUESTIONS (FirstRunAbout's Back and Next, one question a screen): only the way back to the day stays
+  const navShown = view === "about" ? nav.filter((m) => m.id === "finish") : nav;
+  useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
+    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...suggested], navShown.length + fixRow.length + suggested.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
@@ -295,8 +298,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
     // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
     mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
+      // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
+      : st.mail_error ? `${st.mail_error} Fix it in the card below and press Connect again - or pick a different email.`
       : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
-    about: aiErr ? `${aiErr} Change AI picks one that does.` : `Tell me a little about your work - I'm filling in what I can from your email. Five short answers; edit anything.${sortingLine}`,
+    about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
       : "Nothing else is needed - connect more here any time, from Connections."))
       : "Looking at what you told me about your work to suggest what to connect…",
@@ -374,7 +379,8 @@ ${fix.detail || ""}`, screen: "Setup",
     <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
       {shelf("ai", ai, "More AI")}
       {shelf("mail", mail, "More email")}
-      {aboutDue && <FirstRunAbout again={!!st.about_done} onSaved={async () => { await reload(); go("other"); }} />}
+      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine}
+        onSaved={async () => { await reload(); go("other"); }} />}
       {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
     </Box>
   );

@@ -6112,9 +6112,10 @@ class FirstRunConnBody(BaseModel): cid: int
 
 
 class FirstRunAboutBody(BaseModel):
-    name: str = ''; role: str = ''; owns: str = ''; people: str = ''; systems: list = []
+    name: str = ''; org: str = ''; role: str = ''; systems: list = []; job: str = ''
 
-# ABOUT YOUR WORK: five short answers for SOUL.md and JOB.md, suggested from the mail (firstrun.about / suggest_about / save_about)
+# ABOUT YOUR WORK: one question a screen - name, organisation, title, systems, suggested from the mail - then the job description
+# written from the mail with those in hand, for the owner to correct (firstrun.about / suggest_about / learn / job_state / save_about)
 @app.get('/api/setup/first-run/about')
 def first_run_about():
     from . import firstrun
@@ -6124,6 +6125,18 @@ def first_run_about():
 def first_run_about_suggest():
     from . import firstrun
     return firstrun.suggest_about(store)
+
+@app.post('/api/setup/first-run/about/learn')
+def first_run_about_learn(body: FirstRunAboutBody):
+    """The title answered: who they are saved, and JOB.md written from the mail with it in the background (Write it again, too)."""
+    from . import firstrun
+    firstrun.learn(store, body.model_dump())
+    return firstrun.job_state(store)
+
+@app.get('/api/setup/first-run/about/job')
+def first_run_about_job():
+    from . import firstrun
+    return firstrun.job_state(store)
 
 @app.post('/api/setup/first-run/about')
 def first_run_about_save(body: FirstRunAboutBody):

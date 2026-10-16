@@ -1,48 +1,77 @@
-// ABOUT YOUR WORK, the first run's fourth question (the owner, 2026-10-15: "a few short question on setup screen to fill out soul.md
-// and job.md (though you can generate as much as possible from history). They should be short to fill out basic map of their
-// job/soul ... we only have repo's in the soul.md not what other corporate system connectors they have for non technical people ...
-// forgot to ask for their name"). Five answers, suggested from the mail where the form is still blank, saved into SOUL.md (the systems)
-// and JOB.md (role, what they own, who they work with) by firstrun.save_about - and STYLE.md is learned from the sent mail behind it.
-import React, { useEffect, useState } from "react";
+// ABOUT YOUR WORK, ONE QUESTION A SCREEN (the owner, 2026-10-16: "about your work is too much on one screen. ask one then hit next
+// button ... let them fill out name/org/name of role/ then what they are responsible or job description should be prefilled using ai
+// from their email and ask them if it's good description"). Name, organisation, title and systems, each filled from the mail where it
+// can (firstrun.suggest_about) and never over what was typed; the title answered, JOB.md is written from the mail with them in hand
+// (firstrun.learn) and the last screen asks whether it is right. No placeholder text: a box is either filled from the mail or empty.
+// The row's Back and Next are this component's while it is on the canvas; the question is the Advisor's line (onLine).
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
 import { DIM } from "./theme.jsx";
+import { useVerbs } from "./actionRow.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
-const blank = (a) => !a.role && !a.owns && !a.people && !(a.systems || []).length;
+export const STEPS = ["name", "org", "role", "systems", "job"];
+const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", systems: "Systems you work in", job: "Your job" };
+const ASK = {
+  name: "What's your name?", org: "What organisation do you work for?",
+  role: "What's your job title? Next, I write your job description from your email.",
+  systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
+};
+const who = (a) => JSON.stringify([a.name, a.org, a.role].map((x) => (x || "").trim()));
 
-export default function FirstRunAbout({ onSaved, again = false }) {
-  const [a, setA] = useState(null), [offered, setOffered] = useState([]);
-  const [reading, setReading] = useState(false), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [note, setNote] = useState("");
-  const [other, setOther] = useState("");
+export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }) {
+  const [a, setA] = useState(null), [offered, setOffered] = useState([]), [seen, setSeen] = useState([]), [all, setAll] = useState(false);
+  const [at, setAt] = useState(0), [reading, setReading] = useState(false), [note, setNote] = useState("");
+  const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [other, setOther] = useState("");
+  const [job, setJob] = useState({ state: "none", why: "", text: "" }), [jobText, setJobText] = useState(""), [edited, setEdited] = useState(false);
+  const touched = useRef(new Set()), learnedFor = useRef("");
   useEffect(() => {
     let on = true;
     api.get("/api/setup/first-run/about").then(async ({ data }) => {
       if (!on) return;
-      setOffered(data.offered || []);
-      setA({ name: data.name, role: data.role, owns: data.owns, people: data.people, systems: data.systems || [] });
-      if (!blank(data)) return;
-      // what the mail says, for the boxes still blank - never over what was typed
+      const got = { name: data.name || "", org: data.org || "", role: data.role || "", systems: data.systems || [] };
+      setOffered(data.offered || []); setA(got); setSeen(got.systems);
+      // answered before and a job already written for those answers: no need to write it again unless one of them changes
+      if (data.done && data.job) { learnedFor.current = who(got); setJob({ state: "ready", why: "", text: data.job }); setJobText(data.job); }
+      if (data.done && data.org && data.role) return;
+      // what the mail says, for every box not typed in - the name guessed from the address included
       setReading(true);
       try {
         const { data: s } = await api.post("/api/setup/first-run/about/suggest", {}, { timeout: 180_000 });
         if (!on) return;
-        if (s.error) setNote(`I couldn't fill these in from your email (${s.error}) - type them, or skip.`);
-        else setA((x) => ({ ...x, role: x.role || s.role || "", owns: x.owns || s.owns || "", people: x.people || s.people || "",
-          systems: x.systems?.length ? x.systems : s.systems || [] }));
-      } catch (e) { if (on) setNote(`I couldn't fill these in from your email (${errText(e)}) - type them, or skip.`); }
+        if (s.error) setNote(`I couldn't fill these in from your email (${s.error}) - type them in.`);
+        else {
+          // a box the owner answered - now or before - is theirs; only an empty one, or the name guessed from the address, takes the mail's
+          setA((x) => ({ ...x, ...Object.fromEntries(["name", "org", "role"].filter((k) => !touched.current.has(k) && s[k]
+            && (!x[k] || (data.guessed || []).includes(k))).map((k) => [k, s[k]])),
+            systems: touched.current.has("systems") || x.systems.length ? x.systems : s.systems || [] }));
+          setSeen((x) => [...new Set([...x, ...(s.systems || [])])]);
+        }
+      } catch (e) { if (on) setNote(`I couldn't fill these in from your email (${errText(e)}) - type them in.`); }
       if (on) setReading(false);
     }).catch((e) => on && setErr(errText(e)));
     return () => { on = false; };
   }, []);
-  if (!a) return err ? <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography> : <CircularProgress size={16} />;
-  const set = (k) => (e) => setA((x) => ({ ...x, [k]: e.target.value }));
-  const has = (s) => a.systems.includes(s);
-  const toggle = (s) => setA((x) => ({ ...x, systems: has(s) ? x.systems.filter((y) => y !== s) : [...x.systems, s] }));
-  const addOther = () => { const v = other.trim(); if (v && !has(v)) setA((x) => ({ ...x, systems: [...x.systems, v] })); setOther(""); };
+  // the job being written: read again every few seconds until it is ready or says why not
+  useEffect(() => {
+    if (job.state !== "running") return undefined;
+    const id = setTimeout(() => api.get("/api/setup/first-run/about/job").then(({ data }) => {
+      setJob(data);
+      if (data.state === "ready" && !edited) setJobText(data.text);
+    }).catch(() => setJob((j) => ({ ...j })) ), 3000);
+    return () => clearTimeout(id);
+  }, [job, edited]);
+  const step = STEPS[at];
+  const learn = async (x = a) => {
+    learnedFor.current = who(x); setEdited(false); setJob({ state: "running", why: "", text: "" });
+    try { setJob((await api.post("/api/setup/first-run/about/learn", x)).data); }
+    catch (e) { setJob({ state: "failed", why: errText(e), text: "" }); }
+  };
   const save = async () => {
     setBusy("save"); setErr("");
-    try { await api.post("/api/setup/first-run/about", a); onSaved?.(); } catch (e) { setErr(errText(e)); }
+    try { await api.post("/api/setup/first-run/about", { ...a, job: job.state === "ready" || edited ? jobText : "" }); onSaved?.(); }
+    catch (e) { setErr(errText(e)); }
     setBusy("");
   };
   const skip = async () => {
@@ -50,39 +79,79 @@ export default function FirstRunAbout({ onSaved, again = false }) {
     try { await api.post("/api/setup/first-run/about/skip"); onSaved?.(); } catch (e) { setErr(errText(e)); }
     setBusy("");
   };
-  const field = { "& .MuiInputBase-root": { fontSize: 14, bgcolor: "#fff" } };
-  const label = { fontSize: 12.5, fontWeight: 600, mb: 0.4 };
-  const extra = a.systems.filter((s) => !offered.includes(s));
+  const next = () => {
+    setErr("");
+    if (step === "role" && who(a) !== learnedFor.current) learn();     // written while the systems are picked
+    if (step === "job") return save();
+    setAt((i) => Math.min(i + 1, STEPS.length - 1));
+  };
+  const back = () => (at ? setAt(at - 1) : onBack?.());
+  const ready = !!a && (step !== "job" || job.state !== "running");
+  const last = step === "job";
+  useVerbs("setup-about", a ? [
+    { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your email", run: back },
+    { id: "about:next", group: "decide", tone: "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : "",
+      label: last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : "Next",
+      title: last ? "Saved into JOB.md and SOUL.md - edit them any time under Settings → Docs" : "The next question", run: next },
+  ] : [], !!a);
+  // the question is the Advisor's line over the row
+  const line = !a ? "" : step === "job"
+    ? job.state === "running" ? "Reading three months of your email to write your job description - about a minute."
+      : job.state === "failed" ? `I couldn't write it from your email (${job.why}). Press Write it again, or say it in your own words.`
+        : job.state === "ready" ? "This is your job as your email describes it. Is it right? Change anything, then press Looks right."
+          : "Press Write it - I read your email and describe your job."
+    : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""}`;
+  useEffect(() => { onLine?.(line); }, [line, onLine]);
+  useEffect(() => () => onLine?.(""), [onLine]);
+  if (!a) return err ? <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography> : <CircularProgress size={16} />;
+
+  const set = (k) => (e) => { touched.current.add(k); setA((x) => ({ ...x, [k]: e.target.value })); };
+  const has = (s) => a.systems.includes(s);
+  const toggle = (s) => { touched.current.add("systems"); setA((x) => ({ ...x, systems: has(s) ? x.systems.filter((y) => y !== s) : [...x.systems, s] })); };
+  const addOther = () => {
+    const v = other.trim();
+    if (v && !has(v)) { touched.current.add("systems"); setA((x) => ({ ...x, systems: [...x.systems, v] })); setSeen((x) => [...new Set([...x, v])]); }
+    setOther("");
+  };
+  const field = { "& .MuiInputBase-root": { fontSize: 15, bgcolor: "#fff" } };
+  const enter = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); } };
+  const shown = all ? [...new Set([...seen, ...offered])] : seen;
   return (
-    <Box data-tq-firstrun-about="" sx={{ display: "flex", flexDirection: "column", gap: 1.6, maxWidth: 760 }}>
-      {reading && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
-        <Typography sx={{ color: DIM, fontSize: 13.5 }}>Reading your email to fill these in - about a minute. You can start typing.</Typography></Box>}
-      {note && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
-      <Box><Typography sx={label}>Your name</Typography>
-        <TextField size="small" fullWidth value={a.name} onChange={set("name")} placeholder="Alex Doyle" sx={field} /></Box>
-      <Box><Typography sx={label}>Your role</Typography>
-        <TextField size="small" fullWidth value={a.role} onChange={set("role")} placeholder="Finance systems lead at Northwind" sx={field} /></Box>
-      <Box><Typography sx={label}>What you're responsible for</Typography>
-        <TextField size="small" fullWidth multiline minRows={2} value={a.owns} onChange={set("owns")}
-          placeholder="Month-end close, vendor payments, the payroll systems" sx={field} /></Box>
-      <Box><Typography sx={label}>Systems you work in</Typography>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6 }}>
-          {[...offered, ...extra].map((s) => <Chip key={s} label={s} size="small" clickable onClick={() => toggle(s)}
+    <Box data-tq-firstrun-about={step} sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 760 }}>
+      <Typography sx={{ color: DIM, fontSize: 12 }}>About your work · {at + 1} of {STEPS.length}</Typography>
+      <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{LABEL[step]}</Typography>
+      {["name", "org", "role"].includes(step) && <>
+        <TextField key={step} size="small" fullWidth autoFocus value={a[step]} onChange={set(step)} onKeyDown={enter} sx={field}
+          inputProps={{ "aria-label": LABEL[step] }} />
+        {reading && !a[step] && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />
+          <Typography sx={{ color: DIM, fontSize: 13 }}>Reading your email to fill this in - you can type it yourself.</Typography></Box>}
+      </>}
+      {step === "systems" && <>
+        {reading && <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={13} />
+          <Typography sx={{ color: DIM, fontSize: 13 }}>Reading your email for the systems you use…</Typography></Box>}
+        {shown.length > 0 && <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.6 }}>
+          {shown.map((s) => <Chip key={s} label={s} size="small" clickable onClick={() => toggle(s)}
             color={has(s) ? "primary" : "default"} variant={has(s) ? "filled" : "outlined"} />)}
+        </Box>}
+        <Box sx={{ display: "flex", gap: 1, maxWidth: 460, alignItems: "center" }}>
+          <TextField size="small" fullWidth value={other} onChange={(e) => setOther(e.target.value)} sx={field}
+            inputProps={{ "aria-label": "Another system" }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOther(); } }} />
+          <Button size="small" onClick={addOther} disabled={!other.trim()} sx={{ whiteSpace: "nowrap" }}>Add a system</Button>
         </Box>
-        <Box sx={{ display: "flex", gap: 1, mt: 0.8, maxWidth: 420 }}>
-          <TextField size="small" fullWidth value={other} onChange={(e) => setOther(e.target.value)} placeholder="Another one - type it and press Add"
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOther(); } }} sx={field} />
-          <Button size="small" onClick={addOther} disabled={!other.trim()}>Add</Button>
-        </Box></Box>
-      <Box><Typography sx={label}>Who you work with most</Typography>
-        <TextField size="small" fullWidth value={a.people} onChange={set("people")} placeholder="Erin Blake, Gail Moreno" sx={field} /></Box>
+        <Box><Button size="small" sx={{ color: DIM, fontSize: 12.5 }} onClick={() => setAll((v) => !v)}>
+          {all ? "Show only mine" : "Show the full list"}</Button></Box>
+      </>}
+      {step === "job" && (job.state === "running" ? (
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
+          <Typography sx={{ color: DIM, fontSize: 13.5 }}>Writing your job description from your email…</Typography></Box>
+      ) : <>
+        <TextField multiline fullWidth minRows={10} maxRows={22} value={jobText} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
+          onChange={(e) => { setEdited(true); setJobText(e.target.value); }} inputProps={{ "aria-label": "Your job" }} />
+        <Box><Button size="small" onClick={() => learn()} disabled={!!busy}>{job.state === "none" ? "Write it" : "Write it again"}</Button></Box>
+      </>)}
+      {note && step !== "job" && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-        <Button variant="contained" disableElevation disabled={!!busy} onClick={save}>{busy === "save" ? "Saving…" : again ? "Save" : "Save and continue"}</Button>
-        {!again && <Button disabled={!!busy} onClick={skip} sx={{ color: DIM }}>Skip</Button>}
-        <Typography sx={{ color: DIM, fontSize: 12 }}>Saved into SOUL.md and JOB.md - edit them any time under Settings → Docs.</Typography>
-      </Box>
+      {!again && <Box><Button size="small" disabled={!!busy} onClick={skip} sx={{ color: DIM, fontSize: 12.5 }}>Skip these questions</Button></Box>}
     </Box>
   );
 }

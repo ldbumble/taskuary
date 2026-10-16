@@ -502,31 +502,31 @@ JOB = """# JOB.md - what Dana's job is
 <!-- fromhistory:start -->
 _generated 2026-09-30 09:12 — 412 inbound + 188 sent from the last 90 days across 1 mailbox(es), read over Graph_
 
-### What the job is
-- Dana owns the systems the month-end close depends on, and is the person the business writes to
-  when a number does not match.
+### What my job is
+- I own the systems the month-end close depends on, and I'm the person the business writes to when a
+  number does not match.
 
-### Responsibilities, by how often they come up
-- Month-end differences between the GL export and the ledger: every month, always answered.
-- AP importer failures and vendor file formats: weekly, always answered.
-- Census corrections and access to the census database: weekly, answered within the day.
-- Helpdesk escalations about finance tools: several a week, answered when the helpdesk cannot.
+### What I am responsible for
+- Month-end differences between the GL export and the ledger, every month.
+- AP importer failures and vendor file formats, weekly.
+- Census corrections and access to the census database, weekly - answered within the day.
+- Helpdesk escalations about finance tools, when the helpdesk cannot settle them.
 
-### Who Dana works with
-- The CFO's office writes most and is always answered - questions about totals, timing of the close.
-- The helpdesk hands up what it cannot settle and is answered the same day.
-- Vendors write about imports and renewals; renewals go to the CFO, imports Dana settles.
+### Who I work with
+- The CFO's office writes most - questions about totals and the timing of the close.
+- The helpdesk hands up what it cannot settle; I answer the same day.
+- Vendors write about imports and renewals; renewals go to the CFO, imports I settle.
 
 ### Recurring cadences
-- Month-end close, first three working days of the month: the difference thread opens every time.
+- Month-end close, the first three working days of the month: the difference thread opens every time.
 - Vendor statement imports, weekly, Monday or Tuesday.
 - Quarterly access review of the census database.
 
-### Decisions Dana makes, and what they hand up
-- Dana decides fixes, imports, access and priorities in the queue.
+### Decisions I make, and what I hand up
+- I decide fixes, imports, access and priorities in the queue.
 - Money, contracts and renewals go to the CFO; credentials and policy to IT security.
 
-### What to protect
+### What I protect
 - The close finishing on time with a number nobody has to explain twice.
 - Census data being right before anyone downstream reads it.
 <!-- fromhistory:end -->

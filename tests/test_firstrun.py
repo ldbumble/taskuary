@@ -122,6 +122,28 @@ class KeyAndMailTests(unittest.TestCase):
         self.assertFalse(s.get_connector_by_type('gmail')['Active'])
         self.assertIn('full email address', firstrun.connect_mail(s, 'gmail', 'alex', 'x')['why'])
 
+    def test_a_failed_sign_in_is_the_advisors_line_with_what_to_do_and_a_good_one_clears_it(self):
+        """The card said why, while the Advisor's line over the row still asked "What email do you have? Click it below" (a fresh-install
+        walk, 2026-10-16): after a failure it says why and what next."""
+        s = MemoryStore()
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': 'AUTHENTICATIONFAILED'}):
+            firstrun.connect_mail(s, 'gmail', 'alex@gmail.example', 'my-normal-password')
+        with mock.patch.object(firstrun, '_sorting', return_value=0), \
+             mock.patch('taskuary.setup._ai', return_value={'ready': True, 'pick': ''}), mock.patch('taskuary.setup._inbound', return_value=[]), \
+             mock.patch('taskuary.setup._first_items', return_value=[]), mock.patch('taskuary.clis.detect', return_value=[]):
+            s.set_setting('triage_ai', 'cli:claude', 'owner')
+            line = firstrun.state(s)['next']
+            self.assertIn("Couldn't sign in to alex@gmail.example", line); self.assertIn('App Password', line)
+            self.assertIn('press Connect again', line)
+            self.assertIn("Couldn't sign in", firstrun.state(s)['mail_error'])          # the canvas builds its own line from this
+            cid = s.get_connector_by_type('gmail')['ConnectorId']
+            def claims(store, c):
+                store.save_source({'Channel': 'email', 'Address': 'alex@gmail.example', 'ConnectorId': c, 'Active': 0}, 't')
+                return {'ok': True, 'detail': 'logged in'}
+            with mock.patch('taskuary.channels.test_connector', side_effect=claims):
+                self.assertTrue(firstrun.connect_mail(s, 'gmail', 'alex@gmail.example', 'abcd efgh ijkl mnop')['ok'])
+            self.assertNotIn("Couldn't sign in", firstrun.state(s)['next'])
+
     def test_a_failure_that_already_says_what_to_check_is_said_once(self):
         s = MemoryStore()
         said = "The server's address could not be found. Check the host name for typos, and that this computer is online."

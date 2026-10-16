@@ -297,3 +297,39 @@ class VocabularyFromHistoryTests(unittest.TestCase):
             detail = histgen.generate(s, 'vocabulary')
         self.assertIn('no Graph mailbox history', detail); self.assertEqual(voice.vocabulary(s), ['Dov Blake', 'Yardi'])
         self.assertIn('Yardi roll: 1', seen['user']); self.assertIn('Dov Blake: 1', seen['user'])
+
+
+class FirstPersonTests(unittest.TestCase):
+    """JOB.md and STYLE.md are the owner's own documents (the owner, 2026-10-16: "it's written in 3rd party like it appears they are x,
+    that's not a good job.md. it should say this is what i am responsible in 1st party") - and the job knows whose company it is:
+    the owner's own colleagues were read as "one partner organisation"."""
+    INBOX = [{'id': 'i1', 'subject': 'PTO import failing', 'receivedDateTime': '2026-08-01T09:00:00Z', 'conversationId': 'c1',
+              'from': {'emailAddress': {'address': 'paula@corp.example', 'name': 'Paula Vance'}}}]
+
+    def test_the_job_is_written_as_the_owner_and_knows_their_organisation(self):
+        s = MemoryStore()
+        for k, v in (('owner_name', 'Alex Doyle'), ('owner_email', 'alex@corp.example'), ('owner_company', 'Corp'), ('owner_title', 'Payroll lead')):
+            s.set_setting(k, v, 'owner')
+        seen = {}
+        def llm(system, user, max_tokens=0): seen.update(s=system, u=user); return JOB
+        with graph(SENT, self.INBOX), mock.patch('taskuary.llm.build_llm', return_value=llm):
+            histgen.generate(s, 'job')
+        self.assertIn('first person', seen['s']); self.assertIn('### Who I work with', seen['s'])
+        self.assertNotIn('Refer to the owner as {{owner_first}}', seen['s'])
+        self.assertIn('appears', seen['s'])                         # named as a word never to use
+        self.assertIn('Alex Doyle, Payroll lead at Corp', seen['u'])
+        self.assertIn('corp.example', seen['u']); self.assertIn('their own organisation', seen['u'])
+        self.assertIn('paula@corp.example: 1 mails, 1 answered - Paula Vance', seen['u'])   # people by name, not address alone
+
+    def test_the_job_reads_what_people_ask_not_only_subjects(self):
+        s = MemoryStore()
+        asks = [{'FromName': 'Marcus Reed', 'FromEmail': 'marcus@corp.example', 'Subject': 'Vendor payment run', 'Status': 'routed',
+                 'BodyText': 'The payment run is ready - it needs your approval by EOD Wednesday.'}]
+        seen = {}
+        def llm(system, user, max_tokens=0): seen.update(u=user); return JOB
+        with graph(SENT, self.INBOX), mock.patch.object(histgen, '_db_window', return_value=asks), mock.patch('taskuary.llm.build_llm', return_value=llm):
+            histgen.generate(s, 'job')
+        self.assertIn('Marcus Reed "Vendor payment run": The payment run is ready - it needs your approval', seen['u'])
+
+    def test_the_style_is_written_as_the_owner_too(self):
+        self.assertIn('first person', histgen.STYLE_SYSTEM); self.assertIn('### How I push back or say no', histgen.STYLE_SYSTEM)

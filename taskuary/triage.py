@@ -135,7 +135,7 @@ def due_of(j: dict, sent=None) -> str | None:
     except ValueError: base = datetime.now().date()
     return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False) -> dict:
+def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -147,7 +147,8 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
     filled in a `relationship` and a `repo_reason` for a thread that had neither (TQ-0665)."""
     p = {'intent': {'type': 'string', 'enum': ['task', 'reply_only', 'fyi']},
          'why': {'type': 'string'}, 'title': {'type': 'string'}, 'summary': {'type': 'string'},
-         'kind': {'type': ['string', 'null'], 'enum': ['coding', 'general', 'task', None]},
+         # no coding tool connected: the answer cannot say coding (agents.coding_ready)
+         'kind': {'type': ['string', 'null'], 'enum': (['coding'] if coding else []) + ['general', 'task', None]},
          'checklist': {'type': ['array', 'null'], 'items': {'type': 'string'}}, 'urgent': {'type': 'boolean'},
          'due': {'type': ['string', 'null']},
          # who wrote it (categories.sender_class) - the Timeline's info/automated/promo and the Advisor's people (2026-10-11)
@@ -523,7 +524,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     learned: str = None, system: str = None, notes_left: int = 0, mine=(),
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
-                    profiles: str = None, routing_history: list = None, seen: set = None, job: str = None) -> dict:
+                    profiles: str = None, routing_history: list = None, seen: set = None, job: str = None,
+                    coding: bool = True) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
     the owner wrote or generated something real, so the shipped template never rides in as noise.
@@ -610,6 +612,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
             if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
             if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
+            # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
+            if not coding: system += ('\n\nNO CODING TOOL IS CONNECTED on this install: there is no coding agent. Never choose kind '
+                                      'coding - work that would be coding is general.')
             same_ids = {int(w['tid']) for key in ('open_work', 'recently_closed') for w in ((thread or {}).get(key) or []) if w.get('tid')}
             goal_steps = {int(g['tid']): {x['id'] for x in g.get('steps') or []} for g in (thread or {}).get('open_goals') or []}
             how = addressed_to_you(msg, mine)
@@ -657,7 +662,8 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # behind it, for a CLI brain that has no wire to put a schema on - one more ask, naming
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
-            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps)),
+            answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
+                                                                     coding=coding),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -672,6 +678,9 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
                 if j['intent'] == 'task' and j.get('kind') in ('coding', 'general', 'task'): out['kind'] = j['kind']
+                # ...and a coding verdict on an install with no coding tool is the general agent's: it tried to start a CLI that
+                # was not there and said "couldn't start" until someone noticed (2026-10-16)
+                if out.get('kind') == 'coding' and not coding: out['kind'] = 'general'
                 # a playbook the menu actually offered rides on the task as ITS PROCEDURE; it says how the job
                 # is done here, not who does it - the kind stays the model's own (PW-205: the old override to
                 # coding sent a PTO request, a general job, into a checkout)

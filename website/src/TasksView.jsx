@@ -1,6 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says } from "./laneSays.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCoding } from "./capabilities.js";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, IconButton, InputAdornment, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
@@ -107,6 +108,7 @@ const askedAgo = (t) => {
 };
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {
+  const canCode = useCoding();                    // no coding tool connected: no coding kind to make (capabilities.js)
   const [tasks, setTasks] = useState(null);
   const [leavingId, setLeavingId] = useState(null);     // a task closed at the press, still closing on the server (finishWith)
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"
@@ -472,7 +474,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <TextField label="Summary" value={nt.Summary} multiline minRows={2} onChange={(e) => setNt({ ...nt, Summary: e.target.value })} />
           <Box sx={{ display: "flex", gap: 1.5 }}>
             <Select fullWidth value={nt.Kind} renderValue={kindLabel} onChange={(e) => setNt({ ...nt, Kind: e.target.value })}>
-              {KIND_OPTIONS.filter((o) => o.made !== false).map((o) => <MenuItem key={o.key} value={o.key} sx={{ py: 0.7 }}>
+              {KIND_OPTIONS.filter((o) => o.made !== false && (o.key !== "coding" || canCode)).map((o) => <MenuItem key={o.key} value={o.key} sx={{ py: 0.7 }}>
                 <ListItemText primary={o.label} secondary={o.hint}
                   primaryTypographyProps={{ fontSize: 13 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
               </MenuItem>)}

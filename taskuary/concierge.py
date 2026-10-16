@@ -683,6 +683,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
         return f"{what} is already being worked on - press Continue to add to it instead of handing it off again."
     if verb == 'coding_agent' and store is not None:
+        # no coding tool connected: there is no coding agent to offer at all - not even as an alternative (2026-10-16)
+        from . import agents as hub_agents
+        if not hub_agents.coding_ready(store):
+            return ('There is no coding agent on this computer - no coding tool is connected. Send to agent hands it to the '
+                    'general agent instead.')
         gone = no_agent(store)
         if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
                          'Set it up under Connections, then say it again. Nothing has changed.')
@@ -2439,7 +2444,8 @@ def triage_agent(store, item: dict) -> str:
     if not kind and item.get('mid'):
         try: kind = str(operations.verdict_of_message(store, store.get_message(item['mid']) or {})[0] or '')
         except Exception: kind = ''
-    return 'coding_agent' if kind == 'coding' else 'regular_agent'
+    from . import agents as hub_agents
+    return 'coding_agent' if kind == 'coding' and hub_agents.coding_ready(store) else 'regular_agent'
 
 
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,

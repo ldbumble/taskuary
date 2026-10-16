@@ -5212,6 +5212,10 @@ def save_connector(body: ConnectorBody):
             discovery = github_discover(store, c, ACTOR)
         except Exception as e:
             discovery = {'error': str(e)[:300]}
+    # an organisation's AI card switched on here: each job still unpointed goes to the model that fits it (firstrun.models_by_job)
+    if c.get('Type') == 'hipaa_ai' and c.get('Active') and c.get('Secret') and ('Secret' in fields or fields.get('Active')):
+        from . import firstrun
+        discovery = firstrun.models_by_job(store, cfg, cid, only_blank=True)
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}
@@ -6139,6 +6143,12 @@ def first_run_about():
 def first_run_about_suggest():
     from . import firstrun
     return firstrun.suggest_about(store)
+
+@app.get('/api/capabilities')
+def capabilities():
+    """What this install can do, for the screens that offer it: coding only where a coding tool is connected (agents.coding_ready)."""
+    from . import agents
+    return {'coding': agents.coding_ready(store)}
 
 @app.post('/api/signature/learn')
 def signature_learn():

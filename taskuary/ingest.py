@@ -568,7 +568,9 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              profiles=hub_agents.roster(store) or None,
                              # ...and what the owner corrected LAST time a message like this was
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
-                             routing_history=_routing_history(store, msg))
+                             routing_history=_routing_history(store, msg),
+                             # ...and whether coding exists here at all: no coding tool connected, no coding kind (2026-10-16)
+                             coding=hub_agents.coding_ready(store))
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 

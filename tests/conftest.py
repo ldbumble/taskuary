@@ -479,7 +479,11 @@ def no_connection_brains():
     # A test about it patches `agents.default_pick.real` back in.
     no_pick = lambda store: ''
     no_pick.real = agents.default_pick
-    with mock.patch.object(agents, 'connection_brains', stub), mock.patch.object(agents, 'default_pick', no_pick): yield
+    # ...while CODING STAYS POSSIBLE: with no connection brains, agents.coding_ready would turn every coding verdict in the suite
+    # into general work (2026-10-16). A test about coding_ready patches it, or calls `agents.coding_ready.real`.
+    can_code = lambda store: True
+    can_code.real = agents.coding_ready
+    with mock.patch.object(agents, 'connection_brains', stub), mock.patch.object(agents, 'default_pick', no_pick),          mock.patch.object(agents, 'coding_ready', can_code): yield
 
 
 @pytest.fixture(autouse=True)

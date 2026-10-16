@@ -4,6 +4,7 @@
 // Search reaches EVERYTHING (knobs, rules, memory, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCoding } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
@@ -387,6 +388,7 @@ const PageHead = ({ page, first }) => (
 // no-undef is what caught it before it shipped.
 // `only` (the assistant canvas): draw ONE page - and on Configuration, one group of it - instead of the whole document
 function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog, only = null }) {
+  const canCode = useCoding();                    // no coding tool connected: coding is not offered (capabilities.js)
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -676,7 +678,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
   };
-  const cfgGroups = GROUPS.filter((g) => panels[g] || rowsOf(g).length);
+  // no coding tool connected: the Coding agent section has nothing to set (capabilities.js)
+  const cfgGroups = GROUPS.filter((g) => (panels[g] || rowsOf(g).length) && (g !== "Coding agent" || canCode));
   const cfgKey = cfgGroups.join("|");
   useEffect(() => { onSections(cfgKey ? cfgKey.split("|") : []); }, [cfgKey, onSections]);
 
@@ -1011,6 +1014,7 @@ const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap besid
 // `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
 // group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
 export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
+  const canCode = useCoding();                    // no coding tool connected: no Coding agent section (capabilities.js)
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.
@@ -1162,7 +1166,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       return [{ key: e.key, shelf, title: e.label, sub: String(what[e.key] || "").split(/(?<=\.)\s/)[0], sel: e.sel }];
     }).filter((c) => (SHELF[section] || []).includes(c.shelf));
     const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config" }))
-      : section === "config" ? GROUPS.map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
+      : section === "config" ? GROUPS.filter((g) => g !== "Coding agent" || canCode).map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
       : SHELF[section] ? docCards
       : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
     const open = gone || !section ? null : browseState.open;

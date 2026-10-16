@@ -32,3 +32,45 @@ class HipaaAiTests(unittest.TestCase):
         with mock.patch.dict(llm.OPENAI_COMPATIBLE, {'hipaa_ai': ('', 'hipaa-ai')}), self.assertRaises(RuntimeError) as e:
             llm.make_llm('hipaa_ai', {}, 'hai-code-123')
         self.assertIn('gateway address', str(e.exception))
+
+
+class ModelsByJobTests(unittest.TestCase):
+    """Turning the card on fills each job's model from the gateway's own list (the owner, 2026-10-16: "pull the models available,
+    then use lowest quickest for triage/assistant/advisor, and then ... sonnet default for agent work")."""
+    MODELS = ['hipaa-ai', 'claude-opus-5-5', 'gemini-2.5-pro', 'claude-sonnet-5-5', 'gemini-3.8-flash']
+
+    def test_the_fastest_model_for_triage_and_the_assistant_and_sonnet_for_the_agent(self):
+        from taskuary import firstrun
+        self.assertEqual(firstrun.pick_models(self.MODELS), ('gemini-3.8-flash', 'claude-sonnet-5-5'))
+        self.assertEqual(firstrun.pick_models(['x-pro', 'x-flash-lite', 'x-flash']), ('x-flash-lite', 'x-pro'))
+        self.assertEqual(firstrun.pick_models([]), ('', ''))
+
+    def test_turning_it_on_sets_each_job_and_only_blank_ones_when_asked(self):
+        from taskuary import firstrun, aidefaults
+        s = MemoryStore()
+        cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1,
+                          'ConfigJson': json.dumps({'base_url': 'https://ai.northwind.example/v1'})}, 'owner')
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS), mock.patch('taskuary.config.load', return_value={}):
+            out = firstrun.models_by_job(s, {}, cid)
+        self.assertEqual(out, {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5'})
+        for slot in ('triage_ai', 'concierge_ai', 'assistant_ai'): self.assertEqual(s.get_setting(slot), f'connector:{cid}')
+        self.assertEqual(s.get_setting('assistant_model'), 'claude-sonnet-5-5')
+        self.assertEqual(s.get_setting('concierge_model'), 'gemini-3.8-flash')
+        t = MemoryStore(); t.set_setting('triage_ai', 'cli:claude', 'owner')
+        tid = t.get_connector_by_type('hipaa_ai')['ConnectorId']
+        t.save_connector({'ConnectorId': tid, 'Secret': 'hai-code-123', 'Active': 1}, 'owner')
+        with mock.patch('taskuary.llm.list_models', return_value=self.MODELS):
+            firstrun.models_by_job(t, {}, tid, only_blank=True)
+        self.assertEqual(t.get_setting('triage_ai'), 'cli:claude', "the owner's own pick stays")
+        self.assertEqual(t.get_setting('assistant_ai'), f'connector:{tid}')
+
+    def test_switching_it_on_from_connections_fills_only_the_unpointed_jobs(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = MemoryStore(); s.set_setting('triage_ai', 'cli:claude', 'owner')
+        cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.llm.list_models', return_value=self.MODELS):
+            r = TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}).json()
+        self.assertEqual(r['discovery'], {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5'})
+        self.assertEqual((s.get_setting('triage_ai'), s.get_setting('assistant_ai')), ('cli:claude', f'connector:{cid}'))

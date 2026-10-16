@@ -5,6 +5,7 @@
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
 import React, { useEffect, useRef, useState } from "react";
+import { useCoding } from "./capabilities.js";
 import { movesOf, useVerbs } from "./actionRow.js";
 import { Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
@@ -1170,6 +1171,7 @@ export function BriefCard({ card, onStart }) {
 const FOLD_AT = 6;
 
 export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
+  const canCode = useCoding();                    // no coding tool connected: no Coding agent (capabilities.js)
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -1221,7 +1223,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
             <div className="tq-card-actions tq-fyi-acts">
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
+              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title="Proposes filing just this one - nothing is filed until you confirm" sx={quiet}>Not ours</Button>}

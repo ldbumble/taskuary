@@ -24,7 +24,7 @@ test("a section's name, its anchor and its crumb come from one place", () => {
 
 test("every section the rail offers is a heading the page actually stamps", () => {
   // A rail entry whose anchor nobody renders scrolls nowhere and highlights nothing.
-  assert.match(src, /const cfgGroups = GROUPS\.filter\(\(g\) => panels\[g\] \|\| rowsOf\(g\)\.length\);/,
+  assert.match(src, /const cfgGroups = GROUPS\.filter\(\(g\) => \(panels\[g\] \|\| rowsOf\(g\)\.length\) && \(g !== "Coding agent" \|\| canCode\)\);/,
     "Configuration draws every group that has something in it, in the schema's order");
   assert.match(src, /\{cfgGroups\.map\(\(g\) => \(/);
   assert.match(src, /<SectionHead page="config" name=\{g\} \/>/);

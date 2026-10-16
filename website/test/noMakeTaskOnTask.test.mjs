@@ -12,7 +12,7 @@ test("an opened fyi line offers Make task and the agents' tasks only when it has
   const cards = read("assistantCards.jsx");
   const fyis = cards.slice(cards.indexOf("export function FyisCard"), cards.indexOf("export function SetupCard"));
   for (const verb of ["mine", "coding_agent", "regular_agent"])
-    assert.match(fyis, new RegExp(`\\{i\\.mid && !i\\.tid && <Button[^\\n]*propose\\("${verb}", i\\)`), `${verb} is not offered on a task`);
+    assert.match(fyis, new RegExp(`\\{i\\.mid && !i\\.tid && (canCode && )?<Button[^\\n]*propose\\("${verb}", i\\)`), `${verb} is not offered on a task`);
   assert.match(fyis, /\{i\.mid && <Button[^\n]*onClick=\{\(\) => reply\(i\)\}/, "Reply still is");
 });
 

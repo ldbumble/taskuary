@@ -152,6 +152,38 @@ def _everywhere(store, pick: str, cli: str = ''):
     if cli: store.set_setting('default_brain', cli, 'owner')
 
 
+# EACH JOB ON THE MODEL THAT FITS IT, from an organisation's AI card (HIPAA AI): its gateway lists what it offers, and the
+# fastest, cheapest takes the many small calls - triage, the Assistant - while the general agent gets Sonnet (the owner,
+# 2026-10-16: "use lowest quickest for triage/assistant/advisor ... sonnet default for agent work"). Opus is just another
+# choice in that model menu. Read off the names: a gateway's list carries no prices.
+FAST = ('lite', 'flash', 'haiku', 'nano', 'mini')
+AGENT = ('sonnet', 'pro', 'opus')
+
+
+def pick_models(models) -> tuple:
+    """(fast, agent) from a gateway's model ids - '' where nothing fits."""
+    real = [str(m) for m in models or [] if str(m) and str(m) != 'hipaa-ai']
+    by = lambda keys: next((m for k in keys for m in real if k in m.lower()), '')
+    return by(FAST), by(AGENT)
+
+
+def models_by_job(store, cfg: dict, cid: int, only_blank: bool = False) -> dict:
+    """Point triage and the Assistant at the card's fastest model and the general agent at its Sonnet. `only_blank`: a job the
+    owner already pointed somewhere keeps it (the Connections page); setup's pick sets them all."""
+    from . import aidefaults, llm
+    c = store.get_connector(cid, with_secret=True) or {}
+    try: conf = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: conf = {}
+    try: fast, agent = pick_models(llm.list_models(c.get('Type'), conf, c.get('Secret') or ''))
+    except Exception as e:
+        logger.info(f'{c.get("Type")}: no model list from its gateway - {e}'); fast, agent = '', ''
+    pick = f'connector:{cid}'
+    free = lambda slot: not only_blank or not str(store.get_setting(slot) or '').strip()
+    for slot, model in (('triage_ai', fast), ('concierge_ai', fast), ('assistant_ai', agent)):
+        if model and free(slot): aidefaults.apply(store, cfg, slot, pick, model)
+    return {'fast': fast, 'agent': agent}
+
+
 def choose_cli(store, cfg: dict, name: str) -> dict:
     """The owner clicked a CLI card: connect it, test it, make it the brain. {ok, why, fix} - `fix` is the ONE thing to press
     when it did not work: 'install' or 'signin'."""
@@ -227,6 +259,12 @@ def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = Non
         _restore(store, was)
         return {'ok': False, 'why': f"The key works, but {why}. Pick another AI, or another model on its card."}
     store.set_setting(FIX, '', 'owner')
+    if typ == 'hipaa_ai':
+        from . import config as config_mod
+        m = models_by_job(store, config_mod.load(), c['ConnectorId'])
+        if m['fast']:
+            return {'ok': True, 'why': f"Your access code works - {m['fast']} sorts your mail and runs the Assistant"
+                                       + (f", {m['agent']} does the agent work." if m['agent'] else '.')}
     return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort your mail."}
 
 

@@ -3,6 +3,7 @@ import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT } from "./taskLifecycle.js";
 import React, { useEffect, useState } from "react";
+import { useCoding } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -870,7 +871,8 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
 // One door, then an explicit choice. Triage may suggest which kind fits, but it must not silently
 // choose the regular API agent or a coding CLI on the owner's behalf.
 export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, row, first }) => {
-  const suggestedKind = !taskKind || String(taskKind).toLowerCase() === "coding" ? "coding" : "general";
+  const canCode = useCoding();                    // no coding tool connected: no Coding agent, and nothing suggests one (capabilities.js)
+  const suggestedKind = canCode && (!taskKind || String(taskKind).toLowerCase() === "coding") ? "coding" : "general";
   const [agentKind, setAgentKind] = useState("");
   const coding = agentKind === "coding";
   const [open, setOpen] = useState(false);
@@ -943,8 +945,8 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
           onAgent={setAgent} onModel={setModel} size={26} />}
       </Box>
       <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>
-        <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("coding")}>Coding agent</Button>
+        {canCode && <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
+          onClick={() => setAgentKind("coding")}>Coding agent</Button>}
         <Button size="small" variant={agentKind === "general" ? "contained" : "outlined"} disableElevation
           onClick={() => setAgentKind("general")}>Regular agent</Button>
       </Box>

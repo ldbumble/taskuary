@@ -9,6 +9,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCoding } from "./capabilities.js";
 import { createPortal } from "react-dom";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -309,6 +310,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
+  const canCode = useCoding();                    // no coding tool connected: coding is not offered (capabilities.js)
   const [detail, setDetail] = useState(null);
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
@@ -2092,7 +2094,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <MenuItem key="assign" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
           ...(!isGeneral ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
         ]}
-        {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
+        {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
+          .filter((o) => o.key !== "coding" || canCode || t.Kind === "coding").map((o) =>
           <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task")) patch({ Kind: o.key }); }}>
             <ListItemText primary={o.label} secondary={o.hint} primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
           </MenuItem>)}

@@ -451,6 +451,12 @@ def _codex_tool(item: dict):
     return None
 
 
+def coding_ready(store) -> bool:
+    """CODING EXISTS ONLY WHERE A CODING TOOL CAN START (the owner, 2026-10-16: "if no cli tool like cloud api tools no coding"):
+    a connected CLI whose command runs on this computer. A ChatGPT sign-in or an API card - HIPAA AI included - is no coding tool."""
+    return any(runs_here(conn) for _key, conn in connection_brains(store))
+
+
 def runs_here(profile: dict) -> bool:
     """Does this profile's command resolve to something we can start?"""
     try: return bool(_resolve_cmd((profile or {}).get('cmd') or 'claude'))

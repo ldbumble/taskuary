@@ -30,7 +30,8 @@ test("the picker warns instead of offering days while the agent is open, and nev
 test("every Remind me tells the picker whether the agent is open", () => {
   const page = read("TaskPage.jsx");
   const uses = page.split("\n").filter((l) => /<RemindMe |<RemindPicker /.test(l));
-  assert.ok(uses.length >= 4, "the three RemindMe buttons and the action row's picker");
+  // the header's (over a live session), the Tasks tab bar's, and the action row's picker - the folded strip carries no buttons since 2026-10-16
+  assert.ok(uses.length >= 3, "the two RemindMe buttons and the action row's picker");
   for (const u of uses) assert.match(u, /live=\{liveSession\}/, u);
   const view = read("AssistantView.jsx");
   assert.match(view, /live: agentOpen\(item\)/, "the walk's Remind me knows from the card");

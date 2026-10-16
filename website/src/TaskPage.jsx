@@ -11,8 +11,8 @@ import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress,
-  Drawer, IconButton, InputAdornment, Link, MenuItem, Select, TextField, Tooltip, Typography,
+  Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
@@ -41,7 +41,9 @@ import { progress as batchProgress } from "./batchItems.js";
 import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
-import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT } from "./theme.jsx";
+import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
+import { askLine, cameFromLabel, channelName, groupConversations, groupMeta, headerFacts, hidden, previewRows, triageLine } from "./taskSources.js";
+import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
@@ -129,17 +131,19 @@ const KIND_OPTIONS = [
 const KINDS = KIND_OPTIONS.map((o) => o.key);
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
-// The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,
-// sitting on the card's bottom edge. Stacked "Type / Task status / Priority" labels over boxed
-// selects made a four-field form out of four words, and put the one button that completes the
-// task at the end of it (the owner, 2026-09-16: "on bottom the filters agent·coding, waiting").
-const chipSel = {
-  fontSize: 11.5, fontWeight: 600, height: 26, bgcolor: "#f4f1ec", borderRadius: 13, color: INK,
-  "& .MuiSelect-select": { py: 0, pl: 1.25, pr: "24px !important", minHeight: 0, display: "flex", alignItems: "center" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: BORDER },
-  "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#d8cfbe" },
-  "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#55697a" },
-  "& .MuiSelect-icon": { right: 2, fontSize: 18, color: "rgba(0,0,0,.45)" },
+// WHAT TRIAGE DECIDED READS AS FACTS, NOT CONTROLS (the owner, 2026-10-16: "why are there dropdowns by the triage results? you
+// can't change it"). The pills sit under the title, read-only; changing who does it, the priority, the assignee or the repository is
+// on the bar by the prompt box (the row's Task menu) on the canvas, and behind Change on the Tasks tab's own bar.
+const factPill = { display: "inline-flex", alignItems: "center", gap: 0.6, height: 22, px: 1.1, borderRadius: 11, border: `1px solid ${BORDER}`,
+  bgcolor: "#fff", fontSize: 11.5, color: INK, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", minWidth: 0 };
+const FACT_TONE = { agent: { bgcolor: BRAND.tint, borderColor: BRAND.bd, k: BRAND.ink }, alert: { bgcolor: ALERT_TINT, borderColor: ALERT_BD, color: ALERT_INK, k: ALERT_INK } };
+// "09:06" today, "Oct 9" before - a row of messages reads its times at a glance
+const whenShort = (s) => {
+  if (!s) return "";
+  const d = asUtc(String(s));
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString([], { month: "short", day: "numeric" });
 };
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
 const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
@@ -456,12 +460,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [reshape, setReshape] = useState(false);
   const [repoPick, setRepoPick] = useState(false);
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
-  const [sourceOpen, setSourceOpen] = useState(false);
+  // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
+  const [showAll, setShowAll] = useState(false);
+  const [openMsg, setOpenMsg] = useState(null);
+  // the menu the old pills were: { what: "menu" | "kind" | "priority" | "assign", at } - opened from the row or the Tasks tab's bar
+  const [pick, setPick] = useState(null);
   // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
   // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
   const [itemsOpen, setItemsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setSourceOpen(false); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(null); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   // ...in the scope ON SCREEN: with no dependencies this kept the first render's scope, so Refresh always went back to
@@ -748,14 +756,28 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Close out's conversation for an email task: theirs and what you sent outside Taskuary, newest first (a chat has ChatThread)
   const mailThread = chatTask || detail?.batch || !inbound.length ? []
     : newestFirst([...inbound, ...sentOutside.map((m) => ({ ...m, mine: true }))]);
-  // ...every one of them, the first included: a triage summary over the task is a line ABOUT the first email, not the email - with it
-  // the first was in neither place, so a thread read newest first ended one short (2026-10-15). Only words already shown above go.
-  const alsoSaid = inbound.filter((m) => cleanText(m.BodyText) && cleanText(m.BodyText) !== taskAsk);
   const completionIsManual = ownerControlsCompletion(t);
   const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
-  // the triage verdict behind THIS task, for "Where this came from"
-  const sourceRoute = (detail?.routes || []).find((r) => r.MessageId === sourceMessage?.MessageId);
+  // the triage verdict behind THIS task - the header's pills and Came from's last line. The reply source is the NEWEST message, and
+  // a message that only joined the task is routed "same conversation thread", which decides nothing: then the route that made the
+  // task speaks - the first one with a verdict or an intent in it.
+  const judged = (r) => !!(r?.VerdictJson || routeIntent(r?.Reason) || r?.Decision === "create");
+  const sourceRoute = (detail?.routes || []).find((r) => r.MessageId === sourceMessage?.MessageId && judged(r))
+    || (detail?.routes || []).find(judged);
+  const verdict = parseTriageVerdict(sourceRoute) || latestTriageVerdict(detail?.routes || [])
+    || legacyTriageVerdict({ routes: detail?.routes || [], task: t || {}, checklist: detail?.checklist || [] });
+  const facts = headerFacts({ verdict, route: sourceRoute, task: t || {} });
+  // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
+  const sources = groupConversations(storedMessages, { ms: tsMs, clean: cleanText });
+  const sourceCount = sources.reduce((n, g) => n + g.count, 0);
+  const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
+  // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
+  // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
+  const opener = [...inbound].sort((a, b) => tsMs(a.SentAt) - tsMs(b.SentAt))[0];
+  const askText = cleanText(t?.Summary || verdict?.summary || opener?.ReadText || opener?.BodyText || "") || taskAsk;
+  const ask = askLine(askText);
+  const made = t ? `from ${t.Source || "manual"} · created ${timeAgo(t.CreatedAt)}${t.CreatedBy ? ` by ${t.CreatedBy}` : ""}` : "";
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
@@ -782,7 +804,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // "Drafting…" until it lands (the owner, 2026-09-24: "it should say spinning as it's waiting on ai to draft reply")
   const replyPrimary = pendingReview ? "Open the draft" : sentReview ? "Write another" : "Write reply";
   const checklist = detail?.checklist || [];
-  const checklistPct = checklist.length ? (checklist.filter((i) => i.done).length / checklist.length) * 100 : 0;
+  // what the To do list shows: the emails a task owes are Close out's, not boxes to tick here
+  const todo = checklist.filter((i) => !i.out);
   const tickItem = async (i) => {
     try {
       const { data } = await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: !i.done });
@@ -1000,6 +1023,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const runAnother = { id: "run-another", group: "agent", label: "Run another agent",
     run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
     title: "Opens the agent step: a different agent, harness, model or repository. A running session is paused and its handover goes to the new one." };
+  const changeVerbs = !notDone ? [] : [
+    { id: "kind", group: "more", label: "Change who does it", run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }),
+      title: "Your task, an agent (general or coding), or a reply - what the task is decides which machinery works it" },
+    { id: "priority", group: "more", label: "Change priority", run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: "Low, normal, high or urgent" },
+    { id: "assign", group: "more", label: "Assign it", run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: "You, an agent's profile, or nobody" },
+    ...(!isGeneral ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change repository" : "Pick a repo", run: pickRepo,
+      title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
+  ];
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: "Reopen task", run: reopen, title: "Reopens the task only. No agent starts until you choose one." }]
     : [
@@ -1053,6 +1084,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
+      // WHAT THE PILLS USED TO CHANGE, on the row now that the pills only read (section 1's redesign, 2026-10-16): the same PATCHes
+      // and the same repository picker, each a menu at the row's button
+      ...changeVerbs,
     ];
   useVerbs("task", rowVerbs, inRow && !!t, detail?.ref || "");
   // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
@@ -1158,7 +1192,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               {/* header strip: ONE LINE, and it is the Task card's heading too. It used to be a
                   tall block - id, title, dots, close, then "from email · created 10h ago by router"
                   - sitting directly above a second heading that said "Task · the job itself". The
-                  provenance line moved into "Where this came from" inside the card, where you go
+                  provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
               <Box sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
@@ -1171,7 +1205,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* THE (1) IS THE TASK STEP'S NUMBER, so it sits on whichever line is that step's heading: up here while the
                       step is open (or a session hides it), on the folded Task strip once another step is open - it stood up
                       here beside a folded "Task" row that had none, and the count read 1 · Task · 2 · 3 */}
-                  {(stage === "task" || sessionView) && <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
+                  {/* ...and with the step open its heading is "1 Task" inside the card (section 1's redesign, 2026-10-16) - up here only
+                      while a session hides the card */}
+                  {sessionView && <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: "#55697a", color: "#fff",
                     display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>}
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
@@ -1234,6 +1270,23 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   mt: 0.15, ml: 3.4, fontWeight: 600, fontSize: 10 }}>
                   {workContext}
                 </Typography>}
+                {/* TRIAGE DECIDED - what the task is, said once under its title as facts, never as controls (the owner, 2026-10-16: "why
+                    are there dropdowns by the triage results? you can't change it"). A task nobody triaged shows its own facts, unlabelled.
+                    Not over a session: that strip stays one line so the agent keeps the room. */}
+                {!sessionView && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
+                  {facts.triaged && <Typography component="span" sx={{ fontSize: 11, color: FAINT, mr: 0.25 }}>Triage decided</Typography>}
+                  {facts.pills.map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
+                    <Box key={p.key} component="span" data-tq-fact={p.key} sx={{ ...factPill, ...tone }}>
+                      <Box component="span" sx={{ color: k || FAINT }}>{p.label}</Box>
+                      <Box component="span" sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", ...(p.mono ? { ...mono, fontSize: 11 } : {}) }}>{p.value}</Box>
+                    </Box>); })}
+                  {/* WHAT HAPPENS AT THE END, in a few words on the facts' own line; the sentence that explains it is the tooltip */}
+                  {notDone && <>
+                    <Box sx={{ width: "1px", height: 16, bgcolor: BORDER, mx: 0.5, display: { xs: "none", sm: "block" } }} />
+                    <Typography variant="caption" sx={{ color: DIM }} title={completionLine(completionIsManual, owesEmails, !replyMessage)}>
+                      {completionFact(completionIsManual, owesEmails, !replyMessage)}</Typography>
+                  </>}
+                </Box>}
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
@@ -1246,7 +1299,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     result of the work is the thing you are looking at */}
                 {/* The checkout, and why. A wrong guess means an agent editing the wrong tree in
                     good faith, so it is stated on the page rather than buried in the prompt. */}
-                {/* In the agent view the task card (and its "Where this came from") is not drawn, and a report task's
+                {/* In the agent view the task card (and its Came from) is not drawn, and a report task's
                     whole substance is the report - so it is one click away here (the owner, 2026-09-30) */}
                 {sessionView && t?.Source === "report" && sourceMessage?.BodyText && (
                   <Box sx={{ ...card, ...step, mb: 0, px: 1.5, py: 1.1, flexShrink: 0 }}>
@@ -1280,9 +1333,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 )}
                 {!sessionView && (
                   <Box sx={{ ...card, ...step, borderTop: 0, mb: 0, px: 1.5, py: stage === "task" ? 1.5 : 1.1, flexShrink: 0 }}>
-                    {/* FOLDED - the same controls the open card has, in the same order, with their
-                        labels dropped. The left half carries what the header cannot: how far the
-                        checklist got, and what the task is. The whole strip reopens the task. */}
+                    {/* FOLDED - the left half carries what the header cannot: how far the checklist got, and what the task is.
+                        The whole strip reopens the task. */}
                     {stage !== "task" && (
                       <Box onClick={() => setOpenStage("task")}
                         sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" },
@@ -1293,82 +1345,76 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
                         <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3, flexShrink: 0 }}>Task</Typography>
                         <Typography noWrap sx={{ color: DIM, fontSize: 12.5, flex: 1, minWidth: 0 }}>{foldedFacts}</Typography>
-                        {!inRow && !["done", "dropped"].includes(t.Status) && (
-                          <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.35, flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>
-                            <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={12} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 14 }} />}
-                              sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                              title={markDoneHint}
-                              disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                            <Tooltip title="Not a task — delete it and teach Taskuary why">
-                              <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
-                                <BlockIcon sx={{ fontSize: 16 }} /></IconButton>
-                            </Tooltip>
-                            <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
-                            <Divider orientation="vertical" flexItem sx={{ mx: 0.25, my: 0.5, borderColor: BORDER }} />
-                            <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
-                              <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
-                                <ForwardToInboxIcon sx={{ fontSize: 16 }} /></IconButton>
-                            </Tooltip>
-                            <Tooltip title="Split or merge — break it in two, or fold it into the task it repeats">
-                              <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
-                                <CallSplitIcon sx={{ fontSize: 16 }} /></IconButton>
-                            </Tooltip>
-                          </Box>
-                        )}
+                        {/* no buttons on the strip: the Tasks tab's own bar under the view carries them, as the row does on the canvas */}
                         <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0, transform: "rotate(-90deg)" }} />
                       </Box>
                     )}
-                    {stage === "task" && <>
-                    {/* 1 - WHAT YOU CAN DO. The two endings first, grouped, then a rule, then the two
-                        reroutes. Nothing behind a menu: "no one knows where the other buttons were
-                        unless you click the 3 options" (the owner, 2026-09-16). */}
-                    {inRow ? null : !["done", "dropped"].includes(t.Status) ? (
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-                        <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
-                          sx={primaryBtn}
-                          title={markDoneHint}
-                          disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                        <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
-                          sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
-                          title="Delete it and teach Taskuary why — the sender keeps writing to you."
-                          onClick={() => setConfirmNAT(true)}>Not a task</Button>
-                        <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
-                        <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
-                        <Button size="small" variant="outlined" sx={barBtn}
-                          startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-                          title="Not ours to do — the AI writes the forward, you send it."
-                          onClick={() => setHandoff(true)}>Hand it to a person</Button>
-                        <Button size="small" variant="outlined" sx={barBtn}
-                          startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
-                          title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
-                          onClick={() => setReshape(true)}>Split or merge</Button>
-                      </Box>
-                    ) : (
-                      <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
-                        title="Reopens the task only. No agent starts until you choose one."
-                        onClick={reopen}>Reopen task</Button>
-                    )}
-                    {!inRow && <Divider sx={{ my: 1.4, borderColor: BORDER }} />}
-                    {/* 2 - WHAT THERE IS TO DO. The title is in the header now; repeating it here was
-                        the same words twice, an inch apart. */}
-                    <Box sx={{ minWidth: 0 }}>
-                        {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
-                            session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
-                            strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
-                        {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600, mb: 0.9 }}>Open again: {news.line}</Typography>}
-                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>What needs doing</Typography>
-                        {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task;
-                            the card says so once - how many, and what they need now (concierge.repeats, counted by code) */}
-                        {/* ...not on a chat: the thread below shows every message, so "wrote twelve times" says nothing more */}
-                        {detail?.repeats?.line && !chatTask && (
-                          <Typography variant="body2" sx={{ color: INK, mt: 0.45, lineHeight: 1.55, maxWidth: 900, overflowWrap: "anywhere" }}>
-                            {detail.repeats.line}
-                          </Typography>
-                        )}
-                        {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the
-                            reason on hover and the one owner action that changes it. Nothing for the owner's or trusted work. */}
+                    {stage === "task" && <Box data-tq-task-section="" sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
+                    {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
+                        buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
+                        over the chat line; on the Tasks tab, the view's own bar under the sections. */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: PALETTE.slate, color: "#fff",
+                        display: "grid", placeItems: "center", flexShrink: 0, fontSize: 11.5, fontWeight: 600 }}>1</Box>
+                      <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>Task</Typography>
+                    </Box>
+                    <Box sx={{ pl: { xs: 0, sm: 4.25 }, minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75 }}>
+                      {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
+                          session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
+                          strip stands under the canvas it says what to do, so this one goes (assistantView.css .advising) */}
+                      {news && <Typography className="tq-news" sx={{ fontSize: 12.5, color: INK, fontWeight: 600 }}>Open again: {news.line}</Typography>}
+                      {/* THE ASK - one line of what is wanted; the whole summary is the tooltip when the line cut it */}
+                      {ask.line && <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The ask</Typography>
+                        <Typography title={ask.cut ? askText : undefined} sx={{ color: INK, fontSize: 14, lineHeight: 1.45, maxWidth: 900, overflowWrap: "anywhere",
+                          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ask.line}</Typography>
+                      </Box>}
+                      {/* TO DO - the checklist triage drew from the ask (PW-075): boxes are progress on the list, never task completion -
+                          closing the task stays the owner's separate decision. The WHOLE LINE is the target, not the 16px box: on a
+                          manual task ticking these off IS the work (the owner, 2026-09-16). A batch lists its items, a goal its steps. */}
+                      {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
+                      {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
+                        onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
+                      {!t?.DoneWhen && todo.length > 0 && (
+                        <Box sx={{ maxWidth: 900 }}>
+                          <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.25 }}>
+                            <Typography sx={{ ...label }}>To do</Typography>
+                            <Typography variant="caption" sx={{ color: FAINT }} title={progressLine(todo)}>{todo.filter((i) => i.done).length} of {todo.length}</Typography>
+                          </Box>
+                          {todo.map((i) => (
+                            <Box key={i.id} onClick={() => tickItem(i)}
+                              sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
+                                borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" } }}>
+                              <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
+                                sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+                              <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
+                                {i.text}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                      {/* CAME FROM - the task's messages as the conversations they are: each one's first message and its latest two, with
+                          how many are between and who wrote them. It replaces "Where this came from" and the stack of later messages under
+                          the ask (the owner, 2026-10-16: "you will probably have to have a scroll if it goes really far back"). A row opens
+                          its message in full under it, as the old disclosure did. */}
+                      <Box data-tq-came-from="" sx={{ minWidth: 0, maxWidth: 900 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
+                          <Typography sx={{ ...label }}>{cameFromLabel(sources) || "Came from"}</Typography>
+                          {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
+                            label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
+                            sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
+                          {hidden(sources) > 0 && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
+                            sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
+                        </Box>
+                        {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
+                            how many, and what they need now (concierge.repeats, counted by code) */}
+                        {detail?.repeats?.line && <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5, overflowWrap: "anywhere" }}>{detail.repeats.line}</Typography>}
+                        {/* WHOSE WORDS: a stranger's task runs in its CLI's auto mode (origin.py) - said once, quietly, with the reason on
+                            hover and the one owner action that changes it, a link. Nothing for the owner's or trusted work. */}
                         {strangerLine(detail) && (
-                          <Typography variant="body2" sx={{ color: DIM, mt: 0.45, fontSize: 12.5 }}>
+                          <Typography variant="body2" sx={{ color: DIM, mt: 0.4, fontSize: 12.5 }}>
                             <Tooltip title={strangerLine(detail).why}><span>{strangerLine(detail).text}</span></Tooltip>
                             {" · "}
                             <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
@@ -1386,194 +1432,81 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             ⚠ Reads as an attempt to steer the agent: {strangerLine(detail).danger}
                           </Typography>
                         )}
-                        {taskAsk && (
-                          <Typography variant="body2" sx={{ color: DIM, mt: 0.45, lineHeight: 1.55,
-                            whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxWidth: 900,
-                            display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {taskAsk}
-                          </Typography>
-                        )}
-                        {/* ...and what they SENT with it - the photo or screenshot is often the whole ask, and it was only ever inside
-                            the folded history (the owner, 2026-09-30: "don't see the image on the task incoming message") */}
-                        {inbound[0]?.MessageId && !chatTask && !alsoSaid.some((m) => m.MessageId === inbound[0].MessageId) && <Box sx={{ mt: 0.6, maxWidth: 900 }}>
-                          <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
-                        {/* the checklist triage drew from the ask (PW-075): boxes are progress on the list,
-                            never task completion - closing the task stays the owner's separate decision.
-                            The WHOLE LINE is the target, not the 16px box: on a manual task ticking these
-                            off IS the work (the owner, 2026-09-16), and a box that small did not look
-                            like something you were meant to click. */}
-                        {/* a BATCH: its items in ranked order, each with what the agent found and the owner's presses (batch.py) */}
-                        {detail?.batch && <BatchItems taskId={t?.TaskId} items={detail.batch}
-                          onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
-                        {/* a GOAL lists its steps with the task behind each instead of plain boxes (spec 2026-10-12) */}
-                        {t?.DoneWhen && <GoalSteps task={t} onOpenTask={(tid) => (onOpenTask ? onOpenTask(tid) : onSelect?.(tid))}
-                          onChanged={() => { loadDetail(t.TaskId); loadTasks(); onChanged?.(); }} />}
-                        {!t?.DoneWhen && (detail?.checklist || []).length > 0 && (
-                          <Box sx={{ mt: 0.85, maxWidth: 900 }}>
-                            {detail.checklist.filter((i) => !i.out).map((i) => (
-                              <Box key={i.id} onClick={() => tickItem(i)}
-                                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
-                                  borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" } }}>
-                                <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
-                                  sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
-                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
-                                  {i.text}
-                                </Typography>
-                              </Box>
-                            ))}
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.6 }}>
-                              <LinearProgress variant="determinate" value={checklistPct} sx={{ width: 120, height: 4,
-                                borderRadius: 2, bgcolor: PANEL2, "& .MuiLinearProgress-bar": { bgcolor: "#6f8a6e" } }} />
-                              <Typography variant="caption" sx={{ color: FAINT }}>{progressLine(detail.checklist)}</Typography>
+                        {sources.length > 0 ? (
+                          <Box sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", overflow: "hidden" }}>
+                            <Box sx={showAll ? { maxHeight: 360, overflowY: "auto" } : undefined}>
+                              {sources.map((g, gi) => (
+                                <Box key={g.key} data-tq-conversation="" sx={{ px: { xs: 1, sm: 1.4 }, py: 1.1, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                                    <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                                      <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
+                                    <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
+                                    <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11.5, flexShrink: 0, maxWidth: "100%", pl: { xs: 4, sm: 0 } }}>{groupMeta(g)}</Typography>
+                                  </Box>
+                                  <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5 }}>
+                                    {previewRows(g, 2, showAll).map((r, ri) => r.gap ? (
+                                      <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
+                                        · · · {r.gap} more - {r.names}</Typography>
+                                    ) : (
+                                      <React.Fragment key={r.m.MessageId}>
+                                        <Box component="button" type="button" aria-expanded={openMsg === r.m.MessageId}
+                                          onClick={() => setOpenMsg((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
+                                          title="Open the message"
+                                          sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
+                                            display: "grid", gridTemplateColumns: { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
+                                            alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
+                                            "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+                                          <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
+                                          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.excerpt || r.m.Subject || "(no text)"}</Box>
+                                          <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
+                                        </Box>
+                                        {openMsg === r.m.MessageId && (
+                                          <Box sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0 }}>
+                                            <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
+                                              <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>{r.m.who}</Typography>
+                                              <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
+                                              {r.m.SourceLink && <Link href={r.m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
+                                            </Box>
+                                            {r.m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
+                                            {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were
+                                                never enough to check the ask against: first for a report run (the owner, 2026-09-30: "i
+                                                can't see the full report once it gets sent to agent"), then for the email behind a task
+                                                (2026-10-01: "don't see the full email that this task came from") */}
+                                            <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+                                              {r.m.Channel === "report" && looksMd(r.m.BodyText) ? <Md text={cleanText(r.m.BodyText)} />
+                                                : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                                                    {cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))}</Typography>}
+                                            </Box>
+                                            <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense />
+                                          </Box>
+                                        )}
+                                      </React.Fragment>
+                                    ))}
+                                  </Box>
+                                </Box>
+                              ))}
                             </Box>
-                          </Box>
-                        )}
-                        {/* the rest of what they said, in order - indented so it reads as the same
-                            person continuing rather than as separate business */}
-                        {/* ...never on a batch: its other messages are its OTHER ITEMS, not the same person continuing */}
-                        {/* ...NEWEST FIRST, as the task reads elsewhere (the owner, 2026-10-14) */}
-                        {chatTask && <ChatThread messages={taskMessages} />}
-                        {!detail?.batch && !chatTask && newestFirst(alsoSaid).map((m) => (
-                          <Box key={m.MessageId} sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
-                            <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
-                              {m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                              overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4,
-                              WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                              {cleanText(m.ReadText ?? m.BodyText)}
-                            </Typography>
-                            <Attachments messageId={m.MessageId} canFetch={m.Channel === "email" && mentionsPicture(m.BodyText)} dense />
-                          </Box>
-                        ))}
-                        {/* WHERE THIS CAME FROM - the header's old "from email · created 10h ago by
-                            router" caption, turned into something worth reading: the message, what
-                            triage decided about it and why, then the task it made. At the END of the
-                            task list, because it is the last thing in the task's story. */}
-                        <Box sx={{ display: "flex", gap: 0.8, alignItems: "center", flexWrap: "wrap", mt: 1 }}>
-                          <Button size="small" variant="outlined" onClick={() => setSourceOpen((v) => !v)}
-                            startIcon={<AltRouteIcon sx={{ fontSize: 15 }} />}
-                            endIcon={<ExpandMoreIcon sx={{ fontSize: 16, transition: "transform .15s",
-                              transform: sourceOpen ? "rotate(180deg)" : "none" }} />}
-                            sx={{ minHeight: 26, py: 0, px: 1, fontSize: 11.5, color: DIM, borderColor: BORDER }}>
-                            Where this came from
-                          </Button>
-                          {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                            label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
-                            sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                        </Box>
-                        {sourceOpen && (
-                          <Box sx={{ mt: 0.85, maxWidth: 900, border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "hidden" }}>
-                            {/* EVERY MESSAGE the task was made from, not the newest one under a "2 messages"
-                                count (the owner, 2026-09-23: "there are 2 items in this task source, i don't see
-                                the teams or the email message") - oldest first, each with who and when */}
-                            {(inbound.length ? inbound : sourceMessage ? [sourceMessage] : []).map((m, n) => (
-                              <Box key={m.MessageId || n} sx={{ p: 1.1, display: "flex", gap: 1.1, alignItems: "flex-start",
-                                borderTop: n ? `1px solid ${BORDER}` : 0 }}>
-                                <ChannelIcon channel={m.Channel} sx={{ color: "#55697a", mt: 0.25 }} />
-                                <Box sx={{ minWidth: 0, flex: 1 }}>
-                                  <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
-                                    <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>
-                                      {m.FromName || m.FromEmail || m.Channel}
-                                    </Typography>
-                                    <Typography variant="caption" sx={{ color: FAINT }}>
-                                      {m.SentAt ? `· ${fmtDateTime(m.SentAt)}` : ""}
-                                    </Typography>
-                                    {m.SourceLink && <Link href={m.SourceLink} target="_blank"
-                                      rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
-                                  </Box>
-                                  {m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>
-                                    {m.Subject}</Typography>}
-                                  {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were
-                                      never enough to check the ask against: first for a report run (the owner, 2026-09-30: "i
-                                      can't see the full report once it gets sent to agent"), then for the email behind a task
-                                      (2026-10-01: "don't see the full email that this task came from") */}
-                                  <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
-                                    {m.Channel === "report" && looksMd(m.BodyText) ? <Md text={cleanText(m.BodyText)} />
-                                      : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                                          {cleanText(m.Channel === "report" ? m.BodyText : (m.ReadText ?? m.BodyText))}</Typography>}
-                                  </Box>
-                                </Box>
-                              </Box>
-                            ))}
-                            {sourceRoute && (
-                              <Box sx={{ p: 1.1, bgcolor: PANEL2, borderTop: `1px solid ${BORDER}`,
-                                display: "flex", gap: 1.1, alignItems: "flex-start" }}>
-                                <AltRouteIcon sx={{ fontSize: 16, color: ACCENT2, mt: 0.3 }} />
-                                <Box sx={{ minWidth: 0, flex: 1 }}>
-                                  <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
-                                    <Typography sx={{ ...label }}>Triage</Typography>
-                                    <Chip size="small" label={sourceRoute.Decision}
-                                      sx={{ height: 17, fontSize: 9.5, fontWeight: 600, bgcolor: "#e4e9ee", color: "#41525f" }} />
-                                  </Box>
-                                  {sourceRoute.Reason && <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55 }}>
-                                    {sourceRoute.Reason}</Typography>}
-                                </Box>
-                              </Box>
-                            )}
-                            <Box sx={{ p: 1.1, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1.1, alignItems: "center" }}>
-                              <DoneAllIcon sx={{ fontSize: 16, color: "#55697a" }} />
-                              <Typography variant="caption" sx={{ color: FAINT }}>
-                                {detail.ref} · from {t.Source || "manual"} · created {timeAgo(t.CreatedAt)} by {t.CreatedBy}
-                                {detail.comments?.length ? ` · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}` : ""}
+                            {/* WHAT TRIAGE DID, quietly, last: when, whose it made it - the route record leads with who now - and why; then
+                                what joined it since. A task nobody triaged says where it came from and when it was made. */}
+                            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", px: { xs: 1, sm: 1.4 }, py: 0.9, borderTop: "1px solid #ece7e0", bgcolor: "#faf8f5" }}>
+                              <AltRouteIcon sx={{ fontSize: 15, color: ACCENT, mt: 0.25, flexShrink: 0 }} />
+                              <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere" }} title={`${detail.ref} · ${made}`}>
+                                {triaged.head
+                                  ? <><Box component="span" sx={{ color: INK, fontWeight: 600 }}>Triage{triaged.at ? ` · ${whenShort(triaged.at)}` : ""}</Box>{" "}
+                                      {triaged.head}{triaged.why ? `: "${triaged.why}"` : ""}</>
+                                  : <span>{detail.ref} · {made}</span>}
+                                {triaged.later > 0 && ` · ${triaged.later} later message${triaged.later === 1 ? "" : "s"} joined it`}
                               </Typography>
                             </Box>
                           </Box>
-                        )}
+                        ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
+                        {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see
+                            the image on the task incoming message") - unless its message is open above, which shows them already */}
+                        {inbound[0]?.MessageId && openMsg !== inbound[0].MessageId && <Box sx={{ mt: 0.6 }}>
+                          <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
+                      </Box>
                     </Box>
-                    {/* 3 - WHAT THE TASK IS. Settings, not actions: pills on the bottom edge, and the
-                        repo is one of them now instead of an item in a menu. */}
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
-                      mt: 1.4, pt: 1.2, borderTop: `1px solid ${BORDER}` }}>
-                      {!["done", "dropped"].includes(t.Status) && <>
-                        <Select value={t.Kind || "task"} onChange={(e) => patch({ Kind: e.target.value })} sx={chipSel}
-                          renderValue={kindLabel} title="What kind of work this task contains">
-                          {(KINDS.includes(t.Kind || "task") ? KIND_OPTIONS
-                            : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
-                            <MenuItem key={o.key} value={o.key} sx={{ py: 0.6 }}>
-                              <ListItemText primary={o.label} secondary={o.hint}
-                                primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
-                            </MenuItem>)}
-                        </Select>
-                        {/* no Status box: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12). A hand-set
-                            "in progress" was read as an agent's at the next restart, and the list ignored it */}
-                        <Select value={t.Priority || "normal"} onChange={(e) => patch({ Priority: e.target.value })}
-                          sx={chipSel} title="Priority" renderValue={(v) => `${v} priority`}>
-                          {PRIORITIES.map((p) => <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>)}
-                        </Select>
-                        <Select value={t.Assignee || ""} onChange={(e) => {
-                          const assignee = e.target.value, worker = assignedAgent(assignee);
-                          patch({ Assignee: assignee });
-                          if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
-                        }} sx={chipSel} title="Who works it" displayEmpty renderValue={(v) => (v ? assigneeLabel(v) : "nobody on it")}>
-                          <MenuItem value="" sx={{ fontSize: 12 }}>unassigned</MenuItem>
-                          <MenuItem value="owner" sx={{ fontSize: 12 }}>you</MenuItem>
-                          {agents.map((name) => <MenuItem key={name} value={agentAssignee(name)} sx={{ fontSize: 12 }}>
-                            <TaskuaryMark size={12} />&nbsp; {name}
-                          </MenuItem>)}
-                          {t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee)
-                            && <MenuItem value={t.Assignee} sx={{ fontSize: 12 }}>{t.Assignee}</MenuItem>}
-                        </Select>
-                        {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
-                          startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                          title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
-                          onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
-                        {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
-                      </>}
-                      {/* a finished task still says what it WAS - the settings read as the record,
-                          not as controls. Reopen is the only thing you can do to it, and it lives
-                          in the action row above with everything else you can do. */}
-                      {["done", "dropped"].includes(t.Status) && (
-                        <Typography variant="caption" sx={{ color: FAINT }}>{foldedFacts}</Typography>
-                      )}
-                      {/* WHAT HAPPENS AT THE END, said in a few words on the pills' own line; the sentence that explained it
-                          sat right-aligned over two lines and is the tooltip now (the 2026-10-07 design pass) */}
-                      {!["done", "dropped"].includes(t.Status) && <Typography variant="caption" sx={{ color: DIM, ml: 0.4 }}
-                        title={completionLine(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}>
-                        {completionFact(completionIsManual, (detail?.checklist || []).some((i) => i.out && !i.done), !replyMessage)}
-                      </Typography>}
-                    </Box>
-                    </>}
+                    </Box>}
                   </Box>
                 )}
                 {/* ONE SHORT LINE, LIVE OR NOT. A running session has always been a single strip -
@@ -2093,10 +2026,74 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 )}
 
               </Box>
+              {/* THE TASKS TAB'S BAR, AT THE FOOT (the owner, 2026-10-16: "the buttons stay on bottom by the prompt box like always. No
+                  buttons there."). The canvas draws these as its row over the chat line (rowVerbs, ActionRow); the Tasks tab has no
+                  row, so its view keeps the same moves here, under the sections, instead of inside the Task card. The two endings
+                  first, then a rule, then the reroutes, then Change - what the task's pills used to set. While a session fills the page
+                  the header carries them (headControls). */}
+              {!inRow && !sessionView && (
+                <Box data-tq-task-bar="" sx={{ display: "flex", alignItems: "center", gap: 0.8, rowGap: 0.6, flexWrap: "wrap", flexShrink: 0,
+                  px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+                  {notDone ? <>
+                    <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
+                      sx={primaryBtn}
+                      title={markDoneHint}
+                      disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
+                    <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
+                      sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
+                      title="Delete it and teach Taskuary why — the sender keeps writing to you."
+                      onClick={() => setConfirmNAT(true)}>Not a task</Button>
+                    <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
+                    <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
+                    <Button size="small" variant="outlined" sx={barBtn}
+                      startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
+                      title="Not ours to do — the AI writes the forward, you send it."
+                      onClick={() => setHandoff(true)}>Hand it to a person</Button>
+                    <Button size="small" variant="outlined" sx={barBtn}
+                      startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
+                      title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
+                      onClick={() => setReshape(true)}>Split or merge</Button>
+                    <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
+                      title="Who does it, the priority, who it is assigned to, or the repository"
+                      onClick={(e) => setPick({ what: "menu", at: e.currentTarget })}>Change</Button>
+                  </> : (
+                    <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
+                      title="Reopens the task only. No agent starts until you choose one."
+                      onClick={reopen}>Reopen task</Button>
+                  )}
+                </Box>
+              )}
             </>
           )}
         </Box>
       </Box>
+      {/* THE MENUS THE PILLS WERE: the same PATCHes the dropdowns made, reached from the row (canvas) or Change (Tasks tab) */}
+      {t && <Menu open={!!pick} anchorEl={pick?.at || null} onClose={() => setPick(null)}>
+        {pick?.what === "menu" && [
+          <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
+          <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {t.Priority || "normal"}</MenuItem>,
+          <MenuItem key="assign" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
+          ...(!isGeneral ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
+        ]}
+        {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS]).map((o) =>
+          <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task")) patch({ Kind: o.key }); }}>
+            <ListItemText primary={o.label} secondary={o.hint} primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
+          </MenuItem>)}
+        {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}
+        {pick?.what === "priority" && PRIORITIES.map((p) =>
+          <MenuItem key={p} selected={p === (t.Priority || "normal")} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== (t.Priority || "normal")) patch({ Priority: p }); }}>{p}</MenuItem>)}
+        {pick?.what === "assign" && [
+          ["", "unassigned"], ["owner", "you"], ...agents.map((name) => [agentAssignee(name), name]),
+          ...(t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee) ? [[t.Assignee, t.Assignee]] : []),
+        ].map(([v, name]) =>
+          <MenuItem key={v || "none"} selected={v === (t.Assignee || "")} sx={{ fontSize: 12 }} onClick={() => {
+            setPick(null);
+            if (v === (t.Assignee || "")) return;
+            const worker = assignedAgent(v);
+            patch({ Assignee: v });
+            if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
+          }}>{assignedAgent(v) && <><TaskuaryMark size={12} />&nbsp; </>}{name}</MenuItem>)}
+      </Menu>}
       {/* ── review the change: the widest drawer of the three, because code needs the room.
              Read-only by construction - it runs git diff and git status and nothing else, so
              opening it can never disturb what the agent is in the middle of. ── */}

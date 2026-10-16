@@ -145,6 +145,8 @@ const TYPE_OF = {
   "start-agent": "agent", "run-another": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", nat: "task", reshape: "task",
+  // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
+  kind: "task", priority: "task", assign: "task", repo: "task",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 export function clustersOf(row, keep = 2) {
@@ -165,6 +167,7 @@ const SHORT = {
   reply: "Draft", approve: "Send", redraft: "Redraft", email: "Share", hand: "Forward", "ask-sender": "Ask",
   continue: "Continue", "run-another": "New", "start-agent": "Start", "send-general": "Start", "save-end": "End", diff: "Changes",
   done: "Done", "close-note": "Note", reopen: "Reopen", remind: "Snooze", nat: "Dismiss", reshape: "Split",
+  kind: "Who", priority: "Priority", assign: "Assign", repo: "Repo",
 };
 export const shortLabel = (v) => {
   const label = String(v?.label || "");

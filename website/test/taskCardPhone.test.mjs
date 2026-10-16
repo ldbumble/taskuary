@@ -14,9 +14,11 @@ test("a stage heading wraps below sm and its bar takes the whole next line", () 
   assert.match(head, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
   assert.match(head, /flexBasis: \{ xs: "100%", sm: "auto" \}, order: \{ xs: 9, sm: 0 \}/);
 });
-test("the folded task strip follows the same rule", () => {
+// ...and the folded task strip has no bar to wrap any more: the Tasks tab's bar sits under the view (section 1's redesign, 2026-10-16)
+test("the folded task strip wraps on a phone and carries no buttons", () => {
   const at = src.indexOf('onClick={() => setOpenStage("task")}');
   const strip = src.slice(at, src.indexOf("<ExpandMoreIcon", at));
   assert.match(strip, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
-  assert.match(strip, /flexBasis: \{ xs: "100%", sm: "auto" \}, order: \{ xs: 9, sm: 0 \}/);
+  assert.doesNotMatch(strip, /<Button|<IconButton|<RemindMe/);
+  assert.match(src, /\{!inRow && !sessionView && \(\s+<Box data-tq-task-bar=""[^>]*flexWrap: "wrap"/, "the bar it lost wraps at the view's foot");
 });

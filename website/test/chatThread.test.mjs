@@ -28,11 +28,14 @@ test("a voice note says so once, and an attachment-only message has no words", (
   assert.deepEqual(splitBody("(no text - see the attachment)"), { words: "", voice: false });
 });
 
-test("the task card draws the thread for a chat, and the old stack for everything else", () => {
+// SECTION 1 READS EVERY CHANNEL AS CONVERSATIONS (the redesign, 2026-10-16): consecutive chat lines are one-line rows under the
+// chat's name in Came from, like an email thread's - the bubbles stay in Close out, over the reply
+test("the task card's Came from groups chats and email alike; the chat thread stays in Close out", () => {
   assert.match(page, /const chatTask = !detail\?\.batch && isChatTask\(taskMessages\);/);
-  assert.match(page, /\{chatTask && <ChatThread messages=\{taskMessages\} \/>\}/);
-  assert.match(page, /\{!detail\?\.batch && !chatTask && newestFirst\(alsoSaid\)/);
-  assert.match(page, /detail\?\.repeats\?\.line && !chatTask/);
+  assert.doesNotMatch(page, /\{chatTask && <ChatThread messages=\{taskMessages\} \/>\}/);
+  assert.doesNotMatch(page, /newestFirst\(alsoSaid\)/);
+  assert.match(page, /const sources = groupConversations\(storedMessages/);
+  assert.match(page, /detail\?\.repeats\?\.line && <Typography/);
   assert.match(src, /flexDirection: "column", alignItems: me \? "flex-end" : "flex-start"/);   // yours right, theirs left
 });
 
@@ -51,7 +54,6 @@ test("the conversation is a centred column with its own line around it", () => {
 });
 
 test("an email task reads newest first on both sides: every email on the task, theirs and yours over the draft in Close out", () => {
-  assert.match(page, /const alsoSaid = inbound\.filter\(\(m\) => cleanText\(m\.BodyText\) && cleanText\(m\.BodyText\) !== taskAsk\);/);
   assert.match(page, /newestFirst\(\[\.\.\.inbound, \.\.\.sentOutside\.map\(\(m\) => \(\{ \.\.\.m, mine: true \}\)\)\]\)/);
   assert.match(page, /\{mailThread\.length > 0 && <Box data-tq-mail-thread=""/);
   assert.match(page, /\{!chatTask && !mailThread\.length && newestFirst\(sentOutside\)/, "never the sent lines twice");

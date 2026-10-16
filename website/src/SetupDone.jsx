@@ -12,12 +12,12 @@ function Confetti() {
   useEffect(() => {
     const c = ref.current;
     if (!c || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
-    const ctx = c.getContext("2d");
-    const fit = () => { c.width = c.offsetWidth * devicePixelRatio; c.height = c.offsetHeight * devicePixelRatio; };
+    const ctx = c.getContext("2d"), px = window.devicePixelRatio || 1;
+    const fit = () => { c.width = c.offsetWidth * px; c.height = c.offsetHeight * px; };
     fit();
     const W = () => c.width, H = () => c.height, r = Math.random;
-    const bits = Array.from({ length: 160 }, () => ({ x: r() * W(), y: -r() * H(), w: (6 + r() * 6) * devicePixelRatio, h: (3 + r() * 4) * devicePixelRatio,
-      vy: (1.5 + r() * 2.5) * devicePixelRatio, vx: (r() - 0.5) * 1.2 * devicePixelRatio, a: r() * 6, va: (r() - 0.5) * 0.2, col: COLORS[(r() * COLORS.length) | 0] }));
+    const bits = Array.from({ length: 160 }, () => ({ x: r() * W(), y: -r() * H(), w: (6 + r() * 6) * px, h: (3 + r() * 4) * px,
+      vy: (1.5 + r() * 2.5) * px, vx: (r() - 0.5) * 1.2 * px, a: r() * 6, va: (r() - 0.5) * 0.2, col: COLORS[(r() * COLORS.length) | 0] }));
     let id, until = performance.now() + 4500;
     const tick = (t) => {
       ctx.clearRect(0, 0, W(), H());

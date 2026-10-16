@@ -10,6 +10,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
 import { ConfirmDelete, useAgents } from "./ui.jsx";
+import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -72,6 +73,12 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
   const live = useMemo(() => (connectors || []).filter((c) => c.Active), [connectors]);
   const uses = (cfg.uses || []).map(Number);
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
+  // which model it runs on: the general agents' brain unless this job asks for more (workflows.brain_options)
+  const [brain, setBrain] = useState(null);
+  useEffect(() => { api.get("/api/workflows/brain").then(({ data }) => setBrain(data?.models ? data : null)).catch(() => setBrain(null)); }, []);
+  const models = modelChoices(brain);
+  if (cfg.model && models.length && !models.some((m) => m.value === cfg.model)) models.push({ value: cfg.model, label: cfg.model });
+  const efforts = effortChoices(brain, cfg.model);
 
   const body = () => {
     const c = withSchedule({ ...cfg, type: "agent", access: "write" }, sched);
@@ -146,13 +153,25 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
             placeholder="Check Intacct for active employees that share a name or SSN last four, and open a task for finance per pair."
             onChange={(e) => set("prompt", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="Who does it" hint="the profile whose rules it works by; which AI runs it is your default brain">
+        <Field label="Who does it" hint="the profile whose rules it works by">
           <Select size="small" displayEmpty value={roles.includes(cfg.agent) ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
             sx={{ minWidth: 220, bgcolor: "#fff", fontSize: 13 }}>
             <MenuItem value="" sx={{ fontSize: 13 }}>{roles.includes("assistant") ? "assistant (the default)" : "the default"}</MenuItem>
             {roles.filter((a) => a !== "assistant").map((a) => <MenuItem key={a} value={a} sx={{ fontSize: 13 }}>{a}</MenuItem>)}
           </Select>
         </Field>
+        {brain && <Field label="Model" hint="the general agents' own unless this job is hard enough to need a stronger model or more thought">
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <Select size="small" displayEmpty value={cfg.model || ""} sx={{ minWidth: 280, bgcolor: "#fff", fontSize: 13 }}
+              onChange={(e) => setCfg((c) => ({ ...c, model: e.target.value, effort: keepEffort(brain, e.target.value, c.effort) }))}>
+              {models.map((m) => <MenuItem key={m.value || "same"} value={m.value} sx={{ fontSize: 13 }}>{m.label}</MenuItem>)}
+            </Select>
+            {!!efforts.length && <Select size="small" displayEmpty value={efforts.some((x) => x.value === cfg.effort) ? cfg.effort : ""}
+              onChange={(e) => set("effort", e.target.value)} sx={{ minWidth: 150, bgcolor: "#fff", fontSize: 13 }}>
+              {efforts.map((x) => <MenuItem key={x.value || "default"} value={x.value} sx={{ fontSize: 13 }}>{x.label}</MenuItem>)}
+            </Select>}
+          </Box>
+        </Field>}
         <Field label="Works in" hint="the connections it may read and change - nothing outside them without asking">
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {live.map((c) => {

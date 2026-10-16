@@ -1047,7 +1047,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     if profile.get('model'):
         from .climodels import split_pick
         model, _ = split_pick(profile['model'])
-        cmd += [profile.get('model_arg') or '--model', model]
+        if model: cmd += [profile.get('model_arg') or '--model', model]
     cwd = profile.get('cwd')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} over acp cwd={cwd or os.getcwd()}' + (f' resume={resume}' if resume else ''))
@@ -1142,7 +1142,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
         from .climodels import split_pick
         from .climodels import effort_args
         m, eff = split_pick(profile['model'])
-        cmd += [profile.get('model_arg') or '--model', m] + effort_args(_cli_name(name), eff)
+        # '@high' is the CLI's own model at that effort (a workflow's effort alone, workflows.brain): no empty model flag
+        cmd += ([profile.get('model_arg') or '--model', m] if m else []) + effort_args(_cli_name(name), eff)
     # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')

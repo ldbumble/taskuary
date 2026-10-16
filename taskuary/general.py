@@ -1308,6 +1308,12 @@ def start_session(store, tid: int, connector_id=None, model=None, actor='owner',
     if not task: raise ValueError(f'no task {tid}')
     if not handles(task): raise ValueError('assistant view is for general, research, marketing, and triage tasks')
     terminal.resume_task(store, tid, actor)
+    # A WORKFLOW RUN starts on its workflow's brain - the general agents' own unless it asked for a harder model or more effort
+    # (workflows.brain). Only a first start nobody steered: a saved conversation or the owner's pick at the strip stands.
+    if task.get('Source') == 'workflow' and connector_id is None and not model and not pick and not store.saved_session(tid) and not session_for(tid):
+        from . import workflows
+        b = workflows.brain_of_task(store, task)
+        if b and b['pick']: pick, model = b['pick'], b['model'] or None
     # A setup walkthrough speaks with the Assistant's own brain, not the dock's; a browser task needs
     # a CLI to drive the embedded browser - walk_pick says which. An explicit provider choice still wins.
     if (task.get('SourceRef') == SETUP_REF or _browser_task(task)) and connector_id is None and not model and not pick and not store.saved_session(tid):

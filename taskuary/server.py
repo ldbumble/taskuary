@@ -5636,6 +5636,12 @@ def workflows_catalog():
     from . import workflows
     return workflows.catalog(store)
 
+@app.get('/api/workflows/brain')
+def workflow_brain():
+    """The workflow editor's Model and Effort: the general agents' brain a blank runs on, its models, and only the efforts each takes."""
+    from . import workflows
+    return workflows.brain_options(store)
+
 @app.post('/api/workflows/compose')
 def workflow_compose(body: dict):
     """Describe a stateful invoice or scheduled AI-agent workflow; return an editable draft."""

@@ -227,6 +227,12 @@ under Reports and never goes through triage; its agent works it like any other t
   none runs on the assistant, or on the coding profile when it has a folder to work in.
 - A workflow with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
   and nothing starts.
+- A workflow runs on the **same brain as your general agents** (Settings → Triage & agents →
+  General agent), on its main model. For a hard job, the editor's **Model** row picks a stronger
+  model from that CLI's own list and an **Effort** level - only the levels that CLI and model take
+  (Claude Code's `--effort`, Codex's `model_reasoning_effort`). A CLI with no effort setting shows
+  no Effort box; an effort it cannot take is left out and the task says why. The task's header
+  says what it **Runs on**.
 - One run at a time: a scheduled run that comes round while the last one is still working is not
   started, and **Run now** takes you to the run that is. A run that is only waiting for your yes
   does not hold the next one back.

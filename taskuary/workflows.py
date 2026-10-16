@@ -81,6 +81,7 @@ def definition(store, src) -> dict:
             'browser': bool(cfg.get('browser')),
             'schedule': {k: cfg[k] for k in ('cron', 'daily_at', 'every_minutes', 'every', 'on_startup', 'tz', 'at') if cfg.get(k) is not None},
             'runs_on': runs_on(cfg), 'agent': cfg.get('agent') or None,
+            'model': str(cfg.get('model') or '').strip(), 'effort': str(cfg.get('effort') or '').strip(),     # blank: the general agents' (brain)
             'enabled': bool(src.get('Active', 1)) if isinstance(src, dict) else True}
 
 
@@ -149,6 +150,79 @@ def cwd_of(store, task) -> str | None:
     return (str(cfg_of(src).get('cwd') or '').strip() or None) if src else None
 
 
+# WHICH BRAIN WORKS A RUN (the owner, 2026-10-16: "Workflow by default should use same brain as agents - general agents but they can
+# choose for hard workflow to use higher level model and effort"). Blank is the general agents' brain on its main model - exactly what
+# general._selected starts a general task on; a workflow's `model` and `effort` ask that SAME brain for more, never a second brain.
+# Its `model` was read by nobody once a run became a task, so a workflow set to a bigger model ran on the default.
+# Claude Code 2.1.301 `claude --help`: "--effort <level> ... (low, medium, high, xhigh, max)" - used where its model catalogue names none
+CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+
+
+def _tool(cli: str) -> str:
+    from .clis import KNOWN
+    return next((k['label'] for k in KNOWN if k['name'] == cli), cli)
+
+
+def efforts_for(cli: str, cat: dict, model: str) -> list:
+    """The efforts this CLI can be told for this model - its own catalogue's levels; none where effort_args cannot spell the flag."""
+    from .climodels import effort_args
+    from .aidefaults import _efforts
+    if not cli or not effort_args(cli, 'x'): return []
+    seen = model or (cat.get('current') or {}).get('model') or next((m['id'] for m in cat.get('models') or []), '')
+    return list(_efforts(cat, seen) or (CLAUDE_EFFORTS if cli == 'claude' else []))
+
+
+def brain(store, cfg: dict, task: dict = None) -> dict:
+    """{pick, key, cli, tool, model, base, effort, said, dropped} for a run of this workflow. `model` is the one pick the roads take -
+    'opus@high', or '@high' for the brain's own model at that effort (agents.run_cli / terminal.agent_argv spell each in the CLI's
+    own flag). An effort the brain cannot take is left out and `dropped` says why, for the task to say."""
+    from . import agents as hub, browserview, climodels, config, general
+    from .aidefaults import _cli_of
+    conf, cfg = config.load(), cfg or {}
+    t = task or {'Tags': browserview.WANTS if cfg.get('browser') else ''}
+    base = general._selected(store)
+    want = general.default_pick(store, t)     # a browser run needs a CLI's hands (walk_pick), as its session would
+    pick, label, dflt = base if not want or want == base[0] else general._selected(store, pick=want)
+    if runs_on(cfg) == 'coding' and not pick.startswith('cli:'):
+        # ...a coding run needs a terminal, which an API brain has not: the coding CLI, on its own main model
+        key = hub.default_brain(store); pick = f'cli:{key}' if key else ''
+        dflt = str(((conf.get('cli_connections') or {}).get(key) or {}).get('model') or '')
+    key = hub.brain_key(store, pick, conf) if pick.startswith('cli:') else ''
+    cli = _cli_of(conf, key) if key else ''
+    tool = _tool(cli) if cli else str(label or '').replace(' (API)', '') or 'no AI connected'
+    dm, de = climodels.split_pick(dflt)
+    model, effort, dropped = str(cfg.get('model') or '').strip() or dm, str(cfg.get('effort') or '').strip().lower(), ''
+    if effort:
+        ok = efforts_for(cli, climodels.catalog(cli), model) if cli else []
+        if not cli: dropped = f"{tool} is an AI connection, which takes no effort setting"
+        elif not climodels.effort_args(cli, effort): dropped = f"{tool} has no effort setting Taskuary can pass"
+        elif ok and effort not in ok: dropped = f"{tool} offers {', '.join(ok)} for {model or 'its default model'}"
+        if dropped: dropped, effort = f"Effort '{effort}' left out: {dropped}.", ''
+    eff = effort or ('' if cfg.get('model') else de)      # the connection's own effort rides only with its own model
+    return {'pick': pick, 'key': key, 'cli': cli, 'tool': tool, 'base': model, 'effort': eff, 'dropped': dropped,
+            'model': f'{model}@{eff}' if eff else model,
+            'said': f"{tool} · {model or 'its default model'}" + (f', {eff} effort' if eff else '') if pick else ''}
+
+
+def brain_of_task(store, task) -> dict | None:
+    """The brain a run task's session starts on - read when it starts, by whichever road starts it (the worker, a queue drain)."""
+    src = source_of(store, task)
+    return brain(store, cfg_of(src), task) if src else None
+
+
+def brain_options(store) -> dict:
+    """What the editor's Model and Effort offer: the general agents' brain, its models, and per model only the efforts it takes."""
+    from . import climodels
+    from .aidefaults import _conn_models
+    b = brain(store, {})
+    if b['cli']: cat = climodels.catalog(b['cli'])
+    else:
+        row = store.get_connector(int(b['pick'][10:])) if b['pick'].startswith('connector:') and b['pick'][10:].isdigit() else None
+        cat = {'models': [{'id': m, 'label': m} for m in _conn_models((row or {}).get('Type') or '')]}
+    models = [{'id': m['id'], 'label': m.get('label') or m['id'], 'efforts': efforts_for(b['cli'], cat, m['id'])} for m in cat.get('models') or []]
+    return {**b, 'models': models, 'efforts': efforts_for(b['cli'], cat, b['base'])}
+
+
 _DAYS = {'0': 'Sundays', '1': 'Mondays', '2': 'Tuesdays', '3': 'Wednesdays', '4': 'Thursdays', '5': 'Fridays', '6': 'Saturdays',
          '7': 'Sundays', '1-5': 'weekdays', '*': 'daily'}
 
@@ -172,7 +246,7 @@ def of_task(store, task) -> dict | None:
     cfg = cfg_of(src) if src else {}
     title = cfg.get('title') or (src or {}).get('Address') or str(task.get('Title') or '').rsplit(' - ', 1)[0]
     return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
-            'started_by': STARTED_BY.get(trig, '')}
+            'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src else ''}
 
 
 def running(store, sid) -> dict | None:
@@ -218,8 +292,10 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
     tid = store.create_task({'Title': f"{defn['title']} - {when}", 'Summary': text, 'Kind': kind, 'Status': 'open', 'Priority': 'normal',
                              'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags,
                              **({'Assignee': f"agent:{defn['agent']}"} if named else {})}, actor)
+    b = brain(store, cfg_of(src), store.get_task(tid))
     store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
-                                           'with the workflow definition - no triage.')
+                                           + (f"on {b['said']} " if b['said'] else '') + 'with the workflow definition - no triage.'
+                                           + (f" {b['dropped']}" if b['dropped'] else ''))
     logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
     with _LOCK: _STARTING.add(tid)
     def start():

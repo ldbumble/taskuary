@@ -122,6 +122,8 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
     pills: [
       run && { key: "workflow", label: "Workflow", value: workflowTitle(task, workflow) },
       by && { key: "trigger", label: "Started by", value: by },
+      // ...and what it runs on: the general agents' brain, or the harder model and effort this workflow asked for (workflows.brain)
+      run && workflow?.runs_on && { key: "runs_on", label: "Runs on", value: workflow.runs_on, tone: "agent" },
       intent && { key: "intent", label: "Intent", value: intent },
       { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
       profile && { key: "profile", label: "Profile", value: profile },

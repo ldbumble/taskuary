@@ -173,3 +173,10 @@ test("the Tasks list says a row is a workflow run and who started it", () => {
   const list = fs.readFileSync(new URL("../src/TasksView.jsx", import.meta.url), "utf8");
   assert.ok(list.includes("isWorkflowRun(task)") && list.includes("started by ${startedBy(task)}"));
 });
+
+test("a workflow run's header says the model and effort it runs on", () => {
+  const task = { Kind: "general", Source: "workflow", Tags: "workflow-trigger:manual", Title: "Month-end accruals - 2026-10-16 09:30" };
+  const facts = headerFacts({ task, workflow: { title: "Month-end accruals", trigger: "manual", started_by: "you (Run now)", runs_on: "Claude Code · opus, high effort" } });
+  assert.deepEqual(facts.pills.find((p) => p.key === "runs_on"), { key: "runs_on", label: "Runs on", value: "Claude Code · opus, high effort", tone: "agent" });
+  assert.equal(headerFacts({ task: { Kind: "general", Source: "email" }, workflow: { runs_on: "x" } }).pills.find((p) => p.key === "runs_on"), undefined);
+});

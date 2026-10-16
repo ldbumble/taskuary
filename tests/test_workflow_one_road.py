@@ -160,7 +160,8 @@ class CardTests(unittest.TestCase):
         with mock.patch.object(workflows, '_spawn', lambda fn: None):
             tid = workflows.run(s, s.get_source(sid))['task_id']
         self.assertEqual(workflows.of_task(s, s.get_task(tid)),
-                         {'source_id': sid, 'title': 'Vendor bill sweep', 'trigger': 'schedule', 'schedule': 'Mondays 08:00', 'started_by': 'its schedule'})
+                         {'source_id': sid, 'title': 'Vendor bill sweep', 'trigger': 'schedule', 'schedule': 'Mondays 08:00', 'started_by': 'its schedule',
+                          'runs_on': ''})                                                                       # no brain connected in this store
         with mock.patch.object(server, 'store', s):
             self.assertEqual(TestClient(server.app).get(f'/api/tasks/{tid}').json()['workflow']['started_by'], 'its schedule')
         s.delete_source(sid)                                                                           # the workflow deleted: the run keeps its name

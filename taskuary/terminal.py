@@ -829,8 +829,8 @@ def codex_resume_model(argv: list, model: str = None) -> list:
     with a ChatGPT account" (the owner, 2026-09-30, TQ-0887). So a codex resume names codex's OWN model: the one asked for,
     else the one in its config.toml. Any other CLI, or a model already named, is left as it is."""
     if not argv or 'codex' not in os.path.basename(str(argv[0])).lower() or '-m' in argv or '--model' in argv: return argv
-    from .climodels import codex_current
-    own = model or codex_current().get('model')
+    from .climodels import codex_current, split_pick
+    own = split_pick(model)[0] or codex_current().get('model')
     return [*argv, '-m', str(own)] if own else argv
 
 
@@ -842,8 +842,11 @@ def agent_argv(profile: dict, model: str = None) -> list:
     from .clis import preset_args
     argv = _resolve_cmd(profile.get('cmd') or 'claude')
     argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile.get('cmd') or 'claude'))
-    model = model or profile.get('model')
-    argv += [profile.get('model_arg') or '--model', str(model)] if model else []
+    # 'gpt-5.5@high' is a model and its effort in one pick (climodels), and '@high' the CLI's own model at that effort: the pane
+    # takes each in its CLI's own flag, as the headless runner does - `--model opus@high` is a model no CLI has
+    from .climodels import effort_args, split_pick
+    m, eff = split_pick(model or profile.get('model'))
+    argv += ([profile.get('model_arg') or '--model', str(m)] if m else []) + effort_args(cli_named(profile), eff)
     return _codex_hook_trust(_codex_windows_auto(_codex_browser_tui(argv)))
 
 
@@ -2011,7 +2014,12 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if live:
         if t.get('Status') != 'in_progress': store.update_task(tid, {'Status': 'in_progress'}, actor)
         return {**live, 'existing': True}
-    from . import agents as hub_agents
+    from . import agents as hub_agents, workflows
+    # A WORKFLOW RUN opens on its workflow's brain and model (workflows.brain) - by every road that starts it: the worker, a queue
+    # drain. A brain or model named here (the owner's pick, a failover) or a resumed conversation keeps its own.
+    if model is None and brain is None and not resume and not _chain:
+        b = workflows.brain_of_task(store, t)
+        if b and b['key']: model, brain = b['model'] or None, b['key']
     # The chain is of BRAINS, not of workers: the ROLE stays `agent` throughout, because failing
     # over is about which CLI can start, never about what the job is (the 2026-09-16 spec).
     chain = list(_chain or hub_agents.brain_chain(store, brain))
@@ -2031,7 +2039,6 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     continued_cwd = cwd if cwd and os.path.isdir(cwd) else None
     # A WORKFLOW RUN works in the folder its definition names, not in a checkout guessed for its words: Run now on a workflow
     # with a `cwd` opened wherever the coding agent's repository map pointed, and the REPO line named that one (workflows.cwd_of)
-    from . import workflows
     wf_cwd = None if continued_cwd else workflows.cwd_of(store, t)
     if wf_cwd:
         if not os.path.isdir(wf_cwd): raise ValueError(f"no such folder: {wf_cwd} - the workflow's cwd; fix it on the Reports tab")

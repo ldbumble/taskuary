@@ -178,8 +178,11 @@ WORKFLOW_SYSTEM = (
     '- An agent workflow must change data or state, and needs type, title, agent, and prompt and/or skill. Use an exact configured '
     'agent name: the profile whose job it is (an accounts-payable job is ap), else the general assistant - never ask which.\n'
     '- "uses" carries every connection the request names that is in WORKFLOW OPTIONS - name Intacct and its id goes in.\n'
-    '- A skill is its slash-command name without requiring the leading slash. cwd and model '
-    'are optional and must come from the owner, never be guessed.\n'
+    '- A skill is its slash-command name without requiring the leading slash. cwd is optional and must come from the owner, never be guessed.\n'
+    '- "model" and "effort" are LEFT OUT: a run works on the general agents\' brain and model, which is what the owner wants by default. '
+    'Set them only when the owner\'s words ask for a harder model or harder thinking on this job ("use the best model", "think hard", '
+    '"this one is tricky, give it the strongest"): "effort" from the efforts WORKFLOW OPTIONS brain lists, and "model" only to an id '
+    'from its models; say so in explain.\n'
     '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. daily_at is EVERY day: a weekly, '
     'weekday or monthly ask is cron ("every Monday at 8" is "0 8 * * 1"), and explain must say the same schedule the '
     'config carries. If the owner gives no schedule, use daily_at "08:00" for an agent or cron "0 9 1 * *" for monthly '
@@ -193,7 +196,7 @@ WORKFLOW_SYSTEM = (
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
-    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'access', 'uses', 'ask_first', 'done_when', 'browser',
+    'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
               'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
@@ -224,7 +227,17 @@ def workflow_catalog(store) -> dict:
             'agent': [{'name': a.get('Name')} for a in store.list_agents() if a.get('Name')],
             # what a workflow may work IN: the connections that are switched on, by id and name - never their settings
             'connections': [{'id': c['ConnectorId'], 'name': c.get('Name') or c.get('Type'), 'type': c.get('Type')}
-                            for c in store.list_connectors() if c.get('Active')]}
+                            for c in store.list_connectors() if c.get('Active')],
+            # the brain a run works on (workflows.brain) and what it can be asked for - a harder model, more effort
+            'brain': _brain(store)}
+
+
+def _brain(store) -> dict:
+    from . import workflows
+    try: b = workflows.brain_options(store)
+    except Exception as e:
+        logger.debug(f'compose: the workflow brain could not be read - {e}'); return {'said': '', 'models': [], 'efforts': []}
+    return {'said': b['said'], 'efforts': b['efforts'], 'models': [{'id': m['id'], 'efforts': m['efforts']} for m in b['models']]}
 
 
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
@@ -260,6 +273,12 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             for k in ('ask_first', 'done_when'):
                 if not str(cfg.get(k) or '').strip(): cfg.pop(k, None)
             if not cfg.get('browser'): cfg.pop('browser', None)
+            # a model the brain does not offer, or an effort it cannot take, is the model's guess - the brain's own default stands
+            brain = options.get('brain') or {}
+            hit = next((m for m in brain.get('models') or [] if m['id'] == str(cfg.get('model') or '').strip()), None)
+            if not hit: cfg.pop('model', None)
+            if str(cfg.get('effort') or '').strip().lower() not in ((hit or {}).get('efforts') if hit else brain.get('efforts') or []): cfg.pop('effort', None)
+            else: cfg['effort'] = str(cfg['effort']).strip().lower()
             # The workflow door is the owner's grant to write. `type: agent` alone remains a
             # read-only report, because the executor is not the product boundary.
             cfg['access'] = 'write'

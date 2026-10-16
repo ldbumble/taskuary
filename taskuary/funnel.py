@@ -595,8 +595,11 @@ def idle_state(store, tid) -> dict:
     # ...but a session that FINISHED did not leave anything: it said it was done and wrote its report, and the task came
     # back only because somebody wrote again (TQ-1040, 2026-10-12: an agent closed its task, the reply went out, the sender
     # answered, and the step said the agent "left without finishing" over its own finished record)
+    # ...and nothing came in since, or news_since_agent would have said so above: "Nothing has started on what came in since" was
+    # said over a batch whose session closed with nothing new on it at all (TQ-1112 shape) - the task is simply still open
     if session_finished(store, tid):
-        return out('left', f'{_cap(agent)} finished its last session - its record is below. Nothing has started on what came in since.' + old)
+        return out('left', f'{_cap(agent)} finished its last session - its record is below. The task is still open: close it, '
+                           'or continue the session.' + old)
     if store.last_transcript(tid):
         return out('left', f'{_cap(agent)} ran on this and left without finishing it. Continue the session, or hand it on.' + old)
     msg = store.last_inbound_on_task(tid) or {}
@@ -1260,7 +1263,10 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     def mid_job(tid):
         t = store.get_task(tid) or {}
         if t.get('Status') != 'in_progress': return False
-        return tid in live_tids or str(t.get('UpdatedAt') or t.get('CreatedAt') or '') >= stale_before
+        if tid in live_tids: return True
+        # ...and a session that ENDED by finishing is not mid-job, however recent: its report is written and nobody is on it
+        # (TQ-1112 shape: closed, still in_progress for two minutes while the ending wrote, and read as "agents working")
+        return str(t.get('UpdatedAt') or t.get('CreatedAt') or '') >= stale_before and not session_finished(store, tid)
     def held(tid): return bool(tid) and (tid in busy or mid_job(tid))
     # ...and a drafted reply with an agent still WORKING the task: the latest action is the status, and
     # working is newer than any draft the agent made along the way (the owner, 2026-09-24). Only a live

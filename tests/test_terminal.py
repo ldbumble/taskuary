@@ -1117,10 +1117,11 @@ class DurableWrapTests(unittest.TestCase):
         self.assertEqual((agent, sid), ('coding', t.sid))
         # ...and the buttons still have somewhere to point
         self.assertTrue(c.get(f'/api/tasks/{tid}').json()['transcript'])
-        with mock.patch('taskuary.llm.build_llm', return_value=None):   # no AI: files the tail verbatim
+        with mock.patch('taskuary.llm.build_llm', return_value=None):   # no AI: says so - the screen is never the summary (TQ-1112 shape)
             out = c.post(f'/api/tasks/{tid}/wrap', json={'close': True})
         self.assertEqual(out.status_code, 200)
-        self.assertIn('hello-from-pty', out.json()['report'])
+        self.assertIn('No summary could be written', out.json()['report'])
+        self.assertIn('hello-from-pty', server.store.last_transcript(tid)['Text'], 'the transcript itself is kept')
 
     def test_pause_works_off_a_dead_session_too(self):
         tid = self._task('paused after exit')

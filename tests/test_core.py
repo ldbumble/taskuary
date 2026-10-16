@@ -801,9 +801,11 @@ class CoreTests(unittest.TestCase):
             rep = report_from_transcript(s, tid, 'Ran the importer. Fixed the date parse.')
         self.assertEqual((rep['determination'], rep['actions'], rep['summary']), ('bad date', 'fixed run_pto.py', 'runs again'))
         self.assertIn('Fixed the date parse', seen['user'])
-        # no AI (or a bad answer) must never lose the record - the transcript itself is filed
+        # no AI (or a bad answer) files the agent's own last word - never the raw screen as a "summary" (TQ-1112 shape);
+        # the transcript itself is kept with the session
         with mock.patch('taskuary.llm.build_llm', return_value=None):
-            self.assertIn('Fixed the date parse', report_from_transcript(s, tid, 'Ran it. Fixed the date parse.')['summary'])
+            self.assertNotIn('Ran it.', report_from_transcript(s, tid, 'Ran it. Fixed the date parse.')['summary'])
+            self.assertIn('Fixed the date parse', report_from_transcript(s, tid, 'Ran it.', final_message='Fixed the date parse.')['summary'])
         self.assertIn('nothing on screen', report_from_transcript(s, tid, '   ')['summary'])
 
     def test_plain_resolves_repaints_and_keeps_the_gaps(self):

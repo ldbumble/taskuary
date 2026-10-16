@@ -70,7 +70,8 @@ class SaveBeforeCloseTests(Base):
         term.SESSIONS['run1'].alive = False                                              # the first run is over
         term.SESSIONS['run2'] = live(self.tid, 'run2')
         ws.record(self.s, self.tid, 'run2', 'finished', text='Second run: nothing left to do.', source='cli')
-        wrapup.wrap(self.s, self.tid, close=True, actor='agent')
+        with mock.patch.object(term, 'transcript_for', return_value=('the second transcript', 'coding', 'run2')):   # run1 is wrapped once only
+            wrapup.wrap(self.s, self.tid, close=True, actor='agent')
         self.assertIn('Second run', self.artifact_text()); self.assertNotIn('cleared the stuck job', self.artifact_text())
 
     def test_a_save_that_fails_keeps_the_session_and_claims_nothing(self):

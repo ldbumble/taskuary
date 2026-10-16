@@ -87,6 +87,11 @@ def record(store, tid: int, sid: str, kind: str, request_id: str = None, text: s
                             'ChoicesJson': json.dumps(list(choices)) if choices else None, 'Source': source, 'EventId': event_id})
     try: store._poke('task-changed', task_id=tid)
     except Exception: pass
+    if kind == 'turn_end' or kind in TERMINAL:   # a batch close that waited for the turn (batch.close_if_settled)
+        try:
+            from . import batch
+            batch.turn_ended(store, tid)
+        except Exception as e: logger.debug(f'task {tid}: the turn end was not passed on - {e}')
     if kind in REQUESTS:                          # the Advisor on the event (advisor.py): an agent asked
         try:
             from . import advisor

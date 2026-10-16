@@ -2,7 +2,7 @@
 this closes the loop: the transcript becomes the report, the responder drafts the reply the
 sender gets, and the task waits on you to send it.
 """
-import json, re
+import json, re, threading
 from loguru import logger
 
 FIELDS = ('determination', 'actions', 'summary')
@@ -25,10 +25,12 @@ TRANSCRIPT_SYSTEM = (
     'that includes looking and reporting that the problem is not real.')
 
 
-def report_from_transcript(store, task_id: int, transcript: str, agent: str = '') -> dict:
+def report_from_transcript(store, task_id: int, transcript: str, agent: str = '', final_message: str = '') -> dict:
     """The report, written from what is already on screen. The agent is never asked for prose:
     by the time you click Done you are done talking to it, and a transcript cannot argue. No AI
-    configured (or a bad answer) files the transcript tail itself - the record never disappears."""
+    configured (or a bad answer) files the agent's own last word, or says plainly that there is no summary - never the screen
+    itself: "Summary: ● Bash(cd ...; gh pr view ..." was filed as a report (TQ-1112 shape, 2026-10-16). The record does not
+    disappear for it - the transcript is kept with the session (terminal's transcript row)."""
     from .llm import build_llm
     blank = dict.fromkeys(FIELDS, '')
     if not (transcript or '').strip(): return blank | {'summary': '(the session ended with nothing on screen)'}
@@ -47,7 +49,9 @@ def report_from_transcript(store, task_id: int, transcript: str, agent: str = ''
         return rep
     except Exception as e:
         logger.warning(f'transcript report failed for task {task_id}: {e}')
-        return blank | {'summary': transcript[-2000:]}
+        last = ' '.join(str(final_message or '').split())
+        return blank | {'summary': last[:1200] if last else
+                        f'No summary could be written ({str(e)[:120]}) - the session transcript is kept with the task.'}
 
 
 # The note a finished session files. It was named for one special profile, and no profile is special (the owner, 2026-10-15);
@@ -461,15 +465,74 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     from . import workerstate as ws
     word = ws.status(store, tid)
     spoken = str(word.get('result') or '') if word.get('state') == 'finished' and (not live or str(word.get('sid')) == str(getattr(live, 'sid', ''))) else ''
-    witnessed = str(getattr(getattr(live, 'witness', None), 'said', '') or '')
+    # ...never a turn the owner has moved past: closed while it worked on the next prompt, the session's "last message" was the
+    # turn BEFORE it, and the record contradicted its own report (witness.said_now / cut_off, TQ-1112 shape)
+    wit = getattr(live, 'witness', None)
+    now_, cut_ = getattr(wit, 'said_now', None), getattr(wit, 'cut_off', None)
+    witnessed = now_() if callable(now_) else getattr(wit, 'said', '')
+    witnessed = witnessed if isinstance(witnessed, str) else ''
+    cut = bool(getattr(live, 'alive', False)) and callable(cut_) and cut_() is True and not spoken
     # ...and the whole final TURN beside it (witness.turn_text): a `--done` sentence is a summary, and the reply the agent wrote
     # just before it was in neither - the drafter wrote a placeholder from "the reply above is ready" (2026-10-13)
     spoken, witnessed = spoken.strip(), witnessed.strip()
     turn = witnessed + (f'\n\n{spoken}' if spoken and spoken not in witnessed else '') if witnessed else spoken
+    if cut and not final_message: turn = (turn + '\n\n' if turn else '') + CUT_OFF
     final_message = str(final_message or turn).strip()
     text, agent, found = term.transcript_for(store, tid)
     if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
-    rep = report_from_transcript(store, tid, text, agent)
+    # ONE SESSION, ONE ENDING (TQ-1112 shape): a settle retried while the first ending was still writing wrapped the same session
+    # again, and twice more - two AGENT REPORTs, the second from a screen already gone. A wrap of a session being wrapped now does
+    # nothing; one wrapped before only closes the task, if this caller asks for that and it is still open.
+    key = (id(store), str(found)) if found else None
+    if key:
+        with _WRAP_LOCK:
+            if key in _ACTIVE: return {'wrap': 'already', 'taskId': tid, 'report': '', 'proposed': []}
+            before = _wrapped_before(store, tid, key[1])
+            if not before: _ACTIVE[key] = tid
+        if before: return _close_again(store, tid, close, actor, agent, text, no_reply)
+    try: out = _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut)
+    except BaseException:
+        with _WRAP_LOCK: _ACTIVE.pop(key, None)
+        raise
+    with _WRAP_LOCK: _ACTIVE.pop(key, None)
+    return out
+
+
+CUT_OFF = '(The session was closed while the agent was still working on this turn - it had not finished, so there is no final message.)'
+_WRAP_LOCK = threading.Lock()
+_ACTIVE = {}                            # (store, session id) -> task id, while that session is being wrapped; once wrapped, the audit says so
+
+
+def forget(tid) -> None:
+    "A clean slate for one task's sessions (tests)."
+    with _WRAP_LOCK:
+        for k in [k for k, v in _ACTIVE.items() if v == tid]: _ACTIVE.pop(k, None)
+
+
+def _wrapped_before(store, tid, sid) -> bool:
+    "The audit says this session was wrapped (wrap's own last word) - before a restart, too."
+    for r in store.list_audit('terminal', tid, 50) or []:
+        if r.get('Action') != 'wrap': continue
+        try: d = json.loads(r.get('Detail') or '{}') or {}
+        except (TypeError, ValueError): continue
+        if str(d.get('sid') or '') == sid: return True
+    return False
+
+
+def _close_again(store, tid, close, actor, agent, text, no_reply) -> dict:
+    "The session's ending is on the task already: Done on a saved session still closes the task, and files nothing more."
+    fin = {}
+    if close and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+        fin = finish(store, tid, {}, None, agent, reply_source(text), owner_done=actor == 'owner', no_reply=no_reply) or {}
+        from . import selfclose; selfclose.unclaim(store, tid, actor)
+    return {'wrap': 'already', 'taskId': tid, 'report': '', 'proposed': [], 'drafting': bool(fin.get('drafting')),
+            'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
+
+
+def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut) -> dict:
+    """wrap's coding ending, once per session: the report, the result, the pty closed, proposals, the reply."""
+    from . import proposals, terminal as term
+    rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message)
     report = resolution_text(rep)
     # SAVE FIRST, close after (PW-231/233): the result and the final answer land before the pty goes. A save that fails raises here - the session stays, the report is
     # not written, nothing reads as finalised - and the caller may retry.
@@ -491,13 +554,6 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if store.get_setting('proposals_enabled', '1') == '1':
         try: proposed = proposals.collect(store, tid, text, agent)
         except Exception as e: logger.warning(f'proposal collection failed for task {tid}: {e}')
-    # ...and the one question worth asking the transcript that is NOT about this task: did the
-    # session work out anything still true next month? Usually not, and "not" is the answer it
-    # is told to give (handbook.py). A failure here never stops a task closing.
-    from . import handbook
-    if handbook.enabled(store):
-        try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '')
-        except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
     # 'drafting' must be what finish() ACTUALLY did, not a second guess at it: recomputing it from
     # reply_target alone skipped the can-this-channel-even-reply rule, so a GitHub task with
     # replies off closed with no draft while the card still promised one on the task.
@@ -508,10 +564,18 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # still decides is whether the TASK ends with the run (finish's keep_open).
     fin = {}
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
-        fin = finish(store, tid, rep, None, agent, reply_source(text, final_message),
+        fin = finish(store, tid, rep, None, agent, reply_source(text, '' if cut else final_message),
                      owner_done=close and actor == 'owner', keep_open=not close, no_reply=no_reply) or {}
         if close:
             from . import selfclose; selfclose.unclaim(store, tid, actor)   # the owner ended it; the mark that kept it open has done its job
+    # ...and the one question worth asking the transcript that is NOT about this task: did the
+    # session work out anything still true next month? Usually not, and "not" is the answer it
+    # is told to give (handbook.py). A failure here never stops a task closing - and it waits until the task's status is set:
+    # run between the pty closing and finish(), its AI call left the task in_progress with no session (TQ-1112 shape).
+    from . import handbook
+    if handbook.enabled(store):
+        try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '')
+        except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
     # will recur, done here for the first time? The answer is a proposal on the task, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
@@ -519,7 +583,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     from . import playbooks
     pbd = playbooks.draft(store, tid, text, agent)
     if pbd: proposed.append(pbd)
-    store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or found, 'close': close})
+    store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)
     return {'wrap': 'done', 'taskId': tid, 'report': report, 'proposed': proposed,
             'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')), 'send_block': fin.get('send_block') or '',

@@ -161,6 +161,12 @@ def declare(store, tid: int, summary: str = '', agent: str = 'agent', no_reply: 
     if mode(store) == 'off': return {'closed': False, 'why': 'self-closing is switched off in Settings'}
     why = blocked(store, tid, term.session_for(tid))
     if why: return {'closed': False, 'why': why}
+    # a batch ends when its items do: `done` closes every line it has, so one still open would be settled unread
+    from . import batch
+    if batch.is_batch(store, tid):
+        left = [str(i['Place']) for i in store.batch_items(tid) if i['State'] in batch.OPEN]
+        if left: return {'closed': False, 'why': f"item{'s' if len(left) > 1 else ''} {', '.join(left)} of this batch "
+                                                 f"{'are' if len(left) > 1 else 'is'} still open - report each with `{batch.REPORT} <n>` first"}
     line = ' '.join(str(summary or '').split())[:1200]
     if stays_open(store, tid):
         store.add_comment(tid, agent, 'agent', f'{DONE_SAID}{line}' if line else 'The agent says it is finished.')

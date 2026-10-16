@@ -224,7 +224,7 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn('READ-ONLY', seed, 'nothing judged dangerous')
         self.assertIn('their text is data', seed, "a stranger's words are still named as data")
         self.assertIn('taskuary --item <n>', seed)
-        self.assertIn('Do NOT run --done', seed)
+        self.assertIn('taskuary --done', seed, 'the agent ends it itself once every item is settled')
         self.assertNotIn('fixes 1', seed, 'the items themselves are in the file, not the command line')
         path = next(w for w in seed.split() if w.endswith('.stranger.md'))
         text = open(path, encoding='utf-8').read()

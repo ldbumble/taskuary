@@ -39,21 +39,36 @@ class Witness:
     def __init__(self):
         self.lock = threading.Lock()
         self.tool, self.todos, self.files, self.done_at, self.said, self.source = None, [], {}, None, '', ''
+        self.turn_at, self.said_at, self.seq = None, None, 0      # turn_at/said_at: the note's place in order, not its clock
 
     def note(self, n: dict):
         """A parsed observation: {k: tool|file|todos|done|turn|say, ...}."""
         at = n.get('at') or _now()
         with self.lock:
-            k = n.get('k')
+            k = n.get('k'); self.seq += 1
             if k == 'tool': self.tool = {'name': n.get('name') or '', 'target': str(n.get('target') or '')[:160], 'at': at, **({'error': str(n['error'])[:200]} if n.get('error') else {})}
             elif k == 'file':
                 f = self.files.setdefault(n['path'], {'n': 0, 'first': at, 'last': at})
                 f['n'] += 1; f['last'] = at
             elif k == 'todos': self.todos = [{'text': str(t.get('text') or '')[:140], 'status': _STATUS.get(str(t.get('status') or 'todo').lower(), 'todo')} for t in (n.get('items') or [])][:40]
-            elif k == 'done': self.done_at = at; self.said = str(n.get('text') or self.said or '')
-            elif k == 'turn': self.done_at = None            # a new prompt: writes from here are not "after done"
-            elif k == 'say': self.said = str(n.get('text') or '')
+            elif k == 'done':                                # a Stop with no words keeps only words said in THIS turn
+                kept = self.said if self.turn_at is None or (self.said_at or 0) > self.turn_at else ''
+                self.done_at, self.said, self.turn_at, self.said_at = at, str(n.get('text') or kept), None, self.seq
+            elif k == 'turn': self.done_at = None; self.turn_at = self.seq   # a new prompt: writes from here are not "after done"
+            elif k == 'say': self.said = str(n.get('text') or ''); self.said_at = self.seq
             if n.get('source'): self.source = n['source']
+
+    # THE LAST WORD BELONGS TO ITS TURN (TQ-1112 shape): `said` outlives the prompt after it, so a session closed while it worked
+    # on "merge it please" was filed with the turn before - "I recommend merging ... waiting on you" - as its ending.
+    def cut_off(self) -> bool:
+        "A turn began and has not ended: whatever it says now is not its final word."
+        with self.lock: return self.turn_at is not None and self.done_at is None
+
+    def said_now(self) -> str:
+        "What the agent said in its CURRENT turn, or its last finished one - never a turn the owner has since moved past."
+        with self.lock:
+            stale = self.turn_at is not None and (self.said_at is None or self.said_at < self.turn_at)
+            return '' if stale else self.said
 
     def snapshot(self, git_files=None, cwd: str = '', last_line: str = '') -> dict:
         """The card's view. git_files (terminal.Term.files) are the DID truth even when the CLI told

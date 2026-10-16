@@ -22,7 +22,7 @@ agent works them top-down and says what it found per item. The rules the owner s
     the warning, in the same batch. A warning, never a gate - the separate danger call, the batch apart and its read-only
     review went (the owner, 2026-10-15: "remove batch.dangers ... check for danger only in terms of ranking and add warning").
 """
-import re
+import re, threading
 from loguru import logger
 
 from .store import task_ref
@@ -398,7 +398,8 @@ def seed(store, tid, repo: str = None, cwd: str = None, instruction: str = None)
              'with or depends on another item here, say which and how - otherwise say nothing about the others.',
              f'REPORT EACH ONE AS YOU FINISH IT: {REPORT} <n> --result "<two or three sentences: what it is, whether it is right, '
              'what you propose>" --propose merge|close|changes [--overlap "<item and how>"] [--settled]. --settled only when '
-             'nothing is left for the owner to do on it. Do NOT run --done: the batch closes when every item is settled.']
+             'nothing is left for the owner to do on it. Once EVERY item is settled and you have said what you did, run '
+             '`taskuary --done "<one sentence>"` - or just stop: the batch closes when your turn ends with every item settled.']
     if instruction and instruction.strip(): parts.append(f'ASK: {instruction.strip()}')
     rules = term.with_fence_rule(brief.rules(store, 'agent', term.AGENT_CHARS))      # the titles above are fenced
     if rules: parts.append(f'RULES (AGENT.md - every worker): {term.no_emails(rules)}')
@@ -427,19 +428,83 @@ def set_item(store, tid, conv, actor: str = 'agent', **fields) -> bool:
     return ok
 
 
+# A SETTLED BATCH NEVER CUTS ITS AGENT OFF (TQ-1112 shape, 2026-10-16): the agent settles an item with `taskuary --item n --settled`,
+# a TOOL CALL inside its own turn - so the settle that closed the batch wrapped the session from inside that very call. The CLI
+# timed out waiting on the wrap, retried, the retry wrapped it again, and the session died mid-turn with its last word lost.
+# The rule (the owner): a batch may close when its work is done, never while its agent is still working. Mid-turn - by the
+# run's own word (workerstate: a prompt in flight, an answer delivered, background work, a question open) - the close waits
+# for the turn to end (workerstate.record's turn_end calls turn_ended) or for the agent's own `--done`.
+_PENDING, _CLOSING = {}, set()          # task id -> who settled it, for a close waiting on the turn; task ids being closed now
+_LOCK = threading.Lock()
+BUSY = ('working', 'input_needed', 'approval_needed', 'stalled')
+GRACE = 2.0                             # seconds after a turn ends before closing: the Stop hook's own follow-ups (a background
+                                        # job, a question) land first
+
+
+def forget(tid) -> None:
+    with _LOCK: _PENDING.pop(tid, None); _CLOSING.discard(tid)
+
+
+def mid_turn(store, tid) -> bool:
+    """Is a live session on this task in the middle of a turn? Its own word decides; a run that has said nothing is not."""
+    from . import terminal as term, workerstate as ws
+    if not getattr(term.session_for(tid), 'alive', False): return False
+    return ws.status(store, tid).get('state') in BUSY
+
+
 def close_if_settled(store, tid, actor: str = 'router') -> bool:
+    """Every line settled: the batch closes - now when its agent is between turns (or gone), at the end of the turn when it is
+    mid-turn. True when it closed now."""
     its = store.batch_items(tid)
     if not its or any(i['State'] in OPEN for i in its): return False
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
+    with _LOCK:
+        if tid in _CLOSING or tid in _PENDING:
+            if tid in _PENDING: _PENDING[tid] = actor
+            return False                # said once: a retried settle is the same fact
+        busy = mid_turn(store, tid)
+        if busy: _PENDING[tid] = actor
+        else: _CLOSING.add(tid)
+    store.add_comment(tid, 'router', 'agent', 'Every item of this batch is settled.'
+                      + (' It closes when the agent finishes its turn.' if busy else ''))
+    if busy: return False
+    try: _close(store, tid, actor)
+    finally:
+        with _LOCK: _CLOSING.discard(tid)
+    return True
+
+
+def _close(store, tid, actor):
     from . import wrapup, terminal as term
-    store.add_comment(tid, 'router', 'agent', 'Every item of this batch is settled.')
     wrapped = False
     if getattr(term.session_for(tid), 'alive', False):
         try: wrapup.wrap(store, tid, close=True, actor=actor, no_reply=True); wrapped = True
         except Exception as e: logger.warning(f'{task_ref(tid)}: the batch ending failed ({e}) - closing it plainly')
-    if not wrapped: store.update_task(tid, {'Status': 'done'}, actor)
+    if not wrapped and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
     _next(store)
-    return True
+
+
+def _later(f):
+    threading.Timer(GRACE, f).start()
+
+
+def turn_ended(store, tid) -> None:
+    """The agent's turn ended (or its run did): a close that waited on it happens now - unless the session is busy again by
+    then, when the next turn's end gets it. Off the hook's thread: a wrap writes the report with the AI."""
+    if tid not in _PENDING: return
+    def go():
+        with _LOCK:
+            if tid not in _PENDING or mid_turn(store, tid): return
+            actor = _PENDING.pop(tid); _CLOSING.add(tid)
+        try:
+            its = store.batch_items(tid)
+            # an item reopened meanwhile (a comment on it) keeps the batch open; a task closed meanwhile (the agent's --done) is done
+            if its and not any(i['State'] in OPEN for i in its) and (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+                _close(store, tid, actor)
+        except Exception as e: logger.warning(f'{task_ref(tid)}: the batch did not close at the end of the turn ({e})')
+        finally:
+            with _LOCK: _CLOSING.discard(tid)
+    _later(go)
 
 
 def _next(store):

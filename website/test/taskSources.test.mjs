@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { askLine, cameFromLabel, groupConversations, groupMeta, headerFacts, hidden, previewRows, routeHead, triageLine } from "../src/taskSources.js";
+import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, previewRows, routeHead, triageLine } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 let id = 0;
@@ -52,6 +52,25 @@ test("a short conversation is shown whole - a gap of one is not worth a line", (
   assert.equal(previewRows(g).length, 4);
   assert.ok(previewRows(g).every((r) => r.m));
   assert.equal(hidden([g]), 0);
+});
+
+// Close out's condensed view of the conversation it answers: the latest four, newest first, then what is under them counted
+test("Close out reads the latest four, newest first, and counts the rest", () => {
+  const [g] = groupConversations(thread(24, "close"));
+  const rows = latestRows(g);
+  assert.deepEqual(rows.slice(0, 4).map((r) => r.m.excerpt), ["message 23", "message 22", "message 21", "message 20"]);
+  assert.equal(rows[4].gap, 20);
+  assert.equal(rows.length, 5, "no first message under the gap - the draft answers the top line");
+  assert.equal(latestRows(groupConversations(thread(5, "five"))[0]).length, 5, "a gap of one is not worth a line");
+});
+
+test("Show all is offered for a hidden middle, or for any chat of more than one line - its bubbles", () => {
+  const chat = (n) => groupConversations(Array.from({ length: n }, (_, i) => ({ MessageId: ++id, Channel: "whatsapp", SourceName: "Northwind payroll group",
+    FromName: i % 2 ? "Erin Blake" : "Gail Moreno", SentAt: `2026-10-15 09:0${i}:00`, BodyText: `line ${i}` })));
+  assert.ok(expands(chat(3)));
+  assert.ok(!expands(chat(1)));
+  assert.ok(!expands(groupConversations(thread(4, "short2"))));
+  assert.ok(expands(groupConversations(thread(9, "long"))));
 });
 
 test("the ask is one line: its first sentence, the rest kept for the tooltip", () => {

@@ -29,9 +29,8 @@ test("a voice note says so once, and an attachment-only message has no words", (
 });
 
 // SECTION 1 READS EVERY CHANNEL AS CONVERSATIONS (the redesign, 2026-10-16): consecutive chat lines are one-line rows under the
-// chat's name in Came from, like an email thread's - the bubbles stay in Close out, over the reply
-test("the task card's Came from groups chats and email alike; the chat thread stays in Close out", () => {
-  assert.match(page, /const chatTask = !detail\?\.batch && isChatTask\(taskMessages\);/);
+// chat's name in Came from, like an email thread's - and Show all turns a chat into its bubbles there (below)
+test("the task card's Came from groups chats and email alike", () => {
   assert.doesNotMatch(page, /\{chatTask && <ChatThread messages=\{taskMessages\} \/>\}/);
   assert.doesNotMatch(page, /newestFirst\(alsoSaid\)/);
   assert.match(page, /const sources = groupConversations\(storedMessages/);
@@ -39,12 +38,11 @@ test("the task card's Came from groups chats and email alike; the chat thread st
   assert.match(src, /flexDirection: "column", alignItems: me \? "flex-end" : "flex-start"/);   // yours right, theirs left
 });
 
-test("newest first, as every message list reads - and the thread stands over the draft in Close out", () => {
+test("newest first, as every message list reads", () => {
   assert.match(src, /const list = \[\.\.\.messages\]\.sort\(\(a, b\) => tsMs\(b\.SentAt\) - tsMs\(a\.SentAt\)\);/);
   assert.doesNotMatch(src, /scrollTop = el\.scrollHeight/);
   assert.doesNotMatch(src, /maxWidth: 900/);                                  // as wide as the task section
   assert.match(src, /maxWidth: \{ xs: "88%", md: "min\(70%, 640px\)" \}/);      // a bubble stays readable
-  assert.match(page, /\{chatTask && <Box sx=\{\{ mb: 1\.2 \}\}>[\s\S]{0,160}<ChatThread messages=\{taskMessages\} maxHeight=\{240\} \/>/);
 });
 
 // (the owner, 2026-10-15: "keep the width but center them in the chat ... test all different examples of this with newest message first
@@ -53,8 +51,30 @@ test("the conversation is a centred column with its own line around it", () => {
   assert.match(src, /data-tq-chat-thread="" sx={{ mt: 0.85, width: "100%", maxWidth: 800, mx: "auto"/);
 });
 
-test("an email task reads newest first on both sides: every email on the task, theirs and yours over the draft in Close out", () => {
-  assert.match(page, /newestFirst\(\[\.\.\.inbound, \.\.\.sentOutside\.map\(\(m\) => \(\{ \.\.\.m, mine: true \}\)\)\]\)/);
-  assert.match(page, /\{mailThread\.length > 0 && <Box data-tq-mail-thread=""/);
-  assert.match(page, /\{!chatTask && !mailThread\.length && newestFirst\(sentOutside\)/, "never the sent lines twice");
+// THE FULL CHAT IS IN TASK, CONDENSED IN CLOSE OUT (the owner, 2026-10-16: "in close out you have the full chat, it's too confusing.
+// full chat should be in task (condensed and full). in close out chats condensed version?")
+const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("<Fold title={`Context & history"));
+const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
+test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
+  assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{360\} \/>/);
+  assert.match(cameFrom, /<ConversationRows rows=\{previewRows\(g, 2, showAll\)\} open=\{openMsg\} onOpen=\{setOpenMsg\} \/>/);
+  assert.match(cameFrom, /\{expands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles");
+  assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");
+});
+
+test("Close out draws the conversation it answers condensed - the same rows as Task - and points to Task for the whole", () => {
+  assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
+  assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);
+  assert.match(closeOut, /\{closeGroup && <Box data-tq-close-conversation=""/);
+  assert.match(closeOut, /<ConversationRows rows=\{latestRows\(closeGroup, 4\)\} open=\{openMsg\} onOpen=\{setOpenMsg\} \/>/);
+  assert.match(closeOut, /onClick=\{seeWholeConversation\}[\s\S]{0,80}the whole conversation is in Task/);
+  assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setOpenStage\("task"\); setSeekCameFrom\(true\); \};/);
+  assert.match(page, /<Box ref=\{cameFromRef\}/);
+  assert.equal(page.match(/<ConversationRows /g).length, 2, "one component, two places");
+});
+
+test("an email task's Close out is the answered thread's rows; what was sent in another conversation still shows, once", () => {
+  assert.match(page, /sources\.find\(\(g\) => g\.msgs\.some\(\(m\) => m\.MessageId === sourceMessage\?\.MessageId\)\)/);
+  assert.match(page, /const sentApart = newestFirst\(sentOutside\.filter\(\(m\) => !closeGroup\?\.msgs\.some/, "never the sent lines twice");
+  assert.match(closeOut, /\{sentApart\.map\(\(m\) => \(/);
 });

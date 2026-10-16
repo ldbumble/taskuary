@@ -14,5 +14,6 @@ test("where a task came from shows the whole message, not three lines of it", ()
   assert.match(card, /maxHeight: 420, overflowY: "auto"/);
   assert.doesNotMatch(card, /WebkitLineClamp/);
   assert.match(card, /r\.m\.ReadText \?\? r\.m\.BodyText/, "an email still shows its own words, not the quoted chain");
-  assert.match(page, /onClick=\{\(\) => setOpenMsg\(/, "a row in Came from opens its message in full under it");
+  assert.match(page, /onClick=\{\(\) => onOpen\(/, "a row in Came from opens its message in full under it");
+  assert.match(page, /open=\{openMsg\} onOpen=\{setOpenMsg\}/);
 });

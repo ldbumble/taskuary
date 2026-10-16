@@ -52,6 +52,18 @@ export function previewRows(group, keep = 2, all = false) {
 // how many messages the previews leave out - none means there is nothing for "Show all" to add
 export const hidden = (groups, keep = 2) => groups.reduce((n, g) => n + (g.count > keep + 2 ? g.count - keep - 1 : 0), 0);
 
+// CLOSE OUT READS THE CONVERSATION IT ANSWERS CONDENSED: its latest `keep`, newest first - the draft answers the top line - and how
+// many are under them and who wrote them. The whole of it is in Task (the owner, 2026-10-16: "in close out chats condensed version?")
+export function latestRows(group, keep = 4) {
+  const ms = group?.msgs || [];
+  if (ms.length <= keep + 1) return ms.map((m) => ({ m }));
+  const hid = ms.slice(keep);
+  return [...ms.slice(0, keep).map((m) => ({ m })), { gap: hid.length, names: namesOf(hid) }];
+}
+// whether "Show all" changes anything: an email thread's hidden middle, or a chat's back-and-forth - a chat of three lines still reads
+// as one in bubbles (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?")
+export const expands = (groups, keep = 2) => hidden(groups, keep) > 0 || groups.some((g) => isChat(g.channel) && g.count > 1);
+
 export function cameFromLabel(groups) {
   const n = groups.reduce((s, g) => s + g.count, 0);
   if (!n) return "";

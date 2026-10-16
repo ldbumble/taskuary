@@ -42,13 +42,13 @@ import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
-import { cameFromLabel, channelName, groupConversations, groupMeta, headerFacts, hidden, previewRows, triageLine } from "./taskSources.js";
+import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, previewRows, triageLine } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
-import ChatThread, { isChatTask } from "./ChatThread.jsx";
+import ChatThread from "./ChatThread.jsx";
 import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
@@ -145,6 +145,48 @@ const whenShort = (s) => {
   return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : d.toLocaleDateString([], { month: "short", day: "numeric" });
 };
+// A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
+// message in full under it. Task's Came from and Close out draw this SAME list (the owner, 2026-10-16: "full chat should be in task
+// (condensed and full). in close out chats condensed version?"), so the two cannot tell one conversation two ways.
+function ConversationRows({ rows, open, onOpen }) {
+  return rows.map((r, ri) => r.gap ? (
+    <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
+      · · · {r.gap} more - {r.names}</Typography>
+  ) : (
+    <React.Fragment key={r.m.MessageId}>
+      <Box component="button" type="button" data-tq-conversation-row="" aria-expanded={open === r.m.MessageId}
+        onClick={() => onOpen((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
+        title="Open the message"
+        sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
+          display: "grid", gridTemplateColumns: { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
+          alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
+          "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+        <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.excerpt || r.m.Subject || "(no text)"}</Box>
+        <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
+      </Box>
+      {open === r.m.MessageId && (
+        <Box sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0 }}>
+          <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
+            <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>{r.m.who}</Typography>
+            <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
+            {r.m.SourceLink && <Link href={r.m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
+          </Box>
+          {r.m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
+          {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were never enough to check the ask
+              against: first for a report run (the owner, 2026-09-30: "i can't see the full report once it gets sent to agent"), then
+              for the email behind a task (2026-10-01: "don't see the full email that this task came from") */}
+          <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
+            {r.m.Channel === "report" && looksMd(r.m.BodyText) ? <Md text={cleanText(r.m.BodyText)} />
+              : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                  {cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))}</Typography>}
+          </Box>
+          <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense />
+        </Box>
+      )}
+    </React.Fragment>
+  ));
+}
 // the repo is a filter like the others, but it opens a picker rather than a menu of values
 const chipBtn = { fontSize: 11.5, fontWeight: 600, height: 26, minHeight: 26, py: 0, px: 1.25,
   borderRadius: 13, bgcolor: "#f4f1ec", color: INK, borderColor: BORDER,
@@ -477,6 +519,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
   const [showAll, setShowAll] = useState(false);
   const [openMsg, setOpenMsg] = useState(null);
+  // Close out's "the whole conversation is in Task" opens step 1 and brings Came from into view - once it has drawn
+  const cameFromRef = useRef(null);
+  const [seekCameFrom, setSeekCameFrom] = useState(false);
+  useEffect(() => {
+    if (!seekCameFrom) return;
+    cameFromRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    setSeekCameFrom(false);
+  }, [seekCameFrom]);
   // the menu the old pills were: { what: "menu" | "kind" | "priority" | "assign", at } - opened from the row or the Tasks tab's bar
   const [pick, setPick] = useState(null);
   // a batch's items start FOLDED to their progress line: with them open, the agent's session - the thing being watched -
@@ -765,11 +815,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a
   // task whose answer arrived in message three read as an unanswered question (owner, 2026-09-02).
   const inbound = storedMessages.filter((m) => m.Status !== "context" && m.Direction !== "out");
-  // a WhatsApp, Teams or Slack task is a conversation: drawn as one (ChatThread), yours beside theirs - never a batch
-  const chatTask = !detail?.batch && isChatTask(taskMessages);
-  // Close out's conversation for an email task: theirs and what you sent outside Taskuary, newest first (a chat has ChatThread)
-  const mailThread = chatTask || detail?.batch || !inbound.length ? []
-    : newestFirst([...inbound, ...sentOutside.map((m) => ({ ...m, mine: true }))]);
   const completionIsManual = ownerControlsCompletion(t);
   const interruptedTask = String(t?.Tags || "").split(/[\s,]+/).includes("interrupted");
   const taskState = taskPhase(t?.Status);
@@ -785,6 +830,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
   const sources = groupConversations(storedMessages, { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
+  // CLOSE OUT'S CONVERSATION is the one being answered - the reply source's - condensed, newest first; never a batch's four authors
+  const closeGroup = detail?.batch || !inbound.length ? null
+    : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
+  // ...and what you sent outside Taskuary in some OTHER conversation still says so under it, newest first
+  const sentApart = newestFirst(sentOutside.filter((m) => !closeGroup?.msgs.some((x) => x.MessageId === m.MessageId)));
+  const seeWholeConversation = () => { setShowAll(true); setOpenStage("task"); setSeekCameFrom(true); };
   const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
@@ -1415,7 +1466,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                          {hidden(sources) > 0 && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
+                          {expands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
@@ -1443,59 +1494,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Typography>
                         )}
                         {sources.length > 0 ? (
-                          <Box sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", overflow: "hidden" }}>
-                            <Box sx={showAll ? { maxHeight: 360, overflowY: "auto" } : undefined}>
-                              {sources.map((g, gi) => (
-                                <Box key={g.key} data-tq-conversation="" sx={{ px: { xs: 1, sm: 1.4 }, py: 1.1, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
-                                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
-                                    <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                                      <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
-                                    <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
-                                    <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11.5, flexShrink: 0, maxWidth: "100%", pl: { xs: 4, sm: 0 } }}>{groupMeta(g)}</Typography>
-                                  </Box>
-                                  <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5 }}>
-                                    {previewRows(g, 2, showAll).map((r, ri) => r.gap ? (
-                                      <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
-                                        · · · {r.gap} more - {r.names}</Typography>
-                                    ) : (
-                                      <React.Fragment key={r.m.MessageId}>
-                                        <Box component="button" type="button" aria-expanded={openMsg === r.m.MessageId}
-                                          onClick={() => setOpenMsg((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
-                                          title="Open the message"
-                                          sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
-                                            display: "grid", gridTemplateColumns: { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
-                                            alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
-                                            "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
-                                          <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
-                                          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.excerpt || r.m.Subject || "(no text)"}</Box>
-                                          <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
-                                        </Box>
-                                        {openMsg === r.m.MessageId && (
-                                          <Box sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0 }}>
-                                            <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
-                                              <Typography sx={{ color: INK, fontSize: 11.5, fontWeight: 600 }}>{r.m.who}</Typography>
-                                              <Typography variant="caption" sx={{ color: FAINT }}>{channelName(r.m.Channel)}{r.m.SentAt ? ` · ${fmtDateTime(r.m.SentAt)}` : ""}</Typography>
-                                              {r.m.SourceLink && <Link href={r.m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>open the original</Link>}
-                                            </Box>
-                                            {r.m.Subject && <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mt: 0.1 }}>{r.m.Subject}</Typography>}
-                                            {/* WHERE IT CAME FROM IS THE WHOLE MESSAGE, in full and scrolling - three lines of it were
-                                                never enough to check the ask against: first for a report run (the owner, 2026-09-30: "i
-                                                can't see the full report once it gets sent to agent"), then for the email behind a task
-                                                (2026-10-01: "don't see the full email that this task came from") */}
-                                            <Box sx={{ mt: 0.5, maxHeight: 420, overflowY: "auto", minWidth: 0, overflowWrap: "anywhere" }}>
-                                              {r.m.Channel === "report" && looksMd(r.m.BodyText) ? <Md text={cleanText(r.m.BodyText)} />
-                                                : <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                                                    {cleanText(r.m.Channel === "report" ? r.m.BodyText : (r.m.ReadText ?? r.m.BodyText))}</Typography>}
-                                            </Box>
-                                            <Attachments messageId={r.m.MessageId} canFetch={r.m.Channel === "email" && mentionsPicture(r.m.BodyText)} dense />
-                                          </Box>
-                                        )}
-                                      </React.Fragment>
-                                    ))}
-                                  </Box>
+                          <Box ref={cameFromRef} sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", overflow: "hidden", scrollMarginTop: 8 }}>
+                            {sources.map((g, gi) => (
+                              <Box key={g.key} data-tq-conversation="" sx={{ px: { xs: 1, sm: 1.4 }, py: 1.1, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                                  <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                                    <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
+                                  <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, flexBasis: { xs: "calc(100% - 40px)", sm: "auto" } }} title={g.title}>{g.title}</Typography>
+                                  <Typography noWrap variant="caption" sx={{ color: DIM, fontSize: 11.5, flexShrink: 0, maxWidth: "100%", pl: { xs: 4, sm: 0 } }}>{groupMeta(g)}</Typography>
                                 </Box>
-                              ))}
-                            </Box>
+                                {/* SHOW ALL DRAWS EACH CONVERSATION IN ITS OWN FORM: a chat as the back-and-forth it is - bubbles, yours on the right
+                                    (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
+                                    thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
+                                <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5, minWidth: 0 }}>
+                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={360} />
+                                    : <Box sx={showAll ? { maxHeight: 360, overflowY: "auto", minWidth: 0 } : undefined}>
+                                        <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg} /></Box>}
+                                </Box>
+                              </Box>
+                            ))}
                             {/* WHAT TRIAGE DID, quietly, last: when, whose it made it - the route record leads with who now - and why; then
                                 what joined it since. A task nobody triaged says where it came from and when it was made. */}
                             <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", px: { xs: 1, sm: 1.4 }, py: 0.9, borderTop: "1px solid #ece7e0", bgcolor: "#faf8f5" }}>
@@ -1791,28 +1808,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       : null} />
                   {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
-                      {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"): a chat task with a reply ready
-                          opens here, and the thread it answers was folded away in step 1 - the one thing needed to judge the draft */}
-                      {chatTask && <Box sx={{ mb: 1.2 }}>
-                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The conversation</Typography>
-                        <ChatThread messages={taskMessages} maxHeight={240} />
-                      </Box>}
-                      {/* ...and an EMAIL task's too (the owner, 2026-10-15: "for email in both the task side and close out side"): what
-                          they wrote and what you sent outside Taskuary, newest first, one list - the draft answers the top of it */}
-                      {mailThread.length > 0 && <Box data-tq-mail-thread="" sx={{ mb: 1.2 }}>
-                        <Typography sx={{ ...label, display: "block", mb: 0.25 }}>The conversation</Typography>
-                        <Box sx={{ maxHeight: 240, overflowY: "auto", pr: 0.5 }}>
-                          {mailThread.map((m) => (
-                            <Box key={m.MessageId} data-tq-mail-msg="" sx={{ mt: 0.6, pl: 1, borderLeft: `2px solid ${m.mine ? "#cddccd" : BORDER}`, maxWidth: 900 }}>
-                              <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
-                                {m.mine ? "Sent by you" : m.FromName || m.FromEmail || m.Channel}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: DIM, lineHeight: 1.55, whiteSpace: "pre-wrap", overflowWrap: "anywhere",
-                                display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                {cleanText(m.mine ? m.OwnText || m.BodyText : m.ReadText ?? m.BodyText)}</Typography>
-                            </Box>
-                          ))}
+                      {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"), CONDENSED: the latest lines of the
+                          conversation being answered, newest first - the draft answers the top one - and the rest a click away in Task. The
+                          full bubbles here and again in step 1 were one conversation drawn twice (the owner, 2026-10-16: "in close out you
+                          have the full chat, it's too confusing. full chat should be in task (condensed and full). in close out chats
+                          condensed version?"). An email task reads the same rows, so Close out reads one way for every channel. */}
+                      {closeGroup && <Box data-tq-close-conversation="" sx={{ mb: 1.2, minWidth: 0, maxWidth: 900 }}>
+                        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", mb: 0.25, minWidth: 0 }}>
+                          <Typography sx={{ ...label }}>The conversation</Typography>
+                          <Link component="button" type="button" underline="hover" onClick={seeWholeConversation}
+                            sx={{ ml: "auto", fontSize: 12 }}>the whole conversation is in Task</Link>
                         </Box>
+                        <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg} onOpen={setOpenMsg} />
                       </Box>}
                       {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
                       <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
@@ -1868,7 +1875,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           )}
                           {/* the thread's own drawing - who and WHEN first, a rule on the left, newest first - not a grey box with its
                               date pushed off the right edge (the owner, 2026-10-14: "you need time and date when each one was sent") */}
-                          {!chatTask && !mailThread.length && newestFirst(sentOutside).map((m) => (
+                          {sentApart.map((m) => (
                             <Box key={m.MessageId} sx={{ mt: 0.9, pl: 1, borderLeft: `2px solid ${BORDER}`, maxWidth: 900 }}>
                               <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}>
                                 Sent by you{m.SourceName ? ` · ${m.SourceName}` : ""}{m.SentAt ? ` · ${fmtDateTime(m.SentAt)}` : ""}

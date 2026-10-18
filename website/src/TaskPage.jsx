@@ -954,8 +954,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // to a strip under a heading that says the agent is working.
   const emailsWaiting = waitingEmails(detail?.checklist, detail?.reviews);
   const owesEmails = (detail?.checklist || []).some((i) => i.out && !i.done);
+  // A RUN OF STEPS WITH NO AGENT STEP (workflows.of_task by_code): code ran it, so there is no Agent work to open - the steps are on
+  // the task, under where it came from. A session that did start (an older run, a hand-started agent) still shows.
+  const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
   const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
-    kind: t?.Kind, task: taskState, agent: agentState, reply: replyState, hasSender: !!replyMessage,
+    kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
@@ -1637,7 +1640,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                {!codeRun && <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
@@ -1778,7 +1781,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     </Box>
                   )}
                   </>}
-                </Box>
+                </Box>}
                 {repoPick && (
                   <Box sx={{ ...card, mb: 1, bgcolor: PANEL2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>

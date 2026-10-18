@@ -113,7 +113,7 @@ export function workflowOrigin(task = {}, wf = null) {
   const by = startedBy(task, wf);
   // ...and, when it ran as steps (flow.py), what each step did - the run's own record, not the agent's account of it
   return { title: workflowTitle(task, wf), by, line: by ? `Started by ${by}` : "A workflow run",
-    link: wf?.source_id != null ? `#report=${wf.source_id}` : "", ...(Array.isArray(wf?.steps) && wf.steps.length ? { steps: wf.steps, repairs: wf.repairs || [], sourceId: wf.source_id, runId: wf.run_id } : {}) };
+    link: wf?.source_id != null ? `#report=${wf.source_id}` : "", ...(wf?.by_code ? { byCode: true } : {}), ...(Array.isArray(wf?.steps) && wf.steps.length ? { steps: wf.steps, repairs: wf.repairs || [], sourceId: wf.source_id, runId: wf.run_id } : {}) };
 }
 export function headerFacts({ verdict = null, route = null, task = {}, workflow = null } = {}) {
   const kind = task?.Kind || verdict?.kind || "task";
@@ -135,7 +135,9 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
       // ...and what it runs on: the general agents' brain, or the harder model and effort this workflow asked for (workflows.brain)
       run && workflow?.runs_on && { key: "runs_on", label: "Runs on", value: workflow.runs_on, tone: "agent" },
       intent && { key: "intent", label: "What it is", value: intent },
-      { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
+      // ...a run of steps with no agent step is done by those steps (workflows.of_task by_code), not by the agent its kind names
+      run && workflow?.by_code ? { key: "who", label: "Who does it", value: "its steps", tone: "agent" }
+        : { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
       profile && { key: "profile", label: "Agent", value: profile },
       repo && { key: "repo", label: "Repository", value: repo, mono: true },
       // a start that stopped on "which repository?" (funnel.HELD_REPO) says so where the repository would be; the pick is on the bar

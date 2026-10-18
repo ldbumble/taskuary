@@ -34,7 +34,7 @@
     "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
     "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
     "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},
-    "fix":             {"label": "Fix the send", "hint": "Opens where the failed send is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"]},
+    "fix":             {"label": "Fix it", "hint": "Opens where what failed is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"]},
     "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
     "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": []}

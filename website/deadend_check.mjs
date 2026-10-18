@@ -84,7 +84,8 @@ const look = () => page.evaluate(() => {
   window.__tqCards = cards.map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), c.className.slice(0, 40)]; });
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
   const errs = [...document.querySelectorAll('[role="alert"], .MuiAlert-standardError, .tq-next-err')].filter(vis).map((e) => e.innerText.trim()).filter(Boolean);
-  const rail = [...document.querySelectorAll("[data-tq-rail] [data-tq-key]")].map((e) => ({ key: e.getAttribute("data-tq-key"), text: e.innerText.replace(/\s+/g, " ").trim() }));
+  const rail = [...document.querySelectorAll("[data-tq-rail] [data-tq-key]")].map((e) => ({ key: e.getAttribute("data-tq-key"),
+    text: e.innerText.replace(/\s+/g, " ").trim(), title: (e.querySelector(".card b")?.innerText || "").trim() }));
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const read = [card?.innerText || "", row?.innerText || "", document.querySelector("[data-tq-advice]")?.innerText || ""].join("\n");
@@ -110,8 +111,11 @@ const judge = (s, at) => {
 const receipts = (before, after, at) => {
   const keys = new Set(after.rail.map((r) => r.key));
   for (const r of before.rail.filter((r) => !keys.has(r.key))) {
-    const ref = (r.text.match(/TQ-\d+/) || [])[0], said = after.chat.slice(before.chat.length);
-    if (ref ? !said.includes(ref) : !said.trim()) note("RECEIPT", at, `${ref || r.text.slice(0, 50)} left the rail with no line saying where it went`);
+    // a line NAMING it: its ref, or its subject - a report or a message folds to its title line, a batch of fyi to its own line
+    // ("✓ Read - 4 fyi let go") which names none of them, so a message that went in a batch counts the batch's line
+    const ref = (r.text.match(/TQ-\d+/) || [])[0], name = ref || r.title.replace(/…$/, "").slice(0, 30);
+    if (name && !after.chat.includes(name) && !(r.key.startsWith("processing:") && !ref && /fyi let go/.test(after.chat)))
+      note("RECEIPT", at, `${name} left the rail with no line saying where it went`);
   }
 };
 

@@ -146,7 +146,8 @@ test("saving a result never completes the task, drafts never send, a question wa
   assert.match(tasks, /\/wrap`, \{ close: false \}/);
   // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
   assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
-  assert.match(tasks, /\/clarify`, \{ body: text/);
+  // ...the question for the sender down the task tools' road (Stream B, 2026-10-18): a draft for the yes, the message it answers named
+  assert.match(tasks, /runOperation\(api, "task\.clarify", id, \{ text, message_id: sourceMessage\.MessageId \}\)/);
   assert.doesNotMatch(tasks, /\/send`/);
 });
 

@@ -392,6 +392,17 @@ const noted = (method, p) => {
   else if (method !== "get") track("verdict", p.split("/").slice(-1)[0].slice(0, 24));
 };
 
+// THE TASK TOOLS (taskOps.runOperation): the task page's presses run down the operations road (Stream B, 2026-10-18). The demo keeps
+// each proposal and, on its yes, does what the page's old door did here - the same in-memory change, nothing more. A kind with no
+// door here falls through to the demo's own "needs a Taskuary of your own", as it always did.
+const demoOps = {};
+const OP_DOORS = {
+  "task.update": (t, p) => ["patch", `/api/tasks/${t}`, { ...(p.priority ? { Priority: p.priority } : {}), ...(p.title ? { Title: p.title } : {}),
+    ...(p.assignee ? { Assignee: p.assignee === "none" ? "" : p.assignee } : {}), ...(p.due ? { DueAt: p.due === "none" ? null : p.due } : {}) }],
+  "task.set_kind": (t, p) => ["patch", `/api/tasks/${t}`, { Kind: p.kind }],
+  "task.check": (t, p) => p.id && ["patch", `/api/tasks/${t}/checklist/${p.id}`, { done: String(p.done) !== "false" }],
+  "task.defer": (t, p) => ["post", `/api/tasks/${t}/remind`, { until: p.until }],
+};
 const write = (method, url, body) => {
   const p = path(url);
   noted(method, p);
@@ -725,6 +736,15 @@ const write = (method, url, body) => {
       if (list.every((c) => c.done)) { t.Status = "done"; closed = true; }
     }
     return { ok: true, closed, demo: true };
+  }
+  if (method === "post" && p === "/api/operations" && OP_DOORS[body?.kind]?.(body.target, body.params || {})) {
+    const id = `demo-op-${++nextId}`; demoOps[id] = body;
+    return { id, version: 1, kind: body.kind, target: body.target, params: body.params || {}, status: "proposed" };
+  }
+  if (method === "post" && (m = p.match(/^\/api\/operations\/([^/]+)\/execute$/)) && demoOps[m[1]]) {
+    const op = demoOps[m[1]]; delete demoOps[m[1]];
+    const [verb, to, sent] = OP_DOORS[op.kind](op.target, op.params || {});
+    return { id: m[1], kind: op.kind, status: "done", outcome: write(verb, to, sent), demo: true };
   }
   // a workflow's steps: tested, repaired and saved in memory, like every other change a visitor makes (demoWorkflows.js)
   if (method === "post" && p === "/api/workflows/step-test") return demoStepTest(body);

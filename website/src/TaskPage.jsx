@@ -27,7 +27,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
-import { runOperation } from "./taskOps.js";
+import { opError, runOperation } from "./taskOps.js";
 import { ClosingCard, completeTask, writeUpSession } from "./closeAgent.jsx";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
@@ -274,14 +274,28 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => setSteps(r.data.steps || [])).catch(() => setSteps([])), [task.TaskId]);
   useEffect(() => { load(); }, [load, task.UpdatedAt]);
   const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
-  const moveDate = async (e) => { await api.patch(`/api/tasks/${task.TaskId}`, { DueAt: e.target.value || null }); onChanged?.(); };
+  // EVERY PRESS LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the step doors are the task tools' own road (taskOps.runOperation) -
+  // recorded, said in the chat when this goal is on the Assistant's table, and each with its Take it back
+  const [stepErr, setStepErr] = useState("");
+  const op = async (kind, params, fallback) => {
+    setStepErr("");
+    try { await runOperation(api, kind, task.TaskId, params); return true; } catch (e) { setStepErr(opError(e, fallback)); return false; }
+  };
+  // ...on a real move only: the field answers every blur, and an unchanged day pressed nothing
+  const moveDate = async (e) => {
+    if ((e.target.value || "") === String(task.DueAt || "").slice(0, 10)) return;
+    await op("task.update", { due: e.target.value || "none" }, "The due day didn't change - pick it again."); onChanged?.();
+  };
   // "Track it, I have the plan" needs doors of its own (the review, 2026-10-12): a step done by hand is ticked here, and a
-  // step is added here - the same checklist endpoints the task card uses; a step with a child ticks itself when it closes
-  const tick = async (s) => { await api.patch(`/api/tasks/${task.TaskId}/checklist/${s.id}`, { done: !s.done }); load(); onChanged?.(); };
+  // step is added here - the same checklist tools the task card uses; a step with a child ticks itself when it closes
+  const tick = async (s) => {
+    await op("task.check", { item: String(steps.indexOf(s) + 1), id: s.id, done: !s.done }, "That step didn't change - tick it again.");
+    load(); onChanged?.();
+  };
   const add = async () => {
     const text = draft.trim(); if (!text) return;
-    await api.put(`/api/tasks/${task.TaskId}/checklist`, { items: [...steps.map((s) => s.text), text] });
-    setDraft(""); load(); onChanged?.();
+    if (await op("task.checklist", { items: [...steps.map((s) => s.text), text] }, "The step wasn't added - it is still in the box; add it again.")) setDraft("");
+    load(); onChanged?.();
   };
   // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
   const [replanning, setReplanning] = useState(false);
@@ -324,6 +338,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           sx={{ "& .MuiInputBase-root": { fontSize: 12 } }} />
         <Button size="small" variant="outlined" onClick={add} disabled={!draft.trim()} sx={{ fontSize: 11, textTransform: "none" }}>Add</Button>
       </Box>
+      {stepErr && <Typography variant="caption" role="alert" sx={{ color: "#7a2f3c", display: "block", mt: 0.4 }}>{stepErr}</Typography>}
     </Box>
   );
 }
@@ -488,7 +503,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     return pollWhileActive(active, () => loadDetail(selected), 3000);
   }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
-  const patch = async (fields) => { await api.patch(`/api/tasks/${selected}`, fields); loadDetail(selected); loadTasks(); onChanged?.(); };
+  // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
+  // who holds it run down the operations road, so each is recorded, said in the chat when the task is on the Assistant's table, and
+  // offered back there (server._task_undo)
+  const change = async (kind, params) => {
+    try { await runOperation(api, kind, selected, params); } catch (e) { setErr(opError(e, "That change didn't go through - pick it again.")); }
+    loadDetail(selected); loadTasks(); onChanged?.();
+  };
   // Reopen changes the task's status and nothing else: no worker starts until the owner chooses one (PW-217)
   const reopen = async () => {
     try { await runOperation(api, "task.reopen", selected); } catch (e) { setErr(e?.message || "Could not reopen the task"); return; }
@@ -508,8 +529,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const post = async () => {
     if (!comment.trim() || posting) return;
     setPosting(true);
-    try { await api.post(`/api/tasks/${selected}/comments`, { body: comment }); setComment(""); loadDetail(selected); }
-    catch (e) { setErr(`Your note wasn't saved - ${e?.response?.data?.detail || "Taskuary didn't answer"}. It is still in the box; press Post again.`); }
+    try { await runOperation(api, "task.comment", selected, { text: comment }); setComment(""); loadDetail(selected); }
+    catch (e) { setErr(`Your note wasn't saved - ${opError(e, "Taskuary didn't answer")}. It is still in the box; press Post again.`); }
     finally { setPosting(false); }
   };
   // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
@@ -596,8 +617,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // 2026-10-01). The FYI is right; the steps between were the flicker. A delete that fails puts it back with the reason.
   const notATask = async () => {
     onLeave?.();
-    try { await api.post(`/api/tasks/${selected}/not-a-task`); }
-    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Could not remove the task - it is still here; try Remove again."; setErr(msg); onStay?.(msg); return; }
+    try { await runOperation(api, "task.not_a_task", selected); }
+    catch (e) { const msg = opError(e, "Could not remove the task - it is still here; try Remove again."); setErr(msg); onStay?.(msg); return; }
     onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked
@@ -809,13 +830,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const id = selected;
     setAskingSender(true); setErr("");
     try {
-      await api.post(`/api/tasks/${id}/clarify`, { body: text, message_id: sourceMessage.MessageId });
+      await runOperation(api, "task.clarify", id, { text, message_id: sourceMessage.MessageId });
       if (stale(id)) return;
       setAskSenderOpen(false); setSenderQuestion("");
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not prepare the question for the sender");
+      if (!stale(id)) setErr(opError(e, "Could not prepare the question for the sender"));
     } finally { if (!stale(id)) setAskingSender(false); }
   };
   const openReply = async (generate = false) => {
@@ -902,12 +923,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const todo = checklist.filter((i) => !i.out);
   const tickItem = async (i) => {
     try {
-      const { data } = await api.patch(`/api/tasks/${t.TaskId}/checklist/${i.id}`, { done: !i.done });
+      const data = await runOperation(api, "task.check", t.TaskId, { item: String(checklist.indexOf(i) + 1), id: i.id, done: !i.done });
       loadDetail(t.TaskId);
       // the last tick closed it (server: tick_checklist): the list and the rail move with it now,
       // not on the next poll, or the row you just finished sits there looking open
       if (data?.closed) { loadTasks(); onChanged?.(); }
-    } catch (e) { setErr(`That box didn't change - ${e?.response?.data?.detail || "Taskuary didn't answer"}. Tick it again.`); }
+    } catch (e) { setErr(`That box didn't change - ${opError(e, "Taskuary didn't answer")}. Tick it again.`); }
   };
   // what the folded strip says on its left: the header already has the id, title and state, so
   // this carries the two things it cannot - how far the list got, and what the task is
@@ -1555,8 +1576,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {" · "}
                             <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
                               onClick={async () => {
-                                try { await api.post(`/api/tasks/${selected}/trust`); loadDetail(selected); loadTasks(); onChanged?.(); }
-                                catch (e) { setErr(`That didn't go through - ${e?.response?.data?.detail || "Taskuary didn't answer"}. Press ${strangerLine(detail).trust} again.`); }
+                                try { await runOperation(api, "task.trust", selected); loadDetail(selected); loadTasks(); onChanged?.(); }
+                                catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}. Press ${strangerLine(detail).trust} again.`); }
                               }}>
                               {strangerLine(detail).trust}
                             </Link>
@@ -2200,7 +2221,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           )}
         </Box>
       </Box>
-      {/* THE MENUS THE PILLS WERE: the same PATCHes the dropdowns made, reached from the row (canvas) or Change (Tasks tab) */}
+      {/* THE MENUS THE PILLS WERE: the dropdowns' changes, now the task tools (change above), reached from the row (canvas) or Change (Tasks tab) */}
       {t && <Menu open={!!pick} anchorEl={pick?.at || null} onClose={() => setPick(null)}>
         {pick?.what === "menu" && [
           <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
@@ -2210,12 +2231,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ]}
         {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
           .filter((o) => o.key !== "coding" || canCode || t.Kind === "coding").map((o) =>
-          <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task")) patch({ Kind: o.key }); }}>
+          <MenuItem key={o.key} selected={o.key === (t.Kind || "task")} sx={{ py: 0.6 }} onClick={() => { setPick(null); if (o.key !== (t.Kind || "task")) change("task.set_kind", { kind: o.key }); }}>
             <ListItemText primary={o.label} secondary={o.hint} primaryTypographyProps={{ fontSize: 12 }} secondaryTypographyProps={{ fontSize: 10.5 }} />
           </MenuItem>)}
         {/* no Status here: status is DERIVED - Start, Mark done, Remind me and Reopen set it (T12) */}
         {pick?.what === "priority" && PRIORITIES.map((p) =>
-          <MenuItem key={p} selected={p === (t.Priority || "normal")} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== (t.Priority || "normal")) patch({ Priority: p }); }}>{p}</MenuItem>)}
+          <MenuItem key={p} selected={p === (t.Priority || "normal")} sx={{ fontSize: 12 }} onClick={() => { setPick(null); if (p !== (t.Priority || "normal")) change("task.update", { priority: p }); }}>{p}</MenuItem>)}
         {pick?.what === "assign" && [
           ["", "unassigned"], ["owner", "you"], ...agents.map((name) => [agentAssignee(name), name]),
           ...(t.Assignee && t.Assignee !== "owner" && !assignedAgent(t.Assignee) ? [[t.Assignee, t.Assignee]] : []),
@@ -2224,7 +2245,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             setPick(null);
             if (v === (t.Assignee || "")) return;
             const worker = assignedAgent(v);
-            patch({ Assignee: v });
+            change("task.update", { assignee: v || "none" });
             if (worker && agents.includes(worker)) setRun((r) => ({ ...r, agent: worker, model: "" }));
           }}>{assignedAgent(v) && <><TaskuaryMark size={12} />&nbsp; </>}{name}</MenuItem>)}
       </Menu>}

@@ -13,7 +13,8 @@ test("Not a task puts the task down before the delete, and back with the reason 
   const page = read("TaskPage.jsx");
   const nat = page.slice(page.indexOf("const notATask = async"), page.indexOf("// The task's own session"));
   assert.ok(nat.indexOf("onLeave?.()") > -1, "put down at the press");
-  assert.ok(nat.indexOf("onLeave?.()") < nat.indexOf("/not-a-task"), "before the request");
+  // ...down the task tools' road, so it leaves a receipt (Stream B, 2026-10-18)
+  assert.ok(nat.indexOf("onLeave?.()") < nat.indexOf('runOperation(api, "task.not_a_task"'), "before the request");
   assert.match(nat, /catch \(e\) \{[^}]*onStay\?\.\(msg\)/, "a delete that fails puts it back");
   // the canvas's onLeave is the rail's put-down: the task's row leaves by its tid until the pile no longer carries it,
   // and the FYI its mail becomes (no tid) is drawn as soon as the pile has it

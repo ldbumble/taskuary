@@ -15,3 +15,7 @@ export async function runOperation(api, kind, target, params = {}) {
   }
   return data?.outcome ?? data;
 }
+
+// What went wrong, in the server's words: a refused proposal answers with its detail, a handler that failed with its sentence
+// (the Error above) - and a request that never got an answer with the caller's own line.
+export const opError = (e, fallback) => e?.response?.data?.detail || (e?.response ? "" : e?.message) || fallback;

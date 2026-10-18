@@ -3401,7 +3401,8 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     # ...and what was pressed on the item on its table (`table`, on_table): that is this chat, and the owner is looking at it
     raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
-    if not dock_tid or not (table or _chat_proposed(store, dock_tid, op.get('id'))): return {'say': line, 'chips': []}
+    proposed = bool(dock_tid) and _chat_proposed(store, dock_tid, op.get('id'))
+    if not dock_tid or not (table or proposed): return {'say': line, 'chips': []}
     if st != 'done':
         way = recover(store, op, actor, llm)
         line = f"{line} {way['say']}".strip()
@@ -3422,11 +3423,15 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
             u = operations.propose(store, undo['kind'], int(undo.get('target') or 0), {**dict(undo.get('params') or {}), '_undo': True}, actor)
             store.set_setting(LAST_UNDO, u['id'], actor)
             line += f" Undo: {undo.get('label') or 'put it back'}."
+            # A PRESS ON THE TABLE'S TASK VIEW (Stream B, 2026-10-18): its receipt is a notice beside the view, never a card that takes the
+            # table from it - the view folded under its own receipt. Its Take it back rides the bar by the prompt (AssistantView freshUndo).
             record(store, dock_tid, 'assistant', line, {'kind': 'proposal', 'key': None, 'title': undo.get('label') or 'Undo', 'op': u['id'],
-                                                       'tid': None, 'ref': None, 'undo': True})
+                                                       'tid': None, 'ref': None, 'undo': True, **({} if proposed else {'background_event': True})})
             return {'say': line, 'chips': []}
         except Exception as e: logger.debug(f'no undo offered for {op.get("id")}: {e}')
-    record(store, dock_tid, 'assistant', line)
+    # ...and with nothing to put back, the same notice: a bare line let go of the task view the owner was pressing on
+    record(store, dock_tid, 'assistant', line, None if proposed else {'kind': 'words', 'key': None, 'title': label, 'chips': [], 'tid': None,
+                                                                     'ref': ref or None, 'background_event': True})
     return {'say': line, 'chips': []}
 
 

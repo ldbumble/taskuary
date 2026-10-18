@@ -54,7 +54,7 @@ import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, p
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns } from "./assistantTurns.js";
+import { freshUndo, mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink } from "./appLinks.js";
 import { useCapabilities } from "./capabilities.js";
@@ -745,7 +745,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE - a record of the walk, not a door. "Open again" brought it to the bottom as the
               current item, and reopening it in place would leave two current items when the assistant, the bar and Next all work
               the last one (the owner, 2026-10-16: "maybe just remove the open again button"); asking for it brings it back */}
-          {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && (
+          {/* ...and a task view's receipt is a sentence, its Take it back on the bar: no title line of an undo under it (Stream B) */}
+          {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && !(kind === "proposal" && m.card.background_event) && (
             // ...except the item ON THE TABLE, folded by its X or a page opened over it: that line is its door back - nothing reopened
             // it, while the rail kept ringing it and the Advisor kept talking about it (re-audit item 4, 2026-10-18)
             <div className="tq-fold" data-tq-folded={m.card.key} {...(live && foldedNow ? { role: "button", tabIndex: 0, title: "Open it again",
@@ -819,6 +820,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // outlive it either way, so nothing is lost by leaving and nothing is resumed by accident.
   const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
+  const msgsRef = useRef(msgs); msgsRef.current = msgs;      // what is on screen, for a read to tell what it ADDED (freshUndo)
   const caps = useCapabilities(), canCode = caps.coding;   // coding is mentioned only where a coding tool is connected
   const [pile, setPile] = useState(null);
   useEffect(() => { pileRef.current = pile; }, [pile]);   // the section walk reads the rail as drawn
@@ -1079,6 +1081,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
+    // ...and a press on the table's task view brought its Take it back with it: onto the bar, where the walk moving on cannot take it
+    const undo = freshUndo(msgsRef.current, mergeDurableTurns(msgsRef.current, st.messages || []).added);
+    if (undo) setUndoOffer({ ...undo, label: btn("take_back") });
     // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
     // "take it back") left this tab unlocked or locked until a reload (2026-09-29 audit)
     setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
@@ -1759,6 +1764,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
     // TAKE IT BACK (a receipt's undo): the undo is a proposal of its own, run down the same road as any press - flagged so the put-back
     // offers no undo of itself (concierge's receipt)
+    // ...or the one the server already proposed on a task view's receipt (freshUndo): run once, while it still stands
+    if (c.verb === "undo" && c.op) {
+      try {
+        const { data: op } = await api.get(`/api/operations/${c.op}`);
+        if (op?.status === "proposed") await runProposal({ id: op.id, version: op.version, kind: op.kind, label: c.title || btn("take_back"), tid: item?.tid, ref: item?.ref });
+      } catch (e) { setErr(errText(e)); }
+      return;
+    }
     if (c.verb === "undo" && c.undo?.kind) {
       try {
         const { data: op } = await api.post("/api/operations", { kind: c.undo.kind, target: Number(c.undo.target) || 0, params: { ...(c.undo.params || {}), _undo: true } });

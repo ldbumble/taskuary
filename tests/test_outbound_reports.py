@@ -112,7 +112,7 @@ class SendingWhereNobodyWroteFirstTests(unittest.TestCase):
         s.set_setting('reply_channels', 'teams', 't')          # email not among them
         with self.assertRaises(RuntimeError) as e:
             outbound.send_out(s, 'email', ['a@b.com'], 'subject', 'body')
-        self.assertIn('Settings', str(e.exception))
+        self.assertIn('switched off', str(e.exception)); self.assertEqual(e.exception.fix['href'], '#settings=config&group=Replies')
 
     def test_no_recipient_is_refused_rather_than_sent_nowhere(self):
         s = MemoryStore()
@@ -126,7 +126,7 @@ class SendingWhereNobodyWroteFirstTests(unittest.TestCase):
         s.set_setting('reply_channels', 'email,teams,github,jira', 't')
         with self.assertRaises(RuntimeError) as e:
             outbound.send_out(s, 'jira', ['PROJ-1'], 's', 'b')
-        self.assertIn('is off', str(e.exception))       # can_reply never admits a read-only tracker
+        self.assertIn('switched off', str(e.exception))       # can_reply never admits a read-only tracker
 
     def test_a_channel_with_no_sender_behind_it_says_which_ones_can_carry_a_report(self):
         """slack is offered as a reply channel and has no sender in outbound - a pre-existing

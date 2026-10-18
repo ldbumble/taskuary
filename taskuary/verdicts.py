@@ -268,10 +268,11 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             block = outbound.send_block(store, (msg or {}).get('Channel'))
             if block:
                 error = f'not sent - {block}'
-                finished = store.finish_review_delivery(rid, token, 'failed', reason=f'approved, but it cannot be sent from here: {block}')
+                fix = outbound.block_fix(store, (msg or {}).get('Channel'))
+                finished = store.finish_review_delivery(rid, token, 'failed', reason=f'Not sent: {block}.', fix=fix)
                 if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'NOT SENT - {block}. The approved text is kept as the draft.')
                 store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': False, 'blocked': block})
-                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': error, 'delivery': 'failed'}
+                return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': error, 'send_fix': fix, 'delivery': 'failed'}
         try:
             sent = send_fn(attempted) if send_fn is not None else _send_snapshot(store, attempted)
         except outbound.UNKNOWN_ERRORS as e:
@@ -283,14 +284,15 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                 checked = _reconcile_snapshot(store, attempted)
                 if checked['state'] == 'sent': return confirmed(checked['sent'], True)
                 return unknown(f'the provider did not establish delivery ({str(e)[:120]})')
-            error = str(e)[:300]
-            finished = store.finish_review_delivery(rid, token, 'failed', reason=f'approved, but sending FAILED: {error} - fix the channel and approve again')
+            error, fix = str(e)[:300], outbound.fix_of(e)
+            # ONE sentence, said once: the reason, the comment and the card each said it again in their own words (2026-10-17)
+            finished = store.finish_review_delivery(rid, token, 'failed', reason=f'Not sent: {error}.', fix=fix)
             if attempted['envelope'].get('kind') == 'zoho_invoice' and attempted['envelope'].get('item_id'):
                 from . import invoice_workflow
                 invoice_workflow.mark_send_error(store, int(attempted['envelope']['item_id']), error)
             if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'NOT SENT - {error}. The approved text is kept as the draft.')
             store.audit('review', rid, 'delivery_failed', actor, detail={'error': error[:200]})
-            return {'ok': not outgoing, 'status': 'pending', 'sent': None, 'send_error': error, 'delivery': 'failed'}
+            return {'ok': not outgoing, 'status': 'pending', 'sent': None, 'send_error': error, 'send_fix': fix, 'delivery': 'failed'}
         return confirmed(sent)
     finally:
         if not finished:

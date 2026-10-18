@@ -836,9 +836,10 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // a quarter of a desktop monitor - the same rail reading as two different shapes depending
       // on where you opened it. 25vw is the quarter the owner reads on his own desktop, held on
       // every screen (2026-09-22: "so do 25 percent if that's my size").
-      // The clamp is what a one-line row needs at either end: below ~380px a real subject stops
-      // being readable before you open anything, which is the whole job of the row; above ~560px
-      // an ultrawide would spend most of the rail on empty space beside short subjects.
+      // The canvas redesign (2d1f48a7, 2026-09-29) narrowed it to the sidebar's 340px at 1440, 320px at
+      // the floor: the row gives the subject that room by carrying nothing else that can be read on the
+      // card - no ref, a lane's mark only. A ref back on the row cut every subject at a laptop to ~14
+      // characters (the walk click-through, 2026-10-17), so a narrower floor means a leaner row, not a wider rail.
       // Everything else goes to the stage, which holds a whole message, the agent's work and the draft.
       gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, clamp(320px, 23.6vw, 380px)) minmax(0, 1fr)" },
       mt: { xs: -1.5, md: -2.25 }, pt: { xs: 1.5, md: 2 } }}>

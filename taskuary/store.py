@@ -4504,15 +4504,16 @@ class SQLiteStore:
             self.cx.commit(); self._writes += 1
         if cur.rowcount: self._review_changed(rid)
         return bool(cur.rowcount)
-    def finish_review_delivery(self, rid, token, state, receipt=None, reason=None):
-        """Commit a provider outcome before any task lifecycle bookkeeping."""
+    def finish_review_delivery(self, rid, token, state, receipt=None, reason=None, fix=None):
+        """Commit a provider outcome before any task lifecycle bookkeeping. `fix` ({label, href}, outbound.Fixable) rides in
+        the envelope, so the draft's row offers the place that fixes a failed send after a reload too."""
         changed = False
         with _DELIVERY_LOCK, self.lock:
             raw = self.cx.execute('SELECT * FROM review WHERE ReviewId=? AND DeliveryClaim=?', (rid, token)).fetchone()
             if raw:
                 row = dict(raw); snapshot = json.loads(row['DeliveryEnvelope'])
                 env = copy.deepcopy(snapshot['envelope'])
-                env.update(delivery=state, attempted_at=row.get('DeliveryAttemptedAt'))
+                env.update(delivery=state, attempted_at=row.get('DeliveryAttemptedAt'), fix=fix)
                 status = snapshot['status'] if state == 'sent' else 'pending'
                 cur = self.cx.execute('UPDATE review SET Status=CASE WHEN Status=\'pending\' THEN ? ELSE Status END, FinalText=?, DraftText=CASE WHEN ?=\'sent\' THEN DraftText ELSE ? END, '
                                       'DecidedBy=?, DecidedAt=?, DecideNote=?, DeliveryState=?, DeliveryClaim=NULL, DeliveryReceipt=?, Deliver=?, Reason=COALESCE(?,Reason) '

@@ -140,14 +140,14 @@ class ItCannotInventTests(unittest.TestCase):
 
     def test_an_unparseable_answer_says_so_instead_of_crashing(self):
         out = compose.compose(self.s, 'x', llm_saying('I would love to help with that!'))
-        self.assertIn('did not answer', out['error'])
+        self.assertIn('Say it another way', out['error'])
 
     def test_json_in_a_code_fence_still_parses(self):
         fenced = '```json\n' + cfg_answer(type='digest', title='Digest') + '\n```'
         self.assertEqual(compose.compose(self.s, 'x', llm_saying(fenced))['config']['type'], 'digest')
 
     def test_no_ai_configured_says_where_to_go(self):
-        self.assertIn('Connections', compose.compose(self.s, 'x', None)['error'])
+        self.assertTrue(compose.compose(self.s, 'x', None)['fix']['href'].startswith('#connections='))   # a button, not directions
 
     def test_an_empty_ask_is_not_a_report(self):
         self.assertTrue(compose.compose(self.s, '   ', llm_saying(cfg_answer(type='digest', title='x')))['error'])
@@ -189,7 +189,7 @@ class LookBeforeWritingTests(unittest.TestCase):
     def test_it_cannot_peek_forever(self):
         peek = json.dumps({'peek': {'type': 'automate', 'days': 1}})
         out = compose.compose(self.s, 'x', llm_saying(peek, peek, peek, peek), rounds=2)
-        self.assertIn('without answering', out['error'])
+        self.assertIn('Say it another way', out['error'])
 
 
 if __name__ == '__main__':

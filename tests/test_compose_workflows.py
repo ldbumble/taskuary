@@ -52,7 +52,20 @@ def test_workflow_composer_refuses_invented_agents_and_customers():
     store = MemoryStore()
     bad_agent = compose.compose_workflow(store, 'do a thing', answering({
         'config': {'type': 'agent', 'title': 'Thing', 'agent': 'imaginary', 'prompt': 'Do it'}}))
-    assert 'configured CLI agents' in bad_agent['error']
+    # no agent at all is a thing the owner fixes in Connections - the button says so; one that exists is named to pick from
+    assert bad_agent['fix']['href'].startswith('#connections=AI') and 'AI' in bad_agent['error']
+    store.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
+    named = compose.compose_workflow(store, 'do a thing', answering({
+        'config': {'type': 'agent', 'title': 'Thing', 'agent': 'imaginary', 'prompt': 'Do it'}}))
+    assert 'ap' in named['error'] and 'fix' not in named
+
+
+def test_a_model_miss_asks_the_owner_to_say_it_again_not_a_config_error():
+    """The owner cannot fix a missing config - "the model answered without a workflow config" was all they got (2026-10-17)."""
+    for said in ({'explain': 'hm'}, {'config': {'type': 'nonsense', 'title': 'x'}}, {'config': {'type': 'agent', 'title': ''}}):
+        out = compose.compose_workflow(MemoryStore(), 'do a thing', answering(said))
+        assert out['error'] == compose.AGAIN.format('a workflow') and 'config' not in out['error']
+    assert compose.compose_workflow(MemoryStore(), 'do a thing', None)['fix']['label'] == 'Connect an AI'
 
 
 def test_an_agent_workflow_carries_its_connections_what_it_asks_and_when_it_is_done():

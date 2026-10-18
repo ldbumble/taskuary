@@ -240,34 +240,43 @@ def _brain(store) -> dict:
     return {'said': b['said'], 'efforts': b['efforts'], 'models': [{'id': m['id'], 'efforts': m['efforts']} for m in b['models']]}
 
 
+# what the composers answer when they cannot: what to change in the ask, or the place that lifts the block (`fix`: {label, href},
+# an app link the row turns into a button - outbound.Fixable). Developer words ("unsupported workflow type: (missing)") are not it.
+AGAIN = "I couldn't turn that into {}. Say it another way - what should happen, in which system, and when."
+NO_AI = {'error': 'This needs an AI to build it - none is connected yet.', 'fix': {'label': 'Connect an AI', 'href': '#connections=AI%20%E2%80%94%20agents%20%26%20models'}}
+ZOHO = {'error': 'Invoicing runs through a connected Zoho Invoice account.', 'fix': {'label': 'Connect Zoho Invoice', 'href': '#connector=zoho_invoice'}}
+
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
     """Draft a stateful invoice or AI-agent workflow from a sentence. Nothing is saved."""
-    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
-    if not (ask or '').strip(): return {'error': 'say what you want the workflow to do'}
+    if not llm: return dict(NO_AI)
+    if not (ask or '').strip(): return {'error': 'Say what you want the workflow to do.'}
     options = workflow_catalog(store)
     user = {'request': ask.strip(), 'workflow_options': options,
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):
         raw = out.get('config')
-        if not isinstance(raw, dict): return {'error': 'the model answered without a workflow config'}
-        typ = raw.get('type')
-        if typ not in WORKFLOW_KEYS: return {'error': f'unsupported workflow type: {typ or "(missing)"}'}
+        # THE MODEL'S MISS IS NOT THE OWNER'S: they cannot fix a missing config, only ask again - so every miss below says what
+        # to change in the ASK ("the model answered without a workflow config" was the whole message, 2026-10-17)
+        if not isinstance(raw, dict) or raw.get('type') not in WORKFLOW_KEYS: return {'error': AGAIN.format('a workflow')}
+        typ = raw['type']
         cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
-        if not str(cfg.get('title') or '').strip(): return {'error': 'the workflow has no title'}
+        if not str(cfg.get('title') or '').strip(): return {'error': AGAIN.format('a workflow')}
         schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
         if not schedules:
             cfg['cron' if typ == 'zoho_monthly_invoices' else 'daily_at'] = '0 9 1 * *' if typ == 'zoho_monthly_invoices' else '08:00'
         if typ == 'agent':
             names = {x['name'] for x in options['agent']}
             if cfg.get('agent') not in names:
-                return {'error': 'choose one of the configured CLI agents: ' + (', '.join(sorted(names)) or '(none configured)')}
+                return ({'error': f"It picked an agent you don't have - say which one to use: {', '.join(sorted(names))}."} if names else dict(NO_AI))
             if not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
-                return {'error': 'the AI agent workflow needs a skill or a prompt'}
+                return {'error': AGAIN.format('a workflow')}
             if cfg.get('skill'): cfg['skill'] = str(cfg['skill']).strip().lstrip('/')
             known = {x['id'] for x in options['connections']}
             uses = [int(x) for x in (cfg.get('uses') or []) if str(x).isdigit()]
-            if any(x not in known for x in uses): return {'error': 'the workflow named a connection that is not switched on'}
+            if any(x not in known for x in uses):
+                return {'error': 'It needs a connection that is not switched on - connect it, or say which connected system to use.',
+                        'fix': {'label': 'Open Connections', 'href': '#connector='}}
             if uses: cfg['uses'] = list(dict.fromkeys(uses))
             else: cfg.pop('uses', None)
             for k in ('ask_first', 'done_when'):
@@ -286,14 +295,14 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             cfg = with_watch(cfg, None)
         else:
             try: cid = int(cfg.get('connector_id'))
-            except (TypeError, ValueError): return {'error': 'choose a connected Zoho Invoice account'}
+            except (TypeError, ValueError): return dict(ZOHO)
             card = next((x for x in options['zoho_monthly_invoices'] if x['connector_id'] == cid and x['ready']), None)
-            if not card: return {'error': 'choose a connected Zoho Invoice account'}
+            if not card: return dict(ZOHO)
             trusted = {str(x.get('customer_id')): x for x in card.get('customers') or []}
             chosen = cfg.get('customer_ids') if isinstance(cfg.get('customer_ids'), list) else cfg.get('customers')
             ids = list(dict.fromkeys(str(x.get('customer_id') if isinstance(x, dict) else x) for x in (chosen or [])))
-            if not ids: return {'error': 'choose at least one Zoho customer'}
-            if any(x not in trusted for x in ids): return {'error': 'the workflow named a customer that is not in the connected Zoho account'}
+            if not ids: return {'error': 'Say which Zoho customers it should invoice.'}
+            if any(x not in trusted for x in ids): return {'error': "It named a customer your Zoho account doesn't have - say the customer as Zoho lists them."}
             cfg['connector_id'], cfg['customers'] = cid, [trusted[x] for x in ids]
             cfg.pop('customer_ids', None)
         return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
@@ -355,7 +364,7 @@ def _rounds(store, llm, system, user, rounds, finish):
     looked = []
     for _ in range(max(1, rounds + 1)):
         out = _json(llm(system, json.dumps(user, default=str), max_tokens=2000))
-        if not out: return {'error': 'the model did not answer with a configuration - try rewording the ask'}
+        if not out: return {'error': AGAIN.format('a report')}
         if out.get('questions'):
             return {'questions': [str(q)[:300] for q in out['questions']][:3], 'looked_at': looked}
         if out.get('peek') and len(looked) <= rounds:
@@ -366,7 +375,7 @@ def _rounds(store, llm, system, user, rounds, finish):
                 {'you_asked_for': spec, 'result': _peek(store, spec)})
             continue
         return finish(out, looked)
-    return {'error': 'the model kept asking to look at schemas without answering'}
+    return {'error': AGAIN.format('a report')}
 
 
 def _repositories(store) -> dict:
@@ -392,8 +401,8 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
 
     `answers` are the owner's replies to a previous round's questions, so asking is a
     conversation rather than a dead end."""
-    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
-    if not (ask or '').strip(): return {'error': 'say what you want the report to do'}
+    if not llm: return dict(NO_AI)
+    if not (ask or '').strip(): return {'error': 'Say what you want the report to do.'}
     excluded = set(exclude_types or ())
     cat = [row for row in catalog(store) if row.get('type') not in excluded]
     user = {'request': ask.strip(), 'catalog': cat, **({'repositories': repos} if (repos := _repositories(store)) else {}),
@@ -401,9 +410,9 @@ def compose(store, ask: str, llm, answers: dict = None, rounds: int = MAX_PEEKS,
 
     def finish(out, looked):
         cfg = out.get('config')
-        if not isinstance(cfg, dict): return {'error': 'the model answered without a config'}
+        if not isinstance(cfg, dict): return {'error': AGAIN.format('a report')}
         if cfg.get('type') in excluded:
-            return {'error': f"{cfg.get('type')} is a workflow - create it from the Workflows section"}
+            return {'error': 'That reads as a workflow, not a report.', 'fix': {'label': 'Build it as a workflow', 'href': '#report=workflows'}}
         cfg = with_watch(cfg, cfg.get('watch'))
         ok, why = validate(store, cfg)
         if not ok: return {'error': why, 'config': cfg}
@@ -420,8 +429,8 @@ def compose_sources(store, ask: str, llm, one_type: str = None, answers: dict = 
 
     `one_type` is the card the owner is standing on: exactly one source comes back, of that type
     unless the ask plainly needs another system - and then `explain` says which and why."""
-    if not llm: return {'error': 'no AI connector is configured - Connections → AI'}
-    if not (ask or '').strip(): return {'error': 'say what it should read'}
+    if not llm: return dict(NO_AI)
+    if not (ask or '').strip(): return {'error': 'Say what it should read.'}
     cat = catalog(store)
     if one_type:
         # standing on a card whose connection is off: say so now rather than after a model call
@@ -437,7 +446,7 @@ def compose_sources(store, ask: str, llm, one_type: str = None, answers: dict = 
     def finish(out, looked):
         srcs = out.get('sources') or out.get('source')
         if isinstance(srcs, dict): srcs = [srcs]          # one card asked for, one card answered
-        if not isinstance(srcs, list) or not srcs: return {'error': 'the model answered without a data source'}
+        if not isinstance(srcs, list) or not srcs: return {'error': "I couldn't tell which system to read. Name it - the database, mailbox or app."}
         srcs = [{k: v for k, v in s.items() if k not in REPORT_KEYS} for s in srcs if isinstance(s, dict)]
         srcs = [s for s in srcs if s.get('type') not in NOT_A_SOURCE
                 and not (s.get('type') == 'agent' and s.get('access') == 'write')][:cap]

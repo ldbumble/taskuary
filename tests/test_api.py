@@ -1081,7 +1081,7 @@ class ApiTests(unittest.TestCase):
         self.assertIn('not paired', out['send_error'])
         rv = server.store.get_review(rid)
         self.assertEqual(rv['Status'], 'pending')                        # back in the queue...
-        self.assertIn('sending FAILED', rv['Reason'])                    # ...wearing the error
+        self.assertIn('Not sent: WhatsApp', rv['Reason'])                # ...wearing the error, said once
         self.assertEqual(rv['DraftText'], 'All provisioned.')            # approve again = retry as-is
         self.assertNotEqual((server.store.get_task(tid) or {}).get('Status'), 'done')   # nothing finished
         # the channel fixed, the retry sends and closes for real
@@ -1090,6 +1090,18 @@ class ApiTests(unittest.TestCase):
             out2 = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': None}).json()
         self.assertEqual((out2['status'], out2['send_error']), ('approved', None))
         self.assertEqual(server.store.get_review(rid)['Status'], 'approved')
+
+    def test_a_failed_send_keeps_the_way_to_fix_it(self):
+        """"add one under Connections" with nothing to press (the walk click-through, 2026-10-17): a failure the owner can fix
+        carries the place that fixes it, on the answer and in the envelope a reload reads."""
+        mid = c.post('/api/ingest/push', json={'external_id': 'sendfix1', 'subject': 'the cutover', 'body': 'still Thursday?',
+                                               'from_email': 'ray@northwind.example', 'channel': 'whatsapp'}).json()['message_id']
+        c.post(f'/api/messages/{mid}/reply')
+        rid = next(r['ReviewId'] for r in c.get('/api/reviews', params={'status': 'pending'}).json()['data'] if r['MessageId'] == mid)
+        with mock.patch.object(server.outbound, 'reply_to_message', side_effect=server.outbound.Fixable('no mailbox', *server.outbound.MAIL)):
+            out = c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve', 'final_text': 'Yes, Thursday.'}).json()
+        self.assertEqual(out['send_fix'], {'label': 'Connect a mailbox', 'href': '#connections=Email'})
+        self.assertEqual(json.loads(server.store.get_review(rid)['Deliver'])['fix'], out['send_fix'])
 
     def test_a_malformed_attachment_path_is_a_404_not_a_500(self):
         # a stored Path with an embedded NUL made Path.resolve() raise OUTSIDE the try

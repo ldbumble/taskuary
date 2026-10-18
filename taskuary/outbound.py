@@ -22,6 +22,17 @@ class UncertainDelivery(RuntimeError):
     """The provider did not establish whether the send was accepted."""
 
 
+class Fixable(RuntimeError):
+    """A failure the owner can fix, carrying the place that fixes it: `fix` is {label, href}, the href one of the app's
+    own links (canvasLinks.js), and every surface puts it on the action row as a button. A sentence that said
+    "add one under Connections" with nothing to press left the owner to find it (the walk click-through, 2026-10-17)."""
+    def __init__(self, msg, label, href): super().__init__(msg); self.fix = {'label': label, 'href': href}
+
+def fix_of(e) -> dict | None: return getattr(e, 'fix', None)
+MAIL = ('Connect a mailbox', '#connections=Email')
+REPLIES = ('Turn replies on', '#settings=config&group=Replies')
+
+
 def _source_connector_id(store, channel, address):
     """The instance owning a source address/chat. Replies must leave through the same account
     they arrived through when several connectors share a type."""
@@ -36,7 +47,7 @@ def _graph_token(store, kind='outlook', connector_id=None):
     c = store.get_connector(int(connector_id), with_secret=True) if connector_id else \
         store.get_connector_by_type(kind, with_secret=True)
     if c and c.get('Type') != kind: c = None
-    if not c or not c.get('Active'): raise RuntimeError(f'the {kind} connection is not set up')
+    if not c or not c.get('Active'): raise Fixable(f'the {kind} connection is not set up', f'Set up {kind}', f'#connector={kind}')
     cfg, sec, _ = graph_creds(store, c)
     return graph_token(cfg, sec)
 
@@ -45,7 +56,7 @@ def _mailbox(store, msg=None):
     """Which mailbox sends. The one the message arrived in, else the first email source."""
     if msg and msg.get('SourceName') and '@' in (msg['SourceName'] or ''): return msg['SourceName']
     src = next((s for s in store.list_sources() if s['Channel'] == 'email'), None)
-    if not src: raise RuntimeError('no mailbox configured - add one under Connections → Outlook')
+    if not src: raise Fixable('no mailbox is connected to send from', *MAIL)
     return src['Address']
 
 
@@ -316,6 +327,17 @@ def send_block(store, channel) -> str:
     if ch == 'email': return send_probe(store, ch)
     return ''
 
+def block_fix(store, channel) -> dict | None:
+    """...and the button that lifts it, branch for branch with send_block: the reason named a place ("(Settings → Replies)",
+    "its card"), the row gets the way there. None where nothing here lifts it - a Teams chat is answered in Teams."""
+    ch = (channel or '').lower()
+    if not ch or ch in NEVER: return None
+    if ch == 'github': return None if store.github_replies_ok() else {'label': 'Open the GitHub card', 'href': '#connector=github'}
+    if ch in SENDABLE and ch not in reply_channels(store): return dict(zip(('label', 'href'), REPLIES))
+    if ch == 'email' and send_probe(store, ch):
+        return {'label': 'Sign in again', 'href': '#connector=outlook'} if 'Mail.Send' in send_probe(store, ch) else dict(zip(('label', 'href'), MAIL))
+    return None
+
 
 GUARD = ("this text still carries a {mark}...] placeholder. Credentials are taken out of PROMPTS "
          "(redact.py), never out of the owner's own mail - so a placeholder in something addressed "
@@ -366,14 +388,14 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
         raise RuntimeError(f'{ch} cannot carry the attached files from here - remove them, or send this one by email')
     # a channel with no sender at all falls through to the line below that names what DOES work - not "switched off"
     if ch not in NO_SENDER and not can_reply(store, ch):
-        raise RuntimeError(f'sending on {ch} is off - Settings → Replies decides which channels '
-                           'Taskuary may write to, and it governs outbound reports too')
+        raise Fixable(f'sending on {ch} is switched off - the reply settings decide which channels '
+                      'Taskuary may write to, and they govern outbound reports too', *REPLIES)
     if ch == 'email':
         if not to: raise RuntimeError('no recipient - an outbound email needs an address')
         # the mailbox the owner picked to send FROM: through the card that owns that address, never a guess at another one
         if mailbox:
             box = next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox).lower()), None)
-            if not box: raise RuntimeError(f'{mailbox} is not a connected mailbox any more - pick another one to send from')
+            if not box: raise Fixable(f'{mailbox} is not a connected mailbox any more - pick another one to send from', *MAIL)
             if box['kind'] == 'outlook':
                 return send_email(store, to, subject or '(no subject)', body, mailbox=box['address'], connector_id=box['connector_id'],
                                   cc=cc, attachments=attachments)
@@ -387,7 +409,7 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
         from .imapmail import send_smtp
         box = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                     if x['Type'] in ('gmail', 'imap') and x['Active']), None)
-        if not box: raise RuntimeError('no mailbox is connected to send from')
+        if not box: raise Fixable('no mailbox is connected to send from', *MAIL)
         return send_smtp(store, box, to, subject or '(no subject)', body, cc=cc, attachments=attachments)
     if ch == 'teams':
         if not to: raise RuntimeError('no chat id - a Teams message needs one to land in')
@@ -708,7 +730,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         c = next((store.get_connector(x['ConnectorId'], with_secret=True) for x in store.list_connectors()
                   if x['Type'] in ('gmail', 'imap') and x['Active']
                   and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
-        if not c: raise RuntimeError(f'no IMAP connection is set up for {box}')
+        if not c: raise Fixable(f'no mail connection is set up for {box}', *MAIL)
         return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
                          body, in_reply_to=msg.get('ConversationId'), cc=cc,
                          attachments=read_attachments(attachments))
@@ -766,8 +788,8 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
         # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)
         if not store.github_replies_ok():
-            raise RuntimeError("replying on GitHub is off - flip 'Reply to issue/PR authors' "
-                               'on the GitHub connector card to post comments')
+            raise Fixable("replying on GitHub is off - its card's 'Reply to issue/PR authors' lets Taskuary post comments",
+                          'Open the GitHub card', '#connector=github')
         # the CONVERSATION names the item bare ('gh:owner/repo#N'); the row's own id never is - the item is a revision
         # ('gh:owner/repo#N@<hash>', ingest.rev_id) and a comment 'gh:owner/repo#N:c<id>', so parsing it refused every reply (#205)
         ref = str(msg.get('ConversationId') or '') if str(msg.get('ConversationId') or '').startswith('gh:') else ext

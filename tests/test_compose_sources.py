@@ -119,7 +119,7 @@ class SameFenceTests(unittest.TestCase):
         self.assertIn('answers_to_your_questions', llm.seen[0]['user'])
 
     def test_no_ai_configured_says_where_to_go(self):
-        self.assertIn('Connections', compose.compose_sources(self.s, 'x', None)['error'])
+        self.assertTrue(compose.compose_sources(self.s, 'x', None)['fix']['href'].startswith('#connections='))
 
     def test_an_empty_ask_is_not_a_source(self):
         self.assertTrue(compose.compose_sources(self.s, '  ', llm_saying(src_answer({'type': 'digest'})))['error'])
@@ -147,7 +147,7 @@ class SameFenceTests(unittest.TestCase):
 
     def test_an_answer_with_no_sources_says_so(self):
         out = compose.compose_sources(self.s, 'x', llm_saying(json.dumps({'explain': 'sure!'})))
-        self.assertIn('without a data source', out['error'])
+        self.assertIn('which system to read', out['error'])
 
 
 class LookAtTheRealSchemaTests(unittest.TestCase):

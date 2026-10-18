@@ -480,7 +480,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
                     : meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
-                  <div key={i.key} className={cls} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
+                  <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
@@ -497,8 +497,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
                         <b>{i.title}</b>
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
-                            match a row to the Tasks tab, and it was only ever in the tooltip. */}
-                        {!!i.ref && <span className="tq-pile-ref">{i.ref}</span>}
+                            match a row to the Tasks tab, and it was only ever in the tooltip.
+                            ...on the row you are looking at: on every row it cut each subject at a laptop's 334px rail to ~14
+                            characters (the walk click-through, 2026-10-17) - the others carry it in the hover */}
+                        {!!i.ref && isCur && <span className="tq-pile-ref">{i.ref}</span>}
                         {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}

@@ -9,6 +9,7 @@
 // one - and when the words promise an attachment that is not there, a line saying so. It never
 // blocks the send; the owner can always mean "attached in my last mail".
 import React, { useRef, useState } from "react";
+import { label, hint } from "./buttons.js";
 import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import api from "./api.js";
@@ -48,8 +49,8 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
 
   const missing = !files.length && promisesFiles(text);
   // in the row above the chat line the button is one of its More verbs: the same hidden file input opens
-  useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: files.length ? "Attach another" : "Attach a file", disabled: disabled || busy === "adding",
-    run: () => pick.current?.click(), title: "Adds a file to the reply; nothing is sent until you approve it" }], toRow && mail);
+  useVerbs(`attach:${reviewId}`, [{ id: "attach", group: "more", tone: "s", label: label("attach", files.length ? "more" : null), disabled: disabled || busy === "adding",
+    run: () => pick.current?.click(), title: hint("attach") }], toRow && mail);
   return (
     <Box sx={{ mb: 0.75 }}>
       <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.75 }}>
@@ -62,7 +63,7 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
           <Button size="small" onClick={() => pick.current?.click()} disabled={disabled || busy === "adding"}
             startIcon={busy === "adding" ? <CircularProgress size={11} /> : <AttachFileIcon sx={{ fontSize: 14 }} />}
             sx={{ color: DIM, textTransform: "none", fontSize: 11.5 }}>
-            {busy === "adding" ? "Attaching…" : files.length ? "Attach another" : "Attach a file"}
+            {busy === "adding" ? "Attaching…" : label("attach", files.length ? "more" : null)}
           </Button>
         ) : (
           // ...and a draft that PROMISES one says so in the alert colour: sent here, the words would arrive without it (U17)

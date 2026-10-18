@@ -14,6 +14,6 @@ test("a Start coding session held for a repository says so and offers the picker
   const start = page.slice(at, page.indexOf('choice("agent", "regular_agent")', at));
   assert.match(start, /startRepo === "" && <>/, "only while no repository is chosen");
   assert.match(start, /\{PICK_CODE\} first/);            // in plain words - "pick a repo" was code-speak (the walk's WORDS)
-  assert.match(page, /const PICK_CODE = "Choose where the code is";/);
+  assert.match(page, /const PICK_CODE = btn\("pick_repo"\);/);      // its words are the list's (buttons.json pick_repo)
   assert.match(start, /onClick=\{\(\) => \{ setRepoPick\(true\); setResumeAfterRepo\(\{ dispatch: true \}\); \}\}/, "the pick starts the session");
 });

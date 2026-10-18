@@ -3,7 +3,7 @@ way - a raw "[Errno 2] ... 'claude'" on one card, a Connect a mailbox on another
 story. Every failure is now said one way: `classify` turns any exception into {sentence, fix, retry, unknown}, and `record` leaves it
 on the task as the agreed op row (shared with the workflow runner, taskhub-ca), which advisor.failure, concierge.recover and the
 cards all read. A fix is a place from words.json under the button `fix` - never a new button, never "go to X" text."""
-import json, re, uuid
+import json, re, smtplib, uuid
 from . import outbound, redact, words
 
 # the acts that mail someone: only for these is a lost answer "it may have gone" - a timed-out Mark done simply did not happen
@@ -15,6 +15,17 @@ _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.
 
 
 def _fix(label: str, pid: str) -> dict: return {'label': label, 'href': words.href(pid)}
+
+
+def _said(b) -> str: return (b.decode(errors='replace') if isinstance(b, bytes) else str(b or '')).strip()
+def _smtp(e) -> str:
+    """A mail server's answer in words: "(535, b'5.7.8 Authentication unsuccessful')" reached the card as-is (the dead-end walk,
+    2026-10-18) - the code and the bytes are the provider's bookkeeping; what it said is the sentence."""
+    if isinstance(e, smtplib.SMTPAuthenticationError): return f'the mailbox refused the sign-in ({_said(e.smtp_error)})'
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        return 'the mail server refused ' + '; '.join(f'{a} ({_said(m)})' for a, (_, m) in (e.recipients or {}).items())
+    if isinstance(e, smtplib.SMTPResponseException): return f'the mail server said no ({_said(e.smtp_error)})'
+    return ''
 
 
 class Closed(ValueError):
@@ -30,7 +41,7 @@ def classify(e, *, act: str = None) -> dict:
     prompt; `fix` is {label, href} or None; `retry` is whether pressing it again could work; `unknown` only for a send that may
     have gone. A string is read as the error's own words (a handler that reported its failure instead of raising)."""
     from .operations import plain
-    text = str(e if isinstance(e, str) else plain(e))
+    text = str(e if isinstance(e, str) else _smtp(e) or plain(e))
     fix = None if isinstance(e, str) else outbound.fix_of(e)
     fix = fix or outbound.auth_fix(RuntimeError(text))
     sentence = text

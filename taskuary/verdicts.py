@@ -290,7 +290,9 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                 checked = _reconcile_snapshot(store, attempted)
                 if checked['state'] == 'sent': return confirmed(checked['sent'], True)
                 return unknown(f'the provider did not establish delivery ({str(e)[:120]})')
-            error, fix = str(e)[:300], outbound.fix_of(e)
+            # said in words, once (failures.classify): a mail server's raw answer is its bookkeeping, not the owner's sentence
+            from . import failures
+            error, fix = failures.classify(e, act='review.approve')['sentence'][:300], outbound.fix_of(e)
             # ONE sentence, said once: the reason, the comment and the card each said it again in their own words (2026-10-17)
             finished = store.finish_review_delivery(rid, token, 'failed', reason=f'Not sent: {error}.', fix=fix)
             if attempted['envelope'].get('kind') == 'zoho_invoice' and attempted['envelope'].get('item_id'):

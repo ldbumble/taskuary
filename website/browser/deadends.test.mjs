@@ -13,9 +13,9 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const baseline = JSON.parse(readFileSync(path.join(here, "deadend-baseline.json"), "utf8"));
 
-test("the walk leaves the owner alone no more often than it did", { timeout: 900000 }, () => {
+test("the walk leaves the owner alone no more often than it did", { timeout: 2400000 }, () => {
   const run = spawnSync(process.execPath, [path.join(here, "..", "deadend_check.mjs"), "--json", "--port", "7798"],
-    { encoding: "utf8", timeout: 880000, windowsHide: true });
+    { encoding: "utf8", timeout: 2350000, windowsHide: true });     // four passes: walk, sweep, faults, cards
   const out = JSON.parse((run.stdout || "").trim().split("\n").pop() || "{}");
   assert.ok(out.counts, `the walk did not finish: ${run.stdout}${run.stderr}`);
   const worse = Object.entries(out.counts).filter(([r, n]) => n > (baseline[r] || 0));

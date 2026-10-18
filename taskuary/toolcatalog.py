@@ -260,7 +260,8 @@ def button_words(v: str) -> str:
     """'the "Send" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
     if v not in buttons.VERBS: return ''
     st = buttons.VERBS[v].get('states') or {}
-    return f'the "{L(v)}" button' + ''.join(f' ("{w}" {_STATES.get(s, s)})' for s, w in st.items())
+    # only the states a sentence may name: Send anyway is offered by a failed send's own way on (concierge.recover), never chosen
+    return f'the "{L(v)}" button' + ''.join(f' ("{w}" {_STATES[s]})' for s, w in st.items() if s in _STATES)
 DECISIONS = {k: (f'{button_words(k)}: ' if button_words(k) else '') + v for k, v in _DECIDE.items()}
 def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((buttons.VERBS[v].get('states') or {}).values()))
 # the buttons whose verb is not itself a decision, and the tool each one is
@@ -269,7 +270,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
              'remove': 'task.not_a_task'}
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
-PAGE_ONLY = {'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'take_back': "a receipt's undo",
+PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'take_back': "a receipt's undo",
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
              'retriage': 'no tool sorts an item again yet', 'share': 'no tool mails results yet',
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',

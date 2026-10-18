@@ -547,7 +547,7 @@ def gate(text: str) -> tuple[str, bool]:
 def _stopped_work(store, item: dict) -> str:
     """What an agent left on the task when it stopped or was saved - '' when none ever ran. "Nothing has been done with it yet" was
     said over an agent's saved work (the re-audit, 2026-10-18)."""
-    runs = store.list_runs(item['tid']) if item.get('tid') else []
+    runs = store.list_runs(item['tid']) if store is not None and item.get('tid') else []
     r = next((r for r in runs if r.get('Status') not in ('running', 'queued', 'starting')), None)
     if not r: return ''
     if r.get('Status') in ('failed', 'error'): return 'an agent started on it and failed'

@@ -936,7 +936,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // when it was read for it - the last item's line never stands over the next one
   const onTable = current || cardKey;
   const shownAdvice = setupOn.current ? null : adviceShown(advice, onTable ? { key: onTable, lane: currentItem?.lane } : null, busy);      // the strip speaks only for the item on the table, at rest
-  const noAi = !setupOn.current && !busy && !!onTable && (caps.ai === false || (advice?.none === "no_ai" && advice.for === onTable));
+  // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
+  const noAi = !setupOn.current && !busy && !!onTable && !shownAdvice && (caps.ai === false || (advice?.none === "no_ai" && advice.for === onTable));
   useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // ONE ROAD ONTO THE TABLE (2026-10-18): Next, a chip, a rail click, the Board's open, a reopen, a browse card, the card after a
   // receipt or a failed act - every way something reaches the table comes through here, so the rail's "on the table" mark, the

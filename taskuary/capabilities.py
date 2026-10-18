@@ -23,7 +23,10 @@ def ai_brain(store) -> dict:
     rest (its name, why not) off the same dict."""
     from . import setup
     return (_safe(lambda: setup._ai(store), None) if store is not None else None) or {'ready': False}
-def has_ai(store) -> bool: return bool(ai_brain(store).get('ready'))
+def has_ai(store) -> bool:
+    # the demo's script answers every ask (llm.build_llm) - with no AI "connected" the page drew Connect an AI over advice it had
+    from . import demo
+    return demo.enabled() or bool(ai_brain(store).get('ready'))
 
 
 def mail_cards(store) -> list:

@@ -37,7 +37,8 @@ test("with no coding tool connected, Start is the general agent and nothing asks
   assert.match(page, /\{!generalOnly && <RepoSelect/);
   assert.match(page, /\{!generalOnly && startRepo === "" && <>/);
   assert.match(page, /\{handOff && canCode && <Button[^\n]*\n[^\n]*Back to coding/);
-  assert.match(page, /\.\.\.\(!isGeneral && canCode \? \[\{ id: "repo"/);
+  // ...except a start already HELD for it: then choosing where the code is is the way on, whatever is connected (the walk, 2026-10-18)
+  assert.match(page, /\.\.\.\(heldRepo \|\| \(!isGeneral && canCode\) \? \[\{ id: "repo"/);
   assert.match(page, /\{!isGeneral && canCode && <Button size="small" variant="outlined" sx=\{chipBtn\}/);
   assert.match(page, /\.\.\.\(!isGeneral && canCode \? \[<MenuItem key="repo"/);
 });

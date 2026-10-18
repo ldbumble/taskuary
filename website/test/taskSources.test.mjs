@@ -133,7 +133,9 @@ test("the task view draws the new section: read-only pills, no in-section button
   assert.match(page, /verdict\?\.summary \|\| t\?\.Summary/, "the ask is triage's summary first");
   assert.match(page, /maxHeight: 360, overflowY: "auto"/, "Show all scrolls when it goes far back");
   // the edits the pills offered are reachable from the bar: kind, priority, who, repository
-  for (const id of ["kind", "priority", "assign", "repo"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
+  for (const id of ["kind", "priority", "assign"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
+  // the repository is a More item too - and the row's own move while a start is held for it
+  assert.ok(page.includes(`{ id: "repo", group: heldRepo ? "decide" : "more"`), "the row carries repo");
 });
 
 // A WORKFLOW RUN (workflows.run): no message, never triaged - the header says which workflow and what started it, and Came from

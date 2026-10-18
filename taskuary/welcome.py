@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .general import DOCK_TAG
+from . import lanes
 
 SEEN_KEY, CLOSED_KEY, GREETED_KEY = 'assistant_seen_at', 'assistant_closed_at', 'assistant_greeted_on'
 GAP_HOURS, DAY_STARTS = 16, 5          # "welcome back" after this long away; no "good morning" before 5am
@@ -103,12 +104,11 @@ def settled(store, since: datetime) -> int:
                       "AND COALESCE(Tags,'') NOT LIKE ?", (_stamp(since), f'%{DOCK_TAG}%'))
     return int((row[0] if row else {}).get('n') or 0)
 
-# WHAT NEEDS YOU IS THE RAIL'S OWN ANSWER: Urgent, On you and For later - never "waiting on them", which is on somebody else.
+# WHAT NEEDS YOU IS THE RAIL'S OWN ANSWER (lanes.on_you): Urgent and On you, never "waiting on them", which is on somebody else.
 # A lane list of its own here drifted from the funnel: a stopped agent and a failed check were the owner's on the rail and
-# missing from the greeting, so the morning after a close said "Nothing needs you yet" over both (B3, 2026-10-11).
-def needs_you(items: list) -> list:
-    from .funnel import level_of
-    return [i for i in items or [] if level_of(i) in ('urgent', 'task', 'later') and i.get('lane') != 'theirs' and not i.get('settling')]
+# missing from the greeting, so the morning after a close said "Nothing needs you yet" over both (B3, 2026-10-11). It also
+# counted For later, which the opening card beside it does not (U6, 2026-10-17) - the greeting says the card's number now.
+def needs_you(items: list) -> list: return [i for i in items or [] if lanes.on_you(i)]
 
 def _arrived(i, since): return (_at(i.get('since') or i.get('when')) or datetime.min) >= since
 
@@ -285,11 +285,10 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     _spend(store, now, prev)
     chips = concierge.walk_chips(len(items))
     # the headline counts what is ON YOU; reports and notices are reading, never "waiting" (U6: "Waiting · 30" over rows that said
-    # "Nothing to decide")
-    lv = [funnel.level_of(i) for i in items if not i.get('settling') and i.get('lane') != 'theirs']     # waiting on THEM is not on you
+    # "Nothing to decide") - the greeting's own count (needs_you), the header's and the page's opener all ask lanes.on_you
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
-            'on_you': sum(1 for x in lv if x in ('urgent', 'task')), 'to_read': sum(1 for x in lv if x in ('reports', 'fyi')),
-            'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips, 'away': away}
+            'on_you': sum(map(lanes.on_you, items)), 'to_read': sum(map(lanes.to_read, items)),
+            'mail': sum(map(lanes.is_mail, items)), 'chips': chips, 'away': away}
     if cid: concierge.rewrite(store, cid, say, card)
     else: concierge.record(store, tid, 'assistant', say, card)
     return {'said': say, 'chips': chips}

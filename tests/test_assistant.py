@@ -273,7 +273,7 @@ class PostTests(unittest.TestCase):
         self.assertEqual(rv['candidates'], {'followup': 2}); self.assertTrue(rv['model'])
         self.assertEqual([c['key'] for c in rv['skipped']], ['followup:c2']); self.assertIn('Can you confirm the PO', rv['skipped'][0]['facts'])
         self.assertEqual(rv['said'], 0); self.assertTrue(all(isinstance(rv[k], int) for k in ('recent', 'week', 'open')))
-        self.assertIn('    why: You wrote Dana', row['BodyText']); self.assertIn('Reviewed: 2 followup; let go: 1', row['BodyText'])
+        self.assertIn('    why: You wrote Dana', row['BodyText']); self.assertIn('Reviewed: 2 follow up; let go: 1', row['BodyText'])
         self.assertEqual(out['reviewed'], rv)
         # nothing to say still reports what it read - the Reports tab's run result carries it
         self.assertEqual([c['key'] for c in assistant.run(s, llm=lambda *a, **k: '{"say": []}', force=True)['reviewed']['skipped']], ['followup:c2'])

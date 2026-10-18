@@ -153,7 +153,7 @@ def _list_line(store) -> str:
     except Exception: items = None
     if items is None: return 'Everything on it is in front of you on the left.'
     if not items: return 'Nothing is waiting on you right now.'
-    yours = sum(1 for i in items if funnel.on_you(i))
+    yours = sum(1 for i in items if funnel.waits_on_you(i))
     return (f"{_n(len(items), 'thing is', 'things are')} on it"
             + (f", and {_n(yours, 'is', 'are')} waiting on your answer or your yes." if yours else '.'))
 

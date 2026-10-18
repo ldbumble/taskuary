@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { onYou } from "../src/lanes.js";
 import {
   DEMO_ASSISTANT_CHATS,
   DEMO_ASSISTANT_TIMELINE,
@@ -21,7 +22,7 @@ test("the demo has a current assistant conversation and distinct earlier threads
 
 test("the opening line counts what the scripted rail holds for you, never a written number", () => {
   const demo = createDemoAssistantState();
-  const n = demo.pile.items.filter((i) => ["blocked", "approve", "asked"].includes(i.lane)).length;
+  const n = demo.pile.items.filter((i) => onYou(i)).length;   // the header's and the opener's own count
   assert.match(demo.messages[0].text, new RegExp(`\\b${n} things still deserve a look`));
   assert.ok(demo.messages.every((m) => !String(m.text || "").includes("{n}")));
 });

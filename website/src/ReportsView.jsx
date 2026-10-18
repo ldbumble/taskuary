@@ -28,6 +28,7 @@ import WorkflowEditor from "./WorkflowEditor.jsx";
 import Composer from "./Composer.jsx";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
+import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
 import { placeName } from "./words.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
@@ -2079,7 +2080,6 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
 /* What the report's last run DID, under its row. A quiet assistant check posts nothing, so this is
    the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
    go, its note to the next check, and what came out - or the error, when it failed. */
-const IDEA_KINDS = { followup: "follow up", promise: "promise", prep: "prep", cold: "gone quiet", idea: "idea" };
 function LastRun({ r, sid, embedded, flush }) {
   // embedded: one run inside the History dialog - starts open, no "last run" header of its own
   const [open, setOpen] = useState(!!embedded);
@@ -2091,7 +2091,7 @@ function LastRun({ r, sid, embedded, flush }) {
     : r.subject ? `filed: ${r.subject}` : "ran";
   const read = rv?.scope === "sources" ? [`${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only`]
     : rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
-      `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KINDS[k] || k}`).join(", ") || "no candidates"] : [];
+      `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${ideaCounted(k)}`).join(", ") || "no candidates"] : [];
   return (
     <Box sx={{ pl: embedded || flush ? 0 : 5.5, pr: embedded ? 0 : 1, pb: embedded || flush ? 0 : 1.25, mt: embedded ? 0 : flush ? 0.5 : -0.5 }}>
       {!embedded && (
@@ -2117,7 +2117,7 @@ function LastRun({ r, sid, embedded, flush }) {
           {r.lines.map((l) => (
             <Box key={l.id ?? l.key} sx={{ mt: 0.35, px: 1, py: 0.5, borderRadius: 1, border: `1px solid ${ASSISTANT.bd}`, bgcolor: ASSISTANT.tint }}>
               <Typography variant="caption" sx={{ display: "block", color: INK, lineHeight: 1.45 }}>
-                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{IDEA_KINDS[l.kind] || l.kind} · </Box>{l.text}
+                <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>{ideaWord(l.kind)} · </Box>{l.text}
               </Typography>
               {l.why && <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
                 <Box component="span" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>why · </Box>{l.why}</Typography>}
@@ -2143,7 +2143,7 @@ function LastRun({ r, sid, embedded, flush }) {
               <Typography variant="caption" sx={{ fontWeight: 600, color: "#6b5f45" }}>looked at and let go · {rv.skipped.length}</Typography>
               {rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, pl: 1, borderLeft: `2px solid ${BORDER}`, mt: 0.3, whiteSpace: "pre-wrap" }}>
-                  <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KINDS[c.kind] || c.kind} · </Box>{c.facts}
+                  <Box component="span" sx={{ fontWeight: 600 }}>{ideaCounted(c.kind)} · </Box>{c.facts}
                 </Typography>
               ))}
             </Box>

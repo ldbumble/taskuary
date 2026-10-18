@@ -3,6 +3,7 @@
 // the same order with the same names - its own who-wants-what grouping put a finished agent's task under "Agents
 // waiting" while the rail had it On you, and no agent was working on it.
 import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "./funnelPile.js";
+import { isAgentKind, onYou } from "./lanes.js";
 
 export const GROUPS = LEVEL_ORDER.map((key) => ({ key, word: SECTION_WORDS[key] }));
 export const groupOf = (i) => levelOf(i);
@@ -11,7 +12,8 @@ const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working",
 // who asks: the person or the agent - and for a report, whose sender IS its title, the word "Report"
 // An agent's row names the AGENT - the task's "who" was the owner who started it, and "You" under Agents waiting
 // said nothing (the owner, 2026-09-30). An address shows its name part: "securityapp", not "noreply-securityapp@...".
-const isAgentRow = (i) => !!i?.agent && (AGENT_LANES.has(i.lane) || ["agent", "agentdone", "action"].includes(i.kind));
+// ...an agent's own kind of row is lanes.json's `agent` (a proposed action carries the agent that drafted it)
+const isAgentRow = (i) => !!i?.agent && (AGENT_LANES.has(i.lane) || isAgentKind(i.kind));
 const person = (w) => w.includes("@") ? w.split("@")[0].replace(/^no-?reply[-._]?/i, "") || w.split("@")[0] : w;
 // A SERVICE'S MAIL names the service, not the display name it borrowed: GitHub sends a failed run from notifications@github.com
 // under the name of whoever pushed - the owner - so the FYI band read the owner's own first name (2026-10-13: "why does fyi say my name??")
@@ -58,8 +60,9 @@ export function summarize(items) {
     if (twin) twin.count = (twin.count || 1) + 1; else out.push({ ...i });
     return out;
   }, []);
-  // the band's count is the RAIL's count (every row), the rows under it fold twins
-  const groups = bandsOf(items).map((b) => ({ key: b.level, word: SECTION_WORDS[b.level], n: b.items.length, rows: fold(b.items) }));
+  // the band's count is the RAIL's count (every row), the rows under it fold twins; `you` is how many of them are on you (lanes.onYou)
+  const groups = bandsOf(items).map((b) => ({ key: b.level, word: SECTION_WORDS[b.level], n: b.items.length, rows: fold(b.items),
+    you: b.items.filter((i) => onYou(i, b.level)).length }));
   const n = groups.reduce((t, g) => t + g.n, 0);
   const lead = n
     ? `${n} thing${n === 1 ? "" : "s"}: ${groups.map((g) => `${g.n} ${g.key === "fyi" ? g.word : g.word.toLowerCase()}`).join(", ")}.`

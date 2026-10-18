@@ -10,11 +10,11 @@ until the separate canonical Unread/read-state cutover. All remains chronologica
 """
 import contextlib, contextvars, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
-from pathlib import Path
 from loguru import logger
 
 from .store import task_ref, auto_code_enabled
-from . import buttons
+from . import buttons, lanes
+from .lanes import level_of, on_you, waits_on_you, SECTION_WORDS, MAIL_KINDS   # the rail's rules, where their readers find them
 from .categories import agent_word
 from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
@@ -32,7 +32,7 @@ from .workerstate import says as agent_says, sub_state, request_line   # funnel.
 # ONE WORD PER AGENT STATE (the owner, 2026-09-25: "let's unify the vocab for agent status ... show
 # it everywhere"): waiting to start, agent working, agent waiting on you, session saved, agent
 # stopped, agent finished - each with one mark, on the rail, the Timeline, the task page and the phone.
-_VOCAB = json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))
+_VOCAB = lanes.VOCAB
 LANES = tuple(l['key'] for l in _VOCAB['lanes'])
 LANE_WORDS = {l['key']: (l['word'], l['role']) for l in _VOCAB['lanes']}   # the word, and the theme role its dot takes
 # ...and the form that COUNTS. "3 landed" is English; "3 report" is not - the only reason one lane
@@ -55,7 +55,7 @@ def mark_for(item: dict) -> str:
     """The one emoji that identifies a row: its kind's when that says more than its lane's."""
     if not item: return ''
     return KIND_MARKS.get(str(item.get('kind') or '')) or LANE_MARKS.get(str(item.get('lane') or ''), '')
-SOON_MIN, ALERT_MIN, STARTED_MIN = 120, 15, 5   # calendar visibility window; attention boundary; grace after the start
+SOON_MIN, ALERT_MIN, STARTED_MIN = 120, lanes.ALERT_MIN, 5   # calendar visibility window; attention boundary (Urgent's, lanes.json); grace after the start
 SETUP_GRACE_MIN = 15              # a walk-through the owner is still in does not raise its own hand
 LATER_HOURS = 3                   # "not now" - it comes back this much later
 FEED_DAYS = 7
@@ -1011,55 +1011,16 @@ def from_wrapped(store, now: datetime, busy: set) -> list:
 # Lanes retain presentation/state semantics; the shared five bands own ordering across the pile and
 # the feed. INSIDE the actionable band the lane ranks (the owner, 2026-09-07: "asked you" sat under
 # reports because both were one band): what asks you, then what waits for an agent, then what broke, then what landed.
-def _band(item):
-    lane = item.get('lane')
-    # today's brief is a REPORT again, first among the reports (the sort key below) - it led Your task
-    # from 2026-09-10 until the walk's own opener took over its job (the owner, 2026-09-23: "morning
-    # digest is in your tasks. Let's at least put it in the reports")
-    if item.get('kind') == 'meeting':
-        return attention_band(urgent=not _not_yet(item), actionable=True)
-    # a landed result is its own level; 'slipped' is an idea nobody judged, which is an fyi, not work
-    # 'yours' is the owner's own work and 'stopped' is an agent that left mid-job: both are the
-    # owner's to move, so both are actionable - a lane this function does not know falls to the fyi
-    # band and is buried among the newsletters, which is how work disappears.
-    return attention_band(urgent=lane == 'time' or (lane in ('asked', 'yours') and bool(item.get('urgent_request'))),
-                          owner_wait=lane in ('blocked', 'approve'),
-                          working=lane == 'working',
-                          # a task an agent FINISHED is still a task - Your task until Next reads it, never a report:
-                          # reports are what a report you set up filed (the owner, 2026-09-24: "reports are never
-                          # tasks just information" / "it's not agent working if task is done")
-                          actionable=lane in ('broken', 'asked', 'yours', 'theirs', 'queued', 'stopped', 'saved', 'forgotten') or item.get('kind') == 'agentdone'
-                                     or (lane == 'unjudged' and bool(item.get('held'))),
-                          result=lane == 'report')
+# The band is the lane's own entry in lanes.json (lanes.band_of): 'slipped' is the owner's move, a landed result is its own
+# level, and a lane nobody wrote down is work - falling to the fyi band buried it among the newsletters, which is how work
+# disappears. Today's brief is a REPORT, first among the reports (the sort key below; the owner, 2026-09-23).
+_band = lanes.band_of
 
 
-# THE RAIL'S SECTIONS, said once for the server (website/src/funnelPile.js levelOf is the page's copy, and
-# tests/fixtures/rail_levels.json holds both to the same answers). The canvas redesign (2026-09-29) walks a section
-# by its heading, and the phone doorway offers the same sections as picks - so the walk and the rail must agree on
-# which row is in which: For later is work walked past with Next or put away with Remind me; Advisor ideas is an
-# idea still only an idea (made a task, it is work like any other).
-SECTION_WORDS = {'urgent': 'Urgent', 'task': 'On you', 'goals': 'Goals', 'agents': 'Agents working', 'later': 'For later',
-                 'reports': 'Reports', 'ideas': 'Advisor ideas', 'fyi': 'FYI'}
-_LEVEL_OF_BAND = {1: 'urgent', 2: 'task', 3: 'reports', 4: 'fyi', 5: 'agents'}
-# the page's fallback for a row that carries no band (funnelPile.attentionBand) - kept identical, never _band's
-_BAND_FALLBACK = {'blocked': 2, 'time': 1, 'approve': 2, 'broken': 2, 'asked': 2, 'yours': 2, 'queued': 2, 'stopped': 2,
-                  'saved': 2, 'forgotten': 2, 'report': 3, 'fyi': 4, 'working': 5}
-
-
-def level_of(item: dict) -> str:
-    band = item.get('order_band')
-    if not (isinstance(band, int) and 1 <= band <= 5):
-        if item.get('kind') == 'meeting' and (item.get('calendar_ready') is False or (item.get('mins') or 0) > 15): band = 2
-        elif item.get('kind') == 'agentdone': band = 2
-        else: band = _BAND_FALLBACK.get(item.get('lane'), 2)
-    # A GOAL is one row and never gone: Goals while it has news you have not walked past, For later once you have (spec
-    # 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on purpose, so unread cannot be the signal.
-    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and not item.get('surfaced') else 'later'
-    # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
-    # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
-    if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'
-    if band == 4 and item.get('kind') == 'idea': return 'ideas'
-    return _LEVEL_OF_BAND.get(band, 'fyi')
+# THE RAIL'S SECTIONS live in lanes.json `sections` - their order, headings and bands - and level_of (lanes.py, re-exported
+# here) is the one rule the page's levelOf (website/src/lanes.js) mirrors, pinned by tests/fixtures/rail_levels.json. The
+# canvas redesign (2026-09-29) walks a section by its heading and the phone doorway offers the same sections as picks, so the
+# walk and the rail must agree on which row is in which.
 
 
 def section_next(items: list, section: str, seen=()) -> dict | None:
@@ -1573,8 +1534,7 @@ def notices(store, states: dict = None) -> list:
     return sorted(out, key=lambda a: str(a.get('at') or ''))
 
 
-MAIL_KINDS = ('review', 'action', 'asked', 'todo', 'fyi')
-FYI_BATCH = 4                              # FYI has no action: the normal chat walk reads four together
+FYI_BATCH = 4                             # FYI has no action: the normal chat walk reads four together
 FYI_BATCH_RANGE = (1, 10)                  # ...and how many is the owner's (Settings -> Assistant)
 
 
@@ -1588,42 +1548,25 @@ def fyi_batch_size(store) -> int:
     except (AttributeError, TypeError, ValueError): return FYI_BATCH
     return max(lo, min(hi, n))
 
-def _not_yet(i: dict) -> bool:
-    """On the timeline, but nothing to say about it YET - the walk skips it and comes back.
-
-    A meeting enters the pipe two hours out (SOON_MIN) so the day is visible, and its lane is
-    'time', which puts it at the very front of the walk. So the assistant opened with a meeting
-    that was still an hour and a half away, ahead of mail that wanted answering now. It is the same
-    shape as an agent that is mid-run: real, on the board, and not yours to do anything about until
-    it stops (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes
-    before like a agent in middel of working"). alerts() already drew this line at ALERT_MIN; the
-    walk did not.
-    """
-    if i['kind'] != 'meeting': return False
-    if 'calendar_ready' in i: return not i['calendar_ready']
-    return i.get('mins') is not None and i['mins'] > ALERT_MIN
+# On the timeline, but nothing to say about it YET - the walk skips it and comes back. A meeting enters the pipe two hours out
+# (SOON_MIN) so the day is visible, and the assistant opened with one still an hour and a half away, ahead of mail that wanted
+# answering now (the owner, 2026-09-04: "meetings should not go down into the chat until 15 minutes before like a agent in
+# middel of working"). The same line Urgent draws (lanes.not_yet, at ALERT_MIN).
+_not_yet = lanes.not_yet
 
 
-ON_YOU = ('blocked', 'approve')     # the two lanes attention_band calls owner_wait: an agent asked, or a reply waits
-
-def on_you(item: dict) -> bool:
-    """Is this item WAITING ON THE OWNER - an agent parked on a question, a reply wanting their yes?
-
-    These outrank a merely-unread row in the walk. "New arrivals still lead" was the rule for every
-    lane, and with a pipe holding fifty unread fyi it meant the one thing actually on the owner was
-    shown once and then never came up again until the fyi were drained (the owner, 2026-09-10:
-    "coding task is not surfacing at all, it's stuck on the work timeline?"). Being shown is not a
-    decision, so it cannot retire the item; only settling it, or later/skip, takes it off the walk -
-    and _eligible's 30-minute cooldown is what keeps it from coming straight back."""
-    return item.get('lane') in ON_YOU
-
-
+# WAITING ON THE OWNER - an agent parked on a question, a reply wanting their yes (lanes.json `waits`) - outranks a merely-unread
+# row in the walk. "New arrivals still lead" was the rule for every lane, and with fifty unread fyi the one thing actually on
+# the owner was shown once and never came up again (the owner, 2026-09-10). Being shown is not a decision, so it cannot retire
+# the item; only settling it, or later/skip, takes it off the walk - and _eligible's 30-minute cooldown keeps it from coming
+# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Urgent and On you
+# that is the owner's move.
 def leads(item: dict) -> bool:
     """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or On you. A shown
-    row whose lane on_you does not name (a saved coding session the owner had just closed) sat FIRST under On you on the rail while
-    the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk are
-    one order, so what the rail puts on you is walked in its place."""
-    return on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
+    row whose lane does not wait on the owner (a saved coding session the owner had just closed) sat FIRST under On you on the rail
+    while the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk
+    are one order, so what the rail puts on you is walked in its place."""
+    return waits_on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
 
 
 def next_item(store, key: str = None, only: str = None, include_surfaced: bool = False,

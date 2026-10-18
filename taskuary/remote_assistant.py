@@ -563,8 +563,8 @@ def asking() -> dict | None:
 # ── the start of the walk: THE RAIL, said in a chat (walkSummary.js) ──────────────────────────────────────────
 # Its own who-wants-what grouping put a finished agent's task under "Agents waiting" while the rail had it On you (the
 # owner, 2026-10-02: "it should just read from the rail no?"). The bands, their order and their names are the rail's:
-# funnel.level_of, which mirrors funnelPile.levelOf.
-LEVEL_ORDER = ('urgent', 'task', 'goals', 'agents', 'later', 'reports', 'ideas', 'fyi')     # funnelPile.LEVEL_ORDER
+# funnel.level_of, which mirrors lanes.js levelOf, and the order is lanes.json's `sections`.
+from .lanes import LEVEL_ORDER
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
 ROWS_PER_GROUP = 5
 

@@ -1,7 +1,9 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
-import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
+import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou } from "./lanes.js";
 export { says, subState };
+// the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
+export { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou };
 // The pipe, as the Assistant page draws it: what each lane is called and coloured, which item is a
 // new arrival (it drops in from the top and slides to its slot), and which card goes under a line.
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
@@ -353,11 +355,11 @@ export const railAge = (iso, now = Date.now()) => {
 };
 
 // HOW LONG IT HAS WAITED ON YOU, beside the item's ref on the action row: the rail's gutter says it per row, but the eye is on the
-// buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only the lanes that
-// owe the owner something, and only once it is an hour old - under that it is simply new, and saying so is noise.
-const OWED = new Set(["blocked", "approve", "asked", "yours"]);
+// buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only what is on
+// you (lanes.onYou - a stopped agent and a failed check waited as long as an ask did), and only once it is an hour old - under
+// that it is simply new, and saying so is noise.
 export const waitedText = (item, now = Date.now()) => {
-  if (!item || !OWED.has(item.lane)) return "";
+  if (!item || !onYou(item)) return "";
   const a = railAge(item.since || item.when, now);
   return !a || a.startsWith("<") || a.startsWith("in ") ? "" : `waiting ${a}`;
 };
@@ -370,53 +372,21 @@ export const agoText = (iso, now = Date.now()) => {
   return !a ? "" : a === "now" ? "just now" : a.startsWith("in ") ? a : `${a} ago`;
 };
 
-// the header's one line under "Taskuary"
+// the header's one line under "Taskuary" - its "on you" is the opener's and the greeting's (lanes.onYou). It counted only an
+// agent's question and a reply waiting for a yes, so the lane worded "on you" was left out of the header's own "on you".
 export const statusLine = (items, busy) => {
   if (busy) return "thinking…";
   const n = (items || []).length;
   if (!n) return "All caught up";
-  const you = (items || []).filter((i) => i.lane === "blocked" || i.lane === "approve").length;
+  const you = (items || []).filter((i) => onYou(i)).length;
   return `${n} in the pipe${you ? ` · ${you} on you` : ""}`;
 };
 
-// New cards and alerts carry the server's band. Old persisted cards use the same
-// five-band fallback until their current presentation is refreshed.
-const BAND = { blocked: 2, time: 1, approve: 2, broken: 2, asked: 2, yours: 2, queued: 2, stopped: 2, saved: 2, forgotten: 2, report: 3, fyi: 4, working: 5 };
-export const attentionBand = (item) => {
-  if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
-  // a meeting that is not imminent, and any row whose lane this build does not know, are the
-  // owner's to deal with - never a landed result, which is what band 3 now means
-  if (item?.kind === "meeting" && (item.calendar_ready === false || item.mins > 15)) return 2;
-  // a task its agent finished rides the report lane but is Your task, as the server says (R15)
-  if (item?.kind === "agentdone") return 2;
-  return BAND[item?.lane] ?? 2;
-};
-// Unread is ranked by attention, not by the clock, so a DATE over the rail said nothing about what
-// you were looking at - "Saturday, Sep 5" sat over rows from three different days (the owner,
-// 2026-09-07: "the date on top makes no sense on the unread tab since we don't sort by date"). The
-// dock names the LEVEL the rail is currently crossing instead, and its menu jumps between them.
-//
-// One level per thing triage decided, and no level it did not: work is one run whoever is waiting
-// on it, a landed result is not work, and an idea nobody has judged is an fyi. The words are the
-// levels - processing_order.attention_band is the same list on the server.
-export const LEVEL_META = {
-  urgent: { word: "urgent", hint: "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
-  task: { word: "on you", hint: "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
-  goals: { word: "goals", hint: "an outcome with a date, its steps tasks of their own - here while it has news, in For later while it is quiet" },
-  agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
-  later: { word: "for later", hint: "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
-  reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
-  // an idea's own buttons, by name - "let it go" named a word an idea refuses (Let it go is a waiting step's)
-  ideas: { word: "advisor ideas", hint: `something the Advisor noticed - ${label("mine")}, ${label("regular_agent")}, or ${label("not_ours")}` },
-  fyi: { word: "fyi", hint: "people told you things - read them or don't" },
-};
-// FOR LATER: work you walked past with Next, and work Remind me put away. Next settles nothing - the task is still
-// yours - but leaving it at the top of On you read as if Next had done nothing (the owner, 2026-09-23). The canvas
-// redesign (2026-09-29) moved Agents working up to second and gave ideas a level of their own: an idea leaves FYI
-// until it is made work (then it is On you / Agents working like any task) or dismissed (then it leaves the rail).
-// A grouping of the rail only: the walk's own order is the server's (funnel.level_of mirrors this for a section walk).
-export const LEVEL_ORDER = ["urgent", "task", "goals", "agents", "later", "reports", "ideas", "fyi"];
-const LEVEL_OF_BAND = { 1: "urgent", 2: "task", 3: "reports", 4: "fyi", 5: "agents" };
+// Unread is ranked by attention, not by the clock, so the dock names the LEVEL the rail is crossing (the owner, 2026-09-07: "the
+// date on top makes no sense on the unread tab since we don't sort by date"). One level per thing triage decided: work is one
+// run whoever is waiting on it, a landed result is not work, an idea nobody has judged is an fyi. FOR LATER is work walked past
+// with Next or put away with Remind me (2026-09-23); ideas have a level of their own until made work or dismissed (2026-09-29).
+// The levels, their words, hints, bands and order all live in lanes.json `sections` (lanes.js).
 export const PLACEMENT = ["lane", "order_band", "surfaced", "surfaced_at", "put_down", "unread", "kind", "working", "state", "news"];
 export const placed = (row, card) => {
   const out = { ...row, ...card };
@@ -434,15 +404,6 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
   : items.filter((i) => !leaving || i.tid !== leaving)
     .map((i) => (continuing && i.tid === continuing
       ? { ...i, lane: "working", order_band: 5, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
-export const levelOf = (item) => {
-  const band = attentionBand(item);
-  // A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
-  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "goals" : "later";
-  // For later is what you PUT there - Next or Remind me - never a card merely shown and clicked away from (funnel.level_of)
-  if (band === 2 && (item?.put_down || item?.deferred)) return "later";
-  if (band === 4 && item?.kind === "idea") return "ideas";
-  return LEVEL_OF_BAND[band] || "fyi";
-};
 // when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said in the age gutter's own short form, counting DOWN and reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m"
@@ -563,7 +524,6 @@ export const heldSince = (pile, now = Date.now()) => {
 // Clicking a section's heading puts its first row on the table, and Next stays inside that section until it is empty -
 // then it says so and the walk goes on as normal. The rows are the rail's own (bandsOf, so For later walks soonest
 // first); the server's funnel.section_next is the same rule for the phone doorway.
-export const SECTION_WORDS = { urgent: "Urgent", task: "On you", goals: "Goals", agents: "Agents working", later: "For later", reports: "Reports", ideas: "Advisor ideas", fyi: "FYI" };
 export const sectionNext = (items, section, seen = new Set()) =>
   (bandsOf(items).find((b) => b.level === section)?.items || [])
     .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;

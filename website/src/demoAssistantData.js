@@ -2,6 +2,7 @@
 // invented conversations and Timeline posts: enough real-shaped data to demonstrate the
 // product without implying that an AI, mailbox, or agent is running in the visitor's browser.
 import { hint, label } from "./buttons.js";
+import { onYou } from "./lanes.js";
 
 export const DEMO_ASSISTANT_TIMELINE = [
   {
@@ -184,7 +185,7 @@ export function bindIds(fx, item) {
 export function createDemoAssistantState(fx = {}) {
   const bound = (list) => list.map((m) => (m.card ? { ...m, card: bindIds(fx, m.card) } : m));
   const items = pileItems.map((i) => bindIds(fx, i));
-  const waits = items.filter((i) => ["blocked", "approve", "asked"].includes(i.lane)).length;
+  const waits = items.filter((i) => onYou(i)).length;   // the rail's own on you, as the opener and header count it
   const counted = (m) => (m.text?.includes("{n}") ? { ...m, text: m.text.replace("{n}", waits === 1 ? "One thing" : `${waits} things`) } : m);
   const transcripts = Object.fromEntries(Object.entries(DEMO_ASSISTANT_TRANSCRIPTS).map(([k, v]) => [k, bound(v).map(counted)]));
   const census = items.find((i) => i.title === "Census sync fails when a site has no manager");

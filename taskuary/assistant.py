@@ -1417,16 +1417,15 @@ SECTIONS = (
     ('systems', '🛠️', 'From the systems',  'a threshold crossed, a job failing the same way twice, a number that moved'),
 )
 SECTION_KEYS = tuple(s[0] for s in SECTIONS)
-# where a candidate lands when the model does not say (and it never says for hub-found ones)
-KIND_SECTION = {'followup': 'loose', 'promise': 'loose', 'cold': 'loose', 'prep': 'people', 'idea': 'ideas'}
 
 
 def section_of(line: dict) -> str:
-    """Which section one line belongs in. The model's own choice wins for its ideas; a candidate
-    the hub found is placed by its kind, which is the thing that produced it."""
+    """Which section one line belongs in. The model's own choice wins for its ideas; a candidate the hub found (the model never
+    places those) is placed by its kind, which is the thing that produced it - lanes.json `idea_kinds`."""
+    from .lanes import idea_section
     s = str(line.get('section') or '').strip().lower()
     if s in SECTION_KEYS: return s
-    return KIND_SECTION.get(str(line.get('kind') or ''), 'ideas')
+    return idea_section(line.get('kind'))
 
 
 def in_flight(store) -> list:
@@ -1598,7 +1597,8 @@ def _footer(r: dict) -> str:
     if r.get('scope') == 'sources':
         n = int(r.get('systems') or 0)
         return f"Reviewed: {n} configured data source{'s' if n != 1 else ''} only"
-    kinds = ', '.join(f"{v} {k}" for k, v in r['candidates'].items()) or 'no candidates'
+    from .lanes import idea_counted   # the words the Reports tab counts the same candidates in, never the internal kind
+    kinds = ', '.join(f"{v} {idea_counted(k)}" for k, v in r['candidates'].items()) or 'no candidates'
     skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''
     counted = (f"Reviewed: {kinds}{skip} - {r.get('people', 0)} thread(s) of what people said, {r['recent']} sender/subject line(s) from the last two days, "
                f"{r['week']} task(s) closed this week, {r['open']} open task(s), {r['said']} line(s) already said"

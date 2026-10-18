@@ -185,7 +185,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
         pile = funnel.present(store, copy.deepcopy(pile))
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
-    # funnel.on_you first, then unread, then anything ready: the same order as the legacy walk, and
+    # waiting on the owner first (funnel.leads), then unread, then anything ready: the same order as the legacy walk, and
     # the reason a pending reply is not buried under an inbox of unread fyi.
     first = next((item for item in ready if funnel.leads(item)),
                  ready[0] if ready else None)

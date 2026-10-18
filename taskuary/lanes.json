@@ -1,11 +1,12 @@
 {
-  "_": "THE vocabulary, once. Python (funnel.py), the work rail (funnelPile.js) and the Timeline (timelineState.js) all build their tables from this file, so a word cannot mean one thing on the rail, another in chat and a third on the Timeline. Three groups by PURPOSE, not three vocabularies: `lanes` is what is happening to a piece of live work (it also carries the funnel's ordering, so nothing may be added here that is not live work); `kinds` overrides a lane where the lane is not enough; `states` is what the Timeline says about a row that is no longer live work. A word lives in exactly one of them. `counted` is the plural-counting form for prose and defaults to `word`.",
+  "_": "THE vocabulary, once. Python (funnel.py), the work rail (funnelPile.js) and the Timeline (timelineState.js) all build their tables from this file, so a word cannot mean one thing on the rail, another in chat and a third on the Timeline. Three groups by PURPOSE, not three vocabularies: `lanes` is what is happening to a piece of live work (it also carries the funnel's ordering, so nothing may be added here that is not live work); `kinds` overrides a lane where the lane is not enough; `states` is what the Timeline says about a row that is no longer live work. A word lives in exactly one of them. `counted` is the plural-counting form for prose and defaults to `word`. A lane's RULES live beside its words (taskuary/lanes.py and website/src/lanes.js read them): `section` is the rail section a row of this lane falls in when nothing outranks it, `on_you` whether it is the owner's move at all (only `theirs` among the work lanes is not), `waits` whether it is blocked on the owner's answer or yes, `urgent_request` whether an ask triage called urgent moves it up to Urgent. `sections` is the rail's headings in order, `item_kinds` what each kind of row is called when counted and whether it is mail or an agent's, `idea_kinds` the Advisor's own kinds of line.",
   "lanes": [
     {
       "key": "blocked",
       "word": "agent waiting on you",
       "role": "you",
       "mark": "👋",
+      "section": "task", "on_you": true, "waits": true,
       "hint": "an agent is waiting on you — it asked, needs your approval or is stuck, and it is blocking work",
       "loud": true,
       "_says": "the ONE sentence each sub-state of this lane gets, on every surface (workerstate.says / funnelPile.says). `line` when the request has words, `bare` when it does not. asking = a question, approval = a permission, stalled = a turn that died on a wall (rate limit, token ceiling) with the CLI alive at its prompt, parked = quiet at its prompt with nothing recorded",
@@ -21,13 +22,15 @@
       "word": "coming up",
       "role": "working",
       "mark": "⏱",
-      "hint": "a meeting inside two hours, or an urgent sender"
+      "section": "urgent", "on_you": true,
+      "hint": "a meeting today or inside two hours (it moves under Urgent fifteen minutes before), or an urgent sender"
     },
     {
       "key": "approve",
       "word": "ready to close out",
       "role": "you",
       "mark": "🏁",
+      "section": "task", "on_you": true, "waits": true,
       "hint": "a reply, an action or a task's close-out (approve its change, close it where it lives) waits for your yes",
       "loud": true
     },
@@ -36,6 +39,7 @@
       "word": "asked you",
       "role": "working",
       "mark": "🙋",
+      "section": "task", "on_you": true, "urgent_request": true,
       "hint": "a person asked you for something and nobody is on it"
     },
     {
@@ -43,6 +47,7 @@
       "word": "on you",
       "role": "working",
       "mark": "📋",
+      "section": "task", "on_you": true, "urgent_request": true,
       "hint": "real work with nobody on it yet"
     },
     {
@@ -50,6 +55,7 @@
       "word": "waiting on them",
       "role": "muted",
       "mark": "📤",
+      "section": "task", "on_you": false,
       "hint": "your task, waiting on somebody else - it comes back when they answer"
     },
     {
@@ -57,6 +63,7 @@
       "word": "waiting to start",
       "role": "working",
       "mark": "⏳",
+      "section": "task", "on_you": true,
       "hint": "meant for an agent, and nothing is running it — the row says why: held for you, waiting its turn, or a start that failed"
     },
     {
@@ -64,6 +71,7 @@
       "word": "agent stopped",
       "role": "working",
       "mark": "⏹",
+      "section": "task", "on_you": true,
       "hint": "an agent worked this and left without finishing - its work so far is kept"
     },
     {
@@ -71,6 +79,7 @@
       "word": "stopped and saved",
       "role": "working",
       "mark": "💾",
+      "section": "task", "on_you": true,
       "hint": "you ended the agent's session - its report is written and the task is still open"
     },
     {
@@ -78,6 +87,7 @@
       "word": "a check failed",
       "role": "bad",
       "mark": "🛠",
+      "section": "task", "on_you": true,
       "hint": "a report or workflow you set up could not run - the cause is in it"
     },
     {
@@ -86,6 +96,8 @@
       "counted": "couldn't be sorted",
       "role": "bad",
       "mark": "⚠️",
+      "_section": "fyi while the automatic retry still may judge it; a row the retry gave up on (`held`) is On you - lanes.band_of",
+      "section": "fyi", "on_you": true,
       "hint": "Taskuary couldn't sort this — nothing was started; open it and press Sort it again, or choose what it is"
     },
     {
@@ -93,6 +105,7 @@
       "word": "slipped",
       "role": "working",
       "mark": "🧵",
+      "section": "task", "on_you": true,
       "hint": "quiet past that person's usual day - chase, let it go, or say where they answered"
     },
     {
@@ -100,6 +113,7 @@
       "word": "report",
       "role": "info",
       "mark": "📄",
+      "section": "reports", "on_you": false,
       "hint": "a report you set up landed, or an agent finished a job",
       "counted": "landed"
     },
@@ -108,6 +122,7 @@
       "word": "fyi",
       "role": null,
       "mark": "👀",
+      "section": "fyi", "on_you": false,
       "hint": "a person told you something — read it or don't"
     },
     {
@@ -115,6 +130,7 @@
       "word": "agent working",
       "role": "working",
       "mark": "⚙️",
+      "section": "agents", "on_you": false,
       "hint": "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input"
     }
   ],
@@ -205,5 +221,58 @@
       "mark": "📤",
       "hint": "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours"
     }
-  ]
+  ],
+  "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: Goals by a goal's news, For later by Next or Remind me, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. `minutes` on Urgent is how close a meeting comes before it moves there (funnel.ALERT_MIN).",
+  "sections": [
+    { "key": "urgent", "word": "Urgent", "band": 1, "on_you": true, "minutes": 15,
+      "hint": "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
+    { "key": "task", "word": "On you", "band": 2, "on_you": true,
+      "hint": "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
+    { "key": "goals", "word": "Goals", "band": null,
+      "hint": "an outcome with a date, its steps tasks of their own - here while it has news, in For later while it is quiet" },
+    { "key": "agents", "word": "Agents working", "band": 5,
+      "hint": "an agent has these; nothing for you until one stops or asks" },
+    { "key": "later", "word": "For later", "band": null,
+      "hint": "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
+    { "key": "reports", "word": "Reports", "band": 3, "to_read": true,
+      "hint": "a report you set up landed - information, never a task" },
+    { "key": "ideas", "word": "Advisor ideas", "band": null,
+      "hint": "something the Advisor noticed - {button:mine}, {button:regular_agent}, or {button:not_ours}" },
+    { "key": "fyi", "word": "FYI", "band": 4, "to_read": true,
+      "hint": "people told you things - read them or don't" }
+  ],
+  "_item_kinds": "EVERY KIND OF ROW: how a sentence counts it (`one`, `many`; a kind not here is 'other thing'), `mail` - it came in as a message (the opener's mail tally, and the chat says who wrote it) - and `agent` - it is an agent's own news, so its row names the agent when it has one.",
+  "item_kinds": {
+    "review": { "one": "draft to approve", "many": "drafts to approve", "mail": true },
+    "action": { "one": "ready to run", "many": "ready to run", "mail": true, "agent": true },
+    "asked": { "one": "question for you", "many": "questions for you", "mail": true },
+    "todo": { "one": "to-do", "many": "to-dos", "mail": true },
+    "fyi": { "one": "for your information", "many": "for your information", "mail": true },
+    "fyis": { "one": "set of notices", "many": "sets of notices" },
+    "agent": { "one": "agent question", "many": "agent questions", "agent": true },
+    "agentdone": { "one": "finished", "many": "finished", "agent": true },
+    "wrapup": { "one": "to close", "many": "to close", "agent": true },
+    "goal": { "one": "goal", "many": "goals" },
+    "goal_slipped": { "one": "goal that slipped", "many": "goals that slipped" },
+    "goal_fresh": { "one": "goal not started yet", "many": "goals not started yet" },
+    "report": { "one": "report", "many": "reports" },
+    "idea": { "one": "idea", "many": "ideas" },
+    "meeting": { "one": "meeting", "many": "meetings" },
+    "task": { "one": "task", "many": "tasks" },
+    "connection": { "one": "connection to check", "many": "connections to check" },
+    "other": { "one": "other thing", "many": "other things" }
+  },
+  "_idea_kinds": "THE ADVISOR'S KINDS OF LINE (assistant.py): `word` is what its card and its Timeline row call it, `counted` how a report's last run counts its candidates, `section` where the brief puts a line the model did not place (assistant.SECTIONS). A kind not here is an 'advisor idea' in Worth a thought.",
+  "idea_kinds": {
+    "followup": { "word": "waiting on them", "counted": "follow up", "section": "loose" },
+    "promise": { "word": "you promised", "counted": "promise", "section": "loose" },
+    "cold": { "word": "gone quiet", "counted": "gone quiet", "section": "loose" },
+    "prep": { "word": "prep", "counted": "prep", "section": "people" },
+    "asked": { "word": "slipped", "counted": "slipped", "section": "ideas" },
+    "ahead": { "word": "coming up", "counted": "coming up", "section": "ideas" },
+    "idea": { "word": "advisor idea", "counted": "idea", "section": "ideas" },
+    "connect": { "word": "worth connecting", "counted": "worth connecting", "section": "ideas" },
+    "health": { "word": "needs a look", "counted": "needs a look", "section": "ideas" },
+    "unjudged": { "word": "couldn't sort this", "counted": "couldn't be sorted", "section": "ideas" }
+  }
 }

@@ -470,7 +470,8 @@ def tally(recs: list) -> str:
     ran = [r for r in recs if r.get('status') not in ('skipped', 'repaired')]
     ai = sum(1 for r in ran if r.get('kind') in USES_AI or r.get('type') in AI_TYPES)
     secs = sum(r.get('ms') or 0 for r in recs) / 1000
-    return f"Ran {len(ran)} step{'s' if len(ran) != 1 else ''} in {secs:.1f}s, " + ('no AI used' if not ai else f"{ai} with AI")
+    fixed = any(r.get('status') == 'repaired' for r in recs)         # a repair is a model call too: "no AI used" would be untrue
+    return f"Ran {len(ran)} step{'s' if len(ran) != 1 else ''} in {secs:.1f}s, " + (f"{ai} with AI" if ai else 'AI only for the repair' if fixed else 'no AI used')
 
 
 def header(defn: dict, steps: list, trigger: str, when: str) -> str:

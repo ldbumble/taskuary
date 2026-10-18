@@ -561,6 +561,11 @@
 /* ── the canvas (the canvas redesign, 2026-09-29) ─────────────────────────────────────────────── */
 /* the item on the table: the Tasks tab's task view, full width of the conversation, the body's own height */
 .tq-canvas-live { margin: 0 0 12px; }
+/* ...and the LAST thing on the canvas, it holds a screen: a short view (Task, Close out) can then be scrolled to the top like a
+   full one, its blank under it and the lines before it above (the owner, 2026-10-18: "it should always jump to top of screen, it's
+   okay if there is space under task on the canvas") - it stood mid-screen under the earlier lines. 100cqh + 14px + this 12px margin
+   = the body's whole height (its 26px padding taken in) */
+.tq-chat-inner > .tq-canvas-live:not(:has(~ .tq-msg, ~ .tq-canvas-live, ~ .tq-live-card)) { min-height: calc(100cqh + 14px); }   /* an empty browse line may follow */
 /* Expand: the view alone, the conversation around it hidden - its own box never changes size (CanvasItem) */
 .tq-chat-inner.expanded > :not(.tq-canvas-live) { display: none; }
 /* NOT a padding change: the task view is sized off this body (100cqh), so a smaller padding here grew the pane on Expand */

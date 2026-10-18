@@ -124,3 +124,10 @@ test("a bare line borrows no words while the task view's own row holds them", ()
   assert.match(view, /const chips = barHolds && !m\.card \? \[\]/);
   assert.match(view, /tableChips=\{tableChips\} barHolds=\{barHolds\}/);
 });
+
+// the owner, 2026-10-18: "it should always jump to top of screen, it's okay if there is space under task on the canvas" - the
+// last task view on the canvas holds a screen, so a short one scrolls to the top like a full one; the thread's end is its top
+test("every task view opens at the top of the canvas, a short one with the blank under it", () => {
+  assert.match(src("assistantView.css"), /\.tq-chat-inner > \.tq-canvas-live:not\(:has\(~ \.tq-msg, ~ \.tq-canvas-live, ~ \.tq-live-card\)\) \{ min-height: calc\(100cqh \+ 14px\); \}/);
+  assert.match(src("AssistantView.jsx"), /const toEnd = \(el\) => \{/);
+});

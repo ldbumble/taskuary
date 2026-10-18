@@ -91,7 +91,10 @@ def test_after_my_meetings_offers_the_next_free_moment(s):
 
 def test_after_my_meetings_with_none_left_today_asks_for_a_time(s):
     tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
-    with cal(), pytest.raises(ValueError, match='no more meetings today'):
+    with cal(), mock.patch('taskuary.calendar.reachable', return_value=True), pytest.raises(ValueError, match='no more meetings today'):
+        remind.set_reminder(s, tid, remind.AFTER_MEETINGS)
+    # ...and with no calendar to read at all, it says that - never "your calendar shows" of a calendar nobody connected
+    with cal(), mock.patch('taskuary.calendar.reachable', return_value=False), pytest.raises(ValueError, match='no calendar is connected'):
         remind.set_reminder(s, tid, remind.AFTER_MEETINGS)
 
 

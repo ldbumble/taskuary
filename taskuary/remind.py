@@ -149,7 +149,11 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     # "after my meetings" is the calendar's to answer; with no meetings in front of her there is nothing to wait for
     if str(until or '').strip().lower() == AFTER_MEETINGS:
         free = after_meetings(store)
-        if not free: raise ValueError('your calendar shows no more meetings today - say a time ("today 3pm")')
+        if not free:
+            from . import calendar
+            # with no calendar to read, "your calendar shows no more meetings" was a claim about a calendar nobody connected (2026-10-18)
+            if not calendar.reachable(store): raise ValueError('no calendar is connected, so I cannot see your meetings - say a time ("today 3pm")')
+            raise ValueError('your calendar shows no more meetings today - say a time ("today 3pm")')
         until = free['until']
     at, prev = parse(until), t.get('RemindAt') or None
     # Put away with an agent still open, it was deferred anyway and its row stayed under "agent waiting on you" (press

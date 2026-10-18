@@ -35,17 +35,20 @@ PURPOSE = {
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
     'item.settle':              'put the item down, read and settled - `verb`: done (the item on the table is the target)',
-    'task.complete':            f'{L("close")} - the task is finished (note: optional, what came of it - kept on the task)',
+    'task.complete':            (f'{L("close")} - the task is finished; `note` (optional): what came of it, in the owner\'s words when they '
+                                 'said it ("the GL export reconciled fine") - kept on the task'),
     'task.defer':               (f'{L("defer")}: put an open task away until a day and bring it back then - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", '
-                                 '"friday 2pm"), "after_meetings" when they mean once the day\'s meetings or calls are over (the calendar picks the '
-                                 'time), or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
+                                 '"friday 2pm"), "after_meetings" whenever they mean once the day\'s meetings or calls are over - calendar or not: the app '
+                                 'picks the time, or says there is none to pick from - never a day guessed instead, or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
                                  'subject - is this, never a new to-do'),
     'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "
                                  "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
                                  "task.complete (Mark done) is the close"),
-    'agent.answer':             'answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table',
+    'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
+                                 'agent on the task (TASK NOW says so) the words wait there for the next agent that starts on it - say that; '
+                                 'starting one is the owner\'s call, never this'),
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
     'memory.remember':          'keep a fact - `note`',
@@ -323,7 +326,7 @@ BUCKETS = (
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
-         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?',
+         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 

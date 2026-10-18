@@ -84,8 +84,9 @@ function KindConfig({ step, flow, index, set, typeOptions, connectors, agents, t
       <SourceCard bare src={step} index={index} count={1} removable={false} connectors={connectors}
         typeOptions={typeOptions} onChange={set} test={test}
         onRetype={(t) => set({ type: t }, true)} onFill={(one) => set(one)} onCopy={() => {}} onRemove={() => {}} />
-      {tokenInQuery(step) && <Alert severity="warning" sx={{ fontSize: 12, py: 0 }}>
-        An earlier step's output is pasted into this query as text. Check what it can contain before this runs on a schedule.</Alert>}
+      {tokenInQuery(step) && <Alert severity="error" sx={{ fontSize: 12, py: 0 }}>
+        An earlier step's output can't go into a query - what a step read could rewrite it. Keep the query fixed, and judge its rows
+        in an AI step or with "only if".</Alert>}
     </>
   );
   if (step.kind === "ai") return (

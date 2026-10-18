@@ -105,7 +105,7 @@ The "Mark done" button: the task behind the item is finished.
 
 ### `next`
 
-The "Next" button ("All read, next" batch): move on to the next thing.
+The "Next" button: move on to the next thing.
 
 <p class="runs">At once.</p>
 

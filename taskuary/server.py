@@ -1203,12 +1203,15 @@ def _run_operation(op: dict, background: BackgroundTasks):
         # token lacks - which the chat and the phone draw as its choices (concierge.recover); a bare RuntimeError dropped both
         if not out.get('ok'):
             raise operations.Halt(out.get('send_error') or 'the reply was not sent',
-                                  {k: out[k] for k in ('offers', 'refused', 'needs') if out.get(k)} | {'rid': tid})
+                                  {k: out[k] for k in ('offers', 'refused', 'needs') if out.get(k)} | {'rid': tid}
+                                  | ({'fix': out['send_fix']} if out.get('send_fix') else {}))
         # A REPLY THAT DID NOT LEAVE IS NOT DONE (2026-09-29): the verdict comes back ok with the review still pending and the
         # error in send_error - a send that threw, or one the provider never answered - and that was receipted "Done" and
         # settled off the walk. A close-out whose merge landed but whose reply failed did happen; it says so beside it.
         if out.get('status') == 'pending' and out.get('send_error'):
-            raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True})
+            # ...with its fix: dropped here, a send confirmed in chat with no mailbox never offered Connect a mailbox (2026-10-18)
+            raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True}
+                                  | ({'fix': out['send_fix']} if out.get('send_fix') else {}))
         if out.get('send_error'): out = {**out, 'reply_error': out['send_error']}
         return out
     if kind == 'agent.answer':

@@ -204,7 +204,7 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         first = concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
-        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you put aside waits under For later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
+        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing is under For later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
         self.assertEqual([c['verb'] for c in again['chips']], ['open'])
         self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
@@ -1015,9 +1015,21 @@ class ForLaterLine(unittest.TestCase):
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
             out = concierge.surface(s, llm=lambda *a, **k: 'never')
-        self.assertEqual(out['say'], "That's everything for now. 2 things you put aside wait under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
+        self.assertEqual(out['say'], "That's everything for now. 2 things are under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
                                      "Open one now if you want it sooner.")
         self.assertEqual(concierge._back_words('not a time'), 'back in a while')
+
+    def test_the_line_and_its_buttons_keep_the_rails_order(self):
+        """A sort of the line's own named TQ-0001, TQ-0003, TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is
+        not on_you() - and the Open buttons followed the line, not the rail (the walk click-through, 2026-10-17)."""
+        from unittest import mock
+        soon = (datetime.now() + timedelta(hours=2, minutes=5)).strftime('%Y-%m-%d %H:%M:%S')
+        rows = [{'key': f'task:{n}', 'ref': f'TQ-000{n}', 'title': t, 'lane': lane, 'surfaced': True, 'put_down': True, 'back_at': soon}
+                for n, t, lane in ((1, 'Month-end close', 'approve'), (2, 'New starter kit', 'yours'), (3, 'Overnight import', 'approve'))]
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}),              mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(MemoryStore(), llm=lambda *a, **k: 'never')
+        self.assertIn('TQ-0001 back in 2h, TQ-0002 back in 2h, TQ-0003 back in 2h', out['say'])
+        self.assertEqual([c['key'] for c in out['chips']], ['task:1', 'task:2', 'task:3'])
 
 
 class NonCoderWordsTests(unittest.TestCase):

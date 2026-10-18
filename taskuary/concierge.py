@@ -2332,14 +2332,18 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                 back = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
                 waiting = [i | {'put_down': True, 'back_at': i.get('back_at') or back} if leaving in (i['key'], *i.get('aliases', ())) else i
                            for i in waiting]
-            n, waiting = len(waiting), sorted(waiting, key=lambda i: (not funnel.on_you(i), str(i.get('back_at') or '')))
+            # ...in the RAIL'S order, which already leads with what is on the owner: a sort of its own here named TQ-0001, TQ-0003,
+            # TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is not on_you() - and the owner could not match them
+            # (the walk click-through, 2026-10-17)
+            n = len(waiting)
             when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)}{' ' + _back_words(i['back_at']) if i.get('back_at') else ''}"
                              for i in waiting[:4])
             # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
             # ...and only what Next or Remind me put there is "under For later": one you looked at and left is still On you
             aside = all(i.get('put_down') or i.get('deferred') for i in waiting)
-            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} you "
-                   + (f"put aside wait{'s' if n == 1 else ''} under For later" if aside else f"already saw still wait{'s' if n == 1 else ''} on you")
+            # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
+            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} "
+                   + (f"{'is' if n == 1 else 'are'} under For later" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
                    + f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.

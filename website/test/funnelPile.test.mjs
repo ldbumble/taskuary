@@ -373,7 +373,7 @@ test("the waving agent is the one lane sized to be seen", () => {
 // never collapse into one again, and they are the vocabulary's, not this rail's.
 test("a waving agent and a waiting reply are two different words", () => {
   assert.equal(rowMeta({ lane: "blocked" }).word, "agent waiting on you");
-  assert.equal(rowMeta({ lane: "approve" }).word, "ready to close out");
+  assert.equal(rowMeta({ lane: "approve" }).word, "ready to send");
   assert.notEqual(rowMeta({ lane: "blocked" }).word, rowMeta({ lane: "approve" }).word);
 });
 

@@ -1809,7 +1809,7 @@ def reset_walk(store):
         states = store.funnel_states()
         from . import processing_unread          # the rail itself, not pile(): the pile runs the notice watcher
         for i in processing_unread.build(store).get('items') or []:
-            # ...and a yes still owed (ready to close out): shown in the old chat is not answered - a restart opened a new chat
+            # ...and a yes still owed (ready to send): shown in the old chat is not answered - a restart opened a new chat
             # that skipped the Close out GitHub had just refused, for the next pull request (2026-09-29)
             if i.get('lane') not in processing_unread.RAISED_BY_NEW_WALK: continue
             for k in [i.get('key'), *(i.get('aliases') or [])]:

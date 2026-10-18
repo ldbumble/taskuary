@@ -688,11 +688,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     finally { setFinishing(false); }
     loadTasks(); onChanged?.();
   };
-  // HANDED TO A PERSON: the forward went out and the server closed the task after it (server.handoff), so what comes next is
-  // what comes after any close - the list moves on, the walk brings the next; there is nothing left to close here
-  const handedOff = async () => { setHandoff(false); await closedHere(); };
-  const closedHere = async () => {
-    try { await (onFinish ? onFinish("done", async () => {}) : loadDetail(selected)); } catch { /* already closed on the server */ }
+  // HANDED TO A PERSON: the forward went out and the task now waits on them (server.handoff - forward only, 2026-10-18), so
+  // it is off you: the list moves on, the walk brings the next, and the task stays open for its own Mark done
+  const handedOff = async () => { setHandoff(false); await closedHere("waiting"); };
+  const closedHere = async (status = "done") => {
+    try { await (onFinish ? onFinish(status, async () => {}) : loadDetail(selected)); } catch { /* already moved on the server */ }
     loadTasks(); onChanged?.();
   };
   // SENT (Send / Approve): the send already went through, so the task is read again - it stays open (a send never closes it,

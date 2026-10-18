@@ -344,7 +344,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         text = remote_assistant.who_wants_what(items)
         self.assertTrue(text.startswith('4 things: 1 on you, 1 agents working, 1 reports, 1 FYI.'), text)
         # a drafted reply says its lane's word, as the desktop row does (funnel_presentation.state_of) - not "draft ready"
-        self.assertIn('ON YOU · 1\n· Erin Blake - Q3 numbers (ready to close out)', text)
+        self.assertIn('ON YOU · 1\n· Erin Blake - Q3 numbers (ready to send)', text)
         self.assertIn('AGENTS WORKING · 1', text); self.assertIn('· Report - Spend report - 3 over', text)
         self.assertLess(text.index('ON YOU'), text.index('AGENTS WORKING')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')

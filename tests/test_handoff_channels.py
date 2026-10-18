@@ -63,29 +63,26 @@ class HandingItToAPerson(unittest.TestCase):
         send.assert_called_once()
         self.assertEqual(send.call_args.args[1], '19:abc')     # the chat id, not an address
 
-    def test_handing_it_over_closes_the_task(self):
-        """Somebody else owns it now: leaving the card open asks for a second decision."""
+    def test_handing_it_over_leaves_the_task_open_waiting_on_them(self):
+        """Forward only (the owner, 2026-10-18): the task waits on the person it went to; Mark done is a step of its own."""
         tid = _task()
         with mock.patch('taskuary.outbound.can_reply', return_value=True), \
-             mock.patch('taskuary.outbound.send_out', return_value={'ok': True}):
+             mock.patch('taskuary.outbound.send_out', return_value={'ok': True}), \
+             mock.patch('taskuary.concierge.close_task') as close:
             c.post(f'/api/tasks/{tid}/handoff', json={'to': 'tess', 'channel': 'whatsapp', 'text': 'yours'})
-        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+        close.assert_not_called()
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'waiting')
 
-    def test_the_task_closes_only_once_the_forward_went_out(self):
-        """The page puts the task down at the press (2026-10-01) and brings it back when the send fails - so the
-        server must send FIRST: a refused send leaves the task open, with the reason in the answer."""
+    def test_a_refused_forward_changes_nothing(self):
+        """The page puts the task down at the press (2026-10-01) and brings it back when the send fails - so a refused
+        send leaves the task as it was, with the reason in the answer."""
         tid = _task()
-        order = []
-        with mock.patch('taskuary.outbound.send_email', side_effect=lambda *a, **k: order.append('sent') or {'ok': True}), \
-             mock.patch('taskuary.concierge.close_task', side_effect=lambda *a, **k: order.append('closed')):
-            c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'channel': 'email', 'text': 'yours'})
-        self.assertEqual(order, ['sent', 'closed'])
-        tid = _task()
+        was = c.get(f'/api/tasks/{tid}').json()['task']['Status']
         with mock.patch('taskuary.outbound.send_email', side_effect=RuntimeError('the mailbox refused it')):
             r = c.post(f'/api/tasks/{tid}/handoff', json={'to': 'erin@northwind.example', 'channel': 'email', 'text': 'yours'})
         self.assertEqual(r.status_code, 422)
         self.assertIn('refused', r.json()['detail'])
-        self.assertNotEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], 'done')
+        self.assertEqual(c.get(f'/api/tasks/{tid}').json()['task']['Status'], was)
 
     def test_a_draft_never_sends_anything(self):
         tid = _task()

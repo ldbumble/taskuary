@@ -10,7 +10,7 @@ import {
 test("task, agent and reply phases remain independent", () => {
   assert.equal(taskPhase("in_progress"), "in progress");
   assert.equal(agentPhase({ session: { alive: true, waiting: false } }), "agent working");
-  assert.equal(replyPhase([{ Status: "pending", Kind: "draft" }]), "ready to close out");
+  assert.equal(replyPhase([{ Status: "pending", Kind: "draft" }]), "ready to send");
 });
 
 test("an action proposed after a reply never replaces the sender's draft", () => {
@@ -18,7 +18,7 @@ test("an action proposed after a reply never replaces the sender's draft", () =>
   const reply = { ReviewId: 11, Status: "pending", Kind: "draft_reply", DraftText: "Answers to all eight items." };
   const reviews = [action, reply];
   assert.equal(pendingReplyReview(reviews), reply);
-  assert.equal(replyPhase(reviews), "ready to close out");
+  assert.equal(replyPhase(reviews), "ready to send");
   assert.equal(replyPhase([action]), "not drafted");
 });
 
@@ -53,7 +53,7 @@ test("terminal output never triggers whole-task HTTP refreshes", () => {
 });
 
 test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
-  const draftReady = { kind: "coding", task: "open", agent: "stopped and saved", reply: "ready to close out", hasSender: true };
+  const draftReady = { kind: "coding", task: "open", agent: "stopped and saved", reply: "ready to send", hasSender: true };
   assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
   assert.equal(focusStage({ ...draftReady, agent: "agent waiting on you" }), "reply");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted", hasSender: true }), "reply");
@@ -139,7 +139,7 @@ test("needs you is the one phase that wears the loud colour", () => {
   assert.match(ui, /needsYou: \{ bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" \}/);
   assert.match(ui, /if \(value === AGENT\.waiting\) return LC\.needsYou;/);
   // ...and only that one: a draft waiting for a yes is not an agent blocked on you
-  assert.match(ui, /if \(value === "ready to close out" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
+  assert.match(ui, /if \(value === "ready to send" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
 });
 
 // A PROPOSAL IS A DECISION TOO. A playbook drafted after a coding job, or a setting proposed in
@@ -177,7 +177,7 @@ test("a waving agent outranks a proposal, unless the proposal is what it wants",
 });
 
 test("a drafted reply still outranks a waving agent, whatever it is parked on", () => {
-  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "ready to close out" };
+  const base = { kind: "coding", task: "open", agent: "agent waiting on you", reply: "ready to send" };
   assert.equal(focusStage({ ...base, agentSub: "asking" }), "reply");
   assert.equal(focusStage({ ...base, agentSub: "approval" }), "reply");
 });

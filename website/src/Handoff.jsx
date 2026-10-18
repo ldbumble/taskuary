@@ -40,7 +40,7 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
   const send = async () => {
     setBusy("send"); setErr("");
     // PUT DOWN AT THE PRESS, like every close (the owner, 2026-10-01): the task leaves while the forward goes out - the server
-    // sends first and closes the task only once it has, so a send that fails hands it back with the reason, nothing closed
+    // sends first and only then sets the task to waiting on them (forward only), so a send that fails hands it back with the reason
     onLeave?.();
     try { const d = await call({ to, channel, text }); setSent(d.sent); onSent?.(); }
     catch (e) { const msg = msgOf(e, "Could not send it"); setErr(msg); onStay?.(msg); }

@@ -26,9 +26,9 @@ def test_an_agents_row_names_the_agent_and_a_report_says_report():
 
 
 def test_the_state_word_is_the_lanes_except_an_agents_proposed_action():
-    assert fp.state_of({'lane': 'approve', 'kind': 'review'}) == 'ready to close out'
+    assert fp.state_of({'lane': 'approve', 'kind': 'review'}) == 'ready to send'
     assert fp.state_of({'lane': 'approve', 'kind': 'action'}) == 'wants a yes'
-    assert fp.state_of({'lane': 'approve', 'kind': 'action', 'closeout': 'merges the pull request'}) == 'ready to close out'
+    assert fp.state_of({'lane': 'approve', 'kind': 'action', 'closeout': 'merges the pull request'}) == 'ready to send'
     assert fp.state_of({'lane': 'no-such-lane'}) == fp._LANE_WORDS['fyi']
 
 

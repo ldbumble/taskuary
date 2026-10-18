@@ -3466,7 +3466,7 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
         # EVERY ROW HAS A HANDLE the model copies into `on` - its TQ ref, else its message's m-number - so naming one is exact: words
         # ("the Payworth mail") were resolved by a word-overlap guess in code (the owner, 2026-10-08: no code in front of the AI)
         bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
-        # ...and whether a DRAFT waits on it: the lane's word alone ("ready to close out") left "reject the draft on TQ-0004" answered
+        # ...and whether a DRAFT waits on it: the lane's word alone ("ready to send") left "reject the draft on TQ-0004" answered
         # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
         if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]}"
                              + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')

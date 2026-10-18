@@ -124,7 +124,7 @@ export const replySource = (messages = []) => {
 
 // lanes.json's word for the approve lane - ONE word for a reply and a close-out alike (the owner, 2026-09-27: "it should
 // the same everywhere"), because both are the step that closes the task
-export const READY = "ready to close out";
+export const READY = "ready to send";
 
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");

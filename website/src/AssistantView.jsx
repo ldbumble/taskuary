@@ -1671,6 +1671,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // a fix is a place (advisor.for_key's href), never a proposal: with no '<rid>:fix' on the row it opens the place itself
     if (liveVerb(a.verb) === "fix" && a.href) { openAppLink(a.href); return null; }
     if (a.verb === "answer_agent") { askAnswer(currentRef.current); return null; }
+    // MAKE A TASK TO FIX THIS (advisor.failure): a failure nothing here fixes becomes a task of its own, carrying what failed - made by
+    // the same tool the assistant uses, so it has a receipt like any act, then opened
+    if (liveVerb(a.verb) === "new_task" && a.task) {
+      try {
+        const made = await runOperation(api, "task.create_from_text", 0, { text: a.task.text, title: a.task.title, kind: "task" });
+        if (made?.taskId) openTaskRef.current?.({ tid: made.taskId });
+        noteLine(`Made ${made?.ref || "a task"} to fix it - what failed and why are on it.`);
+      } catch (e) { if (demoNo(e)) setErr(errText(e)); else throw e; }
+      return null;
+    }
     // a move that is no proposal (it drafts, asks for a day, or asks what to add) takes the chip's own road - the server refuses it
     if (["reply", "redraft", "defer", "continue"].includes(liveVerb(a.verb))) { await runChip({ verb: liveVerb(a.verb) }); return null; }
     try { return await proposeDirect(a.verb, key, true, a.revision); }

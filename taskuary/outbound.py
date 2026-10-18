@@ -28,7 +28,12 @@ class Fixable(RuntimeError):
     "add one under Connections" with nothing to press left the owner to find it (the walk click-through, 2026-10-17)."""
     def __init__(self, msg, label, href): super().__init__(msg); self.fix = {'label': label, 'href': href}
 
-def fix_of(e) -> dict | None: return getattr(e, 'fix', None)
+def fix_of(e) -> dict | None: return getattr(e, 'fix', None) or auth_fix(e)
+# A REFUSED SIGN-IN is fixed by signing in again, never by sending again: an SMTP 535 or a Graph 401/403 left the Advisor
+# advising Send, with no button to the mailbox (error sweep, 2026-10-18)
+_AUTH = re.compile(r'\((401|403)\)|535|authentication (unsuccessful|failed)|invalid_grant|AADSTS\d+|token (has )?expired', re.I)
+def auth_fix(e) -> dict | None:
+    return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(str(e)) else None
 MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)
 REPLIES = ('Turn replies on', words.href('replies'))
 

@@ -53,7 +53,18 @@ def revision(store, target_kind: str, target_id) -> str:
         t = store.get_task(target_id) or {}
         ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
         base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}"
+    # ...and a failure: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18)
+    base += f"|{_failed_at(store, target_kind, target_id)}"
     return hashlib.sha1(base.encode()).hexdigest()[:16]
+
+
+def _failed_at(store, target_kind, target_id) -> str:
+    """The newest failed act and each draft's delivery on the target - '' when nothing ever failed on it."""
+    col = 'TaskId' if target_kind == 'task' else 'MessageId'
+    op = store._one("SELECT OpId FROM operation WHERE TargetKind=? AND TargetId=? AND Status='error' ORDER BY rowid DESC LIMIT 1",
+                    (target_kind, int(target_id))) or {}
+    rv = store._one(f"SELECT GROUP_CONCAT(DeliveryState) AS d FROM review WHERE {col}=?", (int(target_id),)) or {}
+    return f"{op.get('OpId') or ''}/{rv.get('d') or ''}" if op.get('OpId') or rv.get('d') else ''
 
 
 def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line='', verb=None, label=None, count=(0, 0),
@@ -110,7 +121,11 @@ SYSTEM = (
     f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a draft waiting: {L('approve')}; "
     f"a reply already sent - sending never closes the task - and nothing left to do: {L('close')}; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
-    "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all.")
+    "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all. "
+    "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
+    "wrong, and pick the move that fixes it - the fix offered when there is one (it opens the place that fixes it); else a verb offered "
+    "that gets round it; else, when nothing here can fix it, the one that makes a task to fix it. Never advise the act that failed again "
+    "unchanged - unless the failure says the cause has passed - and never Send again when nobody knows whether the first send went.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
     speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
@@ -179,6 +194,11 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     if stands: facts['where it stands'] = stands
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
+    try: f = failure(store, item)
+    except Exception as e: logger.debug(f'advisor: no failure read for {item.get("key")} - {e}'); f = None
+    if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"
+                       + (' (nobody knows whether it went: check before sending again)' if f.get('unknown') else '')
+                       + (f". The fix offered: {f['fix']['label']}" if f.get('fix') else ''))
     if target_kind == 'task':
         # what the agent itself last said and is asking: the card's preview is the sender's mail, so five stops in a row were
         # judged "stop the agent" over an agent whose last words were "the reply above is ready for you to review and send"
@@ -294,6 +314,38 @@ def quiet(item: dict) -> bool:
     return item.get('lane') == 'unjudged' or (item.get('kind') == 'report' and not item.get('bad'))
 
 
+def failure(store, item: dict) -> dict | None:
+    """What last failed on the item - {what, why, fix, unknown, kind} - or None: a draft whose send failed or never answered, else the
+    newest act on it that ended in an error. The Advisor was never told, so it advised the Send that had just failed (2026-10-18)."""
+    ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or {}
+    if r.get('DeliveryState') in ('failed', 'unknown'):
+        try: env = json.loads(r.get('Deliver') or '{}') or {}
+        except (TypeError, ValueError): env = {}
+        why = re.sub(r'^Not sent:\s*', '', str(r.get('Reason') or '')).rstrip('.')
+        return {'what': 'the reply was not sent' if r['DeliveryState'] == 'failed' else 'the reply may not have gone',
+                'why': why, 'fix': ok(env.get('fix')) if isinstance(env, dict) else None, 'unknown': r['DeliveryState'] == 'unknown', 'kind': 'send'}
+    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
+    except Exception: ops = []
+    last = ops[-1] if ops else {}
+    if last.get('Status') != 'error': return None
+    try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
+    except (TypeError, ValueError): out = {}
+    try:
+        from . import operations
+        what = concierge.describe_op(store, operations.get(store, last['OpId']))[0]
+    except Exception: what = str(last.get('Kind') or 'the last action')
+    return {'what': f'"{what}" did not happen', 'why': str(last.get('Error') or ''), 'fix': ok(out.get('fix')) if isinstance(out, dict) else None,
+            'unknown': bool(isinstance(out, dict) and out.get('delivery') == 'unknown'), 'kind': last.get('Kind')}
+
+
+def fix_task(store, item: dict, f: dict) -> dict:
+    """The task "Make a task to fix this" makes: what failed, why, and on what - in the owner's words, for an agent or for them."""
+    on = ' '.join(filter(None, (item.get('ref'), item.get('title'))))
+    return {'title': f"Fix: {f['what']}"[:120], 'text': f"{f['what'][:1].upper()}{f['what'][1:]} on {on or 'an item'}. What came back: "
+            f"{f['why'] or 'no reason was given'}. Find why, and fix it so it does not fail again."}
+
+
 def delivery_fix(store, item: dict) -> dict | None:
     """{label, href} of the place that fixes the item's failed send - the draft's envelope (Deliver.fix, kept across a reload),
     else the newest act on the item when it failed with one (OutcomeJson.fix). None when nothing failed, or it named no place."""
@@ -322,7 +374,13 @@ def offered(store, item: dict) -> list:
     except Exception as e:
         logger.debug(f'advisor: no fix read for {item.get("key")} - {e}'); fix = None
     # the fix leads: a send that failed is fixed before it is sent again (ReviewDecision.jsx draws it as '<rid>:fix')
-    return ([buttons.chip('fix') | {'label': fix['label'], 'href': fix['href']}] if fix else []) + verbs
+    lead = [buttons.chip('fix') | {'label': fix['label'], 'href': fix['href']}] if fix else []
+    # A FAILURE NOTHING HERE FIXES (no fix named, not a send that may yet have gone) can still be made somebody's work: New task, in its
+    # "fix" state, carrying what failed (the owner, 2026-10-18: "if it's a more complicated fix, the assistant should create a task")
+    try: f = None if fix else failure(store, item)
+    except Exception: f = None
+    if f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
+    return lead + verbs
 
 
 def _capped(store) -> bool:
@@ -405,6 +463,11 @@ def for_key(store, key: str) -> dict:
             try: f = delivery_fix(store, _item(store, *tgt, key=key) or {})
             except Exception: f = None
             if f: out['href'] = f['href']
+        # ...and the task "Make a task to fix this" makes, read live the same way
+        if out.get('verb') == 'new_task':
+            try: it = _item(store, *tgt, key=key) or {}; f = failure(store, it)
+            except Exception: f = None
+            if f: out['task'] = fix_task(store, it, f)
         return out
     # NEVER LEFT GUESSING (the owner, 2026-10-15: "the advisor ... should be guiding at all times never leaving it guessing"): only
     # eight events ever judged an item, so a fresh email or a task that moved since its last event had an empty bar for good. The

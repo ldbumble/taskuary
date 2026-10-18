@@ -116,6 +116,26 @@ class ProposalTests(unittest.TestCase):
             self.assertEqual(TestClient(server.app).delete(f"/api/operations/{p['id']}").json()['status'], 'cancelled')
         self.assertEqual(run(s, p).status_code, 409); self.assertEqual(s.get_task(tid)['Status'], 'open')
 
+    def test_a_press_on_a_cancelled_proposal_answers_with_its_line_and_way_on(self):
+        """The 409 carried only its reason, so the page wrote a second receipt of its own - "Say it again", Next under it - beside the
+        line the server had recorded (re-audit, 2026-10-18). It carries that line, its buttons and the proposal as it stands."""
+        s, tid, mid, item = asked()
+        p = say(s, 'close it', key=item['key'], model='Closing.\nCALL: {"kind": "close", "params": {}}')['proposal']
+        operations.cancel(s, p['id'])
+        r = run(s, p)
+        b = r.json()
+        self.assertEqual((r.status_code, b['status'], b['op']['status']), (409, 'cancelled', 'cancelled'))
+        self.assertTrue(b['detail'] and isinstance(b['detail'], str))                # every reader of `detail` still reads a sentence
+        self.assertTrue(b['receipt'].startswith('Not done'))
+        self.assertIsInstance(b['chips'], list)
+
+    def test_a_stale_press_answers_with_the_moved_proposal(self):
+        s, tid, mid, item = asked()
+        first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']
+        say(s, 'no - a regular agent', key=item['key'], model='A regular agent then.\nCALL: {"kind": "regular_agent", "params": {}}')
+        b = run(s, first).json()
+        self.assertEqual((b['status'], b['op']['version']), ('stale', 2))
+
     def test_a_failed_handler_is_reported_and_settles_nothing(self):
         s, tid, mid, item = asked()
         p = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']

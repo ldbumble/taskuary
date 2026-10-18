@@ -29,10 +29,11 @@ test("the steps say what is done and what is next", async () => {
 test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, no Advisor line", () => {
   const av = read("AssistantView.jsx");
   assert.match(av, /setupMode=\{firstRun\} setupRail=\{firstRun \? <SetupSteps \/> : null\}/);
-  assert.match(av, /\{firstRun \? state && welcome\(\) : state && !shown\.length && !busy && welcome\(\)\}/);
+  assert.match(av, /firstRun \? state && welcome\(\) : state && !shown\.length && !busy && welcome\(\)\}/);
   assert.match(av, /\{!firstRun && shown\.map/);
   assert.match(av, /className="tq-compose-box" style=\{firstRun \? \{ display: "none" \} : undefined\}/);
-  assert.match(av, /const shownAdvice = setupOn\.current \? null : adviceShown/);
+  assert.match(av, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current \}\)/);
+  assert.match(av, /const shownAdvice = table\.speaks \? adviceShown/);
   assert.match(read("FeedView.jsx"), /display: setupMode \? "none" : "flex"/);
 });
 

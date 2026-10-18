@@ -37,10 +37,10 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   assert.match(src, /advised=\{shownAdvice\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);
-  assert.match(src, /if \(n !== adviceAsk\.current\) return;\n\s+setAdvice\(got\);/);
+  assert.match(src, /if \(n !== adviceAsk\.current\) return;[\s\S]{0,400}?setAdvice\(got\);/);
   // the read is for the key ON THE TABLE - the walk's item or a task opened by name - and shown only for it
   assert.match(src, /useEffect\(\(\) => \{ readAdvice\(onTable\); setChanged\(null\); \}, \[onTable, readAdvice\]\);/);
-  assert.match(src, /adviceShown\(advice, onTable \? \{ key: onTable, lane: currentItem\?\.lane \} : null, busy\)/);
+  assert.match(src, /table\.speaks \? adviceShown\(advice, \{ key: table\.key, lane: currentItem\?\.lane \}, busy\) : null/);
   // ...and while it is out, a quiet line - no button - says the advice is coming
   assert.match(src, /data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…<\/div>/);
   assert.doesNotMatch(src, /picks up where it left off, and comes back here/, "the continue receipt is gone");

@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted } from "../src/proposalCard.js";
+import { proposalOf, describe, afterExecute, afterConfirm, afterCancel, markExecuted, liveProposal, holdsProposal, isLive } from "../src/proposalCard.js";
 
 const p = { id: "ab12", kind: "task.create_from_message", target: 7, version: 1, status: "proposed", verb: "coding_agent",
   params: { kind: "coding", instructions: "check the June rows" }, label: "Send to the coding agent",
@@ -36,7 +36,7 @@ test("after the click, the receipt is the server's word and the walk moves only 
   assert.deepEqual(afterExecute(p, { status: "error", error: "agent did not start" }),
     { receipt: "Not done - agent did not start. Nothing moved.", settle: false, status: "error" });
   assert.deepEqual(afterExecute(p, { status: "stale", error: "the context changed since this was proposed" }),
-    { receipt: "Not done - the context changed since this was proposed. Say it again if you still want it.", settle: false, status: "stale" });
+    { receipt: "Not done - the context changed since this was proposed. Nothing moved.", settle: false, status: "stale" });
   assert.deepEqual(afterExecute(p, { status: "done", duplicate: true, outcome: {} }),
     { receipt: "Already done - Send to the coding agent.", settle: false, status: "done" });
 });
@@ -169,4 +169,24 @@ test("a receipt's Open and Report this bug go to the row, never into the line", 
   const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(view, /<ReportLink text=\{m\.text\} \/>/);
   assert.doesNotMatch(view, /className="tq-chip" style=\{\{ marginLeft: 8 \}\} onClick=\{\(\) => actions\.openTask/);
+});
+
+// THE CARD IS THE SERVER'S (re-audit, 2026-10-18): a cancelled or failed proposal kept its confirm buttons, and the next press 409'd
+test("the card follows the parent's live status, and only a newer proposal of its own outranks it", () => {
+  const own = { ...p, id: "cd34", verb: "not_ours_sender" };
+  assert.equal(liveProposal(p, null), p);
+  assert.equal(isLive(liveProposal({ ...p, status: "cancelled" }, { ...p })), false, "the parent's cancel reaches a card holding its own copy");
+  assert.equal(liveProposal(p, own), own, "the card's question made a newer proposal: it is what the buttons run");
+  assert.equal(liveProposal({ ...p, status: "error" }, own).status, "error", "the parent finished: no live buttons");
+  assert.equal(liveProposal({ ...own, status: "done" }, own).status, "done", "adopted by the parent: its status wins");
+  assert.ok(holdsProposal({ proposal: p }, { ...own, replaces: p.id }), "the line that shows the card adopts what replaced it");
+  assert.ok(!holdsProposal({ proposal: p }, { id: "zz" }));
+});
+
+test("a press on a moved or cancelled proposal shows the server's one line, its buttons under it", () => {
+  assert.deepEqual(afterExecute(p, { status: "cancelled", receipt: "Not done - cancelled. TQ-0007 is where it was.", chips: [] }),
+    { receipt: "Not done - cancelled. TQ-0007 is where it was.", settle: false, status: "cancelled" });
+  const src = readFileSync(new URL("../src/ProposalCard.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /useState\(given\)/, "the card never freezes its own copy of the proposal");
+  assert.doesNotMatch(src, /say it again/i);
 });

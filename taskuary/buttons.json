@@ -38,7 +38,7 @@
     "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
     "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": [],
-                        "states": {"fix": "Make a task to fix this"}, "state_hints": {"fix": "A task of its own, carrying what failed and why - for an agent or for you to work"}}
+                        "states": {"fix": "New task to fix this"}, "state_hints": {"fix": "A task of its own, carrying what failed and why - for an agent or for you to work"}}
   },
   "choices": {
     "_": "The card's own question after Not ours / Send to agent - answers, not buttons of their own",

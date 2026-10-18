@@ -340,7 +340,7 @@ def failure(store, item: dict) -> dict | None:
 
 
 def fix_task(store, item: dict, f: dict) -> dict:
-    """The task "Make a task to fix this" makes: what failed, why, and on what - in the owner's words, for an agent or for them."""
+    """The task "New task to fix this" makes: what failed, why, and on what - in the owner's words, for an agent or for them."""
     on = ' '.join(filter(None, (item.get('ref'), item.get('title'))))
     return {'title': f"Fix: {f['what']}"[:120], 'text': f"{f['what'][:1].upper()}{f['what'][1:]} on {on or 'an item'}. What came back: "
             f"{f['why'] or 'no reason was given'}. Find why, and fix it so it does not fail again."}
@@ -463,7 +463,7 @@ def for_key(store, key: str) -> dict:
             try: f = delivery_fix(store, _item(store, *tgt, key=key) or {})
             except Exception: f = None
             if f: out['href'] = f['href']
-        # ...and the task "Make a task to fix this" makes, read live the same way
+        # ...and the task "New task to fix this" makes, read live the same way
         if out.get('verb') == 'new_task':
             try: it = _item(store, *tgt, key=key) or {}; f = failure(store, it)
             except Exception: f = None

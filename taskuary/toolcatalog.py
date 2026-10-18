@@ -266,12 +266,13 @@ def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((butt
 # the buttons whose verb is not itself a decision, and the tool each one is
 CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split',
              'reopen': 'task.reopen', 'close_note': 'task.complete', 'forward': 'task.handoff', 'ask_sender': 'task.clarify',
-             'remove': 'task.not_a_task', 'new_task': 'task.create_from_text'}
+             'remove': 'task.not_a_task'}
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'take_back': "a receipt's undo",
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
-             'retriage': 'no tool sorts an item again yet', 'share': 'no tool mails results yet'}
+             'retriage': 'no tool sorts an item again yet', 'share': 'no tool mails results yet',
+             'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap'}
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
     if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True

@@ -94,6 +94,11 @@
 .tq-aui-dock .tq-aui-user-bubble { max-width: 100%; }
 .tq-aui-dock .tq-aui-footer { padding: 8px 10px 7px; }
 .tq-aui-dock .tq-aui-hint { display: none; }
+/* on the assistant canvas the room is the agent's answer, not the keyboard help (the owner, 2026-10-18); a closed chat's notice keeps its line */
+[data-tq-canvas-item] .tq-aui-footer { padding: 8px 14px 7px; }
+[data-tq-canvas-item] .tq-aui-viewport { padding: 14px 18px 2px; }
+[data-tq-canvas-item] .tq-aui-message { margin-bottom: 14px; }
+[data-tq-canvas-item] .tq-aui-hint:not([role]) { display: none; }
 .tq-aui-dock-expanded .tq-aui-message { width: 100%; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
 .tq-aui-dock-expanded .tq-aui-viewport { padding: 22px 24px 12px; }
 .tq-dock-actions { width: 100%; margin: 2px auto 12px; padding: 10px; border: 1px solid #d6cec1; border-left: 4px solid #98743e; border-radius: 12px; background: #fffdf9; box-shadow: 0 5px 18px rgba(51, 45, 35, .07); box-sizing: border-box; }

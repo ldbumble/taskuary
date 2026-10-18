@@ -1107,6 +1107,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const asking = !!askKey && seenAsk !== askKey && workspaceMode === "live" && !peek;
   const askLine = askKey ? term.line || says(subState(term), agentName(t), term.request?.text) : "";
   const answerAgent = () => { setSeenAsk(askKey); setTimeout(() => termBox.current?.querySelector("textarea")?.focus(), 0); };
+  // THE AGENT'S CHAT OPENS PUSHED UP (the owner, 2026-10-18: "you can almost never see the full output text ... push it up higher
+  // on screen"): on the canvas the folded Task strip scrolls above the view, so "2 Agent work" sits under the title and the chat
+  // fills the rest (its box is sized for exactly that, below). Task is one scroll up, Close out one scroll down.
+  const stepsBox = useRef(null), agentHead = useRef(null);
+  const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;
+  useEffect(() => {
+    // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
+    if (!agentUp) { if (canvas && stepsBox.current) stepsBox.current.scrollTop = 0; return undefined; }
+    const f = requestAnimationFrame(() => {
+      const s = stepsBox.current, h = agentHead.current;
+      if (s && h) s.scrollTop += h.getBoundingClientRect().top - s.getBoundingClientRect().top;
+    });
+    return () => cancelAnimationFrame(f);
+  }, [agentUp, t?.TaskId]);
   // THE ADVISOR ON THE TASKS TAB (U12): the canvas reads it for the item on its table; this view, standing alone, reads its own
   const [taskAdvice, setTaskAdvice] = useState(null);
   const readTaskAdvice = useCallback((id) => {
@@ -1385,8 +1399,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 </Typography>}
                 {/* TRIAGE DECIDED - what the task is, said once under its title as facts, never as controls (the owner, 2026-10-16: "why
                     are there dropdowns by the triage results? you can't change it"). A task nobody triaged shows its own facts, unlabelled.
-                    Not over a session: that strip stays one line so the agent keeps the room. */}
-                {!sessionView && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
+                    Not over a session: that strip stays one line so the agent keeps the room. Nor over the agent's step on the canvas:
+                    the facts are the Task step's, and the height is the agent's (the owner, 2026-10-18: "see more of the agent canvas"). */}
+                {!sessionView && !(canvas && stage === "agent") && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
                   {facts.workflow && <ChannelIcon channel="workflow" sx={{ fontSize: 15, mr: 0.1 }} />}
                   {facts.pills.filter((p) => !SAID.has(p.key) || p.tone === "alert").map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
                     <Box key={p.key} component="span" data-tq-fact={p.key} sx={{ ...factPill, ...tone }}>
@@ -1404,7 +1419,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}
-              <Box sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
+              <Box ref={stepsBox} sx={{ px: liveSession ? 1 : 2, py: liveSession ? 0.65 : 1.5,
                 overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                 {/* THE SESSION IS THE PAGE. Your CLI, in this task's repo, with the task in
                     its lap - you type into it like any other terminal. Everything below is
@@ -1608,7 +1623,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {!liveSession && listRow?.State === "queued" && listRow?.Queued && <Box sx={{ mb: 1 }}>
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
-                <Box sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
+                <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
                   px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : stage === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
@@ -1779,8 +1794,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     (the owner, 2026-10-13: "it should just move to the close out section when you close out agent run") */}
                 {workspaceMode === "general" && (liveSession || stage === "agent") ? (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
-                     height of its own content squeezed between the cards above and below it */
-                  <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 420 },
+                     height of its own content squeezed between the cards above and below it. On the canvas that room is the
+                     VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh - 12px tall,
+                     so the agent takes all of it under the title and its own heading (the Task strip is scrolled above - agentUp):
+                     its input on screen, Close out one scroll below. A fixed 420px floor in a shorter view put the input and the last
+                     lines out of sight. 104px = the view's 12px margin + the title strip + this step's heading + 8px under the chat. */
+                  <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 104px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports} />

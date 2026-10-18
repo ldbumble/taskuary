@@ -13,7 +13,7 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    needs: [test, build-web, browser, docker]
+    needs: [test, build-web, browser, walk, docker]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every CI job to pass
@@ -117,6 +117,23 @@ jobs:
       - run: npm ci
         working-directory: website
       - run: npm run test:browser
+        working-directory: website
+
+  walk:
+    # The dead-end walk on its own: it presses every button on the list and forces each failure (2026-10-18), which takes
+    # longer than the rest of the browser suite together - inside the 10-minute browser job it was cancelled, not failed.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: "22" }
+      - run: pip install -e .[dev]
+      - run: npm ci
+        working-directory: website
+      - run: npm run test:walk
         working-directory: website
 
   docker:

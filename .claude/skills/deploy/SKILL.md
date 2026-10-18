@@ -121,6 +121,7 @@ cd website && npm run build:demo && cd ..     # writes site/demo, also committed
 python -m pytest -q tests/<the files your change touches>      # FROM THE REPO ROOT - targeted, seconds
 cd website && npm test && cd ..                                  # ~2 min, all of it
 cd website && npm run test:browser && cd ..                      # when the UI changed (~5 min); CI runs it
+cd website && npm run test:walk && cd ..                         # the dead-end walk, ~10+ min; its own CI job
 node --test taskuary/whatsapp/*.test.mjs                         # CI does NOT run these
 ```
 

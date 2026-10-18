@@ -38,21 +38,19 @@ export const useSetup = (tick) => {
 /* Gone once the four are done; the optional walk remains available afterwards.
    Assistant header is always there and covers more than this ever did. */
 export const SetupChip = ({ state, onOpen }) => {
-  // the first run's own next step when the server says it (firstrun.py's `todo`), the old checklist's count otherwise - the chip
-  // read "Set up · 2 steps" beside three questions (2026-10-15)
-  const two = state && state.first_left != null;
+  // the first run's own next step and steps left (firstrun.py's `todo` and `left`, the one setup state) - the chip read "Set up · 2
+  // steps" beside three questions (2026-10-15)
   if (!state) return null;
   // SET UP, ALWAYS ON THE TOP BAR once it is done: the way back into the setup canvas (the owner, 2026-10-15: "they should be able to
   // restart the initial walk through from the button on top")
-  if (two ? state.first_left === 0 : state.complete) return (
+  if (!state.left) return (
     <Tooltip title="Setup - your AI, email, connections and what Taskuary knows about your work">
       <Box onClick={onOpen} data-tq-setup-open="" sx={{ cursor: "pointer", ml: 1, px: 1, py: 0.35, borderRadius: 99, border: `1px solid ${BORDER}`,
         "&:hover": { bgcolor: "#eae4d8" } }}>
         <Typography variant="caption" sx={{ fontWeight: 600, color: DIM }}>Setup</Typography>
       </Box>
     </Tooltip>);
-  const left = two ? state.first_left : state.total - state.done;
-  const pct = two ? ((3 - state.first_left) / 3) * 100 : state.total ? (state.done / state.total) * 100 : 0;
+  const pct = ((3 - state.left) / 3) * 100;
   return (
     <Tooltip title={state.dismissed ? "Setting up — put away, click to reopen" : "Finish setting Taskuary up"}>
       <Box onClick={onOpen}
@@ -72,7 +70,7 @@ export const SetupChip = ({ state, onOpen }) => {
           <CircularProgress variant="determinate" value={pct} size={16} thickness={6} sx={{ color: ROLES.done.solid }} />
         </Box>
         <Typography variant="caption" sx={{ fontWeight: 600, color: state.dismissed ? DIM : "#55697a" }}>
-          {two ? (state.first_todo ? `Setup: ${state.first_todo}` : "Set up") : `${left} left`}
+          {state.todo ? `Setup: ${state.todo}` : "Set up"}
         </Typography>
       </Box>
     </Tooltip>

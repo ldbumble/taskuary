@@ -53,7 +53,7 @@ test("the rail and the top bar's chip say what is next from the first run's own 
   const view = read("AssistantView.jsx"), chip = read("SetupWizard.jsx");
   assert.match(view, /Setup: \{settingUp\}/);
   assert.match(view, /setSetupTodo\(data\?\.todo/);
-  assert.match(chip, /`Setup: \$\{state\.first_todo\}`/);
+  assert.match(chip, /`Setup: \$\{state\.todo\}`/);
   assert.doesNotMatch(view + chip, /two setup steps|Set up · \$\{left\} step/);
 });
 

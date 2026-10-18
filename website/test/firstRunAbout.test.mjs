@@ -50,7 +50,7 @@ test("the first time About your work is saved, setup is complete: confetti and o
   assert.match(done, /prefers-reduced-motion: reduce/);
   // the AI failing on the mail is not complete: the problem, and Change AI as the one big button
   assert.match(done, /if \(aiError\) return \([\s\S]*?size="large" onClick=\{onChangeAi\}[\s\S]*?>Change AI</);
-  assert.match(read("setupSteps.js"), /shown === "finish" \? "ready - Go to my day"/);
+  assert.match(read("setupSteps.js"), /shown === "finish" \? \{ sub: "ready - Go to my day" \}/);
 });
 
 test("an AI connected on the Connections page says so, and the one in use leads the shelf", () => {
@@ -70,9 +70,10 @@ test("More connections suggests in the catalogue's search, never as row buttons,
   assert.match(fr, /setBrowseSt\(\{ q: names\.join\(", "\), section: null, open: null \}\)/);
   assert.match(cv, /const terms = q\.split\(","\)/);
   assert.match(cv, /const \[q, setQ\] = useState\(asked \|\| ""\);/);
+  // what ticks it is the server's (firstrun.rail, tests/test_setup_state.py); the rail shows the row as it comes
   const { stepsOf } = await import("../src/setupSteps.js");
-  const other = (n) => stepsOf({ step: "done", about_done: true, more_connected: n }).find((r) => r.key === "other");
-  assert.equal(other(0).done, false); assert.equal(other(3).done, true); assert.equal(other(3).sub, "3 connected");
+  const other = stepsOf({ rail: [{ key: "other", done: true, open: true, optional: true, sub: "3 connected" }] })[0];
+  assert.equal(other.done, true); assert.equal(other.sub, "3 connected"); assert.equal(other.disabled, false);
 });
 
 // "pull the signature from the email and use that in emails ... have a setting so they can check it" (the owner, 2026-10-16)

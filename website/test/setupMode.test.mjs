@@ -6,13 +6,24 @@ import { readFileSync } from "node:fs";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
+// SERVER-SHAPED STATES: which rows are done and open is the server's (firstrun.rail - tests/test_setup_state.py pins it); this file
+// tests the page's part - the row on the canvas, Back/Next/Finish, where setup opens
+const row = (key, done, open = true) => ({ key, done, open, optional: key === "other", need: `${key} first`, sub: "" });
+const rail = (done, open, extra = {}) => ({ rail: ["ai", "mail", "about", "other", "finish"].map((k) => row(k, done.includes(k), open.includes(k))), ...extra });
+const AI = rail([], ["ai", "other"], { frontier: "ai" });
+const EMAIL = rail(["ai"], ["ai", "mail", "other"], { frontier: "mail" });
+const READING = rail(["ai", "mail"], ["ai", "mail", "about", "other"], { frontier: "about" });
+const READY = rail(["ai", "mail", "about"], ["ai", "mail", "about", "other", "finish"], { frontier: "other", ready: true });
+const FINISHED = rail(["ai", "mail", "about", "finish"], ["ai", "mail", "about", "other", "finish"], { frontier: "other", ready: true, dismissed: true });
+
 test("the steps say what is done and what is next", async () => {
   const { stepsOf } = await import("../src/setupSteps.js");
   const at = (st) => stepsOf(st).find((r) => r.current)?.key;
-  assert.equal(at({ step: "ai" }), "ai");
-  assert.equal(at({ step: "email", brain: { name: "Claude" } }), "mail");
-  assert.equal(at({ step: "reading", about_done: false }), "about");
-  assert.equal(at({ step: "done", about_done: true }), "finish");
+  assert.equal(at(AI), "ai");
+  assert.equal(at(EMAIL), "mail");
+  assert.equal(at(READING), "about");
+  assert.equal(at(READY), "finish");
+  assert.deepEqual(stepsOf({ step: "ai" }), [], "no rail from the server, no rows made up here");
 });
 
 test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, no Advisor line", () => {
@@ -57,10 +68,10 @@ test("set up Taskuary typed in the chat is setup mode too, never a card in the c
 
 test("setup reopens on the first step not done, and on Your AI only when every step is", async () => {
   const { openAt } = await import("../src/setupSteps.js");
-  assert.equal(openAt({ step: "done", about_done: false }, true), "about");
-  assert.equal(openAt({ step: "email", brain: { name: "Claude" } }, true), "mail");
-  assert.equal(openAt({ step: "done", about_done: true }, true), "ai");
-  assert.equal(openAt({ step: "done", about_done: true }, false), "other");
+  assert.equal(openAt(READING, true), "about");
+  assert.equal(openAt(EMAIL, true), "mail");
+  assert.equal(openAt(READY, true), "ai");
+  assert.equal(openAt(READY, false), "other");
   assert.match(read("FirstRun.jsx"), /setView\(openAt\(st, revisit \|\| st\.dismissed\)\)/);
 });
 
@@ -69,35 +80,32 @@ test("setup reopens on the first step not done, and on Your AI only when every s
 // email/ai/survey rest is optional" (the owner, 2026-10-15)
 test("the rail marks the step on the canvas, not the first one unfinished", async () => {
   const { stepsOf } = await import("../src/setupSteps.js");
-  const st = { step: "reading", about_done: false, brain: { name: "Google Vertex AI" } };
-  assert.equal(stepsOf(st, "mail").find((r) => r.current).key, "mail");
-  assert.equal(stepsOf(st).find((r) => r.current).key, "about");
+  assert.equal(stepsOf(READING, "mail").find((r) => r.current).key, "mail");
+  assert.equal(stepsOf(READING).find((r) => r.current).key, "about");
 });
 
 test("Finish is open once AI, email and About your work are done - the rest is optional - and says so until then", async () => {
   const { stepsOf, navMoves } = await import("../src/setupSteps.js");
-  const fin = (st) => stepsOf(st).find((r) => r.key === "finish").sub;
-  assert.match(fin({ step: "reading", about_done: false }), /after AI, email and About your work/);
-  assert.match(fin({ step: "reading", about_done: true }), /ready/);
-  assert.equal(navMoves({ step: "reading", about_done: true }, "other").find((m) => m.id === "finish").disabled, false);
-  assert.equal(navMoves({ step: "reading", about_done: false }, "other").find((m) => m.id === "finish").disabled, true);
+  // on Setup complete the rail points at its Go to my day
+  assert.equal(stepsOf(READY, "finish").find((r) => r.key === "finish").sub, "ready - Go to my day");
+  assert.equal(navMoves(READY, "other").find((m) => m.id === "finish").disabled, false);
+  assert.equal(navMoves(READING, "other").find((m) => m.id === "finish").disabled, true);
 });
 
 test("every step has Back and Next; Next waits for the step to be done; the last step is Finish setup alone", async () => {
   const { navMoves, frontierOf, nextOf, prevOf } = await import("../src/setupSteps.js");
   const ids = (st, v, r) => navMoves(st, v, r).map((m) => m.id + (m.disabled ? "-" : ""));
-  assert.deepEqual(ids({ step: "ai" }, "ai"), ["next-"]);
-  assert.deepEqual(ids({ step: "email" }, "ai"), ["next"]);
-  assert.deepEqual(ids({ step: "email" }, "mail"), ["back", "next-"]);
-  assert.deepEqual(ids({ step: "reading", about_done: false }, "mail"), ["back", "next"]);
-  assert.deepEqual(ids({ step: "reading", about_done: false }, "about"), ["back", "next-"]);
+  assert.deepEqual(ids(AI, "ai"), ["next-"]);
+  assert.equal(navMoves(AI, "ai")[0].why, "ai first", "Next says what it waits for, in the server's words");
+  assert.deepEqual(ids(EMAIL, "ai"), ["next"]);
+  assert.deepEqual(ids(EMAIL, "mail"), ["back", "next-"]);
+  assert.deepEqual(ids(READING, "mail"), ["back", "next"]);
+  assert.deepEqual(ids(READING, "about"), ["back", "next-"]);
   // no Walk me through my tasks in setup: it is the day's move once setup is finished (the owner, 2026-10-15)
-  assert.deepEqual(ids({ step: "reading", about_done: true }, "other"), ["back", "finish"]);
-  assert.deepEqual(ids({ step: "done", about_done: true }, "other"), ["back", "finish"]);
-  assert.deepEqual(ids({ step: "reading", about_done: false }, "other"), ["back", "finish-"]);
-  assert.deepEqual(ids({ step: "done", about_done: true, dismissed: true }, "mail", true), ["back", "next", "finish"]);
-  assert.equal(frontierOf({ step: "email" }), "mail"); assert.equal(frontierOf({ step: "reading", about_done: false }), "about");
-  assert.equal(frontierOf({ step: "done", about_done: true }), "other");
+  assert.deepEqual(ids(READY, "other"), ["back", "finish"]);
+  assert.deepEqual(ids(READING, "other"), ["back", "finish-"]);
+  assert.deepEqual(ids(FINISHED, "mail", true), ["back", "next", "finish"]);
+  assert.equal(frontierOf(EMAIL), "mail"); assert.equal(frontierOf(READING), "about"); assert.equal(frontierOf(null), "ai");
   assert.equal(nextOf("mail"), "about"); assert.equal(prevOf("about"), "mail"); assert.equal(prevOf("ai"), "ai");
 });
 
@@ -110,12 +118,11 @@ test("saving About your work tells the rail and the top bar's chip, not only an 
 test("a rail row past what is done waits and says for what; Finish ticks only when finished and the three are done", async () => {
   const { stepsOf, reachable } = await import("../src/setupSteps.js");
   const row = (st, k) => stepsOf(st).find((r) => r.key === k);
-  assert.equal(row({ step: "ai" }, "about").disabled, true); assert.match(row({ step: "ai" }, "about").sub, /waits - connect your email first/);
-  assert.equal(row({ step: "ai" }, "mail").disabled, true); assert.equal(row({ step: "ai" }, "other").disabled, false, "the optional ones never wait");
-  assert.equal(row({ step: "reading", about_done: false }, "about").disabled, false);
-  assert.equal(row({ step: "email", dismissed: true }, "finish").done, false, "put away is not finished");
-  assert.equal(row({ step: "done", about_done: true, dismissed: true }, "finish").done, true);
-  assert.equal(reachable({ step: "ai" }, "about"), false); assert.equal(reachable({ step: "email" }, "mail"), true);
+  // what a waiting row says, and when Finish ticks, are the server's (firstrun.rail); the page disables what is not open
+  assert.equal(row(AI, "about").disabled, true); assert.equal(row(AI, "mail").disabled, true);
+  assert.equal(row(AI, "other").disabled, false, "the optional ones never wait");
+  assert.equal(row(READING, "about").disabled, false);
+  assert.equal(reachable(AI, "about"), false); assert.equal(reachable(EMAIL, "mail"), true);
   const fr = read("FirstRun.jsx");
   assert.match(fr, /if \(!stRef\.current \|\| reachable\(stRef\.current, v\)\) go\(v\);/, "the canvas guards the jump too");
   assert.match(read("SetupSteps.jsx"), /disabled=\{!!r\.disabled\}/);

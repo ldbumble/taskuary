@@ -6049,23 +6049,20 @@ def cli_setup(body: CliSetupBody):
 @app.get('/api/setup')
 def setup_state():
     """What still stands between this install and a working funnel, read off real state - so a
-    step un-does itself if the connection behind it is removed."""
-    from . import setup as setup_mod, firstrun
-    # ...and where the first run stands (firstrun.py): the top bar's chip says what is next from it, not the old checklist
-    first = firstrun.state(store)
-    step = first['step']
-    left = {'ai': 2, 'email': 1}.get(step, 0) + (not first.get('about_done'))         # About your work unanswered is a step left too
-    todo = first['todo'] or ('' if first.get('about_done') else 'about your work')
-    return {**setup_mod.state(store), 'first_left': left, 'first_step': step, 'first_todo': todo}
+    step un-does itself if the connection behind it is removed. The ONE setup state (firstrun.state, what /api/setup/first-run
+    answers) with the walk's checklist on it: the top bar's chip reads its `left` and `todo`, the canvas the rest."""
+    from . import setup as setup_mod
+    return setup_mod.page(store)
 
 @app.post('/api/setup/dismiss')
 def setup_dismiss(body: SetupBody):
     """"I know, leave me alone." A setting, so it stays dismissed across restarts - and it is
     reversible, because a checklist you cannot get back is a worse trap than one you cannot hide."""
-    from . import setup as setup_mod
-    store.set_setting(setup_mod.DISMISSED, '1' if body.dismissed else '0', ACTOR)
+    from . import setup as setup_mod, firstrun
+    # the same flag Finish setup writes: put away on one road was still open on the other (2026-10-18)
+    firstrun.set_dismissed(store, body.dismissed, ACTOR)
     store.audit('setting', 0, 'setup_dismiss' if body.dismissed else 'setup_reopen', ACTOR)
-    return {'ok': True, **setup_mod.state(store)}
+    return {'ok': True, **setup_mod.page(store)}
 
 class SetupSeenBody(BaseModel): step: str
 

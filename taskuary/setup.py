@@ -14,8 +14,7 @@ agents are available afterwards; opening their settings is not a prerequisite fo
 """
 from .llm import AI_TYPES, brain_status
 from . import words
-
-DISMISSED = 'setup_dismissed'      # the owner's "I know, leave me alone" - a setting, so it sticks
+from .firstrun import DISMISSED     # the one "put away" flag (firstrun.dismissed); this module's own is folded into it
 
 # Channels that bring work IN. A report connection or a tool is not a funnel: without one of
 # these the Timeline has nothing to show and never will.
@@ -76,17 +75,25 @@ def _first_items(store) -> list:
         ORDER BY CreatedAt DESC, MessageId DESC LIMIT 5''', channels)
 
 
-def state(store) -> dict:
-    """The wizard's whole model: ordered steps, each with what it is for and whether it is done.
+def state(store, first: dict = None) -> dict:
+    """The checklist the walk reads: ordered steps, each with what it is for and whether it is done - read off the ONE setup
+    state (firstrun.state, the setup canvas's own), so a walk stop and the canvas's rail cannot disagree. `first` is that state
+    when the caller already has it.
+
+    Where the two used to disagree, the canvas's rule won (2026-10-18): the AI is done when it is PICKED and works, not when some
+    brain happens to answer (firstrun's "step 1 is a choice"); the email is done once the AI is (the rail's order); and the AI is
+    named the way the canvas names it ("Claude", not "claude (CLI)").
 
     `goto` carries a `label` as well as the tab and the position inside it, and the label is what the
     button SAYS. Naming the tab instead put "Connections" on two different rows going to two
     different places - the AI CLI agents page and the connector list - which a first-time owner
     cannot tell apart. It lives here rather than in either surface so the walk's stop and the
     checklist's row name the same destination with the same words."""
+    from . import firstrun
+    first = first or firstrun.state(store)
+    rail = {r['key']: r for r in first['rail']}
     who = (store.owner() or {}).get('owner') or ''
-    ai, inbound = _ai(store), _inbound(store)
-    inbox = _first_items(store)
+    ai, inbound, inbox = first['brain'], first['connected'], first['first_items']
     steps = [
         # EVERY detail says what it IS, not just what it holds. A bare noun in the done-green -
         # "Outlook mail, Microsoft Teams, Telegram" sitting directly above "You can connect a
@@ -107,23 +114,23 @@ def state(store) -> dict:
         {'key': 'ai', 'title': 'Connect one AI',
          'why': 'Use ChatGPT, an AI key, or an AI tool already on this computer. Test it on its card - '
                 'nothing else needs choosing to begin.',
-         'done': ai['ready'], 'detail': f"running on {ai['Name']}" if ai['ready'] else ai['why'],
+         'done': rail['ai']['done'], 'detail': f"running on {ai['name']}" if ai['ready'] else ai['why'],
          # WHERE IT SENDS YOU DEPENDS ON WHAT YOU HAVE. "Open AI CLI agents" is the right door when
          # there is no brain yet, or when the brain IS a CLI. It is the wrong one for a key provider:
          # Azure OpenAI is not a CLI tool and cannot be set up in a terminal, so pointing an install
          # that already runs on Azure at a CLI installer read as "this is how you do it" (the owner,
          # 2026-09-17: "you cant setup azure ai from here. It's not a cli tool").
          'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open your AI tools'}
-                  if not ai['Type'] or ai['Type'] == 'cli'
-                  else {'tab': 'Connections', 'hash': f"connector={ai.get('Type')}",
-                        'label': f"Open the {ai.get('Name') or 'provider'} card"}),
+                  if not ai['type'] or ai['type'] == 'cli'
+                  else {'tab': 'Connections', 'hash': f"connector={ai['type']}",
+                        'label': f"Open the {ai['name'] or 'provider'} card"}),
          # ...and with no brain at all, the OTHER road too: an owner with an OpenAI or Azure key and no
          # CLI saw only the CLI door and had nowhere to paste it. Connections opens on its AI group.
-         **({'alt': {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'}} if not ai['Type'] else {})},
+         **({'alt': {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'}} if not ai['type'] else {})},
         {'key': 'inbound', 'title': 'Connect your email',
          'why': 'Start with your mailbox - or a work chat if that is where your work arrives. Sign in, '
                 'test it on its card, and the rest can wait.',
-         'done': bool(inbound), 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
+         'done': rail['mail']['done'], 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
          # the Email section itself, by its one link (words.json) - '' opened Connections at the top, AI first
          'goto': {'tab': 'Connections', 'hash': words.href('mail').lstrip('#'), 'label': 'Connect your email'}},
         {'key': 'sync', 'title': 'Look at your first items',
@@ -132,10 +139,16 @@ def state(store) -> dict:
          # no count: this samples the feed, so any number it printed would be the sample size
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'your first items are ready to review' if inbox else '',
-         'action': 'sync', 'enabled': bool(who and who != 'the owner' and ai['ready'] and inbound),
+         'action': 'sync', 'enabled': bool(who and who != 'the owner' and rail['ai']['done'] and inbound),
          'goto': {'tab': 'Assistant', 'hash': '', 'label': 'Open the Assistant'}},
     ]
     done = sum(1 for s in steps if s['done'])
     return {'steps': steps, 'done': done, 'total': len(steps), 'complete': done == len(steps),
-            'first_items': inbox, 'pending': bool(store.pending_triage(limit=1)),
-            'dismissed': str(store.get_setting(DISMISSED) or '') == '1'}
+            'first_items': inbox, 'pending': bool(store.pending_triage(limit=1)), 'dismissed': first['dismissed']}
+
+
+def page(store) -> dict:
+    """What /api/setup answers: the one setup state (the same /api/setup/first-run answers) with the walk's checklist on it."""
+    from . import firstrun
+    first = firstrun.state(store)
+    return {**first, **state(store, first)}

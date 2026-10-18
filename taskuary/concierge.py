@@ -544,6 +544,17 @@ def gate(text: str) -> tuple[str, bool]:
     return t.strip(), False
 
 
+def _stopped_work(store, item: dict) -> str:
+    """What an agent left on the task when it stopped or was saved - '' when none ever ran. "Nothing has been done with it yet" was
+    said over an agent's saved work (the re-audit, 2026-10-18)."""
+    runs = store.list_runs(item['tid']) if item.get('tid') else []
+    r = next((r for r in runs if r.get('Status') not in ('running', 'queued', 'starting')), None)
+    if not r: return ''
+    if r.get('Status') in ('failed', 'error'): return 'an agent started on it and failed'
+    saved = store.resumable_session(item['tid'])
+    return 'an agent worked on it and stopped' + (' - its conversation is saved, so it can pick up where it left off' if saved else '')
+
+
 def parse_call(text: str) -> tuple[str, dict | None]:
     """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
     operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
@@ -1014,7 +1025,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
         done = (f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
                 'I read it as needing a reply' if item['kind'] == 'review' else 'something is ready to run, waiting for your yes' if item['kind'] == 'action' else
-                'it needs code work, and nobody has started it yet' if item.get('coding') else 'nothing has been done with it yet' if item['kind'] in ('asked', 'todo')
+                _stopped_work(store, item) or ('it needs code work, and nobody has started it yet' if item.get('coding') else 'nothing has been done with it yet')
+                if item['kind'] in ('asked', 'todo')
                 else f'I read it as just for your information{_verdict_why(item)}')
         need = 'nothing has to happen - ' + _from_you(store, item, 3) if item['kind'] == 'fyi' else _from_you(store, item)
         return f"{frm}. Since then: {done}. From you: {need}."

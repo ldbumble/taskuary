@@ -859,7 +859,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     setBusy("");
   };
   const asks = card.kind !== "fyi";
-  const suggestedKind = card.kind === "todo" && card.coding ? "coding" : "general";
+  // ...read off what is connected, like the row (concierge.chips_for): the card offered Send to coding agent with no coding tool, so the
+  // card and the row disagreed and the press failed (the re-audit, 2026-10-18)
+  const canCode = useCapabilities().coding;
+  const suggestedKind = card.kind === "todo" && card.coding && canCode ? "coding" : "general";
   const startAgent = async (agentKind) => {
     setBusy("agent"); setErr("");
     try {

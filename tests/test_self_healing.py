@@ -221,3 +221,12 @@ class CauseAndAreaTests(unittest.TestCase):
                         area={'area': 'connection', 'name': 'Payworth'})
         self.assertEqual(advisor.offered(s, it)[0]['href'], words.href('connections'))
         self.assertEqual(json.loads(s.operations_for(it['tid'])[-1]['OutcomeJson'])['cause'], 'taskuary')
+
+
+class StoppedWorkIsSaidTests(unittest.TestCase):
+    def test_a_stopped_agent_is_never_nothing_done(self):
+        from taskuary import concierge
+        s = MemoryStore(); t = s.create_task({'Title': 'Move the export', 'Status': 'open'}, 'owner')
+        self.assertEqual(concierge._stopped_work(s, {'tid': t}), '')
+        rid = s.start_run(t, 'coding', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))
+        self.assertIn('an agent worked on it and stopped', concierge._stopped_work(s, {'tid': t}))

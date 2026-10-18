@@ -554,10 +554,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         carry={carried} onCarried={() => setCarry(null)} />;
 
   if (browse) {
-    const section = browseState.section ?? null;
-    const back = () => { setDraft(null); load(); onBrowseState?.({ ...browseState, open: null }); };
-    const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
     const openSource = sources.find((x) => x.SourceId === browseState.open);
+    // a link names a number, not a shelf (#report=<id>, a failed run's Fix it): a workflow opens under Workflows, where it lives
+    const section = openSource && isWorkflowSource(openSource) ? "workflows" : browseState.section ?? null;
+    const back = () => { setDraft(null); load(); onBrowseState?.({ ...browseState, section, open: null }); };
+    const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
     // a link to a report that has since been removed: the list, and why - never an empty editor saving to a missing id
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
@@ -592,7 +593,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       detail: browseState.open != null && !missing ? wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid })) : null,
       onBack: back,
       openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
-        : openSource ? `the report "${titleOf(openSource)}" (Reports), its editor open` : "",
+        : openSource ? (section === "workflows" ? `the workflow "${titleOf(openSource)}" (Workflows), its steps open`
+          : `the report "${titleOf(openSource)}" (Reports), its editor open`) : "",
       empty: section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });

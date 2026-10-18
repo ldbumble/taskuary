@@ -528,6 +528,22 @@ def facts(store, item: dict, whole: bool = False) -> str:
     return '\n'.join(lines)
 
 
+# ONE GATE ON WHAT THE MODEL SAYS (general fix 2, 2026-10-18): a reply cut off mid-CALL reached the owner as
+# `CALL: {"kind": "approve", "par` - _CALL reads only a whole one at the end, so half of one was just text. Only the SHAPE is
+# judged here: a word list once blanked replies for what they said and blanked right answers with them (the owner, 2026-10-11:
+# staying in the part is the model's, IN_PART). Jargon is noted for the record, never rewritten.
+_HALF = re.compile(r'\s*\bCALL:.*$', re.I | re.S)
+_BARE = re.compile(r'^\s*(?:```\w*\s*)?\{\s*"(?:kind|verb|params)"', re.I)
+LOST = "I lost my train of thought there - say it again?"
+def gate(text: str) -> tuple[str, bool]:
+    """(what may be shown, whether it was broken). A CALL left in the words, or an answer that is only a fragment of one, is broken."""
+    t = str(text or '')
+    if _BARE.match(t): return '', True
+    if re.search(r'\bCALL:', t, re.I): return _HALF.sub('', t).strip(), True
+    if (j := places.jargon_in(t)): logger.info(f'concierge: a reply said {j[:5]} to the owner')
+    return t.strip(), False
+
+
 def parse_call(text: str) -> tuple[str, dict | None]:
     """The model's CALL line, off the end of its answer: {'kind', 'params'} or None. Validated against
     operations.KINDS here, so an invented kind never reaches a handler - it is simply not a call."""
@@ -865,7 +881,8 @@ def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, 
         logger.warning(f'concierge: the answer-in-words pass failed - {e}'); raw = ''
     raw, _ = parse_call(raw)
     raw, _ = parse_decision(raw)
-    return parse_options(raw)
+    t, opts = parse_options(raw); t, broken = gate(t)               # the one gate: a fragment is never the answer
+    return (t or (LOST if broken else ''), opts)
 
 
 # THE CONTEXT ORDER for typed words over an item (the owner, 2026-10-01): asked "what's left to do?" over an idea, the model
@@ -3279,7 +3296,7 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
             # not _ask (this instruction is not an introduction); its one check still holds here - another task named is dropped
             said = str(b(_system(store, b), f"THE ITEM ON THE TABLE - speak only about this one:\n{facts(store, item)}\n\n{instruction}",
                          max_tokens=MAX_TOKENS) or '').strip()
-            said = parse_decision(said)[0]
+            said = gate(parse_decision(said)[0])[0]
             if off_subject(said, item): said = ''
             m = _PICK.search(said or '')
             say = _PICK.sub('', said or '').strip()
@@ -3473,8 +3490,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
-        raw = str(llm(system,
-                      f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
+        asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
                       + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')
@@ -3489,8 +3505,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - the card is their confirmation.'),
-                      max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
+                         'If they ask for something to be done, CALL it now - the card is their confirmation.'))
+        raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
         # nobody. The model then answers with what it read - one round only, so a question can never
@@ -3516,6 +3532,18 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if out_of_reads: call = None
         raw, decision = parse_decision(raw)
         reply, options = parse_options(raw)
+        # A BROKEN ANSWER IS ASKED AGAIN, ONCE (gate): what it acted on stands; only the words are asked for again, then a plain line
+        reply, broken = gate(reply)
+        if broken and not call and not decision:
+            again = str(llm(system, asked + "\n\nYOUR LAST ANSWER WAS CUT OFF in the middle. Answer again, briefly - and a CALL, if one "
+                                     "is needed, as one whole line at the end.", max_tokens=MAX_TOKENS) or '').strip()
+            again, call = parse_call(again)
+            if call and toolcatalog.is_read(call['kind']): call = None              # no second round of look-ups on a retry
+            again, decision = parse_decision(again)
+            reply, options = parse_options(again)
+            reply, broken = gate(reply)
+        # still broken: what stands before a cut-off CALL is a preamble ("Let me"), never the answer
+        if broken and not call and not decision: reply, options = LOST, []
         # ...and the words it wrote around that last call are a PREAMBLE, never the answer: "I'm handing it to the analyst -
         # you'll confirm it on the card" was shown with no card behind it (2026-10-06)
         if out_of_reads and not decision: reply, options = "I could not finish looking that up - ask me again, a little more narrowly.", []
@@ -3704,7 +3732,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         except Exception as e:
             logger.warning(f'concierge: the second answer failed - {e}'); raw = ''
         raw, _ = parse_call(raw); raw, _ = parse_decision(raw)
-        reply, options = parse_options(raw)
+        reply, options = parse_options(raw); reply = gate(reply)[0]
         if unreal_refs(store, reply, text): reply = ''
         options = [o for o in options if not unreal_refs(store, o, text)]
     # a brain that answered with nothing is not "no AI": say what happened, never the missing-connector line

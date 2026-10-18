@@ -748,6 +748,10 @@ class ApiTests(unittest.TestCase):
         cid = next(x['ConnectorId'] for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'teams')
         r = c.post(f'/api/connectors/{cid}/test').json()
         self.assertFalse(r['ok']); self.assertIn('tenant_id', r['detail'])
+        # ...and the failure is left on the connector, with the place that fixes it, for the Advisor and the chat (2026-10-18)
+        from taskuary import failures
+        f = failures.standing(server.store, 'connector', cid)
+        self.assertIn('tenant_id', f['why']); self.assertTrue(f['fix']['href'])
         self.assertEqual(c.post('/api/connectors/999999/test').status_code, 404)
 
     def test_github_discovery_on_pat_save(self):

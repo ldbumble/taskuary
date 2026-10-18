@@ -437,6 +437,10 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item.get('tid'):
         now = task_now(store, item['tid'])
         if now: lines.append(now)
+    # ...and a report or connection whose run or test failed, with the place that fixes it - it has no task to say so (2026-10-18)
+    from . import failures
+    if (on := failures.target_of(item)) and (f := failures.standing(store, *on)):
+        lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}" + (f". The fix: {f['fix']['label']}" if f.get('fix') else ''))
     task_chain = []
     task_messages = []
     if item.get('tid'):
@@ -1730,7 +1734,7 @@ def read_op(store, kind: str, params: dict) -> str:
         from . import appfacts
         rows = appfacts.reports(store)
         if not rows: return 'No reports or workflows are set up.'
-        def last(r): return 'never ran' if r['last_ok'] is None else (f"FAILED - {r['last_said']}" if r['last_ok'] is False else f"ok {r['last_at'][:16]}")
+        def last(r): return 'never ran' if r['last_ok'] is None else (f"FAILED - {r['last_said']}" + (f" (the fix: {r['fix']})" if r.get('fix') else '') if r['last_ok'] is False else f"ok {r['last_at'][:16]}")
         return NEWLINE.join(f"{'WORKFLOW' if r['workflow'] else 'REPORT'} {r['title']} (source_id {r['source_id']}{'' if r['active'] else ', off'}) - "
                             f"{r['schedule'] or 'no clock'}; reaches you: {r['reach']}; goes: {r['goes']}; last: {last(r)}" for r in rows)
     if kind == 'settings.list':
@@ -1753,7 +1757,7 @@ def read_op(store, kind: str, params: dict) -> str:
         rows = appfacts.connections(store); live = [c for c in rows if c['active']]
         if not live: return f'Nothing is connected yet ({len(rows)} catalogue cards are off).'
         return NEWLINE.join(f"{c['name']} ({c['type']}{', no key yet' if not c['has_secret'] else ''})"
-                            f"{' - last sync ' + c['last_sync'][:16] if c['last_sync'] else ''}{' - ERROR ' + c['last_error'] if c['last_error'] else ''}"
+                            f"{' - last sync ' + c['last_sync'][:16] if c['last_sync'] else ''}{' - ERROR ' + c['last_error'] if c['last_error'] else ''}{' (the fix: ' + c['fix'] + ')' if c.get('fix') else ''}"
                             for c in live) + f"{NEWLINE}{len(rows) - len(live)} catalogue cards are off - connection.read <name> for any of them."
     if kind == 'connection.read':
         from . import appfacts
@@ -1761,7 +1765,7 @@ def read_op(store, kind: str, params: dict) -> str:
         if not c: return 'No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active'])
         return (f"{c['name']} - type {c['type']}, connector_id {c['connector_id']}, {'on' if c['active'] else 'off'}, "
                 f"{'has a key' if c['has_secret'] else 'no key yet'}, last sync {c['last_sync'][:16] or 'never'}"
-                + (f"{NEWLINE}last error: {c['last_error']}" if c['last_error'] else ''))
+                + (f"{NEWLINE}last error: {c['last_error']}" + (f" (the fix: {c['fix']})" if c.get('fix') else '') if c['last_error'] else ''))
     if kind == 'agents.list':
         from . import appfacts, agents as hub_agents
         # ...and the WORKERS a hand-off can name ([researcher]) - they rode every turn as their own block until the

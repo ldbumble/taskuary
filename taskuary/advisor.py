@@ -325,6 +325,9 @@ def failure(store, item: dict) -> dict | None:
         why = re.sub(r'^Not sent:\s*', '', str(r.get('Reason') or '')).rstrip('.')
         return {'what': 'the reply was not sent' if r['DeliveryState'] == 'failed' else 'the reply may not have gone',
                 'why': why, 'fix': ok(env.get('fix')) if isinstance(env, dict) else None, 'unknown': r['DeliveryState'] == 'unknown', 'kind': 'send'}
+    # ...and a report's card or a connection's row has no task: its failure lives on the report or the connector (failures.standing)
+    from . import failures
+    if (on := failures.target_of(item)) and (f := failures.standing(store, *on)): return f
     try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
     except Exception: ops = []
     last = ops[-1] if ops else {}

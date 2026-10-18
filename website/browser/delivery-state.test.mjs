@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "../browser.mjs";
+import { label } from "../src/buttons.js";
 
 const website = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -77,10 +78,13 @@ test("uncertain delivery checks the original attempt and live claims freeze ever
     assert.match(view.text, /original-report.txt/); assert.doesNotMatch(view.text, /new-copy@example.com/);
     assert.equal(view.fileDisabled, true);
     assert.ok(view.buttons.find(button => button.label === "Check delivery" && !button.disabled));
-    assert.ok(view.buttons.filter(button => button.label !== "Check delivery").every(button => button.disabled));
+    // ...and its two ways past it, as the chat offers them (concierge.recover): Send anyway and Mark done - nothing else moves
+    const past = [label("approve", "unknown"), label("close")];
+    for (const word of past) assert.ok(view.buttons.find(button => button.label === word && !button.disabled), `${word} is offered`);
+    assert.ok(view.buttons.filter(button => !["Check delivery", ...past].includes(button.label)).every(button => button.disabled));
     await page.$$eval("#delivery-fixture button", buttons => buttons.find(button => button.textContent.trim() === "Check delivery").click());
     await page.waitForFunction(() => window.deliveryCalls.length === 1);
-    assert.deepEqual(await page.evaluate(() => window.deliveryCalls), [{ url: "/api/reviews/999/decide", body: { verb: "approve", final_text: null, note: null, cc: null } }]);
+    assert.deepEqual(await page.evaluate(() => window.deliveryCalls), [{ url: "/api/reviews/999/decide", body: { verb: "approve", final_text: null, note: null, cc: null, anyway: false } }]);
     await page.waitForFunction(() => document.querySelector("#delivery-fixture")?.innerText.includes("Delivery has not been confirmed."));
     assert.doesNotMatch((await snapshot()).text, /Approved, but it did not send/);
 

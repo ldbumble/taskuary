@@ -507,3 +507,18 @@ def test_recovery_of_unknown_reply_does_not_execute_pending_closeout(s):
     sender.assert_not_called()
     execute.assert_not_called()
     assert result['delivery'] == 'unknown'
+
+
+@pytest.mark.parametrize('outgoing', [False, True])
+def test_send_anyway_goes_past_a_delivery_nobody_can_confirm(s, outgoing):
+    """A provider with no receipt never answers "absent": every Send answered "nothing was sent again", a loop with no way out
+    (the error sweep, 2026-10-18). The owner's own Send anyway sends once more; a plain Send still never does."""
+    tid, mid, rid = make_review(s, outgoing)
+    with mock.patch(provider(outgoing), side_effect=requests.exceptions.ReadTimeout('receipt lost')), mock.patch(reconciliation(outgoing), return_value=None):
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['delivery'] == 'unknown'
+    with mock.patch(provider(outgoing), return_value=SENT) as sender, mock.patch(reconciliation(outgoing), return_value=None):
+        assert verdicts.decide(s, s.get_review(rid), 'approve')['delivery'] == 'unknown'
+        sender.assert_not_called()
+        out = verdicts.decide(s, s.get_review(rid), 'approve', anyway=True)
+    sender.assert_called_once()
+    assert out['delivery'] == 'sent'

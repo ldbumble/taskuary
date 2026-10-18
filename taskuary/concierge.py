@@ -3278,6 +3278,13 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
         from . import terminal as term
         chips += [{'verb': 'repo', 'label': f'Use {r}', 'op': op['id'], 'repo': r, 'params': op.get('params') or {},
                    'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())} for r in term.known_repos(store)[:6]]
+    # A SEND NOBODY CAN CONFIRM (2026-10-18): Try again re-asked the provider and said "nothing was sent again", forever. The way on is
+    # the owner's: Send anyway (the same proposal, told to go past the check) or Mark done when they know it went
+    if st == 'error' and o.get('delivery') == 'unknown' and op.get('kind') == 'review.approve':
+        chips.append({'verb': 'revise', 'op': op['id'], 'params': {**(op.get('params') or {}), 'anyway': True},
+                      'label': buttons.label('approve', 'unknown'), 'hint': buttons.hint('approve', 'unknown')})
+        rv = store.get_review(int(o['rid'])) if o.get('rid') else None
+        if rv and rv.get('TaskId'): chips.append({'verb': 'close', 'tid': rv['TaskId'], 'label': buttons.label('close')})
     # nothing here fixes it and pressing again will not: the bug report, with what went wrong filled in (failures.chips)
     if st == 'error' and not chips: chips.append({'verb': 'bug', 'label': buttons.label('report_bug'), 'text': str(op.get('error') or '')})
     gone = {v for v, row in PROPOSALS.items() if row[0] == op.get('kind')}

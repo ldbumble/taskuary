@@ -1752,6 +1752,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
                           settles: !!c.settles });
       return;
     }
+    // ...a failed proposal told something more (Send anyway: past a delivery nobody can confirm) - the same proposal, revised, run again
+    if (c.verb === "revise" && c.op) {
+      setBusy(true); setErr("");
+      let op = null;
+      try { op = (await api.patch(`/api/operations/${c.op}`, { params: c.params || {} })).data; }
+      catch (e) { setErr(errText(e)); }
+      finally { setBusy(false); }
+      if (op) await runProposal({ ...op, label: c.label, key: item?.key, tid: item?.tid, ref: item?.ref, settles: !!c.settles });
+      return;
+    }
     // ...a hand-off that stopped for a repository: that repository, then the same confirmation again
     if (c.verb === "repo" && c.op) {
       setBusy(true); setErr("");

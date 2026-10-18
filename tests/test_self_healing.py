@@ -186,3 +186,38 @@ class OneGateTests(unittest.TestCase):
         self.assertIn('CUT OFF', said[1])
         txt = json.dumps(out)
         self.assertNotIn('CALL:', txt); self.assertIn(concierge.LOST, txt)
+
+
+class SendAnywayTests(unittest.TestCase):
+    def test_a_send_nobody_can_confirm_offers_send_anyway_and_mark_done_never_try_again(self):
+        from taskuary import concierge
+        s = MemoryStore(); it = draft(s, 'email')
+        op = {'id': 'x', 'version': 1, 'status': 'error', 'kind': 'review.approve', 'params': {}, 'error': 'delivery unknown',
+              'outcome': {'delivery': 'unknown', 'unsent': True, 'rid': it['rid']}}
+        with mock.patch.object(concierge, 'restore_current', return_value=None), mock.patch.object(concierge, 'chips_for', return_value=[]):
+            chips = concierge.recover(s, op, llm=False)['chips']
+        labels = [c['label'] for c in chips]
+        self.assertIn(buttons.label('approve', 'unknown'), labels); self.assertIn(buttons.label('close'), labels)
+        self.assertNotIn(buttons.label('try_again'), labels)
+        anyway = next(c for c in chips if c['verb'] == 'revise')
+        self.assertEqual((anyway['op'], anyway['params']), ('x', {'anyway': True}))
+        self.assertEqual(next(c for c in chips if c['verb'] == 'close')['tid'], it['tid'])
+
+
+class CauseAndAreaTests(unittest.TestCase):
+    """The record says whose failure it is (cause) and where it lives (area) - agreed with the workflow runner, 2026-10-18."""
+    def test_a_workflow_step_gets_its_fix_and_report_this_bug_never_a_task(self):
+        from taskuary import failures
+        s = MemoryStore(); it = draft(s, 'email')
+        failures.record(s, task_id=it['tid'], kind='report.run', error='the export page changed', what='step 2 stopped', cause='step',
+                        fix={'label': 'Open the run', 'href': f"#task={it['tid']}"})
+        verbs = [v['verb'] for v in advisor.offered(s, it)]
+        self.assertEqual(verbs[:2], ['fix', 'report_bug']); self.assertNotIn('new_task', verbs)
+
+    def test_an_app_failure_in_a_known_area_opens_that_place(self):
+        from taskuary import failures, words
+        s = MemoryStore(); it = draft(s, 'email')
+        failures.record(s, task_id=it['tid'], kind='report.run', error='the connection refused the request', what='the run stopped',
+                        area={'area': 'connection', 'name': 'Payworth'})
+        self.assertEqual(advisor.offered(s, it)[0]['href'], words.href('connections'))
+        self.assertEqual(json.loads(s.operations_for(it['tid'])[-1]['OutcomeJson'])['cause'], 'taskuary')

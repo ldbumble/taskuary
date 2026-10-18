@@ -48,18 +48,28 @@ def outcome(c: dict, **more) -> dict:
             if v is not None}
 
 
+# WHERE A FAILURE LIVES (agreed with the workflow runner, taskhub-ca, 2026-10-18): a known area's fix is its place in words.json
+AREA_PLACE = {'connection': 'connections', 'report': 'workflows', 'setting': 'settings', 'brain': 'ai'}
+def area_fix(area) -> dict | None:
+    pid = AREA_PLACE.get((area or {}).get('area')) if isinstance(area, dict) else None
+    return {'label': f"Open {words.name(pid)}", 'href': words.href(pid)} if pid and words.href(pid) else None
+
+
 def record(store, *, task_id: int, kind: str, error, what: str, fix: dict = None, source: str = 'app', retry: bool = None,
-           step: int = None, unknown: bool = False) -> str:
+           step: int = None, unknown: bool = False, cause: str = 'taskuary', area: dict = None) -> str:
     """Leave a failure on the task as the agreed op row: Kind a known kind, Status error, Error the scrubbed sentence, OutcomeJson
-    {what, fix, source, step, retry, delivery}. The workflow runner writes the same row for a step past its self-repair attempts."""
+    {what, fix, source, step, retry, delivery, cause, area}. `cause` is 'taskuary' (the app failed) or 'step' (a workflow's own step:
+    fixed in the run, never a new task); `area` {area, name} names where it lives, and a known area's place is its fix. The workflow
+    runner writes the same row for a step past its self-repair attempts."""
     from .operations import KINDS
     if kind not in KINDS: raise ValueError(f'not a kind of act: {kind}')
     c = classify(error, act=kind)
-    fix = fix or c['fix']; retry = (not fix and not unknown) if retry is None else retry
+    fix = fix or c['fix'] or area_fix(area); retry = (not fix and not unknown) if retry is None else retry
     oid = uuid.uuid4().hex[:12]
     store.add_operation({'OpId': oid, 'Kind': kind, 'TargetKind': 'task', 'TargetId': int(task_id), 'ParamsJson': '{}', 'Version': 1,
                          'Status': 'error', 'Error': c['sentence'],
-                         'OutcomeJson': json.dumps(outcome({'fix': fix, 'retry': retry, 'unknown': unknown}, what=what, source=source, step=step))})
+                         'OutcomeJson': json.dumps(outcome({'fix': fix, 'retry': retry, 'unknown': unknown}, what=what, source=source, step=step,
+                                                           cause=cause, area=area))})
     return oid
 
 

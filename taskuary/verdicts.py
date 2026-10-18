@@ -178,7 +178,7 @@ def _reconcile_snapshot(store, snapshot):
         return {'state': 'unknown', 'reason': f'the provider could not verify delivery ({str(e)[:160]})'}
 
 
-def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None):
+def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=None, send_fn=None, anyway=False):
     """Claim, send or reconcile, persist the outcome, then settle the task.
 
     Review status stays pending until delivery is confirmed. The durable claim and
@@ -206,7 +206,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
 
     def unknown(why):
         nonlocal finished
-        error = f'delivery unknown - {why}; nothing was sent again. Check with the provider before retrying.'
+        error = f"delivery unknown - {str(why).rstrip('.')}; nothing was sent again. Check with the provider before retrying."
         finished = store.finish_review_delivery(rid, token, 'unknown', reason=error)
         if rv.get('TaskId'): store.add_comment(rv['TaskId'], actor, 'human', f'DELIVERY UNKNOWN - {error}')
         store.audit('review', rid, 'delivery_unknown', actor, detail={'error': why[:200]})
@@ -255,7 +255,10 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         if claim['previous'] in ('unknown', 'sending'):
             checked = _reconcile_snapshot(store, attempted)
             if checked['state'] == 'sent': return confirmed(checked['sent'], True)
-            if checked['state'] != 'absent': return unknown(checked.get('reason') or 'the earlier delivery cannot be verified')
+            # SEND ANYWAY (2026-10-18): a provider that keeps no receipt (plain SMTP) never answers "absent", and every press of Send
+            # or Try again answered "nothing was sent again" - a loop with no way out. Only the owner's own Send anyway goes past it.
+            if checked['state'] != 'absent' and not anyway: return unknown(checked.get('reason') or 'the earlier delivery cannot be verified')
+            if checked['state'] != 'absent': store.audit('review', rid, 'send_anyway', actor, detail={'checked': checked.get('state')})
             # Only an explicit provider-confirmed absence permits another attempt.
             moved, _latest = context_moved(store, rv)
             if moved:
@@ -371,7 +374,7 @@ def _post_with_closeout(store, closeout: dict, reply: dict, text: str, actor: st
 
 
 def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = None,
-           actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None) -> dict:
+           actor: str = 'owner', learn_async=None, cc: list = None, reply_text: str = None, anyway: bool = False) -> dict:
     """Land one verdict on a pending review. learn_async(fn, *args) defers the learning
     call (the API hands FastAPI's background task runner in); None runs it inline.
 
@@ -498,7 +501,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
     deliver = _envelope(rv)
     if final and (rv.get('MessageId') or deliver):
-        result = _deliver_review(store, rv, final, verb, actor, note, cc)
+        result = _deliver_review(store, rv, final, verb, actor, note, cc, anyway=anyway)
         if not result.get('ok') or result.get('send_error'): return result
         sent, send_err = result.get('sent'), None
         # A confirmed edit still teaches the owner's voice below.

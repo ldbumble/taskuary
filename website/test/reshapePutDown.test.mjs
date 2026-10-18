@@ -12,7 +12,7 @@ const part = (src, from, to) => src.slice(src.indexOf(from), src.indexOf(to, src
 test("Fold them together puts the merged-away task down before the request, and back with the reason if it fails", () => {
   const fold = part(read("Reshape.jsx"), "const FoldIntoAnother", "if (done) return");
   const go = fold.slice(fold.indexOf("const go = async"));
-  assert.ok(go.indexOf("onLeave?.(src)") > -1 && go.indexOf("onLeave?.(src)") < go.indexOf("/merge`"), "put down at the press");
+  assert.ok(go.indexOf("onLeave?.(src)") > -1 && go.indexOf("onLeave?.(src)") < go.indexOf('runOperation(api, "task.merge"'), "put down at the press");
   assert.match(go, /catch \(e\) \{[^}]*onStay\?\.\(src, msg\)/, "a fold that fails puts it back");
 });
 

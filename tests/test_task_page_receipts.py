@@ -179,6 +179,8 @@ def test_a_press_on_the_tables_task_says_so_in_the_chat_with_its_undo(s, c, kind
     emit.assert_any_call(server.live_bus.CHAT)                  # the chat reads it now, not on its next tick
     line, op = undo_of(s, dock)
     assert undo in line and op['status'] == 'proposed' and op['params']['_undo'] is True
+    # ...a notice beside the task view, never a card that takes the table from it - its Take it back rides the bar
+    assert [r[1] for r in cards(s, dock) if isinstance(r, tuple) and r[1].get('undo')][-1]['background_event'] is True
     # Take it back runs once, and its own receipt offers no undo of itself
     back = take_back(c, op)
     assert back['status'] == 'done' and undo_of(s, dock)[1]['id'] == op['id']
@@ -189,7 +191,8 @@ def test_not_a_task_on_the_table_is_a_line_with_nothing_to_take_back(s, c):
     dock = on_table(s, tid)
     out = run(c, 'task.not_a_task', tid)
     assert out['status'] == 'done' and s.get_task(tid) is None
-    assert any(isinstance(r, str) and r.startswith('Done - ') for r in cards(s, dock))
+    # a notice beside the view, as every press on it is: a bare line let go of the task view being pressed on
+    assert any(isinstance(r, tuple) and r[0].startswith('Done - ') and r[1]['background_event'] for r in cards(s, dock))
     assert undo_of(s, dock) == (None, None)
 
 

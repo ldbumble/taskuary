@@ -55,3 +55,13 @@ export function mergeDurableTurns(local = [], durable = []) {
   }
   return { messages, added };
 }
+
+// THE NEWEST TAKE IT BACK A READ BROUGHT (Stream B, 2026-10-18): a press on the table's task view records its receipt and its undo on
+// the server, as a notice that never takes the table from the view - so its Take it back rides the bar by the prompt (UndoVerb). Only
+// from a turn this read ADDED to a chat already on screen: an undo read back from history on a first load is not this press's. A chat's
+// own undo stays on its card, which is live under it.
+export function freshUndo(local = [], added = []) {
+  if (!(local || []).length) return null;
+  const t = [...(added || [])].reverse().find((x) => x?.card?.kind === "proposal" && x.card.undo && x.card.background_event && x.card.op);
+  return t ? { verb: "undo", op: t.card.op, title: t.card.title || "" } : null;
+}

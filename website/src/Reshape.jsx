@@ -7,11 +7,12 @@ import { Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, TextField,
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import MergeIcon from "@mui/icons-material/MergeType";
 import api from "./api";
+import { opError, runOperation } from "./taskOps.js";
 import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
   ? "This needs the new server — restart Taskuary and try again."
-  : e?.response?.data?.detail || fallback);
+  : opError(e, fallback));
 
 const Head = ({ icon, title, sub }) => (
   <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", mb: 1 }}>
@@ -66,7 +67,8 @@ const SplitInTwo = ({ taskId, taskRef, onDone }) => {
   const go = async () => {
     setBusy(true); setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${taskId}/split`, { first, second, move_message_ids: move });
+      // the task tool's own road (Stream B, 2026-10-18): recorded, and said in the chat when the task is on the Assistant's table
+      const data = await runOperation(api, "task.split", taskId, { text: second.title || first.title || "split", first, second, move_message_ids: move });
       setDone(data.ref); onDone?.({ split: data.taskId, ref: data.ref });
     } catch (e) { setErr(msgOf(e, "Could not break it in two")); }
     setBusy(false);
@@ -146,7 +148,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
     // runs behind it, and one that fails - a session still running on it - brings it back with the reason
     onLeave?.(src);
     try {
-      const { data } = await api.post(`/api/tasks/${src}/merge`, { into: dst });
+      const data = await runOperation(api, "task.merge", src, { into: String(dst) });
       setDone(data); onDone?.({ merged: dst, dropped: src, ref: data.ref });
     } catch (e) { const msg = msgOf(e, "Could not fold them together"); setErr(msg); onStay?.(src, msg); }
     setBusy(false);

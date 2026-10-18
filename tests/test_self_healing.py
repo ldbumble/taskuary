@@ -160,3 +160,29 @@ class OneFailureShapeTests(unittest.TestCase):
         s = MemoryStore(); t = s.create_task({'Title': 'Order badges', 'Status': 'done'}, 'owner')
         with self.assertRaises(ValueError) as e: remind.set_reminder(s, t, 'tomorrow')
         self.assertEqual(outbound.fix_of(e.exception)['href'], f'#task={t}')
+
+
+class OneGateTests(unittest.TestCase):
+    """concierge.gate: a reply cut off mid-CALL reached the owner as `CALL: {"kind": "approve", "par` (the error sweep, 2026-10-18)."""
+    def test_half_a_call_is_never_shown(self):
+        from taskuary import concierge
+        self.assertEqual(concierge.gate('Sending it now.\nCALL: {"kind": "approve", "par'), ('Sending it now.', True))
+        self.assertEqual(concierge.gate('{"kind": "approve", "params": {'), ('', True))
+        self.assertEqual(concierge.gate('Erin asked for the invoice by Friday.'), ('Erin asked for the invoice by Friday.', False))
+
+    def test_the_gate_judges_shape_never_words(self):
+        """A word list once blanked right answers for mentioning access (2026-10-11) - only the shape is judged."""
+        from taskuary import concierge
+        self.assertFalse(concierge.gate("I don't have access to that folder, so Gail sent it instead.")[1])
+
+    def test_a_cut_off_answer_is_asked_again_once_then_said_plainly(self):
+        from taskuary import concierge
+        s = MemoryStore(); said = []
+        def llm(system, user, max_tokens=400, **kw):
+            said.append(user); return 'Let me CALL: {"kind": "task.upd'
+        llm.takes_want = False
+        out = concierge.say(s, 'what is on my list?', llm=llm)
+        self.assertEqual(len(said), 2, 'asked once more, never looped')
+        self.assertIn('CUT OFF', said[1])
+        txt = json.dumps(out)
+        self.assertNotIn('CALL:', txt); self.assertIn(concierge.LOST, txt)

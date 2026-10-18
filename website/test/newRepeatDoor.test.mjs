@@ -12,7 +12,8 @@ test("Report and Workflow are tabs on New, each the Reports describe box", () =>
   const src = read("NewSheet.jsx");
   assert.match(src, /key: "report", +mark: "📊", label: "Report"/);
   assert.match(src, /key: "workflow", mark: "🔁", label: "Workflow"/);
-  assert.match(src, /<Composer kind=\{kind\} onDraft=\{\(config, meta\) => \{ handDraft\(kind, config, meta\); onClose\?\.\(\); window\.location\.hash = DRAFT_HASH\[kind\]; \}\} \/>/);
+  // ...and a workflow ask the composer judged to be a report opens on the report shelf (the owner, 2026-10-18)
+  assert.match(src, /<Composer kind=\{kind\} onDraft=\{\(config, meta\) => \{ const k = meta\?\.verdict === "report" \? "report" : kind; handDraft\(k, config, meta\); onClose\?\.\(\); window\.location\.hash = DRAFT_HASH\[k\]; \}\} \/>/);
   assert.doesNotMatch(src, /"repeat"/);
 });
 

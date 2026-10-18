@@ -61,6 +61,11 @@ export default function Composer({ onDraft, kind = "report" }) {
       </Box>
 
       {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{out.error}</Alert>}
+      {/* THE WORKFLOW DOOR, ASKED FOR A REPORT (the owner, 2026-10-18): said plainly, with the report drafted from the same reads */}
+      {out?.verdict === "report" && out.report && <Alert severity="info" data-tq-report-verdict="" sx={{ mt: 1.25, fontSize: 12.5 }}
+        action={<Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }}
+          onClick={() => { onDraft(out.report, { ...out, explain: "Drafted as a report from what you described." }); setAsk(""); setOut(null); }}>Make it a report</Button>}>
+        {out.explain}</Alert>}
 
       {/* it did not know something. Better here than as a silently wrong WHERE clause. */}
       {out?.questions?.length > 0 && (

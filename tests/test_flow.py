@@ -316,8 +316,11 @@ def test_the_composer_may_peek_at_a_schema_before_it_writes_a_step(db):
     s, asked = MemoryStore(), []
     s.upsert_agent('assistant', 'assistant', 'general', '{}')
     replies = iter([{'peek': {'type': 'sqlite', 'db': db, 'query': "SELECT name FROM sqlite_master WHERE type='table'"}},
-                    {'config': {'type': 'agent', 'title': 'Dupes', 'agent': 'assistant', 'flow': [read_dupes(db)]}}])
+                    {'config': {'type': 'agent', 'title': 'Dupes', 'agent': 'assistant', 'flow': [read_dupes(db), TELL]}}])
     def llm(system, user, **_): asked.append(json.loads(user)); return json.dumps(next(replies))
     out = compose.compose_workflow(s, 'find duplicate bills', llm)
-    assert out['config']['flow'] == [read_dupes(db)] and out['looked_at'][0]['type'] == 'sqlite'
+    assert out['config']['flow'] == [read_dupes(db), TELL] and out['looked_at'][0]['type'] == 'sqlite'
     assert '"name": "bill"' in asked[1]['what_you_looked_at'][0]['result']
+
+
+TELL = {'id': 's2', 'kind': 'task', 'label': 'Tell finance', 'title': 'Duplicate bills: {{s1.rows}}'}

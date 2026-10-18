@@ -166,7 +166,7 @@ def test_a_write_below_the_cards_authority_waits_for_the_owners_yes():
     rv = s._one('SELECT * FROM review WHERE ReviewId=?', (r['review_id'],))
     p = json.loads(rv['DraftText'])
     assert (rv['TaskId'], p['action'], p['type'], p['path']) == (tid, 'run_tool', 'smb_write', 'exports/ap.csv')
-    assert 'step File the export' in p['why'] and out['summary'] == 'Waiting for your yes on step 1.'
+    assert 'step File the export' in p['why'] and out['summary'].startswith('Waiting for your yes on step 1')
     assert s.get_task(tid)['Status'] == 'open'
 
 
@@ -286,7 +286,7 @@ def test_a_site_that_changed_its_layout_is_repaired_by_itself_and_the_run_comple
     assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed() and s.get_task(tid)['Status'] == 'done'
     [rp] = s.report_run_of_task(tid)['repairs']
     assert rp['error'].startswith('404') and rp['why'] == 'the page moved' and rp['was'] == page_flow()
-    assert any(c['Body'].startswith('Repaired step 1 (Read the price page) itself') for c in s.list_comments(tid))
+    assert any(c['Body'].startswith('Fixed itself: 404') and c['Actor'] == 'taskuary' for c in s.list_comments(tid))
     assert s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)) == []
     # Take it back: the steps before the repair come back, once, and only while nothing else changed them
     with mock.patch.object(server, 'store', s):
@@ -316,10 +316,11 @@ def test_a_repair_that_changes_the_goal_waits_for_the_owner(site):
     assert out['failed'] and workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page_flow()
     p = json.loads(s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))['DraftText'])
     assert 'it would change the goal' in p['why']
-    proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps(p)})          # the owner's yes keeps it
-    assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed()
-    with pytest.raises(RuntimeError, match='do not hold'):                                  # a list that does not hold is never saved
-        proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps({**p, 'flow': [{'id': 's1', 'kind': 'task'}]})})
+    with mock.patch.object(workflows, '_spawn', lambda f: None):                            # the run going on is pinned below
+        proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps(p)})      # the owner's yes keeps it
+        assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed()
+        with pytest.raises(RuntimeError, match='do not hold'):                              # a list that does not hold is never saved
+            proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps({**p, 'was': fixed(), 'flow': [{'id': 's1', 'kind': 'task'}]})})
 
 
 def test_repairs_stop_at_the_cap_and_never_loop(site):

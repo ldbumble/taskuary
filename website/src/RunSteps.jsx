@@ -40,6 +40,8 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs, sourceI
   const [said, setSaid] = useState("");
   if (!steps?.length) return null;
   const failed = steps.some((r) => r.status === "failed");
+  // a step the APP broke (a sign-in expired, an AI missing - flow.app_fault) is fixed in that place, never by rewriting the steps
+  const app = steps.find((r) => r.status === "failed" && r.app?.href)?.app;
   const takeBack = async () => {
     setUndoing(true); setSaid("");
     try { await api.post(`/api/workflows/${sourceId}/undo-repair`, { run_id: runId }); setSaid("The previous steps are back."); onChanged?.(); }
@@ -53,7 +55,9 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs, sourceI
     <Box data-tq-run-steps="" sx={{ mt: 0.5 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, flexWrap: "wrap" }}>
         <Typography variant="caption" sx={{ color: failed ? ALERT_INK : DIM, fontWeight: 600, flex: 1, minWidth: 0 }}>{runWords(steps, true)}</Typography>
-        {failed && onFix && <Button size="small" variant="outlined" disabled={fixing} onClick={(e) => { e.stopPropagation(); onFix(); }}
+        {app && <Button size="small" variant="outlined" component="a" href={app.href} onClick={(e) => e.stopPropagation()}
+          sx={{ fontSize: 12, py: 0.1 }} title={app.name}>{btnLabel("fix")}</Button>}
+        {failed && !app && onFix && <Button size="small" variant="outlined" disabled={fixing} onClick={(e) => { e.stopPropagation(); onFix(); }}
           startIcon={fixing ? <CircularProgress size={12} /> : <AutoAwesomeIcon sx={{ fontSize: 14 }} />} sx={{ fontSize: 12, py: 0.1 }}>{btnLabel("fix")}</Button>}
       </Box>
       {(repairs || []).map((x, k) => (

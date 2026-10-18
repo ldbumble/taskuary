@@ -451,8 +451,13 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card
-        head, body = REGISTRY[p['type']](resolve_cfg(store, {**{k: v for k, v in p.items() if k != 'action'}, '_write': True}))
+        head, body = REGISTRY[p['type']](resolve_cfg(store, {**{k: v for k, v in p.items() if k not in ('action', 'flow_run')}, '_write': True}))
         out = {'headline': str(head)[:200], 'output': (body or '')[:2000]}
     if tid: store.add_comment(tid, actor, 'human', f'APPROVED PROPOSAL ({a}): {json.dumps(out)[:600]}')   # a task-less one has no card to say it on
     store.audit('review', rv['ReviewId'], 'proposal_executed', actor, detail={'action': a, 'result': out})
+    # a workflow run that stopped for this yes goes on from that step (flow.resume) - on its own thread, as a run starts: a last
+    # agent step's first turn would otherwise hold the owner's click for as long as the agent works
+    if isinstance(p.get('flow_run'), dict) and a in ('run_tool', 'repair_workflow'):
+        from . import flow, workflows
+        workflows._spawn(lambda: flow.resume(store, p['flow_run'], out if a == 'run_tool' else None))
     return out

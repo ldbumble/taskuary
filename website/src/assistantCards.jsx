@@ -28,6 +28,7 @@ import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta, ageText, agoText } from "./funnelPile.js";
+import { SECTION, ideaWord } from "./lanes.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
@@ -810,8 +811,6 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
 export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   const a = card.action || {};
-  const words = { followup: "waiting on them", promise: "you promised", asked: "slipped", cold: "gone quiet", idea: "advisor idea",
-                  connect: "worth connecting", health: "needs a look" };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
@@ -824,7 +823,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";
   return (
-    <CardShell card={card} kicker={<>{words[card.idea_kind] || "slipped"}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
+    <CardShell card={card} kicker={<>{ideaWord(card.idea_kind)}<span className="tq-card-chip">{chip}</span></>} title={card.title}>
       {facts.length > 0 && <div className="tq-card-facts">{facts.map(([k, v]) => <React.Fragment key={k}><div>{k}</div><div>{v}</div></React.Fragment>)}</div>}
       <Foot
         verb={card.idea_kind === "connect" && a.connector_type ? (
@@ -1097,10 +1096,11 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // the now line sits between what is behind you and what is ahead - not above a day that has not started
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
   // ONE HEADLINE (U6): "Waiting · 30" counted reports and FYI the rows below called nothing to decide - the count is what is
-  // on you, and reports and FYI sit apart as reading
-  const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), READ = new Set(["reports", "fyi"]);
-  const act = groups.filter((g) => !READ.has(g.key)), read = groups.filter((g) => READ.has(g.key));
-  const onYou = cnt(groups.filter((g) => g.key === "urgent" || g.key === "task")), toRead = cnt(read);
+  // on you, and reports and FYI sit apart as reading. Which sections are which is lanes.json's; a section's `you` is its rows that
+  // are on you (summarize - waiting on THEM is under On you but not on you, as the greeting has always said)
+  const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
+  const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
+  const onYou = groups.reduce((n, g) => n + (g.you ?? (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0)), 0), toRead = cnt(read);
   const row = (g) => (
     <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
       <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>

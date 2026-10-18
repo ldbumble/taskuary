@@ -1,4 +1,5 @@
 import { taskSource } from "./taskSource.mjs";
+import { LANE_META, LEVEL_META } from "../src/funnelPile.js";
 /* The Board is the agent floor.
  *
  * "board is only for things that hit agents correct? it should not take up our agent capactity"
@@ -60,5 +61,6 @@ test("every task row says who works it, in the owner's words", () => {
   }
   // the work rail's heading for band 2 is "on you" since the canvas redesign (2026-09-29) - the same words the
   // lane itself says on a row (lanes.json `yours`), so the heading and the row cannot disagree
-  assert.ok(src("funnelPile.js").includes('word: "on you"'), "the rail's band-2 heading is not 'on you'");
+  assert.equal(LEVEL_META.task.word, "on you", "the rail's band-2 heading is not 'on you'");
+  assert.equal(LEVEL_META.task.word, LANE_META.yours.word, "the heading and the lane it holds say it two ways");
 });

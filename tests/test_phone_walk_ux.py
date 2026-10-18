@@ -361,10 +361,14 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertTrue(text.startswith('2 things: 1 on you, 1 for later.'), text)
 
     def test_it_names_the_bands_exactly_as_the_rail_does(self):
+        # both sides read lanes.json's `sections`: the page's lanes.js builds LEVEL_ORDER and SECTION_WORDS from it, as this does
+        import json
         from pathlib import Path
-        js = (Path(__file__).resolve().parents[1] / 'website' / 'src' / 'funnelPile.js').read_text(encoding='utf-8')
-        self.assertIn('export const LEVEL_ORDER = [' + ', '.join(f'"{k}"' for k in remote_assistant.LEVEL_ORDER) + '];', js)
-        for k, word in remote_assistant.groups(): self.assertIn(f'{k}: "{word}"', js)
+        root = Path(__file__).resolve().parents[1]
+        secs = json.loads((root / 'taskuary' / 'lanes.json').read_text(encoding='utf-8'))['sections']
+        self.assertEqual(remote_assistant.groups(), [(s['key'], s['word']) for s in secs])
+        js = (root / 'website' / 'src' / 'lanes.js').read_text(encoding='utf-8')
+        self.assertIn('export const LEVEL_ORDER = SECTIONS.map', js); self.assertIn('export const SECTION_WORDS = Object.fromEntries(SECTIONS', js)
 
 
 class TheVerbDoesTheThingTests(unittest.TestCase):

@@ -49,7 +49,8 @@ test("every item put on the table goes through putOnTable, which pins its card t
 
 test("the first screen has one headline count, and reports and FYI are to read (U6)", () => {
   assert.doesNotMatch(view, /m\.card\.away\}/, "the away line repeated SinceBlock's count");
-  assert.match(cards, /READ = new Set\(\["reports", "fyi"\]\)/);
+  // which sections are reading is lanes.json's `to_read`, never a list of its own in the card
+  assert.match(cards, /isRead = \(g\) => !!SECTION\[g\.key\]\?\.to_read/);
   assert.match(cards, /To read · /);
   assert.doesNotMatch(cards, /tq-day-h">Waiting · /);
 });

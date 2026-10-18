@@ -22,6 +22,7 @@ import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
 import { placeName } from "./words.js";
 import { hint as bHint, label as bLabel } from "./buttons.js";   // `btn` is this file's button style
+import { ideaCounted, ideaWord } from "./lanes.js";
 import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
@@ -2643,7 +2644,7 @@ const briefOf = (b) => { if (!b) return null; if (typeof b === "object") return 
 // sentence; that label turned a readable brief into a stack of footnotes.
 // State comes from the server (a line acted on from another tab shows as done here too); the
 // buttons are the ones the line's action allows.
-const IDEA_KIND = { followup: "follow up", prep: "prep", cold: "gone quiet", ahead: "coming up", idea: "idea" };
+// A line's kind wears the word its card wears, a candidate the word a run's review counts it in (lanes.json `idea_kinds`).
 
 // THE POST HAS SECTIONS. It used to be a flat list of lines, which is fine at two lines and
 // unreadable at six - the owner (2026-09-01): "it should summarize into sections... what the
@@ -2734,7 +2735,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         return (
           <Box key={i.id} sx={{ px: 1.25, py: 0.85, mb: 0.6, borderRadius: 1.5, border: `1px solid ${ASSISTANT.bd}`, bgcolor: open ? ASSISTANT.tint : "#f4f3ef", opacity: open ? 1 : 0.72 }}>
             <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline" }}>
-              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 600, flexShrink: 0 }}>{answered ? "answered" : IDEA_KIND[i.kind] || i.kind}</Typography>
+              <Typography variant="caption" sx={{ color: ASSISTANT.ink, fontWeight: 600, flexShrink: 0 }}>{answered ? "answered" : ideaWord(i.kind)}</Typography>
               <Typography variant="body2" sx={{ color: INK, lineHeight: 1.45, flex: 1 }}>
                 {answered ? "You had already replied to this." : i.text}
               </Typography>
@@ -2845,7 +2846,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
             <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>
             {rv.scope === "sources" ? `${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only` : <>
-              {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${IDEA_KIND[k] || k}`).join(", ") || "no candidates"}
+              {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${ideaCounted(k)}`).join(", ") || "no candidates"}
               {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
               {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
                 : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
@@ -2866,7 +2867,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
                 {showSkipped ? "hide" : "show"} what it looked at and let go — {rv.skipped.length} {showSkipped ? "↑" : "↓"}</Typography>
               {showSkipped && rv.skipped.map((c) => (
                 <Typography key={c.key} variant="caption" sx={{ display: "block", color: FAINT, mt: 0.3, pl: 1, borderLeft: `2px solid ${BORDER}`, whiteSpace: "pre-wrap" }}>
-                  <Box component="span" sx={{ fontWeight: 600 }}>{IDEA_KIND[c.kind] || c.kind} · </Box>{c.facts}</Typography>
+                  <Box component="span" sx={{ fontWeight: 600 }}>{ideaCounted(c.kind)} · </Box>{c.facts}</Typography>
               ))}
             </>
           )}

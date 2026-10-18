@@ -9,7 +9,7 @@ import re
 from .categories import agent_word
 from datetime import date, datetime, timedelta
 
-from . import processing_all, proposals
+from . import lanes, processing_all, proposals
 
 # An open task the owner cleared comes back to the work tab once it has been quiet this long. Done
 # used to be the end of it: the task stayed open in the task tab and the work tab never raised it
@@ -65,12 +65,13 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-OWNER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved', 'time', 'forgotten')
+# Read off lanes.json: every lane whose section is Urgent or On you.
+OWNER_LANES = lanes.OWNER_LANES
 # a goal's CHILD in one of these lanes is told by the goal's row ("coding on step 5 · Ray owes step 4"), not by a row of its
 # own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
 FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
 # what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
-RAISED_BY_NEW_WALK = ('blocked', 'approve')
+RAISED_BY_NEW_WALK = lanes.WAITS
 WALK_KEY = 'walk_started_at'
 
 

@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, buttons, operations, workerstate as ws, words as places
+from . import asks, buttons, lanes, operations, workerstate as ws, words as places
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -957,23 +957,13 @@ def _finished(item: dict) -> str:
     return f"{item['who']} finished {ref}" if item.get('who') else f"{ref} is done"
 
 
-# what each kind of waiting thing is, in the owner's words - the counts a sentence can carry
-KIND_SAYS = {'review': ('draft to approve', 'drafts to approve'), 'action': ('ready to run', 'ready to run'),
-             'asked': ('question for you', 'questions for you'), 'todo': ('to-do', 'to-dos'), 'fyi': ('for your information', 'for your information'),
-             'fyis': ('set of notices', 'sets of notices'), 'agent': ('agent question', 'agent questions'),
-             # the goal kinds printed raw ("1 goal_slipped") inside the count (B14)
-             'goal': ('goal', 'goals'), 'goal_slipped': ('goal that slipped', 'goals that slipped'),
-             'goal_fresh': ('goal not started yet', 'goals not started yet'),
-             'agentdone': ('finished', 'finished'), 'wrapup': ('to close', 'to close'), 'report': ('report', 'reports'),
-             'idea': ('idea', 'ideas'), 'meeting': ('meeting', 'meetings'), 'task': ('task', 'tasks'), 'connection': ('connection to check', 'connections to check')}
-
-
 def waiting_line(items: list) -> str:
-    """'4 waiting: 2 questions for you, 1 draft to approve, 1 report.' - the pile in words, counted by code."""
+    """'4 waiting: 2 questions for you, 1 draft to approve, 1 report.' - the pile in words, counted by code. Each kind's counted
+    words are lanes.json `item_kinds` - never an internal name (the goal kinds printed raw, "1 goal_slipped", B14)."""
     live = [i for i in items or [] if not i.get('settling')]
     if not live: return "Nothing is waiting."
     kinds = Counter(str(i.get('kind') or '') for i in live)
-    part = ', '.join(f"{n} {KIND_SAYS.get(k, ('other thing', 'other things'))[n != 1]}" for k, n in kinds.most_common())   # never an internal name
+    part = ', '.join(lanes.kind_says(k, n) for k, n in kinds.most_common())
     return f"{len(live)} waiting: {part}."
 
 
@@ -998,7 +988,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
             return (f"{waiting_line(left)} Say next and I'll take you through {'it' if len(left) == 1 else 'them'}, or name the one you mean. "
                     + ("(I didn't get an answer to that one - say it again, or name what you want done.)" if brain else no_brain()))
         return ALL_DONE
-    if opening and item.get('mid') and item['kind'] in ('review', 'action', 'asked', 'todo', 'fyi'):
+    if opening and item.get('mid') and lanes.is_mail(item):
         frm = f"{item.get('who') or 'Someone'} wrote on {item.get('channel') or 'email'}" + (f" ({funnel_age(item)})" if funnel_age(item) else '') + f": \"{item['title']}\""
         # A HELD START IS WHAT HAPPENED (the owner, 2026-10-16): "nothing has been done with it yet" was said over work the
         # sender gate held, a start that failed and a real queue alike - the task's own sentence says which, and what to do
@@ -1439,7 +1429,7 @@ def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> 
         say = ("Let's go through what we have today. " + (f"{n} thing{'s' if n != 1 else ''} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
     chips = walk_chips(len(p['items']))
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(p['items']),
-            'mail': sum(1 for i in p['items'] if i['kind'] in funnel.MAIL_KINDS), 'chips': chips}
+            'mail': sum(map(lanes.is_mail, p['items'])), 'chips': chips}
     record(store, tid, 'assistant', say, card)
     return {'say': say, 'card': card, 'chips': chips, 'opened': True}
 

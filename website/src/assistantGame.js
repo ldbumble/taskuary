@@ -5,6 +5,7 @@
 //
 // Nothing here reads words. A zone comes from the lane triage already judged, a match from the
 // kind it already chose (no-hardcoded-words: the model reads intent, code only routes on it).
+import { isAgentKind, isMail, onYou } from "./lanes.js";
 
 export const ZONES = [
   { key: "floor", name: "Agent Floor", hotkey: "1", blurb: "agents at their desks - jump into a code space" },
@@ -36,12 +37,13 @@ const LANE_ZONE = {
   fyi: "coffee", report: "coffee", broken: "coffee",
   forgotten: "archive",
 };
-// an agent's own news - waving, stopped, wrapped up - stands at its desk, whatever lane it rides in
-const AGENT_KINDS = new Set(["agent", "wrapup"]);
 // your own task (Kind "task", the Tasks tab's "your task") trains in the gym, whatever lane it rides in - and so does
 // a task an agent FINISHED: the floor draws desks only for agents at work, so it stood nowhere (the owner, 2026-09-24:
-// "in the game tasks that are done are no where"), and the rail puts it in Your task
-export const zoneOf = (item) => AGENT_KINDS.has(item?.kind) ? "floor" : ["task", "agentdone"].includes(item?.kind) ? "gym" : LANE_ZONE[item?.lane] || "coffee";
+// "in the game tasks that are done are no where"), and the rail puts it in Your task.
+// ...an agent's own news - waving, wrapped up (lanes.json `item_kinds`) - stands at its desk, whatever lane it rides in; mail an
+// agent drafted for your yes is still mail, at the meeting table
+const atDesk = (kind) => isAgentKind(kind) && !isMail({ kind });
+export const zoneOf = (item) => ["task", "agentdone"].includes(item?.kind) ? "gym" : atDesk(item?.kind) ? "floor" : LANE_ZONE[item?.lane] || "coffee";
 
 export function zoneItems(items = []) {
   const out = { floor: [], gym: [], meeting: [], coffee: [], archive: [], hq: [] };
@@ -49,9 +51,8 @@ export function zoneItems(items = []) {
   return out;
 }
 
-// what waits on YOU: a room's red count. fyi, reports and a working agent do not.
-const ON_YOU = new Set(["blocked", "approve", "asked", "yours", "unjudged", "broken", "stopped", "saved"]);
-export const needsYou = (item) => ON_YOU.has(item?.lane);
+// what waits on YOU: a room's red count - the rail's own on you (lanes.onYou). fyi, reports and a working agent do not.
+export const needsYou = (item) => onYou(item);
 // THE INBOX BOSS is the walk to the bottom: its health is everything you have not seen yet. Seen is the chat's
 // own mark (`surfaced` - read in the chat, or with Next here) or handled outright (gone from the pile). An agent
 // at work waits on nobody, so it never stands between you and the bottom. Zero is the bottom - the boss is down.

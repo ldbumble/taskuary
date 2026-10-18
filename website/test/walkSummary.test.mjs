@@ -30,18 +30,23 @@ test("the lead counts each band as the rail does", () => {
   assert.equal(summarize([]).lead, "Nothing is waiting on you.");
 });
 
-test("a drafted reply says it is ready, everything else says its lane's word", () => {
-  assert.equal(stateOf(it("approve", "review"), "ready to close out"), "ready to close out");
-  assert.equal(stateOf(it("approve", "action"), "ready to close out"), "wants a yes");
-  // a close-out is the same one word as a reply
-  assert.equal(stateOf({ ...it("approve", "action"), closeout: "merges the pull request on GitHub" }, "ready to close out"), "ready to close out");
-  assert.equal(stateOf(it("asked"), "asked you"), "asked you");
+// HOW A ROW READS IS THE SERVER'S (funnel_presentation.shows, tests/test_row_presentation.py): the page draws its words
+test("a row draws the server's who and state word, never a copy of its own", () => {
+  const row = { ...it("approve", "action"), who: "Alex", email: "notifications@github.com", shows: { who: "github", state: "wants a yes", move: "" } };
+  assert.equal(whoOf(row), "github");
+  assert.equal(stateOf(row, "ready to close out"), "wants a yes");
+  // ...and the fold and the band's gist read the same words
+  const s = summarize([{ ...row, key: "a" }, { ...row, key: "b" }]);
+  assert.equal(s.groups[0].rows.length, 1);
+  assert.equal(gistOf(s.groups[0]), "github");
+  assert.equal(whoOf({ kind: "report", lane: "report", who: "AP ageing", title: "AP ageing - 5 rows", shows: { who: "Report", state: "landed" } }), "Report");
 });
 
-test("a report's sender is its own title, so the row says Report instead of saying it twice", () => {
-  assert.equal(whoOf({ kind: "report", lane: "report", who: "AP ageing over 30 days", title: "AP ageing over 30 days, weekly - 5 rows" }), "Report");
+test("a card without the server's words falls back to its plain fields", () => {
   assert.equal(whoOf({ kind: "asked", who: "Erin Blake", title: "Q3 numbers" }), "Erin Blake");
   assert.equal(whoOf({ kind: "agent", agent: "coding", title: "Reconcile the August GL export" }), "coding");
+  assert.equal(whoOf({}), "someone");
+  assert.equal(stateOf(it("asked"), "asked you"), "asked you");
 });
 
 test("every group the opener draws has a colour role - a missing one crashed the page (2026-09-24)", () => {
@@ -55,9 +60,6 @@ test("a row reads cleanly: its task number, the agent on an agent row, an addres
   assert.equal(refOf({ tid: 887 }), "TQ-0887");
   assert.equal(refOf({ ref: "TQ-0018", tid: 18 }), "TQ-0018");
   assert.equal(refOf({ title: "no task yet" }), "");
-  assert.equal(whoOf({ kind: "agent", lane: "stopped", who: "You", agent: "coding", title: "Why so many emails" }), "coding");
-  assert.equal(whoOf({ kind: "fyi", lane: "fyi", who: "noreply-securityapp@vendor.example", title: "Vendor Create" }), "securityapp");
-  assert.equal(whoOf({ kind: "asked", who: "erin@northwind.example", title: "Q3 numbers" }), "erin");
   const twice = { lane: "fyi", kind: "fyi", who: "alerts@vendor.example", title: "Vendor Create - 0 created" };
   const s = summarize([{ ...twice, key: "a" }, { ...twice, key: "b" }, it("fyi", "fyi", { title: "Other" })]);
   const read = s.groups.find((g) => g.key === "fyi").rows;
@@ -85,11 +87,4 @@ test("an agent's finished work names the task, whatever field holds the agent", 
   // the live shape: kind agentdone, who is the profile, no agent field
   const g = gistOf({ rows: [{ key: "p", kind: "agentdone", lane: "report", who: "coding", agent: null, title: "Recurring export timeout failures" }] });
   assert.equal(g, "Recurring export timeout failures");
-});
-
-test("a service's mail names the service, not the person whose name it borrowed (2026-10-13)", () => {
-  assert.equal(whoOf({ who: "Alex", email: "notifications@github.com", title: "[northwind/ledger] Run failed: ci", lane: "fyi" }), "github");
-  assert.equal(whoOf({ who: "Card alerts", email: "alerts@mail.bank.example", title: "Statement ready", lane: "fyi" }), "bank");
-  assert.equal(whoOf({ who: "Erin Blake", email: "erin@northwind.example", title: "Lunch", lane: "fyi" }), "Erin Blake");   // a person stays a person
-  assert.equal(whoOf({ who: "noreply-securityapp@vendor.example", email: "noreply-securityapp@vendor.example", title: "x", lane: "fyi" }), "securityapp");
 });

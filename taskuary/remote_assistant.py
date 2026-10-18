@@ -17,6 +17,8 @@ import collections, json, re, threading, time
 
 from loguru import logger
 from . import buttons
+# the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
+from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
 
 
 CHANNELS = ('whatsapp', 'telegram')
@@ -579,15 +581,17 @@ def groups():
     return [(k, funnel.SECTION_WORDS[k]) for k in LEVEL_ORDER]
 
 
-def who_of(i: dict) -> str:
-    who, title = ' '.join(str(i.get('who') or i.get('agent') or '').split()), str(i.get('title') or '')
-    if who and not title.lower().startswith(who.lower()[:16]): return who
-    return 'Report' if i.get('kind') == 'report' or i.get('lane') == 'report' else who or 'someone'
+def _shows(i: dict) -> dict:
+    """How the row reads, as the server worked it out for every surface (funnel_presentation.shows) - a card that came
+    some other road than the pile is worked out the same way here."""
+    return i.get('shows') or shows(i)
+
+
+def who_of(i: dict) -> str: return _shows(i)['who']
 
 
 def who_wants_what(items: list) -> str:
     """The desktop's opener, as a chat can print it: the count in a sentence, then each group's rows."""
-    from . import funnel
     live = list(items or [])
     if not live: return 'Nothing is waiting on you.'
     have = [(k, w, [i for i in live if group_of(i) == k]) for k, w in groups()]
@@ -599,22 +603,12 @@ def who_wants_what(items: list) -> str:
         if key == 'later': rows = sorted(rows, key=lambda i: str(i.get('back_at') or i.get('defer_until') or '9999'))
         lines.append(f'\n{word_.upper()} · {len(rows)}')
         for i in rows[:ROWS_PER_GROUP]:
-            state = ('draft ready' if i.get('kind') != 'action' else 'wants a yes') if i.get('lane') == 'approve' \
-                else (funnel.LANE_WORDS.get(str(i.get('lane') or '')) or ('',))[0]
             # FOR LATER says when it comes back, in the rail's own short form (funnelPile.railBack)
-            if key == 'later': state = f"back in {_back_in(i.get('back_at') or i.get('defer_until'))}" if _back_in(i.get('back_at') or i.get('defer_until')) else ''
+            back = _back_in(i.get('back_at') or i.get('defer_until')) if key == 'later' else ''
+            state = (f'back {back}' if back else '') if key == 'later' else _shows(i)['state']
             lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
         if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
     return '\n'.join(lines)
-
-
-def _back_in(iso) -> str:
-    """'< 30m', '< 1h', '3h', '2d' until a For later row comes back - the rail's gutter, said on the phone. '' once due."""
-    from datetime import datetime as _dt
-    try: at = _dt.strptime(str(iso or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
-    except ValueError: return ''
-    m = round((at - _dt.now()).total_seconds() / 60)
-    return '' if m <= 0 else '< 30m' if m < 30 else '< 1h' if m < 60 else f'{m // 60}h' if m < 1440 else f'{m // 1440}d'
 
 
 def meetings_line(store) -> str:
@@ -1621,12 +1615,6 @@ def channel_word(ch) -> str:
     return _CHANNEL_WORDS.get(k) or k.replace('_', ' ').title()
 
 
-def is_own(item: dict | None) -> bool:
-    """Work the owner started: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)."""
-    it = item or {}
-    return str(it.get('channel') or '') == 'own' or str(it.get('who') or '').strip().lower() in ('owner', 'you', 'me')
-
-
 def agent_label(item: dict | None, name: str = None) -> str:
     """What an agent IS - never the profile's bare name ("coding"); the profile only when it says more."""
     it = item or {}
@@ -1666,35 +1654,6 @@ def agent_state(item: dict | None) -> str:
                 else 'asks you' if it.get('asking') else 'is waiting on you')
     if kind == 'agentdone': return 'finished'
     return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': 'stopped and saved'}.get(lane) or ('finished' if it.get('summary') else '')
-
-
-def move_title(item: dict | None, draft: str = '') -> str:
-    """What the move decides, in the desktop's words - '' where nothing waits on the owner."""
-    it = item or {}
-    kind, lane, who = it.get('kind'), it.get('lane'), story_who(it)
-    if kind == 'agent':
-        if len(it.get('questions') or []) > 1: return f"{len(it['questions'])} questions from the agent"
-        return '' if lane == 'working' else 'pick it up again' if it.get('paused') else 'answer the agent' if it.get('asking') else "tell the agent what's next"
-    # a move that IS a button says the button's own name (buttons.json) - "answer them" and "start it" named none the card had
-    if kind == 'agentdone':
-        return f"{buttons.label('reply')} to {who} with what it found" if it.get('mid') and str(it.get('channel') or '').lower() != 'github' else ''
-    if kind == 'wrapup': return 'close it'
-    if lane == 'queued': return buttons.label('regular_agent')
-    if lane in ('stopped', 'saved'): return 'pick it up again'
-    if kind == 'action': return buttons.label('approve', 'action') if it.get('closeout') else 'do what you asked for' if is_own(it) else 'run what the agent proposed'
-    if kind == 'review':
-        return ('send your draft' if is_own(it) else f'reply to {who}') if draft or it.get('draft') else 'no reply drafted yet'
-    if kind == 'fyi' or lane == 'fyi': return ''
-    if kind == 'todo' or is_own(it): return 'who should take it?'
-    return f'reply to {who}' if it.get('mid') else ''
-
-
-def story_who(item: dict | None) -> str:
-    it = item or {}
-    if is_own(it): return 'You'
-    from .triage import person_name        # "Doyle, Alex at Northwind" reads "Alex Doyle", as on the card
-    raw = re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split()))
-    return person_name(raw) or raw or 'them'
 
 
 def subject_of(store, item: dict | None) -> str:

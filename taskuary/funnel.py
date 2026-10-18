@@ -19,7 +19,7 @@ from .categories import agent_word
 from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
 from .autoreply import is_auto
-from .funnel_presentation import present as _present
+from .funnel_presentation import present as _present, attach as _attach
 from .processing_order import attention_band, gave_up, priority_rank
 from .workerstate import says as agent_says, sub_state, request_line   # funnel.says is a message's subject
 
@@ -1363,6 +1363,7 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
             p = {**full, 'items': items, 'lanes': [{**l, 'n': sum(i['lane'] == l['lane'] for i in items)} for l in full['lanes']],
                  'counts': {**full['counts'], 'unread': len(items), 'actionable': sum(i['actionable'] for i in items)}}
         else: p = build(store)
+        for i in p['items']: _attach(i)                  # how each row reads, once, for the rail and the phone alike
         p['alerts'] = alerts(store, p['items'])
         # BULK PROCESSING: which row wears the "250 more" pill. None on an install that ranks
         # nothing, which is what keeps this whole feature invisible to an owner who takes one

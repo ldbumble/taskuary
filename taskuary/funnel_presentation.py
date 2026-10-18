@@ -10,8 +10,11 @@ import contextlib
 import copy
 import hashlib
 import json
+import re
 import threading
 import weakref
+from datetime import datetime
+from pathlib import Path
 
 
 _ITEM_SCHEMA = "taskuary.funnel.presentation.v1"
@@ -356,7 +359,7 @@ def present(store, payload: dict) -> dict:
     def collect(item):
         for child in _children(item):
             collect(child)
-        every.append(item)
+        every.append(attach(item))
 
     def stamp(item, backings, known):
         for child in _children(item):
@@ -378,3 +381,108 @@ def present(store, payload: dict) -> dict:
             book["by"][prints[id(item)]] = item["presentation_revision"]
     out["display_revision"] = display_revision(out)
     return out
+
+
+# ---- HOW A ROW READS: who, its state word, your move - worked out ONCE, here -------------------------
+# The phone (remote_assistant) re-implemented the desktop's row words (walkSummary.js) and drifted: the 2026-10-13 fix
+# for "why does fyi say my name??" reached the desktop only, and a non-action approve row read "draft ready" on the
+# phone and the lane's word on the desk. Each card now carries `shows` - {who, state, move} - and both surfaces read it.
+# Every word is a pure function of the card, so its stamp (item_revision) stays one too: no clock in it. When a row
+# comes back (back_in) is the exception - it counts down, so it is worked out where it is drawn.
+_LANE_WORDS = {l['key']: l['word'] for l in json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))['lanes']}
+_AGENT_LANES = {'blocked', 'stopped', 'saved', 'queued', 'working', 'broken', 'unjudged'}
+# A SERVICE'S MAIL names the service, not the display name it borrowed: GitHub sends a failed run from notifications@github.com
+# under the name of whoever pushed - the owner - so the FYI band read the owner's own first name (2026-10-13)
+_SERVICE = re.compile(r'^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer(-daemon)?|bounces?)([-._+]|@)', re.I)
+
+
+# An agent's row names the AGENT - the task's "who" is the owner who started it (the owner, 2026-09-30)
+def _agent_row(i: dict) -> bool: return bool(i.get('agent')) and (i.get('lane') in _AGENT_LANES or i.get('kind') in ('agent', 'agentdone', 'action'))
+
+
+def _person(w: str) -> str:
+    """An address shows its name part: "securityapp", not "noreply-securityapp@..."."""
+    if '@' not in w: return w
+    local = w.split('@')[0]
+    return re.sub(r'^no-?reply[-._]?', '', local, flags=re.I) or local
+
+
+def _service(email) -> str:
+    local, _, dom = str(email or '').lower().partition('@')
+    if not dom or not _SERVICE.match(f'{local}@'): return ''
+    parts = dom.split('.'); k = len(parts) - 2
+    if k > 0 and parts[k] in ('co', 'com', 'org', 'net', 'ac', 'gov'): k -= 1      # github.co.uk -> github
+    return parts[max(k, 0)]
+
+
+def who_of(i: dict) -> str:
+    """Who asks: the person, the agent on an agent's row, the service behind a service's mail - and for a report, whose
+    sender IS its title, the word "Report"."""
+    named = str(i.get('who') or '')
+    raw = i.get('agent') if _agent_row(i) else (('@' not in named and _service(i.get('email'))) or i.get('who') or i.get('agent'))
+    who, title = _person(' '.join(str(raw or '').split())), str(i.get('title') or '')
+    if who and not title.lower().startswith(who.lower()[:16]): return who
+    return 'Report' if i.get('kind') == 'report' or i.get('lane') == 'report' else who or 'someone'
+
+
+def state_of(i: dict) -> str:
+    """The one word under a row's who: its lane's word - but an agent's proposed action wants a yes. A drafted reply and a
+    close-out say the lane's word (the desktop's rule; the phone's own "draft ready" is gone)."""
+    word = _LANE_WORDS.get(str(i.get('lane') or '')) or _LANE_WORDS['fyi']
+    return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') else word
+
+
+def back_in(iso, now: datetime = None) -> str:
+    """'in 30m', 'in 1h', 'in 3h', 'in 2d' until a For later row comes back - "< 30m" read as an age (the owner, 2026-09-30),
+    so it reads forward as a meeting's does. '' once due. funnelPile.railBack is the rail's live copy of this rule."""
+    try: at = datetime.strptime(str(iso or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+    except ValueError: return ''
+    m = round((at - (now or datetime.now())).total_seconds() / 60)
+    return '' if m <= 0 else 'in 30m' if m < 30 else 'in 1h' if m < 60 else f'in {m // 60}h' if m < 1440 else f'in {m // 1440}d'
+
+
+def is_own(item: dict | None) -> bool:
+    """Work the owner started: its "sender" is the owner ("owner" from CreatedBy, "You" from ownwork)."""
+    it = item or {}
+    return str(it.get('channel') or '') == 'own' or str(it.get('who') or '').strip().lower() in ('owner', 'you', 'me')
+
+
+def story_who(item: dict | None) -> str:
+    it = item or {}
+    if is_own(it): return 'You'
+    from .triage import person_name        # "Doyle, Alex at Northwind" reads "Alex Doyle", as on the card
+    raw = re.sub(r'\s*<[^>]*>', '', ' '.join(str(it.get('who') or '').split()))
+    return person_name(raw) or raw or 'them'
+
+
+def move_of(item: dict | None, draft: str = '') -> str:
+    """What the move decides, in the desktop's words - '' where nothing waits on the owner."""
+    from . import buttons
+    it = item or {}
+    kind, lane, who = it.get('kind'), it.get('lane'), story_who(it)
+    if kind == 'agent':
+        if len(it.get('questions') or []) > 1: return f"{len(it['questions'])} questions from the agent"
+        return '' if lane == 'working' else 'pick it up again' if it.get('paused') else 'answer the agent' if it.get('asking') else "tell the agent what's next"
+    # a move that IS a button says the button's own name (buttons.json) - "answer them" and "start it" named none the card had
+    if kind == 'agentdone':
+        return f"{buttons.label('reply')} to {who} with what it found" if it.get('mid') and str(it.get('channel') or '').lower() != 'github' else ''
+    if kind == 'wrapup': return 'close it'
+    if lane == 'queued': return buttons.label('regular_agent')
+    if lane in ('stopped', 'saved'): return 'pick it up again'
+    if kind == 'action': return buttons.label('approve', 'action') if it.get('closeout') else 'do what you asked for' if is_own(it) else 'run what the agent proposed'
+    if kind == 'review':
+        return ('send your draft' if is_own(it) else f'reply to {who}') if draft or it.get('draft') else 'no reply drafted yet'
+    if kind == 'fyi' or lane == 'fyi': return ''
+    if kind == 'todo' or is_own(it): return 'who should take it?'
+    return f'reply to {who}' if it.get('mid') else ''
+
+
+def shows(item: dict) -> dict:
+    """A row's words, as every surface draws them."""
+    return {'who': who_of(item), 'state': state_of(item), 'move': move_of(item)}
+
+
+def attach(item):
+    """Set - never keep - a card's `shows`: its lane can change after it was built (an fyi asked again)."""
+    if isinstance(item, dict) and item.get('key') is not None: item['shows'] = shows(item)
+    return item

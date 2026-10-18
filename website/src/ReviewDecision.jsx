@@ -17,7 +17,8 @@ import { useVerbs } from "./actionRow.js";
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
-import { replySendFailure, reviewDeliveryState } from "./sendState.js";
+import { replySendFailure, reviewDeliveryState, sendFix } from "./sendState.js";
+import { openAppLink } from "./appLinks.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -225,6 +226,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
   useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting || delivery.frozen, run: redraft,
     title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])].map((v) => ({ ...v, card: true })), toRow);
+  // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
+  // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
+  const fix = sendFix(r, sendErr);
+  useVerbs(`fix:${r.ReviewId}`, fix ? [{ id: no("fix"), group: "decide", tone: "s", label: fix.label, title: "Opens where this is fixed",
+    run: () => openAppLink(fix.href) }] : [], !!fix && toRow);
 
   if (r.Status === "held") {
     return (
@@ -446,7 +452,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           <b>{sendErr.unknown ? "Delivery has not been confirmed." : "The reply was not sent."}</b> {sendErr.message}
           <Box sx={{ mt: 0.5, fontSize: 11.5 }}>
             {sendErr.unknown ? "Check the original attempt before sending by any other route. A missing receipt will not cause Taskuary to send it again."
-              : "The draft stays on the task. Correct the delivery problem, then approve it again."}
+              : fix ? `The draft stays on the task - ${fix.label} below, then send it again.` : "The draft stays on the task. Correct the delivery problem, then send it again."}
           </Box>
         </Alert>
       )}

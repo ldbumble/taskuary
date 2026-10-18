@@ -21,7 +21,17 @@ export function replyEnvelope(review) {
 export function replySendFailure(data) {
   const message = data?.send_error || data?.reply?.send_error;
   const unknown = [data?.delivery, data?.reply?.delivery].some(state => state === "unknown" || state === "sending");
-  return message ? { message, unknown } : null;
+  const fix = data?.send_fix || data?.reply?.send_fix;
+  return message ? { message, unknown, ...(fix ? { fix } : {}) } : null;
+}
+
+// THE PLACE THAT FIXES A FAILED SEND (outbound.Fixable): from the answer just now, else from the envelope a reload reads - a fix
+// that lived only in the answer was gone after a refresh, and the sentence was all that was left
+export function sendFix(review, failure) {
+  if (failure?.fix?.href) return failure.fix;
+  let env = null;
+  try { env = typeof review?.Deliver === "string" ? JSON.parse(review.Deliver) : review?.Deliver; } catch { env = null; }
+  return (review?.DeliveryState || env?.delivery) === "failed" && env?.fix?.href ? env.fix : null;
 }
 
 // An uncertain send keeps the exact attempted payload. Checking it is a different

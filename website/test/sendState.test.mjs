@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { sendBlockLine, draftState, replyEnvelope, replySendFailure, reviewDeliveryState } from "../src/sendState.js";
+import { sendBlockLine, draftState, replyEnvelope, replySendFailure, reviewDeliveryState, sendFix } from "../src/sendState.js";
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
   const env = { kind: "reply", to: ["a@example.test", "b@example.test"], cc: ["c@example.test"], delivery: "unknown" };
@@ -81,4 +81,15 @@ test("the review, task-panel and assistant surfaces are wired to the shared send
     assert.match(src, /sendBlockLine\(/, `${f} shows the shared reason`);
     assert.match(src, /draftState\(/, `${f} shows the shared draft state`);
   }
+});
+
+test("a failed send keeps the place that fixes it - from the answer, and after a reload from the envelope", () => {
+  const fix = { label: "Connect a mailbox", href: "#connections=Email" };
+  const failure = replySendFailure({ send_error: "no mailbox is connected to send from", send_fix: fix, delivery: "failed" });
+  assert.deepEqual(failure.fix, fix);
+  assert.deepEqual(sendFix({}, failure), fix);
+  assert.deepEqual(sendFix({ DeliveryState: "failed", Deliver: JSON.stringify({ delivery: "failed", fix }) }, null), fix);
+  // a draft that went out, or one that never failed, offers no fix
+  assert.equal(sendFix({ DeliveryState: "sent", Deliver: JSON.stringify({ delivery: "sent", fix }) }, null), null);
+  assert.equal(sendFix({ Deliver: "{" }, null), null);
 });

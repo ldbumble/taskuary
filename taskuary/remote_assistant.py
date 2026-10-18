@@ -1000,6 +1000,7 @@ def recovery_rows(store, chips: list, actor: str = 'owner') -> list:
         elif v == 'retry': yield c['label'], {'t': 'retry', 'id': c['op'], 'settles': bool(c.get('settles'))}
         elif v == 'closeout': yield c['label'], {'t': 'closeout', 'rid': c['rid'], 'act': c['act']}
         elif v == 'repo': yield c['label'], {'t': 'repo', 'id': c['op'], 'repo': c['repo'], 'settles': bool(c.get('settles'))}
+        elif v == 'go': continue        # a place in the desktop app (Connections, Settings): a phone cannot open it, the line says where
         elif v:
             if table is None:
                 from . import general

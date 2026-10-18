@@ -1312,13 +1312,16 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     such; a repeated click is the first receipt again (PW-124, PW-125)."""
     op = operations.get(store, oid)
     if not op: raise HTTPException(404, 'no such proposal')
+    from . import concierge
+    try: table = concierge.on_table(store, op)            # read before it runs: a close takes the item off the table
+    except Exception as e:
+        logger.debug(f'on_table failed for {oid}: {e}'); table = False
     out = operations.execute(store, oid, body.version, lambda: _run_operation(op, background), ACTOR)
     # the receipt is the fact of what happened, in the chat, after it happened (PW-125)
-    from . import concierge
     # ...and the page shows THAT line, not a shorter one of its own beside it (two "Done"s per click)
     # ...and when it did not happen, its way on (concierge.recover): the choices ride under that line
     try:
-        turn = concierge.receipt_turn(store, out, ACTOR)
+        turn = concierge.receipt_turn(store, out, ACTOR, table=table)
         out = {**out, 'receipt': turn['say'], 'chips': turn['chips']}
     except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
     if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])

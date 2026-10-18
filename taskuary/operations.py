@@ -294,7 +294,10 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     except Exception as e:
         logger.warning(f'operation {op_id} ({op["Kind"]}) failed: {e}')
-        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'Actor': actor})
+        # a failure that names its own fix (outbound.Fixable) keeps it, so the way on can offer it (concierge.recover)
+        fix = getattr(e, 'fix', None)
+        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'Actor': actor,
+                                       **({'OutcomeJson': json.dumps({'fix': fix})} if fix else {})})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     finally: _running.op = None
     if _failed(outcome):

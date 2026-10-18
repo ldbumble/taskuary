@@ -238,6 +238,33 @@ class ExecutionTests(unittest.TestCase):
         self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies), bodies[-3:])
 
 
+    def test_a_press_on_the_tables_own_row_is_receipted_and_one_elsewhere_is_not(self):
+        """Mark done on the card on the table closed it with no line in the chat - only chat proposals were its news (the walk
+        click-through, 2026-10-17). The table's own buttons are this chat; a close from anywhere else still says nothing here."""
+        from taskuary import general
+        s, tid, mid, item = asked()
+        dock, _ = general.dock_task(s, 'owner')
+        bodies = lambda: [r.get('Body') or '' for r in general.chat_rows(s, dock['TaskId'])]
+        concierge.set_current(s, dock['TaskId'], item['key'])
+        run(s, operations.propose(s, 'task.complete', tid, {}, 'owner'))
+        self.assertTrue(any('Done -' in b and f'TQ-{tid:04d}' in b for b in bodies()), bodies()[-3:])
+        other = s.create_task({'Title': 'Order the badge printer ribbon', 'Status': 'open'}, 'owner')
+        before = len(bodies())
+        run(s, operations.propose(s, 'task.complete', other, {}, 'owner'))
+        self.assertEqual(len(bodies()), before)
+
+
+    def test_a_failure_that_names_its_fix_offers_it_as_a_way_on(self):
+        """"no mailbox is connected" came with nothing to press: the fix a failure names (outbound.Fixable) is one of the
+        choices recover offers - the model picks among them like any other."""
+        s, tid, mid, item = asked()
+        fix = {'label': 'Connect a mailbox', 'href': '#connections=Email'}
+        op = {'id': 'x1', 'version': 1, 'kind': 'task.complete', 'status': 'error', 'error': 'no mailbox is connected to send from',
+              'outcome': {'fix': fix}}
+        chips = concierge.recover(s, op, llm=False)['chips']
+        self.assertIn({'verb': 'go', **fix}, chips)
+
+
 class HandoffTests(unittest.TestCase):
     """PW-135/136: a confirmed hand-off that starts is acknowledged and moves on once; the delegated task stays in
     Unread as Working, nothing settled; a repository still to choose, a failed start or a cancel keep the item."""

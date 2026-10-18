@@ -1648,6 +1648,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (busy || resetting || handoff || !c) return;
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
+    // THE PLACE THAT FIXES IT (concierge.recover, outbound.Fixable): an app link, opened on the canvas like any other
+    if (c.verb === "go" && c.href) { openAppLink(c.href); return; }
     if (c.verb === "setupask") { askSetup(); return; }
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;

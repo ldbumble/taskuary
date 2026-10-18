@@ -3272,6 +3272,10 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     except Exception as e:
         logger.debug(f'recover: no item on the table - {e}'); item = None
     chips = []
+    # THE PLACE THAT FIXES IT, when the failure named one (outbound.Fixable, a send's `send_fix`): a choice like any other - the
+    # model picks among them - so "no mailbox is connected" comes with Connect a mailbox, never only the words (2026-10-17)
+    fix = o.get('fix') or o.get('send_fix')
+    if isinstance(fix, dict) and fix.get('href') and fix.get('label'): chips.append({'verb': 'go', 'href': fix['href'], 'label': fix['label']})
     if st == 'error' and not o.get('needs') and not o.get('refused') and o.get('dispatch') != 'needs_repo':
         chips.append({'verb': 'retry', 'label': 'Try again', 'op': op['id'], 'version': op['version'], 'kind': op.get('kind'),
                       'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())})
@@ -3310,7 +3314,25 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     return {'say': say, 'chips': chips}
 
 
-def receipt_turn(store, op: dict, actor: str = 'owner', llm=None) -> dict:
+def on_table(store, op: dict) -> bool:
+    """Is this act about the item ON THE ASSISTANT'S TABLE? Read BEFORE it runs - a close takes the item off the pile, and after it
+    nothing says which task the table held. A press on the table's own row is the walk's news as much as a chat proposal is:
+    Mark done on an agent's task closed it with no line in the chat (the walk click-through, 2026-10-17)."""
+    raw = store.get_setting('assistant_dock_task_id')
+    if not str(raw or '').isdigit() or not op: return False
+    key = current_key(store, int(raw))
+    kind = (operations.KINDS.get(op.get('kind')) or ('',))[0]
+    try: tid = int(op.get('target') or 0) if kind == 'task' else int((store.get_review(int(op.get('target') or 0)) or {}).get('TaskId') or 0) if kind == 'review' else 0
+    except (TypeError, ValueError): tid = 0
+    if not key or not tid: return False
+    if key == f'task:{tid}': return True
+    try: item = funnel.next_item(store, key, include_surfaced=True)
+    except Exception as e:
+        logger.debug(f'on_table: {key} did not resolve - {e}'); return False
+    return bool(item) and item.get('tid') == tid
+
+
+def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False) -> dict:
     """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
     recorded line, so the desktop draws them under it and the phone numbers them."""
     label, ref = describe_op(store, op)
@@ -3324,9 +3346,10 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
     # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
     # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
+    # ...and what was pressed on the item on its table (`table`, on_table): that is this chat, and the owner is looking at it
     raw = store.get_setting('assistant_dock_task_id')
     dock_tid = int(raw) if str(raw or '').isdigit() else None
-    if not dock_tid or not _chat_proposed(store, dock_tid, op.get('id')): return {'say': line, 'chips': []}
+    if not dock_tid or not (table or _chat_proposed(store, dock_tid, op.get('id'))): return {'say': line, 'chips': []}
     if st != 'done':
         way = recover(store, op, actor, llm)
         line = f"{line} {way['say']}".strip()

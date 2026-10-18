@@ -1,6 +1,6 @@
 // HAND OFF DISAPPEARS AT THE PRESS (the owner, 2026-10-01): like every close, the task is put down when Send it is pressed -
-// folded, off the rail, the "…" under it - while the forward goes out. The server SENDS first and closes the task only once
-// it has (server.handoff); a send that fails brings the task back with the reason, and the form with the owner's text.
+// folded, off the rail, the "…" under it - while the forward goes out. The server SENDS first and only then sets the task to
+// waiting on them (server.handoff - forward only, 2026-10-18); a send that fails brings the task back with the reason and the text.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -15,7 +15,7 @@ test("Send it puts the task down before the request, and a failed send puts it b
   assert.match(send, /catch \(e\) \{[^}]*onStay\?\.\(msg\)/, "a send that fails puts it back");
 });
 
-test("the task view's hand-off closes the way Mark done does: the drawer goes, the walk moves on, a failure reopens it", () => {
+test("the task view's hand-off moves on without closing: the drawer goes, the walk moves on, a failure reopens it", () => {
   const page = read("TaskPage.jsx");
   assert.match(page, /<Drawer anchor="right" open=\{handoff === true && !!t\}[^\n]*ModalProps=\{\{ keepMounted: !!handoff \}\}/,
     "the form stays mounted while it sends, so a failure brings back what was typed");
@@ -23,7 +23,8 @@ test("the task view's hand-off closes the way Mark done does: the drawer goes, t
   assert.match(page, /onStay=\{\(msg\) => \{ setHandoff\(true\); onStay\?\.\(msg\); \}\}/);
   assert.match(page, /onSent=\{handedOff\}/);
   const done = page.slice(page.indexOf("const handedOff = async"), page.indexOf("const handedOff = async") + 600);
-  assert.match(done, /onFinish \? onFinish\("done", async \(\) => \{\}\)/, "the list and the walk move on as after a close - the server already closed it");
+  assert.match(done, /closedHere\("waiting"\)/, "the list and the walk move on - the task waits on them, still open");
+  assert.match(page, /onFinish \? onFinish\(status, async \(\) => \{\}\)/);
 });
 
 test("the Timeline's hand-off closes its drawer at the press and drops the panel once it is sent", () => {

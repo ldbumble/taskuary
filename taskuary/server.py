@@ -3349,15 +3349,15 @@ def handoff(task_id: int, body: HandoffBody):
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
     store.add_comment(task_id, ACTOR, 'human', f'Handed off to {body.to} by {body.channel}:\n{text}')
-    # Handing work to a person ENDS it here. The forward went out and somebody else owns the
-    # thing now, so leaving the card open on 'needs you' is the funnel asking for a second
-    # decision about work the owner just gave away. Closing it also retires the task's pending
-    # reviews, so the review queue stops asking about a draft that has already been forwarded.
-    from . import concierge
-    concierge.close_task(store, task_id, ACTOR)                  # forward, then Mark done: the agent stops, off the rail
-    store.audit('task', task_id, 'handoff', ACTOR,
-                detail={'to': body.to, 'channel': body.channel, 'closed': True})
-    return {'sent': sent, 'text': text, 'status': 'done'}
+    # FORWARD ONLY (the owner, 2026-10-18): handing it on used to close the task too, and nobody then saw whether the person
+    # took it. Like Send, it does one thing: the task stays open and waits on them (the rail's "waiting on them"), and Mark
+    # done is the owner's own step once it is finished. A task already closed stays closed.
+    st = t.get('Status') if t.get('Status') in ('done', 'dropped') else 'waiting'
+    if st != t.get('Status'): store.update_task(task_id, {'Status': st}, ACTOR)
+    from . import funnel
+    funnel.invalidate()
+    store.audit('task', task_id, 'handoff', ACTOR, detail={'to': body.to, 'channel': body.channel, 'closed': False})
+    return {'sent': sent, 'text': text, 'status': st}
 
 @app.get('/api/runs/live')
 def live_runs(lines: int = 3):

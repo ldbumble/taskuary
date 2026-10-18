@@ -67,9 +67,9 @@ class EscalateIsTheUrgencyRuleTests(unittest.TestCase):
         self.assertEqual(s.get_task(out['task_id'])['Priority'], 'normal')
 
 
-class HandoffClosesTheTaskTests(unittest.TestCase):
+class HandoffForwardsOnlyTests(unittest.TestCase):
     """Through the real endpoint: the send is faked, everything after it is not."""
-    def test_handing_it_to_a_person_closes_it_and_retires_the_review(self):
+    def test_handing_it_to_a_person_forwards_and_leaves_it_open_waiting_on_them(self):
         from unittest import mock
         from fastapi.testclient import TestClient
         from taskuary import server
@@ -83,14 +83,13 @@ class HandoffClosesTheTaskTests(unittest.TestCase):
                                             json={'to': 'hwhitfield@example.com', 'channel': 'email',
                                                   'text': 'Can you get someone to sign the docusign?'})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()['status'], 'done')
+        self.assertEqual(r.json()['status'], 'waiting')
 
         t = s.get_task(tid)
-        self.assertEqual(t['Status'], 'done')                 # not 'waiting', not 'needs you'
-        self.assertTrue(t['ClosedAt'])
-        self.assertEqual(s.get_review(rid)['Status'], 'no_reply')         # forward, then Mark done: the draft retires
-        self.assertNotIn(rid, [r['ReviewId'] for r in s.list_reviews('pending')])
-        # the forward itself is still on the record - closing is not forgetting
+        self.assertEqual(t['Status'], 'waiting')              # forward only (2026-10-18): Mark done is the owner's own step
+        self.assertFalse(t['ClosedAt'])
+        self.assertEqual(s.get_review(rid)['Status'], 'pending')          # nothing else is decided for them
+        # the forward is on the record
         self.assertTrue(any('Handed off to hwhitfield@example.com' in (c['Body'] or '')
                             for c in s.list_comments(tid)))
 

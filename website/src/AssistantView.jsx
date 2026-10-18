@@ -473,7 +473,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                 const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
-                // for every lane - "ready to close out" and "agent waiting on you" included
+                // for every lane - "ready to send" and "agent waiting on you" included
                 // ...and every other row says its lane - mark and word - unless that is the very
                 // thing the heading above it already said (BAND_SAYS).
                 // A MEETING says its clock time instead. "coming up" is what the urgent heading and

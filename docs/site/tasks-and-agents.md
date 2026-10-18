@@ -31,7 +31,7 @@ it leaves your work rail, and the "yours to end" mark comes off.
 | **Mark done** — the task page, the Assistant's button or card, "done" or "close" in the chat, the phone | Mark done | never |
 | **Send** a reply (or one of the task's emails) | Sends it, and nothing else: the item stays in front of you with its receipt, and **Mark done** or **Next** | always - sending and closing are two steps |
 | **Tick the last checklist box** | Mark done | an agent is still working on it |
-| **Hand it to a person** | Forwards it, then Mark done | never |
+| **Hand it to a person** | Forwards it, and the task waits on them (📤 waiting on them) | always - **Mark done** when it is finished |
 | **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |
 | **Mark done** on a channel that cannot send (the draft stays unsent) | Mark done | never |
 | **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with its close-out (below) and the draft if a reply is owed, otherwise it is done | its close-out or a reply waits on you, or you opened the session yourself |
@@ -53,9 +53,9 @@ same three buttons - only the line under them says what they do there. None of t
 
 | The task's work is | The rail says | What **Approve** does there |
 |---|---|---|
-| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository's rules say it cannot merge yet it says why and offers what fits - **Update branch**, **Re-run checks**, or **Approve anyway** where you allowed it |
-| An issue the task came from | ✉️ **ready to close out** | Posts your reply as the closing comment and closes the issue |
-| Mail, chat, anything else | ✉️ **ready to close out** | Sends your reply |
+| A pull request the agent opened, or the one the task came from | ✉️ **ready to send** | Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository's rules say it cannot merge yet it says why and offers what fits - **Update branch**, **Re-run checks**, or **Approve anyway** where you allowed it |
+| An issue the task came from | ✉️ **ready to send** | Posts your reply as the closing comment and closes the issue |
+| Mail, chat, anything else | ✉️ **ready to send** | Sends your reply |
 
 If the act is refused, nothing is sent. Merging or closing the pull request on GitHub yourself counts as answering
 it: the card goes, and the task waits for your **Mark done**. The buttons are yours, so **Agents may push / deploy** does not have to be on - that
@@ -114,7 +114,7 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 
 | It ended because | What you see | What brings it back |
 |---|---|---|
-| The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - ready to close out if a reply is owed | a new message on it |
+| The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - ready to send if a reply is owed | a new message on it |
 | You pressed **Stop and save** | 💾 **session saved** - the report is written, the task stays open | **Keep going** |
 | You pressed **Mark done** | the task is closed and the agent stopped | they write again |
 | The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Keep going**, or **Run another agent** |
@@ -228,7 +228,7 @@ state for a task, in the work rail's words — the server decides it once and bo
 | its agent is running | ⚙️ agent working | agent working |
 | its agent asked, needs approval, or is stuck | 👋 agent waiting on you | agent waiting on you |
 | you ended its session / it ended by itself | 💾 session saved / ⏹ agent stopped | saved or stopped — with **Keep going** |
-| a reply or a close-out waits for your yes | ✉️ ready to close out | agent finished, when an agent drafted it |
+| a reply or a close-out waits for your yes | ✉️ ready to send | agent finished, when an agent drafted it |
 | its agent closed it | ✅ agent finished | agent finished (today) |
 | you closed it | ✅ done | — |
 | waiting on somebody else | 📤 waiting on them | — |
@@ -251,7 +251,7 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **On you** | A person's ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished | For later work when its time comes |
+| **On you** | A person's ask, a task ready to send, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished | For later work when its time comes |
 | **Goals** | A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row ("3 of 7 · coding agent on step 5 · Ray owes step 4") unless one is your move, which is a row of its own under On you | For later while it is quiet, with its date in the time column; never gone until it is done |
 | **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
 | **For later** | Your work you pressed **Next** on, and tasks put away with **Remind me** - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first | - |

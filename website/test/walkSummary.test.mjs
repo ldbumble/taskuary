@@ -34,7 +34,7 @@ test("the lead counts each band as the rail does", () => {
 test("a row draws the server's who and state word, never a copy of its own", () => {
   const row = { ...it("approve", "action"), who: "Alex", email: "notifications@github.com", shows: { who: "github", state: "wants a yes", move: "" } };
   assert.equal(whoOf(row), "github");
-  assert.equal(stateOf(row, "ready to close out"), "wants a yes");
+  assert.equal(stateOf(row, "ready to send"), "wants a yes");
   // ...and the fold and the band's gist read the same words
   const s = summarize([{ ...row, key: "a" }, { ...row, key: "b" }]);
   assert.equal(s.groups[0].rows.length, 1);

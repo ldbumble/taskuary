@@ -27,7 +27,7 @@
     },
     {
       "key": "approve",
-      "word": "ready to close out",
+      "word": "ready to send",
       "role": "you",
       "mark": "🏁",
       "section": "task", "on_you": true, "waits": true,

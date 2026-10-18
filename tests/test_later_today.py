@@ -56,6 +56,15 @@ def test_a_reminder_for_later_today_puts_the_task_away_and_its_undo_keeps_the_ho
     assert again['undo']['params'] == {'until': f'{later:%Y-%m-%d %H:%M}'}
 
 
+
+def test_a_seven_oclock_today_is_undone_to_its_hour_not_its_morning(s):
+    """7:00 is also the hour a bare date comes back at; for today the date alone is refused, so the undo keeps the hour."""
+    tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
+    with mock.patch('taskuary.remind.datetime', wraps=datetime) as d:
+        d.now.return_value = NOW.replace(hour=6)
+        remind.set_reminder(s, tid, 'today 7am')
+        assert remind.set_reminder(s, tid, '2 weeks')['undo']['params'] == {'until': '2026-09-25 07:00'}
+
 def test_the_five_minute_sweep_brings_it_back_without_waiting_for_a_sync(s):
     from taskuary import asks
     tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')

@@ -159,7 +159,8 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
         asks.reminder_set(store, tid)       # said at the door it was set from when it comes due
     store.audit('task', tid, 'remind', actor, detail={'from': prev, 'to': at})
     # the undo keeps the hour too: a reminder for later today, put back as its date alone, was "today" with no time
-    back = (prev[:10] if prev[11:19] in ('', MORNING) else prev[:16]) if prev else 'none'
+    # - and a 7:00 today is an hour, not a morning: put back as its date alone it is refused ("say a time later today")
+    back = (prev[:10] if prev[11:19] in ('', MORNING) and prev[:10] != f'{datetime.now():%Y-%m-%d}' else prev[:16]) if prev else 'none'
     # a day after it is due is set - she may mean it - but said: the due day brings it back first anyway (B2, 2026-10-11)
     due_at = str(t.get('DueAt') or '')[:10]
     ahead = due_at > f"{datetime.now() + timedelta(days=1):%Y-%m-%d}"       # its "due tomorrow" step is still to come

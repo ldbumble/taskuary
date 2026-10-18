@@ -377,6 +377,7 @@ class DecideBody(BaseModel):
     verb: str; final_text: str | None = None; note: str | None = None
     cc: list[str] | None = None      # loop somebody in on this answer (email only)
     reply_text: str | None = None    # on a close-out: the task's pending reply, sent once the merge/close succeeded
+    anyway: bool = False             # Send anyway: past a delivery nobody can confirm (verdicts._deliver_review)
 class CodeBody(BaseModel):
     repo: str | None = None; agent: str | None = None
     model: str | None = None; instruction: str | None = None
@@ -1198,7 +1199,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import proposals
         rv = store.get_review(tid)
         closeout = rv.get('Kind') == 'action' and proposals._action(rv) in proposals.CLOSEOUT
-        out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None), background)
+        out = decide(tid, DecideBody(verb='approve', reply_text='' if closeout else None, anyway=bool(p.get('anyway'))), background)
         # ...with what the failure knows about the way on - GitHub's own offers (Update branch, Re-run checks) and a grant the
         # token lacks - which the chat and the phone draw as its choices (concierge.recover); a bare RuntimeError dropped both
         if not out.get('ok'):
@@ -1210,7 +1211,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         # settled off the walk. A close-out whose merge landed but whose reply failed did happen; it says so beside it.
         if out.get('status') == 'pending' and out.get('send_error'):
             # ...with its fix: dropped here, a send confirmed in chat with no mailbox never offered Connect a mailbox (2026-10-18)
-            raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True}
+            raise operations.Halt(out['send_error'], {'delivery': out.get('delivery') or 'failed', 'unsent': True, 'rid': tid}
                                   | ({'fix': out['send_fix']} if out.get('send_fix') else {}))
         if out.get('send_error'): out = {**out, 'reply_error': out['send_error']}
         return out
@@ -3465,7 +3466,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                    + ('I refreshed it with the latest context; review it and approve again.' if draft
                                       else f"Nothing was sent. Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
-                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text)
+                learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text, anyway=body.anyway)
 
 @app.get('/api/reviews/{rid}/closeout')
 def closeout_state(rid: int):

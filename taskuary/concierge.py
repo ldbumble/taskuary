@@ -2019,7 +2019,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # a brief has no row behind it: what it is about is its own words, never the item on the table
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
     # ...and a fact is what it says: "Remember it: memory.remember" put the tool's name on the card (real-AI check, 2026-10-18)
-    if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120]
+    if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120].rstrip('.')    # the line adds its own stop
     # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
     # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
     instant = toolcatalog.is_instant(kind)

@@ -92,7 +92,8 @@ test("uncertain delivery checks the original attempt and live claims freeze ever
     // on a task page the draft's own buttons are drawn UNDER THE DRAFT, never on the task's bar (the owner, 2026-10-06) - and frozen alike
     await page.waitForFunction(() => [...document.querySelectorAll("#delivery-fixture button")].some(b => b.textContent.trim() === "Checking delivery…"));
     const verbs = await page.$eval("#delivery-verbs", node => JSON.parse(node.innerText));
-    assert.ok(!verbs.some(verb => verb.id.startsWith("999:")), "nothing of the draft's rides the bar");
+    // registered as card verbs so the Advisor can find the draft's Send (B4) - but never DRAWN on the bar (actionRow rowOf skips `card`)
+    assert.ok(!verbs.some(verb => verb.id.startsWith("999:") && !verb.card), "nothing of the draft's rides the bar");
     assert.ok(verbs.filter(verb => verb.id === "attach").every(verb => verb.disabled));
     view = await snapshot();
     assert.ok(view.buttons.filter(button => button.label).every(button => button.disabled));

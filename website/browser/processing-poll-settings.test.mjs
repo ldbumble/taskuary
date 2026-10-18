@@ -128,7 +128,7 @@ test("PW-003/PW-004/PW-005 render the six chat clocks and global off help read-o
   await clickNav(page, "Settings");
   await page.waitForSelector('input[placeholder^="Search settings"]', { timeout: 10000 });
   await press(page, '[data-tq-browse-chip="config"]');
-  await page.waitForFunction(() => document.body.innerText.includes("Triage & routing"), { timeout: 5000 });
+  await page.waitForFunction(() => document.body.innerText.includes("How mail is sorted"), { timeout: 5000 });
   await clickVisibleExact(page, "Sync & startup");
   await page.waitForFunction(() => document.body.innerText.includes("Background sync (minutes)"), { timeout: 5000 });
 

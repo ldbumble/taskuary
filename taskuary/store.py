@@ -416,7 +416,8 @@ INSERT OR IGNORE INTO processing_reconcile_state (Singleton) VALUES (1);
 CREATE TABLE IF NOT EXISTS processing_dirty_row (
   Id INTEGER PRIMARY KEY, Kind TEXT NOT NULL, LocalId TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
-  MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT);
+  MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT,
+  StepsJson TEXT, TaskId INTEGER);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
 -- advances independently from amount -> Zoho draft -> Review -> sent.  The unique keys are
 -- the duplicate barrier: restarting Taskuary or pressing Run again cannot create another batch
@@ -1066,6 +1067,10 @@ class SQLiteStore:
                     self.cx.execute('ROLLBACK TO widen_connector_type')
                     self.cx.execute('RELEASE widen_connector_type')
                     raise
+            # a workflow's steps, each with its status, output and time (flow.py), and the run task they belong to
+            rrcols = {r[1] for r in self.cx.execute('PRAGMA table_info(report_run)')}
+            if 'StepsJson' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN StepsJson TEXT')
+            if 'TaskId' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN TaskId INTEGER')
             # after the widen above, which rebuilds the table without it
             if 'LastErrorAt' not in {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}:
                 self.cx.execute('ALTER TABLE connector ADD COLUMN LastErrorAt TEXT')
@@ -3689,14 +3694,22 @@ class SQLiteStore:
     def add_report_run(self, sid: int, rec: dict) -> int:
         """One run of one report, whole: what it read (Inputs), what it reviewed, what it said and why
         (Lines), what came out. The last-run setting keeps the newest for the row; this keeps the rest."""
-        rid = self._exec('INSERT INTO report_run (SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, Inputs, Summary) '
-                         'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        rid = self._exec('INSERT INTO report_run (SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, Inputs, Summary, '
+                         'StepsJson, TaskId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                          (sid, rec.get('at'), rec.get('type'), rec.get('title'), rec.get('ms'), rec.get('subject'), rec.get('message_id'), int(bool(rec.get('failed'))),
                           rec.get('error'), rec.get('said'), json.dumps(rec.get('lines') or [], default=str), json.dumps(rec.get('reviewed'), default=str) if rec.get('reviewed') else None,
-                          rec.get('inputs'), rec.get('summary')))
+                          rec.get('inputs'), rec.get('summary'), json.dumps(rec['steps'], default=str) if rec.get('steps') is not None else None, rec.get('task_id')))
         self._exec('DELETE FROM report_run WHERE SourceId=? AND RunId NOT IN (SELECT RunId FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?)',
                    (sid, sid, self.REPORT_RUNS_KEPT))
         return rid
+    def set_report_run_steps(self, rid: int, steps: list, failed: bool = False, error: str = None, ms: int = None, summary: str = None) -> None:
+        """A workflow run's steps as they land (flow.execute), so the run is readable while it works."""
+        self._exec('UPDATE report_run SET StepsJson=?, Failed=?, Error=?, Ms=COALESCE(?, Ms), Summary=COALESCE(?, Summary) WHERE RunId=?',
+                   (json.dumps(steps or [], default=str), int(bool(failed)), error, ms, summary, int(rid)))
+    def report_run_of_task(self, tid: int):
+        """The newest workflow run that belongs to this run task - its steps, for the task card."""
+        r = self._one('SELECT *, length(Inputs) InputChars FROM report_run WHERE TaskId=? ORDER BY RunId DESC LIMIT 1', (int(tid),))
+        return self._run_row(r) if r else None
     def report_run_failed(self, mid) -> bool | None:
         """Did the run that PRODUCED this report message fail? None when no run is linked to it - the
         caller falls back to the subject's convention. Keyed on the row, never on the report's newest
@@ -3707,7 +3720,7 @@ class SQLiteStore:
     def report_runs(self, sid: int, limit: int = 60) -> list:
         """The history, newest first, WITHOUT the inputs (14KB each) - get_report_run fetches one whole."""
         return [self._run_row(r) for r in self._rows('SELECT RunId, SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, '
-                                                      'length(Inputs) InputChars FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?', (sid, limit))]
+                                                      'StepsJson, TaskId, length(Inputs) InputChars FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?', (sid, limit))]
     def get_report_run(self, rid: int):
         r = self._one('SELECT *, length(Inputs) InputChars FROM report_run WHERE RunId=?', (rid,))
         return self._run_row(r) if r else None
@@ -3718,7 +3731,7 @@ class SQLiteStore:
             except ValueError: return None
         return {'runId': r['RunId'], 'sourceId': r['SourceId'], 'at': r['At'], 'type': r['Type'], 'title': r['Title'], 'ms': r['Ms'], 'subject': r['Subject'],
                 'messageId': r['MessageId'], 'failed': bool(r['Failed']), 'error': r['Error'], 'said': r['Said'], 'lines': j(r.get('LinesJson')) or [],
-                'reviewed': j(r.get('ReviewedJson')), 'inputChars': r.get('InputChars') or 0, **({'inputs': r['Inputs']} if 'Inputs' in r else {}),
+                'reviewed': j(r.get('ReviewedJson')), 'inputChars': r.get('InputChars') or 0, 'steps': j(r.get('StepsJson')), 'taskId': r.get('TaskId'), **({'inputs': r['Inputs']} if 'Inputs' in r else {}),
                 **({'summary': r['Summary']} if 'Summary' in r else {})}
 
     def thread_messages(self, conversation_id=None, subject=None, limit=40):

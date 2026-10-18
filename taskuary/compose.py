@@ -154,6 +154,28 @@ SYSTEM = (
     + WATCH_RULE + REPOS_RULE)
 
 
+# A WORKFLOW IS STEPS, and code runs every one it can (flow.py; the owner, 2026-10-18: "maybe we should do the same for
+# workflows and it will end up the ai will just make judgements"): the model writes them ONCE, here, with real queries.
+FLOW_RULES = (
+    'FLOW RULES - an agent workflow\'s work is "flow": an ordered list of steps that code runs on every run, so only the judgement '
+    'costs a model:\n'
+    '  {"id": "s1", "kind": "source", "label": "<short name>", "type": "<a catalog type>", ...exactly the keys the catalog lists for it}\n'
+    '  {"id": "s2", "kind": "ai", "label": "...", "prompt": "<the judgement, reading {{s1}}>", "output": "text|yes_no|fields", "fields": ["..."]}\n'
+    '  {"id": "s3", "kind": "task", "label": "...", "title": "...", "summary": "...", "assignee": "<an agent name, optional>"}\n'
+    '  {"id": "s4", "kind": "draft", "label": "...", "channel": "email", "to": "<address>", "about": "...", "subject": "..."}\n'
+    '  {"id": "s5", "kind": "agent", "label": "...", "prompt": "<what the agent does with what the steps found>"}\n'
+    '- Every read or write a catalog type can do is a "source" step with a REAL query, object or path: peek at the schema, never guess. '
+    'Use only types whose ready flag is true.\n'
+    '- "ai" only where a judgement, a summary or a draft is needed. When a later step depends on it, its output is yes_no or fields.\n'
+    '- "task" opens a task, "draft" leaves an email for the owner to approve - that is how results land; neither needs a connection.\n'
+    '- "agent" ONLY when the work needs an agent\'s hands - a web page, open-ended investigation - and it is always the last step. A job '
+    'that is nothing but that is ONE agent step (or just "prompt").\n'
+    '- A step reads earlier output with {{s1}} (its rows/text), {{s1.head}}, {{s1.rows}} (a count), {{s2.answer}}, {{s2.why}}, '
+    '{{s2.fields.<name>}}, {{inputs.<key>}}, {{run.date}}.\n'
+    '- "only_if": {"step": "s2", "is": "yes|no|rows|empty"} skips a step unless an earlier one answered so - use it instead of asking the '
+    'AI whether to continue.\n'
+    '- "repair": "propose" when the owner wants a failed run fixed for them to approve; leave it out otherwise.\n')
+
 WORKFLOW_SYSTEM = (
     'You turn a plain-English request into ONE Taskuary workflow configuration. Workflows do work '
     'or keep state; reports only read and summarize. This builder supports exactly two workflow types:\n'
@@ -166,10 +188,12 @@ WORKFLOW_SYSTEM = (
     'and leave drafts - emails, messages, invoices - for the owner to approve, with no connection at all. Never ask which '
     'connection opens a task or where a result should go. A connection is only for a system the work happens IN (Intacct '
     'to read, a portal to drive). Opening tasks or drafting IS doing work: such a job is a workflow, never "really a report".\n\n'
-    'Answer JSON only in one of two shapes:\n'
+    'Answer JSON only in one of three shapes:\n'
     '  {"questions": ["..."]} when the request is unclear - what the job is, what it should produce, for whom - or a choice you cannot '
     'sensibly default is missing (which Zoho customers, say); at most three short questions. A clear request is built: what you chose - who runs it, the schedule, what it asks first - goes '
     'in explain, never back to the owner as a question, and nothing they already said is asked again.\n'
+    '  {"peek": {"type": "<a type from the catalog>", ...its keys}} - you need to SEE a real schema (which tables, what the columns '
+    'are called) before you can write a step\'s query; the result comes back and you answer again.\n'
     '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n\n'
     'RULES\n'
     '- Use only connector ids, customer ids, and agent names present in WORKFLOW OPTIONS. Never invent one.\n'
@@ -192,13 +216,13 @@ WORKFLOW_SYSTEM = (
     'WORKFLOW OPTIONS connections; "ask_first" - what it must ask the owner before doing; "done_when" - what finished '
     'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page.\n'
     '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, watch, delivery, or alerts: a run is a task, '
-    'so there is no condition to wait for and nothing for triage to judge.\n')
+    'so there is no condition to wait for and nothing for triage to judge.\n\n' + FLOW_RULES)
 
 WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
     'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
-              'every_minutes', 'daily_at', 'cron', 'on_startup'},
+              'flow', 'repair', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
 
@@ -252,7 +276,8 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
     if not llm: return dict(NO_AI)
     if not (ask or '').strip(): return {'error': 'Say what you want the workflow to do.'}
     options = workflow_catalog(store)
-    user = {'request': ask.strip(), 'workflow_options': options,
+    # the systems a step may read or write, as the report composer sees them - a step is a report source card (flow.py)
+    user = {'request': ask.strip(), 'workflow_options': options, 'catalog': catalog(store),
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):
@@ -270,8 +295,16 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             names = {x['name'] for x in options['agent']}
             if cfg.get('agent') not in names:
                 return ({'error': f"It picked an agent you don't have - say which one to use: {', '.join(sorted(names))}."} if names else dict(NO_AI))
-            if not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
+            if cfg.get('flow') is not None:
+                from . import flow
+                ok, why = flow.validate(store, cfg['flow'], strict=True)
+                if not ok: return {'error': f"{AGAIN.format('a workflow')} (Its steps did not hold: {why}.)"}
+                lone = len(cfg['flow']) == 1 and cfg['flow'][0].get('kind') == 'agent'
+                if lone and not cfg.get('prompt'): cfg['prompt'] = cfg['flow'][0].get('prompt') or ''
+                if lone: cfg.pop('flow')          # one agent step IS the prompt-only workflow (flow.steps_of)
+            elif not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
                 return {'error': AGAIN.format('a workflow')}
+            if str(cfg.get('repair') or '') not in ('propose', 'auto'): cfg.pop('repair', None)
             if cfg.get('skill'): cfg['skill'] = str(cfg['skill']).strip().lstrip('/')
             known = {x['id'] for x in options['connections']}
             uses = [int(x) for x in (cfg.get('uses') or []) if str(x).isdigit()]
@@ -309,7 +342,7 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
         return {'config': cfg, 'explain': str(out.get('explain') or '')[:600],
                 'confidence': out.get('confidence') or 'medium', 'looked_at': looked}
 
-    return _rounds(store, llm, WORKFLOW_SYSTEM, user, 0, finish)
+    return _rounds(store, llm, WORKFLOW_SYSTEM + _playbook(user['catalog']), user, MAX_PEEKS, finish)
 
 
 # The same fence, aimed one step lower down. The report composer answers "what report do I

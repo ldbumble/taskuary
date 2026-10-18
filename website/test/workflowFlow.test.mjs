@@ -120,8 +120,8 @@ test("steps that only read are a report: the editor offers it, built from the sa
     { title: "Bills", ai_prompt: "Summarize:\n[mssql.read ap bills] ( rows)", cron: "0 8 * * 1", type: "mssql", query: "SELECT 1", label: "Read AP bills" });
   const ed = read("WorkflowEditor.jsx");
   assert.match(ed, /onlyReads\(cfg\.flow, types\) && <Alert[^>]*data-tq-report-suggestion/);
-  assert.match(ed, /onReport\(asReport\(cfg\)\)}>Make it a report</);
-  assert.match(read("Composer.jsx"), /out\?\.verdict === "report"[\s\S]*Make it a report/);
+  assert.match(ed, /onReport\(asReport\(cfg\)\)}>\{btnLabel\("make_report"\)\}</);
+  assert.match(read("Composer.jsx"), /out\?\.verdict === "report"[\s\S]*btnLabel\("make_report"\)/);
   assert.match(read("ReportsView.jsx"), /meta\?\.verdict === "report" \? asReportDraft\(config, meta\)/);
 });
 

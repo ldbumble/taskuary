@@ -17,6 +17,7 @@
     "stop_agent":      {"label": "Stop and save", "hint": "Writes up what was done, stops the work, and drafts the reply to whoever asked - the task stays open", "row": ["save-end"]},
     "answer_agent":    {"label": "Answer it", "hint": "Type your answer in the box below - it goes straight to the agent that is waiting", "row": ["answer_agent"]},
     "continue":        {"label": "Keep going", "hint": "Pick the work up where it left off - say what to add, or keep going as is", "row": ["continue"]},
+    "make_report":     {"label": "Make it a report", "hint": "This only reads and sums up - it is drafted as a report from the same reads, nothing saved until you save it", "row": []},
     "rerun":           {"label": "Run it again", "hint": "Runs the report again in the background - its result goes where the report sends it, and if it fails the bell says why", "row": []},
     "chase":           {"label": "Chase them", "hint": "Drafts a short nudge on the thread, in your voice, copying whoever usually gets them to answer", "row": []},
     "let_go":          {"label": "Let it go", "hint": "Puts it down: the step is dropped or the follow-up closed", "row": []},

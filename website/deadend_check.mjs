@@ -62,6 +62,7 @@ const WALK_SKIP = {
   "coding_agent": "an answer inside Send to agent's question; the faults pass starts one through it",
   "stop_agent": "Stop and save ends a live session - the demo's agents are recordings with no session to save",
   "continue": "Keep going resumes a stopped agent's session - none in the demo world has one",
+  "make_report": "offered only on a workflow whose steps all read - every demo workflow acts, and describing a new one asks the AI, which neither world has",
   "rerun": "runs a report - the demo refuses it (\"running reports are switched off\"), the faults world has no report source",
   "chase": "shows only on a person who has gone quiet past their usual time - the seeded world is hours old",
   "let_go": "as Chase them: a slipped follow-up's answer",

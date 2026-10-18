@@ -4513,7 +4513,9 @@ class SQLiteStore:
             if raw:
                 row = dict(raw); snapshot = json.loads(row['DeliveryEnvelope'])
                 env = copy.deepcopy(snapshot['envelope'])
-                env.update(delivery=state, attempted_at=row.get('DeliveryAttemptedAt'), fix=fix)
+                env.update(delivery=state, attempted_at=row.get('DeliveryAttemptedAt'))
+                if fix: env['fix'] = fix
+                else: env.pop('fix', None)
                 status = snapshot['status'] if state == 'sent' else 'pending'
                 cur = self.cx.execute('UPDATE review SET Status=CASE WHEN Status=\'pending\' THEN ? ELSE Status END, FinalText=?, DraftText=CASE WHEN ?=\'sent\' THEN DraftText ELSE ? END, '
                                       'DecidedBy=?, DecidedAt=?, DecideNote=?, DeliveryState=?, DeliveryClaim=NULL, DeliveryReceipt=?, Deliver=?, Reason=COALESCE(?,Reason) '

@@ -48,7 +48,7 @@ def draft_revision(store, rv) -> str:
                            "ORDER BY ReviewId DESC LIMIT 1", (rv['TaskId'],))
         if reply: rows.append(reply)
     def env(r):
-        d = {k: v for k, v in _envelope(r).items() if k not in ('delivery', 'attempted_at')}     # how a send went is not what it says
+        d = {k: v for k, v in _envelope(r).items() if k not in ('delivery', 'attempted_at', 'fix')}     # how a send went is not what it says
         # an empty envelope means the reply _deliver_review resolves - and a failed send writes that resolution into
         # Deliver, so hashing the raw field refused Try again with "the draft changed" when nothing the owner saw had moved
         if d: return d

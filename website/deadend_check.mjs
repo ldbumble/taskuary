@@ -97,7 +97,8 @@ const look = () => page.evaluate(() => {
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const read = [card?.innerText || "", row?.innerText || "", document.querySelector("[data-tq-advice]")?.innerText || ""].join("\n");
-  return { verbs, advice: !!document.querySelector("[data-tq-advice]"), adv: document.querySelector("[data-tq-advice]")?.innerText || "",
+  // the no-AI strip asks for an AI - it picks nothing, so nothing on the bar may be dark under it (CI's demo has no CLI to ask)
+  return { verbs, advice: !!document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])'), adv: document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])')?.innerText || "",
     errs, rail, ref, read, chat: chat?.innerText || "",
     cards: window.__tqCards, card: card ? { top: cr.top, shown: Math.min(cr.bottom, rr ? rr.top : hr.bottom) - Math.max(cr.top, hr.top) } : null };
 });

@@ -183,9 +183,10 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
         store.add_comment(task_id, actor, 'agent', f'PROPOSAL REFUSED ({p.get("action")}): {why}')
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
         return None
-    # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR)
+    # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
+    # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
     reason = (f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
-              if p.get('closeout') else f'the agent proposes to {why}' + (f" - {p['why'][:200]}" if p.get('why') else ''))
+              if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {why}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')

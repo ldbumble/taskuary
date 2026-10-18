@@ -106,14 +106,17 @@ export const recHead = (r) => !r ? "" : r.status === "failed" ? `failed: ${r.err
 export const tally = (recs) => {
   const ran = (recs || []).filter((r) => !["skipped", "repaired"].includes(r.status));
   const ai = ran.filter((r) => USES_AI.has(r.kind)).length;
-  const ms = (recs || []).reduce((n, r) => n + (r.ms || 0), 0);
-  return `Ran ${ran.length} step${ran.length === 1 ? "" : "s"} in ${secs(ms)}, ${ai ? `${ai} with AI` : "no AI used"}`;
+  const ms = (recs || []).reduce((n, r) => n + (r.ms || 0), 0), fixed = (recs || []).some((r) => r.status === "repaired");
+  // a repair is a model call too (flow.repair): "no AI used" over a run that repaired itself would be untrue
+  return `Ran ${ran.length} step${ran.length === 1 ? "" : "s"} in ${secs(ms)}, ${ai ? `${ai} with AI` : fixed ? "AI only for the repair" : "no AI used"}`;
 };
 // `short`: where the failed step's own row already says the error, the line above it does not say it again
 export const runWords = (recs, short = false) => {
   const i = (recs || []).findIndex((r) => r.status === "failed" || r.status === "waiting");
   if (i < 0) return tally(recs);
-  return recs[i].status === "failed" ? `Step ${i + 1} failed${short ? "" : `: ${recs[i].error || ""}`}` : `Waiting for your yes on step ${i + 1}`;
+  // the step's own number: a repaired record is the same step tried again, not a step of its own (Step 3 failed on a one-step run)
+  const n = recs.slice(0, i).filter((r) => r.status !== "repaired").length + 1;
+  return recs[i].status === "failed" ? `Step ${n} failed${short ? "" : `: ${recs[i].error || ""}`}` : `Waiting for your yes on step ${n}`;
 };
 // what the editor's last tests came to - a test never writes, so it never says "ran"
 export const testWords = (recs) => {

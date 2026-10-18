@@ -157,6 +157,7 @@ def test_a_page_that_moved_is_repaired_by_itself_the_step_rerun_and_the_run_fini
         out, run = run_now(s, src, m)
     tid = out['task_id']
     assert m.calls == 1 and [r['status'] for r in run['steps']] == ['repaired', 'ok', 'ok'] and not run['failed']
+    assert 'AI only for the repair' in run['summary']                                       # the repair was a model call, and says so
     assert [p['url'] for p in page.reads] == [f'{VENDOR}/prices', f'{VENDOR}/catalog']       # the failed step ran again
     assert saved(s, src) == steps(f'{VENDOR}/catalog', '.catalog .price') and asks(s, tid) == []
     asked = json.loads(m.users[0])
@@ -188,6 +189,7 @@ def test_a_repair_that_reaches_somewhere_new_asks_first_however_small_the_model_
     assert run['failed'] and saved(s, src) == before and run['repairs'] == []
     [p] = asks(s, out['task_id'])
     assert p['action'] == 'repair_workflow' and 'Asking first' in p['why'] and p['flow'] == change(moved)
+    assert s._one("SELECT Reason FROM review WHERE TaskId=? AND Kind='action'", (out['task_id'],))['Reason'].startswith('the workflow asks to')
 
 
 def test_a_repair_that_widens_a_delete_asks_first(s):

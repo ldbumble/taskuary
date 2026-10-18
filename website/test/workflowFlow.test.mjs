@@ -69,6 +69,10 @@ test("a run reads back in the owner's words, and says how little AI it took", ()
   assert.equal(tally(recs), "Ran 2 steps in 2.1s, no AI used");
   assert.equal(runWords([...recs.slice(0, 1), { id: "s2", kind: "source", status: "failed", error: "Invalid object name" }]), "Step 2 failed: Invalid object name");
   assert.equal(runWords([{ id: "s1", kind: "source", status: "waiting" }]), "Waiting for your yes on step 1");
+  // a step repaired twice and still failing is step 1, and the repairs were the AI it took
+  const tried = [{ id: "s1", kind: "source", status: "repaired", ms: 1 }, { id: "s1", kind: "source", status: "repaired", ms: 1 }];
+  assert.equal(runWords([...tried, { id: "s1", kind: "source", status: "failed", error: "gone" }], true), "Step 1 failed");
+  assert.equal(tally([...tried, { id: "s1", kind: "source", status: "ok", ms: 8 }]), "Ran 1 step in 0.0s, AI only for the repair");
   assert.deepEqual(Object.keys(outputsOf(recs)), ["s1", "s2", "s3"]);
 });
 
@@ -101,7 +105,7 @@ test("a self-repair reads back with what broke and Take it back, in the shared b
   const rs = read("RunSteps.jsx");
   assert.ok(rs.includes('btnLabel("take_back")') && rs.includes('btnLabel("fix")') && rs.includes("/undo-repair"));
   assert.doesNotMatch(rs, />Fix with AI</);
-  assert.equal(tally([{ kind: "source", status: "repaired", ms: 300 }, { kind: "source", status: "ok", ms: 700 }]), "Ran 1 step in 1.0s, no AI used");
+  assert.equal(tally([{ kind: "source", status: "repaired", ms: 300 }, { kind: "source", status: "ok", ms: 700 }]), "Ran 1 step in 1.0s, AI only for the repair");
   assert.ok(read("WorkflowEditor.jsx").includes('cfg.repair || "auto"'));                 // repair is on unless the owner says otherwise
 });
 

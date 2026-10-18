@@ -8,6 +8,7 @@ import { Alert, Box, Button, Chip, CircularProgress, MenuItem, Select, Switch, T
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
+import { label as btnLabel } from "./buttons.js";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
 import { ConfirmDelete, useAgents } from "./ui.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
@@ -109,7 +110,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
     try {
       const { data } = await api.post(`/api/workflows/${cur.SourceId}/repair`, { run_id: runId, ...(cfg.flow?.length ? { flow: toSaved(cfg.flow) } : {}) });
       if (data.flow) { setRepair({ was: cfg.flow || [], explain: data.explain || "" }); setCfg((c) => ({ ...c, flow: data.flow })); }
-      else setMsg({ ok: false, text: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "No fix was found." });
+      else setMsg({ ok: false, text: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "No fix was found.",
+        fix: data.fix?.href ? data.fix : null });      // no AI, or the app broke and not the steps: where that is fixed
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "No fix was found." }); }
     finally { setBusy(""); }
   };
@@ -179,7 +181,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         <Button variant="contained" size="small" disableElevation disabled={!!busy} onClick={save}>
           {busy === "save" ? "Saving…" : "Save"}</Button>
       </Box>
-      {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}>{msg.text}</Alert>}
+      {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}
+        action={msg.fix ? <Button size="small" component="a" href={msg.fix.href} sx={{ fontSize: 12 }}>{msg.fix.label || btnLabel("fix")}</Button> : null}>{msg.text}</Alert>}
       {lastRun && lastRun({ onFix: canFix ? () => fix(lastRunRec.run_id) : null, fixing: busy === "fix",
         // a repair taken back puts the old steps on the saved workflow: the page shows them too
         onChanged: async () => { await reload(); const { data } = await api.get("/api/sources"); const row = (data.data || []).find((x) => x.SourceId === cur?.SourceId);

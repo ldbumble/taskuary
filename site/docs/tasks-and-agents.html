@@ -173,8 +173,8 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 </tr>
 <tr>
 <td><strong>Hand it to a person</strong></td>
-<td>Forwards it, then Mark done</td>
-<td>never</td>
+<td>Forwards it, and the task waits on them (📤 waiting on them)</td>
+<td>always - <strong>Mark done</strong> when it is finished</td>
 </tr>
 <tr>
 <td><strong>Not ours</strong> / <strong>Not a task</strong></td>
@@ -236,17 +236,17 @@ same three buttons - only the line under them says what they do there. None of t
 </thead>
 <tbody><tr>
 <td>A pull request the agent opened, or the one the task came from</td>
-<td>✉️ <strong>ready to close out</strong></td>
+<td>✉️ <strong>ready to send</strong></td>
 <td>Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository&#39;s rules say it cannot merge yet it says why and offers what fits - <strong>Update branch</strong>, <strong>Re-run checks</strong>, or <strong>Approve anyway</strong> where you allowed it</td>
 </tr>
 <tr>
 <td>An issue the task came from</td>
-<td>✉️ <strong>ready to close out</strong></td>
+<td>✉️ <strong>ready to send</strong></td>
 <td>Posts your reply as the closing comment and closes the issue</td>
 </tr>
 <tr>
 <td>Mail, chat, anything else</td>
-<td>✉️ <strong>ready to close out</strong></td>
+<td>✉️ <strong>ready to send</strong></td>
 <td>Sends your reply</td>
 </tr>
 </tbody></table>
@@ -375,7 +375,7 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 </thead>
 <tbody><tr>
 <td>The agent said it was done</td>
-<td>its <strong>Close out</strong> card if its work lives on GitHub, then ✅ <strong>agent finished</strong> - ready to close out if a reply is owed</td>
+<td>its <strong>Close out</strong> card if its work lives on GitHub, then ✅ <strong>agent finished</strong> - ready to send if a reply is owed</td>
 <td>a new message on it</td>
 </tr>
 <tr>
@@ -503,7 +503,7 @@ state for a task, in the work rail&#39;s words — the server decides it once an
 </tr>
 <tr>
 <td>a reply or a close-out waits for your yes</td>
-<td>✉️ ready to close out</td>
+<td>✉️ ready to send</td>
 <td>agent finished, when an agent drafted it</td>
 </tr>
 <tr>
@@ -551,7 +551,7 @@ it until it is empty, then says so (&quot;FYI done.&quot;) and the walk goes on 
 </tr>
 <tr>
 <td><strong>On you</strong></td>
-<td>A person&#39;s ask, a task ready to close out, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person&#39;s usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished</td>
+<td>A person&#39;s ask, a task ready to send, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person&#39;s usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished</td>
 <td>For later work when its time comes</td>
 </tr>
 <tr>
@@ -667,7 +667,7 @@ moves it down without deleting it.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./connections"><span>Previous</span>Connections</a><a class="pn next" href="./security"><span>Next</span>Security</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.4 · updated 2026-10-18</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.5 · updated 2026-10-18</p>
   </main>
 </div>
 <script src="./docs.js"></script>

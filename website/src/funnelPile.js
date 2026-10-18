@@ -415,6 +415,8 @@ export const dueWord = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
   return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : "";
 };
+// It counts down while the page sits, so it is worked out here, live; funnel_presentation.back_in is its server twin (the
+// phone, the assistant's list) and a test holds the two to the same words.
 export const railBack = (iso, now = Date.now()) => {
   if (!iso) return "";
   const t = new Date(String(iso).replace(" ", "T")).getTime();

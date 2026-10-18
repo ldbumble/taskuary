@@ -8,35 +8,20 @@ import { isAgentKind, onYou } from "./lanes.js";
 export const GROUPS = LEVEL_ORDER.map((key) => ({ key, word: SECTION_WORDS[key] }));
 export const groupOf = (i) => levelOf(i);
 const AGENT_LANES = new Set(["blocked", "stopped", "saved", "queued", "working", "broken", "unjudged"]);
-
-// who asks: the person or the agent - and for a report, whose sender IS its title, the word "Report"
-// An agent's row names the AGENT - the task's "who" was the owner who started it, and "You" under Agents waiting
-// said nothing (the owner, 2026-09-30). An address shows its name part: "securityapp", not "noreply-securityapp@...".
 // ...an agent's own kind of row is lanes.json's `agent` (a proposed action carries the agent that drafted it)
 const isAgentRow = (i) => !!i?.agent && (AGENT_LANES.has(i.lane) || isAgentKind(i.kind));
-const person = (w) => w.includes("@") ? w.split("@")[0].replace(/^no-?reply[-._]?/i, "") || w.split("@")[0] : w;
-// A SERVICE'S MAIL names the service, not the display name it borrowed: GitHub sends a failed run from notifications@github.com
-// under the name of whoever pushed - the owner - so the FYI band read the owner's own first name (2026-10-13: "why does fyi say my name??")
-const SERVICE = /^(no-?reply|do-?not-?reply|notifications?|notify|alerts?|mailer(-daemon)?|bounces?)([-._+]|@)/i;
-const service = (e) => {
-  const [local, dom] = String(e || "").toLowerCase().split("@");
-  if (!dom || !SERVICE.test(`${local}@`)) return "";
-  const parts = dom.split("."); let k = parts.length - 2;
-  if (k > 0 && ["co", "com", "org", "net", "ac", "gov"].includes(parts[k])) k -= 1;     // github.co.uk -> github
-  return parts[Math.max(k, 0)];
-};
-export const whoOf = (i) => {
-  const named = String(i?.who || ""), who = person(String((isAgentRow(i) ? i.agent : (!named.includes("@") && service(i?.email)) || i?.who || i?.agent) || "").trim()), title = String(i?.title || "");
-  if (who && !title.toLowerCase().startsWith(who.toLowerCase().slice(0, 16))) return who;
-  return i?.kind === "report" || i?.lane === "report" ? "Report" : who || "someone";
-};
+
+// HOW A ROW READS IS THE SERVER'S (funnel_presentation.shows): who asks - the person, the agent on an agent's row, the
+// service behind a service's mail, "Report" for a report - and the one state word under it. This file had its own copy
+// and the phone another; the 2026-10-13 "why does fyi say my name??" fix reached only this one. Every card the page
+// gets went through funnel.present, which sets `shows`; the plain field is all that is left for a card without it.
+export const whoOf = (i) => i?.shows?.who || String(i?.who || i?.agent || "").trim() || "someone";
 
 // the task number a row belongs to, "" for one with no task yet
 export const refOf = (i) => i?.ref || (i?.tid ? `TQ-${String(i.tid).padStart(4, "0")}` : "");
 
-// the one line under a row's "who": the lane's word, except a drafted reply, which is the thing to approve
-export const stateOf = (i, laneWord) => i?.lane === "approve"
-  ? (i.kind === "action" && !i.closeout ? "wants a yes" : laneWord) : laneWord;   // a reply and a close-out: the lane's one word
+// the one line under a row's "who" - the server's word, else the lane's
+export const stateOf = (i, laneWord) => i?.shows?.state || laneWord;
 
 // a band's card says who it is from, never what each one said - the rail beside it has the rows (the owner, 2026-10-06)
 // ...a report has no "who" but its own name, so it says that

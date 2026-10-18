@@ -167,16 +167,17 @@ def pipe_list(store, p: dict) -> str:
     # BY THE RAIL'S OWN SECTIONS, the headings the owner sees (funnel.level_of) - each row still says its lane. Grouped by
     # lane, "For later" never appeared: it is a section, not a lane, and "what is waiting in later" was answered "nothing is
     # parked in Later" over four rows sitting under that heading (the owner, 2026-09-30)
-    from .remote_assistant import _back_in
+    # ...and each row in the words the rail and the phone give it (funnel_presentation.shows)
+    from .funnel_presentation import back_in, shows
     out = []
     for sec in ('urgent', 'task', 'agents', 'later', 'reports', 'ideas', 'fyi'):
         xs = [i for i in items if funnel.level_of(i) == sec]
         if not xs: continue
         out.append(f"{funnel.SECTION_WORDS[sec].upper()} ({len(xs)}):")
         def row(i):
-            back = _back_in(i.get('back_at') or i.get('defer_until')) if sec == 'later' else ''
-            return (f"  {task_ref(i['tid']) + ' ' if i.get('tid') else ''}{i['who'] + ' - ' if i.get('who') else ''}{_cut(i.get('title'), 100)}"
-                    f" [{funnel.LANE_WORDS.get(i['lane'], (i['lane'],))[0]}{', back in ' + back if back else ''}]")
+            back, sh = back_in(i.get('back_at') or i.get('defer_until')) if sec == 'later' else '', i.get('shows') or shows(i)
+            return (f"  {task_ref(i['tid']) + ' ' if i.get('tid') else ''}{sh['who']} - {_cut(i.get('title'), 100)}"
+                    f" [{sh['state']}{', back ' + back if back else ''}]")
         out += [row(i) for i in xs[:15]]
         if len(xs) > 15: out.append(f'  ...and {len(xs) - 15} more')
     return NL.join(out)

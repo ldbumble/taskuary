@@ -1327,7 +1327,11 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
         turn = concierge.receipt_turn(store, out, ACTOR, table=table)
         out = {**out, 'receipt': turn['say'], 'chips': turn['chips']}
     except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
-    if out['status'] in ('stale', 'cancelled'): raise HTTPException(409, out.get('error') or out['status'])
+    # ...and a press on a proposal that moved or was cancelled answers with that line and its buttons, so the page shows the one
+    # recorded receipt with its way on - the bare 409 had the page write a second line of its own, "Say it again", and only Next
+    if out['status'] in ('stale', 'cancelled'):
+        return JSONResponse({'detail': out.get('error') or out['status'], 'status': out['status'], 'receipt': out.get('receipt'),
+                             'chips': out.get('chips') or [], 'op': operations.get(store, oid)}, status_code=409)
     return out
 
 @app.get('/api/tasks/{task_id}/history')
@@ -4574,9 +4578,10 @@ def concierge_chips(key: str):
 
 @app.get('/api/advice')
 def advice_for(key: str):
-    """The Advisor's line and pill for the item on the table, at its current revision - or nothing (advisor.py)."""
+    """The Advisor's line and pill for the item on the table, at its current revision - or why there is none: still being judged
+    ({"pending": true}) or left alone ({"none": why}) - advisor.status."""
     from . import advisor
-    return advisor.for_key(store, key)
+    return advisor.status(store, key)
 
 
 @app.get('/api/advice/notes')

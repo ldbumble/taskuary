@@ -8,11 +8,11 @@ const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "ut
 const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
 
 test("no AI connected: the strip says it once and its one button opens Connections, AI (U3)", () => {
-  assert.match(view, /data\.verb \|\| data\.none === "no_ai"/, "the no-AI answer is kept, not dropped as nothing");
+  assert.match(read("tableState.js"), /data\.verb \|\| data\.none === "no_ai"/, "the no-AI answer is kept, not dropped as nothing");
   assert.match(view, /Connect an AI to get a suggestion on each item/);
   assert.match(view, /openAppLink\(place\("ai"\)\.href\)\}>Connect an AI<\/button>/);
   // ...and the capability says so too: one answer for "is an AI connected" (capabilities.js)
-  assert.match(view, /caps\.ai === false \|\| \(advice\?\.none === "no_ai" && advice\.for === onTable\)/);
+  assert.match(view, /caps\.ai === false \|\| \(advice\?\.none === "no_ai" && advice\.for === table\.key\)/);
 });
 
 test("a press refused as changed reads the advice again and says so (B6)", () => {
@@ -36,7 +36,7 @@ test("every item put on the table goes through putOnTable, which pins its card t
   assert.match(view, /putOnTable\(card\);\n\s+say\(data\.say\);/, "landed");
   assert.match(view, /putOnTable\(card, "card"\);/, "the Board's open");
   assert.match(view, /putOnTable\(null, "view"\);\s+\/\/ its top in view/, "a browse card");
-  assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); putOnTable\(null, "view"\); \}/, "the folded item opened again");
+  assert.match(view, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \}/, "the folded item opened again");
   assert.equal((view.match(/setCurrent\(/g) || []).length, 1, "Current is set in one place");
   assert.doesNotMatch(view, /toCard/);
   // the pin: the card's top to the top of the body, on mount and on every resize, until the owner scrolls

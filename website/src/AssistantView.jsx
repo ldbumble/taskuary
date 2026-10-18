@@ -42,6 +42,7 @@ const AssistantMark = () => <TaskuaryMark size={24} />;
 import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
+import { adviceRead, CAP_LINE, tableOf } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -49,7 +50,7 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
-import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
@@ -738,7 +739,11 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               current item, and reopening it in place would leave two current items when the assistant, the bar and Next all work
               the last one (the owner, 2026-10-16: "maybe just remove the open again button"); asking for it brings it back */}
           {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && (
-            <div className="tq-fold" data-tq-folded={m.card.key}>
+            // ...except the item ON THE TABLE, folded by its X or a page opened over it: that line is its door back - nothing reopened
+            // it, while the rail kept ringing it and the Advisor kept talking about it (re-audit item 4, 2026-10-18)
+            <div className="tq-fold" data-tq-folded={m.card.key} {...(live && foldedNow ? { role: "button", tabIndex: 0, title: "Open it again",
+              style: { cursor: "pointer" }, onClick: () => actions.reopen?.(m.card.key, true),
+              onKeyDown: (e) => { if (e.key === "Enter") actions.reopen?.(m.card.key, true); } } : {})}>
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
@@ -936,9 +941,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // WHAT IS ON THE TABLE, by key: the walk's item, or the task opened by name. The advice is read for this key and shown only
   // when it was read for it - the last item's line never stands over the next one
   const onTable = current || cardKey;
-  const shownAdvice = setupOn.current ? null : adviceShown(advice, onTable ? { key: onTable, lane: currentItem?.lane } : null, busy);      // the strip speaks only for the item on the table, at rest
-  // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
-  const noAi = !setupOn.current && !busy && !!onTable && !shownAdvice && (caps.ai === false || (advice?.none === "no_ai" && advice.for === onTable));
   useEffect(() => { if (!tableKey) return; setExpanded(false); setFoldedKey(null); }, [tableKey]);
   // ONE ROAD ONTO THE TABLE (2026-10-18): Next, a chip, a rail click, the Board's open, a reopen, a browse card, the card after a
   // receipt or a failed act - every way something reaches the table comes through here, so the rail's "on the table" mark, the
@@ -956,6 +958,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       const item = how === "card" ? null : card || null;
       currentRef.current = item; cardRef.current = how === "card" ? card?.key || null : null;
       setCurrent(item?.key || null); setCurrentItem(item); setCardKey(cardRef.current);
+      // ...and the page the chat was answering about is put away with it: the open page's label stood after a task landed by Next,
+      // a chip or a receipt, and the chat went on answering about Settings (re-audit, 2026-10-18)
+      if (card) openCardRef.current = null;
     }
     if (how !== "sync") pin.current = true;
   }, []);
@@ -1191,19 +1196,21 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // `asking`: the key a read is out for - the strip says "Thinking about this one…" while the table waits on it, so the row with
   // nothing dark is never read as having nothing to do
   const [asking, setAsking] = useState(null);
-  const readAdvice = useCallback(async (key, keep) => {
+  const readAdvice = useCallback(async (key, keep, again = false) => {
     const n = ++adviceAsk.current;
     if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
     setAsking(key || null);
     if (!key) return;
     let got = null;
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
-    try { const { data } = await api.get("/api/advice", { params: { key } }); got = data && (data.verb || data.none === "no_ai") ? { ...data, for: key } : null; }
+    let read = { advice: null, asking: null };
+    try { read = adviceRead((await api.get("/api/advice", { params: { key } })).data, key); got = read.advice; }
     catch { got = null; }
     if (n !== adviceAsk.current) return;
-    setAdvice(got);
-    // an empty answer is the Advisor judging it now - the line comes by the `advice` event; the quiet line waits for it, not for ever
-    if (got) setAsking(null); else setTimeout(() => { if (n === adviceAsk.current) setAsking(null); }, 20000);
+    // ...pending is the Advisor judging it now: the line comes by the `advice` event. One that never lands is asked again once, and
+    // then the quiet line goes - never a "Thinking" that stands for good
+    setAdvice(got); setAsking(again ? null : read.asking);
+    if (read.asking && !again) setTimeout(() => { if (n === adviceAsk.current) readAdvice(key, true, true); }, 20000);
   }, []);
   // ...re-read when the table changes AND when the card on it refreshes (a reply landing keeps the key and moves the
   // revision: the old pill must go), and when the Advisor's own event names this item or one of its aliases
@@ -1608,7 +1615,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       try { res = (await api.post(`/api/operations/${p.id}/execute`, { version: p.version })).data; }
       catch (e) {
         if (demoNo(e)) { setErr(errText(e)); return; }                  // the demo's own line, not a failed receipt
-        res = { status: e?.response?.status === 409 ? "stale" : "error", error: e?.response?.data?.detail || errText(e) };
+        const b = e?.response?.data || {};
+        res = e?.response?.status === 409 ? { status: b.status || "stale", error: b.detail || errText(e), receipt: b.receipt, chips: b.chips || [] }
+          : { status: "error", error: b.detail || errText(e) };
       }
       const out = afterExecute(p, res);
       const step = afterConfirm(p, out, current);
@@ -1619,7 +1628,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
       const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
         : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : [];
-      setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
+      setMsgs((m) => [...m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
       // A SCRIPT, started by name (script.start): the deterministic road the words asked for opens here -
@@ -1776,7 +1785,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const cancelProposal = async (p) => {
     try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
     const out = afterCancel(p);
-    setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
+    setMsgs((m) => [...m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status } } : x)),
                      { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips: [{ verb: "next", label: btn("next") }] }]);
   };
   // a card did its thing: say so in the thread, then move on
@@ -2170,7 +2179,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
-    reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); putOnTable(null, "view"); } else pull(key); },
+    // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
+    reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
     browseState: (id, state) => { holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
     browse: (area, state) => browse(area, state),
     browseClose: (id) => setMsgs((m) => m.filter((x) => x.id !== id)),    // the New card, closed: its line goes
@@ -2192,6 +2202,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     return null;
   }, [shown]);
+  // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
+  // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
+  const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current });
+  const shownAdvice = table.speaks ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
+  // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
+  const noAi = table.speaks && !busy && !shownAdvice && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
+  const capped = table.speaks && !busy && !shownAdvice && advice?.none === "cap" && advice.for === table.key;
   // NEVER LEFT HANGING (the owner, 2026-10-08: "assistant is leaving user hanging. We need Next button on bottom at least and say hit
   // next to continue"): a Next the server refused because the list moved under it said so in red and left nothing to press - every
   // card above folded, so no card had a row to register. With nothing on the table and the walk able to go on (or a press just
@@ -2332,7 +2349,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
           {/* SETUP MODE IS ITS OWN SCREEN (the owner, 2026-10-15: "it should be a distinct setup mode vs regular operations mode"):
               setup alone on the canvas, never under the day's conversation */}
-          {firstRun ? state && welcome() : state && !shown.length && !busy && welcome()}
+          {/* ...but a place picked from the sidebar during setup opens: it lit up and nothing opened, and nothing said why (re-audit,
+              2026-10-18). The place shows alone, with the way back to setup over it */}
+          {firstRun && browsing ? <>
+            <div className="tq-next" role="status" data-tq-setup-back=""><div className="tq-next-txt">Setup is waiting where you left it.</div>
+              <button type="button" className="tq-chip" onClick={browseDown}>{`Back to ${place("setup").name}`}</button></div>
+            {shown.filter((m) => m.id === browsing).map((m) => <Line key={m.id} m={m} live last tableChips={[]} barHolds={false}
+                                     actions={actions} fresh={null} canvas={canvasState} />)}
+          </> : firstRun ? state && welcome() : state && !shown.length && !busy && welcome()}
           {!firstRun && shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
@@ -2411,9 +2435,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             </div>
           ) : <>
             {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button */}
-            {!shownAdvice && !changed && !busy && !!onTable && asking === onTable && currentItem?.lane !== "working" && (
+            {capped && <div className="tq-next" role="status" data-tq-advice="cap"><div className="tq-next-txt">{CAP_LINE}</div></div>}
+            {table.speaks && !shownAdvice && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
               <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
-            {changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
+            {table.speaks && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
                 : "This changed - nothing to suggest on it now."}</div></div>}
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
@@ -2479,7 +2504,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
-        onSection={walkSection} onCurrent={() => setRailOpen(false)} />}
+        onSection={walkSection} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

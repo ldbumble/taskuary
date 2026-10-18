@@ -93,3 +93,14 @@ test("the day's opener filled in its place is redrawn where it stands, not skipp
   assert.equal(messages[0].card.away, "Overnight: 3 came in.");
   assert.equal(added.length, 0);
 });
+
+test("a failed press's receipt is the server's recorded line even when that line carries its way on", () => {
+  // concierge.receipt_turn records a failure WITH its chips as a words card: read as a turn of its own, it drew twice (re-audit, 2026-10-18)
+  const text = "Not done - the agent did not start. TQ-0007 is where it was.";
+  const local = [{ id: "r200", role: "receipt", status: "error", text, chips: [{ verb: "next", label: "Next" }] }];
+  const durable = [{ id: 901, role: "assistant", text, card: { kind: "words", chips: [{ verb: "retry", label: "Try again" }] } }];
+  const out = mergeDurableTurns(local, durable).messages;
+  assert.equal(out.length, 1);
+  assert.equal(out[0].role, "receipt");
+  assert.equal(out[0].commentId, 901);
+});

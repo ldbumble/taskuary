@@ -293,9 +293,10 @@ class ApiTests(unittest.TestCase):
         s = MemoryStore(); t = s.create_task({'Title': 'x', 'Status': 'in_progress'}, 'owner')
         with mock.patch.object(server, 'store', s), mock.patch.object(advisor, 'notice'):
             c = TestClient(server.app)
-            self.assertEqual(c.get(f'/api/advice?key=task:{t}').json(), {})
+            # an empty strip says why (advisor.status): nothing judged and nothing judging is no spinner
+            self.assertEqual(c.get(f'/api/advice?key=task:{t}').json(), {'none': 'nothing'})
             self.assertEqual(c.get(f'/api/advice/notes?key=task:{t}').json(), {'rows': []})
-            self.assertEqual(c.get('/api/advice?key=conn:1').json(), {})
+            self.assertEqual(c.get('/api/advice?key=conn:1').json(), {'none': 'nothing'})
 
 
 class SchemaTests(unittest.TestCase):

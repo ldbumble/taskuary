@@ -66,7 +66,9 @@ export function afterExecute(p, res) {
   if (res?.status === "error" && res.outcome?.dispatch === "needs_repo")
     return { receipt: `Not started - ${res.error || "it needs a repository first"}. Pick one on the card and confirm again.`, settle: false, status: "error",
              repo: { taskId: res.outcome.taskId, agent: res.outcome.agent } };
-  if (res?.status === "stale") return { receipt: `Not done - ${res.error || "the proposal is out of date"}. Say it again if you still want it.`, settle: false, status: "stale" };
+  // ...and for a press on a proposal that moved or was cancelled: the server's recorded line, its buttons under it (a 409 body
+  // carries both) - "Say it again" with only Next under it was the way on (re-audit, 2026-10-18)
+  if (res?.status === "stale" || res?.status === "cancelled") return { receipt: res.receipt || `Not done - ${res.error || "the proposal is out of date"}. Nothing moved.`, settle: false, status: res.status };
   // the server's sentence for a failure too: it says "Not sent" for a reply, and it is the one the phone got (2026-09-29)
   return { receipt: res?.receipt || `Not done - ${res?.error || "it failed"}. Nothing moved.`, settle: false, status: res?.status || "error" };
 }
@@ -93,6 +95,17 @@ export function afterConfirm(p, out, current) {
 // receipt that says it started read as a contradiction (the owner, 2026-10-13: "it's already shows that the task was started")
 const INVITE = /\s*Nothing has been started - confirm below, or tell me what to change\.\s*$/;
 export function proposalSay(text, p, live) { return p && (p.status || !live) ? String(text || "").replace(INVITE, "") : text; }
+
+// THE CARD IS THE SERVER'S (re-audit, 2026-10-18): it copied its proposal once and kept its confirm buttons after a Cancel or a
+// failure, so the next press was a 409. The parent's copy carries the live status; the card's own copy is only a NEWER proposal
+// its question made (Not ours -> from now on), which the parent adopts on the first press (`replaces`).
+export function liveProposal(given, own) {
+  if (!own || !given || own.id === given.id || (given.status && given.status !== "proposed")) return given || own;
+  return own;
+}
+// the line showing a proposal - or the one its card's own question replaced
+export const holdsProposal = (m, p) => !!m?.proposal && (m.proposal.id === p?.id || (!!p?.replaces && m.proposal.id === p.replaces));
+export const isLive = (p) => !!p && p.version != null && (p.status || "proposed") === "proposed";
 
 export function afterCancel(p) { return { receipt: `Cancelled - nothing changed; ${p.ref || "it"} is where it was.`, status: "cancelled" }; }
 

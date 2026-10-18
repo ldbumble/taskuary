@@ -476,6 +476,26 @@ def for_key(store, key: str) -> dict:
     return {'none': 'no_ai'} if rs and rs[0].get('Dropped') == 'no brain' else {}
 
 
+# WHY THE STRIP IS EMPTY, in one word the page reads: "Thinking about this one..." ran 20 s and then showed nothing, over an item the
+# Advisor keeps out of (unsorted mail, a report that ran fine) as much as over one it was judging (error sweep, 2026-10-18)
+QUIET = {'left to the item': 'quiet', 'no actions': 'no_actions', 'cap': 'cap', 'no brain': 'no_ai'}
+def status(store, key: str) -> dict:
+    """for_key, and when it has no line: {'pending': True} while a judgement of this item is in flight, else {'none': why}."""
+    out = for_key(store, key)
+    if out.get('verb') or out.get('none'): return out
+    tgt = target_of(store, key)
+    if not tgt: return {'none': 'nothing'}
+    if _at_work(store, *tgt): return {'none': 'working'}
+    if str(store.get_setting(ON_KEY, '1') or '1') != '1': return {'none': 'off'}
+    rev = revision(store, *tgt)
+    with _LOCK: busy = any(m[:3] == (tgt[0], int(tgt[1]), rev) for m in _INFLIGHT)
+    if busy: return {'pending': True}
+    rs = _at(store, tgt[0], tgt[1], rev); own = _own(store, tgt, key, rs) if rs else {key}
+    last = next((r for r in rs if r.get('Key') in own), None)
+    if not last: return {'pending': True} if BACKGROUND else {'none': 'nothing'}
+    return {'none': QUIET.get(str(last.get('Dropped') or ''), 'cap' if str(last.get('Dropped') or '').startswith('cap') else 'nothing')}
+
+
 def notes(store, key: str, limit: int = 10) -> list:
     """The receipt: what it decided and what it dropped, per revision, with the evidence resolved to labels."""
     from .learnedgraph import _resolve

@@ -42,7 +42,7 @@ test("fold, unfold and expand ask the server for nothing", () => {
   const state = view.slice(view.indexOf("const canvasState"), view.indexOf("const canvasState") + 400);
   assert.doesNotMatch(state, /api\.|loadPile|surface\(/);
   const reopen = view.slice(view.indexOf("reopen: (key, onTable)"), view.indexOf("reopen: (key, onTable)") + 120);
-  assert.match(reopen, /if \(onTable\) \{ setFoldedKey\(null\); putOnTable\(null, "view"\); \} else pull\(key\);/, "the folded item unfolds in place; an earlier one is a named pull");
+  assert.match(reopen, /if \(onTable\) \{ setFoldedKey\(null\); browseDown\(\); putOnTable\(null, "view"\); \} else pull\(key\);/, "the folded item unfolds in place (a page over it put away); an earlier one is a named pull");
 });
 
 // HARD REQUIREMENT 3: one live card - only the interactive line mounts a TaskPage (and with it one terminal)

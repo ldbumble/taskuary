@@ -52,7 +52,7 @@ test("a card that asks its own question: each answer is the button that does it,
   const { altLabel } = await import("../src/ProposalCard.jsx").catch(() => ({}));
   assert.match(card, /onClick=\{\(\) => choose\(a\)\}>\{altLabel\(a\.label\)\}/);
   assert.match(card, /open && !\(asks && !picking\) \?/, "the separate confirm row is drawn only with no question, or a repository to choose");
-  assert.match(card, /if \(!pickingRepo\(data\)\) onConfirm\?\.\(data\)/, "the other answer confirms in the same press");
+  assert.match(card, /if \(!pickingRepo\(data\)\) onConfirm\?\.\(up\(data\)\)/, "the other answer confirms in the same press");
   assert.match(card, /!\(asks && k === "verb"\)/, "no raw 'verb:' line under the question");
   if (altLabel) assert.deepEqual(["A coding agent", "A non-coding agent", "Just this once"].map(altLabel), ["Send to a coding agent", "Send to a non-coding agent", "Just this once"]);
 });

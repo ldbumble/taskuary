@@ -4,12 +4,13 @@
 /* Which key to re-read advice for when an `advice` live event lands: the event carries the target's legacy key
    (task:N / msg:N) while the table holds the rail's key (processing:... in a real install) - a card's aliases bridge
    the two. Returns the table's key, or null when the event is about something else. */
+import { sameTarget } from "./tableState.js";
 export function adviceKeyFor(ev, cur) {
   const k = ev?.key;
   if (!k || !cur) return null;
   if (typeof cur === "string") return k === cur ? cur : null;
   if (!cur.key) return null;
-  return k === cur.key || (cur.aliases || []).includes(k) ? cur.key : null;
+  return k === cur.key || (cur.aliases || []).includes(k) || sameTarget(ev, cur) ? cur.key : null;
 }
 
 /* The suggestion as the strip says it: the Advisor's sentence without its verb in front ("Reply: Gail is asking..." -> "Gail is

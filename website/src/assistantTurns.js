@@ -4,8 +4,10 @@
 const optimistic = (m) => typeof m?.id === "string" && /^(?:a|u|r|context)\d+$/.test(m.id);
 const words = (v) => String(v || "").replace(/\s+/g, " ").trim();
 // a receipt drawn at the click is the server's recorded line, come back as an assistant turn - the
-// same words, so it is the same turn (a card-carrying line, the undo offer, is its own)
-const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && !b?.card))
+// same words, so it is the same turn (a card-carrying line, the undo offer, is its own). A failure's line is
+// recorded with its way on as a words card (concierge.receipt_turn): read as its own turn, every failed or
+// stale press showed its receipt twice (re-audit, 2026-10-18)
+const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && (!b?.card || b.card.kind === "words")))
   && words(a?.text) === words(b?.text);
 
 export function mergeDurableTurns(local = [], durable = []) {

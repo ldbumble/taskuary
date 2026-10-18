@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import api from "./api.js";
-import { describe, pickingRepo } from "./proposalCard.js";
+import { describe, isLive, liveProposal, pickingRepo } from "./proposalCard.js";
 import { RepoPicker } from "./RepoPicker.jsx";
 
 // The confirmation box (PW-123): what will happen, on what, with which parameters - and one specifically
@@ -13,14 +13,17 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
   const [peek, setPeek] = useState(null);
   // THE CARD'S OWN QUESTION (2026-09-25): Not ours asks how far, Send to agent asks which agent. Another answer
   // is a new proposal from the same road, shown in place - nothing runs until the confirm button.
-  const [p, setP] = useState(given);
+  const [own, setOwn] = useState(null);
+  const p = liveProposal(given, own);
   const [repo, setRepo] = useState(given?.params?.repo || "");
   if (!p) return null;
+  // a newer proposal of the card's own carries the one it replaces, so the parent's copy - and its status - follows it
+  const up = (q) => (q && given && q.id !== given.id ? { ...q, replaces: given.id } : q);
   const d = describe(p);
   // A CHECKOUT NOBODY NAMED IS CHOSEN HERE, before Start: the dropdown holds every repository, the words' best
   // guess preselected, and Start waits until one is chosen. The card used to say "you pick it when it starts" and
   // the start then guessed on its own (the owner, 2026-09-24: "it should be dropdown to choose repo if it's not clear")
-  const open = p.version != null && (p.status || "proposed") === "proposed";
+  const open = isLive(p);
   const picking = pickingRepo(p);
   // THE ANSWERS ARE THE BUTTONS (the owner, 2026-10-01: "what are these buttons? it's confusing"): a card that asks its own
   // question drew its answers as pills - the proposed one filled, as if already pressed - and then a separate confirm under
@@ -28,18 +31,18 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
   const asks = open && !!p.alts?.length;
   const rows = (picking ? d.params.filter(([k]) => k !== "repository") : d.params).filter(([k]) => !(asks && k === "verb"));
   const confirm = async () => {
-    if (!picking || repo === (p.params?.repo || "")) return onConfirm?.(p);
+    if (!picking || repo === (p.params?.repo || "")) return onConfirm?.(up(p));
     try {
       const { data } = await api.patch(`/api/operations/${p.id}`, { params: { ...p.params, repo } });
-      return onConfirm?.({ ...p, version: data.version, params: data.params });
+      return onConfirm?.(up({ ...p, version: data.version, params: data.params }));
     } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "the repository could not be set" }); }
   };
   const choose = async (a) => {
     if (a.current) return confirm();
     try {
       const { data } = await api.post("/api/concierge/propose", { verb: a.verb, key: p.key, table: !!p.settles, exact: true });
-      setP(data); setRepo(data?.params?.repo || ""); setPeek(null);
-      if (!pickingRepo(data)) onConfirm?.(data);           // a checkout still to choose waits for its picker and Start
+      setOwn(data); setRepo(data?.params?.repo || ""); setPeek(null);
+      if (!pickingRepo(data)) onConfirm?.(up(data));       // a checkout still to choose waits for its picker and Start
     } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "that answer is not available here", pick: true }); }
   };
   const preview = async () => {
@@ -47,7 +50,7 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
     try { setPeek(await onPreview?.(p)); } catch (e) { setPeek({ error: e?.response?.data?.detail || e?.message || "the dry run failed" }); }
   };
   const askRepo = p.status === "error" && p.repo?.taskId;      // a decision, not a failure: choose, then the same confirmation runs again (PW-135)
-  const state = { done: "Confirmed.", cancelled: "Cancelled.", stale: "Out of date - say it again.", error: "Failed - nothing moved." }[p.status] || "";
+  const state = { done: "Confirmed.", cancelled: "Cancelled.", stale: "Out of date - nothing moved.", error: "Failed - nothing moved." }[p.status] || "";
   return (
     <div className="tq-proposal" style={{ border: "1px solid #d8d1c5", borderRadius: 12, padding: "10px 12px", marginTop: 6, background: "#fffdfb" }}>
       <div style={{ fontWeight: 600, fontSize: 12.5, color: "#41525f" }}>{d.title}</div>
@@ -69,7 +72,7 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
             <button key={a.verb} type="button" className={`tq-chip${a.current ? " primary" : ""}`} disabled={a.current && picking && !repo}
               title={a.current ? "the one proposed" : undefined} onClick={() => choose(a)}>{altLabel(a.label)}</button>
           ))}
-          {!picking && <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{d.cancel}</button>}
+          {!picking && <button type="button" className="tq-chip" onClick={() => onCancel?.(up(p))}>{d.cancel}</button>}
         </div>
       )}
       {picking && open && (
@@ -92,13 +95,13 @@ export default function ProposalCard({ p: given, onConfirm, onCancel, onPreview 
         <div style={{ marginTop: 8 }}>
           <div style={{ fontWeight: 600, fontSize: 12, color: "#41525f" }}>Which repository should the coding agent use?</div>
           <RepoPicker taskId={p.repo.taskId} agent={p.repo.agent} onDone={(data) => { if (data?.repo) onConfirm?.(p); }} />
-          <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>Not now</button>
+          <button type="button" className="tq-chip" onClick={() => onCancel?.(up(p))}>Not now</button>
         </div>
       ) : open && !(asks && !picking) ? (
         <div className="tq-options" style={{ marginTop: 8 }}>
           <button type="button" className="tq-chip primary" disabled={picking && !repo} onClick={confirm}>{d.confirm}</button>
           {d.preview && <button type="button" className="tq-chip" disabled={!!peek?.busy} onClick={preview}>{peek?.busy ? "Running…" : "Preview"}</button>}
-          <button type="button" className="tq-chip" onClick={() => onCancel?.(p)}>{d.cancel}</button>
+          <button type="button" className="tq-chip" onClick={() => onCancel?.(up(p))}>{d.cancel}</button>
         </div>
       ) : (state ? <div style={{ fontSize: 11.5, color: "#8a8276", marginTop: 6 }}>{state}</div> : null)}
     </div>

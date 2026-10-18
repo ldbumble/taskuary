@@ -191,3 +191,13 @@ test("a workflow run's header says the model and effort it runs on", () => {
   assert.deepEqual(facts.pills.find((p) => p.key === "runs_on"), { key: "runs_on", label: "Runs on", value: "Claude Code · opus, high effort", tone: "agent" });
   assert.equal(headerFacts({ task: { Kind: "general", Source: "email" }, workflow: { runs_on: "x" } }).pills.find((p) => p.key === "runs_on"), undefined);
 });
+
+test("a run of steps with no agent step names no agent: its steps do it, and the task has no Agent work to open", () => {
+  const task = { Kind: "general", Source: "workflow", Tags: "workflow-trigger:manual", Title: "Duplicate bill check - 2026-10-18 09:30" };
+  const wf = { title: "Duplicate bill check", runs_on: "", by_code: true, steps: [{ id: "s1", kind: "source", status: "ok" }], source_id: 4, run_id: 9 };
+  const pills = headerFacts({ task, workflow: wf }).pills;
+  assert.equal(pills.find((p) => p.key === "runs_on"), undefined);
+  assert.equal(pills.find((p) => p.key === "who").value, "its steps");
+  assert.equal(workflowOrigin(task, wf).byCode, true);
+  assert.equal(workflowOrigin(task, { ...wf, by_code: false }).byCode, undefined);
+});

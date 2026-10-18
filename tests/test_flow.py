@@ -192,6 +192,14 @@ def test_a_run_now_of_a_flow_makes_its_task_then_walks_the_steps(db):
     assert reports_rows(s) == []
 
 
+def test_a_run_of_steps_alone_names_no_agent_and_one_that_hands_off_still_does(db):
+    s = MemoryStore()
+    code, handed = source(s, [read_dupes(db)]), source(s, [read_dupes(db), {'id': 's2', 'kind': 'agent', 'label': 'Fix them', 'prompt': 'Void it.'}])
+    wf = workflows.of_task(s, s.get_task(run_task(s, code)))
+    assert wf['by_code'] is True and wf['runs_on'] == ''                         # nothing runs it on an agent, so none is named
+    assert 'by_code' not in workflows.of_task(s, s.get_task(run_task(s, handed)))
+
+
 def reports_rows(s): return s._rows("SELECT * FROM message WHERE Channel='report'")
 
 

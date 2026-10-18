@@ -244,13 +244,17 @@ def when_words(cfg: dict) -> str:
 
 def of_task(store, task) -> dict | None:
     """What the task card says about a workflow run: which workflow, and what started it (TaskPage's header and Came from)."""
+    from . import flow
     if (task or {}).get('Source') != 'workflow': return None
     src, trig = source_of(store, task), trigger_of(task)
     cfg = cfg_of(src) if src else {}
+    # a run of steps with no agent step is run by code: nothing runs it on an agent, so there is no agent to name or to show
+    by_code = flow.is_flow(cfg) and not any(s.get('kind') == 'agent' for s in flow.steps_of(cfg))
     title = cfg.get('title') or (src or {}).get('Address') or str(task.get('Title') or '').rsplit(' - ', 1)[0]
     run = store.report_run_of_task(task['TaskId']) if task.get('TaskId') else None     # its steps, when it ran as steps (flow.execute)
     return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
-            'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src else '',
+            'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src and not by_code else '',
+            **({'by_code': True} if by_code else {}),
             **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or '',
                 'repairs': [{k: r.get(k) for k in ('at', 'label', 'error', 'why', 'diff', 'undone')} for r in run.get('repairs') or []]}
                if run and run.get('steps') else {})}

@@ -75,10 +75,16 @@ export const sourceLabel = (src) => SOURCES[src] || src || "";
 // A RUN BY ITS LAST WORDS (the owner, 2026-10-15: "main thing is the last summary message from each model run"): its last message,
 // without the prompt box a screen-read log carries along with it ("▌▌ Work in a new folder..."), else its written summary
 // ...the last thing it SAID first: `result` is every message of the run strung together, and showed the whole run as its "last" one
-const lastSaid = (s) => [...(s?.steps || [])].reverse().find((x) => x.k === "said" && String(x.text || "").trim());
-export const lastWords = (s) => String(lastSaid(s)?.text || "").trim()
-  || String(s?.result || "").split("\n").filter((l) => !/^\s*▌/.test(l)).join("\n").trim()
-  || String(s?.report?.summary || "").trim();
+const isSaid = (x) => x.k === "said" && String(x.text || "").trim();
+// ...but a line it said and then WORKED PAST is progress, not its last words (2026-10-18: a run that ended by filing its reply
+// through a tool led with "Next I'm checking the run log" - its written result never repeated that line, so it is the answer)
+export const lastWords = (s) => {
+  const st = s?.steps || [], i = st.findLastIndex(isSaid), said = i < 0 ? "" : String(st[i].text).trim();
+  const res = String(s?.result || "").split("\n").filter((l) => !/^\s*▌/.test(l)).join("\n").trim();
+  const workedPast = i >= 0 && st.slice(i + 1).some((x) => x.k === "tool"), stem = norm(said).replace(/…$/, "");
+  if (said && workedPast && res && !norm(res).includes(stem)) return res;
+  return said || res || String(s?.report?.summary || "").trim();
+};
 // every run, newest first, numbered from the first: Run 3 · latest, Run 2, Run 1
 // ...each by ITS OWN steps: runs that resumed one CLI conversation share its log, so every run's record carried all of it and Run 2
 // said Run 3's last words (2026-10-15). A run's `at` is when it ended: its steps are the ones after the run before it ended.
@@ -86,6 +92,7 @@ const when = (t) => Date.parse(String(t || "").replace(" ", "T"));
 export const runsOf = (sessions) => (sessions || []).map((s, i, all) => {
   const end = when(s.at), after = i + 1 < all.length ? when(all[i + 1].at) : -Infinity;
   const timed = (s.steps || []).length && (s.steps || []).every((x) => !Number.isNaN(when(x.at)));
-  const own = timed && !Number.isNaN(end) ? { ...s, steps: s.steps.filter((x) => when(x.at) > after && when(x.at) <= end + 60_000), result: "" } : s;
+  // the session's written result is the NEWEST run's: an older run sharing its log is cut to its own steps without it
+  const own = timed && !Number.isNaN(end) ? { ...s, steps: s.steps.filter((x) => when(x.at) > after && when(x.at) <= end + 60_000), result: i ? "" : s.result } : s;
   return { s, n: all.length - i, said: lastWords(own) };
 });

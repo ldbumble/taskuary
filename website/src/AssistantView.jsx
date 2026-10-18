@@ -1290,6 +1290,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...on a NEW line, not on a line's own state changing: browsing (a chip, a card, Back) rewrites its line in place, and
   // pinning the bottom there threw the card you had just opened out of view (the canvas redesign, 2026-09-29)
   const holdBottom = useRef(false);        // a browse card is being read from its top
+  // THE END OF THE THREAD, WHEN A TASK VIEW ENDS IT, IS THAT VIEW'S TOP (the owner, 2026-10-18: "top is not high enough ... should it
+  // not fill the entire screen"): the view is the body's height, so scrolled to the bottom it stood ~30px low under a strip of the
+  // line before it. Its top meets the body's top instead - the same place the pin puts it.
+  const toEnd = (el) => {
+    const live = [...el.querySelectorAll(".tq-canvas-live")].pop(), box = el.getBoundingClientRect(), r = live?.getBoundingClientRect();
+    el.scrollTop = r && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48 ? el.scrollTop + r.top - box.top : el.scrollHeight;
+  };
   // THE CARD ON THE TABLE STAYS IN VIEW (B15; the walk's SEEN, 2026-10-17): putOnTable pins it, and the pin brings its top to the
   // top of the view once it mounts and KEEPS it there while it loads and grows - a receipt or a failure under it, a draft filling
   // in, used to push it down until only its header (or nothing) stood above the row. The pin lets go when the owner scrolls, types,
@@ -1310,14 +1317,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const m = msgs[msgs.length - 1];
     if (pin.current && m && (m.proposal || (!m.card && m.role !== "receipt" && m.role !== "browse"))) pin.current = false;
     if (keepTable()) return;
-    holdBottom.current = false; const el = bodyRef.current; if (el && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight;
+    holdBottom.current = false; const el = bodyRef.current; if (el && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el);
   }, [msgs.length, busy]);   // eslint-disable-line react-hooks/exhaustive-deps
   // ...and again whenever the thread GROWS - a card that loaded its draft, a report that unfolded - so the
   // bottom of the conversation is always what you see, unless you have scrolled up to read, or a card is pinned
   useEffect(() => {
     const el = bodyRef.current, inner = el?.firstElementChild;
     if (!el || !inner || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => { if (keepTable()) return; if (!holdBottom.current && el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) el.scrollTop = el.scrollHeight; });
+    const ro = new ResizeObserver(() => { if (keepTable()) return; if (!holdBottom.current && el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el); });
     ro.observe(inner);
     // the owner's own scroll is theirs: the pin lets go
     const own = () => { pin.current = false; };

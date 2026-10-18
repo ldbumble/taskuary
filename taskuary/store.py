@@ -417,7 +417,7 @@ CREATE TABLE IF NOT EXISTS processing_dirty_row (
   Id INTEGER PRIMARY KEY, Kind TEXT NOT NULL, LocalId TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS report_run (RunId INTEGER PRIMARY KEY, SourceId INTEGER, At TEXT, Type TEXT, Title TEXT, Ms INTEGER, Subject TEXT,
   MessageId INTEGER, Failed INTEGER DEFAULT 0, Error TEXT, Said INTEGER, LinesJson TEXT, ReviewedJson TEXT, Inputs TEXT, Summary TEXT,
-  StepsJson TEXT, TaskId INTEGER);
+  StepsJson TEXT, TaskId INTEGER, RepairsJson TEXT);
 -- Stateful report workflows: a scheduled run opens one monthly batch, then each customer
 -- advances independently from amount -> Zoho draft -> Review -> sent.  The unique keys are
 -- the duplicate barrier: restarting Taskuary or pressing Run again cannot create another batch
@@ -1071,6 +1071,7 @@ class SQLiteStore:
             rrcols = {r[1] for r in self.cx.execute('PRAGMA table_info(report_run)')}
             if 'StepsJson' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN StepsJson TEXT')
             if 'TaskId' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN TaskId INTEGER')
+            if 'RepairsJson' not in rrcols: self.cx.execute('ALTER TABLE report_run ADD COLUMN RepairsJson TEXT')   # flow.py self-repairs
             # after the widen above, which rebuilds the table without it
             if 'LastErrorAt' not in {r[1] for r in self.cx.execute('PRAGMA table_info(connector)')}:
                 self.cx.execute('ALTER TABLE connector ADD COLUMN LastErrorAt TEXT')
@@ -3706,6 +3707,9 @@ class SQLiteStore:
         """A workflow run's steps as they land (flow.execute), so the run is readable while it works."""
         self._exec('UPDATE report_run SET StepsJson=?, Failed=?, Error=?, Ms=COALESCE(?, Ms), Summary=COALESCE(?, Summary) WHERE RunId=?',
                    (json.dumps(steps or [], default=str), int(bool(failed)), error, ms, summary, int(rid)))
+    def set_report_run_repairs(self, rid: int, repairs: list) -> None:
+        """The repairs a run made to its own steps (flow.execute), each with the steps it replaced - what Undo puts back."""
+        self._exec('UPDATE report_run SET RepairsJson=? WHERE RunId=?', (json.dumps(repairs or [], default=str), int(rid)))
     def report_run_of_task(self, tid: int):
         """The newest workflow run that belongs to this run task - its steps, for the task card."""
         r = self._one('SELECT *, length(Inputs) InputChars FROM report_run WHERE TaskId=? ORDER BY RunId DESC LIMIT 1', (int(tid),))
@@ -3720,7 +3724,7 @@ class SQLiteStore:
     def report_runs(self, sid: int, limit: int = 60) -> list:
         """The history, newest first, WITHOUT the inputs (14KB each) - get_report_run fetches one whole."""
         return [self._run_row(r) for r in self._rows('SELECT RunId, SourceId, At, Type, Title, Ms, Subject, MessageId, Failed, Error, Said, LinesJson, ReviewedJson, '
-                                                      'StepsJson, TaskId, length(Inputs) InputChars FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?', (sid, limit))]
+                                                      'StepsJson, TaskId, RepairsJson, length(Inputs) InputChars FROM report_run WHERE SourceId=? ORDER BY RunId DESC LIMIT ?', (sid, limit))]
     def get_report_run(self, rid: int):
         r = self._one('SELECT *, length(Inputs) InputChars FROM report_run WHERE RunId=?', (rid,))
         return self._run_row(r) if r else None
@@ -3731,7 +3735,7 @@ class SQLiteStore:
             except ValueError: return None
         return {'runId': r['RunId'], 'sourceId': r['SourceId'], 'at': r['At'], 'type': r['Type'], 'title': r['Title'], 'ms': r['Ms'], 'subject': r['Subject'],
                 'messageId': r['MessageId'], 'failed': bool(r['Failed']), 'error': r['Error'], 'said': r['Said'], 'lines': j(r.get('LinesJson')) or [],
-                'reviewed': j(r.get('ReviewedJson')), 'inputChars': r.get('InputChars') or 0, 'steps': j(r.get('StepsJson')), 'taskId': r.get('TaskId'), **({'inputs': r['Inputs']} if 'Inputs' in r else {}),
+                'reviewed': j(r.get('ReviewedJson')), 'inputChars': r.get('InputChars') or 0, 'steps': j(r.get('StepsJson')), 'taskId': r.get('TaskId'), 'repairs': j(r.get('RepairsJson')) or [], **({'inputs': r['Inputs']} if 'Inputs' in r else {}),
                 **({'summary': r['Summary']} if 'Summary' in r else {})}
 
     def thread_messages(self, conversation_id=None, subject=None, limit=40):

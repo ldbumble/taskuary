@@ -251,7 +251,9 @@ def of_task(store, task) -> dict | None:
     run = store.report_run_of_task(task['TaskId']) if task.get('TaskId') else None     # its steps, when it ran as steps (flow.execute)
     return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
             'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src else '',
-            **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or ''} if run and run.get('steps') else {})}
+            **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or '',
+                'repairs': [{k: r.get(k) for k in ('at', 'label', 'error', 'why', 'diff', 'undone')} for r in run.get('repairs') or []]}
+               if run and run.get('steps') else {})}
 
 
 def running(store, sid) -> dict | None:

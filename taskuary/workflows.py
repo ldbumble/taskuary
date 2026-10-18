@@ -64,6 +64,9 @@ def _names(store, ids) -> list:
 def definition(store, src) -> dict:
     """The workflow as data (PW-203), read from the source it has always been stored on."""
     cfg = cfg_of(src); sid = src.get('SourceId') if isinstance(src, dict) else None
+    # a saved flow that is one agent step carries its words on that step (flow.steps_of), not on the config
+    lone = cfg['flow'][-1] if isinstance(cfg.get('flow'), list) and cfg['flow'] and isinstance(cfg['flow'][-1], dict) else {}
+    if lone.get('kind') == 'agent': cfg = {**cfg, 'prompt': cfg.get('prompt') or lone.get('prompt'), 'skill': cfg.get('skill') or lone.get('skill')}
     skill, steps = str(cfg.get('skill') or '').strip().lstrip('/'), ''
     if skill:
         from . import config
@@ -245,8 +248,10 @@ def of_task(store, task) -> dict | None:
     src, trig = source_of(store, task), trigger_of(task)
     cfg = cfg_of(src) if src else {}
     title = cfg.get('title') or (src or {}).get('Address') or str(task.get('Title') or '').rsplit(' - ', 1)[0]
+    run = store.report_run_of_task(task['TaskId']) if task.get('TaskId') else None     # its steps, when it ran as steps (flow.execute)
     return {'source_id': (src or {}).get('SourceId'), 'title': title, 'trigger': trig, 'schedule': when_words(cfg) if src else '',
-            'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src else ''}
+            'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src else '',
+            **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or ''} if run and run.get('steps') else {})}
 
 
 def running(store, sid) -> dict | None:
@@ -270,9 +275,9 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
 
     `background`: the task is made now and the worker starts on its own thread - a general session's first turn holds the call
     for as long as the agent works, which kept the owner from their task and held every report behind it on the clock."""
-    from . import ingest, browserview
+    from . import ingest, browserview, flow
     from .agents import CODING_KINDS
-    defn = definition(store, src)
+    defn, steps = definition(store, src), flow.is_flow(cfg_of(src))
     busy = running(store, defn['source_id'])
     if busy:
         # ...and one run at a time: a tick that comes round while the last run still works would put a second agent on the same job
@@ -280,7 +285,8 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
         return {'task_id': busy['TaskId'], 'ref': task_ref(busy['TaskId']), 'kind': busy.get('Kind'), 'title': defn['title'],
                 'trigger': trigger, 'busy': True}
     when, kind = datetime.now().strftime('%Y-%m-%d %H:%M'), defn['runs_on']
-    text = brief(defn, trigger, when, context)
+    # STEPS RUN BY CODE: the task says which, in order; only a lone agent step is handed the whole brief (flow.py)
+    text = flow.header(defn, flow.steps_of(cfg_of(src)), trigger, when) if steps else brief(defn, trigger, when, context)
     # a browser job's run task asks for a browser the way the walk that taught it did: the tag is what
     # general.py reads to launch one, bound to this session and restored from the owner's profile
     tags = ','.join(x for x in (browserview.WANTS if kind == 'general' and defn.get('browser') else '', f'{TRIGGER_TAG}{trigger}') if x)
@@ -293,17 +299,23 @@ def run(store, src, actor: str = 'schedule', trigger: str = 'schedule', context:
                              'Source': 'workflow', 'SourceRef': f"workflow:{defn['source_id']}", 'Tags': tags,
                              **({'Assignee': f"agent:{defn['agent']}"} if named else {})}, actor)
     b = brain(store, cfg_of(src), store.get_task(tid))
-    store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
-                                           + (f"on {b['said']} " if b['said'] else '') + 'with the workflow definition - no triage.'
-                                           + (f" {b['dropped']}" if b['dropped'] else ''))
-    logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} on the {kind} agent")
+    if steps:
+        n = len(flow.steps_of(cfg_of(src)))
+        store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): {n} steps, run by code - a model only where a step asks for one. No triage.")
+    else:
+        store.add_comment(tid, actor, 'agent', f"Workflow run ({trigger}): handed to the {'coding' if kind == 'coding' else 'regular'} agent "
+                                               + (f"on {b['said']} " if b['said'] else '') + 'with the workflow definition - no triage.'
+                                               + (f" {b['dropped']}" if b['dropped'] else ''))
+    logger.info(f"workflow {defn['title']!r} ({trigger}) -> {task_ref(tid)} " + ('as steps' if steps else f'on the {kind} agent'))
     with _LOCK: _STARTING.add(tid)
     def start():
         try:
-            if kind == 'coding': ingest._auto_code(store, tid)
+            # the tid stays in _STARTING until the last step is done, so `running` still means one run at a time
+            if steps: flow.execute(store, store.get_source(defn['source_id']) or src, tid, trigger)
+            elif kind == 'coding': ingest._auto_code(store, tid)
             else: ingest._auto_general(store, tid, text)
         finally:
             with _LOCK: _STARTING.discard(tid)
     if background: _spawn(start)
     else: start()
-    return {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger}
+    return {'task_id': tid, 'ref': task_ref(tid), 'kind': kind, 'title': defn['title'], 'trigger': trigger, 'steps': steps}

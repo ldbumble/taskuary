@@ -114,3 +114,16 @@ def test_an_unclear_request_is_still_asked_about():
     """The owner, 2026-10-15: "it's okay if workflow asks questions if it's not clear" - building a clear request must not
     become guessing at an unclear one."""
     assert 'when the request is unclear - what the job is, what it should produce, for whom' in compose.WORKFLOW_SYSTEM
+
+
+def test_the_workflow_builder_sees_the_catalog_and_a_lone_agent_step_is_still_a_prompt():
+    """Steps are report source cards (flow.py), so the builder is handed the same ready catalog the report builder is - and a job
+    that is nothing but an agent's hands stays the prompt-only workflow every run already knows."""
+    store = MemoryStore()
+    store.upsert_agent('ap', 'accounts-payable', 'cli', '{}')
+    seen = {}
+    out = compose.compose_workflow(store, 'sign in to the vendor portal every Monday and download the statements', answering({
+        'config': {'type': 'agent', 'title': 'Portal statements', 'agent': 'ap', 'browser': True, 'repair': 'sometimes',
+                   'flow': [{'id': 's1', 'kind': 'agent', 'label': 'Download', 'prompt': "Download this week's statements."}]}}, seen))
+    assert 'flow' not in out['config'] and out['config']['prompt'] == "Download this week's statements." and 'repair' not in out['config']
+    assert {c['type'] for c in seen['user']['catalog']} >= {'sqlite', 'taskuary'} and 'FLOW RULES' in seen['system']

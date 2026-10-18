@@ -1589,6 +1589,8 @@ def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> 
     except Exception as e:
         rec.update({'ms': int((time.time() - t0) * 1000), 'failed': True, 'error': str(e)[:600]})
         keep(); raise
+    # a workflow run as steps keeps its own run row and last run, step by step as it works (flow.execute)
+    if out.get('flow'): return out
     rec.update({'ms': int((time.time() - t0) * 1000), 'subject': out.get('subject'), 'message_id': out.get('message_id'),
                 'failed': bool(out.get('failed', run_failed(out.get('subject')))), 'files': out.get('files'),
                 'said': out.get('said'), 'reviewed': out.get('reviewed'), 'inputs': str(out.get('inputs') or '')[:30000],
@@ -1620,6 +1622,9 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         if out.get('busy'):
             return {'message_id': None, 'subject': f"{title} - not started: {out['ref']} is still working", 'files': 0, 'said': 0,
                     'summary': f"the last run, {out['ref']}, is still working - one run at a time", 'task_id': out['task_id']}
+        if out.get('steps'):
+            return {'message_id': None, 'subject': f"{title} → {out['ref']} (steps)", 'files': 0, 'said': 0, 'flow': True,
+                    'summary': f"running its steps as {out['ref']} ({trigger})", 'task_id': out['task_id']}
         return {'message_id': None, 'subject': f"{title} → {out['ref']} ({who} agent, {trigger})", 'files': 0, 'said': 0,
                 'summary': f"handed to the {who} agent as {out['ref']} ({trigger})", 'task_id': out['task_id']}
     logger.debug(f'report run: {title} ({cfg.get("type", "rest")}, ai={bool(cfg.get("ai_prompt"))})')

@@ -4991,6 +4991,14 @@ def save_source(body: SourceBody):
         raise HTTPException(422, 'WhatsApp takes named chats only - add the person or the group you want, '
                                  'not every chat on the account')
     was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
+    # a workflow's steps are checked before they are kept: a broken list would only fail on its first scheduled run (flow.validate)
+    if fields.get('ConfigJson') and channel == 'report':
+        try: flow_cfg = json.loads(fields['ConfigJson']).get('flow')
+        except (ValueError, AttributeError): flow_cfg = None
+        if flow_cfg is not None:
+            from . import flow
+            ok, why = flow.validate(store, flow_cfg)
+            if not ok: raise HTTPException(422, f'The steps cannot be saved yet: {why}.')
     sid = store.save_source(fields, ACTOR)
     # SWITCHING SOMETHING ON MUST LOOK BACK. The watermark advances on every poll, including
     # polls that deliberately read nothing from this source (a repo whose issues were 'off',
@@ -5671,6 +5679,42 @@ def workflow_compose(body: dict):
         store.audit('workflow', 0, 'compose', ACTOR,
                     detail={'ask': ((body or {}).get('ask') or '')[:300],
                             'type': out['config'].get('type'), 'confidence': out.get('confidence')})
+    return out
+
+@app.post('/api/workflows/step-test')
+def workflow_step_test(body: dict):
+    """Run ONE step with the outputs the page already has for the steps above it (n8n's "execute node"): testing step 4 never
+    re-runs the writes in steps 1-3. Reads and AI steps run for real, through the same switch and scope checks as a scheduled run;
+    a task, a draft, an agent hand-off and a write come back `dry` - what it WOULD do, rendered."""
+    from . import flow, workflows
+    b = body or {}
+    steps, i = b.get('flow') or [], b.get('index')
+    if not isinstance(steps, list) or not isinstance(i, int) or not 0 <= i < len(steps): raise HTTPException(422, 'say which step to test')
+    src = store.get_source(int(b['source_id'])) if str(b.get('source_id') or '').isdigit() else None
+    cfg = {**(workflows.cfg_of(src) if src else {}), 'title': b.get('title') or '', 'inputs': b.get('inputs') or {}, 'flow': steps}
+    ctx = flow.context(cfg, 'manual', (src or {}).get('SourceId'))
+    outs = b.get('outputs') or {}
+    for s in steps[:i]:
+        if isinstance(outs.get(s.get('id')), dict): flow._add(ctx, s, {**outs[s['id']], 'id': s['id']})
+    step = steps[i]
+    llm = _llm() if step.get('kind') == 'ai' else None
+    return flow.run_step(store, step, ctx, llm, None, dry=True, title=cfg['title'],
+                         src=src or {'ConfigJson': json.dumps(cfg)}, recs=[outs[s['id']] for s in steps[:i] if isinstance(outs.get(s.get('id')), dict)])
+
+@app.post('/api/workflows/{sid}/repair')
+def workflow_repair(sid: int, body: dict = None):
+    """Fix with AI: one composer round over a failed run's failed step, peeking at the real schema. Returns {flow, explain, diff}
+    for the editor to show as an unsaved change - nothing is kept until the owner saves it."""
+    from . import flow, workflows
+    src = store.get_source(sid)
+    if not src: raise HTTPException(404, 'workflow not found')
+    b = body or {}
+    run = store.get_report_run(int(b['run_id'])) if str(b.get('run_id') or '').isdigit() else None
+    if not run or run.get('sourceId') != sid: raise HTTPException(404, 'that run is not one of this workflow\'s')
+    cfg = workflows.cfg_of(src)
+    if isinstance(b.get('flow'), list) and b['flow']: cfg = {**cfg, 'flow': b['flow']}     # the editor's own unsaved list
+    out = flow.repair(store, cfg, run, _llm())
+    if out.get('flow'): store.audit('workflow', sid, 'repair_drafted', ACTOR, detail={'run': run['runId'], 'explain': out.get('explain')})
     return out
 
 # ── QuickBooks Online (quickbooks.py): OAuth against Intuit, with a redirect back to this server ──

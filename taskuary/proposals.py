@@ -64,6 +64,8 @@ ACTIONS = {
     # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
     'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), 'agent_push_enabled'),
     'run_tool': ('run one query/script through a tool connection', ('type',), None),
+    # a workflow step that failed, fixed by the model on the owner's say-so (flow.repair): the new list is saved only past their yes
+    'repair_workflow': ("change this workflow's steps to the repaired list", ('source_id', 'flow'), None),
     # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
     # and an agent that knows it did: a playbook is filed only past the owner's click
     'write_playbook': ('file a new PLAYBOOK - how this kind of job is done here - for the next agent to follow',
@@ -441,6 +443,11 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
             p['text'] = splice(playbooks.read(p['slug']) or p['text'], p['block'])
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
+    elif a == 'repair_workflow':
+        from . import flow
+        if not isinstance(p.get('flow'), list): raise RuntimeError('the repaired steps are not a list')
+        d = flow.apply(store, p['source_id'], p['flow'], actor, p.get('why') or '')       # re-validated there, and audited
+        out = {'workflow': int(p['source_id']), 'changed': flow.diff_text(d)[:1200]}
     else:                                   # run_tool
         from .reports import REGISTRY, resolve_cfg
         # the owner approved THIS query, so it may commit - the one road to a write on a read-level SQL card

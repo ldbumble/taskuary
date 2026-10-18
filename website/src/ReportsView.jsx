@@ -380,7 +380,12 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       if (value === "new") { setQ(""); setDraft(null); setBucket("new-report"); }
       else if (value === "draft" || value === "draft-workflow") { setQ(""); setBucket("draft"); }
       else if (["workflows", "new-invoices", "new-agent"].includes(value)) { setQ(""); setDraft(null); setBucket(value); }
-      else if (/^\d+$/.test(value || "")) { setQ(""); setBucket(Number(value)); }
+      else if (/^\d+$/.test(value || "")) {
+        setQ(""); setBucket(Number(value));
+        // a failed run's Fix with AI pressed on its task (RunSteps): the workflow opens with the fix on its way
+        const fix = /&fix=(\d+)/.exec(window.location.hash || "")?.[1];
+        if (fix) setFixRun({ sid: Number(value), runId: Number(fix) });
+      }
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
@@ -530,7 +535,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
         lastRun={openId != null && lastRuns[openId] ? (more) => <LastRun r={lastRuns[openId]} sid={openId} flush {...more} /> : null}
         lastRunRec={openId != null ? lastRuns[openId] : null}
-        fixRun={fixRun?.sid === openId ? fixRun.runId : null} onFixTaken={() => setFixRun(null)} onReport={asReportDraft}
+        fixRun={fixRun?.sid === openId ? fixRun.runId : browse && browseState.fix && browseState.open === openId ? browseState.fix : null}
+        onFixTaken={() => { setFixRun(null); if (browse && browseState.fix) onBrowseState?.({ ...browseState, fix: null }); }} onReport={asReportDraft}
         composer={<>
           <Composer kind="workflow" onDraft={(config, meta) => meta?.verdict === "report" ? asReportDraft(config, meta) : onDraft(config, meta)} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>

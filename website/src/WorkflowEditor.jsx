@@ -115,7 +115,8 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "No fix was found." }); }
     finally { setBusy(""); }
   };
-  useEffect(() => { if (fixRun && cur) { fix(fixRun); onFixTaken?.(); } }, [fixRun]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and once the workflow has loaded: a fix asked for from the run task arrives before it has
+  useEffect(() => { if (fixRun && cur) { fix(fixRun); onFixTaken?.(); } }, [fixRun, cur?.SourceId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const changed = repair ? diffKeys(repair.was, cfg.flow) : null;
   const canFix = !!(cur && steps && lastRunRec?.failed && lastRunRec?.run_id && (lastRunRec.steps || []).some((r) => r.status === "failed"));
 

@@ -19,7 +19,8 @@ export function canvasRequestFromHash(hash, n = 0) {
       : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
       : v === "workflows" ? { section: "workflows", open: null }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
-          : /^\d+$/.test(v) ? { section: "reports", open: Number(v) } : { section: "reports", open: null };
+          : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}) }
+            : { section: "reports", open: null };
     return { kind: "browse", area: "reports", state, n };
   }
   // the connector's own card reads the hash when it loads (ConnectorsView), so the link opens its detail in place

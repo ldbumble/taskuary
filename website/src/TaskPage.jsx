@@ -1612,7 +1612,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             </Box>
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
                             {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
-                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs} sourceId={fromWorkflow.sourceId} runId={fromWorkflow.runId} /></Box>}
+                              {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
+                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs} sourceId={fromWorkflow.sourceId} runId={fromWorkflow.runId}
+                                onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
+                                  ? () => { window.location.hash = `report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`; } : null} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see

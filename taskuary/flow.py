@@ -38,7 +38,14 @@ OUTPUTS = ('text', 'yes_no', 'fields')
 BODY_CAP, MAX_STEPS = 4000, 20
 # a step of kind `source` reads these as data even though scopes has no verb for them (an unknown verb counts as a write there)
 READS = ('taskuary', 'calendar', 'google_sheets', 'sharepoint_list', 'sharepoint_file', 'stooq')
-NOT_A_STEP = ('agent', 'assistant', 'zoho_monthly_invoices')      # the agent is its own kind; the others are whole jobs
+NOT_A_STEP = ('agent', 'assistant', 'zoho_monthly_invoices', 'image_generate')   # the agent is its own kind; the others are whole jobs
+AI_TYPES = ('digest',)          # a read the reports road runs with a model inside it (the sent-words judge): counted as AI
+# what a step connects with is the step's as saved: a token in one would let a row or a mail choose where the card's credentials
+# go (reports.CONNECTION_KEYS). `url` is the page a read reads - pasting a link an earlier step found into it is the point.
+FIXED = ('type', 'connector_id')
+def fixed_keys() -> tuple:
+    from .reports import CONNECTION_KEYS
+    return (*FIXED, *sorted(CONNECTION_KEYS - {'url', 'connector_id'}))
 TOKEN = re.compile(r'\{\{\s*([^{}\n]{1,120}?)\s*\}\}')
 
 FLOW_AI_SYSTEM = ('You are one step of a deterministic workflow. You judge, summarize or draft from the data you are given, and '
@@ -178,8 +185,11 @@ def validate(store, flow, strict: bool = False) -> tuple:
         if oi:
             if not isinstance(oi, dict) or oi.get('step') not in seen: return False, f'{at}: "only if" must name a step before it'
             if oi.get('is') not in ONLY_IF: return False, f"{at}: \"only if\" is one of {', '.join(ONLY_IF)}"
+        # `_write` commits a SQL batch on a read-level card: only an approved proposal or the card's own authority sets one
+        if any(str(k).startswith('_') for k in s): return False, f"{at}: a setting starting with _ is Taskuary's own, never a step's"
         if kind == 'source':
-            t = s.get('type')
+            t, pasted = s.get('type'), [k for k in fixed_keys() if _refs(s.get(k))]
+            if pasted: return False, f"{at}: {', '.join(pasted)} cannot come from an earlier step - it says where the step connects"
             if t not in REGISTRY or t in PLANNED: return False, f'{at}: unknown system type {t!r}'
             if t in NOT_A_STEP: return False, f'{at}: {t} is not a step - use the agent step for work that needs an agent'
             if strict:
@@ -288,9 +298,9 @@ def _skip(step, ctx) -> str:
 # ── one step ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def _source(store, step, ctx, llm, tid, dry, warns, title):
     from . import artifacts, proposals, reports
-    raw = {k: v for k, v in step.items() if k not in STEP_KEYS}
+    raw = {k: v for k, v in step.items() if k not in STEP_KEYS and not str(k).startswith('_')}
     if TOKEN.search(str(raw.get('query') or '')): warns.append('this query has an output pasted into it as text - check what it can contain')
-    cfg = render(raw, ctx, warns); t, w = cfg.get('type'), writes(cfg.get('type'))
+    cfg = {**render(raw, ctx, warns), **{k: raw[k] for k in fixed_keys() if k in raw}}; t, w = cfg.get('type'), writes(cfg.get('type'))
     try: reports.gate(store, cfg)
     except PermissionError as e:
         if not w: raise
@@ -351,6 +361,7 @@ def _task(store, step, ctx, llm, tid, dry, warns, title):
 
 def _draft(store, step, ctx, llm, tid, dry, warns, title):
     from . import outbox
+    if _refs(step.get('to')) or _refs(step.get('cc')): warns.append('who it goes to comes from an earlier step - check the address before you send it')
     to, about = render(str(step.get('to') or ''), ctx, warns).strip(), render(str(step.get('about') or ''), ctx, warns)
     subject, cc = render(str(step.get('subject') or ''), ctx, warns).strip(), render(step.get('cc') or [], ctx, warns)
     if dry: return {'status': 'dry', 'head': f'would draft for {to}' + (f": {subject[:80]}" if subject else ''), 'body': about}
@@ -387,7 +398,7 @@ def run_step(store, step, ctx, llm=None, task_id=None, dry=False, title='', src=
     """One step, recorded: {id, label, kind, status ok|failed|skipped|waiting|dry, ms, head, body, rows?, answer?, why?, error?,
     warnings?}. A step that raises is a failed record, never an exception out of here. Adds its output to ctx."""
     t0, warns, kind = time.time(), [], step.get('kind')
-    rec = {'id': step.get('id'), 'label': step.get('label') or step.get('id'), 'kind': kind}
+    rec = {'id': step.get('id'), 'label': step.get('label') or step.get('id'), 'kind': kind, **({'type': step.get('type')} if kind == 'source' else {})}
     why = _skip(step, ctx)
     if why: rec.update(status='skipped', head=why)
     else:
@@ -456,7 +467,7 @@ def said(rec: dict) -> str:
 def tally(recs: list) -> str:
     """"Ran 4 steps in 2.1s, no AI used" - counted from the kinds, so the owner sees how little of it was a model."""
     ran = [r for r in recs if r.get('status') not in ('skipped', 'repaired')]
-    ai = sum(1 for r in ran if r.get('kind') in USES_AI)
+    ai = sum(1 for r in ran if r.get('kind') in USES_AI or r.get('type') in AI_TYPES)
     secs = sum(r.get('ms') or 0 for r in recs) / 1000
     return f"Ran {len(ran)} step{'s' if len(ran) != 1 else ''} in {secs:.1f}s, " + ('no AI used' if not ai else f"{ai} with AI")
 

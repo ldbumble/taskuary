@@ -121,8 +121,11 @@ def parse(text: str) -> list:
     for _, _, j in spans(text):
         if j is None: continue
         a = str(j.get('action') or '').strip()
-        # a merge is the owner's close-out, never an agent's ask - and no agent may mark its own ask as one
-        if a in ACTIONS and a != 'merge_pr': out.append({**{k: v for k, v in j.items() if k != 'closeout'}, 'action': a})
+        # a merge is the owner's close-out, never an agent's ask - and no agent may mark its own ask as one. A workflow repair is
+        # raised by the run itself (flow._repair_now): an agent that read a mail asking for one could rewrite any workflow, with
+        # its own words for what changes on the card the owner approves
+        # ...and `flow_run` is the run a workflow's own write waits in: an agent's run_tool naming one would mark that step done
+        if a in ACTIONS and a not in ('merge_pr', 'repair_workflow'): out.append({**{k: v for k, v in j.items() if k not in ('closeout', 'flow_run')}, 'action': a})
         if len(out) >= MAX: break
     return out
 
@@ -444,8 +447,11 @@ def execute(store, rv: dict, actor='owner', final_text: str = None, skip_checks:
         slug = playbooks.write(p['slug'], p['text'])
         out = {'playbook': slug, 'path': str(playbooks.folder() / f'{slug}.md')}
     elif a == 'repair_workflow':
-        from . import flow
+        from . import flow, workflows
         if not isinstance(p.get('flow'), list): raise RuntimeError('the repaired steps are not a list')
+        # the fix was written against the steps as they stood then: a change made since would be thrown away by approving it
+        now = flow.steps_of(workflows.cfg_of(store.get_source(int(p['source_id'])) or {}))
+        if p.get('was') != now: raise RuntimeError('the steps have changed since this fix was written - run the workflow again, or Fix with AI on it')
         d = flow.apply(store, p['source_id'], p['flow'], actor, p.get('why') or '')       # re-validated there, and audited
         out = {'workflow': int(p['source_id']), 'changed': flow.diff_text(d)[:1200]}
     else:                                   # run_tool

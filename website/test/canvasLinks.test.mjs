@@ -7,6 +7,8 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#task=123", 4), { kind: "task", tid: 123, n: 4 });
   assert.deepEqual(canvasRequestFromHash("#new-task"), { kind: "new", n: 0 });
   assert.deepEqual(canvasRequestFromHash("#report=17").state, { section: "reports", open: 17 });
+  // a failed workflow run's Fix with AI, pressed on its task: the workflow opens with the fix asked for
+  assert.deepEqual(canvasRequestFromHash("#report=17&fix=9021").state, { section: "reports", open: 17, fix: 9021 });
   assert.deepEqual(canvasRequestFromHash("#report=new").state, { section: "reports", open: "new-report" });
   assert.deepEqual(canvasRequestFromHash("#report=workflows").state, { section: "workflows", open: null });
   assert.deepEqual(canvasRequestFromHash("#report=new-agent").state, { section: "workflows", open: "new-agent" });

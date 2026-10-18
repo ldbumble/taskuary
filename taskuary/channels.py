@@ -835,8 +835,8 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
         store.decide_review(rv['ReviewId'], 'superseded', None, 'you',
                             f'The owner replied {place}; this draft was not sent.')
 
-    # Treat this exactly like a successful send through Review.  Reply-only work closes, while
-    # owner-controlled work and a task whose coding agent is still running keep their safeguards.
+    # Treat this exactly like a successful send through Review - which closes nothing (the owner, 2026-10-18: "sending and
+    # closing are two steps"): the task stays open for Mark done.
     if tid:
         from . import verdicts
         verdicts._settle_task_after_sent_reply(store, stale[0], 'you', True)
@@ -850,8 +850,8 @@ def retire_draft_answered_elsewhere(store, tid: int | None, sent: dict) -> list:
         state = ''
     else:
         where = f'TQ-{tid:04d}'
-        state = ' The task is still open because it has other work in progress.' \
-            if task.get('Status') not in ('done', 'dropped') else ' I marked the task done.'
+        from . import buttons
+        state = f" The task stays open until you {buttons.label('close')}." if task.get('Status') not in ('done', 'dropped') else ''
     # ...said in the Assistant's conversation - and never as a dead end: the page offers Next under the newest line that has
     # nothing to press (the owner, 2026-09-30: "it can write that and close task ... but then should move to next or at least
     # have buttons to navigate")

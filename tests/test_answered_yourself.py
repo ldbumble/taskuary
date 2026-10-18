@@ -159,7 +159,7 @@ class TheReplyHasToSurviveTheTrip(unittest.TestCase):
                                'body': 'yes'}, 'your line in this chat - kept for context')
 
         self.assertEqual(s.get_review(rid)['Status'], 'superseded')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertEqual(s.get_task(tid)['Status'], 'open')             # answered, and open for Mark done (2026-10-18)
         self.assertEqual(_row(s, mid)['NeedsYou'], 0)
         # ...said on the task it settled, never in the Assistant's conversation (the owner, 2026-10-06: the task being
         # worked is the main thing there, nothing else)

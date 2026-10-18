@@ -40,7 +40,8 @@ const JARGON = [...JARGON_RES, /\bnull\b/, /\bundefined\b/, /Traceback/, /\b[45]
 // a word on the row that is no named button: not a label on the list, not a state's label, not a working state ("Sending…"), not
 // the More arrow, and not an item's own name (the end of the walk's "Open TQ-12 · ...")
 const NAMED = new Set(ALL_LABELS.map((l) => l.trim()));
-const named = (w) => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w);
+// ...nor a failed send's fix ('<rid>:fix'), which wears the fix's own words ("Connect a mailbox") - buttons.json says so of `fix`
+const named = (w, id = "") => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w) || /:fix$/.test(id);
 const web = build ? mkdtempSync(join(tmpdir(), "tq-deadend-web-")) : "";
 if (build && spawnSync("npx", ["vite", "build", "--outDir", web, "--emptyOutDir"], { cwd: join(root, "website"), shell: true, stdio: "ignore" }).status) {
   console.error("the page did not build"); process.exit(2);
@@ -87,7 +88,7 @@ await wait(6000);
 const look = () => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
-  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), dark: b.classList.contains("p"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
+  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
   const cards = [...document.querySelectorAll("[data-tq-task-page]")].filter(vis), card = cards[cards.length - 1];
   window.__tqCards = cards.map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height), c.className.slice(0, 40)]; });
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
@@ -116,7 +117,7 @@ const judge = (s, at) => {
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view ${JSON.stringify(s.cards)}`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off)) note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);
   for (const w of JARGON) { const m = s.read.match(w); if (m) note("WORDS", at, `"${m[0]}" in "${s.read.slice(Math.max(0, m.index - 40), m.index + 40).replace(/\s+/g, " ")}"`); }
-  const odd = [...new Set(s.verbs.map((v) => v.word).filter((w) => !named(w)))];
+  const odd = [...new Set(s.verbs.filter((v) => !named(v.word, v.id)).map((v) => v.word))];
   if (odd.length) note("NAMES", at, `on the row but on no list of buttons: ${JSON.stringify(odd)}`);
 };
 const receipts = (before, after, at) => {

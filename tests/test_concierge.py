@@ -181,7 +181,7 @@ class TurnTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
-        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send & close, Redraft, or move on', out['say'])
+        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send, Redraft, or move on', out['say'])
         self.assertEqual(out['options'], [])
 
     def test_a_model_that_fails_still_leaves_a_line(self):
@@ -362,7 +362,7 @@ class BrainTests(unittest.TestCase):
             out = concierge.surface(s)
             # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
             # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
-            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft, or move on.')
+            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send, Redraft, or move on.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
@@ -628,20 +628,21 @@ class FastLaneTests(unittest.TestCase):
 
 
 class ReplyClosesTests(unittest.TestCase):
-    def test_a_reply_that_went_out_closes_the_task_unless_an_agent_still_has_it(self):
+    def test_a_reply_that_went_out_never_closes_the_task_agent_or_none(self):
+        """It closed the task unless an agent still had it; the owner, 2026-10-18: "sending and closing are two steps"."""
         from taskuary import verdicts
         s = store()
         t, m, r = drafted(s)
         sent = {'channel': 'email', 'to': ['dana@vendor.com'], 'cc': []}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent):
             out = verdicts.decide(s, s.get_review(r), 'approve', 'Attached.', None, 'owner')
-        self.assertTrue(out['ok']); self.assertEqual(s.get_task(t)['Status'], 'done')
-        self.assertTrue(any('Closed - the reply went out' in c['Body'] for c in s.list_comments(t)))
+        self.assertTrue(out['ok']); self.assertEqual(s.get_task(t)['Status'], 'waiting')
+        self.assertFalse(any('Closed' in c['Body'] for c in s.list_comments(t)))
         t2, m2, r2 = drafted(s, 'second')
         live = [{'taskId': t2, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 2, 'waiting': False, 'tail': []}]
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent), mock.patch('taskuary.terminal.live_sessions', return_value=live):
             verdicts.decide(s, s.get_review(r2), 'approve', 'On it.', None, 'owner')
-        self.assertEqual(s.get_task(t2)['Status'], 'waiting')                # the agent's close-out comes first
+        self.assertEqual(s.get_task(t2)['Status'], 'waiting')
 
 
 class SetupAndTroubleTests(unittest.TestCase):
@@ -927,7 +928,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft, or move on.')      # the facts, instant (2026-09-07)
+            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send, Redraft, or move on.')      # the facts, instant (2026-09-07)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)

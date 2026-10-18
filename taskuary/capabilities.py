@@ -1,6 +1,6 @@
 """WHAT THIS INSTALL CAN DO, answered by one function - read by every check that decides what the owner is OFFERED: the chips,
 the Advisor's verbs, the assistant's coding lines, setup, and the page (GET /api/capabilities, website/src/capabilities.js).
-Each of these was asked its own way in its own file, and they disagreed: a Teams draft offered Send & close that could never
+Each of these was asked its own way in its own file, and they disagreed: a Teams draft offered Send that could never
 leave, coding was offered where no coding tool runs (2026-10-18). Nothing is cached - a connection made a second ago counts."""
 from loguru import logger
 
@@ -65,7 +65,7 @@ def draft_channel(store, rid) -> str:
 
 
 def can_send_draft(store, rid) -> bool:
-    """False only where the draft's channel is known and cannot deliver - the Send & close that would only ever fail."""
+    """False only where the draft's channel is known and cannot deliver - the Send that would only ever fail."""
     ch = draft_channel(store, rid)
     return not ch or can_send(store, ch)
 

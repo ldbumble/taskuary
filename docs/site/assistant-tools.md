@@ -35,7 +35,7 @@ The "Reply" button: write a reply to the sender. Nothing is sent.
 
 ### `approve`
 
-The "Send & close" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never continues an agent's session - that is agent.continue.
+The "Send" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only that. It never closes the task - that is close, the owner's own Mark done, a separate step - and never continues an agent's session - that is agent.continue.
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -319,7 +319,7 @@ Prepare a question for the task's sender; it waits for the owner's yes, never se
 
 ### `review.approve`
 
-The owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked.
+The owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.
 
 <p class="runs">Waits for your yes on a card.</p>
 

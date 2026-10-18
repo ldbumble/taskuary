@@ -179,7 +179,7 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
         store.audit('task', task_id, 'proposal_refused', actor, detail={'action': p.get('action'), 'why': why})
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR)
-    reason = (f"closes the task: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
+    reason = (f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
               if p.get('closeout') else f'the agent proposes to {why}' + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
@@ -189,8 +189,8 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
 
 # ── the close-out ────────────────────────────────────────────────────────────────────────
 # What FINISHES a task depends on where it lives (the owner, 2026-09-27): mail is closed out by the reply, a pull
-# request the agent opened by merging it, an issue by closing it with a comment. So a finished agent's task is not
-# done until that last act is approved - the same yes-gated review as any proposal, raised by wrapup.finish. The
+# request the agent opened by merging it, an issue by closing it with a comment - each the same yes-gated review as any
+# proposal, raised by wrapup.finish; approving it runs that act alone, and Mark done is still the owner's (2026-10-18). The
 # words (the summary, the closing comment) are the card's text; the act is plain code on the owner's click.
 # ONE button word for every system (the owner, 2026-09-27: "if we have button to close out per system it will be endless")
 # - approve, as it shows on an agent's proposal (buttons.json: Approve) - and per action only the sentence saying what it does
@@ -208,10 +208,9 @@ def closeout_pending(store, tid: int):
 
 
 # ── close-out and playbook are TWO things (the owner, 2026-10-01) ────────────────────────────────────────────────────
-# A task closes only when BOTH are settled: its close-out (the reply sent, the pull request merged or closed, the issue
-# closed) and the playbook proposal its agent left (approved or dismissed). A sent reply used to close the task and dismiss
-# the undecided playbook with it; deciding the playbook first and sending after closed it right, but the other order never
-# closed at all. Whichever half lands second closes the task, from every door - each one calls in here.
+# Neither closes the task: its close-out (the reply sent, the pull request merged or closed, the issue closed) and the
+# playbook proposal its agent left (approved or dismissed) are each said on the task, and only the owner's Mark done closes it
+# (2026-10-18: "sending and closing are two steps, never automatic"). A sent reply used to dismiss the undecided playbook.
 PLAYBOOK = 'write_playbook'
 
 
@@ -227,31 +226,17 @@ def owed(store, tid: int) -> bool:
 
 
 def closed_out(store, tid: int, actor: str, said: str) -> bool:
-    """The close-out is done. The task closes now - unless its playbook still waits, when it stays open on the owner with
-    that one decision left, marked so that deciding it closes the task. True when it closed."""
+    """The close-out is done: said on the task, with what still waits (its emails, its playbook). The task STAYS OPEN - only
+    the owner's Mark done closes it (the owner, 2026-10-18: "sending and closing are two steps, never automatic"); this used
+    to close it whenever nothing else waited. False always: nothing closed."""
     from . import slots
-    left = slots.open_(store, tid)
-    # ...and while its emails wait (2026-10-05): four were drafted, and the first send closed the task and superseded
-    # the other three. It closes when the last one is sent or dropped (slots.settled) - same pattern as the playbook.
-    if left:
-        store.audit('task', tid, 'closed_out', actor)
-        store.add_comment(tid, actor, 'human', f"{said} The task closes when its {len(left)} remaining email{'s' if len(left) != 1 else ''} "
-                                               f"{'are' if len(left) != 1 else 'is'} sent or dropped.")
-        return False
-    if playbook_pending(store, tid):
-        store.audit('task', tid, 'closed_out', actor)
-        store.add_comment(tid, actor, 'human', f'{said} The task closes when you approve or dismiss its playbook.')
-        return False
-    from . import concierge
-    return concierge.close_task(store, tid, actor)
-
-
-def _playbook_decided(store, tid: int, actor: str) -> None:
-    """The playbook was approved or dismissed: the task closes if its close-out was already done and nothing else waits."""
-    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped') or owed(store, tid) or playbook_pending(store, tid): return
-    if not store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='closed_out' LIMIT 1", (tid,)): return
-    from . import concierge
-    if concierge.close_task(store, tid, actor): store.add_comment(tid, actor, 'human', 'Closed - the close-out was done and the playbook is decided.')
+    if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
+    n = len(slots.open_(store, tid))
+    store.audit('task', tid, 'closed_out', actor)
+    rest = (f" {n} email{'s' if n != 1 else ''} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if playbook_pending(store, tid)
+            else f" {buttons.label('close')} when the task is finished.")
+    store.add_comment(tid, actor, 'human', f'{said}{rest}')
+    return False
 
 
 def _action(rv) -> str:
@@ -325,11 +310,10 @@ def closeout(store, tid: int, p: dict, text: str = '', actor='agent'):
 
 
 def settle(store, rv: dict, verb: str, actor='owner') -> None:
-    """After the owner answered a close-out: a yes closes the task unless something else still waits on
-    them (the reply to send); "not yet" leaves it open and on them - it is not closed until the act is."""
+    """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
+    done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
     tid = rv.get('TaskId')
-    if not tid: return
-    if _action(rv) == PLAYBOOK: return _playbook_decided(store, tid, actor)
+    if not tid or _action(rv) == PLAYBOOK: return
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)
@@ -337,9 +321,11 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
             store.update_task(tid, {'Status': 'waiting'}, actor)
         return
     if _action(rv) not in CLOSEOUT:
-        # a proposal a finished agent left waiting (wrapup.finish): once the last one is answered, yes or no, the task ends
+        # a proposal a finished agent left waiting (wrapup.finish): once the last one is answered, yes or no, the task is
+        # back on the owner - open, nobody else's turn - for their Mark done. It used to close here.
         if (store.get_task(tid) or {}).get('Status') == 'waiting' and not owed(store, tid) and \
                 store._one("SELECT 1 x FROM audit WHERE EntityType='task' AND EntityId=? AND Action='awaits_proposals' LIMIT 1", (tid,)):
+            store.update_task(tid, {'Status': 'open'}, actor)
             closed_out(store, tid, actor, 'Every proposal is answered.')
         return
     if verb not in ('approve', 'edit'):
@@ -351,7 +337,7 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
 
 def close_pr(store, rv: dict, actor='owner') -> dict:
     """The merge close-out's other answer: the work is not wanted, so the pull request is closed on GitHub without
-    merging and the task ends with it (the owner, 2026-09-27). The owner's own act, like the merge."""
+    merging (the owner, 2026-09-27). The owner's own act, like the merge - and like it, it leaves the task open for Mark done."""
     p = json.loads(rv.get('DraftText') or '{}')
     if p.get('action') != 'merge_pr': raise RuntimeError('only a pull request close-out can be closed without merging')
     ok, why = validate(store, p)

@@ -14,9 +14,9 @@ const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: 
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
 
 test("the advised verb is the one filled button, whatever the row would have filled - and with no advice, none is", () => {
-  const list = [v("approve", "decide", { tone: "p", label: "Send & close" }), v("continue", "agent", { label: "Keep going" }), v("done", "more", { label: "Mark done" }), v("next", "next")];
+  const list = [v("approve", "decide", { tone: "p", label: "Send" }), v("continue", "agent", { label: "Keep going" }), v("done", "more", { label: "Mark done" }), v("next", "next")];
   assert.deepEqual(filled(rowOf({ ref: "", list })), []);
-  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "approve", label: "Send & close" })), ["approve"]);
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "approve", label: "Send" })), ["approve"]);
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Keep going" })), ["continue"]);
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["done"]);   // Mark done is the advisor's close
 });
@@ -93,7 +93,7 @@ test("a move the row cannot make is no advice: a greyed or missing button draws 
 
 test("advised Send fills only a button that sends, and the card's other words for an act still match", () => {
   const list = [v("approve", "decide", { label: "Refresh the draft" }), v("remind", "decide", { label: "Remind me" }), v("next", "next")];
-  assert.equal(advisedIn(list, { verb: "approve", label: "Send & close" }), null, "Refresh the draft is not Send");
-  assert.equal(advisedIn([v("approve", "decide", { label: "Send & close" })], { verb: "approve", label: "Send & close" })?.label, "Send & close");
+  assert.equal(advisedIn(list, { verb: "approve", label: "Send" }), null, "Refresh the draft is not Send");
+  assert.equal(advisedIn([v("approve", "decide", { label: "Send" })], { verb: "approve", label: "Send" })?.label, "Send");
   assert.equal(advisedIn(list, { verb: "defer", label: "Remind me later" })?.label, "Remind me", "defer is the row's Remind me");
 });

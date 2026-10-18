@@ -20,6 +20,7 @@ import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { replySendFailure, reviewDeliveryState, sendFix } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
+import { draftCanSend, useCapabilities } from "./capabilities.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
 // approved an answer without the question in front of you, or opened the task to find it. Four
@@ -84,24 +85,28 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
   // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
   const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
-  const sendable = r.CanSend !== false || carried;
-  // one of the task's emails (slots.py) is not its close-out: sending it closes nothing until the last one goes
+  // can THIS draft leave: the channel's answer (capabilities.js, live as connections change) and the row's own - r.CanSend also
+  // knows a draft with nobody to go to
+  const caps = useCapabilities();
+  const canSendIt = draftCanSend(caps, r);
+  const sendable = canSendIt || carried;
+  // one of the task's emails (slots.py) is not its close-out: sending it ticks that email and closes nothing
   const isSlot = r.Kind === "slot";
   const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification" && !isSlot;
   // THE BUTTONS THAT ACT ON THE DRAFT ARE UNDER THE DRAFT (the owner, 2026-10-06: "any button that relates to a piece of a task ... put
-  // the button right there, if related to task in general then put button on bottom"): Send & close where sending finishes the task,
-  // Copy & close where this channel cannot carry it - and Redraft beside them. ONE NAME for the send (buttons.json): "Send" on one
-  // email of several was a second name for the same press; the line under it says what closes
-  const sendWord = btn("approve");
-  // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so Send & close sent the promise without
-  // the file and closed the task on it. The move becomes answering by email with the file; sending the words alone stays beside it.
-  const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && r.CanSend !== false
+  // the button right there, if related to task in general then put button on bottom"): Send where this channel carries it, Mark done
+  // (with the draft copied) where it cannot - and Redraft beside them. ONE NAME for the send, wherever (buttons.json), and it only
+  // sends: SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18) - the task's own Mark done is the close
+  const sendWord = btn("approve"), stays = `the task stays open until you ${btn("close")}`;
+  // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so a send went out with the promise and
+  // without the file. The move becomes answering by email with the file; sending the words alone stays beside it.
+  const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && canSendIt
     && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || promisesFiles(value));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
-    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
-    : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone - that closes the task.`
-    : onTask && !r.Stale && r.CanSend !== false ? `${sendWord} sends this to ${replyContext(r)} and closes the task.`
-    : onTask && !r.Stale && r.CanSend === false ? "Copy & close copies the draft for you to paste and send yourself, and closes the task." : "";
+    : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`
+    : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
+    : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.`
+    : onTask && !r.Stale && !canSendIt ? `${btn("close")} copies the draft for you to paste and send yourself, and closes the task.` : "";
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({offers} = what fits instead)
   const [said, setSaid] = useState("");              // what Update branch / Re-run checks just did
   // THE CARD READS GITHUB FIRST (closeoutState.js): Close out is live only when this repo's rules let it merge now
@@ -149,8 +154,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // a close-out GitHub's state refused is "not now", with what fits instead - never "approved, but it did not send"
       if (data.refused) { setCoFail({ text: data.send_error || "", offers: data.offers || [] }); reloadGh(); }
       else if (data.send_error) setSendErr(replySendFailure(data));
-      // Close out / Approve & send is not put down at the press: it waits for the send so an error shows HERE, then the
-      // task page closes the walk on it when that send closed the task (the owner, 2026-10-02)
+      // Send / Approve is not put down at the press: it waits for the send so an error shows HERE, then the task page reads the
+      // task again - still open, its Mark done the move now (the owner, 2026-10-02; 2026-10-18: a send never closes it)
       else if (data.ok && verb === "approve" && onSent) { await onSent(); setBusy(false); return; }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
@@ -201,9 +206,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
-    ] : r.CanSend === false ? [
-      { id: no("approve"), label: busy ? "Closing…" : btn("close"), tone: "p", disabled: busy, run: () => decide("close_unsent"),
-        title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).` },
+    ] : !canSendIt ? [
+      { id: no("approve"), label: busy ? "Closing…" : btn("close"), tone: "p", disabled: busy, run: copyClose,
+        title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is copied for you and kept; the task is marked done (PW-145).` },
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
@@ -223,7 +228,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
       : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
           title: btnHint("redraft") }] : []),
-        ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
+        ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && v.id !== no("approve")) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
@@ -323,7 +328,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           shows it; here it lived only in the tooltip of the button that replaced Send, so a drafted
           answer with nowhere to go looked like a card that had simply lost its button. The draft is
           real and worth reading - a GitHub task with replies off is still answered, by hand. */}
-      {!proposal && !carried && r.CanSend === false && (
+      {!proposal && !carried && !canSendIt && (
         <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>
           No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
         </Typography>
@@ -377,12 +382,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               : "Run the proposed action; nothing is sent to the sender"}>
             {busy ? proposal.busyLabel : proposal.approveLabel}
           </Button>
-        ) : r.CanSend === false ? (
+        ) : !canSendIt ? (
           <Button size="small" variant={solid} disableElevation disabled={busy}
             sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
-            title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).`}
+            title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is copied for you and kept; the task is marked done (PW-145).`}
             onClick={copyClose}>
-            {busy ? "Closing…" : "Copy & close"}
+            {/* the one close, by its one name - it had a second one here, a copy-and-close of its own */}
+            {busy ? "Closing…" : btn("close")}
           </Button>
         ) : r.Stale ? (
           /* THE ROAD OUT OF THE WARNING. A stale draft disabled the only button on the card
@@ -417,9 +423,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy || drafting} onClick={redraft}
           title={btnHint("redraft")}>
           {drafting ? "Drafting…" : redraftWord}</Button>}
-        {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
+        {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
-          title="Drop this email - the task closes when the rest are sent">Don't send</Button>}
+          title="Drop this email - it is never sent, and the task stays open">Don't send</Button>}
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}

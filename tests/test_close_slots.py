@@ -1,6 +1,6 @@
 """A task says what closes it: output slots on the checklist (spec 2026-10-05-task-close-slots-design.md).
 
-The shape: one ask, four addressed drafts, each approved on its own, the task closing when the last is sent.
+The shape: one ask, four addressed drafts, each approved on its own. None of them closes the task - Mark done does (2026-10-18).
 """
 import json
 from unittest import mock
@@ -98,12 +98,12 @@ def send_reply(s, rid):
         return verdicts.decide(s, s.get_review(rid), 'approve')
 
 
-def test_four_slots_stay_open_through_three_sends_and_close_on_the_fourth(s):
+def test_four_slots_stay_open_through_all_four_sends(s):
     tid = typed(s, [*FOUR[:2], {'to': 'gail@northwind.example', 'about': 'where tab 3 stands'}, FOUR[3]]); rids = [draft(s, tid, n) for n in range(4)]
     for rid in rids[:3]:
         assert approve(s, rid)['ok'] and s.get_task(tid)['Status'] != 'done'
     assert s.get_review(rids[3])['Status'] == 'pending'
-    assert approve(s, rids[3])['ok'] and s.get_task(tid)['Status'] == 'done'
+    assert approve(s, rids[3])['ok'] and s.get_task(tid)['Status'] == 'open'      # the last send closes nothing either
     assert all(i['done'] for i in slots.all_(s, tid))
 
 
@@ -112,7 +112,7 @@ def test_a_rejected_slot_is_dropped_and_counts_as_settled(s):
     with mock.patch('taskuary.learn.learn_from'): verdicts.decide(s, s.get_review(a), 'reject')
     assert s.get_task(tid)['Status'] != 'done' and s.get_review(b)['Status'] == 'pending'
     approve(s, b)
-    assert s.get_task(tid)['Status'] == 'done'
+    assert s.get_task(tid)['Status'] == 'open' and all(i['done'] for i in slots.all_(s, tid))
 
 
 @pytest.mark.parametrize('verb', ['no_reply', 'close_unsent'])
@@ -123,12 +123,12 @@ def test_not_sending_one_slot_drops_that_slot_not_the_task(s, verb):
     assert [i['done'] for i in slots.all_(s, tid)] == [True, False]
 
 
-def test_a_reply_and_slots_close_only_when_both_are_settled(s):
+def test_a_reply_and_slots_all_sent_still_leave_the_task_open(s):
     tid, mid, reply = mail_task(s); slots.add(s, tid, FOUR[:1], 'owner'); a = draft(s, tid, 0)
     send_reply(s, reply)
     assert s.get_task(tid)['Status'] != 'done' and s.get_review(a)['Status'] == 'pending'
     approve(s, a)
-    assert s.get_task(tid)['Status'] == 'done'
+    assert s.get_task(tid)['Status'] != 'done'
 
 
 def test_a_slot_sent_before_the_reply_leaves_the_reply_waiting(s):
@@ -137,10 +137,10 @@ def test_a_slot_sent_before_the_reply_leaves_the_reply_waiting(s):
     assert s.get_task(tid)['Status'] != 'done' and s.get_review(reply)['Status'] == 'pending'
 
 
-def test_a_task_without_slots_closes_on_its_reply_as_before(s):
+def test_a_task_without_slots_stays_open_after_its_reply(s):
     tid, mid, reply = mail_task(s)
     send_reply(s, reply)
-    assert s.get_task(tid)['Status'] == 'done'
+    assert s.get_task(tid)['Status'] != 'done'
 
 
 def test_the_closeout_redirect_never_sends_a_slot_as_the_reply(s):
@@ -446,11 +446,11 @@ def test_ticking_a_drafted_slot_drops_its_draft(s):
     assert s.get_review(a)['Status'] == 'rejected' and slots.all_(s, tid)[0]['done']
 
 
-def test_dropping_the_last_undrafted_slot_closes_a_typed_task(s):
+def test_dropping_the_last_undrafted_slot_leaves_a_typed_task_open(s):
     tid = typed(s, FOUR[:1]); sid = slots.all_(s, tid)[0]['id']
     c, p = api(s)
-    with p: c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True})
-    assert s.get_task(tid)['Status'] == 'done'
+    with p: r = c.patch(f'/api/tasks/{tid}/checklist/{sid}', json={'done': True}).json()
+    assert r['closed'] is False and s.get_task(tid)['Status'] == 'open' and slots.all_(s, tid)[0]['done']
 
 
 def test_the_assistants_drop_rejects_the_pending_draft(s):

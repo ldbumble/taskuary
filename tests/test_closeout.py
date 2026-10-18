@@ -68,7 +68,7 @@ class MergeCloseOutTests(unittest.TestCase):
         self.assertEqual((p['action'], p['repo'], p['number']), ('merge_pr', 'northwind/ledger', 7))
         self.assertIn('the export reads the new view', p['text'])        # the summary is the card's text
 
-    def test_merge_squashes_the_reviewed_head_and_closes_the_task(self):
+    def test_merge_squashes_the_reviewed_head_and_leaves_the_task_open(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
         rv = proposals.closeout_pending(s, tid)
         with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'checks', return_value=GREEN), \
@@ -77,7 +77,7 @@ class MergeCloseOutTests(unittest.TestCase):
         self.assertTrue(out['ok'], out)
         args = merge.call_args[0]
         self.assertEqual((args[1], args[2], args[3], args[5]), ('northwind/ledger', 7, 'abc1234def', 'Edited summary'))
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertNotEqual(s.get_task(tid)['Status'], 'done')            # Approve runs the merge, and only that (2026-10-18)
         self.assertTrue(ci.pr_of(s, tid)['merged'])
 
     def test_the_merge_pins_the_head_the_card_was_raised_on(self):
@@ -103,19 +103,19 @@ class MergeCloseOutTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
         self.assertTrue(proposals.closeout_pending(s, tid))
 
-    def test_not_yet_keeps_it_open_and_a_merge_on_github_then_closes_it(self):
+    def test_not_yet_keeps_it_open_and_a_merge_on_github_then_answers_it(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
         verdicts.decide(s, proposals.closeout_pending(s, tid), 'reject')
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'state': 'closed', 'merged': True}):
             self.assertTrue(ci.pr_ended(s, tid, ci.landing_of(s, tid)))
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertEqual(s.get_task(tid)['Status'], 'open')               # answered, and still the owner's to Mark done
 
     def test_merging_on_github_answers_a_pending_close_out(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
         with mock.patch.object(github, 'pr', return_value={**OPEN, 'state': 'closed', 'merged': True}):
             ci.pr_ended(s, tid, ci.landing_of(s, tid))
-        self.assertEqual((pending(s, tid), s.get_task(tid)['Status']), ([], 'done'))
+        self.assertEqual((pending(s, tid), s.get_task(tid)['Status']), ([], 'waiting'))
 
     def test_a_pr_nobody_offered_to_merge_is_not_polled(self):
         s = armed(MemoryStore()); tid = with_pr(s)
@@ -137,7 +137,7 @@ class MergeCloseOutTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
         self.assertTrue(proposals.closeout_pending(s, tid))
 
-    def test_close_pr_closes_it_unmerged_and_ends_the_task(self):
+    def test_close_pr_closes_it_unmerged_and_leaves_the_task_open(self):
         s = armed(MemoryStore()); tid = with_pr(s); finish(s, tid)
         rv = proposals.closeout_pending(s, tid)
         with mock.patch.object(github, 'pr', return_value=OPEN), mock.patch.object(github, 'close_pr') as close, \
@@ -145,7 +145,7 @@ class MergeCloseOutTests(unittest.TestCase):
             out = verdicts.decide(s, rv, 'close_pr')
         self.assertTrue(out['ok'], out)
         close.assert_called_once_with('ghp_x', 'northwind/ledger', 7); merge.assert_not_called()
-        self.assertEqual((s.get_review(rv['ReviewId'])['Status'], s.get_task(tid)['Status']), ('rejected', 'done'))
+        self.assertEqual((s.get_review(rv['ReviewId'])['Status'], s.get_task(tid)['Status']), ('rejected', 'waiting'))
         self.assertFalse(ci.pr_of(s, tid)['merged'])
 
     def test_close_pr_on_a_reply_is_refused(self):
@@ -233,7 +233,7 @@ class OnePressTests(unittest.TestCase):
         self.assertTrue(out['ok'] and out['reply']['ok'], out)
         self.assertEqual(say.call_args[0][1:], ('northwind/ledger', 7, 'Thanks - merged.'))
         merge.assert_called_once()
-        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'waiting'))
 
     def test_red_checks_say_so_and_merge_anyway_overrules_them(self):
         """Red checks the repository does NOT require ("unstable"), with the card set to "stop and ask": the card says so
@@ -248,7 +248,7 @@ class OnePressTests(unittest.TestCase):
             merge.assert_not_called(); say.assert_not_called()
             out = verdicts.decide(s, proposals.closeout_pending(s, tid), 'merge_anyway', reply_text='Thanks - merged.')
         self.assertTrue(out['ok'], out); merge.assert_called_once(); say.assert_called_once()
-        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'done'))
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('edited', 'waiting'))
 
 
     def test_close_out_pressed_on_the_reply_card_runs_the_merge_too(self):
@@ -261,7 +261,7 @@ class OnePressTests(unittest.TestCase):
             out = verdicts.decide(s, s.get_review(reply), 'approve')
         self.assertTrue(out['ok'], out); merge.assert_called_once()
         self.assertEqual(say.call_args[0][3], 'Thanks - approving.')
-        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('approved', 'done'))
+        self.assertEqual((s.get_review(reply)['Status'], s.get_task(tid)['Status']), ('approved', 'waiting'))
 
     def test_the_phone_shows_the_reply_a_finished_agent_wrote(self):
         """`draft_reply` (the agent's own) was never read, so WhatsApp asked for a yes to a reply it did not show."""
@@ -279,7 +279,7 @@ class OnePressTests(unittest.TestCase):
 
     def test_a_close_out_card_does_not_say_the_agent_proposed_it(self):
         s, tid, _ = self._both()
-        self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'closes the task: merge pull request #7')
+        self.assertEqual(proposals.closeout_pending(s, tid)['Reason'], 'the close-out: merge pull request #7')
 
 
 class GithubStateTests(unittest.TestCase):
@@ -360,7 +360,7 @@ class IssueCloseOutTests(unittest.TestCase):
         with mock.patch.object(github, 'close_issue') as close:
             self.assertTrue(verdicts.decide(s, rv, 'approve', final_text='Fixed in the nightly run.')['ok'])
         self.assertEqual(close.call_args[0][1:], ('northwind/ledger', 12, 'Fixed in the nightly run.'))
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertNotEqual(s.get_task(tid)['Status'], 'done')
 
     def test_the_tracker_switch_does_not_hide_the_issue_close_out(self):
         s = armed(MemoryStore(), tracker=False)

@@ -1024,7 +1024,7 @@ class ApiTests(unittest.TestCase):
 
     def test_a_tasks_draft_says_who_it_answers_and_whether_its_channel_can_carry_it(self):
         """The walk's task card read its drafts from the task detail, which carried neither: every inbound reply said
-        "To this conversation", and a Teams draft offered Send & close only to come back "not sent" (2026-10-07)."""
+        "To this conversation", and a Teams draft offered Send only to come back "not sent" (2026-10-07)."""
         tid = server.store.create_task({'Title': 'Import check', 'Kind': 'general', 'Status': 'open'}, 'test')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'td-from1', 'Channel': 'teams', 'SourceName': 'Ops chat',
                                         'Subject': 'Import', 'BodyText': 'did the import finish?', 'FromName': 'Gail Moreno',
@@ -1172,9 +1172,9 @@ class ApiTests(unittest.TestCase):
         self.assertIn('mailbox not found', out['send_error'])
         self.assertTrue(any('NOT SENT' in cm['Body'] for cm in server.store.list_comments(tid)))
 
-    def test_sending_a_reply_closes_an_owner_created_task_too(self):
-        """Owner-created tasks stayed open after their reply went out (0.3.2.9); the owner, 2026-09-24: "task should
-        close when sending reply". Only an agent still working a task holds it open."""
+    def test_sending_a_reply_leaves_an_owner_created_task_open(self):
+        """The owner, 2026-10-18: "sending and closing are two steps, never automatic" - it closed here on the send (2026-09-24);
+        now the reply goes and the task waits for Mark done, which then closes it."""
         tid = c.post('/api/tasks', json={'Title': 'importer down', 'Kind': 'coding'}).json()['taskId']
         server.store.update_task(tid, {'Status': 'waiting'}, 'agent')
         mid = server.store.add_message({'TaskId': tid, 'ExternalId': 'graph:BBB', 'Channel': 'email',
@@ -1184,8 +1184,10 @@ class ApiTests(unittest.TestCase):
                                        'DraftText': 'Running again - a bad date had stopped it.'})
         with mock.patch.object(server.outbound, 'send_email', return_value={'channel': 'email', 'to': ['ap@client.com']}):
             c.post(f'/api/reviews/{rid}/decide', json={'verb': 'approve'})
+        self.assertEqual(server.store.get_task(tid)['Status'], 'waiting')
+        c.patch(f'/api/tasks/{tid}', json={'Status': 'done'})                                   # Mark done
         self.assertEqual(server.store.get_task(tid)['Status'], 'done')
-        self.assertNotIn('stay:open', server.store.get_task(tid)['Tags'] or '')
+        self.assertNotIn('stay:open', server.store.get_task(tid)['Tags'] or '')                 # ...and the mark comes off with it
 
     def test_mine_makes_a_task_for_the_owner_with_nobody_dispatched(self):
         """An ADP "approve this workflow" mail is real work and not an agent's. Filing it as

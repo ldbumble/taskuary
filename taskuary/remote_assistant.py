@@ -1011,12 +1011,19 @@ def recovery_rows(store, chips: list, actor: str = 'owner') -> list:
             if table: yield c['label'], {'t': 'verb', 'verb': v, 'key': table}
 
 
+def sent_rows(store, done: dict) -> list:
+    """A send keeps its task (concierge.sent_chips): the item stays, and Mark done or Next is the owner's next pick, numbered."""
+    from . import concierge
+    return [(c['label'], {'t': 'close', 'tid': c['tid']} if c['verb'] == 'close' else {'t': 'next'}) for c in concierge.sent_chips(store, done)]
+
+
 def receipt_text(store, done: dict, actor: str = 'owner') -> str:
     """The receipt - and when the act did NOT happen, its way on, numbered (2026-09-29: a failed Close out on the phone
     said "Not done - 403 ..." and offered nothing to pick, and the list it was picked from was already spent)."""
     from . import concierge
     if done.get('status') == 'done':
         line = concierge.receipt(store, done, actor)
+        if (sent := sent_rows(store, done)): return turn_text({'say': line, 'item': None}, store=store, extra=sent)
         # ...and the task it made or moved is a pick: "open it from here or from Tasks" with nothing to tap (2026-10-06),
         # where the desktop draws Open TQ-… under the same line
         o = done.get('outcome') or {}
@@ -1067,6 +1074,7 @@ def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
     undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
     if done.get('status') == 'done' and _settled_the_table(prop, item):
         return _on(store, actor, [said], extra=undo, done_with=prop.get('key') or (item or {}).get('key'))
+    if (sent := sent_rows(store, done)): return turn_text({'say': said, 'item': None}, store=store, extra=sent)
     if undo: return '\n\n'.join([said, turn_text({}, store=store, extra=undo)])
     return said
 
@@ -1126,6 +1134,12 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             nxt = concierge.surface(store, act.get('key'), actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)
         if t == 'stay': return 'Left it - nothing moved.'
+        if t == 'close' and act.get('tid'):             # Mark done under a send's receipt: the one close, then the walk goes on
+            tid_ = int(act['tid'])
+            from .store import task_ref
+            said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
+            here = (item or {}).get('key')
+            return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
         if t == 'walk': return walk(store, actor)
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'undo': return concierge.undo_last(store, actor)
@@ -1516,7 +1530,7 @@ def more_text(store, item: dict | None) -> str:
 
 # what the first word does, said before it is pressed - the desktop card's "then" line. Keyed on the
 # vocabulary's verbs (concierge.CHIPS), so a word the table does not name simply says nothing.
-THEN = {'approve': 'sends the draft above, in your name.',
+THEN = {'approve': f"sends the draft above, in your name - the task stays open until you {buttons.label('close')}.",
         'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
         'reply': 'writes a draft for you to approve here - nothing is sent.',
         'regular_agent': 'hands it to an agent - you can change which one before it starts.',
@@ -1525,7 +1539,7 @@ THEN = {'approve': 'sends the draft above, in your name.',
         'stop_agent': 'saves what the agent did and stops it; the task stays open.',
         'close': 'ends the task - it stops coming back.'}
 # an action card's Send is "Run it": it runs what the card shows, it sends no mail
-THEN_KIND = {('approve', 'action'): 'runs what the card above shows.'}
+THEN_KIND = {('approve', 'action'): 'runs what the card above shows, and only that.'}
 
 
 # words that put a thing DOWN rather than do it: never the card's verb while a real one is offered

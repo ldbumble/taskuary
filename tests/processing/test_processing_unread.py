@@ -269,8 +269,8 @@ def test_confirmed_done_rejects_new_context_instead_of_reading_unseen_arrival(st
 
 
 def test_a_confirmed_send_leaves_unread_and_stays_in_all(store):
-    """PW-149: the reply really left, so the item is answered. It drops out of Unread on the same
-    pass that closed its task, and All still carries it - a sent answer is history, not a hole."""
+    """PW-149: the reply really left, so the item is answered. It drops out of Unread - its task stays open for Mark
+    done (2026-10-18) - and All still carries it - a sent answer is history, not a hole."""
     from taskuary import verdicts
     tid = store.create_task({'Title': 'Please reply', 'Kind': 'reply', 'Status': 'open'}, 'fixture')
     mid = add(store, 'Please reply', tid=tid, status='routed')
@@ -278,11 +278,18 @@ def test_a_confirmed_send_leaves_unread_and_stays_in_all(store):
     all_rows, unread = both(store)
     assert next(i for i in unread['items'] if i.get('rid') == rid)['lane'] == 'approve'
     assert mid in {r['row']['MessageId'] for r in all_rows}
-    verdicts._settle_task_after_sent_reply(store, store.get_review(rid), 'owner', True)
-    store.decide_review(rid, 'approved', 'Draft', 'owner')
-    assert store.get_task(tid)['Status'] == 'done'
+    from unittest import mock
+    from taskuary import outbound
+    with mock.patch('taskuary.outbound.reply_to_message', return_value={'channel': 'email', 'to': ['sender@example.test'], 'cc': []}),          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
+        assert verdicts.decide(store, store.get_review(rid), 'approve')['ok']
+    assert store.get_task(tid)['Status'] == 'open'
+    funnel.invalidate(); _, after = both(store)
+    # ...answered, not "asked you": the open task stands as itself, on you, for its Mark done
+    assert [(i['kind'], i['lane'], i['why']) for i in after['items'] if i.get('mid') == mid] == [('todo', 'yours', 'you answered - the task is still open')]
+    from taskuary import concierge
+    concierge.close_task(store, tid, 'owner')
     all_after, after = both(store)
-    assert [i for i in after['items'] if i.get('mid') == mid] == [], 'a sent reply is out of Unread'
+    assert [i for i in after['items'] if i.get('mid') == mid] == [], 'marked done, it is out of Unread'
     assert mid in {r['row']['MessageId'] for r in all_after}, 'and still in All'
 
 

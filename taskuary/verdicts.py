@@ -242,7 +242,7 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
                                    'who': str((msg or {}).get('FromEmail') or '').lower(), 'cc': [str(a).lower() for a in (sent.get('cc') or [])],
                                    'chase': str(rv.get('Reason') or '').startswith('chase:')})   # task.chase's own mark, with its colon
         except Exception as e: logger.warning(f'review {rid}: the outcome row was not written - {e}')
-        # A reply that ASKED them something keeps watching for the answer, though the send closed the task (asks.py) -
+        # A reply that ASKED them something keeps watching for the answer, even once the task is marked done (asks.py) -
         # whether it asked is the model's to read, off this thread: the button never waits on it
         if not outgoing and rv.get('Kind') not in ('action', 'slot'):
             from . import asks
@@ -315,7 +315,7 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
 
     kind = rv.get('Kind')
     if kind == 'action': return                        # a proposed action is not a reply
-    if kind == 'slot':                                 # one of the task's emails: it ticks itself, the last one closes
+    if kind == 'slot':                                 # one of the task's emails: it ticks itself, and closes nothing
         from . import slots
         if was_sent: slots.settled(store, rv, True, actor)
         return
@@ -336,37 +336,9 @@ def _settle_task_after_sent_reply(store, rv: dict, actor: str, was_sent: bool):
             store.add_comment(task_id, actor, 'human',
                               'Stopped the agent after sending the clarification; waiting for the sender.')
         return
-
-    # SEND, THEN MARK DONE - the one close every door takes (concierge.close_task: done, drafts retired, the agent
-    # stopped, off the rail). It used to keep the task open while an agent still worked it, and before that while the
-    # owner had opened a session on it (the owner, 2026-09-24: "send the reply should send then close").
-    # ...unless the work is still going (the owner, 2026-09-24: "if session still going, i don't think we should force
-    # close it... if new message comes in while sending reply, it should stay on"). Mark done is the owner's own word
-    # and always closes; a send only closes what nothing is still happening on.
-    from .funnel import working_tids
-    if task_id in working_tids(store):
-        store.add_comment(task_id, actor, 'human', 'Reply sent. The agent is still working on it, so the task stays open.')
-        return
-    if _newer_inbound(store, task_id, rv):
-        store.add_comment(task_id, actor, 'human', 'Reply sent. A new message came in meanwhile, so the task stays open.')
-        return
-    # ...nor while its close-out waits: closing here would dismiss the merge (or the issue's close) the owner has not answered
-    from . import proposals
-    if proposals.closeout_pending(store, task_id):
-        store.add_comment(task_id, actor, 'human', 'Reply sent. The task closes when you answer its close-out.')
-        return
-    # ...nor while its playbook is undecided: the close-out is done, the playbook is the other half (the owner, 2026-10-01)
-    if proposals.closed_out(store, task_id, actor, 'Reply sent.'):
-        store.add_comment(task_id, actor, 'human', 'Closed - the reply went out.')
-
-
-def _newer_inbound(store, task_id: int, rv: dict) -> bool:
-    """A message from someone else on this task, newer than the one this reply answered."""
-    from .ingest import is_ours
-    answered = store.get_message(rv['MessageId']) if rv.get('MessageId') else None
-    since = str((answered or {}).get('SentAt') or rv.get('CreatedAt') or '')
-    return any(str(m.get('SentAt') or '') > since and not is_ours(m) and m.get('MessageId') != rv.get('MessageId')
-               for m in store.list_messages(task_id) or [])
+    # SENDING IS NOT CLOSING (the owner, 2026-10-18: "sending and closing are two steps, never automatic"): the reply went
+    # out and the task stays open - on the table with its receipt - until the owner's own Mark done (concierge.close_task).
+    # It used to close here past a list of guards (an agent still on it, a newer message, a close-out or playbook waiting).
 
 
 def _carried(store, closeout: dict, reply: dict) -> bool:
@@ -506,7 +478,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                 store.add_comment(rv['TaskId'], actor, 'human', f'CLOSING THE PULL REQUEST FAILED: {str(e)[:300]}')
                 return {'ok': False, 'status': 'pending', 'sent': None, 'send_error': str(e)[:300]}
             if not store.decide_review(rid, 'rejected', None, actor, 'closed the pull request without merging'): return _delivery_busy(store, rid)
-            proposals.settle(store, rv, 'approve', actor)       # answered: the task ends like a merge ends it
+            proposals.settle(store, rv, 'approve', actor)       # answered, like a merge - the task stays open for Mark done
             return {'ok': True, 'status': 'rejected', 'sent': None, 'send_error': None, 'result': out}
         if verb in ('approve', 'edit', 'merge_anyway'):
             try:
@@ -518,7 +490,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
                         # a grant the token lacks (github.Refused.needs): the owner's to add - a retry only repeats it
                         **({'needs': e.needs} if getattr(e, 'needs', '') else {})}
             if not store.decide_review(rid, VERB2STATUS['approve'], rv.get('DraftText'), actor, note): return _delivery_busy(store, rid)
-            proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # a close-out's yes closes the task
+            proposals.settle(store, rv, 'approve' if verb == 'merge_anyway' else verb, actor)   # runs only the act: the task stays open
             return {'ok': True, 'status': 'approved', 'sent': None, 'send_error': None, 'result': out}
         if not store.decide_review(rid, VERB2STATUS[verb], None, actor, note): return _delivery_busy(store, rid)
         store.add_comment(rv['TaskId'], actor, 'human', f'Proposal {VERB2STATUS[verb]} - nothing was done.')
@@ -546,8 +518,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         # the owner's word that nothing goes back IS Mark done - the one close, whoever opened a session on it
         from . import concierge
         concierge.close_task(store, rv['TaskId'], actor)
-    # Sending is the lifecycle boundary. A final/manual answer closes the task and its live
-    # terminal; a clarification stops the blocked terminal but deliberately leaves it waiting.
+    # a clarification stops the blocked terminal and leaves the task waiting; any other answer leaves it open for Mark done
     if result is None and verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
         _settle_task_after_sent_reply(store, rv, actor, False)
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})

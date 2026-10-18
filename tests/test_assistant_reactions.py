@@ -454,16 +454,17 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(out['decision'], {'verb': 'reply', 'text': 'the export is fixed and shipping tonight'})   # the page drafts with this
         self.assertIsNone(out.get('proposal')); send.assert_not_called()                                    # nothing goes out
 
-    def test_approve_is_confirmed_then_sends_the_drafted_reply_and_the_task_settles(self):
+    def test_approve_is_confirmed_then_sends_the_drafted_reply_and_the_task_stays_open(self):
         s, tid, rid, item = self._drafted()
         p = decide(s, 'approve', 'approve', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rid, 'Send & close'))    # says what it does (2026-10-06)
+        self.assertEqual((p['kind'], p['target'], p['label']), ('review.approve', rid, buttons.label('approve')))    # says what it does (2026-10-06)
         self.assertEqual(s.get_review(rid)['Status'], 'pending')       # nothing sent on the words
         sent = {'ok': True, 'to': 'craig@vendor.com', 'subject': 'RE:', 'provider': 'test', 'channel': 'email'}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent):
             self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertIn(s.get_review(rid)['Status'], ('approved', 'edited'))   # 'edited' when the text was touched
-        self.assertEqual(s.get_task(tid)['Status'], 'done')            # a sent reply closes its task
+        self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))   # a sent reply leaves its task open (2026-10-18)
+        self.assertFalse(p['settles'])                                     # ...and the item on the table: Mark done or Next moves it
         self.assertIsNotNone(s.sent_reply(task_id=tid))
 
     def test_not_ours_files_it_and_never_again_writes_the_verdict_down(self):
@@ -1630,7 +1631,8 @@ class ApiActionsTests(unittest.TestCase):
         funnel.invalidate()
         gone = c.get('/api/funnel/pile', params={'current': key}).json()
         self.assertIsNone(gone['current'], 'the page is told the table is clear')
-        self.assertEqual(gone['items'], [])
+        # ...and the task is still open (sending is not closing, 2026-10-18): what stands for it now asks for its Mark done
+        self.assertEqual([(i['kind'], i['tid']) for i in gone['items']], [('wrapup', out['task_id'])])
 
     def test_a_closed_agent_cannot_become_a_current_funnel_card(self):
         s = store(); out = self._ask(s)

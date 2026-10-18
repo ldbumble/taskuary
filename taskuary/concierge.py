@@ -150,7 +150,7 @@ OPENING = (
 
 # what the assistant says when a decision is carried out - the fact of what happens now, never a claim
 RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so.", 'let_go': 'Put down.', 'elsewhere': 'Closed - they answered elsewhere.',
-            'reply': "I'll draft that - nothing goes out until you say so.", 'approve': 'Sending it as drafted. Moving on.',
+            'reply': "I'll draft that - nothing goes out until you say so.", 'approve': f"Sending it as drafted - the task stays open until you {buttons.label('close')}.",
             'not_ours': "Not ours, then - filed. Moving on.", 'not_ours_remember': "Filed, and remembered: this kind goes straight past you from now on.",
             'not_ours_sender': "Noted: that sender is noise - everything from them files itself from now on. Moving on.",
             'remember': "Remembered. Moving on.", 'coding_agent': "Handed off - the code work starts now, and what it finds comes back here.",
@@ -674,7 +674,7 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
         how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
         return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
-    # A DRAFT THAT CANNOT LEAVE is not offered Send & close (capabilities.can_send_draft): a Teams chat is read here and never
+    # A DRAFT THAT CANNOT LEAVE is not offered Send (capabilities.can_send_draft): a Teams chat is read here and never
     # posted into, so the button - and the Advisor's line over it - could only ever end "not sent" (2026-10-18)
     if verb == 'approve' and item.get('kind') == 'review' and item.get('rid') and store is not None:
         from . import capabilities, outbound
@@ -2006,7 +2006,7 @@ def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, acto
             rec(say_)
             return {'say': say_, 'options': [], 'decision': None}
         say_ = (f"Written as a hand-off to {out['to']} - it is below for your yes, and nothing goes until you give it. "
-                'Approving it sends the message and closes this one out here.')
+                f"{buttons.label('approve')} sends it - this one stays open until you {buttons.label('close')}.")
         rec(say_, out['card'])
         return {'say': say_, 'options': [], 'decision': {'verb': 'forwarded', 'reviewId': out['reviewId'], 'to': out['to']}}
     raise ValueError(f"{words['verb']} is a proposal - it is never carried out on the words alone")
@@ -2472,7 +2472,10 @@ def triage_agent(store, item: dict) -> str:
 # The button's words are buttons.json's (the verb's own label); only the three that are no button of their own keep a phrase.
 _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('task.create_from_message', True), 'mine': ('task.create_from_message', True),
         'not_ours': ('message.file', True), 'not_ours_sender': ('preference.exclude_sender', True), 'not_ours_kind': ('idea.act', True),
-        'block_sender': ('preference.sender_rule', True), 'close': ('task.complete', True), 'approve': ('review.approve', True),
+        'block_sender': ('preference.sender_rule', True), 'close': ('task.complete', True),
+        # ...a send is NOT a settle (the owner, 2026-10-18: "sending and closing are two steps"): the item stays on the table with
+        # its receipt, and Mark done or Next moves it - Approve on an agent's proposal runs that act alone, the same way
+        'approve': ('review.approve', False),
         'answer_agent': ('agent.answer', True),
         # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
         # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
@@ -3149,6 +3152,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     # the merge landed and the reply beside it did not: both halves are facts, and the second one is still yours
     if kind == 'review.approve' and o.get('reply_error'):
         return f" {str(o['reply_error']).replace('Done on GitHub, but the', 'But the', 1)} - it is kept as the draft."
+    if kind == 'review.approve' and (o.get('sent') or {}).get('to'): return f" Sent to {', '.join(o['sent']['to'])}."
     # Later says WHEN it comes back (funnel.later_until). A sent reply's watch is decided by the model after the send
     # (asks.watch_reply, in the background), so the approve receipt no longer claims one
     if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
@@ -3310,6 +3314,18 @@ def on_table(store, op: dict) -> bool:
     return bool(item) and item.get('tid') == tid
 
 
+def sent_chips(store, op: dict) -> list:
+    """A SEND KEEPS ITS TASK (the owner, 2026-10-18: "sending and closing are two steps"): an Approve that ran - a reply sent,
+    an agent's act run - leaves the item where it is, and its receipt carries the two ways on: Mark done, the one close,
+    while its task is open, and Next. [] for any other act."""
+    if op.get('kind') != 'review.approve' or op.get('status') != 'done': return []
+    try: tid = (store.get_review(int(op.get('target') or 0)) or {}).get('TaskId')
+    except (TypeError, ValueError): tid = None
+    live = bool(tid) and (store.get_task(int(tid)) or {}).get('Status') not in (None, 'done', 'dropped')
+    return ([{'verb': 'close', 'label': buttons.label('close'), 'tid': int(tid), 'ref': task_ref(int(tid))}] if live else []) \
+        + [{'verb': 'next', 'label': buttons.label('next')}]
+
+
 def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False) -> dict:
     """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
     recorded line, so the desktop draws them under it and the phone numbers them."""
@@ -3335,6 +3351,9 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
         record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': way['chips'],
                                                    'tid': None, 'ref': ref or None})
         return {'say': line, 'chips': way['chips']}
+    if (chips := sent_chips(store, op)):
+        record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': chips, 'tid': None, 'ref': ref or None})
+        return {'say': line, 'chips': chips}
     # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
     # a one-click card on the desktop, an Undo pill on the phone (remote_assistant). The undo is a
     # proposal of its own, never auto, so the click is the only thing that reverts.

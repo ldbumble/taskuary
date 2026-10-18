@@ -68,7 +68,7 @@ is rarely knowable from one message — and a correction teaches the class, not 
 ## A reply has no confirmed delivery
 
 Approval stays pending while Taskuary sends the reply. Repeated clicks do not start another
-send, and a task closes only after the provider confirms delivery.
+send. A sent reply never closes the task - that is **Mark done**, pressed when you are finished.
 
 **Delivery unknown** means the provider timed out, the process stopped during sending, or a
 receipt could not be verified. Check the provider's sent messages before taking any further

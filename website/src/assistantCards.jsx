@@ -5,7 +5,7 @@
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
 import React, { useEffect, useRef, useState } from "react";
-import { useCapabilities } from "./capabilities.js";
+import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { movesOf, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, label as btn } from "./buttons.js";
 import { Button, TextField } from "@mui/material";
@@ -571,7 +571,8 @@ const SENDS_ON = { whatsapp: "on WhatsApp", teams: "in Teams", slack: "in Slack"
 export const sendsBy = (channel, who) => { const on = SENDS_ON[String(channel || "").toLowerCase()]; return on ? `answers ${who} ${on}` : `emails ${who}`; };
 
 // a reply drafted, or an action proposed - the owner's yes is the only thing that moves it
-export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
+export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
+  const caps = useCapabilities();                     // can a draft leave: its channel asked here, and its row (draftCanSend)
   const [rv, setRv] = useState(null);
   const [text, setText] = useState(null);
   const [busy, setBusy] = useState("");
@@ -593,7 +594,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       setRv((data.data || []).find((x) => x.ReviewId === card.rid) || { gone: true });
       const found = (data.data || []).find((x) => x.ReviewId === card.rid);
       setMate(found && closeoutOf(found) ? (data.data || []).find((x) => x.TaskId === found.TaskId && x.Kind !== "action"
-        && (x.CanSend !== false || String(x.Channel || "").toLowerCase() === "github")) || null : null);   // the close-out carries a GitHub comment
+        && (draftCanSend(caps, x) || String(x.Channel || "").toLowerCase() === "github")) || null : null);   // the close-out carries a GitHub comment
       // the task's close-out, whichever card is on the table - the reply's card reads GitHub's state through it too
       setCoRv(found && closeoutOf(found) ? found : found ? (data.data || []).find((x) => x.TaskId === found.TaskId && closeoutOf(x)) || null : null);
     }).catch((e) => live && setErr(errText(e)));
@@ -636,8 +637,13 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
       if (data.refused) reloadGh();
       if (data.send_error) throw new Error(data.send_error);
       const sentTo = mate && verb !== "reject" ? ` The reply went to ${mate.FromName || "them"}.` : "";
-      onDone?.(verb === co?.alt?.verb ? `Done — ${co.alt.then}.${sentTo}` : verb === "approve" ? (co ? `Done — ${co.then}.${sentTo}` : action ? "Done — the action ran." : `Sent to ${who}.`)
-        : co ? "Not yet — the task stays open." : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.");
+      const yes = verb === "approve" || verb === "merge_anyway", ran = yes || verb === co?.alt?.verb;
+      const said = verb === co?.alt?.verb ? `Done — ${co.alt.then}.${sentTo}` : yes ? (co ? `Done — ${co.then}.${sentTo}` : action ? "Done — the action ran." : `Sent to ${who}.`)
+        : co ? "Not yet — the task stays open." : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.";
+      // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): a send, or an Approve that ran, leaves the item on the table with
+      // its receipt - Mark done and Next on its row - where it used to settle the item and walk on as if the task were finished
+      if (ran && onSent) onSent(said, card.tid, card.ref);
+      else onDone?.(said);
     } catch (e) { setErr(errText(e)); }
     setBusy("");
   };
@@ -676,7 +682,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {busy === "back" ? "Sending…" : btn("continue")}</Button>
     : action
     ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : btnHint("approve", "action")} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>{busy === "approve" ? (co ? co.busy : "Running…") : btn("approve", "action")}</Button>
-    : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
+    : rv && !draftCanSend(caps, rv) && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
       <Button size="small" variant="contained" disableElevation disabled={!!busy || drafting} startIcon={<RefreshRoundedIcon />}
@@ -699,7 +705,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
     : rv && !value.trim() && !stale ? <>writes one for you to approve here - nothing is sent.</>
     : stale ? <>rewrites it from the newest message; you still approve it.</>
     : rv && card.closeout ? <>{card.closeout}, then the reply above {sendsBy(rv.Channel, who)}.</>
-    : rv ? <>{sendsBy(rv.Channel, who)}{card.tid ? " and closes the task" : ""}.</> : null;
+    : rv ? <>{sendsBy(rv.Channel, who)}{card.tid ? ` - the task stays open until you ${btn("close")}` : ""}.</> : null;
   // YOUR MOVE, named: what the block decides, in its own words (the canvas's A+B, the owner 2026-09-28)
   const replyTo = String(mate ? mate.FromName || "them" : who).replace(/\s*<[^>]*>/g, "");
   const stopped = conflict || ((co || card.tid) && blocked);

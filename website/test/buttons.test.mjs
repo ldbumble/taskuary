@@ -77,6 +77,9 @@ const NOT_BUTTONS = {
   "TasksView.jsx": ["New task"],                               // the new-task dialog's title
   // a setup wizard's own step forward - not the walk's Next, which puts an item down
   "FirstRun.jsx": ["Next"], "FirstRunAbout.jsx": ["Next"], "SkillImport.jsx": ["Next"],
+  // other sends that are not a draft's Send (2026-10-18, when approve's label became "Send"): the bug report's own, the chat
+  // composer's arrow, and the answer box's Send/Queue to a waiting agent
+  "BugReportDialog.jsx": ["Send"], "GeneralWorkspace.jsx": ["Send"], "ui.jsx": ["Send"],
 };
 test("no page file types a button's label: every one is read from buttons.js", () => {
   const hits = [];

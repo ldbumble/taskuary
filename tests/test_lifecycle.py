@@ -1,8 +1,8 @@
 """The whole loop, one scenario, no model: a mail arrives and is triaged -> it is in the pipe -> the chat
 opens with the day -> the owner starts and the item comes out onto the table -> the owner hands it to the
 coding agent in words -> the coding agent works (in hand, at the top), stops to ask (front, card), finishes (the watcher
-says so, offers the report) -> its reply waits for the yes -> approving sends and closes the task -> the
-pipe is empty and says so. Every state is asserted where the owner would see it: the pile, the chat, the
+says so, offers the report) -> its reply waits for the yes -> approving sends it, and only that -> Mark done
+closes the task -> the pipe is empty and says so. Every state is asserted where the owner would see it: the pile, the chat, the
 task. If any link breaks, this is the test that says which."""
 import unittest
 from datetime import datetime, timedelta
@@ -91,12 +91,16 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn('removed Bulk Approve and Deny', p['items'][0]['summary'])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = concierge.surface(s)
-        self.assertEqual(out['item']['rid'], r); self.assertIn('it was worked on - removed Bulk Approve and Deny', out['say']); self.assertIn('From you: Send & close', out['say'])
-        # 8. approving sends and CLOSES the task; the pipe empties and says so
+        self.assertEqual(out['item']['rid'], r); self.assertIn('it was worked on - removed Bulk Approve and Deny', out['say']); self.assertIn(f"From you: {buttons.label('approve')}", out['say'])
+        # 8. approving SENDS - and only sends (the owner, 2026-10-18: "sending and closing are two steps"); Mark done closes the
+        #    task, and the pipe empties and says so
         sent = {'channel': 'email', 'to': ['craig@northwind.example'], 'cc': []}
         with mock.patch('taskuary.outbound.reply_to_message', return_value=sent), mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             done = verdicts.decide(s, s.get_review(r), 'approve', 'Done - both are off now.', None, 'owner')
-        self.assertTrue(done['ok']); self.assertEqual(s.get_task(t)['Status'], 'done')
+        self.assertTrue(done['ok']); self.assertNotIn(s.get_task(t)['Status'], ('done', 'dropped'))
+        with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            self.assertTrue(concierge.close_task(s, t, 'owner'))
+        self.assertEqual(s.get_task(t)['Status'], 'done')
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             p = funnel.pile(s, force=True)
             self.assertEqual([e['kind'] for e in p['events']], ['done'])        # the watcher saw it close - and says nothing (PW-165)
@@ -146,10 +150,14 @@ class LifecycleTests(unittest.TestCase):
             with mock.patch.object(concierge, 'brain', return_value=lambda *a, **k: 'Sending it.\nCALL: {"kind": "approve", "params": {}}'):
                 said = c.post('/api/concierge/say', json={'text': 'looks good, send it', 'key': f'review:{r}'}).json()
             self.assertIsNone(said['decision']); prop = said['proposal']
-            self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, 'Send & close'))
+            self.assertEqual((prop['kind'], prop['target'], prop['label']), ('review.approve', r, buttons.label('approve')))
             self.assertEqual(s.get_review(r)['Status'], 'pending')                                            # nothing sent on the words
             ran = c.post(f"/api/operations/{prop['id']}/execute", json={'version': prop['version']}).json()
             self.assertEqual(ran['status'], 'done')
+            self.assertEqual(c.get(f'/api/tasks/{t}').json()['task']['Status'], 'waiting')                 # sent, and still open
+            self.assertEqual([x['verb'] for x in ran['chips']], ['close', 'next'])                          # ...its receipt: Mark done, Next
+            done = c.post('/api/operations', json={'kind': 'task.complete', 'target': t, 'params': {}}).json()
+            self.assertEqual(c.post(f"/api/operations/{done['id']}/execute", json={'version': done['version']}).json()['status'], 'done')
             self.assertEqual(c.get(f'/api/tasks/{t}').json()['task']['Status'], 'done')
             self.assertEqual(c.get('/api/funnel/pile?force=1').json()['items'], [])
             self.assertEqual(c.post('/api/concierge/next', json={}).json()['say'], concierge.ALL_DONE)

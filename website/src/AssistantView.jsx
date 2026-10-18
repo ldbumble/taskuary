@@ -21,6 +21,7 @@ import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt
 import CloseIcon from "@mui/icons-material/Close";
 import ViewSidebarIcon from "@mui/icons-material/ViewSidebar";
 import api from "./api.js";
+import { runOperation } from "./taskOps.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import DemoJourney from "./DemoJourney.jsx";
@@ -50,7 +51,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
-import { coveredByReload, heldSince } from "./funnelPile.js";
+import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
 import DigestText from "./DigestText.jsx";
@@ -664,7 +665,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
-    reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
+    reply: <ReplyCard card={c} onDone={actions.done} onSent={actions.sent} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
     meeting: <MeetingCard card={c} onDone={actions.done} onOpenTask={actions.openTask} />,
     report: <ReportCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onDone={actions.done} />,
     idea: <IdeaCard card={c} onOpenTask={actions.openTask} onTimeline={actions.timeline} onNavigate={actions.navigate} />,
@@ -1608,7 +1609,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // ...and an act that did NOT happen carries its way on (concierge.recover): Try again, GitHub's own offers, the
       // item's other verbs, Next - it said "Not done" and offered nothing (2026-09-29)
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
-      const chips = out.status !== "done" && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
+      // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
+      const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
         : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
@@ -1653,7 +1655,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // press, so the advice is read again for the item as it is now and the strip says so (B6)
   // ONE ROAD FOR AN ADVISOR PRESS (2026-10-18): the Advisor's pick is the row's own button whenever the row has it - pressed, it
   // runs that button's handler, exactly as a click does (a draft's Send sends the box as edited). It went to the proposal road
-  // instead and drew an inline "Send & close / Cancel" card in the chat (the walk's INLINE). Only a verb the row lacks goes there.
+  // instead and drew an inline "Send / Cancel" card in the chat (the walk's INLINE). Only a verb the row lacks goes there.
   const pressAdvice = async (a, anchor = null) => {
     const key = a.for || a.key;
     setChanged(null);
@@ -1696,6 +1698,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const item = currentRef.current || currentItem;
     const key = item?.key || current;
     if (c.verb === "next") { surface(null, null, key, !item); return; }
+    // MARK DONE UNDER A SEND'S RECEIPT: the task it names, closed by the one close - the item it was may be gone already (its draft
+    // went), so this never asks the table for it - then the walk goes on
+    if (c.verb === "close" && c.tid) {
+      setBusy(true); setErr("");
+      try {
+        await runOperation(api, "task.complete", c.tid);
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${c.ref || "The task"} marked done.` }]);
+        advance(null, true);
+      } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+      return;
+    }
     if (c.verb === "answer_agent") { askAnswer(item); return; }
     // one item by name - one the walk already showed and will not repeat yet ("N things you've already seen")
     if (c.verb === "open" && c.key) { surface(c.key); return; }
@@ -1786,6 +1799,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
     }
     advance(pile);
+  };
+  // A SEND KEEPS THE ITEM ON THE TABLE (the owner, 2026-10-18: "sending and closing are two steps"): the card folds to its line, the
+  // receipt says what went, and its row is the two ways on - Mark done (the one close) while there is a task, and Next. Nothing is
+  // settled and the walk does not move: done() above did both, as if the send had finished the task.
+  const sent = (receipt, tid = null, ref = null) => {
+    setMsgs((m) => { const i = interactiveCardIndex(m), out = i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x));
+      return [...out, { id: `r${Date.now()}`, role: "receipt", text: receipt, ...sentChips(tid, ref) }]; });
+    onChanged?.(); loadPile();
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the
   // trail. Nothing here reaches a model - a question typed during it is an ordinary turn, answered
@@ -2128,7 +2149,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...but the browser demo has no setup to run - it cannot connect an inbox - so its door is the install note (setup() above), never
   // a setup that waits on "Getting set up…" for good (the browser CI, 2026-10-15)
   setupRef.current = () => (DEMO ? setup() : setFirstRun(true));
-  const actions = { done, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
+  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table

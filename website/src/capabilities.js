@@ -16,6 +16,16 @@ export const capabilities = () => (asked ||= api.get("/api/capabilities").then((
   .catch(() => { asked = null; return last; }));
 // a channel the server has not named can send: only an explicit false hides a Send
 export const canSend = (caps, channel) => !channel || caps?.send?.[String(channel).toLowerCase()] !== false;
+// ...where a screen holds only a row's snapshot of that same channel answer: the live one once it is in, the row's until then
+export const channelCanSend = (caps, channel, rowSays) => (caps?.known ? canSend(caps, channel) : rowSays !== false);
+// ...and ONE DRAFT's: its channel asked here, AND the row's own CanSend, which knows more than the channel (a draft with nobody to
+// go to; an invoice, which leaves by its own road and asks no channel)
+export const draftCanSend = (caps, r) => {
+  if (!r || r.CanSend === false) return false;
+  let env = {};
+  try { env = JSON.parse(r.Deliver || "{}") || {}; } catch { /* not an envelope */ }
+  return env.kind === "zoho_invoice" || canSend(caps, r.Channel || env.channel);
+};
 export function refreshCapabilities() {
   asked = null;
   return capabilities().then((c) => { subs.forEach((f) => f(c)); return c; });

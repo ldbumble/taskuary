@@ -2,8 +2,8 @@
   "_": "THE ONE LIST OF BUTTONS (the owner, 2026-10-17: 'make a complete list of buttons and remove the other ones', 'centralize it - if it's in one code place it's easy to update it later'). Every button the owner can press has ONE name, here, read by the server (taskuary/buttons.py), the page (website/src/buttons.js), the phone, the Advisor and the assistant's tools. A sentence may name a button only by a label on this list, and only when the item shows it. `row` lists the task page's own ids for the same act. `states` are the other words the same button shows while it works or before there is anything to act on.",
   "verbs": {
     "reply":           {"label": "Reply", "hint": "Write back to whoever asked - you see the draft before anything is sent", "row": ["reply"]},
-    "approve":         {"label": "Send & close", "hint": "Sends the drafted reply and closes the task", "row": ["approve"],
-                        "states": {"action": "Approve"}, "state_hints": {"action": "Lets the agent do what it proposes - nothing happens before you press it"}},
+    "approve":         {"label": "Send", "hint": "Sends the reply - the task stays open until you Mark done", "row": ["approve"],
+                        "states": {"action": "Approve"}, "state_hints": {"action": "Runs only what the agent proposes - nothing happens before you press it, and the task stays open until you Mark done"}},
     "redraft":         {"label": "Redraft", "hint": "Has the AI write the draft again", "row": ["redraft"], "states": {"none": "Draft with AI"}},
     "close":           {"label": "Mark done", "hint": "Closes the task - it stops coming back", "row": ["done"]},
     "defer":           {"label": "Remind me", "hint": "Put the task away until a day - it waits under For later on your rail and is back in front of you that morning", "row": ["remind"]},

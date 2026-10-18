@@ -900,7 +900,59 @@ class OperationEdit(BaseModel): params: dict
 class OperationConfirm(BaseModel): version: int
 class DiscussBody(BaseModel): body: str; actor: str = 'owner'
 
+# EVERY ACT LEAVES A RECEIPT, AND A PUT-BACK WHERE ONE IS POSSIBLE (Stream B, the owner 2026-10-18): the task page's presses run
+# down this road now, so what a press changed on a task is read BEFORE it runs and its receipt offers the way back (concierge.receipt_turn)
+REVERSIBLE = frozenset({'task.complete', 'task.reopen', 'task.update', 'task.check', 'task.checklist', 'task.set_kind', 'task.set_repo'})
+KIND_WORDS = {'task': 'your task', 'general': 'a general agent', 'coding': 'a coding agent', 'reply': 'a reply', 'goal': 'a goal'}
+
 def _run_operation(op: dict, background: BackgroundTasks):
+    """The shared handler for each kind, and on a task the undo of what it changed when its handler names none."""
+    before = store.get_task(op['target']) if op['kind'] in REVERSIBLE else None
+    out = _run_kind(op, background)
+    if before and isinstance(out, dict) and 'undo' not in out:
+        try: out = {**out, 'undo': _task_undo(op['kind'], int(op['target']), op['params'] or {}, before, out)}
+        except Exception as e: logger.debug(f"no undo for {op['kind']} on {op['target']}: {e}")
+    return out
+
+def _boxes(t: dict) -> list:
+    try: items = json.loads(t.get('Checklist') or '[]')
+    except (TypeError, ValueError): items = []
+    return [i for i in items if isinstance(i, dict) and i.get('text')] if isinstance(items, list) else []
+
+def _task_undo(kind: str, tid: int, p: dict, t: dict, out: dict) -> dict | None:
+    """The put-back of a task act, from the task as it stood before it: None when nothing changed or nothing can be put back
+    (a dropped email is gone, a task deleted is gone). Labels name the button where one exists (buttons.json)."""
+    L, ref = buttons.label, task_ref(tid)
+    def u(k, params, label): return {'kind': k, 'target': tid, 'params': params, 'label': label}
+    if kind == 'task.complete': return None if out.get('already') else u('task.reopen', {}, f"{L('reopen')} {ref}")
+    if kind == 'task.reopen': return u('task.complete', {}, f"{L('close')} {ref}") if t.get('Status') == 'done' else None
+    if kind == 'task.update':
+        was = {'Priority': ('priority', t.get('Priority') or 'normal'), 'Title': ('title', t.get('Title') or ''),
+               'Assignee': ('assignee', t.get('Assignee') or 'none'), 'DueAt': ('due', str(t.get('DueAt') or '')[:10] or 'none')}
+        back = {was[k][0]: was[k][1] for k in out.get('changed') or {} if k in was and was[k][1]}
+        if not back: return None
+        said = {'priority': f"priority back to {back.get('priority')}", 'title': 'the title back', 'assignee': 'who holds it back', 'due': 'the due day back'}
+        return u('task.update', back, f"Put {said[next(iter(back))]}" if len(back) == 1 else 'Put it back as it was')
+    if kind == 'task.check':
+        old = next((i for i in _boxes(t) if i['text'] == out.get('item')), None)
+        on = out.get('done', True)
+        # an email ticked off is let go - its draft is never sent - and nothing brings that back
+        if not old or old.get('out') or bool(old.get('done')) == on: return None
+        n = [i['id'] for i in _boxes(t)].index(old['id']) + 1
+        return u('task.check', {'item': str(n), 'id': old['id'], 'done': not on}, f"{'Untick' if on else 'Tick'} {old['text'][:60]}")
+    if kind == 'task.checklist':
+        if not isinstance(p.get('items'), list) or p.get('emails') or p.get('drop'): return None
+        prev = [i['text'] for i in _boxes(t) if not i.get('out')]
+        return None if prev == [str(x) for x in p['items']] else u('task.checklist', {'items': prev}, 'Put the checklist back')
+    if kind == 'task.set_kind':
+        prev, now = ('goal' if is_goal(t) else str(t.get('Kind') or 'task')), str(out.get('kind') or p.get('kind'))
+        return None if prev == now else u('task.set_kind', {'kind': prev, 'learn': False}, f"Make it {KIND_WORDS.get(prev, prev)} again")
+    if kind == 'task.set_repo':
+        prev = next((x[5:] for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x.startswith('repo:')), '')
+        return u('task.set_repo', {'repo': prev}, f"Put it back in {prev}") if prev and prev != str(p.get('repo') or '').strip() else None
+    return None
+
+def _run_kind(op: dict, background: BackgroundTasks):
     """The shared handler for each kind - the same code the task page and the timeline run."""
     kind, tid, mid, p = op['kind'], op['target'], op['target'], op['params'] or {}
     if kind == 'task.create_from_message':
@@ -1064,8 +1116,9 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import concierge, remind
         try: c = concierge.task_contract(store, kind, tid, p)
         except ValueError as e: raise HTTPException(422, str(e))
-        if c.get('assignee'): want['Assignee'] = c['assignee']
-        want, day = {k: v for k, v in want.items() if v}, c.get('due')
+        # ...and '' is the page's "unassigned" (assignee none): nobody holds it, a change like any other
+        if 'assignee' in c: want['Assignee'] = c['assignee']
+        want, day = {k: v for k, v in want.items() if v is not None}, c.get('due')
         due = day is not None
         if not want and not due: raise HTTPException(422, 'say what to change - priority, title, who owns it or the due day')
         if want: update_task(tid, TaskBody(**want), background)
@@ -1076,8 +1129,9 @@ def _run_operation(op: dict, background: BackgroundTasks):
         from . import concierge
         try: hit = concierge.task_contract(store, kind, tid, p)['item']
         except ValueError as e: raise HTTPException(422, str(e))
-        out = tick_checklist(tid, hit['id'], ChecklistTick(done=str(p.get('done', True)).lower() not in ('false', '0', 'no')))
-        return {**(out if isinstance(out, dict) else {}), 'item': hit['text']}
+        on = str(p.get('done', True)).lower() not in ('false', '0', 'no')
+        out = tick_checklist(tid, hit['id'], ChecklistTick(done=on))
+        return {**(out if isinstance(out, dict) else {}), 'item': hit['text'], 'done': on}
     if kind == 'task.checklist':
         from . import slots
         items, emails, drop = p.get('items'), p.get('emails'), p.get('drop')
@@ -1106,7 +1160,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
         into = _re.search(r'(\d+)', str(p.get('into') or ''))
         if not into: raise HTTPException(422, 'name the task it is the same job as (TQ-0123)')
         return merge_task_api(tid, MergeBody(into=int(into.group(1))))
-    if kind == 'task.clarify': return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or '')))
+    # ...the message the page asked about when it names one (its "Ask the sender" answers the mail on screen, not the newest)
+    if kind == 'task.clarify':
+        return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or ''), message_id=int(p['message_id']) if str(p.get('message_id') or '').isdigit() else None))
+    # the owner vouching for a stranger's task (origin.raise_to) - a page press only: not in toolcatalog.PURPOSE, so no chat can vouch
+    if kind == 'task.trust': return task_trust(tid)
     if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None))
     if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'hub.publish':
@@ -1234,6 +1292,10 @@ def _run_operation(op: dict, background: BackgroundTasks):
     if kind == 'memory.remember':
         from . import concierge
         return {'memoryId': concierge.remember_fact(store, str(p.get('note') or ''), ACTOR)}
+    if kind == 'task.split' and isinstance(p.get('second'), dict):
+        # the task page's Split (Reshape): both halves as the owner wrote them and the mails that go with the second - the page's own handler
+        return split_task_api(tid, TaskSplitBody(second=SplitHalf(**p['second']), first=SplitHalf(**p['first']) if isinstance(p.get('first'), dict) else None,
+                                                 move_message_ids=[int(x) for x in p.get('move_message_ids') or []]))
     if kind == 'task.split':
         from . import concierge, funnel
         item = (funnel.next_item(store, p['key']) if p.get('key') else None) or {'tid': tid, 'key': p.get('key')}
@@ -1327,6 +1389,8 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     try:
         turn = concierge.receipt_turn(store, out, ACTOR, table=table)
         out = {**out, 'receipt': turn['say'], 'chips': turn['chips']}
+        # ...and a press on the table's task view lands in the chat now, not on its next 30-second read (Stream B, 2026-10-18)
+        if table: live_bus.emit(live_bus.CHAT)
     except Exception as e: logger.debug(f'no receipt recorded for {oid}: {e}')
     # ...and a press on a proposal that moved or was cancelled answers with that line and its buttons, so the page shows the one
     # recorded receipt with its way on - the bare 409 had the page write a second line of its own, "Say it again", and only Next

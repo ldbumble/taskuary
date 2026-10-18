@@ -64,6 +64,7 @@ KINDS = {
     'task.handoff':             ('task', ('who',), None),    # a draft for the owner's yes - never sent from the card
     'task.merge':               ('task', ('into',), None),
     'task.clarify':             ('task', ('text',), None),
+    'task.trust':               ('task', (), None),          # the owner vouches for a stranger's task - the page's link, never a chat tool
     'agent.continue':           ('task', (), None),
     'review.reject':            ('review', (), None),
     'hub.publish':              ('text', ('title', 'body'), None),   # the Assistant's Hub envelope, as a tool (2026-09-25)

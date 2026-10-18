@@ -1794,13 +1794,16 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
     special-cased, and a checklist item was "the first one containing the words" (the owner, 2026-10-11: no word lists - the
     model reads intent, code validates). A date is data, so remind's date PARSER still reads "friday" or "2 weeks"."""
     from . import remind
-    out = {}
+    # A PUT-BACK RESTORES WHAT WAS THERE (Stream B, 2026-10-18): a receipt's Take it back after the task page changed the owner or
+    # the due day puts back the old value - a person's step, a day already gone - which no fresh choice may name
+    out, back = {}, bool(p.get('_undo'))
     if kind == 'task.update':
         who = str(p.get('assignee') or '').strip()
         if who:
-            allowed = ['owner'] + [f"agent:{a['Name']}" for a in store.list_agents()]
-            if who not in allowed: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
-            out['assignee'] = who
+            # `none` is the page's "unassigned" - nobody holds it
+            allowed = ['owner', 'none'] + [f"agent:{a['Name']}" for a in store.list_agents()]
+            if who not in allowed and not back: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
+            out['assignee'] = '' if who == 'none' else who
         due = str(p.get('due') or '').strip()
         if due:
             today = f"{datetime.now():%Y-%m-%d}"
@@ -1810,7 +1813,7 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
             elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', due):
                 try: day = datetime.strptime(due, '%Y-%m-%d').strftime('%Y-%m-%d')
                 except ValueError: raise ValueError(bad)
-                if day < today: raise ValueError(f'{bad} That day has gone.')
+                if day < today and not back: raise ValueError(f'{bad} That day has gone.')
                 out['due'] = day
             else:
                 try: day = (remind.parse(due) or '')[:10]
@@ -1819,7 +1822,9 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
                 out['due'] = day
     if kind == 'task.check':
         items, want = store.task_checklist(tid), str(p.get('item') or '').strip()
-        hit = items[int(want) - 1] if want.isdigit() and 0 < int(want) <= len(items) else None
+        # ...and the page's box by its own id when it sends one: the number was read off a list that may have moved since
+        hit = (next((i for i in items if i['id'] == p['id']), None) if p.get('id')
+               else items[int(want) - 1] if want.isdigit() and 0 < int(want) <= len(items) else None)
         if not hit: raise ValueError(f"task.check item is the checklist item's number - not {want!r}. {task_ref(tid)} has: "
                                      + ('; '.join(f"{n}. {i['text']}" for n, i in enumerate(items, 1)) or 'no checklist') + '. Nothing was ticked.')
         out['item'] = hit
@@ -3152,6 +3157,7 @@ def op_label(kind: str, p: dict) -> str:
     label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': L('reopen'),
+             'task.trust': 'Trust what is on it',
              'task.not_a_task': L('remove'), 'dispatch.prepare': L('regular_agent'), 'agent.continue': L('continue'),
              'review.reject': 'Reject the draft', 'task.split': L('split', 'split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection'),
              # PURPOSE is written for the model: read as a label it put "how work like this should be ROUTED" on the button (2026-10-18)
@@ -3211,9 +3217,9 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'setting.set': return f" {o.get('said') or ''}"
     if kind == 'task.update':
         from .remind import when
-        said = lambda k, v: (f"the due day is now {when(v)}" if v != 'none' else 'no due day now') if k == 'DueAt' else f"{k.lower()} is now {v}"
+        said = lambda k, v: (f"the due day is now {when(v)}" if v != 'none' else 'no due day now') if k == 'DueAt' else f"{k.lower()} is now {v or 'nobody'}"
         return ' ' + ', '.join(said(k, v) for k, v in (o.get('changed') or {}).items()) + '.'
-    if kind == 'task.check' and o.get('item'): return f" Ticked: {o['item']}."
+    if kind == 'task.check' and o.get('item'): return f" {'Unticked' if o.get('done') is False else 'Ticked'}: {o['item']}."
     if kind == 'task.watch': return (' Stopped watching it.' if o.get('watch') == 'off' else
                                      f" I'll tell you {'here ' if o.get('via') else ''}when " + {'done': 'it is done', 'reply': 'someone replies on it'}.get(o.get('watch'), 'anything happens on it') + '.')
     if kind == 'task.checklist': return f" The list has {len(o.get('checklist') or [])} item(s)" + (f", {o['added']} email(s) added." if o.get('added') else '.')

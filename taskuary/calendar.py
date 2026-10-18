@@ -127,6 +127,16 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     return out
 
 
+def reachable(store) -> bool:
+    """Whether any card can read a calendar at all - the switch on, and an Outlook card with a mailbox or a Google card signed in.
+    No network: agenda() is the read."""
+    if store.get_setting('calendar_enabled', '1') != '1': return False
+    boxes = [s for s in store.list_sources() if s.get('Channel') == 'email' and s.get('Address')]
+    if any(c.get('Active') and boxes for c in store.connectors_by_type('outlook')): return True
+    return any(c.get('Active') and json.loads(c.get('ConfigJson') or '{}').get('google_refresh_token')
+               for c in store.connectors_by_type('gmail', with_secret=True))
+
+
 def agenda(store, days: int = DAYS, start: datetime = None) -> dict:
     """{events, errors, sources, start, end, tz} - every calendar the cards can reach, from `start`
     (now, unless a caller wants the whole day) for `days` days."""

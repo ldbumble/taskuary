@@ -668,6 +668,14 @@ def _agent_running(tid) -> bool:
     except Exception: return False
 
 
+def closed_note(store, item: dict | None) -> str:
+    """' TQ-0013 is closed - ...' when the item's task was marked done or dropped, else ''."""
+    t = (store.get_task(int(item['tid'])) if store is not None and (item or {}).get('tid') else None) or {}
+    if t.get('Status') not in ('done', 'dropped'): return ''
+    return (f" {task_ref(t['TaskId'])} is closed - it was marked done. Sending this does not open it again; "
+            f"{buttons.label('reopen')} does, if there is more to do.")
+
+
 def _live_task(store, item) -> bool:
     """The item names a task that is still open (with no store to ask, naming one is enough)."""
     if not item.get('tid'): return False
@@ -1952,6 +1960,16 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             try: task_contract(store, kind, t, params)
             except ValueError as e: raise CallMiss(str(e))
         if kind == 'agent.stop': params.setdefault('wrap', True)    # the task page's Stop and save: written up, then stopped
+        # THE CALL ROAD CHECKS WHAT THE BUTTONS CHECK (real-AI check, 2026-10-18): a hand-off to someone who never wrote here and a
+        # stop with nothing running were offered as cards that failed only at the press, in jargon. The fact goes back to the model,
+        # which asks or says so - never a card nobody can run
+        if kind == 'task.handoff':
+            who = str(params.get('who') or '').strip()
+            if who and not person(store, who):
+                raise CallMiss(f"Nobody called {who} has written here, so there is no address to hand {named} to - ask the owner for "
+                               f"their email address (task.handoff takes an address as `who`). Nothing was written.")
+        if kind == 'agent.stop' and not _agent_running(t) and (store.get_task(t) or {}).get('RunStatus') != 'running':
+            raise CallMiss(f"No agent is running on {named} - there is nothing to stop. Say so in plain words. Nothing was changed.")
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
@@ -2000,6 +2018,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     label = op_label(kind, params)
     # a brief has no row behind it: what it is about is its own words, never the item on the table
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
+    # ...and a fact is what it says: "Remember it: memory.remember" put the tool's name on the card (real-AI check, 2026-10-18)
+    if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120]
     # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
     # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
     instant = toolcatalog.is_instant(kind)
@@ -2009,7 +2029,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and it.get('tid') and int(target or 0) == int(it['tid']):
         instant = True
     tail = 'Doing it now.' if instant else 'Nothing has been started - confirm below, or tell me what to change.'
-    prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or kind, tail, actor, item)
+    prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or label, tail, actor, item)
     if instant: prop = {**prop, 'auto': True}
     return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
 
@@ -3133,7 +3153,9 @@ def op_label(kind: str, p: dict) -> str:
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
              'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': L('reopen'),
              'task.not_a_task': L('remove'), 'dispatch.prepare': L('regular_agent'), 'agent.continue': L('continue'),
-             'review.reject': 'Reject the draft', 'task.split': L('split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection')}.get(kind, label)
+             'review.reject': 'Reject the draft', 'task.split': L('split', 'split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection'),
+             # PURPOSE is written for the model: read as a label it put "how work like this should be ROUTED" on the button (2026-10-18)
+             'memory.remember': 'Remember it', 'routing.remember': 'Remember where work like this goes'}.get(kind, label)
     if kind == 'dispatch.prepare' and str(p.get('kind')) == 'coding': label = L('coding_agent')
     if kind == 'idea.act': label = {'task': L('mine'), 'agent': L('regular_agent'), 'dismiss': L('not_ours'),
                                     'dismiss_kind': L('not_ours_kind')}.get(str(p.get('verb')), label)
@@ -3444,7 +3466,10 @@ def _rail_block(p: dict, cap: int = RAIL_CAP) -> str:
         # EVERY ROW HAS A HANDLE the model copies into `on` - its TQ ref, else its message's m-number - so naming one is exact: words
         # ("the Payworth mail") were resolved by a word-overlap guess in code (the owner, 2026-10-08: no code in front of the AI)
         bits = [x for x in (handle_of(i), i.get('who'), _cut(i.get('title') or '', 90)) if x]
-        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]})")
+        # ...and whether a DRAFT waits on it: the lane's word alone ("ready to close out") left "reject the draft on TQ-0004" answered
+        # "there is no draft", and "send the reply to Sam" written as a new one (real-AI check, 2026-10-18)
+        if bits: rows.append(f"- {' · '.join(bits)} ({funnel.LANE_WORDS.get(i.get('lane'), ('',))[0]}"
+                             + ('; a drafted reply waits for your yes' if i.get('rid') and i.get('draft') else '') + ')')
     if not rows: return ''
     more = f"\n- ...and {len(items) - cap} more (timeline.search finds them)" if len(items) > cap else ''
     return ('THE RAIL BY NAME - only to find the one the owner names; never act on a row they did not name. To act on one, put its '
@@ -3709,11 +3734,14 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         rec('assistant', RECEIPTS['next'])
         return {'say': RECEIPTS['next'], 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
     if decision and verb in ('reply', 'redraft') and target_item:
-        rec('assistant', RECEIPTS[verb])
+        # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
+        # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
+        said = RECEIPTS[verb] + closed_note(store, target_item)
+        rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)
         if elsewhere: d['target'] = card_for(target_item)
-        return {'say': RECEIPTS[verb], 'options': [], 'chips': [], 'decision': d}
+        return {'say': said, 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
         return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
     if decision and verb in PROPOSALS:

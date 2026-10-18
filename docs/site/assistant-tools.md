@@ -10,7 +10,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere |
-| **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
+| **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
@@ -285,15 +285,17 @@ Delete a task and teach triage it was never work.
 
 ### `task.complete`
 
-Mark done - the task is finished (note: optional, what came of it - kept on the task)
+Mark done - the task is finished - kept on the task.
+
+- `note` (optional) - (optional): what came of it, in the owner's words when they said it ("the GL export reconciled fine")
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `task.defer`
 
-Remind me: put an open task away until a day and bring it back then. "Remind me about <a task that exists>" - named by ref, sender or subject - is this, never a new to-do.
+Remind me: put an open task away until a day and bring it back then - calendar or not: the app picks the time, or says there is none to pick from - never a day guessed instead, or "none" to bring it back now. "Remind me about <a task that exists>" - named by ref, sender or subject - is this, never a new to-do.
 
-- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), "after_meetings" when they mean once the day's meetings or calls are over (the calendar picks the time), or "none" to bring it back now
+- `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), "after_meetings" whenever they mean once the day's meetings or calls are over
 - `ref` (optional) - the task (TQ-0123) when it is not the one on the table
 
 <p class="runs">Runs at once, with an undo on the receipt.</p>
@@ -356,7 +358,7 @@ Pick up the agent's own last session on a task where it left off, coding or not.
 
 ### `agent.answer`
 
-Answer the agent that is waiting.
+Answer the agent that is waiting. With no agent on the task (TASK NOW says so) the words wait there for the next agent that starts on it - say that; starting one is the owner's call, never this.
 
 - `text`
 - `ref` (optional) - its task when it is not the one on the table

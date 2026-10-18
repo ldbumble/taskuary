@@ -604,7 +604,7 @@ class ResponseTests(unittest.TestCase):
             # split is a TOOL now, not a DECIDE verb (the owner, 2026-09-25) - the model CALLs it
             p = say(s, 'these are two different things, split it', key=item['key'],
                     model='Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'task.split', 'params': {'text': 'split it'}}))['proposal']
-            self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, buttons.label('split')))
+            self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, buttons.label('split', 'split')))
             self.assertEqual(len(s.list_tasks(active_only=True)), 1)   # one task until the click
             r = run(s, p)
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the nightly export')

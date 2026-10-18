@@ -130,6 +130,32 @@ def validate(store, flow, strict: bool = False) -> tuple:
     return True, ''
 
 
+# ── a workflow that only reads is a report ──────────────────────────────────────────────────────────────────────────────
+# A WORKFLOW DOES SOMETHING: it moves data from one system to another, opens work, drafts what goes out - and every run of it is
+# a task (the owner, 2026-10-18). Steps that only read and judge, with nothing written, opened or sent, are a report wearing the
+# wrong shape: the right tool reads on its schedule, summarizes once and lands under Reports, and makes no task to close.
+def only_reads(steps) -> bool:
+    """True when nothing in the list writes, opens, drafts or hands to an agent - read steps and AI judgements only."""
+    return bool(steps) and all(isinstance(s, dict) and (s.get('kind') == 'ai' or (s.get('kind') == 'source' and not writes(s.get('type'))))
+                               for s in steps)
+
+
+def as_report(cfg: dict) -> dict:
+    """The same reads as a report config: each read step its source card, the AI step's prompt its summary instruction - with a
+    {{sN}} token turned into the report's own [type.label] token, so the rows still land where the prompt talked about them."""
+    steps = [s for s in (cfg or {}).get('flow') or [] if isinstance(s, dict)]
+    srcs = [{**{k: v for k, v in s.items() if k not in STEP_KEYS}, 'label': s.get('label') or s.get('type')} for s in steps if s.get('kind') == 'source']
+    keys = {s['id']: f"[{s.get('type')}.{slug(s.get('label') or s.get('type'))}]" for s in steps if s.get('kind') == 'source'}
+    def tok(m):
+        head = m.group(1).split('.', 1)[0].strip()
+        return keys.get(head, '') if '.' not in m.group(1) else ''
+    prompt = '\n\n'.join(TOKEN.sub(tok, str(s.get('prompt') or '')).strip() for s in steps if s.get('kind') == 'ai')
+    out = {'title': (cfg or {}).get('title') or '', **({'ai_prompt': prompt} if prompt else {}),
+           **{k: cfg[k] for k in ('cron', 'daily_at', 'every_minutes', 'on_startup') if (cfg or {}).get(k)}}
+    if len(srcs) == 1: return {**out, **srcs[0]}
+    return {**out, 'type': srcs[0]['type'] if srcs else 'rest', 'sources': srcs}
+
+
 # ── templating ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 def context(cfg: dict, trigger: str = 'manual', sid=None, outputs: dict = None) -> dict:
     """What a token can name: the steps run so far (their records, `full` bodies kept beside them), the inputs, the run."""

@@ -188,13 +188,17 @@ WORKFLOW_SYSTEM = (
     'and leave drafts - emails, messages, invoices - for the owner to approve, with no connection at all. Never ask which '
     'connection opens a task or where a result should go. A connection is only for a system the work happens IN (Intacct '
     'to read, a portal to drive). Opening tasks or drafting IS doing work: such a job is a workflow, never "really a report".\n\n'
-    'Answer JSON only in one of three shapes:\n'
+    'Answer JSON only in one of four shapes:\n'
     '  {"questions": ["..."]} when the request is unclear - what the job is, what it should produce, for whom - or a choice you cannot '
     'sensibly default is missing (which Zoho customers, say); at most three short questions. A clear request is built: what you chose - who runs it, the schedule, what it asks first - goes '
     'in explain, never back to the owner as a question, and nothing they already said is asked again.\n'
     '  {"peek": {"type": "<a type from the catalog>", ...its keys}} - you need to SEE a real schema (which tables, what the columns '
     'are called) before you can write a step\'s query; the result comes back and you answer again.\n'
-    '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n\n'
+    '  {"config": {...}, "explain": "<what it will do>", "confidence": "high|medium|low"}.\n'
+    '  {"report": {<a report config: type, title, the type\'s keys, ai_prompt, schedule>}, "explain": "<why this is a report>"} - '
+    'when what the owner wants is only to READ data and be told about it (pull it, summarize it, flag what stands out) and nothing '
+    'is written, moved, opened or sent. That is a report, not a workflow: every workflow run is a task, and a summary is not work '
+    'to close. Judge it from what they ask for, not from any one word.\n\n'
     'RULES\n'
     '- Use only connector ids, customer ids, and agent names present in WORKFLOW OPTIONS. Never invent one.\n'
     '- A Zoho workflow needs type, title, connector_id, customers, and a schedule. Customers may be '
@@ -271,6 +275,18 @@ AGAIN = "I couldn't turn that into {}. Say it another way - what should happen, 
 NO_AI = {'error': 'This needs an AI to build it - none is connected yet.', 'fix': {'label': 'Connect an AI', 'href': words.href('ai')}}
 ZOHO = {'error': 'Invoicing runs through a connected Zoho Invoice account.', 'fix': {'label': 'Connect Zoho Invoice', 'href': '#connector=zoho_invoice'}}
 
+REPORT_VERDICT = ('That only reads data and tells you about it, so it is a report, not a workflow - a workflow does something '
+                  '(moves data, opens work, drafts what goes out), and every run of one is a task.')
+
+
+def report_verdict(store, cfg: dict, explain, looked) -> dict:
+    """{'verdict': 'report', 'report': <a report draft>, 'explain'} - what the workflow door answers when the ask is a report."""
+    cfg = with_watch({k: v for k, v in cfg.items() if k not in ('access', 'flow', 'repair', 'agent', 'uses', 'ask_first', 'done_when')}, cfg.get('watch'))
+    ok, why = validate(store, cfg)
+    return {'verdict': 'report', 'report': cfg, 'explain': f"{REPORT_VERDICT} {str(explain or '').strip()}".strip()[:700],
+            'looked_at': looked, **({} if ok else {'report_error': why})}
+
+
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
     """Draft a stateful invoice or AI-agent workflow from a sentence. Nothing is saved."""
     if not llm: return dict(NO_AI)
@@ -281,7 +297,14 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
             **({'answers_to_your_questions': answers} if answers else {})}
 
     def finish(out, looked):
+        # A REPORT, NOT A WORKFLOW (the owner, 2026-10-18): only reading and reporting is the report builder's job - said plainly,
+        # with the report drafted from the same reads for one press to open. The model's judgement of the ask, or steps that only read.
+        if isinstance(out.get('report'), dict):
+            return report_verdict(store, out['report'], out.get('explain'), looked)
         raw = out.get('config')
+        from . import flow as _flow
+        if isinstance(raw, dict) and raw.get('type') == 'agent' and _flow.only_reads(raw.get('flow')):
+            return report_verdict(store, _flow.as_report(raw), out.get('explain'), looked)
         # THE MODEL'S MISS IS NOT THE OWNER'S: they cannot fix a missing config, only ask again - so every miss below says what
         # to change in the ASK ("the model answered without a workflow config" was the whole message, 2026-10-17)
         if not isinstance(raw, dict) or raw.get('type') not in WORKFLOW_KEYS: return {'error': AGAIN.format('a workflow')}

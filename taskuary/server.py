@@ -5116,7 +5116,8 @@ def report_run(rid: int):
 @app.get('/api/report-types')
 def report_types():
     legacy = {'handbook_search', 'handbook_write', 'handbook_vote'}
-    return {'data': [{'type': t, 'status': 'legacy' if t in legacy else ('planned' if t in PLANNED else 'builtin')}
+    from .flow import writes          # a workflow step of this type changes something (the editor's "this only reads" check)
+    return {'data': [{'type': t, 'status': 'legacy' if t in legacy else ('planned' if t in PLANNED else 'builtin'), 'writes': writes(t)}
                      for t in REGISTRY]}
 
 @app.get('/api/problems')

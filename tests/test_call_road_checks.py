@@ -58,6 +58,8 @@ class TheCardSaysWhatIsSoTests(unittest.TestCase):
         out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Gail covers payroll'}}, None, 'remember Gail covers payroll')
         self.assertNotIn('memory.remember', out['say'])
         self.assertIn('Gail covers payroll', out['say'])
+        out = concierge.call_turn(s, dock, {'kind': 'memory.remember', 'params': {'note': 'Ray covers AP.'}}, None, 'remember it')
+        self.assertNotIn('..', out['say'])
 
     def test_no_card_wears_a_sentence_written_for_the_model(self):
         for kind, p in (('routing.remember', {'field': 'kind', 'value': 'coding'}), ('memory.remember', {'note': 'x'})):

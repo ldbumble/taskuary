@@ -76,6 +76,8 @@ const WALK_SKIP = {
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "pick_repo:set": "shows once a task has a repository - neither world has one chosen",
+  "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
+  "pick_repo": "on the task page's More menu only where a repository is known - a CI box has none, so it is pressed where it shows",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
 };
 

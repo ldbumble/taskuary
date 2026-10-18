@@ -1,4 +1,5 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
+import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
 import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou } from "./lanes.js";
 export { says, subState };

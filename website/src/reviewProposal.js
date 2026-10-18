@@ -31,6 +31,8 @@ export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 export const reviewText = (review) => {
   const proposal = proposalFrom(review);
   if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
+  // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
+  if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
@@ -71,6 +73,16 @@ export const proposalPresentation = (review) => {
       rejectLabel: "Discard proposal",
     };
   }
+  if (proposal?.action === "repair_workflow") return {
+    kind: "action",
+    title: "Repair this workflow's steps",
+    context: "A step failed · the AI wrote a fix · the steps change only if you approve",
+    destinationLabel: "Changes",
+    destination: "the workflow's saved steps",
+    approveLabel: APPROVE,
+    busyLabel: "saving…",
+    rejectLabel: "Dismiss",
+  };
   return {
     kind: "action",
     title: review.Subject || review.Title || "Proposed action",

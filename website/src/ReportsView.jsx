@@ -25,6 +25,8 @@ import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mo
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
 import WorkflowEditor from "./WorkflowEditor.jsx";
+import RunSteps from "./RunSteps.jsx";
+import { asSteps, runWords } from "./workflowFlow.js";
 import Composer from "./Composer.jsx";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
@@ -33,7 +35,7 @@ import { placeName } from "./words.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
-const FIELDS = {
+export const FIELDS = {
   mssql: [["query", "query", "multiline", "SELECT TOP 20 * FROM ..."], AI_FIELD],
   database: [["query", "query", "multiline", "SELECT ... (any SQL the connected engine speaks)"], AI_FIELD],
   // service and operation are PICKED, not typed - see AwsPicker. botocore ships both lists
@@ -178,7 +180,7 @@ const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronTex
   c.every_minutes && `every ${c.every_minutes} minutes`, c.daily_at && `daily at ${c.daily_at}`]
   .filter(Boolean).join(" + ") || "only when you press Run now";
 
-const TYPE_LABELS = {
+export const TYPE_LABELS = {
   zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary",
   mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
@@ -258,7 +260,7 @@ const TYPE_GROUPS = [
   ["Taskuary's own data", ["digest", "evening_inbox", "automate", "assistant"]],
 ];
 // which connector CARD a type's credentials live on (mirrors reports.card_of server-side)
-const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
+export const CARD_OF = { s3_object: "aws", cloudwatch_logs: "aws", azure_blob: "azure", azure_logs: "azure",
   alchemy_prices: "alchemy", alchemy_wallet: "alchemy",
   zoho_monthly_invoices: "zoho_invoice",
   entra_users: "azure", entra_groups: "azure", entra_signins: "azure", entra_licenses: "azure",
@@ -371,6 +373,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   // a NEW report's first save remounts its editor on its new id: what it said and where it stood ride across
   const [carry, setCarry] = useState(null);
   const [running, setRunning] = useState(null);
+  const [fixRun, setFixRun] = useState(null);     // {sid, runId}: Fix with AI pressed on a run in the list - the editor takes it
   useEffect(() => {
     const fromHash = () => {
       const value = /report=([^&]+)/.exec(window.location.hash || "")?.[1];
@@ -484,7 +487,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-                {(c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
+                {asSteps(c) && c.flow.length ? `${c.flow.length} step${c.flow.length === 1 ? "" : "s"}`
+                  : (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
               {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
                 No schedule — it only runs when you press Run now. Give it one in step 3.</Typography>}
@@ -505,7 +509,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
                 load();
               }} />
           </Box>
-          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} />}
+          {lastRuns[s.SourceId] && <LastRun r={lastRuns[s.SourceId]} sid={s.SourceId} onChanged={load}
+            onFix={lastRuns[s.SourceId].run_id ? (runId) => { setFixRun({ sid: s.SourceId, runId }); openOne(s.SourceId); } : null} />}
           </Box>
         );
   };
@@ -514,13 +519,20 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
   const saved = (then) => (sid, c) => { setDraft(null); setCarry(c ? { sid, ...c } : null); then(sid); };
   // a workflow has its own page (WorkflowEditor): what it does, who, where, what it asks, when it is done, when it runs
   const agentWorkflow = workflowOpen && !invoiceOpen;
+  // a workflow that only reads is a report (the owner, 2026-10-18): the same reads open in the report builder, nothing saved yet
+  const asReportDraft = (config, meta = {}) => {
+    onDraft(config, { explain: "Made from the workflow's reads - preview it, then save it as a report.", ...meta });
+    if (browse) onBrowseState?.({ section: "reports", open: "draft" }); else setBucket("draft");
+  };
   const toInvoices = () => { setDraft(null); if (browse) onBrowseState?.({ section: "workflows", open: "new-invoices" }); else setBucket("new-invoices"); };
   const wizard = (onBack, onSaved) => agentWorkflow
-    ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} draft={draft}
+    ? <WorkflowEditor key={String(bucketNow)} sourceId={openId} sources={sources} connectors={connectors} types={types} draft={draft}
         reload={load} onBack={onBack} onSaved={saved(onSaved)} note={wizardNote}
-        lastRun={openId != null && lastRuns[openId] ? <LastRun r={lastRuns[openId]} sid={openId} flush /> : null}
+        lastRun={openId != null && lastRuns[openId] ? (more) => <LastRun r={lastRuns[openId]} sid={openId} flush {...more} /> : null}
+        lastRunRec={openId != null ? lastRuns[openId] : null}
+        fixRun={fixRun?.sid === openId ? fixRun.runId : null} onFixTaken={() => setFixRun(null)} onReport={asReportDraft}
         composer={<>
-          <Composer kind="workflow" onDraft={onDraft} />
+          <Composer kind="workflow" onDraft={(config, meta) => meta?.verdict === "report" ? asReportDraft(config, meta) : onDraft(config, meta)} />
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: -1.25, mb: 2 }}>
             Monthly Zoho invoices have a form of their own — <Box component="span" onClick={toInvoices}
               sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>open it</Box>.
@@ -1908,9 +1920,11 @@ const FILE_FIELD_FOR = { tail: ['', '.log', '.txt', '.md', '.out', '.err'], shee
 
 /* `removable` is the Assistant's case: every one of its own sources can go, including the last,
    because zero of them is a valid Assistant - a report with zero sources is not a report. */
-function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
+/* `bare` is a workflow step's card (WorkflowSteps): the step is the frame and carries its own number, label and remove, and
+   `test` is its Test this step in place of the card's own preview. */
+export function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDragStart, onDragEnd,
                       onDropHere, onChange, onRetype, onCopy, onRemove, onFill, removable = count > 1,
-                      writeEnabled = false }) {
+                      writeEnabled = false, bare = false, test = null }) {
   const fields = (FIELDS[src.type] || []).filter(([, key]) => {
     if (key === "ai_prompt") return false;
     if (src.type !== "local_file") return true;
@@ -1932,9 +1946,9 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
   return (
     <Box draggable={!!onDragStart} onDragStart={onDragStart} onDragEnd={onDragEnd}
       onDragOver={(e) => e.preventDefault()} onDrop={onDropHere}
-      sx={{ ...card, width: { xs: "100%", sm: 354 }, p: 1.25, display: "flex", flexDirection: "column", gap: 1,
+      sx={{ ...(bare ? { width: "100%" } : { ...card, width: { xs: "100%", sm: 354 }, p: 1.25 }), display: "flex", flexDirection: "column", gap: 1,
         opacity: dragging ? 0.45 : 1, ...(onDragStart ? { cursor: "grab", "&:active": { cursor: "grabbing" } } : {}) }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+      {!bare && <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
         {onDragStart && <DragIndicatorIcon sx={{ fontSize: 16, color: "#cfc9bf" }} />}
         {/* ...and the name the prompt calls it by, so "source 3 of 5" and [taskuary.work] read as one card */}
         <Typography variant="caption" sx={{ ...mono, color: FAINT, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
@@ -1945,7 +1959,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
           sx={{ fontSize: 14, color: FAINT, cursor: "pointer", "&:hover": { color: "#55697a" } }} />
         {removable && <CloseIcon onClick={onRemove} titleAccess="Remove this source"
           sx={{ fontSize: 15, color: FAINT, cursor: "pointer", "&:hover": { color: "#6b2733" } }} />}
-      </Box>
+      </Box>}
       <Select size="small" value={src.type || "mssql"} onChange={(e) => onRetype(e.target.value)}
         sx={{ fontSize: 12.5, bgcolor: "#fff" }}>
         {(() => {
@@ -1988,7 +2002,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
       {onFill && !["assistant", "taskuary"].includes(src.type) && <SourceComposer one typeHint={src.type} hint="say what you want out of it"
         placeholder={PLACEHOLDER_FOR[src.type] || "the rows this card should return"}
         onSources={(list) => onFill(list[0])} />}
-      {(count > 1 || removable) && (
+      {!bare && (count > 1 || removable) && (
         <TextField size="small" label="label" value={src.label || ""} sx={{ bgcolor: "#fff" }}
           placeholder="cash balances" onChange={(e) => onChange({ label: e.target.value })} />
       )}
@@ -2072,7 +2086,7 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
         helperText="blank = 200, and only for list results"
         FormHelperTextProps={{ sx: { fontSize: 10.5, mx: 0 } }}
         sx={{ bgcolor: "#fff", width: "100%" }} onChange={(e) => onChange({ max_rows: e.target.value })} />}
-      <SourceTest src={src} />
+      {test || <SourceTest src={src} />}
     </Box>
   );
 }
@@ -2080,13 +2094,15 @@ function SourceCard({ src, index, count, typeOptions, connectors, dragging, onDr
 /* What the report's last run DID, under its row. A quiet assistant check posts nothing, so this is
    the only place its work shows: what it read (the exact text the model saw), what it reviewed and let
    go, its note to the next check, and what came out - or the error, when it failed. */
-function LastRun({ r, sid, embedded, flush }) {
+function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
   // embedded: one run inside the History dialog - starts open, no "last run" header of its own
-  const [open, setOpen] = useState(!!embedded);
+  // ...and a workflow's failed steps start open: which step failed, and Fix with AI, are the whole point of looking
+  const [open, setOpen] = useState(!!embedded || !!(r.steps?.length && r.failed));
   const [showInputs, setShowInputs] = useState(false);
   const [hist, setHist] = useState(false);
   const rv = r.reviewed || null;
-  const outcome = r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
+  const outcome = r.steps?.length ? (r.failed || r.steps.some((x) => x.status === "waiting") ? runWords(r.steps, true) : r.summary || runWords(r.steps))
+    : r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
     : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
     : r.subject ? `filed: ${r.subject}` : "ran";
   const read = rv?.scope === "sources" ? [`${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only`]
@@ -2110,7 +2126,13 @@ function LastRun({ r, sid, embedded, flush }) {
         )}
       </Typography>
       )}
-      {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)} />}
+      {hist && <RunHistory sid={sid} title={r.title} onClose={() => setHist(false)}
+        onFix={onFix ? (runId) => { setHist(false); onFix(runId); } : null} />}
+      {/* a workflow run as steps: the same top-to-bottom list as its editor, each step's status, time and output */}
+      {open && !!r.steps?.length && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, mb: flush ? 1.5 : 0, p: 1.25, borderRadius: 1.5, border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
+        <RunSteps steps={r.steps} fixing={fixing} onFix={onFix && r.failed && (r.run_id || r.runId) ? () => onFix(r.run_id || r.runId) : null}
+          repairs={r.repairs} sourceId={sid ?? r.sourceId} runId={r.run_id || r.runId} onChanged={onChanged} />
+      </Box>}
       {open && !!r.lines?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>
           <Typography variant="caption" sx={{ fontWeight: 600, color: ASSISTANT.ink }}>what it said, and why</Typography>
@@ -2125,7 +2147,7 @@ function LastRun({ r, sid, embedded, flush }) {
           ))}
         </Box>
       )}
-      {open && (
+      {open && !r.steps?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           {rv && (
             <Typography variant="caption" sx={{ color: DIM, display: "block", lineHeight: 1.5 }}>
@@ -2175,7 +2197,7 @@ function LastRun({ r, sid, embedded, flush }) {
    how long, what came out - and the chosen run whole on the right: what it read, what it reviewed and
    let go, what it said and WHY. The assistant's quiet checks post nothing, so this is where "why did it
    bring that up / why did it stay quiet at 14:30" gets answered (the owner, 2026-08-30). */
-function RunHistory({ sid, title, onClose }) {
+function RunHistory({ sid, title, onClose, onFix }) {
   const [runs, setRuns] = useState(null);
   const [pick, setPick] = useState(null);      // the run id chosen
   const [full, setFull] = useState({});        // run id -> the whole record, inputs and all
@@ -2192,7 +2214,7 @@ function RunHistory({ sid, title, onClose }) {
     if (pick == null || full[pick] || missed === pick) return;
     api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => setMissed(pick));
   }, [pick, full, missed]);
-  const outcome = (r) => r.failed ? "failed" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
+  const outcome = (r) => r.failed ? "failed" : r.type === "flow" ? "ran its steps" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
   const cur = pick != null ? (full[pick] || runs?.find((r) => r.runId === pick)) : null;
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
@@ -2224,7 +2246,7 @@ function RunHistory({ sid, title, onClose }) {
               <Typography variant="body2" sx={{ color: INK, fontWeight: 600, mb: 0.5 }}>
                 {cur.at} · {outcome(cur)}{cur.error ? ` — ${cur.error}` : ""}{cur.subject && cur.type !== "assistant" ? ` · ${cur.subject}` : ""}
               </Typography>
-              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded />
+              {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded onFix={onFix} />
                 : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
                   <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>{btnLabel("try_again")}</Box></Typography>
                   : <CircularProgress size={16} />}

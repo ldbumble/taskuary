@@ -45,6 +45,7 @@ import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
+import RunSteps from "./RunSteps.jsx";
 import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, previewRows, triageLine, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
@@ -1601,7 +1602,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           /* A WORKFLOW RUN has no message to show: where it came from is the workflow and what started it - its clock, your
                              Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
                           <Box data-tq-workflow-origin="" sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", px: { xs: 1, sm: 1.4 }, py: 1.1,
-                            display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
+                            display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: fromWorkflow.steps ? "wrap" : "nowrap" } }}>
                             <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
                               <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1610,6 +1611,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 {fromWorkflow.line} · {whenShort(t?.CreatedAt)}</Typography>
                             </Box>
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
+                            {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
+                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs} sourceId={fromWorkflow.sourceId} runId={fromWorkflow.runId} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see

@@ -11,6 +11,8 @@ import api from "./api";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
 import { ConfirmDelete, useAgents } from "./ui.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
+import WorkflowSteps from "./WorkflowSteps.jsx";
+import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -58,7 +60,9 @@ const Field = ({ label, hint, children }) => (
   </Box>
 );
 
-export default function WorkflowEditor({ sourceId, sources, connectors, draft, reload, onBack, onSaved, note, composer, lastRun }) {
+
+export default function WorkflowEditor({ sourceId, sources, connectors, types, draft, reload, onBack, onSaved, note, composer, lastRun,
+  lastRunRec, fixRun, onFixTaken, onReport }) {
   const cur = sources.find((s) => s.SourceId === sourceId) || null;
   const [cfg, setCfg] = useState(() => ({ type: "agent", access: "write", ...(cur ? parse(cur.ConfigJson) : draft || {}) }));
   const [sched, setSched] = useState(() => scheduleOf(cur ? parse(cur.ConfigJson) : draft || {}));
@@ -79,23 +83,61 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
   const models = modelChoices(brain);
   if (cfg.model && models.length && !models.some((m) => m.value === cfg.model)) models.push({ value: cfg.model, label: cfg.model });
   const efforts = effortChoices(brain, cfg.model);
+  // STEPS (flow.py): what each step last came back with - the last run's, then every test - and a repair not yet kept
+  const steps = asSteps(cfg);
+  const [outputs, setOutputs] = useState(() => outputsOf(lastRunRec?.steps));
+  const [repair, setRepair] = useState(null);       // {was, explain} while the AI's repair waits on Keep or Discard
+  const setFlow = (f) => setCfg((c) => ({ ...c, flow: typeof f === "function" ? f(c.flow || []) : f }));
+  const names = Object.fromEntries((connectors || []).map((c) => [c.ConnectorId, c.Name || c.Type]));
+  const turnIntoSteps = async () => {
+    setBusy("steps"); setMsg(null);
+    try {
+      const { data } = await api.post("/api/workflows/compose", { ask: askFor(cfg, names) });
+      if (data.config?.flow?.length) {
+        setCfg((c) => ({ ...c, flow: data.config.flow, ...(data.config.repair ? { repair: data.config.repair } : {}) }));
+        setMsg({ ok: true, text: `${data.explain || "Drafted as steps."} Test each step, then Save - nothing is saved yet.` });
+      } else if (data.questions?.length) setMsg({ ok: false, text: `It needs to know: ${data.questions.join(" ")}` });
+      else if (data.config) setMsg({ ok: true, text: "It reads as work for an agent's hands throughout, so it stays one prompt." });
+      else setMsg({ ok: false, text: data.error || "It could not be turned into steps." });
+    } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be turned into steps." }); }
+    finally { setBusy(""); }
+  };
+  // Fix with AI: a failed run's failed step, repaired by the model and shown as an unsaved change - Keep, then Save, or Discard
+  const fix = async (runId) => {
+    if (!cur || !runId) return;
+    setBusy("fix"); setMsg(null);
+    try {
+      const { data } = await api.post(`/api/workflows/${cur.SourceId}/repair`, { run_id: runId, ...(cfg.flow?.length ? { flow: toSaved(cfg.flow) } : {}) });
+      if (data.flow) { setRepair({ was: cfg.flow || [], explain: data.explain || "" }); setCfg((c) => ({ ...c, flow: data.flow })); }
+      else setMsg({ ok: false, text: data.questions?.length ? `It needs to know: ${data.questions.join(" ")}` : data.error || "No fix was found." });
+    } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "No fix was found." }); }
+    finally { setBusy(""); }
+  };
+  useEffect(() => { if (fixRun && cur) { fix(fixRun); onFixTaken?.(); } }, [fixRun]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const changed = repair ? diffKeys(repair.was, cfg.flow) : null;
+  const canFix = !!(cur && steps && lastRunRec?.failed && lastRunRec?.run_id && (lastRunRec.steps || []).some((r) => r.status === "failed"));
 
   const body = () => {
     const c = withSchedule({ ...cfg, type: "agent", access: "write" }, sched);
+    if (Array.isArray(c.flow)) c.flow = toSaved(c.flow);
     for (const k of Object.keys(c)) if (c[k] === "" || c[k] == null || (Array.isArray(c[k]) && !c[k].length)) delete c[k];
     if (!c.browser) delete c.browser;
+    if (c.repair === "auto") delete c.repair;
     return c;
   };
-  const missing = !String(cfg.title || "").trim() ? "a name" : !String(cfg.prompt || cfg.skill || "").trim() ? "what it does" : "";
+  const missing = !String(cfg.title || "").trim() ? "a name"
+    : steps ? (!(cfg.flow || []).length ? "a first step" : "") : !String(cfg.prompt || cfg.skill || "").trim() ? "what it does" : "";
+  const stepMissing = steps ? firstMissing(cfg.flow) : "";
   const save = async () => {
     if (missing) { setMsg({ ok: false, text: `Give it ${missing} first.` }); return null; }
+    if (stepMissing) { setMsg({ ok: false, text: `Not yet: ${stepMissing}.` }); return null; }
     setBusy("save"); setMsg(null);
     try {
       const c = body();
       const { data } = await api.post("/api/sources", { ...(cur ? { SourceId: cur.SourceId } : {}), Channel: "report",
         Address: c.title, ConfigJson: JSON.stringify(c), Active: cur ? !!cur.Active : true });
       await reload();
-      setMsg({ ok: true, text: `Saved — runs ${scheduleWords(sched)}.` });
+      setMsg({ ok: true, text: `Saved — runs ${scheduleWords(sched)}.` }); setRepair(null);
       if (!cur) onSaved?.(data.sourceId);
       return data.sourceId || cur?.SourceId;
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be saved." }); return null; }
@@ -138,7 +180,14 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
           {busy === "save" ? "Saving…" : "Save"}</Button>
       </Box>
       {msg && <Alert severity={msg.ok ? "success" : "warning"} sx={{ mb: 1.5, fontSize: 12.5 }} onClose={() => setMsg(null)}>{msg.text}</Alert>}
-      {lastRun}
+      {lastRun && lastRun({ onFix: canFix ? () => fix(lastRunRec.run_id) : null, fixing: busy === "fix",
+        // a repair taken back puts the old steps on the saved workflow: the page shows them too
+        onChanged: async () => { await reload(); const { data } = await api.get("/api/sources"); const row = (data.data || []).find((x) => x.SourceId === cur?.SourceId);
+          if (row) setCfg((c) => ({ ...c, flow: parse(row.ConfigJson).flow })); } })}
+      {repair && <Alert severity="info" sx={{ mb: 1.5, fontSize: 12.5 }} action={<Box sx={{ display: "flex", gap: 0.5 }}>
+        <Button size="small" color="inherit" onClick={() => { setRepair(null); setMsg({ ok: true, text: "Kept - Save to make it this workflow's steps." }); }}>Keep</Button>
+        <Button size="small" color="inherit" onClick={() => { setCfg((c) => ({ ...c, flow: repair.was })); setRepair(null); }}>Discard</Button></Box>}>
+        The AI's repair{repair.explain ? `: ${repair.explain}` : "."} The changed steps are marked below - nothing is saved yet.</Alert>}
       {/* describing it is how a new one starts; a draft that arrived built (New, or this box) is already past that */}
       {!cur && !draft && composer}
       {note && <Alert severity={note.severity} sx={{ mb: 1.5, fontSize: 12.5 }}>{note.text}</Alert>}
@@ -148,11 +197,36 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
           <TextField size="small" fullWidth value={cfg.title || ""} placeholder="Weekly duplicate employee check"
             onChange={(e) => set("title", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
-        <Field label="What it does" hint="the job, in plain words - the agent reads exactly this on every run">
+        {/* A WORKFLOW IS A GOAL (flow.repair): a broken step is fixed by itself only while this still holds */}
+        {steps && <Field label="Goal" hint="what it is for, in plain words - a step that breaks is repaired toward this, and anything that would change it asks you first">
+          <TextField size="small" fullWidth multiline minRows={1} value={cfg.goal || ""} placeholder="Every Monday, catch AP bills posted twice and get finance to void them."
+            onChange={(e) => set("goal", e.target.value)} sx={{ bgcolor: "#fff" }} />
+        </Field>}
+        {steps ? <Field label="Steps" hint="top to bottom, each the same every run - test one before you save, and only the AI steps use a model">
+          {/* READS ONLY IS A REPORT (the owner, 2026-10-18): every workflow run is a task, so steps that only read and judge are
+              offered as the report they are - the same reads and prompt, one press away. Saving as a workflow still works. */}
+          {onlyReads(cfg.flow, types) && <Alert severity="info" data-tq-report-suggestion="" sx={{ mb: 1.25, fontSize: 12.5 }}
+            action={onReport ? <Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }} onClick={() => onReport(asReport(cfg))}>Make it a report</Button> : null}>
+            {REPORT_WORDS} Add a step that acts - open a task, draft a message, write to a system - or make it a report.</Alert>}
+          <WorkflowSteps flow={cfg.flow || []} setFlow={setFlow} outputs={outputs} setOutputs={setOutputs} connectors={connectors} types={types}
+            agents={roles} title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />
+          {!(cfg.flow || []).length && <Typography component="button" type="button" onClick={() => setCfg((c) => { const n = { ...c }; delete n.flow; return n; })}
+            sx={{ border: 0, bgcolor: "transparent", p: 0, mt: 0.5, cursor: "pointer", color: "#55697a", fontSize: 12, fontWeight: 600 }}>
+            Use one agent prompt instead</Typography>}
+        </Field>
+        : <Field label="What it does" hint="the job, in plain words - the agent reads exactly this on every run">
           <TextField size="small" fullWidth multiline minRows={3} value={cfg.prompt || ""}
             placeholder="Check Intacct for active employees that share a name or SSN last four, and open a task for finance per pair."
             onChange={(e) => set("prompt", e.target.value)} sx={{ bgcolor: "#fff" }} />
-        </Field>
+          {/* the same job as steps: code for the reads and writes, a model only where it judges (flow.py) */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.75, flexWrap: "wrap" }}>
+            <Button size="small" variant="outlined" disabled={!!busy || !String(cfg.prompt || "").trim()} onClick={turnIntoSteps}
+              startIcon={busy === "steps" ? <CircularProgress size={12} /> : null}>{busy === "steps" ? "Drafting steps…" : "Turn into steps"}</Button>
+            <Typography component="button" type="button" onClick={() => set("flow", [])}
+              sx={{ border: 0, bgcolor: "transparent", p: 0, cursor: "pointer", color: "#55697a", fontSize: 12, fontWeight: 600 }}>or build the steps yourself</Typography>
+            <Typography variant="caption" sx={{ color: FAINT }}>so the same reads and writes run as code, and the AI only judges</Typography>
+          </Box>
+        </Field>}
         <Field label="Who does it" hint="the profile whose rules it works by">
           <Select size="small" displayEmpty value={roles.includes(cfg.agent) ? cfg.agent : ""} onChange={(e) => set("agent", e.target.value)}
             sx={{ minWidth: 220, bgcolor: "#fff", fontSize: 13 }}>
@@ -229,6 +303,11 @@ export default function WorkflowEditor({ sourceId, sources, connectors, draft, r
               <TextField size="small" value={cfg.skill || ""} placeholder="weekly-user-review"
                 onChange={(e) => set("skill", e.target.value.replace(/^\//, ""))} sx={{ bgcolor: "#fff", width: 280 }} />
             </Field>
+            {steps && <Field label="When a step fails" hint="the AI repairs the step toward the goal; a fix that would change the goal, or send or write somewhere new, always waits for you">
+              <Select size="small" value={cfg.repair || "auto"} onChange={(e) => set("repair", e.target.value)} sx={{ minWidth: 300, bgcolor: "#fff", fontSize: 13 }}>
+                {REPAIR.map(([v, w]) => <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{w}</MenuItem>)}
+              </Select>
+            </Field>}
             <Field label="Repository folder" hint="only for work on code: the run is a coding session in this checkout">
               <TextField size="small" fullWidth value={cfg.cwd || ""} placeholder="C:/work/census"
                 onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "#fff" }} />

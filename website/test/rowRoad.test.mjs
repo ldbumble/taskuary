@@ -89,6 +89,6 @@ test("both verdicts carry a word and a hint", () => {
     assert.ok(v && v.label && v.hint, `${key} needs a word and a hint`);
   }
   assert.equal(VERDICTS.find((v) => v.key === "ignored").label, "ignored");
-  assert.equal(VERDICTS.find((v) => v.key === "error").label, "triage failed");
+  assert.equal(VERDICTS.find((v) => v.key === "error").label, "couldn't sort this");
 });
 

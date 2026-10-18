@@ -71,6 +71,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // chunks by content, so that tab asks the new server for a filename the build no longer has.
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind } from "./autostart.js";
+import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails,
@@ -123,13 +124,16 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 // task/agent (maybe coding vs general)"). "your task" is deliberately the same phrase the work
 // rail's own heading uses for band 2 (funnelPile.LEVEL_META), so one thing has one name in both
 // places. The two `agent` kinds are the two that reach the Board; reply and your task do not.
+// ...and the hints in plain words (the audit, 2026-10-17): they named repositories, CLIs and triage's model - a coder's notes to
+// someone choosing who does a finance task
 const KIND_OPTIONS = [
-  { key: "task", label: "your task", hint: "yours to do - nothing works it, and it is not on the Board" },
-  { key: "general", label: "agent · general", hint: "research, writing, analysis, planning - an agent runs it without a repository" },
-  { key: "coding", label: "agent · coding", hint: "the configured CLI in a repository terminal" },
-  { key: "reply", label: "reply", hint: "drafted by the model triage uses and approved on the task - it never opens a session" },
+  { key: "task", label: "your task", hint: "Yours to do - no assistant works on it" },
+  { key: "general", label: "agent · general", hint: "An AI assistant works on it - research, writing, analysis, planning" },
+  { key: "coding", label: "agent · coding", hint: "Your coding tool works on it, in your code" },
+  { key: "reply", label: "reply", hint: "You approve a drafted reply - nothing else runs" },
 ];
 const KINDS = KIND_OPTIONS.map((o) => o.key);
+const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
 const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
 // WHAT TRIAGE DECIDED READS AS FACTS, NOT CONTROLS (the owner, 2026-10-16: "why are there dropdowns by the triage results? you
@@ -137,6 +141,16 @@ const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || k
 // on the bar by the prompt box (the row's Task menu) on the canvas, and behind Change on the Tasks tab's own bar.
 const factPill = { display: "inline-flex", alignItems: "center", gap: 0.6, height: 22, px: 1.1, borderRadius: 11, border: `1px solid ${BORDER}`,
   bgcolor: "#fff", fontSize: 11.5, color: INK, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", minWidth: 0 };
+// ...and SAID AS ONE LINE in plain words (the audit, 2026-10-17): "Triage decided · Intent task · Who does it an agent · general" was
+// the sorter's own vocabulary. Now "Sorted as: a task for an assistant · normal priority". A held repository stays a pill: it is a warning.
+const SAID = new Set(["intent", "who", "profile", "repo", "priority"]);
+export const sortedLine = (facts, kind) => {
+  const v = (k) => facts.pills.find((p) => p.key === k && p.tone !== "alert")?.value || "";
+  const intent = v("intent"), reply = intent === "reply" || kind === "reply";
+  const what = reply ? "a reply to send" : intent === "fyi" ? "for your information" : `a task ${{ general: "for an assistant", coding: "for your coding tool" }[kind] || "for you"}`;
+  const head = facts.triaged ? `Sorted as: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
+  return [head, v("repo") && `in ${v("repo")}`, `${v("priority") || "normal"} priority`].filter(Boolean).join(" · ");
+};
 const FACT_TONE = { agent: { bgcolor: BRAND.tint, borderColor: BRAND.bd, k: BRAND.ink }, alert: { bgcolor: ALERT_TINT, borderColor: ALERT_BD, color: ALERT_INK, k: ALERT_INK } };
 // "09:06" today, "Oct 9" before - a row of messages reads its times at a glance
 const whenShort = (s) => {
@@ -431,8 +445,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => {
     // ...and nor is a hand-off's: on a reply or a coding task, "Use non-coding agent" left blank was refilled with the
     // roster's first role, so a task with no profile showed - and would have started - a researcher (2026-10-15)
-    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff) && !run.agent)) setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), model: "" }));
-  }, [agents, kinds, run.agent, generalTask, handOff]);
+    // ...nor with no coding tool connected: every start is the general agent's then, and the coding profile is refused (B3)
+    if (agents.length && !agents.includes(run.agent) && !((generalTask || handOff || !canCode) && !run.agent)) setRun((r) => ({ ...r, agent: codingProfile(agents, kinds), model: "" }));
+  }, [agents, kinds, run.agent, generalTask, handOff, canCode]);
   useEffect(() => { loadDetail(selected); }, [selected, loadDetail]);
   useEffect(() => {
     const task = detail?.task;
@@ -442,8 +457,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     const owned = assignedAgent(task.Assignee);
     // a general task starts from the role it was handed, else blank (its configured profile) - never the roster's first name;
     // a coding task from the profile of kind coding, else blank and the server finds it
-    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) ? "" : codingProfile(agents, kinds), model: "" }));
-  }, [selected, detail?.task, agents, kinds]);
+    setRun((r) => ({ ...r, agent: agents.includes(owned) ? owned : isGeneralKind(task.Kind) || !canCode ? "" : codingProfile(agents, kinds), model: "" }));
+  }, [selected, detail?.task, agents, kinds, canCode]);
   // ...and an error belongs to the task it happened on: a failed Mark done stayed up over the next task opened, as if about it.
   // Only a move from one task straight to another clears it: "That task is gone" empties the selection, and the list then
   // opens its first row - that message must survive the hop.
@@ -476,9 +491,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try {
       const { data } = await api.post(`/api/tasks/${selected}/waitroom`, { text: waitText });
       setWaitText("");
-      setErr(data.delivered ? (data.state === "restarted" ? "Session reopened with your note." : "Typed into the session - the agent was parked.") : "");
+      setErr(data.delivered ? (data.state === "restarted" ? "The agent picked up again with your note." : "Your note went to the agent.") : "");
       loadDetail(selected);
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not queue the note"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not send the note - press send again."); }
   };
 
   const [posting, setPosting] = useState(false);
@@ -502,7 +517,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
       setWrapped({ report: data.report, drafting: data.drafting });
       setTerm(null); loadDetail(id);
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not wrap up the session"); }
+    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again."); }
     if (!stale(id)) setWrapping(false);
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
@@ -574,7 +589,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const notATask = async () => {
     onLeave?.();
     try { await api.post(`/api/tasks/${selected}/not-a-task`); }
-    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Could not delete the task"; setErr(msg); onStay?.(msg); return; }
+    catch (e) { const msg = e?.response?.data?.detail || e?.message || "Could not remove the task - it is still here; try Remove again."; setErr(msg); onStay?.(msg); return; }
     onSelect(null); await loadTasks(); onChanged?.();
   };
   // The task's own session - the only terminal in the app. undefined means "not looked
@@ -700,7 +715,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
   const askFinish = () => (liveSession ? setConfirmDone(true) : finish("done"));
-  // MARK DONE ON A LIVE SESSION ends it the way Save and end session does (the owner, 2026-09-29: "make it the same like
+  // MARK DONE ON A LIVE SESSION ends it the way Stop and save does (the owner, 2026-09-29: "make it the same like
   // when you hit stop session"): the terminal goes at once for the write-up's progress line, the result is filed, and
   // only then is the task closed. The close used to kill the pty with no write-up while the terminal stayed on screen
   // for the whole request. No reply is drafted - the close dismisses drafts - and a write-up that fails still closes.
@@ -995,7 +1010,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the non-coding agent");
+      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.");
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
@@ -1056,18 +1071,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={(e) => setContinueAt(e.currentTarget)}>
-        {startingAgent === "resume" ? "Continuing…" : "Continue session"}</Button>}
+        {startingAgent === "resume" ? "Continuing…" : "Keep going"}</Button>}
       {canSave && <Button size="small" variant={barContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>Save and end session</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
+        onClick={wrapUp}>Stop and save</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
           sx={canContinue || canSave ? barBtn : primaryBtn}
           startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
-          title="A fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
+          title="A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
           onClick={() => setRestartOpen(true)}>Run another agent</Button>
       </>}
     </Box>
@@ -1077,6 +1092,27 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
   // (canvas=false) keeps its bars.
   const inRow = !!canvas;
+  // AN AGENT WAITING ON YOU LEADS WITH WHAT IT ASKED (U20): its own sentence over the terminal, one button to answer it, the screen
+  // behind "Show details". The pane stays mounted at its size underneath - folding it away would resize the pty (CanvasItem) - and
+  // a stuck agent is not asking anything, so it keeps its screen and its Run another agent.
+  const termBox = useRef(null);
+  const [seenAsk, setSeenAsk] = useState("");
+  const askKey = term?.alive && !isGeneral && agentState === AGENT.waiting && subState(term) !== "stalled" ? `${term.sid}:${term.line || subState(term)}` : "";
+  const asking = !!askKey && seenAsk !== askKey && workspaceMode === "live" && !peek;
+  const askLine = askKey ? term.line || says(subState(term), agentName(t), term.request?.text) : "";
+  const answerAgent = () => { setSeenAsk(askKey); setTimeout(() => termBox.current?.querySelector("textarea")?.focus(), 0); };
+  // THE ADVISOR ON THE TASKS TAB (U12): the canvas reads it for the item on its table; this view, standing alone, reads its own
+  const [taskAdvice, setTaskAdvice] = useState(null);
+  const readTaskAdvice = useCallback((id) => {
+    if (!id) { setTaskAdvice(null); return; }
+    api.get("/api/advice", { params: { key: `task:${id}` } })
+      .then(({ data }) => { if (!stale(id)) setTaskAdvice(data?.verb && data.line ? data : null); })
+      .catch(() => { if (!stale(id)) setTaskAdvice(null); });
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (canvas || !active) return; setTaskAdvice(null); readTaskAdvice(selected); }, [canvas, active, selected, readTaskAdvice]);
+  useEffect(() => { if (!canvas && active && t?.UpdatedAt) readTaskAdvice(selected); }, [t?.UpdatedAt]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => (canvas || !active ? undefined
+    : onLive("advice", (ev) => { if (adviceKeyFor(ev, `task:${selRef.current}`)) readTaskAdvice(selRef.current); })), [canvas, active, readTaskAdvice]);
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,
@@ -1092,13 +1128,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // (its handover kept for the next) when the new one starts (startCodingAgent).
   const runAnother = { id: "run-another", group: "agent", label: "Run another agent",
     run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
-    title: "Opens the agent step: a different agent, harness, model or repository. A running session is paused and its handover goes to the new one." };
+    title: "A fresh agent, with new instructions if you want. One still working is paused, and what it found goes to the new one." };
   const changeVerbs = !notDone ? [] : [
     { id: "kind", group: "more", label: "Change who does it", run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }),
-      title: "Your task, an agent (general or coding), or a reply - what the task is decides which machinery works it" },
+      title: "You, an assistant, or a drafted reply for you to approve" },
     { id: "priority", group: "more", label: "Change priority", run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: "Low, normal, high or urgent" },
     { id: "assign", group: "more", label: "Assign it", run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: "You, an agent's profile, or nobody" },
-    ...(!isGeneral ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change repository" : "Pick a repo", run: pickRepo,
+    // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
+    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change repository" : "Pick a repo", run: pickRepo,
       title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
   ];
   const rowVerbs = !t ? [] : !notDone
@@ -1112,11 +1149,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: "Close with a note", run: (e, a) => setNoteAt(a || e?.currentTarget),
         title: "Closes the task with what came of it. The note is kept on the task; nothing is sent." }] : []),
       ...(liveSession ? [
+        // the Advisor's "Answer it" is this verb (answer_agent): an agent waiting on you has the one filled move on the row
+        ...(askKey ? [{ id: "answer_agent", group: "agent", lead: true, label: "Answer it", run: answerAgent, title: "Shows the agent's screen so you can type your answer" }] : []),
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),
-        { id: "save-end", group: "agent", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
+        { id: "save-end", group: "agent", label: "Stop and save", disabled: !!wrapping, run: wrapUp,
           title: "Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it." },
         ...(notDone ? [runAnother] : []),
-      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : "Continue session", disabled: !!startingAgent,
+      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : "Keep going", disabled: !!startingAgent,
         run: (e, a) => setContinueAt(a || e?.currentTarget),
         title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.` }]
@@ -1124,17 +1163,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         disabled: !!startingAgent, run: startGeneralAgent,
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
-        title: "Starts the regular assistant with this task and its messages - profile, brain and model as set in Agent work." }]
+        title: "Starts the assistant on this task and its messages, with the choices in Agent work." }]
       // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
       // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
       : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : "Start an agent on the next step",
         disabled: !!startingAgent, run: startGoalStep,
         title: "Finds the first step not done, makes it a task of its own if it is not one yet, starts the regular agent on it and opens it here." }]
+      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): Start (and the Advisor's Send to agent, aliased
+      // to it) starts it at once - it opened the coding form, whose Start coding session could not work on this computer
+      : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : "Send to agent",
+        disabled: !!startingAgent, run: startGeneralAgent, title: "Starts the assistant on this task and its messages. Nothing is sent to anyone without your yes." }]
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? "Run another agent" : "Start an agent",
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
-        // it OPENS the step where the harness, model and prompt are chosen - nothing starts until that step's own Start button
-        title: ranBefore ? "Opens the agent step: a fresh session with a different harness, model or prompt. It receives the saved result, not the old conversation."
-          : "Opens the agent step so you can choose a harness, a model and a prompt. Nothing starts until you press Start there." }] : []),
+        // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own Start button
+        title: ranBefore ? "A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
+          : "Opens the agent step so you can choose the agent and add instructions. Nothing starts until you press Start there." }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
       ...(!liveSession ? [{ id: "email", group: "agent", label: "Send out results", run: () => setEmailOpen(true),
         title: "An email or a chat message about this task, to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
@@ -1143,14 +1186,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
-      { id: "nat", group: "more", label: "Not a task", run: () => setConfirmNAT(true), title: "Delete it and teach Taskuary why — the sender keeps writing to you." },
+      // ONE VERB FOR IT, button and dialog (U13): "Dismiss" on the bar deleted the task behind a dialog that said Delete
+      { id: "nat", group: "more", label: "Remove - not a task", run: () => setConfirmNAT(true), title: NAT_TITLE },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: "Put it away until a day; it is back on your work rail that morning" },
       { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true),
         title: report ? "Forwards it to a person with the agent's result in it — the AI writes the forward, you send it." : "Not ours to do — the AI writes the forward, you send it." },
       { id: "reshape", group: "more", label: "Split or merge", run: () => setReshape(true), title: "Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats." },
       // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
-      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Save and end session", disabled: !!wrapping, run: wrapUp,
+      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Stop and save", disabled: !!wrapping, run: wrapUp,
         title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
@@ -1162,15 +1206,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CONFIGURE THE NEXT RUN, IN LINE (the owner, 2026-10-05: "should be the bottom like continue session and it should replace the
   // continue session box"): on the canvas the agent step's form is a card under the conversation, in Continue's place - one card at
   // a time - and it closes when the agent starts (startCodingAgent / startGeneralAgent close restartOpen on success)
+  // WITH NO CODING TOOL CONNECTED the form is the general agent's and nothing else (B3): no repository picker, no Start coding
+  // session, no "Pick a repo first", no switch to a "non-coding" agent and back - there is only the one agent
+  const generalOnly = handOff || !canCode;
   const nextRunForm = (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 600, mb: 0.75 }}>
-                        {report || detail?.transcript || term?.alive || generalStarted ? "Configure the next run" : "Start an agent"}
+                        {report || detail?.transcript || term?.alive || generalStarted ? "Start another agent" : "Start an agent"}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                         {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
                             which brain, which model - and all three reach the session. */}
-                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!handOff}
+                        <AgentPicker agents={agents} models={models} kinds={kinds} coding={!generalOnly}
                           agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
                           generalBrains={generalBrains} pick={run.pick || ""} has={ownProfile}
@@ -1179,12 +1226,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />
                         <Typography variant="caption" sx={{ color: FAINT }}>
-                          This run receives the task, messages, attachments, and the latest saved result.
+                          It gets the task, its messages and files, and what was saved last time.
                         </Typography>
                       </Box>
                       <TextField fullWidth multiline minRows={2} maxRows={5} size="small" value={run.instruction}
                         onChange={(e) => { const v = e.target.value; setRun((r) => ({ ...r, instruction: v })); }}
-                        placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : "Extra instructions for this session (optional)"}
+                        placeholder={detail?.transcript ? "What should this new agent do next? - paste or drop a picture too" : "Anything else it should know (optional)"}
                         {...runPics.drop}
                         InputProps={{ endAdornment: (
                           <Box sx={{ display: "flex", alignSelf: "flex-start", gap: 0.25 }}>
@@ -1194,17 +1241,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Box>) }}
                         sx={{ mt: 0.85, bgcolor: "#fff", "& .MuiInputBase-root": { alignItems: "flex-start" } }} />
                       <ImageTray pics={runPics} sx={{ mt: 0.75 }} />
-                      {!handOff && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
+                      {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
                         value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
+                        {!generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
                         </Button>}
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
                             the pick resumes this start - the same road a start that ran into the question takes */}
-                        {!handOff && startRepo === "" && <>
+                        {!generalOnly && startRepo === "" && <>
                           <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
                           <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
                             startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
@@ -1213,18 +1260,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Save and end session</Button>}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Stop and save</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
-                        {!handOff && <Button size="small" variant="outlined" disabled={!!startingAgent}
+                        {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
                           onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Use non-coding agent</Button>}
-                        {handOff && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
+                        {generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
-                          {startingAgent === "general" ? "Starting…" : "Send to non-coding agent"}
+                          {startingAgent === "general" ? "Starting…" : canCode ? "Send to non-coding agent" : "Send to agent"}
                         </Button>}
-                        {handOff && <Button size="small" variant="text" disabled={!!startingAgent}
+                        {handOff && canCode && <Button size="small" variant="text" disabled={!!startingAgent}
                           onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
                         {(restartOpen || report || detail?.transcript) && <Button size="small" variant="text"
                           onClick={() => setRestartOpen(false)}>Cancel</Button>}
@@ -1302,7 +1349,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title={markDoneHint}
                         disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                      <Tooltip title="Not a task — delete it and teach Taskuary why">
+                      <Tooltip title={`Remove - not a task. ${NAT_TITLE}`}>
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
@@ -1344,13 +1391,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     are there dropdowns by the triage results? you can't change it"). A task nobody triaged shows its own facts, unlabelled.
                     Not over a session: that strip stays one line so the agent keeps the room. */}
                 {!sessionView && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
-                  {facts.triaged && <Typography component="span" sx={{ fontSize: 11, color: FAINT, mr: 0.25 }}>Triage decided</Typography>}
                   {facts.workflow && <ChannelIcon channel="workflow" sx={{ fontSize: 15, mr: 0.1 }} />}
-                  {facts.pills.map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
+                  {facts.pills.filter((p) => !SAID.has(p.key) || p.tone === "alert").map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
                     <Box key={p.key} component="span" data-tq-fact={p.key} sx={{ ...factPill, ...tone }}>
                       <Box component="span" sx={{ color: k || FAINT }}>{p.label}</Box>
                       <Box component="span" sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", ...(p.mono ? { ...mono, fontSize: 11 } : {}) }}>{p.value}</Box>
                     </Box>); })}
+                  <Typography component="span" data-tq-sorted="" sx={{ fontSize: 12, color: DIM, minWidth: 0 }}>{sortedLine(facts, t?.Kind || "task")}</Typography>
                   {/* WHAT HAPPENS AT THE END, in a few words on the facts' own line; the sentence that explains it is the tooltip */}
                   {notDone && <>
                     <Box sx={{ width: "1px", height: 16, bgcolor: BORDER, mx: 0.5, display: { xs: "none", sm: "block" } }} />
@@ -1486,9 +1533,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             <Link component="button" underline="hover" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
                               onClick={async () => {
                                 try { await api.post(`/api/tasks/${selected}/trust`); loadDetail(selected); loadTasks(); onChanged?.(); }
-                                catch (e) { console.error("trust this task failed", e); }
+                                catch (e) { setErr(`That didn't go through - ${e?.response?.data?.detail || "Taskuary didn't answer"}. Press ${strangerLine(detail).trust} again.`); }
                               }}>
-                              Trust this task
+                              {strangerLine(detail).trust}
                             </Link>
                           </Typography>
                         )}
@@ -1524,7 +1571,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               <AltRouteIcon sx={{ fontSize: 15, color: ACCENT, mt: 0.25, flexShrink: 0 }} />
                               <Typography sx={{ fontSize: 12, color: DIM, minWidth: 0, overflowWrap: "anywhere" }} title={`${detail.ref} · ${made}`}>
                                 {triaged.head
-                                  ? <><Box component="span" sx={{ color: INK, fontWeight: 600 }}>Triage{triaged.at ? ` · ${whenShort(triaged.at)}` : ""}</Box>{" "}
+                                  ? <><Box component="span" sx={{ color: INK, fontWeight: 600 }}>Sorted{triaged.at ? ` · ${whenShort(triaged.at)}` : ""}</Box>{" "}
                                       {triaged.head}{triaged.why ? `: "${triaged.why}"` : ""}</>
                                   : <span>{detail.ref} · {made}</span>}
                                 {triaged.later > 0 && ` · ${triaged.later} later message${triaged.later === 1 ? "" : "s"} joined it`}
@@ -1596,12 +1643,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
                               title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
-                              onClick={(e) => setContinueAt(e.currentTarget)}>Continue session</Button>
+                              onClick={(e) => setContinueAt(e.currentTarget)}>Keep going</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
-                              title="Opens the agent step so you can choose a harness, a model and a prompt."
+                              title="Opens the agent step so you can choose the agent and add instructions."
                               onClick={() => setOpenStage("agent")}>
                               {report || detail?.transcript ? "Run another agent" : startLabel(story, t.Kind, false) || "Start an agent"}</Button>
                           )}
@@ -1636,7 +1683,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
                       <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
-                        onClick={wrapUp}>Save and end session</Button>
+                        onClick={wrapUp}>Stop and save</Button>
                       {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
                           the way on is another agent - startCodingAgent pauses this one and files its handover first */}
                       {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (
@@ -1690,18 +1737,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
                         : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
-                      {runRole && <Box sx={{ ...chipBtnStatic }} title="The role: which document this worker follows. A coding task's role is the coding profile.">
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>role</Box>&nbsp;{runRole}</Box>}
+                      {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
+                      {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
                       {brainPill && <Box sx={{ ...chipBtnStatic }}
-                        title={brainPill === detail?.ranOn?.brain
-                          ? `What ran this session${detail.ranOn.model ? `, on ${detail.ranOn.model}` : ""}. A brain is chosen on Settings → Triage & agents, or by this role's override — not per task.`
-                          : "The brain: which CLI or API connector actually runs it. Chosen on Settings → Triage & agents, or by this role's override — not per task."}>
-                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>brain</Box>&nbsp;{brainPill}</Box>}
-                      {!isGeneral && <Button size="small" variant="outlined" sx={chipBtn}
+                        title={brainPill === detail?.ranOn?.brain ? "The AI that did this work. Which AI the agents use is set in Settings, not per task."
+                          : "The AI that does the work. Which AI the agents use is set in Settings, not per task."}>
+                        <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>AI</Box>&nbsp;{brainPill}</Box>}
+                      {/* the repository pill only where a coding tool is connected (B3) */}
+                      {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
                         onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
-                      {!isGeneral && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
+                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
                     </Box>
                   )}
                   </>}
@@ -1753,7 +1801,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {agentState === AGENT.waiting ? says(subState(term), agentName(t)) : `${agentName(t)} is working`} in its session — it keeps running while you read the task.
                     </Typography>
                     <Button size="small" variant="contained" disableElevation sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
-                      onClick={() => setPeek(false)}>Back to the session</Button>
+                      onClick={() => setPeek(false)}>Back to the agent</Button>
                   </Box>
                 ) : workspaceMode === "live" ? (
                   <>
@@ -1773,9 +1821,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* it takes what is left between the strip above and the waiting room below, and
                         never less than a readable terminal - a fixed 64vh pushed the waiting room under
                         the fold the moment the strip above it had anything to say */}
-                    <Box sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 },
+                    <Box ref={termBox} sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
+                      {/* what it asked, OVER the pane (U20): absolutely placed, so the pane under it keeps its size; on the canvas the
+                          row holds Answer it, here the card does */}
+                      {asking && <Box data-tq-agent-asks="" role="status" sx={{ position: "absolute", inset: 0, zIndex: 2, bgcolor: "rgba(255,253,251,.97)",
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1.25, p: 3, textAlign: "center" }}>
+                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.5, maxWidth: 560, overflowWrap: "anywhere" }}>{askLine}</Typography>
+                        {!inRow && <Button size="small" variant="contained" disableElevation sx={primaryBtn} onClick={answerAgent}>Answer it</Button>}
+                        <Link component="button" type="button" underline="hover" onClick={() => setSeenAsk(askKey)} sx={{ fontSize: 12, color: DIM }}>Show details</Link>
+                      </Box>}
                     </Box>
                     {/* pages the session published with Claude's Artifact tool, under the session that made them */}
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>
@@ -1879,6 +1935,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           queue mounts, so two surfaces cannot say different things about one draft. */}
                       {pendingReview ? (
                         <ReviewDecision review={pendingReview} closeout={closeoutRv} toRow={inRow} onMarkDone={askFinish} onSent={sent} onRemind={(e, a) => setRemindAt(a || e?.currentTarget)}
+                          onEmailInstead={() => setEmailOpen(true)}
                           onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />   /* the list's row moves too (T19) */
                       ) : (
                         <>
@@ -2067,6 +2124,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   row, so its view keeps the same moves here, under the sections, instead of inside the Task card. The two endings
                   first, then a rule, then the reroutes, then Change - what the task's pills used to set. While a session fills the page
                   the header carries them (headControls). */}
+              {/* the Advisor's suggestion over the bar, said and not pressed: the buttons below stay as they are (U12) */}
+              {!inRow && !sessionView && notDone && taskAdvice && (
+                <Typography data-tq-task-advice="" role="status" sx={{ px: 1.75, py: 0.75, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff",
+                  fontSize: 12.5, color: DIM, flexShrink: 0, overflowWrap: "anywhere" }}>
+                  <Box component="span" sx={{ color: INK, fontWeight: 600 }}>Suggested: {taskAdvice.label}</Box>
+                  {" - "}{suggestion(taskAdvice.line, taskAdvice.label, taskAdvice.verb)}
+                </Typography>
+              )}
               {!inRow && !sessionView && (
                 <Box data-tq-task-bar="" sx={{ display: "flex", alignItems: "center", gap: 0.8, rowGap: 0.6, flexWrap: "wrap", flexShrink: 0,
                   px: 1.75, py: 1, borderTop: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
@@ -2077,8 +2142,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
                     <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                       sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
-                      title="Delete it and teach Taskuary why — the sender keeps writing to you."
-                      onClick={() => setConfirmNAT(true)}>Not a task</Button>
+                      title={NAT_TITLE}
+                      onClick={() => setConfirmNAT(true)}>Remove - not a task</Button>
                     <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                     <Button size="small" variant="outlined" sx={barBtn}
@@ -2090,7 +2155,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
                       onClick={() => setReshape(true)}>Split or merge</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
-                      title="Who does it, the priority, who it is assigned to, or the repository"
+                      title={`Who does it, the priority${canCode ? ", who it is assigned to, or the repository" : " or who it is assigned to"}`}
                       onClick={(e) => setPick({ what: "menu", at: e.currentTarget })}>Change</Button>
                   </> : (
                     <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
@@ -2109,7 +2174,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <MenuItem key="kind" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "kind" })}>Who does it · {kindLabel(t.Kind || "task")}</MenuItem>,
           <MenuItem key="priority" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "priority" })}>Priority · {t.Priority || "normal"}</MenuItem>,
           <MenuItem key="assign" sx={{ fontSize: 12.5 }} onClick={() => setPick({ ...pick, what: "assign" })}>Assigned to · {t.Assignee ? assigneeLabel(t.Assignee) : "nobody"}</MenuItem>,
-          ...(!isGeneral ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
+          ...(!isGeneral && canCode ? [<MenuItem key="repo" sx={{ fontSize: 12.5 }} onClick={() => { setPick(null); pickRepo(); }}>Repository · {repoOf(t) || "pick a repo"}</MenuItem>] : []),
         ]}
         {pick?.what === "kind" && (KINDS.includes(t.Kind || "task") ? KIND_OPTIONS : [{ key: t.Kind, label: t.Kind, hint: "legacy task type" }, ...KIND_OPTIONS])
           .filter((o) => o.key !== "coding" || canCode || t.Kind === "coding").map((o) =>
@@ -2240,9 +2305,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
         confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}
         onConfirm={stopAndFinish} />
-      <ConfirmDelete open={confirmNAT} what={t ? `"${(t.Title || "this task").slice(0, 60)}"` : "this task"}
-        consequence={"It is deleted, and triage is taught that this topic is never a task. Its messages stay on the Timeline, "
-          + "and the sender is not muted — that is \"Skip this sender\"."}
+      {/* the dialog says the button's verb (U13), and what happens in words - no "triage", no Timeline (it is gone) */}
+      <ConfirmDelete open={confirmNAT} what="this task" title="Remove this task?" confirmLabel="Remove"
+        consequence={"Taskuary will stop making tasks from messages like this. The email itself is kept (search finds it), "
+          + "and the sender is not muted."}
         onClose={() => setConfirmNAT(false)} onConfirm={notATask} />
     </>
   );

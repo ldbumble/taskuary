@@ -28,7 +28,7 @@
       "word": "ready to close out",
       "role": "you",
       "mark": "🏁",
-      "hint": "a reply, an action or a task's close-out (merge its pull request, close its issue) waits for your yes",
+      "hint": "a reply, an action or a task's close-out (approve its change, close it where it lives) waits for your yes",
       "loud": true
     },
     {
@@ -68,7 +68,7 @@
     },
     {
       "key": "saved",
-      "word": "session saved",
+      "word": "stopped and saved",
       "role": "working",
       "mark": "💾",
       "hint": "you ended the agent's session - its report is written; continue it, or mark the task done"
@@ -82,10 +82,11 @@
     },
     {
       "key": "unjudged",
-      "word": "triage failed",
+      "word": "couldn't sort this",
+      "counted": "couldn't be sorted",
       "role": "bad",
       "mark": "⚠️",
-      "hint": "triage could not classify this — nothing was started; open it and retry, or choose what it is"
+      "hint": "Taskuary couldn't sort this — nothing was started; open it and press Sort it again, or choose what it is"
     },
     {
       "key": "forgotten",

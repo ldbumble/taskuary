@@ -65,8 +65,10 @@ export default function ReplyFiles({ reviewId, files = [], text = "", channel = 
             {busy === "adding" ? "Attaching…" : files.length ? "Attach another" : "Attach a file"}
           </Button>
         ) : (
-          <Typography variant="caption" sx={{ color: DIM }}>
-            A {channel} message cannot carry a file — answer by email to attach one.
+          // ...and a draft that PROMISES one says so in the alert colour: sent here, the words would arrive without it (U17)
+          <Typography variant="caption" sx={{ color: promisesFiles(text) || files.length ? ALERT_INK : DIM }}>
+            {promisesFiles(text) || files.length ? `This reply mentions a file, and a ${channel} message cannot carry one — reply by email with the file instead.`
+              : `A ${channel} message cannot carry a file — answer by email to attach one.`}
           </Typography>
         )}
         <input ref={pick} hidden type="file" multiple disabled={disabled} onChange={(e) => add(e.target.files)} />

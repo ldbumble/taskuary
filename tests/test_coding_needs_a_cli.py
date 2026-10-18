@@ -63,6 +63,6 @@ class AssistantTests(unittest.TestCase):
         tid = s.create_task({'Title': 'Fix the export script', 'Kind': 'coding'}, 'test')
         with mock.patch.object(agents, 'coding_ready', return_value=False):
             self.assertEqual(concierge.triage_agent(s, {'tid': tid}), 'regular_agent')
-            self.assertIn('no coding tool is connected', concierge.cannot({'tid': tid}, 'coding_agent', s))
+            self.assertTrue(concierge.cannot({'tid': tid}, 'coding_agent', s)); self.assertEqual(concierge.handoff_verb(s, 'coding_agent'), 'regular_agent')
         with mock.patch.object(agents, 'coding_ready', return_value=True):
             self.assertEqual(concierge.triage_agent(s, {'tid': tid}), 'coding_agent')

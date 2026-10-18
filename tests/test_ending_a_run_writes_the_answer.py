@@ -1,7 +1,7 @@
 """Ending the run is when the reply gets written - whoever ended it.
 
 An agent that finished by itself drafted the reply (selfclose -> wrap(close=True) -> finish). The
-owner pressing "Save and end session" got the report filed and nothing to send, on the one road
+owner pressing "Stop and save" got the report filed and nothing to send, on the one road
 where they had just read the work and knew it was done (the owner, 2026-09-22). `close` now decides
 only whether the TASK ends with the run; the answer is written either way.
 """

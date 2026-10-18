@@ -104,3 +104,21 @@ test("every step has Back and Next; Next waits for the step to be done; the last
 test("saving About your work tells the rail and the top bar's chip, not only an AI or email step", () => {
   assert.match(read("FirstRun.jsx"), /const at = st && `\$\{st\.step\}\|\$\{!!st\.about_done\}`;/);
 });
+
+// the non-coder audit, 2026-10-17: About your work pressed on the rail from Your AI, then saved, put "Setup complete" over a day with
+// no AI and no mail - and "Finish" ticked on a setup put away early
+test("a rail row past what is done waits and says for what; Finish ticks only when finished and the three are done", async () => {
+  const { stepsOf, reachable } = await import("../src/setupSteps.js");
+  const row = (st, k) => stepsOf(st).find((r) => r.key === k);
+  assert.equal(row({ step: "ai" }, "about").disabled, true); assert.match(row({ step: "ai" }, "about").sub, /waits - connect your email first/);
+  assert.equal(row({ step: "ai" }, "mail").disabled, true); assert.equal(row({ step: "ai" }, "other").disabled, false, "the optional ones never wait");
+  assert.equal(row({ step: "reading", about_done: false }, "about").disabled, false);
+  assert.equal(row({ step: "email", dismissed: true }, "finish").done, false, "put away is not finished");
+  assert.equal(row({ step: "done", about_done: true, dismissed: true }, "finish").done, true);
+  assert.equal(reachable({ step: "ai" }, "about"), false); assert.equal(reachable({ step: "email" }, "mail"), true);
+  const fr = read("FirstRun.jsx");
+  assert.match(fr, /if \(!stRef\.current \|\| reachable\(stRef\.current, v\)\) go\(v\);/, "the canvas guards the jump too");
+  assert.match(read("SetupSteps.jsx"), /disabled=\{!!r\.disabled\}/);
+  // ...and the server refuses Finish while there is no AI or no mail; the canvas says why instead of moving on
+  assert.match(fr, /if \(e\?\.response\?\.status === 409\) \{ setErr\(errText\(e\)\); return; \}/);
+});

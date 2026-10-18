@@ -12,7 +12,7 @@ test("first sync calls the real poll and accepts an already running read", async
     assert.equal(await startFirstSync({ post: async (url) => { calls.push(url); return { data: { report } }; } }), report);
   }
   assert.deepEqual(calls, ["/api/ingest/poll", "/api/ingest/poll"]);
-  await assert.rejects(startFirstSync({ post: async () => ({ data: {} }) }), /did not start/);
+  await assert.rejects(startFirstSync({ post: async () => ({ data: {} }) }), /Couldn't start reading your mail/);
 });
 
 test("a started HTTP request is not a first useful result", async () => {
@@ -22,7 +22,7 @@ test("a started HTTP request is not a first useful result", async () => {
   assert.equal((await firstSyncProgress(reader({ status: { state: "idle" } }, { ...state, pending: true }))).phase, "reading");
   const empty = await firstSyncProgress(reader({ status: { state: "idle" } }, state));
   assert.equal(empty.phase, "empty");
-  assert.match(empty.message, /source scope/);
+  assert.match(empty.message, /which folders/);
 });
 
 test("source and AI failures remain visible even when older items exist", async () => {

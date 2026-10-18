@@ -17,8 +17,8 @@ test("each control carries the caption that names its effect on task versus agen
     ['{finishing ? "Marking done…" : "Mark done"}', "title={markDoneHint}"],
     ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
-    ["Save and end session", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ["Save and end session", "Saves the stopped session's result and report. The task stays open."],
+    ["Stop and save", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
+    ["Stop and save", "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
@@ -27,7 +27,7 @@ test("each control carries the caption that names its effect on task versus agen
     ["Ask sender", "nothing is sent now."],
     ["Review changes", "Nothing is approved or committed here."],
   ]) {
-    // one name can sit on several buttons (every ending is "Save and end session", 2026-09-25): each
+    // one name can sit on several buttons (every ending is "Stop and save", 2026-09-25): each
     // caption must be on one of them
     const ats = [];
     for (let at = tasks.indexOf(`>${label}</Button>`); at !== -1; at = tasks.indexOf(`>${label}</Button>`, at + 1)) ats.push(at);
@@ -52,7 +52,7 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   assert.ok(bar.includes("sx={barContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
   // a general agent's composer sits under this bar and continues the same conversation: no second door (2026-09-29)
   assert.match(tasks, /const barContinue = canContinue && !isGeneral;/);
-  assert.ok(bar.includes("{barContinue && <Button"), "the bar's Continue session is the coding agent's only");
+  assert.ok(bar.includes("{barContinue && <Button"), "the bar's Keep going is the coding agent's only");
   // whichever state it is in, exactly one move is filled: continue it, file it, or run another
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
   assert.match(tasks, /const canSave = !report && !wrapped;/);
@@ -87,7 +87,8 @@ test("the agent card names the role and the brain, and offers no model", () => {
   const at = tasks.indexOf("{runRole && <Box");
   assert.notEqual(at, -1, "the role pill must be rendered");
   const row = tasks.slice(at, at + 1400);
-  assert.ok(row.includes(">role</Box>") && row.includes(">brain</Box>"), "both pills are labelled");
+  // ...in plain words (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary
+  assert.ok(row.includes(">works as</Box>") && row.includes(">AI</Box>"), "both pills are labelled");
   assert.ok(row.includes("{brainPill &&"), "the brain pill renders brainPill, not runBrain");
   assert.ok(!/>model</.test(row), "and there is no model pill - the model is not the task's");
 });
@@ -187,9 +188,9 @@ test("a draft that cannot be sent says why on the card, not in a tooltip", () =>
   assert.match(decision, /The draft stays for you to use/);
 });
 
-test("Mark done on a live session ends it the way Save and end session does", () => {
+test("Mark done on a live session ends it the way Stop and save does", () => {
   // the owner, 2026-09-29: the confirm killed the pty with no write-up, and the terminal stayed on screen for the whole
-  // close - Save and end session swaps it for the write-up's progress line at once, files the result, then this closes
+  // close - Stop and save swaps it for the write-up's progress line at once, files the result, then this closes
   assert.ok(tasks.includes("onConfirm={stopAndFinish}"), "the confirm takes the write-up road");
   const at = tasks.indexOf("const stopAndFinish = async");
   const body = tasks.slice(at, tasks.indexOf("\n  };", at));
@@ -205,7 +206,7 @@ test("Mark done on a live session ends it the way Save and end session does", ()
 test("run another agent is on the bar, live sessions and general tasks included", () => {
   assert.match(tasks, /const runAnother = \{ id: "run-another", group: "agent"/);
   const live = tasks.slice(tasks.indexOf("...(liveSession ? ["), tasks.indexOf("] : continueHere ?"));
-  assert.match(live, /runAnother/, "a live session offers it beside Save and end session");
+  assert.match(live, /runAnother/, "a live session offers it beside Stop and save");
   assert.doesNotMatch(tasks, /id: "run-another", group: "more"/);
 });
 

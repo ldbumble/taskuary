@@ -26,7 +26,7 @@ who is not technical never assembled them. The missing part was putting them tog
 2. **Two playbooks**, copied into `~/.taskuary/playbooks`: `vendor-payment-inquiry` (read-only, a
    drafted reply) and `portal-bill-approvals` (checks the bills waiting in the portal and approves the
    ones the rep names). The portal posts approved bills to the ledger itself, so the ledger is only read.
-3. **Where the mail goes:** `default_profile = ap`, a new setting (Settings → Triage & routing →
+3. **Where the mail goes:** `default_profile = ap`, a new setting (Settings → How mail is sorted →
    *Your mail goes to*). `agents.routed_role` uses it when triage judges a message to be general
    work and names no better-suited worker. Triage still picks a researcher for outside
    information, and coding still goes to the coding agent.

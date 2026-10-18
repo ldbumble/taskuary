@@ -40,7 +40,7 @@ def test_a_failed_report_is_still_its_own_thing():
 
 def test_the_lane_is_in_the_shared_vocabulary():
     assert 'unjudged' in LANES
-    assert LANE_WORDS['unjudged'][0] == 'triage failed'
+    assert LANE_WORDS['unjudged'][0] == "couldn't sort this"   # plain words: "triage" is the app's own word, not the owner's
     assert LANE_MARKS['unjudged']
 
 

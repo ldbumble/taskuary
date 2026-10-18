@@ -72,9 +72,9 @@ test("a message whose triage failed has an explicit error state with a retry hin
   // PW-036/037: failed triage is an error, never an fyi face
   const row = { MessageId: 9, MsgStatus: "error", RouteReason: "AI triage failed (model timed out) - retry available" };
   assert.equal(stateOf(row), "error");
-  assert.match(STATES.error.word, /triage failed/i);
-  assert.match(STATES.error.hint, /retry/i);
-  assert.match(subline(row), /triage failed/i);
+  assert.match(STATES.error.word, /couldn't sort/i);                 // lanes.json, in plain words
+  assert.match(STATES.error.hint, /sort it again/i);
+  assert.match(subline(row), /couldn't sort this — press Sort it again/i);
   // ...and it stays an error when the failed follow-up is linked to a task
   assert.equal(stateOf({ ...row, TaskId: 3, TaskStatus: "open" }), "error");
 });
@@ -95,7 +95,7 @@ test("a message a standing rule turned away says so, and asks nothing", () => {
 
 test("a failed verdict asks, because nothing judged it", () => {
   const t = triageSummary({ MsgStatus: "error", RouteReason: "AI triage failed" });
-  assert.equal(t.status, "triage failed");
+  assert.equal(t.status, "couldn't sort this");
   assert.equal(t.choose, true);
 });
 

@@ -130,7 +130,7 @@ class WrapEndpointTests(unittest.TestCase):
             return c.post(f'/api/tasks/{tid}/wrap', json=body or {'close': True}).json()
 
     def test_mark_done_on_a_live_session_files_the_report_and_drafts_nothing(self):
-        # 2026-09-29: Mark done ends a live session the way Save and end session does, then closes the task - and the
+        # 2026-09-29: Mark done ends a live session the way Stop and save does, then closes the task - and the
         # close dismisses drafts, so the write-up it asks for must not write one
         from taskuary import server
         tid = []

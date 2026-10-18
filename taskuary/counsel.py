@@ -162,7 +162,27 @@ def pick(store, *heads: str) -> str:
     if not any(h in parts for h in heads): return text
     return '\n\n'.join([parts.get('', '')] + [f'## {h}\n{parts[h]}' for h in parts if h in heads]).strip()
 
-def for_chat(store) -> str: return load(store)
+# CODING EXISTS ONLY WHERE A CODING TOOL CAN START (agents.coding_ready): a finance user offered "Coding agent | Regular agent"
+# picked coding and was refused (2026-10-17 audit). The shipped document opens each coding-only bullet with these words, so
+# an install without one drops them; an owner's copy written before that still talking coding gets the one rule after it
+CODING_ONLY = 'With a coding tool connected'
+NO_CODING = ("No coding tool is connected on this computer: never mention, offer or ask about a coding agent or a repository. "
+             "Every hand-off is Send to agent - a regular agent.")
+
+def without_coding(text: str) -> str:
+    out, skip = [], False
+    for line in (text or '').splitlines():
+        if line.startswith('- ') or line.startswith('#') or not line.strip(): skip = line.startswith(f'- {CODING_ONLY}')
+        if not skip: out.append(line)
+    t = '\n'.join(out) if len(out) < len((text or '').splitlines()) else text
+    return f'{t}\n\n{NO_CODING}' if re.search(r'coding|repositor', t, re.I) else t
+
+def for_chat(store) -> str:
+    from . import agents
+    text = load(store)
+    try: ready = agents.coding_ready(store)
+    except Exception: ready = False
+    return text if ready else without_coding(text)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 def for_worker(store) -> str: return pick(store, VOICE_HEAD)

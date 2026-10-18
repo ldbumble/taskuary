@@ -129,7 +129,7 @@ class AgentOpen(ValueError):
     """Remind me on a task whose agent session is still open: the doors answer 409 with this."""
 
 
-OPEN_SAYS = 'An agent session is still open on this task - Save and end session first, then put it away.'
+OPEN_SAYS = 'An agent is still open on this task - press Stop and save first, then put it away.'
 
 
 def agent_open(tid: int) -> bool:

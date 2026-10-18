@@ -104,30 +104,29 @@ def state(store) -> dict:
          # this button opened a tab that no longer exists (2026-09-22)
          'goto': {'tab': 'Settings', 'hash': 'settings=about', 'label': 'Open About you'}},
         {'key': 'ai', 'title': 'Connect one AI',
-         'why': 'Use one API provider, a local model, or a coding CLI you already pay for. Test it '
-                'on its connection card. The existing model defaults are enough to begin.',
+         'why': 'Use ChatGPT, an AI key, or an AI tool already on this computer. Test it on its card - '
+                'nothing else needs choosing to begin.',
          'done': ai['ready'], 'detail': f"running on {ai['Name']}" if ai['ready'] else ai['why'],
          # WHERE IT SENDS YOU DEPENDS ON WHAT YOU HAVE. "Open AI CLI agents" is the right door when
          # there is no brain yet, or when the brain IS a CLI. It is the wrong one for a key provider:
          # Azure OpenAI is not a CLI tool and cannot be set up in a terminal, so pointing an install
          # that already runs on Azure at a CLI installer read as "this is how you do it" (the owner,
          # 2026-09-17: "you cant setup azure ai from here. It's not a cli tool").
-         'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'}
+         'goto': ({'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open your AI tools'}
                   if not ai['Type'] or ai['Type'] == 'cli'
                   else {'tab': 'Connections', 'hash': f"connector={ai.get('Type')}",
                         'label': f"Open the {ai.get('Name') or 'provider'} card"}),
          # ...and with no brain at all, the OTHER road too: an owner with an OpenAI or Azure key and no
          # CLI saw only the CLI door and had nowhere to paste it. Connections opens on its AI group.
          **({'alt': {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'}} if not ai['Type'] else {})},
-        {'key': 'inbound', 'title': 'Connect one work source',
-         'why': 'Start with one mailbox, chat, or issue tracker. Choose the account or project you '
-                'want read, enable it as an input, and test the connection. Other sources can wait.',
+        {'key': 'inbound', 'title': 'Connect your email',
+         'why': 'Start with your mailbox - or a work chat if that is where your work arrives. Sign in, '
+                'test it on its card, and the rest can wait.',
          'done': bool(inbound), 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
-         'goto': {'tab': 'Connections', 'hash': '', 'label': 'Add one work source'}},
-        {'key': 'sync', 'title': 'Review your first result',
-         'why': 'Read your connected sources, then review up to five recent items here. Open one '
-                'to see its verdict and any draft. A sync follows each source\'s normal scope; '
-                'this review sample does not limit how many items it imports.',
+         'goto': {'tab': 'Connections', 'hash': '', 'label': 'Connect your email'}},
+        {'key': 'sync', 'title': 'Look at your first items',
+         'why': 'Taskuary reads what you connected and shows up to five of your newest items here. Open one '
+                'to see how it was sorted and any draft. Everything else is still read - this is only a sample.',
          # no count: this samples the feed, so any number it printed would be the sample size
          # rather than the truth ("2 read" on an install holding thousands)
          'done': bool(inbox), 'detail': 'your first items are ready to review' if inbox else '',

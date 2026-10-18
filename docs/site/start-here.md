@@ -124,7 +124,7 @@ change the AI or the mailbox. Setup does not overwrite an existing user's model 
 configuration.
 
 After that, connect a coding CLI if you want code written, or add a report for numbers you check
-by hand. **Settings → Triage & agents** lets you use different models for different jobs. Reports
+by hand. **Settings → How mail is sorted** lets you use different models for different jobs. Reports
 and the Hub can wait until you have a workflow that needs them.
 
 Two reports exist from the start: the **End of day checkup** and the **Advisor**, which looks for
@@ -144,7 +144,7 @@ Taskuary lets those be different brains, and the choice is mostly about what you
 | **Local brain** | Ollama or any OpenAI-compatible local server | a coding CLI, optionally the same local model | no key, and no mail leaving the machine |
 
 With no cloud key, set the triage brain to your configured CLI in
-[Settings](settings#triage-agents), and give that CLI a light model on its connector card so
+[Settings](settings#how-mail-is-sorted), and give that CLI a light model on its connector card so
 routine triage does not burn the coding model.
 
 ## Where your data lives

@@ -1,6 +1,6 @@
 """A button's words are a promise. These pin the ones the action-row audit (2026-09-30) found saying less than the handler does:
 the assistant's `approve` was described as "send the drafted reply" though on a close-out it merges first, and three chip words
-(Save and end session, Mark done, Run it again) carried no sentence on hover at all."""
+(Stop and save, Mark done, Run it again) carried no sentence on hover at all."""
 from taskuary import concierge, toolcatalog
 
 

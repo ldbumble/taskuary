@@ -33,7 +33,7 @@ class FactsTests(unittest.TestCase):
 
     def test_settings_come_from_the_schema_with_their_values_in_words(self):
         rows = {r['key']: r for r in appfacts.settings(store())}
-        self.assertEqual(rows['intent_classify_enabled']['said'], 'Intent triage (Triage & routing): on')
+        self.assertEqual(rows['intent_classify_enabled']['said'], 'Intent triage (How mail is sorted): on')
         self.assertEqual(rows['poll_minutes']['value'], '10')
         self.assertNotIn('ingest_status', rows)                                       # bookkeeping is not a knob
 

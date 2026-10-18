@@ -28,3 +28,62 @@ test("Write reply calls the draft helper, not itself - the component's own openR
   assert.doesNotMatch(s, /import \{ openReply \} from "\.\/replyDraft\.js"/);
   assert.match(s, /generate \? draftReply\(api, replyMessage\.MessageId\)/);
 });
+
+// THE AUDIT FOR NON-CODERS (2026-10-17): what the task view offers and says when the person using it never wrote code
+test("with no coding tool connected, Start is the general agent and nothing asks for a repository (B3)", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*"Send to agent",\n\s+disabled: !!startingAgent, run: startGeneralAgent/);
+  assert.match(page, /const generalOnly = handOff \|\| !canCode;/);
+  assert.match(page, /\{!generalOnly && <RepoSelect/);
+  assert.match(page, /\{!generalOnly && startRepo === "" && <>/);
+  assert.match(page, /\{handOff && canCode && <Button[^\n]*\n[^\n]*Back to coding/);
+  assert.match(page, /\.\.\.\(!isGeneral && canCode \? \[\{ id: "repo"/);
+  assert.match(page, /\{!isGeneral && canCode && <Button size="small" variant="outlined" sx=\{chipBtn\}/);
+  assert.match(page, /\.\.\.\(!isGeneral && canCode \? \[<MenuItem key="repo"/);
+});
+
+test("one verb for removing a task: the button, its tooltip and its dialog all say Remove (U13)", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /\{ id: "nat", group: "more", label: "Remove - not a task"/);
+  assert.match(page, /title="Remove this task\?" confirmLabel="Remove"/);
+  assert.match(page, /Taskuary will stop making tasks from messages like this\. The email itself is kept \(search finds it\)/);
+  assert.doesNotMatch(page, /triage is taught|stay on the Timeline/);
+});
+
+test("the header says what triage made of it in one plain line, and the kind hints carry no coding words", async () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /data-tq-sorted=""[^\n]*\{sortedLine\(facts, t\?\.Kind \|\| "task"\)\}/);
+  for (const jargon of ["without a repository", "the configured CLI", "the model triage uses", "harness"]) assert.ok(!page.includes(jargon), jargon);
+  // sortedLine is pure: read it out of the source and run it
+  const body = page.slice(page.indexOf("const SAID ="), page.indexOf("const FACT_TONE"));
+  const { sortedLine } = await import(`data:text/javascript,${encodeURIComponent(body.replace("export const sortedLine", "export const sortedLine"))}`);
+  const pills = (o) => Object.entries(o).map(([key, value]) => ({ key, value }));
+  assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "task", who: "an agent · general", priority: "normal" }) }, "general"),
+    "Sorted as: a task for an assistant · normal priority");
+  assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "reply", priority: "high" }) }, "reply"), "Sorted as: a reply to send · high priority");
+  assert.equal(sortedLine({ triaged: false, pills: pills({ priority: "normal" }) }, "task"), "A task for you · normal priority");
+});
+
+test("an agent waiting on you leads with what it asked, over a pane that keeps its size, and Answer it is the row's move (U20)", () => {
+  const page = src("TaskPage.jsx");
+  assert.match(page, /\{ id: "answer_agent", group: "agent", lead: true, label: "Answer it", run: answerAgent/);
+  assert.match(page, /<Box ref=\{termBox\} sx=\{\{ flex: "1 1 0", minHeight: \{ xs: 360, md: 0 \}, position: "relative"/);
+  assert.match(page, /asking && <Box data-tq-agent-asks="" role="status" sx=\{\{ position: "absolute", inset: 0/);
+  assert.match(page, />Show details<\/Link>/);
+  assert.match(page, /subState\(term\) !== "stalled"/, "a stuck agent asks nothing - it keeps its screen and Run another agent");
+});
+
+test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)", () => {
+  const page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
+  assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
+  assert.match(page, /data-tq-task-advice=""/);
+  assert.match(item, /\{phone && <ActionRow inline advised=\{advised\} \/>\}/);
+  assert.match(item, /adviceShown\(useItemAdvice\(card, phone\)/);
+});
+
+test("a chat reply that promises a file leads with replying by email, and sending the words alone says so (U17)", () => {
+  const rd = src("ReviewDecision.jsx"), page = src("TaskPage.jsx");
+  assert.match(rd, /id: no\("email-file"\), label: "Reply by email with the file", tone: "p"/);
+  assert.match(rd, /`\$\{sendWord\} without the file`/);
+  assert.match(page, /onEmailInstead=\{\(\) => setEmailOpen\(true\)\}/);
+});

@@ -283,7 +283,7 @@ class WrapOnceTests(unittest.TestCase):
         self.assertEqual(self.reports(), [])
 
     def test_the_owner_closing_a_saved_session_still_closes_the_task(self):
-        wrapup.wrap(self.s, self.tid, close=False, actor='owner')               # Save and end session
+        wrapup.wrap(self.s, self.tid, close=False, actor='owner')               # Stop and save
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'open')
         wrapup.wrap(self.s, self.tid, close=True, actor='owner', no_reply=True) # ...then Done
         self.assertEqual(self.s.get_task(self.tid)['Status'], 'done')
@@ -367,7 +367,7 @@ class ClosedSessionStateTests(unittest.TestCase):
         s = MemoryStore(); t = s.create_task({'Title': 'Review the pull request', 'Kind': 'coding', 'Status': 'open', 'Assignee': 'agent:coding'}, 'o')
         self.finished_run(s, t)
         why = funnel.not_started_why(s, t)
-        self.assertIn('finished its last session', why)
+        self.assertIn('finished its work', why)
         self.assertNotIn('came in since', why)
 
     def test_a_task_whose_session_finished_is_not_under_agents_working(self):

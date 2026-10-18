@@ -29,7 +29,7 @@ test("every lane the server knows has a word, a mark and a role the theme can co
   assert.strictEqual(LANE_META.stopped.word, "agent stopped");
   // ...and a row NOTHING judged is not an fyi: `fyi` claims a verdict was reached, and the whole
   // point of the error state is that none was (the owner, 2026-09-15: "that's a bad bug")
-  assert.strictEqual(LANE_META.unjudged.word, "triage failed");
+  assert.strictEqual(LANE_META.unjudged.word, "couldn't sort this");
   assert.strictEqual(LANE_META.unjudged.role, "bad");
   // a failed check is second only to an agent that is stuck, wears the oxblood `bad` role, and
   // is NOT in the server's MUTED_LANES - a rule that quiets a chatty report cannot quiet it failing

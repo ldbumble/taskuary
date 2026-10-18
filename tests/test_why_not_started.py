@@ -200,7 +200,7 @@ class FinishedIsNotLeftTests(unittest.TestCase):
         s = MemoryStore(); t = handed(s, who='agent:coding'); self.ran(s, t)
         self.assertFalse(funnel.agent_left(s, t))
         why = funnel.not_started_why(s, t)
-        self.assertIn('finished its last session', why)
+        self.assertIn('finished its work', why)
         self.assertNotIn('left without finishing', why)
 
     def test_a_report_written_after_it_began_is_a_finish_too(self):
@@ -232,11 +232,11 @@ class NewsAfterTheAgentTests(unittest.TestCase):
         self.wrote(ago(0))
         why = funnel.not_started_why(self.s, self.t)
         self.assertIn('Erin Blake wrote again today', why)
-        self.assertNotIn('You ended the session', why)
+        self.assertNotIn('You stopped it', why)
         self.assertFalse(funnel.agent_left(self.s, self.t), 'not "stopped" or "saved" on the rail')
         self.assertEqual(funnel.agent_story(self.s, self.t)['kind'], 'news')
 
     def test_the_message_that_started_the_work_is_not_news(self):
         self.wrote(ago(6))
         self.assertIsNone(funnel.news_since_agent(self.s, self.t))
-        self.assertIn('You ended the session', funnel.not_started_why(self.s, self.t))
+        self.assertIn('You stopped it', funnel.not_started_why(self.s, self.t))

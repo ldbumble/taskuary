@@ -30,7 +30,7 @@ class SessionSavedTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertTrue(funnel.session_saved(s, tid))
         self.assertTrue(funnel.agent_left(s, tid))
-        self.assertIn('You ended the session', funnel.not_started_why(s, tid))
+        self.assertIn('You stopped it', funnel.not_started_why(s, tid))
         self.assertNotIn('left without finishing', funnel.not_started_why(s, tid))
 
     def test_closing_the_task_is_not_a_saved_session(self):
@@ -117,4 +117,4 @@ class SavedIsItsOwnLaneTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             lanes = [i['lane'] for i in processing_unread.build(s, live_state=[], include_read=True)['items'] if i.get('tid') == tid]
         self.assertEqual(lanes, ['saved'])
-        self.assertEqual(funnel.LANE_WORDS['saved'][0], 'session saved')
+        self.assertEqual(funnel.LANE_WORDS['saved'][0], 'stopped and saved')

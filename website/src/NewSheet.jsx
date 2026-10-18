@@ -30,7 +30,7 @@ import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
-  { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "a live CLI session, or the assistant's own chat — the two doors triage picks between" },
+  { key: "agent",  mark: <TaskuaryMark size={14} />, label: "Give an agent a job", hint: "an agent works on it for you and reports back" },
   { key: "note",   mark: "💡", label: "Note to self", hint: "a reminder or an idea — nothing works it, it just sits on the day you pick" },
   { key: "goal",   mark: "🎯", label: "Set a goal", hint: "an outcome with a date and steps — the steps are tasks, and it stays on your rail until it is done" },
   // A JOB THAT REPEATS, one tab each (the owner, 2026-10-15: "we need 2, one for reports and one for workflows"): say it in
@@ -193,7 +193,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         });
         setOk(mode === "task"
           ? `${data.ref} — an agent is finding out first; the message is drafted when it is done.`
-          : `${data.ref} — drafted. It is on the Timeline waiting for you to send it.`);
+          : `${data.ref} — drafted. It is open now, waiting for you to send it.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "agent") {
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
@@ -347,7 +347,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 <Fork on={how === "terminal"} onClick={() => { setHow("terminal"); setModel(""); }} title="A live session"
                   hint="a CLI agent on a keyboard, in a checkout — it edits, runs and reports back." />
                 <Fork on={how === "general"} onClick={() => { setHow("general"); setModel(""); }} title="A general agent"
-                  hint="a researcher, analyst or writer on its own — no repository. It looks things up, drafts and reports back." />
+                  hint="a researcher, analyst or writer on its own. It looks things up, drafts and reports back." />
               </Box>
             </Box>
             {how === "general" && (
@@ -401,7 +401,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Label>And then</Label>
             <Box sx={{ display: "flex", gap: 1 }}>
               <Fork on={mode === "draft"} onClick={() => setMode("draft")} title="Draft it and show me"
-                hint="written in your voice from the thread. It lands on the Timeline as 🏁 ready to close out." />
+                hint="written in your voice from the thread. It opens for you as 🏁 ready to send and close out." />
               <Fork on={mode === "task"} onClick={() => setMode("task")} title="Find out first"
                 hint="an agent researches it, then drafts the message from what it actually found." />
             </Box>

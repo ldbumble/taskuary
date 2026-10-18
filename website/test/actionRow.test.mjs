@@ -62,7 +62,8 @@ test("the card's buttons leave the card on the canvas and come back on the Tasks
   assert.match(task, /useVerbs\("task"/);
   // ...but a decision's own buttons stay UNDER ITS DRAFT on every surface (the owner, 2026-10-06): none of them ride the row
   assert.doesNotMatch(read("ReviewDecision.jsx"), /\{!toRow && <>/);
-  assert.match(read("ReviewDecision.jsx"), /\], false\);   \/\/ the draft's own buttons are drawn under it/);
+  // ...registered as `card` verbs, so the row knows the card holds the move and never draws them (B4, 2026-10-17)
+  assert.match(read("ReviewDecision.jsx"), /\.map\(\(v\) => \(\{ \.\.\.v, card: true \}\)\), toRow\);/);
   assert.doesNotMatch(read("CanvasItem.jsx"), /data-tq-next/, "Next is the row's now; the view carries none of its own");
   assert.match(read("ActionRow.jsx"), /data-tq-next/);
 });
@@ -87,7 +88,7 @@ test("Next is the FIRST control of the row, then the types; no task number or wa
 test("the row by type: two buttons each, the rest behind that type's own arrow, the filled one always in view", async () => {
   const { clustersOf, typeOf } = await import("../src/actionRow.js");
   const row = rowOf({ ref: "", list: [v("reply", "decide", { tone: "p", label: "Write reply" }), v("email", "agent", { label: "Send out results" }),
-    v("hand", "more", { label: "Hand it to a person" }), v("continue", "agent", { label: "Continue session" }), v("run-another", "agent"),
+    v("hand", "more", { label: "Hand it to a person" }), v("continue", "agent", { label: "Keep going" }), v("run-another", "agent"),
     v("save-end", "more"), v("done", "more"), v("close-note", "more"), v("remind", "more"), v("nat", "more"), v("next", "next")] });
   const g = Object.fromEntries(clustersOf(row).map((c) => [c.type, c]));
   assert.deepEqual(clustersOf(row).map((c) => c.type), ["reply", "agent", "close", "task"]);
@@ -95,8 +96,8 @@ test("the row by type: two buttons each, the rest behind that type's own arrow, 
   assert.deepEqual(g.close.shown.map((x) => x.id), ["done", "close-note"]);
   assert.deepEqual([...g.task.shown, ...g.task.rest].map((x) => x.id).sort(), ["nat", "remind"]);
   // the Advisor's pick behind the arrow comes into view, filled
-  const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Continue session" }), v("run-another", "agent"), v("save-end", "more", { label: "Save and end session" })] },
-    { verb: "stop_agent", label: "Save and end session" }));
+  const picked = clustersOf(rowOf({ ref: "", list: [v("continue", "agent", { label: "Keep going" }), v("run-another", "agent"), v("save-end", "more", { label: "Stop and save" })] },
+    { verb: "stop_agent", label: "Stop and save" }));
   assert.equal(typeOf({ id: "save-end" }), "agent");
   assert.ok(picked[0].shown.some((x) => x.id === "save-end" && x.tone === "p"));
   assert.equal(typeOf({ id: "123:approve" }), "reply");                 // a draft's own verbs, by the act
@@ -160,7 +161,7 @@ test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as on
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
   assert.match(view, /const openTaskCard = \(req\) => \{\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
-  assert.match(view, /setStageMode\("chat"\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
+  assert.match(view, /setStageMode\("chat"\); browseDown\(\); toCard\.current = busy \|\| turnFlight\.current \? null : msgs\.length; surface\(key, asUser \|\| null\);/, "pull");
   assert.match(view, /const pullOrOpen = \(key, asUser, openByMid, openByItem\) => \{\n\s+browseDown\(\);/);
   assert.match(view, /\{ \.\.\.x, state, down: false \}/, "opening the same area again picks it back up");
   const browse = fs.readFileSync(path.join(process.cwd(), "src", "CanvasBrowse.jsx"), "utf8");
@@ -239,7 +240,7 @@ test("no word stands twice: a word on the bar is not repeated, nor behind More",
 });
 
 test("a live session's Mark done stands on the bar, outlined, and Next stays the filled one - room or not", () => {
-  const live = [v("diff", "agent", { label: "Review changes" }), v("save-end", "agent", { label: "Save and end session" }),
+  const live = [v("diff", "agent", { label: "Review changes" }), v("save-end", "agent", { label: "Stop and save" }),
     v("run-another", "agent", { label: "Run another agent" }), v("done", "more", { label: "Mark done", promote: false, beside: true }), v("next", "next")];
   const r = rowOf({ ref: "", list: live });
   assert.deepEqual(r.agent.map((x) => x.id), ["diff", "save-end", "run-another", "done"]);
@@ -268,10 +269,15 @@ test("how long it has waited on you: owed lanes only, from an hour, in the rail'
 
 test("one word on the bar, the whole name on hover and in the menus (canvas J3, 2026-10-13)", async () => {
   const { shortLabel } = await import("../src/actionRow.js");
-  assert.equal(shortLabel({ id: "continue", label: "Continue session" }), "Continue");
-  assert.equal(shortLabel({ id: "run-another", label: "Run another agent" }), "New");
+  assert.equal(shortLabel({ id: "continue", label: "Keep going" }), "Continue");
+  // plain words for someone who never wrote code (the audit, 2026-10-17): no "New", "Who", "End"; and Remove is what its dialog says
+  assert.equal(shortLabel({ id: "run-another", label: "Run another agent" }), "Another agent");
   assert.equal(shortLabel({ id: "close-note", label: "Close with a note" }), "Note");
-  assert.equal(shortLabel({ id: "nat", label: "Not a task" }), "Dismiss");
+  assert.equal(shortLabel({ id: "nat", label: "Remove - not a task" }), "Remove");
+  assert.equal(shortLabel({ id: "kind", label: "Change who does it" }), "Reassign");
+  assert.equal(shortLabel({ id: "save-end", label: "Stop and save" }), "Stop");
+  assert.equal(shortLabel({ id: "12:redraft", label: "Draft with AI" }), "Draft", "nothing drafted yet is not a Redraft");
+  assert.equal(shortLabel({ id: "answer_agent", label: "Answer it" }), "Answer it");
   assert.equal(shortLabel({ id: "12:approve", label: "Send & close" }), "Send");      // a draft's own verb, by its act
   assert.equal(shortLabel({ id: "reply", label: "Drafting…" }), "Drafting…");         // a state is said as it is
   assert.equal(shortLabel({ id: "remind", label: "Back Tue" }), "Back Tue");
@@ -289,4 +295,30 @@ test("one border around the three layers: the suggestion, the row and the box si
   const css = fs.readFileSync(path.join(process.cwd(), "src", "assistantView.css"), "utf8");
   assert.match(css, /\.tq-dock \{[^}]*border: 1px solid/);
   assert.match(css, /\.tq-dock \.tq-compose-box \{[^}]*border: 0;/);
+});
+
+// B4 (the audit, 2026-10-17): the card holds the move - a waiting draft's Send, under it - so advice never draws a second filled
+// Send on the bar (it took the proposal road and dropped the edit in the box), and a row verb advised beside it stays outlined
+test("the draft's own Send is a card verb: the Advisor finds it, the bar never draws it, and nothing on the bar fills", async () => {
+  const { advisedAny, holdsMove } = await import("../src/actionRow.js");
+  const list = [v("12:approve", "decide", { tone: "p", label: "Send & close", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
+    v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
+  assert.ok(holdsMove(list));
+  assert.equal(advisedAny(list, { verb: "approve", label: "Send & close" })?.id, "12:approve", "found, so no advice:approve is drawn");
+  const sent = rowOf({ ref: "", list }, { verb: "approve", label: "Send & close" });
+  assert.ok(![...sent.decide, ...sent.agent, ...sent.more].some((x) => x.card), "the card's buttons are never on the bar");
+  assert.deepEqual(filled(sent), []); assert.equal(sent.next.tone, "s");
+  const later = rowOf({ ref: "", list }, { verb: "defer", label: "Remind me" });
+  assert.deepEqual(filled(later), [], "an advised Remind me comes onto the bar outlined - the card's Send stays the one dark button");
+  assert.ok(later.agent.some((x) => x.id === "remind"));
+  // ...but only through a filled button: a card of outlined ones leaves the bar its own move
+  assert.ok(!holdsMove([v("12:redraft", "decide", { label: "Redraft", card: true }), v("next", "next")]));
+});
+
+test("the Advisor's own button for a move the row lacks is outlined where the card holds the move; a 409 says the suggestion changed", async () => {
+  const strip = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
+  assert.match(strip, /tone: held \? "s" : "p"/);
+  assert.match(strip, /status === 409 \? "This changed - here's the updated suggestion\."/);
+  assert.doesNotMatch(strip, /note\.model/, "no model names in the Why? box");
+  assert.doesNotMatch(strip, /e\.label \|\| e\.id/, "no evidence ids in the Why? box");
 });

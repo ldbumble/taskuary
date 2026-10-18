@@ -394,7 +394,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                   border: `1px solid ${BORDER}`, color: DIM, "& .MuiChip-label": { px: 0.65 } }} />
               </Box>
               {col.key === "agentdone" && <Typography variant="caption" sx={{ display: "block", color: FAINT, fontSize: 10, px: 0.4, mb: 0.85, lineHeight: 1.3 }}>
-                Finished today, or a reply it drafted waiting for your yes — older finished work lives in Tasks.
+                Finished today, or a reply it drafted waiting for your yes — search finds older finished work.
               </Typography>}
               {!cards.length && <Empty>Nothing here.</Empty>}
               {cards.map((t) => {

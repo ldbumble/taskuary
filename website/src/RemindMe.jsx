@@ -42,7 +42,7 @@ export function RemindPicker({ task, anchor, onClose, onDone, path, onLeave, onS
           {away ? `Away until ${remindDay(task.RemindAt)}` : "Bring it back on…"}</Typography>
         {live && !away ? (
           <Typography sx={{ fontSize: 12, color: "#7a2f3c" }}>
-            An agent session is still open on this task. Save and end session first, then put it away.</Typography>
+            An agent is still open on this task. Press Stop and save first, then put it away.</Typography>
         ) : <>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
             {QUICK.map(([label, until]) => (
@@ -75,7 +75,7 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
   const [at, setAt] = useState(null);
   const away = remindWaiting(task);
   const title = away ? `Away until ${remindDay(task.RemindAt)} - change the day or bring it back now`
-                     : "Remind me - put it away until a day; it is back on your work rail that morning";
+                     : "Remind me - put it away until a day; it waits under For later on your rail, and is back in front of you that morning";
   return (
     <>
       {compact

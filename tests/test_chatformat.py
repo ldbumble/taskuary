@@ -231,7 +231,7 @@ class PhoneDoorTests(unittest.TestCase):
         block = self.ra.decision_block(self.s, {'mid': mid, 'kind': 'report'}) + self.ra.more_text(self.s, {'mid': mid, 'kind': 'report'})
         self.assertNotIn('raw data', block)
         self.assertNotIn('Anthropic asked', block)                  # the evidence dump
-        self.assertNotIn('combined by triage', block)               # a report is not a thread
+        self.assertNotIn('messages in this thread', block)               # a report is not a thread
         self.assertIn(cf.BREAK, block)
         self.assertIn('People want', block)
         self.assertIn('In flight', block)

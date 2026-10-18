@@ -1,11 +1,16 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
 // ONE filled button at most (the decision; Next only when there is no decision), and a greyed decision says why it is greyed.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, press, rowOf, shortLabel, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, holdsMove, press, rowOf, shortLabel, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+
+// what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
+// the advice again, and the line says the suggestion is the new one
+export const proposeFailed = (e) => (e?.response?.status === 409 ? "This changed - here's the updated suggestion."
+  : e?.response?.data?.detail || "That did not go through - try again.");
 
 // THE ADVISOR'S SUGGESTION (advisor.py), over the row whose filled button it picked: the reason in a sentence, and Why? for the
 // reasoning behind it - the buttons stay on the row, the box below stays the owner's own. Nothing to say draws nothing (2026-10-13).
@@ -18,19 +23,22 @@ export function AdvisorNext({ advice, onPropose }) {
   // takes, stamped with the revision it was judged at, and the row fills it like any advised button
   const theirs = verbs.list.filter((v) => !String(v.id).startsWith("advice:"));
   const lacks = !!(advice?.verb && advice.line && onPropose) && !advisedAny(theirs, advice);
+  // ...a 409 says so once and stays over the suggestion the page reads next for this item; another item starts clean
+  useEffect(() => { setGoing(""); }, [advice?.for || advice?.key]);
   const run = async () => {
     setGoing("…");
-    try { await onPropose(advice); setGoing(""); } catch (e) { setGoing(e?.response?.data?.detail || "That did not go through - try again."); }
+    try { await onPropose(advice); setGoing(""); } catch (e) { setGoing(proposeFailed(e)); }
   };
-  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: "p", disabled: going === "…",
+  // ...outlined where the card already holds the move (a draft's Send, under it): one dark button per screen
+  const held = holdsMove(theirs);
+  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: held ? "s" : "p", disabled: going === "…",
     title: "What the Advisor suggests", run }] : [], lacks);
   if (!advice?.verb || !advice.line) return null;
-  // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Save and end session left Next the filled
+  // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
   // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
   const onRow = advisedIn(verbs.list, advice);
   if (!onRow) return null;
   const word = shortLabel(onRow);
-  const [n, m] = advice.count || [0, 0];
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);
     api.get("/api/advice/notes", { params: { key: advice.key, limit: 5 } })
@@ -44,13 +52,15 @@ export function AdvisorNext({ advice, onPropose }) {
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{word}</b> - the dark button below</div>
+          <div className="pick">Suggested: <b>{word}</b> - {onRow.card ? (onRow.tone === "p" ? "the dark button under the draft" : "under the draft") : holdsMove(verbs.list) ? "on the row below" : "the dark button below"}</div>
           <div className="said">{advice.line}</div>
-          {m >= 2 && <div className="fact">You chose {word} {n} of {m} times in a moment like this.</div>}
-          {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).length > 0 && (
+          {/* each count in words of what it measures (advisor.says) - a close that held is not an answer to a chase */}
+          {!!advice.says && <div className="fact">{advice.says}</div>}
+          {/* what it rests on, in words: an evidence id ("out13") or the model's name tells someone who never wrote code nothing */}
+          {note === null ? <div className="fact">Reading its notes…</div> : (note.evidence || []).some((e) => e.label) && (
             <div className="rests"><div className="head">What it rests on</div>
-              <ul>{note.evidence.map((e) => <li key={e.id}>{e.label || e.id}</li>)}</ul></div>)}
-          {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}{note.model ? ` · ${note.model}` : ""}</div>}
+              <ul>{note.evidence.filter((e) => e.label).map((e) => <li key={e.id}>{e.label}</li>)}</ul></div>)}
+          {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}</div>}
         </div>
       </Popover>
     </div>

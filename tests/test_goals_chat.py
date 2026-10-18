@@ -15,11 +15,11 @@ class GoalOpenerTests(unittest.TestCase):
         line = concierge.fallback(goal_item(), opening=True)
         self.assertIn('Migrate the census export off the old portal', line); self.assertIn('1 Dec', line)
         self.assertIn('Ray owes step 4', line); self.assertIn('slipped', line)
-        self.assertIn('move the date', line.lower())
+        self.assertIn('Mark done, Remind me, or move on.', line)   # the buttons it has (U2)
 
     def test_a_fresh_goal_offers_its_first_step(self):
         line = concierge.fallback(goal_item('goal_fresh', 'no steps yet'), opening=True)
-        self.assertIn('first step', line.lower())
+        self.assertIn('Mark done, Remind me, or move on.', line)
 
     def test_a_goal_on_track_needs_nothing(self):
         line = concierge.fallback(goal_item('goal', '2 of 7 · coding on step 3'), opening=True)

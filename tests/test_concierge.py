@@ -146,7 +146,7 @@ class TurnTests(unittest.TestCase):
         s = store()
         out = decided(s, 'can you do a deep dive on the ECC agent harness?', 'regular_agent', arg='do a deep dive on the ECC agent harness')
         p = out['proposal']
-        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'general', 'Start a regular agent on it'))
+        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'general', 'Start an agent on it'))
         self.assertIn('deep dive', p['params']['text']); self.assertEqual(s.list_tasks(active_only=True), [])   # nothing started on the words
         session = mock.Mock()
         with mock.patch.object(concierge.general, 'start_session', return_value=session), \
@@ -181,7 +181,7 @@ class TurnTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
-        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: approve the draft below', out['say'])
+        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send & close, Redraft it, or move on', out['say'])
         self.assertEqual(out['options'], [])
 
     def test_a_model_that_fails_still_leaves_a_line(self):
@@ -362,7 +362,7 @@ class BrainTests(unittest.TestCase):
             out = concierge.surface(s)
             # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
             # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
-            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: approve the draft below, or redraft it.')
+            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft it, or move on.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
@@ -927,7 +927,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: approve the draft below, or redraft it.')      # the facts, instant (2026-09-07)
+            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft it, or move on.')      # the facts, instant (2026-09-07)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)
@@ -1018,3 +1018,73 @@ class ForLaterLine(unittest.TestCase):
         self.assertEqual(out['say'], "That's everything for now. 2 things you put aside wait under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
                                      "Open one now if you want it sooner.")
         self.assertEqual(concierge._back_words('not a time'), 'back in a while')
+
+
+class NonCoderWordsTests(unittest.TestCase):
+    """The 2026-10-17 audit: every line and button the Assistant draws is one a non-coder can act on."""
+    def test_a_failed_report_leads_with_run_it_again(self):
+        """B7: the line said "run it again" over a card with no such button."""
+        it = {'key': 'report:5', 'kind': 'report', 'title': 'Weekly AR', 'bad': True, 'source_id': 3, 'mid': 5, 'when': ago(1)}
+        self.assertEqual(concierge.chips_for(MemoryStore(), it)[0]['verb'], 'rerun')
+        self.assertIn('Run it again, or move on.', concierge.fallback(it, False, store=MemoryStore()))
+        fine = {**it, 'bad': False}
+        self.assertNotEqual(concierge.chips_for(MemoryStore(), fine)[0]['verb'], 'rerun')
+        self.assertNotIn('make it a task', concierge.fallback(fine, False, store=MemoryStore()).lower())     # U11: read and passed
+
+    def test_an_agent_asking_is_answered_first_and_a_stall_is_not(self):
+        """U7: "Stop and save" led a card whose agent was waiting on an answer."""
+        it = {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'title': 'Totals', 'asking': True, 'agent': 'the assistant', 'tail': ['Which month?']}
+        chips = concierge.chips_for(None, it)
+        self.assertEqual((chips[0]['verb'], chips[0]['label']), ('answer_agent', 'Answer it'))
+        self.assertIn('Stop and save', [c['label'] for c in chips])
+        stalled = {**it, 'asking': False, 'request_kind': 'stalled'}
+        self.assertNotIn('answer_agent', [c['verb'] for c in concierge.chips_for(None, stalled)])
+
+    def test_the_waiting_count_says_goals_in_words_and_it_follows_the_count(self):
+        """B14: "1 goal_slipped" and "them" over one thing."""
+        self.assertEqual(concierge.waiting_line([{'kind': 'goal_slipped'}, {'kind': 'goal_fresh'}, {'kind': 'agent'}]),
+                         '3 waiting: 1 goal that slipped, 1 goal not started yet, 1 agent question.')
+        one = concierge.fallback(None, False, [{'kind': 'asked'}])
+        self.assertIn("take you through it,", one)
+
+    def test_no_ai_is_said_once_with_the_link_on_the_desk_and_in_words_on_the_phone(self):
+        """U3: "set one up" twice in one reply, the second a raw "#cli-agents"."""
+        desk = concierge.fallback(None, False, [{'kind': 'asked'}])
+        self.assertEqual(desk.count('Connect an AI'), 1); self.assertIn('](#cli-agents)', desk)
+        with concierge.delivering(concierge.PHONE):
+            self.assertNotIn('#cli-agents', concierge.fallback(None, False, [{'kind': 'asked'}]))
+
+    def test_the_line_names_only_buttons_the_item_has(self):
+        """U2: "Prep me" over a meeting whose only button is Next; "continue it now" with no Continue."""
+        meet = concierge.fallback({'key': 'meeting:1', 'kind': 'meeting', 'title': 'Budget review', 'why': 'at 2:00 PM'}, False)
+        self.assertNotIn('Prep me', meet)
+        goal = concierge.fallback({'key': 'goal:1', 'kind': 'goal_slipped', 'title': 'Close Q3', 'tid': 4, 'ref': 'TQ-0004'}, False)
+        self.assertNotIn('Move the date', goal); self.assertIn('Mark done', goal)
+
+    def test_a_finished_agent_line_ends_its_sentence_and_the_phone_is_not_sent_to_a_card(self):
+        """B19: "...Updated the totals Its full report is on the card." - and a phone has no card."""
+        it = {'key': 'done:1', 'kind': 'agentdone', 'title': 'Totals', 'ref': 'TQ-0001', 'who': 'Erin', 'summary': 'Updated the totals'}
+        self.assertEqual(concierge.fallback(it, False), 'Erin finished TQ-0001: Updated the totals. Its full report is on the card.')
+        with concierge.delivering(concierge.PHONE):
+            self.assertTrue(concierge.fallback(it, False).endswith('Open it to read the full report.'))
+
+    def test_remind_me_says_where_the_task_waits_now(self):
+        """B8: "Upcoming in Tasks" was a tab that no longer exists."""
+        said = concierge.away_line({'remindAt': '2026-10-20 08:00:00', 'when': 'Tuesday'})
+        self.assertEqual(said, 'Away until Tuesday - it is under For later on your rail, and back in front of you that morning.')
+        self.assertNotIn('Tasks', concierge.CHIP_HINTS['defer'])
+
+    def test_nothing_drafted_offers_draft_with_ai(self):
+        it = {'key': 'review:1', 'kind': 'review', 'rid': 1, 'mid': 2, 'tid': 3, 'title': 'Lease', 'draft': ''}
+        self.assertIn('Draft with AI', [c['label'] for c in concierge.chips_for(None, it)])
+        self.assertIn('Redraft it', [c['label'] for c in concierge.chips_for(None, {**it, 'draft': 'Hi Gail'})])
+
+    def test_with_no_coding_tool_a_coding_hand_off_is_send_to_agent(self):
+        """B3: Coding agent was offered, then refused with "There is no coding agent on this computer"."""
+        from taskuary import agents
+        s = MemoryStore()
+        with mock.patch.object(agents, 'coding_ready', return_value=False):
+            self.assertEqual(concierge.handoff_verb(s, 'coding_agent'), 'regular_agent')
+            self.assertNotIn('coding agent', concierge.tools_block(s).split('NEVER use')[0].replace('Never mention or offer a coding agent', ''))
+        with mock.patch.object(agents, 'coding_ready', return_value=True):
+            self.assertEqual(concierge.handoff_verb(s, 'coding_agent'), 'coding_agent')

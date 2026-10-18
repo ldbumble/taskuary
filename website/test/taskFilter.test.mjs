@@ -100,7 +100,7 @@ test("with a live session, X steps back to the task first and the session keeps 
   // page opens on rather than the pane that has finished (2026-09-22)
   assert.match(source, /if \(!liveSession\) \{ setPeek\(false\); setOpenStage\(null\); \}/, "the session ending puts the page back");
   assert.match(source, /workspaceMode === "live" && peek \?/, "the terminal folds to a line instead of unmounting the page");
-  assert.match(source, /Back to the session/);
+  assert.match(source, /Back to the agent/);
   // the task card, the reply card, context & history and earlier runs all come back while peeking
   // (the steps are sections of one card since the 2026-10-06 cleanup - `...card, ...step` - the gates are the same)
   for (const gate of [/\{!sessionView && \(\s*<Box sx=\{\{ \.\.\.card, \.\.\.step/, /\{!sessionView && <Fold title=\{`Context & history/,

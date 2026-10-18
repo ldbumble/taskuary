@@ -49,15 +49,15 @@ test("every live agent ends the same way, and never without being written up", (
   // Three controls all ended the session and differed only in what they wrote down - a result, a
   // handover note, or nothing - which is unreadable as three labels (the owner, 2026-09-16: "save
   // result vs end session vs stop session???"). One ending now, and it writes up either way.
-  assert.match(controls, />Save and end session<\/Button>/);
+  assert.match(controls, />Stop and save<\/Button>/);
   // and NO way to end one without that write-up (the owner: "meaning no stop without saving")
   assert.doesNotMatch(controls, />Stop session<\/Button>/);
   assert.doesNotMatch(controls, /handover<\/Button>/);
   // the parity this has always guarded: the ending is not gated on a coding session, so a general
   // agent ends exactly as a coding one does
-  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Save and end session/);
+  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Stop and save/);
   // ...and the action row (layout B) registers the same ending for the canvas, gated on the live session alone
-  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: "Save and end session"/);
+  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: "Stop and save"/);
 });
 
 test("task references use readable sans-serif digits", () => {

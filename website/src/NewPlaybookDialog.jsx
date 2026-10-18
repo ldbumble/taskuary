@@ -102,7 +102,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
     <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>
       {task ? <>
         <Button href={`#task=${task.TaskId}`} onClick={onClose}>Open task</Button>
-        <Typography sx={{ mr: "auto", fontSize: 12, color: "text.secondary" }}>Saved in Tasks so you can return later.</Typography>
+        <Typography sx={{ mr: "auto", fontSize: 12, color: "text.secondary" }}>Saved as {task.ref || `TQ-${String(task.TaskId).padStart(4, "0")}`} - search finds it when you want to come back.</Typography>
         <Button onClick={onClose}>Close</Button>
       </> : <>
         <Button onClick={onManual} disabled={busy} sx={{ mr: "auto" }}>Write manually</Button>

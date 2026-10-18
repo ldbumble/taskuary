@@ -52,3 +52,13 @@ test("studioElapsed takes the live row's start first, then the session's, then t
   assert.equal(studioElapsed({ RunStartedAt: at(30) }, null, now), "30s");
   assert.equal(studioElapsed(task, { StartedAt: "2026-09-28 11:59:55" }, now), "5s");
 });
+
+test("an agent the Board lists as waiting on you is waiting here too, not working (B20)", () => {
+  const now = Date.parse("2026-09-10T12:21:00");
+  const quiet = { Status: "in_progress", Kind: "general", RunStatus: "running", RunAgent: "atlas", RunStartedAt: "2026-09-10 12:00:00" };
+  assert.equal(studioTaskState(quiet, { kind: "session", waiting: true }, [], now).label, "waiting on you");
+  assert.equal(studioTaskState(quiet, { kind: "session", idle: 60 }, [], now).label, "waiting on you");
+  assert.equal(studioTaskState({ ...quiet, State: "blocked" }, null, [], now).tone, "waiting");
+  assert.equal(studioTaskState({ ...quiet, Session: { alive: true, waiting: true } }, null, [], now).pose, "hand");
+  assert.equal(studioTaskState(quiet, { kind: "session", waiting: false }, [], now).label, "working · 21m");
+});

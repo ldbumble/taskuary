@@ -9,11 +9,12 @@ import { readFileSync } from "node:fs";
 const src = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 
 test("opening a general task picks its own role, or blank - never the roster's first name", () => {
-  assert.match(src, /agent: agents\.includes\(owned\) \? owned : isGeneralKind\(task\.Kind\) \? "" : codingProfile\(agents, kinds\)/);
+  // ...and nor is any task when no coding tool is connected: the general agent is the only one there is (B3)
+  assert.match(src, /agent: agents\.includes\(owned\) \? owned : isGeneralKind\(task\.Kind\) \|\| !canCode \? "" : codingProfile\(agents, kinds\)/);
   assert.doesNotMatch(src, /agents\[0\]/);
 });
 
 test("the roster check leaves a general task's blank alone", () => {
   // ...and a hand-off's on any task: blank there is "its own profile", not a gap for researcher to fill (2026-10-15)
-  assert.match(src, /!agents\.includes\(run\.agent\) && !\(\(generalTask \|\| handOff\) && !run\.agent\)/);
+  assert.match(src, /!agents\.includes\(run\.agent\) && !\(\(generalTask \|\| handOff \|\| !canCode\) && !run\.agent\)/);
 });

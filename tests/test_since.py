@@ -39,7 +39,18 @@ class SinceTests(unittest.TestCase):
         s._exec("UPDATE transcript SET CreatedAt='2026-10-07 01:00:00'"); s._exec("UPDATE worker_event SET CreatedAt='2026-10-07 01:00:00'")
         out = since.overnight(s, NOW)
         self.assertEqual((out['sessions'], out['stopped']), (1, 1))
-        self.assertEqual(out['line'], 'Since last night: 1 agent session finished, 1 stopped before finishing.')
+        self.assertEqual(out['line'], 'Since last night: 1 agent finished, 1 stopped before finishing.')
+
+    def test_the_hidden_guide_chat_retired_by_new_chat_is_not_a_task_closed(self):
+        """B16: New chat closes the internal guide conversation - "1 task closed" on a quiet morning was that."""
+        from taskuary import general
+        s = MemoryStore()
+        dock = general.dock_task(s, 'owner')[0]['TaskId']
+        mine = s.create_task({'Title': 'Send Erin the totals', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        for t in (dock, mine): s._exec("UPDATE task SET Status='done', ClosedAt='2026-10-07 01:00:00' WHERE TaskId=?", (t,))
+        out = since.overnight(s, NOW)
+        self.assertEqual(out['closed'], 1)
+        self.assertEqual(out['line'], 'Since last night: 1 task closed.')
 
     def test_a_quiet_night_says_nothing(self):
         self.assertEqual(since.overnight(MemoryStore(), NOW)['line'], '')

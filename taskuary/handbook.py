@@ -53,6 +53,8 @@ TITLE_MAX, BODY_MAX = 140, 700
 # The vote is the moderation. An entry the room has voted below zero leaves the tab and the
 # agents' seed prompt, kept as 'downvoted' so it can be read back or restored - never deleted.
 RETIRE_BELOW = 0
+# the activity box reads an audit row as "<entity> <action>": 'lore' showed "lore post" - the table's old name, not the tab's (U19)
+AUDIT = 'hub'
 KINDS = ('new_idea', 'technical_solve', 'howto', 'gotcha', 'decision', 'system', 'people')
 KIND_HINT = {'new_idea': 'a developed new idea for the company and why it is promising',
              'technical_solve': 'a difficult technical problem and the reusable solution',
@@ -145,7 +147,7 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
         vote(store, have['LoreId'], 1, author)
         if body and body != (have.get('Body') or '') and body not in (have.get('Body') or ''):
             store.lore_comment(have['LoreId'], body, author)
-        store.audit('lore', have['LoreId'], 'agree', author, 'agent',
+        store.audit(AUDIT, have['LoreId'], 'agree', author, 'agent',
                     {'topic': tp, 'said': title[:120], 'why_earned': str(why_earned or '')[:500]})
         return {**dict(store.lore_get(have['LoreId'])), 'merged': True}
     # A TITLE THAT WAS RETIRED: the write below refreshes that row by its signature and left it retired - the post vanished
@@ -157,7 +159,7 @@ def post(store, title: str, body: str = '', topic: str = '', kind: str = 'howto'
     lid = store.lore_put({'Topic': tp, 'Title': title, 'Body': body, 'Kind': kind, 'TaskId': task_id,
                           'Cwd': cwd or '', 'Sig': sig_of(tp, title)}, author)
     if gone: store.lore_restore(lid)
-    store.audit('lore', lid, 'post', author, 'agent',
+    store.audit(AUDIT, lid, 'post', author, 'agent',
                 {'topic': tp, 'kind': kind, 'why_earned': str(why_earned or '')[:500]})
     return {**dict(store.lore_get(lid)), 'merged': False}
 
@@ -171,7 +173,7 @@ def vote(store, lid: int, delta: int, actor: str = 'owner') -> dict:
     score = store.lore_vote(lid, 1 if int(delta) >= 0 else -1, actor)
     if score < RETIRE_BELOW and p['Status'] == 'live':
         store.lore_retire(lid, actor, 'downvoted')
-        store.audit('lore', lid, 'downvoted_out', actor, 'agent', {'score': score})
+        store.audit(AUDIT, lid, 'downvoted_out', actor, 'agent', {'score': score})
     elif score >= RETIRE_BELOW and p['Status'] == 'downvoted':
         store.lore_restore(lid)
     return dict(store.lore_get(lid))

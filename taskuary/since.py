@@ -34,7 +34,11 @@ def overnight(store, now: datetime = None) -> dict:
     since = start.strftime('%Y-%m-%d %H:%M:%S')
     mail = came_in(store, start)
     reports = _n(store, "SELECT COUNT(*) n FROM message WHERE CreatedAt>=? AND Channel='report'", (since,))
-    closed = _n(store, "SELECT COUNT(*) n FROM task WHERE ClosedAt>=? AND Status='done'", (since,))
+    # the owner's work only: New chat retires the hidden guide conversation, and that read "1 task closed" on a quiet morning (B16)
+    from .general import DOCK_TAG
+    from .store import INTERNAL_TASK_BASE
+    closed = _n(store, "SELECT COUNT(*) n FROM task WHERE ClosedAt>=? AND Status='done' AND TaskId<? AND IFNULL(SourceRef,'')!=?",
+                (since, INTERNAL_TASK_BASE, DOCK_TAG))
     # FINISHED IS THE RUN SAYING SO (workerstate 'finished'), never a transcript row: one is filed the moment a hook names the CLI's
     # session id, and again when a close kills the pane - so sessions the window's X cut off read "finished" (B3, 2026-10-11).
     # The ones whose run ended any other way are said apart.
@@ -43,7 +47,7 @@ def overnight(store, now: datetime = None) -> dict:
                     "AND CreatedAt>=? AND NOT EXISTS (SELECT 1 FROM worker_event f WHERE f.TaskId=w.TaskId AND f.Sid=w.Sid AND f.Kind='finished')",
              (since,))
     parts = [p for n, p in ((mail, _plural(mail, 'message') + ' read'), (reports, _plural(reports, 'report') + ' ran'),
-                            (sessions, _plural(sessions, 'agent session') + ' finished'), (cut, (f'{cut}' if sessions else _plural(cut, 'agent session')) + ' stopped before finishing'),
+                            (sessions, _plural(sessions, 'agent') + ' finished'), (cut, (f'{cut}' if sessions else _plural(cut, 'agent')) + ' stopped before finishing'),
                             (closed, _plural(closed, 'task') + ' closed')) if n]
     return {'line': (f'{word}: ' + ', '.join(parts) + '.') if parts else '', 'heading': word if word.startswith('Since') else f'{word} · since {_clock(start)}',
             'mail': mail, 'reports': reports, 'closed': closed, 'sessions': sessions, 'stopped': cut}

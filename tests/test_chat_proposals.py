@@ -105,7 +105,7 @@ class ProposalTests(unittest.TestCase):
         first = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')['proposal']
         second = say(s, 'no - a regular agent, it is just reading', key=item['key'], model='A regular agent then.\nCALL: {"kind": "regular_agent", "params": {}}')['proposal']
         self.assertEqual((second['id'], second['version'], second['params']['kind']), (first['id'], 2, 'general'))
-        self.assertEqual(second['label'], 'Send to a regular agent')
+        self.assertEqual(second['label'], 'Send to agent')
         self.assertEqual(run(s, first).status_code, 409)                             # the old confirmation is stale
         self.assertEqual(operations.get(s, first['id'])['status'], 'proposed')
 
@@ -138,8 +138,9 @@ class InterpretationTests(unittest.TestCase):
 
     def test_a_clarifying_question_proposes_nothing(self):
         s, tid, mid, item = asked()
-        out = say(s, 'send to agent', key=item['key'], model='Which kind should take it?\nOPTIONS: Coding agent | Regular agent')
-        self.assertIsNone(out.get('proposal')); self.assertEqual(out['options'], ['Coding agent', 'Regular agent'])
+        # every hand-off is Send to agent (COUNSEL, 2026-10-17): the question that is left is yours or an agent's
+        out = say(s, 'deal with this', key=item['key'], model='Should I put it on your list, or hand it off?\nOPTIONS: Make a task | Send to agent')
+        self.assertIsNone(out.get('proposal')); self.assertEqual(out['options'], ['Make a task', 'Send to agent'])
 
     def test_a_decision_that_names_another_item_targets_that_one_and_an_unknown_name_asks(self):
         s, tid, mid, item = asked()
@@ -284,6 +285,26 @@ class HandoffTests(unittest.TestCase):
         with mock.patch.object(server, 'store', s):
             TestClient(server.app).delete(f"/api/operations/{p['id']}")
         self.assertEqual(run(s, p).status_code, 409); self.assertEqual([i['key'] for i in pile(s)], [item['key']])
+
+
+class NoCodingToolTests(unittest.TestCase):
+    """Coding exists only where a coding tool is connected: COUNSEL offered "Coding agent | Regular agent" to a finance user, who
+    picked coding and was refused (2026-10-17 audit)."""
+    def test_without_a_coding_tool_the_chat_never_hears_of_coding(self):
+        from taskuary import agents, counsel
+        s = MemoryStore()
+        with mock.patch.object(agents, 'coding_ready', return_value=False): text = counsel.for_chat(s)
+        self.assertNotRegex(text.lower(), r'coding|repositor'); self.assertIn('Send to agent', text)
+        with mock.patch.object(agents, 'coding_ready', return_value=True): text = counsel.for_chat(s)
+        self.assertIn('OPTIONS: Coding agent | Regular agent', text)
+
+    def test_an_owners_copy_that_still_talks_coding_gets_the_one_rule(self):
+        from taskuary import agents, counsel
+        s = MemoryStore(); s.save_doc('counsel', '# Mine\n\n- Code fixes go to the coding agent.\n', 'owner')
+        with mock.patch.object(agents, 'coding_ready', return_value=False): text = counsel.for_chat(s)
+        self.assertTrue(text.startswith('# Mine') and text.endswith(counsel.NO_CODING))
+        s.save_doc('counsel', '# Mine\n\n- Speak plainly.\n', 'owner')
+        with mock.patch.object(agents, 'coding_ready', return_value=False): self.assertEqual(counsel.for_chat(s), '# Mine\n\n- Speak plainly.')
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 // The first-run review waits for evidence, rather than calling a started request a result.
 export async function startFirstSync(api) {
   const { data } = await api.post("/api/ingest/poll");
-  if (!["running", "busy"].includes(data?.report)) throw new Error("The source read did not start. Try again.");
+  if (!["running", "busy"].includes(data?.report)) throw new Error("Couldn't start reading your mail - try again.");
   return data.report;
 }
 
@@ -15,6 +15,6 @@ export async function firstSyncProgress(api) {
   if (status.status?.state === "running")
     return { phase: "reading", message: status.status.what || "Reading your connected sources…", state };
   if (state.steps?.find((step) => step.key === "sync")?.done)
-    return { phase: "ready", message: "Your first items are ready. Open one to check its verdict or draft.", state };
-  return { phase: "empty", message: "The read finished without a reviewable item. Check the source scope, or send a new message to the connected account and read again.", state };
+    return { phase: "ready", message: "Your first items are ready. Open one to see how it was sorted and any draft.", state };
+  return { phase: "empty", message: "The read finished with nothing to look at yet. Check which folders the connection reads, or send a new message to that mailbox and read again.", state };
 }

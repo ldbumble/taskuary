@@ -23,7 +23,7 @@ test("the picker warns instead of offering days while the agent is open, and nev
   const src = read("RemindMe.jsx");
   const picker = src.slice(src.indexOf("export function RemindPicker"), src.indexOf("export default function RemindMe"));
   assert.match(picker, /live/);
-  assert.match(picker, /Save and end session/);
+  assert.match(picker, /Stop and save/);
   assert.match(picker, /\{live && !away \?/, "the warning takes the days' place");
 });
 

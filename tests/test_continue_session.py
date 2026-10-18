@@ -1,4 +1,4 @@
-"""Continue session (A19, the owner, 2026-09-25): a pill on work an agent left - stopped, saved by you, or paused when
+"""Keep going (A19, the owner, 2026-09-25): a pill on work an agent left - stopped, saved by you, or paused when
 Taskuary stopped - for coding and non-coding agents alike, with what to tell it as it picks up."""
 import json, unittest
 from unittest import mock
@@ -16,7 +16,7 @@ class PillTests(unittest.TestCase):
         s = MemoryStore()
         for extra in ({'lane': 'stopped'}, {'lane': 'saved'}, {'lane': 'blocked', 'paused': True, 'kind': 'agent'}):
             item = {'key': 'k', 'kind': 'todo', 'tid': 7, 'ref': 'TQ-0007', **extra}
-            self.assertEqual(concierge.chips_for(s, item)[0]['label'], 'Continue session', extra)
+            self.assertEqual(concierge.chips_for(s, item)[0]['label'], 'Keep going', extra)
         self.assertNotIn('continue', [c['verb'] for c in concierge.chips_for(s, {'key': 'k', 'kind': 'todo', 'tid': 7, 'lane': 'yours'})])
 
     def test_a_general_agent_is_continued_in_its_chat_so_there_is_no_pill(self):

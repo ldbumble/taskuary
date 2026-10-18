@@ -67,7 +67,7 @@ and no model reads it. Only words you type go to the model.
 | anything typed - "next", "undo" and "set up" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
 
 Typed words are answered by the **Assistant's** brain - the same one, and the same model, as the Assistant in the app
-(Settings → Triage & agents → Assistant). A Claude Assistant runs at **low effort** unless its model names one
+(Settings → How mail is sorted → Assistant). A Claude Assistant runs at **low effort** unless its model names one
 (`claude-sonnet-5@medium`): a turn is a short answer, and Sonnet's own default is high.
 
 ### Approving things

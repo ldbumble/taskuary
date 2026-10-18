@@ -40,27 +40,27 @@ STOPS = [
     # how most of these get set up (the owner, 2026-09-17: "you cant setup azure ai from here").
     {'key': 'ai', 'can': [
         _can('paste an API key on a provider card - Azure OpenAI, OpenAI, Anthropic, OpenRouter', 'Connections'),
-        _can('or sign in to a coding CLI you already pay for - Claude Code, Codex - in a terminal right here',
+        _can('or sign in with a coding tool you already pay for - Claude Code, Codex',
              'Connections', 'cli-agents'),
-        _can('either one is enough; triage reads your mail on whichever you pick', 'Settings',
-             'settings=config&group=Triage%20%26%20agents')]},
+        _can('either one is enough; your mail is sorted by whichever you pick', 'Settings',
+             'settings=config&group=How%20mail%20is%20sorted')]},
     {'key': 'inbound', 'can': [
         _can('connect a mailbox - Outlook, Gmail, or any IMAP host', 'Connections'),
-        _can('or use one chat or issue tracker as your first source', 'Connections'),
+        _can('or start with a work chat such as Teams or Slack', 'Connections'),
         _can('test a card before waiting on a schedule', 'Connections')]},
     {'key': 'sync', 'can': [
         # Sync now lives on the Assistant tab as well as on each connection card, and this stop's
         # own goto is the checklist's - so sending the first line anywhere else was a stop arguing
         # with the button above it
         _can('read your connected sources with the button below'),
-        _can('open one of the first five results to check its verdict or draft')]},
+        _can('open one of the first five to see how it was sorted and any draft')]},
 
     {'key': 'models', 'title': 'Optional: models and agents',
      'blurb': 'The existing model defaults are enough to start. Adjust costs, add a coding agent, '
               'or choose separate models after you have reviewed your first result.',
-     'goto': _goto('Settings', 'settings=config&group=Triage%20%26%20agents'), 'can': [
-        _can('choose a model for routine triage', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
-        _can('choose another brain for the assistant or agent', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
+     'goto': _goto('Settings', 'settings=config&group=How%20mail%20is%20sorted'), 'can': [
+        _can('choose which AI sorts your mail', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
+        _can('choose a different AI for the assistant or the agents', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
         _can('keep the current defaults and continue')]},
 
     {'key': 'connections', 'title': 'Connections', 'image': '/walk/connections.png',
@@ -90,7 +90,7 @@ STOPS = [
      'blurb': 'The knobs. Most people change three and never come back: what drafts automatically, '
               'how finished work lands, and what reaches them.',
      'goto': _goto('Settings'), 'can': [
-        _can('choose the triage brain and its backups', 'Settings', 'settings=config&group=Triage%20%26%20agents'),
+        _can('choose which AI sorts your mail, and its backups', 'Settings', 'settings=config&group=How%20mail%20is%20sorted'),
         _can('decide whether replies draft themselves', 'Settings'),
         _can('write routing policies the AI can never override', 'Settings', 'settings=policies'),
         _can('see every verdict it learned from, and switch off the wrong ones', 'Settings', 'settings=memory'),
@@ -131,7 +131,7 @@ STOPS = [
      'goto': _goto('Assistant'), 'can': [
         _can('press Next and go through what is waiting'),
         _can('reply, or hand the item to an agent'),
-        _can('say it is not ours - and triage remembers that'),
+        _can('say it is not yours - and it is remembered'),
         _can('ask anything in your own words')]},
     {'key': 'hub', 'title': 'Hub', 'image': '/walk/hub.png',
      'blurb': 'What the company knows, in one place - the durable posts, the people, the systems. '

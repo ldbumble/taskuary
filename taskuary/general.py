@@ -398,7 +398,7 @@ def report_note(store, tid: int):
     """What the agent did, for a general session as for a coding one (the owner, 2026-10-09: "general agent should also have
     the summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). A coding session
     ends with an AGENT REPORT note - its summary and LAST MESSAGE - and that note is what the task card shows; a chat ended
-    with nothing but its turns unless the owner pressed Save and end session (wrapup.wrap) - closed by the agent or put away, it
+    with nothing but its turns unless the owner pressed Stop and save (wrapup.wrap) - closed by the agent or put away, it
     left no result. Its last answer, filed verbatim (no model boils the conversation down), once: the same answer is not filed twice."""
     last = next((str(c.get('Body') or '').strip() for c in reversed(chat_rows(store, tid)) if c.get('ActorType') == ASSISTANT_TYPE), '')
     if not last: return None

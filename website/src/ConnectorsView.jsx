@@ -116,7 +116,7 @@ const META = {
   outlook: { group: "Messaging", channel: "email", srcLabel: "Mailboxes", srcPh: "someone@yourdomain.com",
     fields: [["tenant_id (tenant app only)", "tenant_id"], ["client_id (your own app - sign-in or tenant app)", "client_id"]],
     secretLabel: "client secret (tenant app only)",
-    desc: "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+    desc: "Your Microsoft mailbox, read and sorted for you. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
     howto: ["Sign in with Microsoft (anyone): Credentials → Sign in with Microsoft → open microsoft.com/devicelogin, enter the code, sign in with your own account and accept. That is mail, sending and calendar for your mailbox - work or personal (Outlook.com). Nobody registers anything.",
       "\"Need admin approval\": some organisations let only an admin say yes to a new app. The card then shows an approval link - forward it to your Microsoft 365 admin. They sign in, click Accept once, and everyone in the organisation can sign in from then on. It is a consent grant on Taskuary's app id, not an app registration on their side; the yellow \"unverified publisher\" note on their screen is expected.",
       "Register your own Microsoft app (optional - if your organisation only approves apps it registered itself, or you want your own name on the consent screen). portal.azure.com → Microsoft Entra ID → App registrations → New registration: name it Taskuary; Supported account types: \"Accounts in any organizational directory and personal Microsoft accounts\" (or just your organisation); Redirect URI: platform \"Mobile and desktop applications\", tick https://login.microsoftonline.com/common/oauth2/nativeclient → Register.",
@@ -144,7 +144,7 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
     fields: [pollSecondsField("slack")], secretLabel: "bot token (xoxb-…)",
-    desc: "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
+    desc: "Ingest Slack channels with a bot token - messages come in and are sorted like your mail.",
     howto: ["Create a Slack app (api.slack.com/apps) → OAuth & Permissions → bot token scopes: channels:history, channels:read.",
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
       "Paste the xoxb- bot token under Credentials (write-only).",
@@ -247,7 +247,7 @@ const META = {
   jira: { group: "Project management", channel: "jira", srcLabel: "Site", srcPh: "yourteam.atlassian.net",
     fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"]],
     secretLabel: "API token",
-    desc: "Jira issues ASSIGNED TO YOU land on the Timeline through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
+    desc: "Jira issues ASSIGNED TO YOU come in and are sorted like your mail — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
     howto: ["Create an API token: id.atlassian.com → Security → Create API token.",
       "Enter the site URL and the account email under Credentials, paste the token (write-only).",
       "Test authenticates as you and adds the site under Sources.",
@@ -256,7 +256,7 @@ const META = {
   asana: { group: "Project management", channel: "asana", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "Personal Access Token",
-    desc: "Asana tasks ASSIGNED TO YOU land on the Timeline through triage, linking back to Asana.",
+    desc: "Asana tasks ASSIGNED TO YOU come in and are sorted like your mail, linking back to Asana.",
     howto: ["Create a Personal Access Token: app.asana.com/0/my-apps → Create new token.",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test authenticates, finds your workspace and adds it under Sources.",
@@ -265,7 +265,7 @@ const META = {
   monday: { group: "Project management", channel: "monday", srcLabel: "Account", srcPh: "added by Test",
     fields: [["board ids to watch, comma-separated (blank = your 25 most recently used boards)", "board_ids"]],
     secretLabel: "API token",
-    desc: "Monday.com items ASSIGNED TO YOU (any People column naming you) land on the Timeline through triage.",
+    desc: "Monday.com items ASSIGNED TO YOU (any People column naming you) come in and are sorted like your mail.",
     howto: ["Get an API token: your avatar → Developers → My access tokens (admin tokens work too).",
       "Paste it under Credentials (write-only). Test authenticates and remembers who 'you' are.",
       "Monday has no assigned-to-me API, so the poll walks boards and keeps items whose People column names you — blank config walks your 25 most recently used boards; list board ids to pin it down (the number in the board's URL).",
@@ -274,7 +274,7 @@ const META = {
   clickup: { group: "Project management", channel: "clickup", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "API token (starts pk_)",
-    desc: "ClickUp tasks ASSIGNED TO YOU land on the Timeline through triage, with their list, status and priority.",
+    desc: "ClickUp tasks ASSIGNED TO YOU come in and are sorted like your mail, with their list, status and priority.",
     howto: ["Get a personal API token: Settings → Apps → API Token → Generate. It starts pk_ and does not expire.",
       "Paste it under Credentials (write-only). ClickUp wants the token raw, so don't add 'Bearer' — Taskuary handles the header.",
       "Test authenticates, remembers who 'you' are and which Workspace to walk, and adds it under Sources.",
@@ -283,7 +283,7 @@ const META = {
   todoist: { group: "Project management", channel: "todoist", srcLabel: "Account", srcPh: "added by Test",
     fields: [["filter query (blank = (today | overdue))", "filter"]],
     secretLabel: "API token",
-    desc: "The Todoist tasks a filter says are live — due today and overdue by default — land on the Timeline through triage.",
+    desc: "The Todoist tasks a filter says are live — due today and overdue by default — come in and are sorted like your mail.",
     howto: ["Get your API token: avatar → Settings → Integrations → Developer → copy the API token.",
       "Paste it under Credentials (write-only).",
       "Todoist is a personal list, so most tasks have no assignee and 'assigned to me' would match only shared projects. The poll asks a FILTER QUERY instead — what Todoist itself says is live.",
@@ -293,7 +293,7 @@ const META = {
   gitlab: { group: "Developer", channel: "gitlab", srcLabel: "Instance", srcPh: "added by Test",
     fields: [["instance URL (blank = https://gitlab.com)", "base_url"]],
     secretLabel: "Personal Access Token (scope: read_api)",
-    desc: "GitLab issues and merge requests ASSIGNED TO YOU land on the Timeline through triage — gitlab.com or your own instance.",
+    desc: "GitLab issues and merge requests ASSIGNED TO YOU come in and are sorted like your mail — gitlab.com or your own instance.",
     howto: ["Create a Personal Access Token: avatar → Preferences → Access tokens, scope read_api.",
       "Self-hosted? Enter the instance URL; blank means gitlab.com.",
       "Paste the token (write-only). Test authenticates as you and adds the instance under Sources.",
@@ -302,7 +302,7 @@ const META = {
   azdo: { group: "Developer", channel: "azdo", srcLabel: "Organization", srcPh: "added by Test",
     fields: [["organization URL (https://dev.azure.com/yourorg)", "org_url"]],
     secretLabel: "Personal Access Token (Work Items: Read)",
-    desc: "Azure DevOps work items ASSIGNED TO YOU land on the Timeline through triage.",
+    desc: "Azure DevOps work items ASSIGNED TO YOU come in and are sorted like your mail.",
     howto: ["Create a PAT: User settings (top right) → Personal access tokens → New, scope Work Items: Read.",
       "Enter the organization URL (https://dev.azure.com/yourorg) and paste the PAT (write-only).",
       "Test authenticates and reports how many projects the token can see.",
@@ -312,7 +312,7 @@ const META = {
     fields: [["organization slug (first path segment of your Sentry URLs)", "org"],
       ["base URL (blank = https://sentry.io; set for self-hosted)", "base_url"]],
     secretLabel: "auth token (org:read + event:read)",
-    desc: "New unresolved Sentry errors land on the Timeline through triage — production breakage joins the same funnel as the mail about it.",
+    desc: "New unresolved Sentry errors come in and are sorted like your mail — production breakage joins the same funnel as the mail about it.",
     howto: ["Create an auth token: Sentry → Settings → Auth Tokens (scopes org:read, event:read).",
       "Enter the organization slug — the first path segment in your Sentry URLs.",
       "Paste the token (write-only). Test authenticates and adds the org under Sources.",
@@ -320,7 +320,7 @@ const META = {
   pagerduty: { group: "Developer", channel: "pagerduty", srcLabel: "Account", srcPh: "added by Test",
     fields: [],
     secretLabel: "API token",
-    desc: "Open PagerDuty incidents (triggered / acknowledged) land on the Timeline through triage.",
+    desc: "Open PagerDuty incidents (triggered / acknowledged) come in and are sorted like your mail.",
     howto: ["Get an API token: PagerDuty → Integrations → API Access Keys (a read-only key is enough).",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test probes the incidents API and adds the account under Sources.",
@@ -328,7 +328,7 @@ const META = {
   linear: { group: "Project management", channel: "linear", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "API key",
-    desc: "Linear issues ASSIGNED TO YOU land on the Timeline through triage.",
+    desc: "Linear issues ASSIGNED TO YOU come in and are sorted like your mail.",
     howto: ["Create a personal API key: Linear → Settings → Security & access → Personal API keys.",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test authenticates as you and adds the workspace under Sources.",
@@ -337,7 +337,7 @@ const META = {
   trello: { group: "Project management", channel: "trello", srcLabel: "Account", srcPh: "added by Test",
     fields: [["API key (trello.com/power-ups/admin → your Power-Up → API key)", "api_key"]],
     secretLabel: "token (generate it from the API key page)",
-    desc: "Open Trello cards ASSIGNED TO YOU land on the Timeline through triage.",
+    desc: "Open Trello cards ASSIGNED TO YOU come in and are sorted like your mail.",
     howto: ["Get an API key: trello.com/power-ups/admin → create a Power-Up if you have none → API key.",
       "On that same page use the Token link to authorize and copy the token.",
       "Enter the API key under Credentials and paste the token (write-only).",
@@ -345,7 +345,7 @@ const META = {
   notion: { group: "Project management", channel: "notion", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "internal integration secret",
-    desc: "Notion pages shared with your integration show on the Timeline as they change — a FEED by default: edits are information, not assignments.",
+    desc: "Notion pages shared with your integration show up to read as they change — a FEED by default: edits are information, not assignments.",
     howto: ["Create an internal integration at notion.so/my-integrations and copy its secret.",
       "SHARE the pages or databases you care about with the integration (page → ⋯ → Connections) — it sees nothing else.",
       "Paste the secret under Credentials (write-only). Test authenticates the integration.",
@@ -353,7 +353,7 @@ const META = {
   discord: { group: "Messaging", channel: "discord", srcLabel: "Channel IDs", srcPh: "1234567890123456789",
     fields: [pollSecondsField("discord")],
     secretLabel: "bot token",
-    desc: "Watch Discord channels with a bot — messages land on the Timeline through triage, and approved replies post back to the channel.",
+    desc: "Watch Discord channels with a bot — messages come in and are sorted like your mail, and approved replies post back to the channel.",
     howto: ["Create an app at discord.com/developers → Bot → Reset Token, and turn ON the Message Content intent.",
       "Invite the bot to your server with permission to read (and send, for replies in) the channels you'll watch.",
       "Paste the bot token under Credentials (write-only).",
@@ -370,7 +370,7 @@ const META = {
   mattermost: { group: "Messaging", channel: "mattermost", srcLabel: "Channel IDs", srcPh: "4xp9fdt7pbgiijzwbn3qf6qc4c",
     fields: [["server url", "base_url", "https://chat.yourcompany.com"], pollSecondsField("mattermost")],
     secretLabel: "personal access token (write-only)",
-    desc: "Your own Mattermost server — watched channels land on the Timeline through triage, and approved replies post back into the channel.",
+    desc: "Your own Mattermost server — watched channels come in and are sorted like your mail, and approved replies post back into the channel.",
     howto: ["An admin turns on personal access tokens: System Console → Integrations → Integration Management.",
       "Your Profile → Security → Personal Access Tokens → Create. Paste it under Credentials (write-only).",
       "Enter the server url (https://chat.yourcompany.com — no /api/v4, that is added).",
@@ -396,7 +396,7 @@ const META = {
   matrix: { group: "Messaging", channel: "matrix", srcLabel: "Room IDs", srcPh: "!AbCdEf:matrix.org",
     fields: [["homeserver url (blank = matrix.org)", "base_url", "https://matrix-client.matrix.org"], pollSecondsField("matrix")],
     secretLabel: "access token (write-only)",
-    desc: "Any Matrix homeserver — matrix.org or your own. Rooms land on the Timeline through triage and replies go back as your account, not a bot.",
+    desc: "Any Matrix homeserver — matrix.org or your own. Rooms come in and are sorted like your mail and replies go back as your account, not a bot.",
     howto: ["In Element: Settings → Help & About → Advanced → Access Token. Copy it.",
       "Paste it under Credentials (write-only). Leave the homeserver blank for matrix.org.",
       "Add each room ID under Sources — Room Settings → Advanced → Internal room ID (!AbCdEf:matrix.org).",
@@ -410,7 +410,7 @@ const META = {
       ["Google OAuth client secret (blank = reuse the Gmail card's)", "google_client_secret"],
       pollSecondsField("google_chat")],
     secretLabel: "Google refresh token (write-only)",
-    desc: "Google Chat spaces on the Timeline, replies back into the space. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two.",
+    desc: "Google Chat spaces come in and are sorted like your mail, replies back into the space. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two.",
     howto: ["In Google Cloud: enable the Google Chat API on the project whose OAuth client you use (the Gmail card's, if you have one).",
       "Run the OAuth consent flow with scopes chat.messages and chat.spaces.readonly, and paste the refresh token under Credentials (write-only).",
       "Leave the client id and secret blank to reuse the Gmail card's; fill them only for a separate project.",
@@ -443,7 +443,7 @@ const META = {
     desc: "One key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, through OpenRouter's OpenAI-compatible API.",
     howto: ["Create a key at openrouter.ai → Keys.",
       "Paste it under Credentials; optionally set a model from openrouter.ai/models (e.g. meta-llama/llama-3.3-70b-instruct). Empty = openrouter/auto picks per request.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under Settings → Triage & agents."] },
+      "Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under Settings → How mail is sorted."] },
   meta: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default muse-spark-1.2)", "model"], ["base_url (default https://api.meta.ai/v1)", "base_url"]],
     secretLabel: "Meta Model API key",
@@ -451,7 +451,7 @@ const META = {
     howto: ["Create a key at dev.meta.ai → API keys (a payment method is required; Meta publishes no free tier).",
       "Paste it under Credentials. Leave model blank for muse-spark-1.2, or name muse-spark-1.3.",
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under Settings → Triage & agents.",
+      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under Settings → How mail is sorted.",
       "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (Windows, macOS and Linux)."] },
   // NINE PROVIDERS, ONE SURFACE. Each of these speaks the OpenAI chat-completions schema exactly,
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
@@ -527,7 +527,7 @@ const META = {
       "Paste it under Credentials. sonar is the everyday model; sonar-pro searches harder and costs more.",
       "Test runs a real round trip. Useful as the brain for a research report rather than for triage."] },
   // A decision model, not a brain. It sits in this group because it is an AI card you paste a key
-  // on, but it is offered in exactly ONE picker (Settings → Triage & agents → Where runs go): it
+  // on, but it is offered in exactly ONE picker (Settings → How mail is sorted → Where runs go): it
   // emits no text at all, so chosen as the Assistant's brain it would have nothing to say.
   // The owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py) - no key; the sign-in box at the top of
   // the card IS the credential, and it is a brain like any other once signed in.
@@ -535,7 +535,7 @@ const META = {
     fields: [["model (blank = the first model your plan lists)", "model"]], secretLabel: null,
     desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports - with no API key. Calls count against your ChatGPT allowance under a weekly cap you set in ChatGPT.",
     howto: ["Sign in with ChatGPT above: your browser opens auth.openai.com, you sign in with your own ChatGPT account and allow plan usage, and the card finishes by itself.",
-      "Then pick it as a brain under Settings → Configuration → Triage & agents. It is text only: screenshots are not sent, and it has no tools.",
+      "Then pick it as a brain under Settings → Configuration → How mail is sorted. It is text only: screenshots are not sent, and it has no tools.",
       "Set or raise the weekly cap for Taskuary in ChatGPT's settings. When the cap is used up the brain stops and says so - it does not fall back to paid credits unless you allow that in ChatGPT.",
       "Test runs a real round trip on your plan."] },
   typesafe: { group: "AI — agents & models", channel: "ai", srcLabel: null,
@@ -543,7 +543,7 @@ const META = {
     desc: "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
     howto: ["Create a key at typesafe.ai → API keys.",
       "Paste it under Credentials. Test asks Jev one real question and reports the confidence it came back with — there is no completion to run.",
-      "Then pick it under Settings → Configuration → Triage & agents → Where runs go. It appears in no other brain picker, on purpose.",
+      "Then pick it under Settings → Configuration → How mail is sorted → Where runs go. It appears in no other brain picker, on purpose.",
       "Before you trust it: open a report with an AI routing line and press try it on the last 5 runs, with and without this chosen. That replays both judges over the same real runs."] },
   ollama: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["base_url (default http://127.0.0.1:11434)", "base_url"], ["model — required, e.g. llama3.2 / qwen2.5", "model"]],
@@ -551,7 +551,7 @@ const META = {
     desc: "Open-source models on YOUR machine — Ollama out of the box, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM). Your mail never leaves the box.",
     howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
       "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
-      "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → Triage & agents.",
+      "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → How mail is sorted.",
       "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."],
     agent: ["Check for a local server yourself: GET http://127.0.0.1:11434/api/tags (Ollama) - and http://127.0.0.1:1234/v1/models for LM Studio. If Ollama is not installed, ask the owner once whether to install it, then do it (winget install Ollama.Ollama on Windows, brew install ollama on a Mac, the ollama.com script on Linux) and start it.",
       "If /api/tags lists no models, ask which to pull (suggest llama3.2 for a laptop, qwen2.5 for more headroom) and run `ollama pull <model>` yourself - it downloads gigabytes, so say so and wait for it.",
@@ -720,13 +720,13 @@ const DATA_META = {
   aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
     fields: [["access key id", "access_key_id"], ["region(s), comma-separated (e.g. us-east-2, us-east-1)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
-    desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports, Timeline feeds and agent tools, with your IAM keys.",
+    desc: "S3 objects, CloudWatch logs — or ANY service call — as scheduled reports, feeds to read and agent tools, with your IAM keys.",
     howto: ["Create an IAM user (or use an existing one) with read access to what you'll pull: AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess, etc.",
       "Enter the access key id + region and paste the secret access key (write-only). Leave everything blank to use the server's own AWS credentials (env vars, ~/.aws, an instance role).",
       "Several regions? List them comma-separated. CloudWatch log groups exist PER REGION - the same account shows a completely different set in us-east-1 and us-east-2 - so discovery sweeps each one and every object remembers where it was found. S3 is one global namespace, listed once, and each bucket is asked for its own region so reads go to the right endpoint.",
       "Nothing to install: the desktop build ships boto3, and where it is missing the card's Test offers an Install button rather than a command to go and run.",
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
-      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines appear on the Timeline), tasks (they go through triage), or off.",
+      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines show up to read), tasks (they go through triage), or off.",
       "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."],
     agent: ["Look for credentials this machine already has before asking: `aws sts get-caller-identity` (if the CLI is installed), ~/.aws/credentials, AWS_* environment variables. If they exist and the owner agrees to use them, leave the key fields blank - the server uses its own credentials.",
       "Otherwise the IAM user and keys are the owner's to create (read-only policies such as AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess); ask for the access key id and region(s), save them in ConfigJson, and the secret access key as Secret.",
@@ -1205,12 +1205,12 @@ const DATA_META = {
   azure: { title: "Microsoft Azure", types: ["azure", "azure_blob", "azure_logs"], discovers: true,
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"]],
     secretLabel: "client secret (write-only; blank = reuse the Outlook connector's app)",
-    desc: "Blob storage, Log Analytics (KQL) — or ANY resource via ARM — as scheduled reports, Timeline feeds and agent tools, through an app registration.",
+    desc: "Blob storage, Log Analytics (KQL) — or ANY resource via ARM — as scheduled reports, feeds to read and agent tools, through an app registration.",
     howto: ["Reuse the app you registered for Outlook (leave everything blank) or register a new one: Azure Portal → App registrations.",
       "Grant the app RBAC roles on what you'll pull: Reader on a subscription/resource group (ARM reads), Storage Blob Data Reader (blobs), Log Analytics Reader (logs). These are IAM role assignments, not Graph API permissions.",
       "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
       "Test & discover authenticates (naming the subscriptions the app can see — a token with no roles is called out) and then enumerates what those roles reach: every blob container and Log Analytics workspace is listed under 'What you have access to'.",
-      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows appear on the Timeline), tasks (they go through triage), or off.",
+      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows show up to read), tasks (they go through triage), or off.",
       "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."],
     agent: ["GET {base}/api/connectors{hdr} and check the outlook card: if it carries a tenant app (tenant_id, client_id, a secret) this card can reuse it with everything blank. If `az` is installed, `az account show` tells you which tenant and subscription this machine is already signed into - useful to confirm ids.",
       "Otherwise the registration and its RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) are the owner's admin work in the Azure portal; ask for tenant_id and client_id (ConfigJson) and the client secret (Secret) once that exists.",
@@ -1283,7 +1283,7 @@ const WINRM_HOWTO = [
   "This card is the CONNECTION only - the machine name. Build the actual reports (script + AI summary + schedule) on the REPORTS tab.",
   "A box you can RDP into (like AZWEB01) is usually domain-joined and already reachable over WinRM with your Windows login - just enter the machine name and Test.",
   "If Test fails with 'WinRM unreachable', enable PS remoting on the remote box once: open an elevated PowerShell THERE and run Enable-PSRemoting -Force.",
-  "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands on the Timeline.",
+  "Reports then run any PowerShell you write ON that machine (read a log, query a service, export a CSV) and the output - optionally AI-summarized - lands under Reports on your work rail.",
 ];
 const WINRM_AGENT = [
   "Ask for the machine name. Probe it yourself from here: `Test-WSMan <host>` (and Test-NetConnection <host> -Port 5985). Reachable: save host in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}), SETUP DONE.",
@@ -1693,7 +1693,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   const groups = [
     { title: "AI — agents & models", cards: [
-      { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → Triage & agents",
+      { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → How mail is sorted",
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
         ...cliCardOf(clis) },
       ...channelCards(AI_SHELF),
@@ -2242,7 +2242,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           </Box>
         ))}
         <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel="Remove"
-          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived stays on the Timeline."
+          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived is kept - search finds it."
           onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
           <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }}
@@ -2271,7 +2271,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {conn.Active && !isAI && (
           <Button size="small" variant="contained" disableElevation onClick={syncHere} disabled={srcSync}
             startIcon={srcSync ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : <SyncIcon sx={{ fontSize: 14 }} />}
-            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now — see it on the Timeline"}</Button>
+            sx={{ background: "linear-gradient(90deg, #55697a, #7d9a7c)" }}>{srcSync ? "Syncing…" : "Sync now"}</Button>
         )}
       </Box>
     )},
@@ -2511,7 +2511,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
    Reports tab. A pick waits for the card's Save bar. ── */
 const CLOUD_MODES = [
   ["report", "report only — selectable on the Reports tab, never polled"],
-  ["feed", "feed — new items appear on the Timeline, never become work"],
+  ["feed", "feed — new items show up to read, never become work"],
   ["tasks", "tasks — new items go through triage and can become work"],
   ["off", "off — ignored entirely"],
 ];
@@ -2868,8 +2868,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
    or just be something the agents are allowed to touch. */
 const ROLE_META = {
   trigger: ["Inbound trigger — creates work", "Poll it for new items, run them through triage, open tasks and draft replies. This is what turns a connection into work (mail, chats, GitHub issues…)."],
-  feed: ["Timeline feed — shows, never assigns", "Poll it and show every new item on the Timeline, but stop there: no triage, no AI call, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
-  report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result on the Timeline."],
+  feed: ["Feed — shows, never assigns", "Check it and show every new item to read, but stop there: no sorting, no AI, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
+  report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result under Reports on your work rail."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
 };
 
@@ -3163,8 +3163,8 @@ const BULK_HELP = (
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
       Value is <b>words first</b>: addressed to you or merely cc’d, how many people, whether a colleague has
       already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
-      triage brain orders the head of the queue and adds its own reason. You see it on the Timeline’s funnel
-      bar and can pin any card to the top or push it back.
+      AI that sorts your mail orders the head of the queue and adds its own reason. You see that order on the Board’s
+      Queued column.
     </Typography>
   </Box>
 );
@@ -3489,7 +3489,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         if (data.status === "pending") { setTimeout(tick, 2000); return; }
         setFlow(null);
         if (data.status === "ok") { setState("ok"); setDetail(data.adopted ? `Signed in as ${data.name || data.account} - it now sorts your mail.`
-          : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under Settings → Triage & agents to switch.`); reload(); }
+          : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under Settings → How mail is sorted to switch.`); reload(); }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };
@@ -3563,7 +3563,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") {
-          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under Mailboxes below and the first sync is running; mail lands on the Timeline in a minute.`);
+          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under Mailboxes below and the first sync is running; what needs you shows up in the Assistant in a minute.`);
           reload(); onSignedIn?.();
         }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
@@ -3698,7 +3698,7 @@ const ProcessingStep = ({ conn, reload, n }) => {
         </Popover>
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.75 }}>
-        How tasks from this connection reach the agents. Applies to every task it creates; the Timeline’s funnel bar and the Board’s Queued lane follow it.
+        How tasks from this connection reach the agents. Applies to every task it creates; the Board’s Queued column follows it.
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "minmax(0, 1fr) minmax(0, 1fr)" }, gap: 1 }}>
         {MODES.map(([v, title, desc]) => (
@@ -3761,8 +3761,8 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             2 · PER REPO — WHAT ISSUES AND PRS DO
           </Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
-            <b>tasks</b> = through triage, <b>feed</b> = shown on the Timeline only, <b>replies</b> (issues) = the issues
-            themselves are ignored but a person commenting on one goes through triage, <b>off</b> = ignored.
+            <b>tasks</b> = sorted like your mail, <b>feed</b> = shown to read only, <b>replies</b> (issues) = the issues
+            themselves are ignored but a person commenting on one is sorted like your mail, <b>off</b> = ignored.
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
             <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.

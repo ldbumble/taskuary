@@ -1,6 +1,12 @@
 import { assignedAgent } from "./agentIdentity.js";
 
 export const studioTaskIsLive = (task) => !!(task && (task.Session || task.RunStatus === "running"));
+// WAITING IS THE BOARD'S RULE (B20): the game said "working · 21m" over agents the Board listed as waiting on you - a running session
+// sitting at its prompt is waiting, not working. Same reading as ui.isWaiting (the server's verdict, else 45s of quiet) and the
+// Board's blocked state; written here because node tests this file without the JSX
+const asks = (s) => !!s && (s.waiting ?? (s.idle >= 45));
+export const studioTaskWaits = (task, liveRow = null) => !!task && (task.Status === "waiting" || task.ReviewStatus === "pending" || task.State === "blocked"
+  || (liveRow?.kind === "session" && asks(liveRow)) || (!!task.Session?.alive && asks(task.Session)));
 
 export function studioAgentName(task, liveRow, configuredAgents = []) {
   const named = liveRow?.AgentName || task?.Session?.agent || task?.RunAgent || assignedAgent(task?.Assignee);
@@ -10,7 +16,7 @@ export function studioAgentName(task, liveRow, configuredAgents = []) {
 
 export function studioPose(task) {
   if (!task) return "free";
-  if (task.Status === "waiting" || task.ReviewStatus === "pending") return "hand";
+  if (studioTaskWaits(task)) return "hand";
   if (studioTaskIsLive(task)) return task.Kind === "coding" ? "type" : "paper";
   return "sit";
 }
@@ -18,8 +24,7 @@ export function studioPose(task) {
 export function studioSeats(tasks = [], capacity = 4) {
   const count = Math.max(1, Math.min(8, Number(capacity) || 4));
   const live = tasks.filter(studioTaskIsLive);
-  const waiting = tasks.filter((task) => !live.includes(task)
-    && (task.Status === "waiting" || task.ReviewStatus === "pending"));
+  const waiting = tasks.filter((task) => !live.includes(task) && studioTaskWaits(task));
   const occupied = [...live, ...waiting].slice(0, count);
   return Array.from({ length: count }, (_, index) => occupied[index] || null);
 }
@@ -36,7 +41,7 @@ export function studioElapsed(task, liveRow, now = Date.now()) {
 export function studioTaskState(task, liveRow, configuredAgents = [], now = Date.now()) {
   if (!task) return { agent: "", label: "free", tone: "free", pose: "free" };
   const agent = studioAgentName(task, liveRow, configuredAgents);
-  if (task.Status === "waiting" || task.ReviewStatus === "pending") {
+  if (studioTaskWaits(task, liveRow)) {
     return { agent, label: "waiting on you", tone: "waiting", pose: "hand" };
   }
   if (studioTaskIsLive(task)) {

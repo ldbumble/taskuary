@@ -49,7 +49,7 @@ const pileItems = [
   {
     bind: { task: "northwind/importers#214 - census sync fails when a site has no manager", key: "agent" },
     kind: "agent", lane: "blocked", title: "Census sync fails when a site has no manager",
-    who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the coding agent needs a choice before changing skip behavior",
+    who: "Marcus Reed", when: "2026-09-03 09:35:19", why: "the agent needs one choice from you before it changes anything",
     agent: "coding", working: "coding", asking: true,
     // the answers it named, and the request they bind to: a raised hand is answered by picking one
     request_id: "q7", request_kind: "input_needed",
@@ -88,7 +88,8 @@ const pileItems = [
 const currentMessages = [
   {
     id: "demo-current-1", role: "assistant", at: "2026-09-03 10:14:00",
-    text: "Morning. I filed the maintenance notice and the newsletter. Three things still deserve a look; I put the cutover reply first.",
+    // "{n}" is the scripted rail's own count of what waits on you (createDemoAssistantState) - a written "Three" drifted from the rail (B23)
+    text: "Morning. I filed the maintenance notice and the newsletter. {n} still deserve a look; I put the cutover reply first.",
   },
   {
     id: "demo-current-2", role: "user", at: "2026-09-03 10:16:00",
@@ -96,7 +97,7 @@ const currentMessages = [
   },
   {
     id: "demo-current-3", role: "assistant", at: "2026-09-03 10:16:10",
-    text: "Ruth needs the Thursday cutover confirmed, and the census-sync coding agent needs one behavior choice. The audit requests can wait until those are clear.",
+    text: "Ruth needs the Thursday cutover confirmed, and the agent on the census sync needs one choice from you. The audit requests can wait until those are clear.",
   },
   {
     id: "demo-current-4", role: "user", at: "2026-09-03 10:19:00",
@@ -122,7 +123,7 @@ export const DEMO_ASSISTANT_TRANSCRIPTS = {
   8900: currentMessages,
   8899: [
     { id: "demo-8899-1", role: "user", at: "2026-09-03 08:03:00", text: "Walk me through what landed overnight." },
-    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request is with a regular agent - it is writing up the laptop and access requests.", card: { bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", agent: "assistant", channel: "email" } },
+    { id: "demo-8899-2", role: "assistant", at: "2026-09-03 08:03:10", text: "First: Priya's new-starter request is with an agent - it is writing up the laptop and access requests.", card: { bind: { task: "New starter on Monday - laptop + accounts", key: "agent" }, kind: "agent", lane: "working", title: "New starter on Monday - laptop + accounts", agent: "assistant", channel: "email" } },
     { id: "demo-8899-3", role: "user", at: "2026-09-03 08:05:00", text: "Good. What else?" },
     { id: "demo-8899-4", role: "assistant", at: "2026-09-03 08:05:10", text: "Ruth asked whether Thursday still holds for AP cutover. A short reply is drafted and waiting for review.", card: reviewCard },
     { id: "demo-8899-5", role: "user", at: "2026-09-03 08:07:00", text: "Leave that for the close check. Anything noisy?" },
@@ -181,8 +182,10 @@ export function bindIds(fx, item) {
 
 export function createDemoAssistantState(fx = {}) {
   const bound = (list) => list.map((m) => (m.card ? { ...m, card: bindIds(fx, m.card) } : m));
-  const transcripts = Object.fromEntries(Object.entries(DEMO_ASSISTANT_TRANSCRIPTS).map(([k, v]) => [k, bound(v)]));
   const items = pileItems.map((i) => bindIds(fx, i));
+  const waits = items.filter((i) => ["blocked", "approve", "asked"].includes(i.lane)).length;
+  const counted = (m) => (m.text?.includes("{n}") ? { ...m, text: m.text.replace("{n}", waits === 1 ? "One thing" : `${waits} things`) } : m);
+  const transcripts = Object.fromEntries(Object.entries(DEMO_ASSISTANT_TRANSCRIPTS).map(([k, v]) => [k, bound(v).map(counted)]));
   const census = items.find((i) => i.title === "Census sync fails when a site has no manager");
   return {
     activeTaskId: 8900,
@@ -194,7 +197,7 @@ export function createDemoAssistantState(fx = {}) {
       rev: "demo-assistant-1", items: structuredClone(items), hidden: 0, muted: 2,
       rules: ["vendor newsletters", "automated success notices"], events: [],
       alerts: [
-        { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `coding asked you something on ${census?.ref}` },
+        { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `An agent asked you something on ${census?.ref}` },
       ],
       lanes: [
         { lane: "blocked", word: "agent waiting on you", role: "you", n: 1 },

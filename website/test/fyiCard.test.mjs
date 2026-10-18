@@ -20,7 +20,7 @@ test("each fyi entry shows its own summary and acts alone through the proposal r
   assert.match(fyis, /const folded = items\.length > FOLD_AT/);
   assert.doesNotMatch(fyis, /tq-fyi-doors/);                                         // no door on every line (2026-09-23)
   assert.match(fyis, /<button type="button" className="tq-fyi-line" onClick=\{\(\) => setOpen/);   // the line IS the control
-  for (const label of ["Reply", "Make task", "Coding agent", "Regular agent", "Talk about it"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
+  for (const label of ["Reply", "Make task", "Coding agent", "Send to agent", "Talk about it"]) assert.match(fyis, new RegExp(`>${label}</Button>`));
   assert.match(fyis, /propose\("mine", i\)/); assert.match(fyis, /propose\("coding_agent", i\)/); assert.match(fyis, /propose\("regular_agent", i\)/);
   assert.match(fyis, /onPropose\?\.\(verb, i\.key\)/);                               // the entry's own key, never the handful's
   assert.match(fyis, /openReply\(api, i\.mid\)/);   // a reply opens at once, its draft written behind it (replyDraft.js)
@@ -70,7 +70,7 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   const tasks = taskSource();
   // one set of words for the one act, whichever agent held the conversation (2026-09-15) - and one box, the rail's,
   // with a note for the agent (T14, 2026-09-25)
-  assert.match(tasks, /Continue session/);
+  assert.match(tasks, /Keep going/);
   assert.match(tasks, /<ContinueBox task=\{t\} anchor=\{continueAt\}/);
   assert.match(tasks, /onClick=\{\(e\) => setContinueAt\(e\.currentTarget\)\}/);
 });

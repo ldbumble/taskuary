@@ -80,7 +80,7 @@ class IgnoreScopeInstructionTests(unittest.TestCase):
         said = concierge.fallback(item, opening=True)
         self.assertIn('I read it as just for your information - an automated success-file notification', said)
         self.assertNotIn('fyi - triage: fyi', said)              # the verdict word is not said twice
-        self.assertIn('make it a task', said); self.assertIn('ignore this sender', said)
+        self.assertIn('Make a task', said); self.assertIn('Not ours', said)
 
     def test_a_reason_that_never_names_the_verdict_is_passed_through_whole(self):
         from taskuary import concierge

@@ -173,7 +173,7 @@ class WhoMayWrite(unittest.TestCase):
         self.assertEqual(c.post(f'/api/hub/{lid}/retire', headers=headers).status_code, 200)
         self.assertEqual(server.store.lore_get(lid)['Status'], 'retired')
         self.assertEqual(c.post(f'/api/hub/{lid}/restore', headers=headers).status_code, 200)
-        actions = server.store.list_audit('lore', lid)
+        actions = server.store.list_audit(handbook.AUDIT, lid)
         by_action = {a['Action']: a['Actor'] for a in actions}
         self.assertEqual(by_action['retire'], 'general-assistant')
         self.assertEqual(by_action['restore'], 'general-assistant')
@@ -202,6 +202,12 @@ class VotedOn(unittest.TestCase):
         self.assertEqual(s.lore_get(p['LoreId'])['Score'], 2)
         handbook.vote(s, p['LoreId'], -1, 'codex')                      # flipped, not added
         self.assertEqual(s.lore_get(p['LoreId'])['Score'], 0)
+
+    def test_a_post_is_written_down_as_a_hub_post_not_a_lore_post(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'Invoices from vendor.example arrive on the 3rd', '', 'payables', 'system', 'coding')
+        self.assertEqual([a['Action'] for a in s.list_audit('hub', p['LoreId'])], ['post'])
+        self.assertEqual(s.list_audit('lore', p['LoreId']), [])
 
     def test_new_idea_and_technical_solve_are_real_filterable_tags(self):
         s = MemoryStore()

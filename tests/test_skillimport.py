@@ -432,7 +432,7 @@ class WhatTriageSeesTests(unittest.TestCase):
         s, rows = self._rows()
         line, why, _ = agents.roster_line(s, rows['nda-triage'])
         self.assertEqual((line, why), ('- nda-triage: signs NDAs', ''))
-        for name, word in (('coding', 'coding'), ('quiet', 'Available to triage'), ('blank', 'no purpose')):
+        for name, word in (('coding', 'coding'), ('quiet', 'Can be given new work'), ('blank', 'no purpose')):
             line, why, _ = agents.roster_line(s, rows[name])
             self.assertEqual(line, '', name); self.assertIn(word, why, name)
         line, why, _ = agents.roster_line(s, {**rows['nda-triage'], 'Active': 0})

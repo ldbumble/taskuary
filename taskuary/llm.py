@@ -10,7 +10,7 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
                         same brain that works the tasks, no second API key to buy
 
 Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
-everything on one model (and one bill). Configure it in Settings -> Triage & routing.
+everything on one model (and one bill). Configure it in Settings -> How mail is sorted.
 """
 import base64, hashlib, json, mimetypes, re, requests
 from pathlib import Path

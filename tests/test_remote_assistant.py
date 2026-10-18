@@ -554,7 +554,7 @@ class CardParityTests(unittest.TestCase):
                            'Channel': 'github', 'Subject': 'Re: GitHub PR fixes allowed_hosts config behavior',
                            'FromName': 'Robin Vale', 'FromEmail': 'code@personal.example',
                            'SentAt': '2026-09-17 23:40:00', 'BodyText': 'One more thought.', 'Status': 'routed'})
-        self.assertIn('2 messages combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+        self.assertIn('2 messages in this thread', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
 
     def test_a_source_keeps_its_own_spelling_in_the_thread_line(self):
         """A brand name is not a word to title-case: the card would have said GitHub, not Github."""
@@ -615,7 +615,7 @@ class CardParityTests(unittest.TestCase):
 
     def test_a_single_message_is_not_announced_as_a_thread(self):
         store, tid, mid = self.armed()
-        self.assertNotIn('combined by triage', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
+        self.assertNotIn('messages in this thread', remote_assistant.decision_block(store, {'tid': tid, 'mid': mid}))
 
     def test_the_source_line_carries_the_ref_the_desktop_prints_in_its_corner(self):
         """So the owner can say "open TQ-0630" when they get back to a desktop."""

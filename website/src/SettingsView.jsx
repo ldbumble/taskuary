@@ -346,7 +346,7 @@ const PAGE = 980;
 const PAGES = {
   about: { title: "About you", icon: AccountCircleIcon, desc: "Who the system knows you are — your identities per channel, the facts only you can add, your avatar." },
   docs: { title: "Docs", icon: MenuBookIcon, desc: "The documents the system writes from and writes to — how you sound, what triage is told, what it has learned, and the playbooks your agents follow." },
-  config: { title: "Configuration", icon: TuneIcon, desc: "Triage, drafting, coding agent and display knobs — how the funnel behaves." },
+  config: { title: "Configuration", icon: TuneIcon, desc: "How mail is sorted, replies, agents and display - how Taskuary behaves." },
   policies: { title: "Routing policies", icon: AltRouteIcon, desc: "Deterministic rules the AI can never override — ignores, escalations, auto-answers." },
   memory: { title: "Verdicts & notes", icon: PsychologyIcon, desc: "The evidence behind LEARNED.md — every verdict you gave, one line each, plus notes you write. Toggle off what it learned wrong." },
   audit: { title: "Audit integrity", icon: VerifiedIcon, desc: "Who did what, when — a tamper-evident record of every action, and a button that proves nobody edited it." },
@@ -674,7 +674,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const rowsOf = (g) => settings.filter((s) => !hidden(s.Name) && meta(s.Name).group === g
     && !(panelOk && PANEL_OWNED.has(s.Name)));
   const panels = {
-    "Triage & agents": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
+    "How mail is sorted": <AiDefaults brains={brainOptions} agents={agentOptions} onGo={goFromPanel} onLoaded={setPanelOk} />,
     "Assistant on your phone": <PhoneDoorways onLoaded={setPanelOk} onNavigate={onNavigate} />,
     "Agent permissions": <AgentPermissions />,
   };
@@ -1111,7 +1111,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   }, [q, jump, sectionsOf]);
 
   // #settings=<page> lands on one of the rail's pages, and &group=<section> scrolls to a section
-  // inside it. The section names contain a `&` ("Triage & agents"), so a link carries them encoded
+  // inside it. Some section names contain a `&` ("Sync & startup"), so a link carries them encoded
   // and they are decoded exactly once, here. The hash is read and consumed in this one place: it
   // used to be two effects in two components, and React runs the child's first, so the child
   // blanked the hash before the parent ever read it.

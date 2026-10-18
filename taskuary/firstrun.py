@@ -17,13 +17,14 @@ from loguru import logger
 # the CLIs most people already pay for, always offered; any OTHER installed CLI joins them
 OFFERED = ('claude', 'codex', 'gemini')
 # ChatGPT itself is the browser sign-in on its own card (choose_connector); Codex is ChatGPT's coding CLI, named as itself
-PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': ('Codex', "ChatGPT's coding CLI - if you pay for ChatGPT"),
-         'gemini': ('Gemini CLI', 'Gemini CLI - free with a Google account'), 'copilot': ('Copilot', 'GitHub Copilot CLI - if you pay for Copilot')}
+PLAIN = {'claude': ('Claude', 'Claude Code - if you pay for Claude'), 'codex': ('Codex', "ChatGPT's coding tool - if you pay for ChatGPT"),
+         'gemini': ('Gemini CLI', "Google's coding tool - free with a Google account"), 'copilot': ('Copilot', "GitHub's coding tool - if you pay for Copilot")}
 KEYS = (('anthropic', 'Claude API key', 'console.anthropic.com → API Keys'),
         ('openai', 'OpenAI API key', 'platform.openai.com → API keys'))
 MAIL = (('outlook', 'Microsoft 365 / Outlook', 'Work email or Outlook.com - one sign-in, no password here'),
         ('gmail', 'Gmail', 'Your Gmail address and a Google App Password'),
         ('imap', 'Other email', 'Any other mailbox: address, server and password'))
+MAIL_TYPES = tuple(t for t, _l, _s in MAIL)
 TEST_SECONDS = 60          # a CLI that has not answered in a minute is not going to: say so, never spin
 # a pick that failed, kept until one works: the NEXT line said "pick your AI" again after it, and a reload lost Sign in (2026-10-15)
 FIX = 'first_run_fix'
@@ -53,6 +54,40 @@ def _sorting(store) -> int:
     """Mail read in and not judged yet - what the "reading" step counts down."""
     return int((store._one("SELECT COUNT(*) AS n FROM message WHERE Status IN ('new','triaging') "
                            "AND IFNULL(Direction,'in')<>'out'") or {}).get('n') or 0)
+
+
+def _read_once(store) -> bool:
+    """A mailbox read through at least once and no read running now: with nothing left to sort, an empty mailbox - "Reading your
+    mail now..." stood for good over one that had nothing new in it (the non-coder audit, 2026-10-17)."""
+    try: running = (json.loads(store.get_setting('ingest_status') or '{}') or {}).get('state') == 'running'
+    except ValueError: running = False
+    return not running and any(c.get('LastSyncAt') for c in store.list_connectors() if c.get('Active') and c.get('Type') in MAIL_TYPES)
+
+
+# A FAILING AI IN PLAIN WORDS: the raw exception ("'claude' not found on PATH", "not JSON") stood on the Advisor's line, and stayed
+# there days after (the non-coder audit, 2026-10-17). Matched on what the SYSTEM said, never on anything the owner typed.
+AI_ERR_HOURS = 6           # a failure nothing has repeated in this long is not today's news - a still-broken AI stamps a new one per mail
+_AI_ERRS = ((r'not found on path|no such file|is not recognized|cannot find the file', "it isn't installed on this computer any more"),
+            (r'json|verdict|parse|could not be read', "its answers came back in a form Taskuary can't read"),
+            (r'timed? ?out|took too long|deadline', 'it took too long to answer'),
+            (r'\b(401|403)\b|unauthori[sz]ed|forbidden|api key|sign[ -]?in|log ?in|expired|credential', 'it needs you to sign in again, or its key stopped working'),
+            (r'\b429\b|rate.?limit|quota|usage limit|credit|billing|insufficient|cap reached', 'it reached its usage limit or ran out of credit'),
+            (r'connect|network|getaddrinfo|resolve|unreachable|offline', "Taskuary couldn't reach it - check this computer is online"))
+
+
+def plain_ai_error(raw: str) -> str:
+    low = str(raw or '').lower()
+    return next((said for pat, said in _AI_ERRS if re.search(pat, low)), 'it stopped answering') if low.strip() else ''
+
+
+def _ai_error(store) -> str:
+    """The brain's last failure on the real mail, in a sentence - '' once it is older than AI_ERR_HOURS."""
+    from datetime import datetime, timedelta
+    err, at = str(store.get_setting('triage_last_error') or '').strip(), str(store.get_setting('triage_last_error_at') or '')
+    try: old = bool(at) and datetime.now() - datetime.fromisoformat(at.strip()) > timedelta(hours=AI_ERR_HOURS)
+    except ValueError: old = False
+    if err and old: err = ''
+    return plain_ai_error(err or store.get_setting('triage_last_unusable') or '')
 
 
 def state(store) -> dict:
@@ -89,24 +124,31 @@ def state(store) -> dict:
     via = agents.brain_key(store, pick) if pick.startswith('cli:') else ''
     cli = via or next((k['name'] for k in found if k['name'] == raw or k['name'] in pick), '')
     name = PLAIN[cli][0] if cli in PLAIN else raw
+    # ONE NAME FOR CHATGPT: the brain read "ChatGPT (your plan)" over a card titled ChatGPT, so the card never knew it was the AI
+    if pick.startswith('connector:') and pick[10:].isdigit() and (store.get_connector(int(pick[10:])) or {}).get('Type') == 'chatgpt': name = 'ChatGPT'
     # ...kept past step 1 too: Change brings the AI cards back, and a pick that fails there must still say why (2026-10-15)
     fix = _fix(store)
-    ask = "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
+    ask = "What AI do you have? Pick it - Taskuary checks it works and uses it to sort your mail."
     # a brain that fails on the mail itself: said, with the way out, instead of "Sorting 18 emails" for good (2026-10-15)
-    ai_error = str(store.get_setting('triage_last_error') or store.get_setting('triage_last_unusable') or '').strip() if step in ('reading', 'done') else ''
+    ai_error = _ai_error(store) if step in ('reading', 'done') else ''
     mail_err = str(store.get_setting(MAIL_ERR) or '').strip()
+    empty = step == 'reading' and not sorting and _read_once(store)
     nxt = {'ai': fix['why'] if fix else ask,
-           'email': f"{mail_err} Fix it in the card below and press Connect again - or pick a different email." if mail_err
-                    else f"{name or 'Your AI'} is ready. What email do you have? Click it below - Microsoft 365 is one sign-in.",
-           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI below picks one that does." if ai_error
+           'email': f"{mail_err} Fix it in the card and press Connect again - or pick a different email." if mail_err
+                    else f"{name or 'Your AI'} is ready. What email do you have? Pick it - Microsoft 365 is one sign-in.",
+           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI picks one that does." if ai_error
+                       else "Connected - nothing new to sort yet. Any other connection you'd like to set up?" if empty
                        else f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
            'done': "You're set up. Anything else you connect is optional."}[step]
-    # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15)
-    todo = {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step]
-    return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'why': brain.get('why') or ''}, 'fix': fix,
-            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'next': nxt,
-            'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': about(store)['done'],
+    # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15); the mail read and
+    # About your work unanswered is the step left, not "reading your mail" (the non-coder audit, 2026-10-17)
+    done_about = about(store)['done']
+    todo = ('about your work' if step in ('reading', 'done') and not done_about
+            else {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step])
+    return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'pick': pick, 'why': brain.get('why') or ''}, 'fix': fix,
+            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'empty': empty, 'next': nxt,
+            'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
             'more_connected': more_connected(store), 'dismissed': store.get_setting(DISMISSED) == '1'}
 
 
@@ -189,7 +231,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     when it did not work: 'install' or 'signin'."""
     from . import agents, cli_connections, clis, config
     k = next((k for k in clis.detect(store) if k['name'] == name), None)
-    if not k: return {'ok': False, 'why': f'Taskuary does not know a CLI called {name}.', 'fix': ''}
+    if not k: return {'ok': False, 'why': f"Taskuary doesn't know an AI called {name} - pick another one.", 'fix': ''}
     label = PLAIN.get(name, (k['label'],))[0]
     if name not in clis.READONLY:
         return {'ok': False, 'fix': '', 'why': f"{label} can run tasks for you, but it can't sort mail - pick Claude, Codex or Gemini, or an API key."}
@@ -198,9 +240,11 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
                                            'detail': out.get('detail') or '', 'install': k['install'] if k.get('installable') else ''}), 'owner')
         return out
     if not k['installed']:
-        return failed({'ok': False, 'fix': 'install' if k.get('installable') else '',
-                'why': f"{label} isn't on this computer yet." + (' Press Install - it takes about a minute.' if k.get('installable')
-                                                                  else f" {k.get('why_not') or 'Install it, then click its card again.'}")})
+        # one that cannot install here says what to pick instead: the installer's own words (npm, WSL2) are the detail, not the line
+        if not k.get('installable'):
+            return failed({'ok': False, 'fix': '', 'detail': k.get('why_not') or '',
+                           'why': f"{label} can't be installed on this computer - pick ChatGPT or an API key instead."})
+        return failed({'ok': False, 'fix': 'install', 'why': f"{label} isn't on this computer yet. Press Install - it takes about a minute."})
     conns = cfg.setdefault('cli_connections', {})
     key = next((n for n, c in conns.items() if cli_connections.cli_key(c.get('cmd')) == name), None)
     if not key:
@@ -220,8 +264,8 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
                 'detail': str(e)[:400]})
         return failed({'ok': False, 'fix': 'signin' if k.get('setup') else '',
                 'why': f"{label} is installed but needs you to sign in once."
-                       + (" Press Sign in below - Taskuary checks it by itself when you're done." if k.get('setup') else
-                          ' Sign in to it on this computer, then click its card again.'),
+                       + (" Press Sign in - Taskuary checks it by itself when you're done." if k.get('setup') else
+                          ' Sign in to it on this computer, then pick it again.'),
                 'detail': str(e)[:200]})
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
     was = _brains(store)
@@ -238,11 +282,21 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
 def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = None) -> dict:
     """The owner pasted an API key on an AI card: save it (and the card's own fields - Azure's endpoint), switch the card on,
     test it, make it the brain."""
-    from .channels import test_connector
     c = store.get_connector(cid) if cid else store.get_connector_by_type(typ)
+    out = _choose_key(store, c, typ, secret, config)
+    # A FAILED KEY IS THE LINE'S TOO, and survives a reload, like a sign-in that failed (choose_connector): it showed on the card
+    # alone while the line still asked "What AI do you have?" - on the organisation access-code road most of all (2026-10-17)
+    if out['ok'] or not c: store.set_setting(FIX, '', 'owner')
+    else: store.set_setting(FIX, json.dumps({'key': f"c{c['ConnectorId']}", 'name': typ, 'title': c.get('Name') or typ, 'fix': '',
+                                             'why': out['why'], 'detail': out.get('detail') or '', 'setup': '', 'install': ''}), 'owner')
+    return out
+
+
+def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
+    from .channels import test_connector
     secret = str(secret or '').strip()
     if not c: return {'ok': False, 'why': f'There is no {typ} card here.'}
-    if len(secret) < 12: return {'ok': False, 'why': "That doesn't look like a whole API key - copy it again and paste the full thing."}
+    if len(secret) < 12: return {'ok': False, 'why': "That doesn't look like a whole key - copy it again and paste the full thing."}
     row = {'ConnectorId': c['ConnectorId'], 'Secret': secret, 'Active': 1}
     if config:
         try: conf = json.loads(c.get('ConfigJson') or '{}')
@@ -252,19 +306,19 @@ def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = Non
     out = test_connector(store, c['ConnectorId'])
     if not out.get('ok'):
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'owner')
-        return {'ok': False, 'why': f"That key didn't work: {str(out.get('detail') or 'the provider said no')[:200]}. Check you copied all of it."}
+        return {'ok': False, 'why': f"That key didn't work ({str(out.get('detail') or 'the provider said no')[:200]}). Copy all of it again and press Connect."}
     was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")
     if (why := _prove(store)):
         _restore(store, was)
-        return {'ok': False, 'why': f"The key works, but {why}. Pick another AI, or another model on its card."}
-    store.set_setting(FIX, '', 'owner')
+        return {'ok': False, 'why': f"The key works, but {why.split(' - ')[0]}. Pick another AI, or another model on its card.", 'detail': why}
     if typ == 'hipaa_ai':
         from . import config as config_mod
         m = models_by_job(store, config_mod.load(), c['ConnectorId'])
         if m['fast']:
-            return {'ok': True, 'why': f"Your access code works - {m['fast']} sorts your mail and runs the Assistant"
-                                       + (f", {m['agent']} does the agent work." if m['agent'] else '.')}
+            # the jobs said, not the model names behind them - Settings has those for whoever wants them
+            return {'ok': True, 'why': "Your access code works - a quick model sorts your mail and runs the Assistant"
+                                       + (', a stronger one does the agent work.' if m['agent'] else '.')}
     return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort your mail."}
 
 
@@ -303,6 +357,14 @@ MAIL_ERR = 'first_run_mail_error'
 
 def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:
     """Gmail or any IMAP mailbox: address + password, switched on, tested, read. Microsoft 365 signs in instead (ms/signin)."""
+    out = _connect_mail(store, typ, address, secret, host)
+    # EVERY ANSWER IS THE LINE'S: a missing "@" returned early, and the line kept the last address's "turned the connection away"
+    # under the card's "Type your full email address" (a live walk, 2026-10-17)
+    store.set_setting(MAIL_ERR, '' if out['ok'] else out['why'], 'owner')
+    return out
+
+
+def _connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:
     from .channels import test_connector
     if typ not in ('gmail', 'imap'): return {'ok': False, 'why': 'Microsoft 365 signs in with its own button.'}
     c = store.get_connector_by_type(typ)
@@ -313,6 +375,8 @@ def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> 
     try: conf = json.loads(store.get_connector(c['ConnectorId']).get('ConfigJson') or '{}')
     except ValueError: conf = {}
     conf['address'] = address
+    # the server as IT gives it, "mail.northwind.example:993" - first run has one box for it, no port field
+    if typ == 'imap' and (m := re.fullmatch(r'(.+?):(\d{2,5})', host)): host, conf['imap_port'] = m.group(1), int(m.group(2))
     if typ == 'imap': conf['imap_host'] = host or f"imap.{address.split('@', 1)[1]}"
     store.save_connector({'ConnectorId': c['ConnectorId'], 'ConfigJson': json.dumps(conf), 'Secret': secret.replace(' ', '') if typ == 'gmail' else secret,
                           'Active': 1}, 'owner')
@@ -322,10 +386,9 @@ def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> 
         said = str(out.get('detail') or '').strip()[:160].rstrip('.')
         # a reason that already says what to check is said once - "online.. Check the address" read twice (2026-10-15)
         hint = (' For Gmail you need an App Password, not your normal password: myaccount.google.com/apppasswords'
-                if typ == 'gmail' else '' if 'check' in said.lower() else ' Check the address, the password and the server name.')
-        why = f"Couldn't sign in to {address}: {said}.{hint}"
-        store.set_setting(MAIL_ERR, why, 'owner')
-        return {'ok': False, 'why': why}
+                if typ == 'gmail' else '' if 'check' in said.lower()
+                else ' Check the address and the password, and the server name - your IT team can tell you the mail server and port.')
+        return {'ok': False, 'why': f"Couldn't sign in to {address}: {said}.{hint}"}
     for s in store.list_sources(active_only=False):                 # the test claimed the mailbox; make sure it is ON
         if s['Channel'] == 'email' and (s['Address'] or '').lower() == address.lower() and not s.get('Active'):
             store.save_source({**s, 'Active': 1, 'ConnectorId': c['ConnectorId']}, 'owner')
@@ -333,7 +396,6 @@ def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> 
     if not mine.get('owner') or mine.get('owner') == 'the owner':
         guess = ' '.join(w.capitalize() for w in address.split('@')[0].replace('.', ' ').replace('_', ' ').split()) or address
         store.set_setting('owner_name', guess, 'owner'); store.set_setting('owner_email', address, 'owner')
-    store.set_setting(MAIL_ERR, '', 'owner')
     return {'ok': True, 'why': f'Connected {address} - reading your mail now.'}
 
 # ABOUT YOUR WORK (the owner, 2026-10-15: "a few short question on setup screen to fill out soul.md and job.md (though you can generate
@@ -550,9 +612,20 @@ def skip_about(store):
     store.set_setting(ABOUT_KEY, json.dumps({**{k: a[k] for k in ('name', 'org', 'role', 'systems')}, 'done': True}), 'owner')
 
 
+def unfinished(store) -> str:
+    """Why setup cannot finish yet, in a sentence - '' when it can. The AI and the mail come first: About your work saved from the
+    rail closed setup on a day with no AI and no mailbox, under "Setup complete" (the non-coder audit, 2026-10-17). One already
+    finished and reopened to change something can always go back to its day."""
+    if store.get_setting(DISMISSED) == '1': return ''
+    step = state(store)['step']
+    return {'ai': 'Pick an AI that works first - setup finishes once it is sorting your mail.',
+            'email': 'Connect your email first - setup finishes once your mail is being read.'}.get(step, '')
+
+
 def finish(store):
-    """The owner pressed Finish setup (or walked into the tasks): the canvas is the day from now on, until Setup reopens it."""
-    store.set_setting(DISMISSED, '1', 'owner')
+    """The owner pressed Finish setup (or walked into the tasks): the canvas is the day from now on, until Setup reopens it. A pick
+    that failed on the way is done with too - it stood over "Your AI is X" on the Advisor's line long after (2026-10-17)."""
+    store.set_setting(DISMISSED, '1', 'owner'); store.set_setting(FIX, '', 'owner')
 
 
 def settle_existing(store):

@@ -49,8 +49,8 @@ class SetupSaysTests(unittest.TestCase):
             s.set_setting('triage_last_error', 'vertex_ai error 429: quota exceeded', 'system')
             st = firstrun.state(s)
         self.assertEqual(st['step'], 'reading')
-        self.assertIn('quota exceeded', st['next']); self.assertIn('Change', st['next'])
-        self.assertEqual(st['ai_error'], 'vertex_ai error 429: quota exceeded')
+        self.assertIn('usage limit', st['next']); self.assertIn('Change', st['next'])
+        self.assertEqual(st['ai_error'], 'it reached its usage limit or ran out of credit')   # in words, not the exception (U16)
 
 
 if __name__ == '__main__': unittest.main()

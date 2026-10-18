@@ -9,7 +9,7 @@ import React, { useEffect, useSyncExternalStore } from "react";
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
@@ -84,22 +84,28 @@ export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disab
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
 export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
 
+// A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, never drawn here
+// ...and it holds the move only through its FILLED button: a card of outlined ones (a greyed draft's) leaves the bar its own
+export const holdsMove = (list) => list.some((v) => v.onCard || (v.card && v.tone === "p"));
 export function rowOf({ list, ref }, pick = null) {
-  const by = (g) => list.filter((v) => v.group === g);
+  const by = (g) => list.filter((v) => v.group === g && !v.card);
   let decide = by("decide"), more = by("more"), agent = by("agent");
-  // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice"):
-  // the verb it advises is the one filled - off More and onto the bar if it waited there - and every other one is outlined
-  const advised = advisedIn(list, pick);
-  if (advised) {
-    const fill = (xs) => xs.map((v) => (v.id === advised.id ? { ...v, tone: "p" } : v.tone === "p" ? { ...v, tone: "s" } : v));
-    decide = fill(decide); agent = fill(agent);
-    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [{ ...advised, tone: "p" }, ...agent]; }
-  }
-  let primary = advised ? { ...advised, tone: "p" } : decide.find((v) => v.tone === "p") || null;
   // THE CARD ALREADY HOLDS THE MOVE (a waiting draft's Send & close, under the draft): the bar fills nothing, Next included -
-  // two filled buttons on one screen leave the owner to work out which one is meant
-  const onCard = !advised && list.some((v) => v.onCard);
-  // no decision waiting: the session's way back in (Continue session / Start an agent) is the move, else Mark done
+  // two filled buttons on one screen leave the owner to work out which one is meant. Advice no longer overrides it: an advised
+  // Send filled a second Send on the bar that took the proposal road and dropped the edit in the box (the audit, 2026-10-17)
+  const onCard = holdsMove(list);
+  // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice"):
+  // the verb it advises is the one filled - off More and onto the bar if it waited there - and every other one is outlined.
+  // The card's own button is already the dark one; a row verb advised beside it comes onto the bar outlined.
+  const hit = advisedIn(list, pick), advised = hit && !hit.card ? hit : null;
+  if (advised) {
+    const tone = onCard ? "s" : "p";
+    const fill = (xs) => (onCard ? xs : xs.map((v) => (v.id === advised.id ? { ...v, tone: "p" } : v.tone === "p" ? { ...v, tone: "s" } : v)));
+    decide = fill(decide); agent = fill(agent);
+    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [{ ...advised, tone }, ...agent]; }
+  }
+  let primary = advised && !onCard ? { ...advised, tone: "p" } : decide.find((v) => v.tone === "p") || null;
+  // no decision waiting: the session's way back in (Keep going / Start an agent) is the move, else Mark done
   const lead = !primary && !onCard && agent.find((v) => v.lead);
   if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
@@ -141,7 +147,7 @@ export function rowOf({ list, ref }, pick = null) {
 // they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
 export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
 const TYPE_OF = {
-  reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", "ask-sender": "reply", hand: "reply", attach: "reply",
+  reply: "reply", approve: "reply", redraft: "reply", palt: "reply", reject: "reply", email: "reply", "ask-sender": "reply", hand: "reply", attach: "reply", "email-file": "reply",
   "start-agent": "agent", "run-another": "agent", continue: "agent", "send-general": "agent", diff: "agent", "save-end": "agent",
   done: "close", "close-note": "close", reopen: "close",
   remind: "task", nat: "task", reshape: "task",
@@ -167,14 +173,17 @@ export function clustersOf(row, keep = 2) {
 // ONE WORD ON THE BAR (the owner, 2026-10-13: "the buttons look horrible with double words on one button"): the section's label
 // names the noun - REPLY, AGENT, CLOSE, TASK - so the button is the verb. The full name rides in the hover text and in the
 // section's menu, which can afford it. A label that says a state ("Drafting…", "Back Tue") is kept as it is.
+// ...and plain words for someone who never wrote code (the audit, 2026-10-17): "New", "Who" and "End" said nothing to them, and
+// "Dismiss" deleted the task - Remove is what its dialog says too. Repo is drawn only where a coding tool is connected (TaskPage).
 const SHORT = {
   reply: "Draft", approve: "Send", redraft: "Redraft", email: "Share", hand: "Forward", "ask-sender": "Ask",
-  continue: "Continue", "run-another": "New", "start-agent": "Start", "send-general": "Start", "save-end": "End", diff: "Changes",
-  done: "Done", "close-note": "Note", reopen: "Reopen", remind: "Snooze", nat: "Dismiss", reshape: "Split",
-  kind: "Who", priority: "Priority", assign: "Assign", repo: "Repo",
+  continue: "Continue", "run-another": "Another agent", "start-agent": "Start", "send-general": "Start", "save-end": "Stop", diff: "Changes",
+  done: "Done", "close-note": "Note", reopen: "Reopen", remind: "Snooze", nat: "Remove", reshape: "Split",
+  kind: "Reassign", priority: "Priority", assign: "Assign", repo: "Repo", answer_agent: "Answer it", "email-file": "Email it",
 };
 export const shortLabel = (v) => {
   const label = String(v?.label || "");
   if (/…$/.test(label) || /^Back /.test(label)) return label;
+  if (/^Draft with AI$/i.test(label)) return "Draft";      // nothing drafted yet: there is nothing to redraft
   return SHORT[String(v?.id || "").split(":").pop()] || label;
 };

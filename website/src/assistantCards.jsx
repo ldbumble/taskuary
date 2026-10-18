@@ -331,7 +331,7 @@ function useClose(card, onDone) {
 // it's confusing").
 // the task page's own actions, reached from a card (the owner, 2026-09-28: "whatever actions you can do in tasks should
 // have those buttons ... it can be in more") - each opens the task with that dialog up
-const TASK_ACTS = [["not_a_task", "Not a task…", "Delete it and teach triage why - on the task"],
+const TASK_ACTS = [["not_a_task", "Not a task…", "Delete it and teach Taskuary why - on the task"],
                    ["handoff", "Hand it to a person…", "The AI writes the forward, you send it - on the task"],
                    ["reshape", "Split or merge…", "Break it in two, or fold it into the task it repeats - on the task"]];
 
@@ -755,7 +755,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         ...(card.tid && !conflict ? [{ verb: "back", label: "Send back to the agent", title: "Tell the agent what to change - it picks up where it stopped",
           disabled: !!busy, onClick: () => setBack((b) => (b === null ? "" : null)) }] : []),
         ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
-          title: "Marks the task done, dismisses the draft, and ends any live agent session. No reply is sent.",
+          title: "Marks the task done, dismisses the draft, and stops any agent still working on it. No reply is sent.",
           disabled: !!busy || !rv, onClick: finish }] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
@@ -863,7 +863,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
         setRepoAsk({ taskId: data.taskId, agent: data.agent || "" });
       } else {
         setRepoAsk(null);
-        const who = agentKind === "coding" ? (data.agent || "the coding agent") : (data.agent || "the regular agent");
+        const who = agentKind === "coding" ? (data.agent || "the coding agent") : (data.agent || "an agent");
         onDone?.(`${data.ref || "It"} is with ${who} now - I'll bring it back when it's done.`);
       }
     } catch (e) {
@@ -1089,7 +1089,16 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   const now = Date.now(), next = evs.findIndex((e) => atLocal(e.start) > now);
   // the now line sits between what is behind you and what is ahead - not above a day that has not started
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
-  const total = groups.reduce((n, g) => n + (g.n ?? g.rows.length), 0);
+  // ONE HEADLINE (U6): "Waiting · 30" counted reports and FYI the rows below called nothing to decide - the count is what is
+  // on you, and reports and FYI sit apart as reading
+  const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), READ = new Set(["reports", "fyi"]);
+  const act = groups.filter((g) => !READ.has(g.key)), read = groups.filter((g) => READ.has(g.key));
+  const onYou = cnt(groups.filter((g) => g.key === "urgent" || g.key === "task")), toRead = cnt(read);
+  const row = (g) => (
+    <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
+      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
+    </button>
+  );
   // THE WHOLE CARD FROM THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card - say calendar missing if
   // not available"): the calendar side says what it is - none connected, unreadable, or a day with no meetings - instead of vanishing.
   // `sources` is what calendar.today could reach; an answer from before it was sent says nothing, so the side stays as it was.
@@ -1135,13 +1144,11 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       )}
       {waits && (
         <div className="tq-day-wait">
-          <div className="tq-day-h">Waiting · {loading ? "counting…" : total}</div>
+          <div className="tq-day-h">{loading ? "Counting…" : onYou ? `${onYou} on you` : "Nothing on you"}</div>
           {!groups.length && <div style={{ fontSize: 13, color: "#6e685f" }}>Your mail is still being read - what needs you shows up here.</div>}
-          {groups.map((g) => (
-            <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-              <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
-            </button>
-          ))}
+          {act.map(row)}
+          {!!read.length && <div className="tq-day-h" style={{ marginTop: 8 }}>To read · {loading ? "…" : toRead}</div>}
+          {read.map(row)}
         </div>
       )}
     </div>}
@@ -1224,7 +1231,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
               {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
               {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Proposes sending it to a regular agent - nothing starts until you confirm" sx={quiet}>Regular agent</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Sends it to an agent to work on - nothing starts until you confirm" sx={quiet}>Send to agent</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
               {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title="Proposes filing just this one - nothing is filed until you confirm" sx={quiet}>Not ours</Button>}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
@@ -1235,7 +1242,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
       </div>
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
       <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>All read, next</Button>}
-        then={<><b>All read, next</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - they stay on the Timeline.</>}
+        then={<><b>All read, next</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
         where={null} />
     </CardShell>
   );

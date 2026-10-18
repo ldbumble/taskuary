@@ -38,7 +38,7 @@ phone the task view is the screen, and **Expand** takes the session full screen 
 | **Send to agent** | an ask, an fyi, an idea, a meeting, a report | A task and an agent on it. The card asks which agent | you confirm |
 | **Not ours** | a draft reply, a proposal (not a close-out), an ask, an fyi | Files it. The card asks how far | you confirm |
 | **Send back to the agent** | a draft reply on a task (under More actions); a close-out GitHub refuses for merge conflicts (the main button) | Picks the task's own agent back up with your note - or, on a conflict, GitHub's reason - as the first thing it hears. The card comes back when it stops | at once |
-| **Save and end session** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
+| **Stop and save** | an agent waiting on you | Writes up what the session did and stops the agent. The task stays open | at once |
 | **Remind me** | any card with an open task behind it | Asks for a day, then puts the task away until that morning: under For later on your rail, with its day. On the phone the days come as choices | you pick the day |
 
 A handful of fyi comes as one card with its own **All read, next** button. A close-out card for a pull request also
@@ -61,11 +61,11 @@ Send to agent starts on the agent triage would pick; the other is one click away
 
 ## Pictures, and your voice
 
-Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Continue session**. It
+Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Keep going**. It
 goes with your words: the Assistant looks at the picture itself, and a coding agent is handed the file to open. PNG,
 JPEG, GIF and WebP, up to eight at a time. The microphone beside each box dictates into it.
 
-**Continue session** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
+**Keep going** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
 add a picture, or continue as is. Moving on with **Next** puts the card away with the item.
 
 ## Remind me
@@ -94,7 +94,7 @@ mean.
 | "ask the sender which date range they need" | The question is written for your yes |
 | "start the coding agent on TQ-0123" | An agent starts on that task; it asks which repository when it is not clear |
 | "continue the agent where it left off" | The agent's own last session picks up again |
-| "stop the agent on TQ-0123" | Save and end session on that task's agent |
+| "stop the agent on TQ-0123" | Stop and save on that task's agent |
 | "split this in two" / "it's the same job as TQ-0120" | Two tasks, or this one folded into the other |
 | "this isn't a task" | Deleted, and triage learns it was not work |
 | "it's done" / "reopen TQ-0123" | Mark done, or open again |

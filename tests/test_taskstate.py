@@ -87,13 +87,13 @@ class MakeATaskTests(unittest.TestCase):
         t = s.create_task({'Title': 'Chase the invoice', 'Kind': 'general', 'Status': 'open'}, 'o')
         idea = {'key': 'idea:3', 'kind': 'idea', 'idea': 3, 'tid': t, 'ref': f'TQ-{t:04d}', 'title': 'Chase the invoice'}
         self.assertNotIn('mine', on(idea))
-        self.assertNotIn('make it a task', concierge.fallback(idea, True))
+        self.assertNotIn('Make a task', concierge.fallback(idea, True))
         s.update_task(t, {'Status': 'done'}, 'o')
         self.assertIn('mine', on(idea), "a closed task is history - new work on it may be a task again")
         live = s.create_task({'Title': 'Payroll notice', 'Kind': 'task', 'Status': 'open'}, 'o')
         fyi = {'key': 'msg:9', 'kind': 'fyi', 'mid': 9, 'tid': live, 'ref': f'TQ-{live:04d}', 'title': 'Payroll notice', 'who': 'Erin Blake'}
-        self.assertNotIn('make it a task', concierge.fallback(fyi, True))
-        self.assertIn('make it a task', concierge.fallback({**fyi, 'tid': None}, True))
+        self.assertNotIn('Make a task', concierge.fallback(fyi, True))
+        self.assertIn('Make a task', concierge.fallback({**fyi, 'tid': None}, True))
 
     def test_the_mine_door_on_a_message_with_a_task_returns_that_task_and_makes_no_second(self):
         from unittest import mock

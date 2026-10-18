@@ -55,7 +55,7 @@ export const ROADS = [
 // off the reason prose.
 export const VERDICTS = [
   { key: "ignored", label: "ignored", hint: "you said this sender is not a task - nothing was started" },
-  { key: "error", label: "triage failed", hint: STATES.error.hint },
+  { key: "error", label: "couldn't sort this", hint: STATES.error.hint },   // lanes.json's word, not "triage failed"
 ];
 export const verdictOf = (row) => (row?.MsgStatus === "error" ? "error"
   // an error outranks the road even on a follow-up that has a task (PW-036/037): nothing judged
@@ -131,7 +131,7 @@ export function subline(row, ref = (id) => `TQ-${String(id).padStart(4, "0")}`) 
   if (row.TaskId) bits.push(ref(row.TaskId));
   switch (stateOf(row)) {
     case "triaging": bits.push("triage is deciding what this is"); break;
-    case "error":   bits.push("triage failed — retry, or choose what it is"); break;
+    case "error":   bits.push("couldn't sort this — press Sort it again, or choose what it is"); break;
     case "waving":  bits.push(row.AgentLine || (row.Working ? says("asking", row.Working) : "waiting on you — nothing is moving it")); break;
     case "working": bits.push(row.Working ? `${row.Working} has this open` : "an agent has this"); break;
     case "reply":   bits.push(undrafted(row) ? "waiting for your answer — nothing drafted yet" : "a reply is drafted — read it and send"); break;

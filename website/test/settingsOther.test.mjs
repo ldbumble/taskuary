@@ -53,7 +53,7 @@ test("a key the AI-defaults panel owns is suppressed in every section, not just 
   const filter = src.slice(at, at + 260);
   assert.ok(filter.includes("!(panelOk && PANEL_OWNED.has(s.Name))"),
     "the suppression must not be scoped to one section");
-  assert.ok(!/=== "Triage & agents" && panelOk/.test(filter),
+  assert.ok(!/=== "How mail is sorted" && panelOk/.test(filter),
     "the old tab-scoped form is what let an owned key leak onto Other");
 });
 

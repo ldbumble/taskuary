@@ -16,11 +16,11 @@ export const taskPhase = (status) => {
 
 // ONE WORD PER AGENT STATE, the words lanes.json gives the rail (the owner, 2026-09-25: "let's unify
 // the vocab for agent status ... show it everywhere").
-export const AGENT = { waiting: "agent waiting on you", working: "agent working", saved: "session saved",
+export const AGENT = { waiting: "agent waiting on you", working: "agent working", saved: "stopped and saved",
   stopped: "agent stopped", finished: "agent finished", idle: "waiting to start" };
 
 // `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
-// "session saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
+// "stopped and saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
 // "waiting to start" (T5).
 // `state`: the server's word for the task (taskstate.py) - saved, stopped or waiting to start is what the list and the
 // Board say, so the page says it too instead of guessing from the facts it happens to have loaded (2026-09-25 pass).

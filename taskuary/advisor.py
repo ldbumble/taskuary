@@ -55,9 +55,18 @@ def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line=
                        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (target_kind, int(target_id), key, event, revision, int(tier), line or '', verb, label, json.dumps(list(count)),
                         json.dumps(list(evidence)), model, dropped, _now()))
+# A drop for an OUTSIDE reason is not a verdict on the item: with no AI, opening an item wrote "no brain" and the line never
+# came once one was connected; 30 reads in an hour left every later item a "cap" for good (2026-10-17 audit). The next look
+# tries again. "nothing to say", "verb not offered", "no item", "no actions" stand for the revision.
+RETRY = ('no brain', 'cap', 'no answer')
+def retryable(r) -> bool: return bool(r) and not r.get('Verb') and str(r.get('Dropped') or '').startswith(RETRY)
+def _at(store, target_kind, target_id, revision) -> list:
+    return store._rows('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? AND Revision=? ORDER BY Id DESC', (target_kind, int(target_id), revision))
 def row(store, target_kind: str, target_id, revision: str):
-    return store._one('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? AND Revision=? ORDER BY Tier DESC, Id DESC LIMIT 1',
-                      (target_kind, int(target_id), revision))
+    """The row that stands at this revision: the newest with a verb at any tier - a later tier-2 drop sorted first by tier hid
+    a good tier-1 line - else the newest verdict. Retryable drops are never it."""
+    rs = _at(store, target_kind, target_id, revision)
+    return next((r for r in rs if r.get('Verb')), None) or next((r for r in rs if not retryable(r)), None)
 def rows(store, target_kind: str, target_id, limit: int = 10) -> list:
     return store._rows('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? ORDER BY Id DESC LIMIT ?', (target_kind, int(target_id), limit))
 
@@ -69,7 +78,8 @@ SYSTEM = (
     "the item's own facts point at one verb. Never invent a number: the numbers in the ledger lines are the only ones you may use, "
     "and you cite their ids. A ledger line says what HAPPENED, never whether it worked: \"continued\" means the session was started "
     "again, nothing more - never call it a success, and never say something was merged, sent or fixed unless a line says exactly that. "
-    "The line is plain words for the owner: the ids go in \"evidence\" only, and the verb is named by its label, never its id. "
+    "The line is plain words for the owner, who may never have written code: the ids go in \"evidence\" only, the verb is named by "
+    "its label, never its id, and never a word from the item's own bookkeeping (lane, kind, triage, session, model, an event name). "
     "The reason must be the fact that makes THIS verb right, and it must hold up on its own: someone or an agent waiting on the "
     "owner is a reason to answer, never a reason to put it off. Ending an agent's session is right when its work is done or no "
     "longer wanted; when it has finished something for the owner to review or send, the move is the one that reviews or sends it. If none of the verbs offered is the right move, say nothing - a "
@@ -77,8 +87,16 @@ SYSTEM = (
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"]}. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
-    "item's own facts make right (a person waiting on them: answer; nothing for them to do: close or let go; work an agent left: "
-    "continue or review it) and say why in plain words - say nothing only when no verb offered fits at all.")
+    "item's own facts make right (a person waiting on them: answer; an agent asking them something: Answer it; nothing for them to "
+    "do: close or let go; work an agent left: continue or review it) and say why in plain words - say nothing only when no verb "
+    "offered fits at all.")
+def _system(store) -> str:
+    """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
+    speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
+    from . import counsel
+    try: voice = counsel.sections(counsel.load(store)).get(counsel.VOICE_HEAD, '').strip()
+    except Exception: voice = ''
+    return f"{SYSTEM}\n\nHOW THE LINE SPEAKS (the owner's own rules):\n{voice}" if voice else SYSTEM
 # the event every item on the table gets, when no other event judged it at its current revision (Advisor audit, 2026-10-15)
 SHOWN = 'item.shown'
 WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, 'line': {'type': 'string'},
@@ -112,6 +130,15 @@ def habit(store, verb: str, item: dict) -> tuple:
                    lambda r: json.loads(r['f'] or '{}').get('answer_days') is not None)}.get(verb)
     if not q: return (0, 0)
     rs = store._rows(q[0]); return (sum(1 for r in rs if q[1](r)), len(rs))
+# ...and what each count MEASURES, said so: "You chose Mark done 2 of 3 times in a moment like this" was read off closes that
+# held and answers to nudges, counted over every item, not this kind of moment (2026-10-17 audit)
+MEASURES = {'continue': 'You picked the work back up {n} of the last {m} times an agent stopped',
+            'approve': 'You sent {n} of your last {m} drafts as written',
+            'close': '{n} of the last {m} tasks you closed stayed closed',
+            'chase': '{n} of your last {m} nudges got an answer'}
+def says(verb: str, count) -> str:
+    n, m = (list(count) + [0, 0])[:2]
+    return MEASURES[verb].format(n=n, m=m) + '.' if verb in MEASURES and m >= 2 else ''
 def pill(label: str, count) -> str:
     n, m = (list(count) + [0, 0])[:2]
     return f'{label} · {n} of {m} times' if m >= 2 else str(label or '')
@@ -120,7 +147,12 @@ def pill(label: str, count) -> str:
 def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     from .learn import injectable
     from . import outcomes
-    facts = {k: item.get(k) for k in ('ref', 'kind', 'lane', 'title', 'who', 'when', 'why', 'channel') if item.get(k)}
+    from . import funnel
+    facts = {k: item.get(k) for k in ('ref', 'title', 'who', 'when', 'why', 'channel') if item.get(k)}
+    # where it stands, in the rail's own words - a lane id handed over as-is came back in the line ("the lane is blocked")
+    kinds = {k['key']: k['word'] for k in funnel._VOCAB['kinds']}
+    stands = kinds.get(item.get('kind')) or funnel.LANE_WORDS.get(item.get('lane'), ('',))[0]
+    if stands: facts['where it stands'] = stands
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
     if target_kind == 'task':
@@ -139,7 +171,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         at = continuity.last_agent_turn(store, int(target_id))
         mail = continuity.mail_since(store, int(target_id), at) if at else []
         if mail:
-            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; Continue session hands "
+            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; Keep going hands "
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}
@@ -149,7 +181,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     lrn = injectable(store.doc('learned') or '')
     if lrn.strip(): lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
-    led += [f"{v['verb']}: this move {n} of {m} times" for v in verbs for n, m in [habit(store, v['verb'], item)] if m >= 2]
+    led += [f"{v['label']}: {says(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if says(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
     if tier >= 2:                                         # the bigger read, only for the item on the table
         from .counsel import dossier
@@ -185,15 +217,24 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     def W(**kw): return _write(store, target_kind=target_kind, target_id=target_id, key=key, event=event, revision=rev, tier=tier, **kw)
     item = _item(store, target_kind, target_id)
     if not item: return W(dropped='no item')
-    verbs = [c for c in concierge.chips_for(store, item) if c.get('verb') != 'next']
+    if quiet(item): return W(dropped='left to the item')
+    verbs = offered(store, item)
     if not verbs: return W(dropped='no actions')
-    brain = llm or build_llm(store)
-    if not brain: return W(dropped='no brain')
     have = row(store, target_kind, target_id, rev)                           # two events in one poll: the second finds the first's row
-    if have and int(have.get('Tier') or 1) >= tier: return have['Id']
+    if judged(have, tier): return have['Id']
+    brain = llm or build_llm(store)
+    if not brain:
+        # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
+        last = next(iter(_at(store, target_kind, target_id, rev)), None)
+        if last and last.get('Dropped') == 'no brain': return last['Id']
+        rid = W(dropped='no brain'); _emit(key, target_kind, target_id); return rid
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
-    ans = ask_json(brain, SYSTEM, _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=200)
+    ans = ask_json(brain, _system(store), _prompt(store, event, item, verbs, tier, target_kind, target_id), want=WANT, max_tokens=200)
     d = ans.data if isinstance(ans.data, dict) else {}
+    # a line that landed while this one was thinking stands: a tier-2 answer, drop or not, never replaces a line the owner may
+    # already be reaching for (B5 - the filled button moved under the cursor seconds after the item opened)
+    now = row(store, target_kind, target_id, rev)
+    if now and now.get('Verb'): return now['Id']
     if not d: return W(dropped=f'no answer: {ans.error or "not an object"}'[:200], model=model)
     verb, line = d.get('verb'), ' '.join(str(d.get('line') or '').split())[:200]
     ev = [e for e in (d.get('evidence') or []) if isinstance(e, str) and _EV.match(e)][:6]
@@ -203,11 +244,34 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     if not hit: return W(dropped=f'verb not offered: {verb}'[:120], model=model, line=line, evidence=ev)
     line = plain(line, verb, hit['label'])
     rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)
+    _emit(key, target_kind, target_id); return rid
+
+
+def _emit(key, target_kind, target_id):
     try:
         from . import live
         live.emit(live.ADVICE, key=key, target_kind=target_kind, target_id=int(target_id))
     except Exception: pass
-    return rid
+
+
+def judged(have, tier: int) -> bool:
+    """A line stands at any tier (the bigger read runs only where the first one found none); a verdict drop stands for its own
+    tier and below, so the item on the table still earns the bigger read after the small one said nothing."""
+    return bool(have) and (bool(have.get('Verb')) or int(have.get('Tier') or 1) >= tier)
+
+
+def quiet(item: dict) -> bool:
+    """Where the Advisor keeps out of it. Mail the AI never sorted: the row's own Sort it again is the move, and the Advisor,
+    offered only Make a task / Send to agent / Not ours, put the dark button on "Not ours" for mail nobody read. A report that
+    ran fine: it is read, not acted on, and the only verbs it carries create work (2026-10-17 audit)."""
+    return item.get('lane') == 'unjudged' or (item.get('kind') == 'report' and not item.get('bad'))
+
+
+def offered(store, item: dict) -> list:
+    """The verbs the item's row carries, minus Next. An agent waiting on the owner carries Answer it there (chips_for) - its card
+    once offered only End and Remind me, which the prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17
+    audit). Not added here: a paused, stalled or stopped agent has nobody listening, and the row knows which is which."""
+    return [c for c in concierge.chips_for(store, item) if c.get('verb') != 'next']
 
 
 def _capped(store) -> bool:
@@ -226,9 +290,11 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
     try:
         if str(store.get_setting(ON_KEY, '1') or '1') != '1' or not target_id: return None
         rev = revision(store, target_kind, target_id)
-        have = row(store, target_kind, target_id, rev)
-        if have and int(have.get('Tier') or 1) >= tier: return None             # judged at this revision already
-        if _capped(store): return _write(store, target_kind=target_kind, target_id=target_id, key=key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
+        if judged(row(store, target_kind, target_id, rev), tier): return None    # judged at this revision already
+        if _capped(store):
+            last = next(iter(_at(store, target_kind, target_id, rev)), None)
+            if last and last.get('Dropped') == 'cap': return last['Id']          # one cap row per revision, retried next look
+            return _write(store, target_kind=target_kind, target_id=target_id, key=key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
         mark = (target_kind, int(target_id), rev, int(tier))
         with _LOCK:
             if mark in _INFLIGHT: return None                                   # the same moment, judged on another thread
@@ -251,7 +317,7 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
 def _payload(r: dict) -> dict:
     count = json.loads(r.get('CountJson') or '[0,0]')
     return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', r['Label'] or '') if r.get('Line') else r.get('Line'), 'verb': r['Verb'], 'label': r['Label'], 'pill': pill(r['Label'], count), 'count': count,
-            'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
+            'says': says(r['Verb'] or '', count), 'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 
 def _at_work(store, target_kind: str, target_id) -> bool:
@@ -265,16 +331,18 @@ def _at_work(store, target_kind: str, target_id) -> bool:
 
 def for_key(store, key: str) -> dict:
     """What the prompt box shows for the item on the table: the row at the item's CURRENT revision, or nothing. A changed
-    item drops its old pill by this one comparison - no cleanup pass. The item on the table earns the bigger read, once."""
+    item drops its old pill by this one comparison - no cleanup pass. The item on the table earns the bigger read, once, and
+    only where the small read left no line: a tier-2 answer swapped the line and moved the filled button seconds after the item
+    opened, under the owner's hand (B5, 2026-10-17). {"none": "no_ai"} is the strip's cue to ask for an AI."""
     tgt = target_of(store, key)
     if not tgt or _at_work(store, *tgt): return {}
-    rev = revision(store, *tgt); r = row(store, tgt[0], tgt[1], rev)
-    if r and int(r.get('Tier') or 1) < 2: notice(store, r['Event'], tgt[0], tgt[1], tier=2)
+    rev = revision(store, *tgt); rs = _at(store, tgt[0], tgt[1], rev); r = row(store, tgt[0], tgt[1], rev)
+    if r and r.get('Verb'): return _payload(r)
     # NEVER LEFT GUESSING (the owner, 2026-10-15: "the advisor ... should be guiding at all times never leaving it guessing"): only
     # eight events ever judged an item, so a fresh email or a task that moved since its last event had an empty bar for good. The
     # item on the table is judged now, at this revision, once - the line arrives by the `advice` live event the page already reads
-    if not r: notice(store, SHOWN, tgt[0], tgt[1], tier=2)
-    return _payload(r) if r and r.get('Verb') else {}
+    if not judged(r, 2): notice(store, r['Event'] if r else SHOWN, tgt[0], tgt[1], tier=2)
+    return {'none': 'no_ai'} if rs and rs[0].get('Dropped') == 'no brain' else {}
 
 
 def notes(store, key: str, limit: int = 10) -> list:
@@ -294,7 +362,22 @@ def notes(store, key: str, limit: int = 10) -> list:
 def block(store, item: dict) -> str:
     """The Advisor's line for the chat's system prompt, so 'why?' is answered from its evidence - a lookup, not a think."""
     d = for_key(store, (item or {}).get('key') or '') if item else {}
-    if not d: return ''
-    ev = ', '.join(d['evidence']) or 'the item itself'
+    if not d.get('verb'): return ''
+    # the button's name and what the evidence SAYS: "verb stop_agent; evidence: out13" was handed to the chat as-is, and came
+    # back to the owner in its answer (2026-10-17 audit)
+    ev = '; '.join(filter(None, (evidence_words(store, e) for e in d['evidence']))) or 'the item itself'
     return (f"THE ADVISOR'S LINE on this item (if the owner asks why, this is the answer; the numbers are the ledger's): "
-            f"\"{d['line']}\" - the pill offers {d['pill']} (verb {d['verb']}); evidence: {ev}.")
+            f"\"{d['line']}\" - its button is {d['label']}" + (f" ({d['says']})" if d.get('says') else '') + f"; it rests on: {ev}.")
+
+
+def evidence_words(store, ev_id: str) -> str:
+    """One evidence id as what it says: an outcome as the ledger's own sentence, anything else as the label it resolves to."""
+    try:
+        if str(ev_id).startswith('out'):
+            from . import outcomes
+            r = store._one('SELECT * FROM outcome WHERE Id=?', (int(ev_id[3:]),))
+            return outcomes._sentence(store, r) if r else ''
+        from .learnedgraph import _resolve
+        lbl = _resolve(store, ev_id).get('label')
+        return '' if lbl == ev_id else str(lbl or '')
+    except Exception: return ''

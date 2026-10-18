@@ -14,14 +14,14 @@ const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: 
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
 
 test("the advised verb is the one filled button, whatever the row would have filled", () => {
-  const list = [v("approve", "decide", { tone: "p", label: "Send & close" }), v("continue", "agent", { label: "Continue session" }), v("done", "more", { label: "Mark done" }), v("next", "next")];
+  const list = [v("approve", "decide", { tone: "p", label: "Send & close" }), v("continue", "agent", { label: "Keep going" }), v("done", "more", { label: "Mark done" }), v("next", "next")];
   assert.deepEqual(filled(rowOf({ ref: "", list })), ["approve"]);
-  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Continue session" })), ["continue"]);
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Keep going" })), ["continue"]);
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["done"]);   // Mark done is the advisor's close
 });
 
 test("a pick waiting behind More comes onto the bar, filled; nothing advised leaves the row as it was", () => {
-  const list = [v("continue", "agent", { lead: true, label: "Continue session" }), v("rerun", "more", { label: "Run it again" }), v("next", "next")];
+  const list = [v("continue", "agent", { lead: true, label: "Keep going" }), v("rerun", "more", { label: "Run it again" }), v("next", "next")];
   const r = rowOf({ ref: "", list }, { verb: "rerun", label: "Run it again" });
   assert.deepEqual(filled(r), ["rerun"]); assert.ok(!r.more.some((x) => x.id === "rerun"));
   assert.deepEqual(filled(rowOf({ ref: "", list }, null)), filled(rowOf({ ref: "", list })));
@@ -29,13 +29,13 @@ test("a pick waiting behind More comes onto the bar, filled; nothing advised lea
 });
 
 test("the advisor's Reply is the task's Write reply: matched by the verb's id, so no second Reply is drawn", () => {
-  const list = [v("reply", "decide", { tone: "p", label: "Write reply" }), v("continue", "agent", { label: "Continue session" }), v("done", "more", { label: "Mark done" })];
+  const list = [v("reply", "decide", { tone: "p", label: "Write reply" }), v("continue", "agent", { label: "Keep going" }), v("done", "more", { label: "Mark done" })];
   assert.equal(advisedIn(list, { verb: "reply", label: "Reply" })?.id, "reply");
-  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Continue session" })), ["continue"]);
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Keep going" })), ["continue"]);
 });
 
 test("a greyed verb is never the advised one", () => {
-  const list = [v("continue", "agent", { lead: true, label: "Continue session" }), v("done", "more", { label: "Mark done", disabled: true }), v("next", "next")];
+  const list = [v("continue", "agent", { lead: true, label: "Keep going" }), v("done", "more", { label: "Mark done", disabled: true }), v("next", "next")];
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["continue"]);
 });
 
@@ -58,7 +58,7 @@ test("while the NEXT strip stands, the task's own Open again line is hidden - on
 test("the strip gives the suggestion, not the move's name: a lead-in that is the verb goes, any other sentence stays whole", () => {
   assert.equal(suggestion("Reply: Gail is directly asking your access decision for this group.", "Reply", "reply"), "Gail is directly asking your access decision for this group.");
   assert.equal(suggestion("Reply because Erin is directly asking for your okay.", "Reply", "reply"), "Erin is directly asking for your okay.");
-  assert.equal(suggestion("Continue session - the coding agent was cut off, not finished.", "Continue session", "continue"), "The coding agent was cut off, not finished.");
+  assert.equal(suggestion("Keep going - the coding agent was cut off, not finished.", "Keep going", "continue"), "The coding agent was cut off, not finished.");
   assert.equal(suggestion("Erin: the list is approved, send it.", "Reply", "reply"), "Erin: the list is approved, send it.");   // a name, not the verb
   assert.equal(suggestion("You usually merge these.", "Mark done", "close"), "You usually merge these.");
 });
@@ -86,8 +86,8 @@ test("a move the row cannot make is no advice: a greyed or missing button draws 
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
   assert.match(strip, /const onRow = advisedIn\(verbs\.list, advice\);\s*if \(!onRow\) return null;/, "a greyed button: no line");
   assert.match(strip, /!advisedAny\(theirs, advice\)/, "a greyed button is not lacking: nothing joins the row for it");
-  const list = [v("stop_agent", "agent", { label: "Save and end session", disabled: true }), v("next", "next")];
-  assert.equal(advisedIn(list, { verb: "stop_agent", label: "Save and end session" }), null, "greyed: nothing to fill, so nothing to say");
+  const list = [v("stop_agent", "agent", { label: "Stop and save", disabled: true }), v("next", "next")];
+  assert.equal(advisedIn(list, { verb: "stop_agent", label: "Stop and save" }), null, "greyed: nothing to fill, so nothing to say");
 });
 
 test("advised Send fills only a button that sends, and the card's other words for an act still match", () => {

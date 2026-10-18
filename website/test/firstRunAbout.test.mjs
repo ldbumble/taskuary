@@ -23,7 +23,7 @@ test("the job is written once the title is answered, and the last press saves wh
 });
 
 test("a failed email sign-in is the Advisor's line, with what to do", () => {
-  assert.match(read("FirstRun.jsx"), /: st\.mail_error \? `\$\{st\.mail_error\} Fix it in the card below and press Connect again/);
+  assert.match(read("FirstRun.jsx"), /: st\.mail_error \? `\$\{st\.mail_error\} Fix it in the card and press Connect again/);
 });
 
 test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is the Advisor's line", () => {
@@ -42,19 +42,24 @@ test("the job reads as a document, and Edit opens its text", () => {
 
 test("the first time About your work is saved, setup is complete: confetti and one big button into the day", () => {
   const fr = read("FirstRun.jsx"), done = read("SetupDone.jsx");
-  assert.match(fr, /const first = !reopened && !st\.about_done; await reload\(\); go\(first \? "done" : "other"\);/);
-  assert.match(fr, /\{q === "done" && <SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\} \/>\}/);
+  // ...but only once the AI and the mail work too: saved from the rail over no AI, it went to Setup complete (2026-10-17)
+  assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "done" : "other"\);/);
+  assert.match(fr, /\{q === "done" && <SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/>\}/);
   assert.match(fr, /const navShown = view === "done" \? \[\] :/);
   assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);
   assert.match(done, /prefers-reduced-motion: reduce/);
+  // the AI failing on the mail is not complete: the problem, and Change AI as the one big button
+  assert.match(done, /if \(aiError\) return \([\s\S]*?size="large" onClick=\{onChangeAi\}[\s\S]*?>Change AI</);
   assert.match(read("setupSteps.js"), /shown === "finish" \? "ready - Go to my day"/);
 });
 
 test("an AI connected on the Connections page says so, and the one in use leads the shelf", () => {
   const fr = read("FirstRun.jsx");
-  assert.match(fr, /: ai\.connected \? \["on", "Connected - click to make it your AI"\]/);
+  assert.match(fr, /: ai\.connected \? \["on", "Connected - pick it to make it your AI"\]/);
   assert.match(fr, /\["on", "Your AI - it sorts your mail"\]/);
-  assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(\(c\) => c\.title === inUse\)/);
+  assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(using\), \.\.\.lead\.filter\(\(c\) => !using\(c\)\)\] : lead;/);
+  // ...matched by its connection, not its name: "ChatGPT (your plan)" never matched the card titled ChatGPT (2026-10-17)
+  assert.match(fr, /const inUseCid = \(c\) => st\.step !== "ai" && st\.brain\?\.pick === `connector:\$\{c\.ConnectorId\}`;/);
 });
 
 // "No such buttons. If it suggest systems then you can do it in search ... don't like new buttons besides for what there was before"
@@ -77,5 +82,5 @@ test("the email signature is a setup question and a Settings field, both with a 
   assert.match(about, /data-tq-signature-preview=""/);
   assert.match(settings, /if \(m\.type === "signature"\) return <SignatureSetting/);
   assert.match(settings, /api\.post\("\/api\/signature\/learn"/);
-  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace's policy denies it, use the Codex CLI/);
+  assert.match(read("FirstRun.jsx"), /If OpenAI says your workspace's policy denies it, use Codex/);
 });

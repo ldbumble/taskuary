@@ -321,7 +321,7 @@ class Term:
             # A CLI can exit itself (quit, crash, rate-limit) without traveling through the HTTP
             # close button. It no longer owns the task at that point: release stale running rows
             # and put unfinished work back in the owner's pipe immediately.
-            # ...only when it went away BY ITSELF. A close is someone's decision - Save and end session, Mark done,
+            # ...only when it went away BY ITSELF. A close is someone's decision - Stop and save, Mark done,
             # Stop, the X - and whoever closed it says what the task is now; this used to reopen it under them and
             # write "nobody is working it" over a session the owner had just ended (A1/A2, 2026-09-25)
             if not getattr(self, 'on_purpose', False): release_task(self.store, self.task_id)
@@ -2436,7 +2436,7 @@ def close(sid):
     return bool(t)
 
 
-SAVED = 'session:saved'          # the owner ended the session and its result is written (Save and end session) - not "left"
+SAVED = 'session:saved'          # the owner ended the session and its result is written (Stop and save) - not "left"
 
 
 def release_held(store, task_id, actor='terminal') -> int:

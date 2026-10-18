@@ -134,7 +134,7 @@ class SenderRoadsTests(unittest.TestCase):
         self.assertIn('not_ours', verbs); self.assertNotIn('not_ours_sender', verbs); self.assertNotIn('block_sender', verbs)
         p = concierge.propose_direct(s, 'not_ours', item['key'], table=True)
         self.assertEqual([a['verb'] for a in p['alts']], ['not_ours', 'not_ours_sender', 'block_sender'])
-        self.assertIn('never reaches triage', p['alts'][2]['label'])
+        self.assertIn('never comes in', p['alts'][2]['label'])
 
     def test_the_memory_road_teaches_triage_and_writes_no_rule(self):
         s, item = self._fyi()

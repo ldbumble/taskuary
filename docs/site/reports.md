@@ -128,7 +128,7 @@ sentence the judge answers yes or no to), **when a rule trips** (a number or wor
   never sent to anyone. It clears itself when a run works again. A send or an alert that did not go
   is in the bell the same way, until the next one goes.
 - **A mute** covers the alert and the morning brief as well as the rail.
-- **Who judges** is one setting for every report, under Settings › Triage & agents › Where runs
+- **Who judges** is one setting for every report, under Settings › How mail is sorted › Where runs
   go; blank means the brain that writes the report. **try it on the last 5 runs** shows what the
   card would have done, without posting anything.
 
@@ -227,7 +227,7 @@ under Reports and never goes through triage; its agent works it like any other t
   none runs on the assistant, or on the coding profile when it has a folder to work in.
 - A workflow with a **folder** (`cwd`) runs in that folder. If the folder is gone, the task says so
   and nothing starts.
-- A workflow runs on the **same brain as your general agents** (Settings → Triage & agents →
+- A workflow runs on the **same brain as your general agents** (Settings → How mail is sorted →
   General agent), on its main model. For a hard job, the editor's **Model** row picks a stronger
   model from that CLI's own list and an **Effort** level - only the levels that CLI and model take
   (Claude Code's `--effort`, Codex's `model_reasoning_effort`). A CLI with no effort setting shows

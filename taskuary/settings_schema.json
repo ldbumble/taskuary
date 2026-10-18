@@ -12,8 +12,7 @@
     "phone_assistant"
   ],
   "groups": [
-    "Triage & agents",
-    "Triage & routing",
+    "How mail is sorted",
     "Replies",
     "Assistant",
     "Assistant on your phone",
@@ -56,28 +55,28 @@
       "help": "A nearest-neighbour search always has a nearest neighbour, even when nothing is related, so passages below this cosine similarity are dropped. Raise it if unrelated passages turn up; lower it if related ones are missed. Scales differ between models, and the default 0.5 is a starting point, not a measurement for yours."
     },
     "intent_classify_enabled": {
-      "group": "Triage & routing",
+      "group": "How mail is sorted",
       "label": "Intent triage",
       "type": "switch",
       "desc": "Classify every new message: a task to DO, a question to ANSWER, or FYI to file.",
-      "help": "The heart of the funnel. Every inbound message is read (by the triage brain in Triage & agents, the section above, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself."
+      "help": "The heart of the funnel. Every inbound message is read (by the AI picked for sorting at the top of this section, guided by SOUL.md) and classified: task = something must be done, so an agent can be dispatched; reply_only = answering IS the work, so a reply is drafted for your approval; fyi = informational, filed with no task and no draft.\n\nOff: every message becomes a task, which turns newsletters into work items. Leave this on unless you are debugging triage itself."
     },
     "triage_ai": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Triage brain",
       "type": "brain",
       "desc": "Which AI reads and classifies inbound messages.",
       "help": "TWO BRAINS: a small, fast cloud model (Anthropic / OpenAI / Azure OpenAI) classifies each message in under a second for a fraction of a cent, while your CLI agent — the expensive, capable one — is saved for actually working tasks.\n\nONE BRAIN, TWO GEARS also works well: pick a CLI agent here and set its 'light model' (Docs → Profiles → Manage profiles → Edit) — triage, drafts, summaries and the digest then run on the cheap fast tier (haiku, gemini-flash…) while coding sessions keep the agent's main model. No second API key, one bill.\n\nLeft blank, it is your default brain on its light gear (haiku for Claude) - never whichever connector was added first. Obvious automated noise is filtered by cheap heuristics before any AI is called either way."
     },
     "triage_backup_ai": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Backup AI connections",
       "type": "brains",
       "desc": "Ordered alternatives for triage, reply drafts, summaries, reports, and assistant chat when the chosen AI is unavailable.",
       "help": "Pick more than one. Taskuary tries them in the order shown when the primary brain hits a session or usage limit, is signed out, has no key, or otherwise refuses the call. A fallback uses its own default model; a model name chosen for Claude is never handed to Codex.\n\nThis starts blank because crossing from a cloud API to a local CLI can change cost and privacy. Once you name backups, the same chain protects every short/background AI job as well as the non-coding assistant."
     },
     "learn_enabled": {
-      "group": "Triage & routing",
+      "group": "How mail is sorted",
       "label": "Learn from your verdicts",
       "type": "switch",
       "desc": "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
@@ -105,7 +104,7 @@
         "github"
       ],
       "desc": "Which channels get a drafted reply at all. Switch one off and its questions just file.",
-      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still land on the Timeline and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the agent wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
+      "help": "A question arriving somewhere you never answer from should not open a reply task whose draft has nowhere to go. Turn a channel off and messages from it still come in and can still become real tasks — they simply never get a draft, and the funnel says so in the row's reason ('replies are off for slack').\n\nOne answer for the whole app: triage uses it to decide whether a question becomes a reply task, the agent wrap-up uses it to decide whether to draft at all, and the approval buttons on the task use it to decide whether Approve can actually send. They cannot disagree.\n\nTwo rules are not yours to change here: GitHub also needs 'Reply to issue/PR authors' on its own card (a reply there is a PUBLIC comment), and the read-only trackers — Jira, Linear, Sentry, PagerDuty and friends — can never carry a reply because Taskuary only reads them."
     },
     "calendar_enabled": {
       "group": "Replies",
@@ -115,35 +114,35 @@
       "help": "When the thread mentions a day, a time, a meeting or availability, the responder fetches your busy slots for the next 14 days and is told: never offer a busy time; if the asked time is busy, say so and offer the nearest free one; if the calendar could not be read, say you will confirm. The task gets a note that the calendar was checked.\n\nAgents can read the same thing: POST /api/tools/run with type \"calendar\"."
     },
     "concierge_ai": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Assistant tab brain",
       "type": "brain",
       "desc": "Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.",
-      "help": "THREE DEFAULTS, side by side in Triage & agents: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
+      "help": "THREE DEFAULTS, side by side in How mail is sorted: the triage brain, the default coding CLI, and this one.\n\nA CLI agent here can ACT - read a task or message, rerun a report, run a data tool - because it has a shell; it runs in its own scratch folder on a light model (Claude: haiku, Codex: low effort, Gemini: flash, or the agent's own 'light model' from Docs → Profiles) and picks its conversation back up turn to turn, so only the first turn pays the start-up. An API connector answers faster but can only talk. Sending, approving and pushing are your buttons whichever speaks."
     },
     "concierge_model": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Assistant tab model",
       "type": "text",
       "desc": "A different model for the Assistant tab, if you want one (e.g. sonnet, or gpt-5.4-mini). Blank = the faster, lighter default. Add @low, @medium or @high to set how hard it thinks, e.g. claude-sonnet-5@medium; a Claude model with nothing added thinks at low.",
       "help": "For a CLI this is its --model, and model@effort sets its reasoning effort (Claude --effort, Codex model_reasoning_effort); for an API connector, its model or deployment name. Changing it starts a fresh CLI conversation."
     },
     "assistant_ai": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "General agent brain",
       "type": "brain",
       "desc": "Which AI works every general task - research, planning, writing, a job with no repository - and answers the floating bubble. Your phone talks to the Assistant, not this.",
       "help": "Normally set on the General agent card at the top of this tab; this row is the fallback if that panel cannot load. A CLI here can run tools, drive a browser and post to the wall; an API connector has no shell, so it can only read and write - quicker, and enough for chat. Blank = the first active API connector, else the default agent."
     },
     "judge_ai": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Where runs go",
       "type": "brain",
-      "desc": "Which AI decides whether a finished report lands on your Timeline, your work rail, reaches you right away, or goes out.",
+      "desc": "Which AI decides whether a finished report waits under Reports, reaches you right away, or goes out.",
       "help": "Normally set on the 'Where runs go' card at the top of this section; this row is the fallback if that panel cannot load. Four yes/nos about a result somebody else wrote, judged against the sentences on the report's own card - it never has to write anything, so a decision model belongs here and a chat model is wasted on it. Blank = the brain that writes each report judges its own run."
     },
     "assistant_model": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "General agent model",
       "type": "text",
       "desc": "Override the model for the brain above. Blank = the provider's own default.",
@@ -206,35 +205,35 @@
       "help": "Switch a kind off and it never appears in a post again; lines already posted keep their actions and conversation. 'idea' is the only one that needs an AI connector — the others are read straight off the hub's own tables and your calendar. With 'idea' off no model is called at all: the facts post in the hub's own words."
     },
     "default_brain": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Default AI for agents",
       "type": "text",
       "desc": "Which AI program runs an agent's work when its role does not name one. A role (coding, researcher, analyst) decides the instructions an agent starts with; this decides which program follows them. Blank = each profile's own program.",
       "help": "Set from the cards above in normal use — this is the raw value they write. Naming a brain here is what stops a role name being read as a CLI name, which is how TQ-0588's coding work was once routed to Copilot.\n\nA role and a brain are different questions and one name cannot answer both."
     },
     "backup_brains": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Fallback AI programs",
       "type": "text",
       "desc": "Tried in order when the first one has used up its allowance, is signed out, or will not start. * = every other one you have set up, in the order they are listed.",
       "help": "Failover is for AVAILABILITY failures only — session/usage/rate limits, quota, expired login, a missing executable — never for an agent that simply erred. The task, its messages, attachments, repository and seed prompt all travel to the replacement, which starts a fresh conversation with its own model."
     },
     "profile_brains": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "A different AI for one role",
       "type": "text",
       "desc": "For a role that should run on a different AI from the default above. Written as JSON, e.g. {\"researcher\": \"codex\"}. Blank (the default) means every role uses the default.",
       "help": "The escape hatch for 'the analyst should run on codex but everything else on claude'. An unknown role name is ignored rather than guessed at. Edited here because it is rare enough not to earn a picker."
     },
     "default_agent": {
-      "group": "Triage & agents",
+      "group": "How mail is sorted",
       "label": "Default coding CLI",
       "type": "agent",
       "desc": "The CLI agent that works tasks when nothing names one.",
       "help": "Start session, Send to coding agent and auto-dispatch all use this agent unless you pick another in the moment; every agent picker lists it first. The roster itself lives under Docs → Profiles → Manage profiles, where the default row wears the star.\n\nGitHub-specific permissions (may agents open issues? push?) are on the GitHub connector card, because they are decisions about how your team uses GitHub, not about Taskuary."
     },
     "default_profile": {
-      "group": "Triage & routing",
+      "group": "How mail is sorted",
       "label": "Your mail goes to",
       "type": "profile",
       "desc": "The worker that takes a non-coding task when triage names no specialist for it. Blank leaves it unassigned for you to pick.",
@@ -453,7 +452,7 @@
       "label": "Catch-up window (days)",
       "type": "number",
       "desc": "How far back the app reaches when it opens, for what arrived while it was closed.",
-      "help": "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe Timeline shows the catch-up running and refreshes when it lands. The daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup."
+      "help": "Taskuary is a window you open, not a service — at 5:30am it is closed, so 'anything since I last polled' misses the weekend. On startup every trigger connection is asked for this many days; the window only ever WIDENS (a source last polled a month ago is not pulled forward), and duplicates are never re-ingested.\n\nThe daily DIGEST.md synthesis runs right after it. 0 = plain incremental poll on startup."
     },
     "mark_read_enabled": {
       "group": "Sync & startup",
@@ -502,7 +501,7 @@
       "label": "Passed work comes back after (minutes)",
       "type": "number",
       "desc": "How long something you passed with Next - an agent waiting, a task ready to close out, a task nobody is on - waits in Passed before it is back in Your task and the walk. 180 (three hours) by default. To put a task away until a date, use Remind me on the task.",
-      "help": "Next does not close anything - the task stays open in Tasks. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date."
+      "help": "Next does not close anything - the task stays open. Rather than let it sit there unseen, the work tab raises it again once it has been quiet this long, and keeps doing so until you Mark it done. A task with a Remind me date stays away until that date."
     },
     "meeting_grace_minutes": {
       "group": "Assistant",

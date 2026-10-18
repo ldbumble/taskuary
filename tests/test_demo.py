@@ -38,8 +38,8 @@ class OffByDefaultTests(unittest.TestCase):
 class TheDoorsAreShutTests(unittest.TestCase):
     def test_nothing_sends(self):
         with on():
-            for path in ('/api/reviews/3/send', '/api/review/3/send', '/api/tasks/7/handoff'):
-                self.assertIn('Nothing sends', demo.refuse('POST', path), path)
+            for path in ('/api/reviews/3/send', '/api/review/3/send', '/api/tasks/7/handoff', '/api/reviews/3/decide'):
+                self.assertIn('nothing is sent', demo.refuse('POST', path), path)
 
     def test_no_connector_can_be_made_edited_or_given_a_secret(self):
         with on():
@@ -103,6 +103,43 @@ class TheDemoStillWorksTests(unittest.TestCase):
             self.assertNotEqual(demo.refuse('POST', '/api/connectors'), '')
 
 
+class TheCardsOwnButtonsTests(unittest.TestCase):
+    """U8 (2026-10-17): Mark done, Remind me and a draft were refused with "Report this bug" under them. They write the demo's own
+    database and nothing else, so they work; Start and Send stay shut, and every refusal is said as the demo, in plain words."""
+    def test_done_remind_and_a_draft_are_allowed(self):
+        with on():
+            for path in ('/api/concierge/propose', '/api/tasks/3/remind', '/api/messages/9/reply', '/api/reviews/4/draft'):
+                self.assertEqual(demo.refuse('POST', path), '', path)
+
+    def test_a_confirmed_proposal_runs_by_its_kind(self):
+        from taskuary import operations
+        s = MemoryStore(); t = s.create_task({'Title': 'Order new badges', 'Status': 'open'}, 'owner')
+        m = s.add_message({'ConversationId': 'c1', 'Channel': 'email', 'Subject': 'Badges', 'FromEmail': 'erin@northwind.example',
+                           'BodyText': 'can you order them?', 'Status': 'routed', 'TaskId': t})
+        done = operations.propose(s, 'task.complete', t, {}, 'owner')['id']
+        later = operations.propose(s, 'task.defer', t, {'until': '2026-12-01'}, 'owner')['id']
+        start = operations.propose(s, 'dispatch.prepare', t, {'kind': 'coding'}, 'owner')['id']
+        agent = operations.propose(s, 'task.create_from_message', m, {'kind': 'coding'}, 'owner')['id']
+        mine = operations.propose(s, 'task.create_from_message', m, {'kind': 'task'}, 'owner')['id']
+        run = lambda oid: demo.refuse('POST', f'/api/operations/{oid}/execute', store=s)
+        with on():
+            self.assertEqual((run(done), run(later), run(mine)), ('', '', ''))
+            self.assertEqual((run(start), run(agent)), (demo.STARTS, demo.STARTS))
+            self.assertEqual(run('no-such-proposal'), '')                    # the handler's own 404 says so
+
+    def test_without_a_store_to_read_the_kind_it_stays_shut(self):
+        with on(), mock.patch.object(demo, '_store', lambda: None):
+            self.assertEqual(demo.refuse('POST', '/api/operations/abc/execute'), demo.OFF)
+
+    def test_every_refusal_is_said_as_the_demo_in_plain_words(self):
+        with on():
+            for path in ('/api/connectors', '/api/tools/run', '/api/reviews/3/send', '/api/terminals', '/api/tasks/3/dispatch',
+                         '/api/sync', '/api/doc/soul', '/api/something/invented'):
+                why = demo.refuse('POST', path)
+                self.assertTrue(why.startswith('This is the demo - '), (path, why))
+                for word in ('CLI', 'triage', 'session', 'timeline', 'operator'): self.assertNotIn(word, why, (path, why))
+
+
 class TheScriptedBrainTests(unittest.TestCase):
     def test_it_answers_without_a_key_a_cli_or_a_network(self):
         said = demo.brain()('you are an assistant', 'CONVERSATION\nUSER: what should I do first?')
@@ -118,6 +155,41 @@ class TheScriptedBrainTests(unittest.TestCase):
         import json
         out = json.loads(demo.brain()('Answer ONLY with JSON: {"intent": ...}', 'a message'))
         self.assertIn(out['intent'], ('fyi', 'task', 'reply_only'))
+
+    def test_the_advisor_gets_one_offered_verb_and_a_plain_line(self):
+        """B17 (2026-10-17): the Advisor's prompt says JSON, so it got triage's {"intent": "fyi"} and the demo never showed one
+        suggestion. It names an offered verb someone waiting makes right - and on a newsletter, like the real one, nothing."""
+        import json
+        ask = lambda verbs: json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: {verbs}'))
+        out = ask('close (Mark done), reply (Reply), defer (Remind me)')
+        self.assertEqual(out['verb'], 'reply'); self.assertLessEqual(len(out['line']), 80); self.assertTrue(out['line'])
+        self.assertEqual(ask('mine (Make a task), regular_agent (Send to agent), not_ours (Not ours)')['verb'], None)
+
+    def test_the_canned_count_is_the_rails_own(self):
+        """B23: "Three things are waiting on you" stood beside a rail of nine."""
+        from taskuary import funnel
+        s = MemoryStore(); demo.seed(s)
+        with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
+            funnel.invalidate(); n = len(funnel.pile(s, force=True)['items'])
+            self.assertTrue(demo._list_line(s).startswith(f'{n} things are on it'), demo._list_line(s))
+        funnel.invalidate()
+        self.assertNotIn('Three', ' '.join(demo.CANNED))
+
+
+class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
+    def test_an_item_on_the_table_gets_a_verb(self):
+        """The demo is where newcomers first meet the Advisor: the strip over an ask has a suggestion on it."""
+        from taskuary import advisor, funnel
+        s = MemoryStore(); demo.seed(s)
+        with on(), mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
+            funnel.invalidate()
+            keys = [i['key'] for i in funnel.pile(s, force=True)['items'] if i.get('lane') == 'approve' or i.get('kind') in ('asked', 'todo')]
+            self.assertTrue(keys)
+            tgt = advisor.target_of(s, keys[0])
+            advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2)
+            got = advisor.for_key(s, keys[0])
+        funnel.invalidate()
+        self.assertTrue(got.get('verb'), got); self.assertTrue(got.get('line'), got)
 
 
 class TheWorldTests(unittest.TestCase):
@@ -169,6 +241,37 @@ class TheWorldTests(unittest.TestCase):
         for domain in found:
             self.assertTrue(domain.endswith(ok) or '.example.' in domain,
                             f'{domain} is not a reserved domain - the demo may only invent people')
+
+    def test_the_accounting_task_is_a_general_agents_conversation(self):
+        """B23: the GL reconciliation was seeded as coding, so an accountant's task opened as a terminal."""
+        from taskuary import general
+        s = MemoryStore(); demo.seed(s)
+        gl = next(t for t in s.list_tasks() if t['Title'] == 'Reconcile the August GL export')
+        self.assertEqual(gl['Kind'], 'general')
+        said = [c['Body'] for c in s.list_comments(gl['TaskId']) if c.get('ActorType') == general.ASSISTANT_TYPE]
+        self.assertTrue(any('4,180' in b for b in said), said)
+
+    def test_a_reply_that_asked_something_is_not_filed_as_fyi(self):
+        """B23: history replies were seeded routed with no task, so "can you approve the Fairhaven PO?" sat under the fyi as
+        "Nothing to decide". Each is answered on a closed task of its own, like triage makes it."""
+        s = MemoryStore(); demo.seed(s)
+        for days, hour, channel, who, subject, body, verdict, why in demo.HISTORY:
+            if verdict != 'reply': continue
+            m = next(x for x in (s.get_message(r['MessageId']) for r in s.scan_messages(200)) if x.get('BodyText') == body)
+            self.assertTrue(m.get('TaskId'), body)
+            self.assertEqual((s.get_task(m['TaskId']) or {}).get('Status'), 'done', body)
+
+    def test_each_agent_replays_its_own_work(self):
+        """B23: every agent task replayed the month-end transcript, whatever it was about."""
+        from taskuary import terminal
+        s = MemoryStore(); demo.seed(s)
+        with mock.patch.object(terminal, 'SESSIONS', {}), mock.patch.object(demo, 'Replay', lambda st, tid, lines=None: mock.Mock(task_id=tid, sid=str(tid), lines=lines)):
+            demo.start_sessions(s)
+            shown = {s.get_task(r.task_id)['Title']: r.lines for r in terminal.SESSIONS.values()}
+        self.assertTrue(shown)
+        self.assertEqual(len({str(v) for v in shown.values()}), len(shown))
+        for title, lines in shown.items():
+            self.assertNotIn('4,180', ' '.join(t for t, _ in lines), title)   # the month-end difference belongs to the GL task
 
     def test_a_replayed_session_looks_like_a_session(self):
         s = MemoryStore()

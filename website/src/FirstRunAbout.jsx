@@ -98,7 +98,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
     { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your email", run: back },
     { id: "about:next", group: "decide", tone: "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : "",
       label: last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : "Next",
-      title: last ? "Saved into JOB.md and SOUL.md - edit them any time under Settings → Docs" : "The next question", run: next },
+      title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : "The next question", run: next },
   ] : [], !!a);
   // the question is the Advisor's line over the row
   const line = !a ? "" : step === "job"

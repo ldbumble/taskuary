@@ -34,7 +34,7 @@ test("three questions on the Advisor's line, each answered on the Connections pa
   assert.match(cv, /api\.post\("\/api\/setup\/first-run\/mail"/, "the Connections email card itself, in its simple mode");
   assert.match(cv, /if \(conn\.Type === "outlook"\) return <MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>;/);
   assert.match(fr, /if \(Date\.now\(\) > until\) throw new Error\("the install is taking too long"\)/, "an install never spins forever");
-  assert.match(fr, /Click the card to try again\./, "a failure always says what to press");
+  assert.match(fr, /Pick it again to retry\./, "a failure always says what to press");
   assert.doesNotMatch(fr, /<Dialog|<Popover|<Drawer/);
 });
 
@@ -83,7 +83,7 @@ test("other email is the Connections card in its simple mode, and an AI not inst
   assert.match(cv, /export function ChannelDetail\(\{[^}]*simple = false, onConnected \}\)/);
   assert.match(cv, /const SIMPLE_FIELDS = \{ gmail: \["address"\], imap: \["address", "imap_host"\] \};/);
   assert.match(fr, /if \(!ai\.installed && ai\.install && !ai\.done\) \{ install\(ai\); return; \}/);
-  assert.match(fr, /Click its card to try again, or pick another AI\./);
+  assert.match(fr, /Pick it again to retry, or pick another AI\./);
 });
 
 // the owner, 2026-10-14: "what is this garbage ... where are the cards with choices" - Set up Taskuary opened the 13-stop walk
@@ -92,6 +92,24 @@ test("Set up Taskuary opens the two cards, open on both steps, and only a fresh 
   assert.match(view, /if \(!DEMO\) \{ setFirstRun\(true\); return; \}/);   // typed or pressed, the one setup mode (2026-10-16)
   assert.match(view, /firstrun: <FirstRun revisit onChanged=\{actions\.reload\} onWalk=\{\(\) => actions\.start\(null\)\} \/>/);
   assert.match(view, /data\?\.step && data\.dismissed === false\) setFirstRun\(true\)/, "setup stays the canvas until it is finished; a finished install opens on its day");
-  assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more\) => q === k &&/);   // one step on the canvas; Back and Next move between them
+  assert.match(read("FirstRun.jsx"), /const shelf = \(k, cards, more, group = null\) => q === k &&/);   // one step on the canvas; Back and Next move between them
   assert.match(view, /c\?\.kind === "firstrun" \? "firstrun"/, "a card from before still routes to FirstRun, not an empty message");
+});
+
+// the non-coder audit, 2026-10-17
+test("setup reads for someone with no coding tool, and its loops and errors behave", () => {
+  const fr = read("FirstRun.jsx");
+  // ChatGPT, the organisation card and the keys lead; the coding tools sit under their own heading
+  assert.match(fr, /const lead = \[\.\.\.\(planCard \? \[planCard\] : \[\]\), \.\.\.keyCards\];/);
+  assert.match(fr, /\{ label: "If you use a coding tool", cards: coding \}/);
+  assert.match(fr, /"Can't install on this computer - pick ChatGPT or a key instead"/); assert.match(fr, /"Installed - needs sign-in"/);
+  assert.doesNotMatch(fr, /below - |Click it below|card below/, "the cards are above the line");
+  // Cancel stops the ChatGPT sign-in loop - it is checked after every wait - and so does leaving setup
+  assert.match(fr, /const gone = \(\) => signRef\.current !== me;/); assert.match(fr, /const cancelSignin = \(\) => \{\n\s+signRef\.current = null;/);
+  assert.match(fr, /useEffect\(\(\) => \(\) => \{ signRef\.current = null; \}, \[\]\);/);
+  // a background read never clears an error; the first load that failed is tried again, with Try again
+  assert.doesNotMatch(fr, /setSources\(s\.data\.data \|\| \[\]\); setErr\(""\)/);
+  assert.match(fr, /if \(st \|\| !fails\) return undefined;\n\s+const id = setTimeout\(reload, 3000\);/);
+  assert.match(fr, /\{loadErr && <Button size="small" onClick=\{reload\}>Try again<\/Button>\}/);
+  assert.doesNotMatch(fr, /VOICE_TYPES|voiceDue/, "the speech-to-text offer was never shown");
 });

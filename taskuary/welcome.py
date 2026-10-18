@@ -180,7 +180,8 @@ def away_lines(store, now: datetime, since, items: list, back: bool = False, rea
     if not since: return []
     n, word, out = came_in(store, since), away_word(since, now), []
     fresh = sum(1 for i in needs_you(items) if _arrived(i, since))
-    out.append(f"{word}: {n} came in{' so far' if reading else ''}, {fresh} need{'s' if fresh == 1 else ''} you." if n
+    # ONE WORD FOR WHAT IS YOURS (U6): "3 need you" here, "Waiting · 30" on the card - the rail's own "on you" for both
+    out.append(f"{word}: {n} came in{' so far' if reading else ''}, {fresh} on you." if n
                else f"{word}: nothing new came in{' yet' if reading else ''}.")
     done = settled(store, since) if word == 'Over the weekend' or back else 0
     if done: out.append(f"{_cap(num(done))} {'was' if done == 1 else 'were'} settled without you.")
@@ -283,7 +284,11 @@ def arrive(store, now: datetime = None, actor: str = 'owner', leaving: bool = Fa
     cid = _HELD.get('cid')
     _spend(store, now, prev)
     chips = concierge.walk_chips(len(items))
+    # the headline counts what is ON YOU; reports and notices are reading, never "waiting" (U6: "Waiting · 30" over rows that said
+    # "Nothing to decide")
+    lv = [funnel.level_of(i) for i in items if not i.get('settling') and i.get('lane') != 'theirs']     # waiting on THEM is not on you
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(items),
+            'on_you': sum(1 for x in lv if x in ('urgent', 'task')), 'to_read': sum(1 for x in lv if x in ('reports', 'fyi')),
             'mail': sum(1 for i in items if i.get('kind') in funnel.MAIL_KINDS), 'chips': chips, 'away': away}
     if cid: concierge.rewrite(store, cid, say, card)
     else: concierge.record(store, tid, 'assistant', say, card)

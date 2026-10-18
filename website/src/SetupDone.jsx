@@ -38,7 +38,19 @@ function Confetti() {
     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }} />;
 }
 
-export default function SetupDone({ onDay, onMore }) {
+// `aiError`: the AI failing on the real mail. Then it is not complete: "reading and sorting your mail" with a big Go to my day stood over
+// a line saying the AI was not sorting anything (the non-coder audit, 2026-10-17) - the problem, and Change AI as the one big button
+export default function SetupDone({ onDay, onMore, aiError = "", onChangeAi }) {
+  if (aiError) return (
+    <Box data-tq-setup-done="ai-error" sx={{ minHeight: "56vh", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 2, textAlign: "center", px: 2 }}>
+      <Typography component="h2" sx={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.5 }}>One thing left: your AI</Typography>
+      <Typography sx={{ color: DIM, fontSize: 15.5, maxWidth: 560 }}>{aiError} Pick another one - it is checked on a test email first.</Typography>
+      <Button variant="contained" disableElevation size="large" onClick={onChangeAi}
+        sx={{ fontSize: 18, px: 5, py: 1.5, borderRadius: 2.5, mt: 1 }}>Change AI</Button>
+      <Button size="small" onClick={onDay} sx={{ color: DIM }}>Go to my day anyway</Button>
+    </Box>
+  );
   return (
     <Box data-tq-setup-done="" sx={{ position: "relative", minHeight: "56vh", display: "flex", flexDirection: "column", alignItems: "center",
       justifyContent: "center", gap: 2, textAlign: "center", px: 2 }}>

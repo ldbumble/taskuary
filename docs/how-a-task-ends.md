@@ -141,7 +141,7 @@ doing it" (a PR today) and only on cards - it is not a chat or poll word; in the
 
 These never close a task:
 
-- **Save and end session**: stops the agent and writes its report; the task stays open.
+- **Stop and save**: stops the agent and writes its report; the task stays open.
 - **Reject** a draft: the draft is rejected; the task is untouched. A close-out card has no Reject - its reply is edited in place.
 - **Send back to the agent**: the task's agent picks up again with your note; the card returns when it stops.
 - **Next**: it moves the walk; open work comes back after `task_return_minutes`.

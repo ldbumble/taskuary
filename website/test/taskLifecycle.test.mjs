@@ -53,7 +53,7 @@ test("terminal output never triggers whole-task HTTP refreshes", () => {
 });
 
 test("one stage is open: the last thing owed wins, and a closed task shows itself", () => {
-  const draftReady = { kind: "coding", task: "open", agent: "session saved", reply: "ready to close out", hasSender: true };
+  const draftReady = { kind: "coding", task: "open", agent: "stopped and saved", reply: "ready to close out", hasSender: true };
   assert.equal(focusStage(draftReady), "reply");                                    // sending it is what closes the task
   assert.equal(focusStage({ ...draftReady, agent: "agent waiting on you" }), "reply");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted", hasSender: true }), "reply");
@@ -61,13 +61,13 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
   assert.equal(focusStage({ kind: "coding", task: "open", agent: "waiting to start", reply: "sent", hasSender: true }), "task");
   assert.equal(focusStage({ kind: "general", task: "open", agent: "waiting to start", reply: "not needed" }), "task");
   assert.equal(focusStage({ kind: "coding", task: "open", agent: "agent working", reply: "not drafted" }), "agent");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "session saved", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "stopped and saved", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "agent stopped", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");   // no sender to answer
   // finished: the last thing done - the message sent, else the agent's work, else the task
-  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "sent" }), "reply");
-  assert.equal(focusStage({ kind: "coding", task: "done", agent: "session saved", reply: "not needed" }), "agent");
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "stopped and saved", reply: "sent" }), "reply");
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "stopped and saved", reply: "not needed" }), "agent");
   assert.equal(focusStage({ kind: "general", task: "done", agent: "waiting to start", record: true }), "agent");
   assert.equal(focusStage({ kind: "task", task: "dropped", agent: "waiting to start" }), "task");
   assert.equal(focusStage({}), "task");
@@ -92,10 +92,10 @@ test("the task page opens exactly one stage and lets you open the others by hand
 });
 
 test("a general chat that has answered is agent state, not \"not started\"", () => {
-  assert.equal(agentPhase({ conversation: true }), "session saved");
-  assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "session saved");
+  assert.equal(agentPhase({ conversation: true }), "stopped and saved");
+  assert.equal(agentPhase({ conversation: true, report: { Body: "x" } }), "stopped and saved");
   assert.equal(agentPhase({}), "waiting to start");
-  assert.equal(focusStage({ kind: "general", task: "open", agent: "session saved", reply: "not drafted" }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: "stopped and saved", reply: "not drafted" }), "agent");
 });
 
 test("closing the task never hides behind a fold, and a finished chat can be closed out", () => {
@@ -110,8 +110,8 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   assert.match(source, /const canWrap = !!term \|\| !!detail\?\.transcript \|\| hasGeneralHistory/);
   assert.match(source, /conversation: generalStarted/);
   // ...under the one name every ending wears, a chat's and a coding run's alike (2026-09-25)
-  // ...ONE name for the write-up, live or ended (2026-10-02: "Save result" and "Save and end session" were one button twice)
-  assert.ok(source.includes("onClick={wrapUp}>Save and end session</Button>}"), "the finished chat needs its own close-out");
+  // ...ONE name for the write-up, live or ended (2026-10-02: "Save result" and "Stop and save" were one button twice)
+  assert.ok(source.includes("onClick={wrapUp}>Stop and save</Button>}"), "the finished chat needs its own close-out");
   assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
   assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
   // interrupted work says so on the task page, not only in the list row

@@ -27,10 +27,10 @@ export default function SetupSteps() {
       <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", color: FAINT, textTransform: "uppercase", mb: 1, px: 1 }}>
         Setting up Taskuary</Typography>
       {stepsOf(st, shown).map((r, i) => (
-        <Box key={r.key} component="button" type="button" onClick={() => go(r.key)} data-tq-setup-step={r.key}
-          sx={{ display: "flex", alignItems: "flex-start", gap: 1.1, width: "100%", textAlign: "left", border: 0, cursor: "pointer",
-            fontFamily: "inherit", borderRadius: "8px", px: 1, py: 0.9, bgcolor: r.current ? "#e4e9ee" : "transparent",
-            "&:hover": { bgcolor: r.current ? "#e4e9ee" : "#efebe3" } }}>
+        <Box key={r.key} component="button" type="button" onClick={() => go(r.key)} data-tq-setup-step={r.key} disabled={!!r.disabled}
+          sx={{ display: "flex", alignItems: "flex-start", gap: 1.1, width: "100%", textAlign: "left", border: 0, cursor: r.disabled ? "default" : "pointer",
+            fontFamily: "inherit", borderRadius: "8px", px: 1, py: 0.9, bgcolor: r.current ? "#e4e9ee" : "transparent", opacity: r.disabled ? 0.7 : 1,
+            "&:hover": { bgcolor: r.current ? "#e4e9ee" : r.disabled ? "transparent" : "#efebe3" } }}>
           <Box sx={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, display: "grid", placeItems: "center", fontSize: 11, fontWeight: 700,
             color: r.done ? "#fff" : r.current ? INK : FAINT, bgcolor: r.done ? "#47654a" : "transparent",
             border: r.done ? "none" : `1.5px solid ${r.current ? INK : "#cfc9bf"}` }}>{r.done ? "✓" : i + 1}</Box>

@@ -295,7 +295,7 @@ class ReadsTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'research this GitHub project for me', llm=brain)
         self.assertIn(concierge.LAST_READ, prompts[-1])
-        self.assertIn('regular agent', (out.get('proposal') or {}).get('label', '').lower())
+        self.assertIn('an agent', (out.get('proposal') or {}).get('label', '').lower())
 
     def _handoff(self, answer, workers=True, soul=''):
         """One typed turn with nothing on the table, the model answering `answer`; returns (turn, proposal)."""
@@ -478,12 +478,12 @@ class AppReadTests(unittest.TestCase):
 
     def test_settings_read_by_key_or_label_and_a_group_lists_its_knobs(self):
         s = self._store()
-        self.assertIn('Intent triage (Triage & routing): on', concierge.read_op(s, 'setting.read', {'key': 'intent_classify_enabled'}))
+        self.assertIn('Intent triage (How mail is sorted): on', concierge.read_op(s, 'setting.read', {'key': 'intent_classify_enabled'}))
         self.assertIn('Intent triage', concierge.read_op(s, 'setting.read', {'label': 'intent triage'}))
         self.assertIn('No setting by that name', concierge.read_op(s, 'setting.read', {'label': 'warp drive'}))
-        out = concierge.read_op(s, 'settings.list', {'group': 'Triage & routing'})
-        self.assertIn('Intent triage', out); self.assertNotIn('Triage brain', out)
-        self.assertIn('Triage & agents', concierge.read_op(s, 'settings.list', {}))            # no group: the groups
+        out = concierge.read_op(s, 'settings.list', {'group': 'How mail is sorted'})
+        self.assertIn('Intent triage', out); self.assertNotIn('Background sync', out)
+        self.assertIn('How mail is sorted', concierge.read_op(s, 'settings.list', {}))         # no group: the groups
 
     def test_connections_and_agents(self):
         s = self._store()

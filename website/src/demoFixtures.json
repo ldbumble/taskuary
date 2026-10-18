@@ -555,14 +555,14 @@
    },
    {
     "key": "models",
-    "title": "Choose what runs on which model",
-    "why": "Triage, the assistant, the general agent and the coding CLI each run on a brain and a model, and the defaults are a guess at your budget. One page shows all four and what will actually run. Looking is enough - the defaults are a real answer.",
+    "title": "Choose which AI does what",
+    "why": "Sorting your mail, this assistant and the agents each run on an AI, and the defaults are a guess at your budget. One page shows them side by side. Looking is enough - the defaults are a real answer.",
     "done": false,
     "detail": "",
     "goto": {
      "tab": "Settings",
-     "hash": "settings=config&group=Triage%20%26%20agents",
-     "label": "Open Triage & agents"
+     "hash": "settings=config&group=How%20mail%20is%20sorted",
+     "label": "Open How mail is sorted"
     }
    },
    {
@@ -1138,7 +1138,7 @@
    },
    {
     "lane": "saved",
-    "word": "session saved",
+    "word": "stopped and saved",
     "role": "working",
     "n": 0
    },

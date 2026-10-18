@@ -198,7 +198,7 @@ const TYPE_LABELS = {
   fmp_fundamentals: "FMP — fundamentals", fmp_ratios: "FMP — ratios", alpaca_quotes: "Alpaca — quotes", alpaca_bars: "Alpaca — bars",
   markets_screen: "Strategy screen — only the rows that match",
   metric: "A certified number (Assistant \u2192 Numbers)", metric_check: "Re-prove the certified numbers",
-  digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Advisor — its post on the Timeline (its voice: COUNSEL.md, Docs section)",
+  digest: "Taskuary digest", evening_inbox: "End-of-day Inbox brief", automate: "Automation ideas (own data)", assistant: "Advisor — its notes for you (how it speaks: Settings, Docs)",
   agent: "AI agent — run a skill or a prompt",
   local_file: "File on this computer",
   google_sheets: "Google Sheet", sharepoint_list: "SharePoint list", sharepoint_file: "SharePoint file",
@@ -300,7 +300,7 @@ export const LINE_SAYS = {
   timeline: ["show it under Reports", "a run to read"],
   alert: ["reach me right away", "the moment it lands, with no Review step"],
   send: ["send it out", "to the people it is addressed to"],
-  triage: ["Let triage judge it when it fires", "triage decides whether it needs a task; nothing is made for what an open task already covers"],
+  triage: ["Let Taskuary decide if it needs a task", "sorted like your mail; nothing is made for what an open task already covers"],
 };
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
 // build it: a rule you cannot read is a rule you cannot trust.
@@ -861,9 +861,9 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
 
    `never` is not offered on the Timeline unless the report has somewhere else to go: a report that
    reaches nobody at all is not a setting, it is a report that does nothing. */
-// the one judge setting, app-wide: Settings › Configuration › Triage & agents › Where runs go
-const JUDGE_HASH = `settings=config&group=${encodeURIComponent("Triage & agents")}`;
-const WHERE_RUNS_GO = "Settings › Triage & agents › Where runs go";
+// the one judge setting, app-wide: Settings › Configuration › How mail is sorted › Where runs go
+const JUDGE_HASH = `settings=config&group=${encodeURIComponent("How mail is sorted")}`;
+const WHERE_RUNS_GO = "Settings › How mail is sorted › Where runs go";
 // Who decides where a run goes, in words the card can say. `judge` is the Where-runs-go slot as
 // /api/ai/defaults reports it; blank there means the brain that writes this report (reports.judge_for).
 function judgeWords(judge, cfg, brains) {
@@ -873,7 +873,7 @@ function judgeWords(judge, cfg, brains) {
   if (judge?.value) return [brainLabel(judge.value) || judge.display || "The brain chosen under Where runs go",
     `It reads what came back and answers yes or no to each line above. Chosen for every report under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
   return ["The brain that writes this report",
-    `That is ${brainLabel(cfg.ai_brain) || "the triage brain"} — the same brain the summary above runs on, picked there. To have one judge for every report, or a model that only decides, pick it under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
+    `That is ${brainLabel(cfg.ai_brain) || "the AI that sorts your mail"} — the same AI the summary above runs on, picked there. To have one judge for every report, or a model that only decides, pick it under ${WHERE_RUNS_GO}. A run it does not answer for reaches you anyway.`];
 }
 
 function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceId }) {
@@ -971,7 +971,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             )}
             {line === "timeline" && how === "never" && (
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-                This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back on your Timeline.
+                This report is for whoever it is sent to, not for you. Turning “Send it somewhere” off puts it back under Reports on your work rail.
               </Typography>
             )}
             {line === "timeline" && CONDITIONAL.includes(how) && !ownTriage && (
@@ -1011,7 +1011,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
         );
       })}
       {/* WHO JUDGES IS SAID HERE, NOT PICKED. There is ONE judge setting, for every report (Settings ›
-          Triage & agents › Where runs go), and blank there means the brain that writes this report - the
+          How mail is sorted › Where runs go), and blank there means the brain that writes this report - the
           picker above the summary prompt. A second brain picker used to sit here: it wrote the very same
           field as that one, and read as a per-report judge that the setting then quietly overrode (the
           owner, 2026-09-17: "here i choose what model judges what goes on rail?? ... but then in setting
@@ -1226,7 +1226,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   const save = async () => {
     setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
-    if (!c.title) { setSaveErr(`Give the ${workflow ? "workflow" : "report"} a title first — it is the headline on the Timeline (step 1).`); return false; }
+    if (!c.title) { setSaveErr(`Give the ${workflow ? "workflow" : "report"} a title first — it is the headline each run shows (step 1).`); return false; }
     // saving an edit is not switching it back on: a report the owner turned off stays off
     const active = cur ? !!cur.Active : true;
     const body = { Channel: "report", Address: c.title, ConfigJson: JSON.stringify(c), Active: active };
@@ -1281,12 +1281,12 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           <StepContent>
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5, mb: 1.5 }}>
               {workflow
-                ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this workflow's schedule and files its result on the Timeline."
+                ? "Give the AI agent a saved skill or a plain-English job that writes data. It runs with write access on this workflow's schedule and puts its result on your work rail."
                 : isAssistant
                 ? "Point it at the systems it should read on every check — write the query here, or reuse a data view you already saved. This report reads only those sources; the general Advisor and Morning digest are separate."
                 : "Sources at the top feed one prompt at the bottom. Add as many as you want — the same connection twice with different queries is fine, and every source's rows reach the summary together."}
             </Typography>
-            <TextField required label="title — becomes the Timeline headline" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
+            <TextField required label="title — the headline each run shows" value={cfg.title || ""} sx={{ bgcolor: "#fff", maxWidth: 720, mb: 2 }}
               fullWidth onChange={(e) => setCfg({ ...cfg, title: e.target.value })} />
 
             {isAssistant && (
@@ -1495,7 +1495,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               </Box>
               {!cfg.deliver ? (
                 <Typography variant="caption" sx={{ color: FAINT }}>
-                  Off — the report lands on your Timeline and goes nowhere else.
+                  Off — the report shows under Reports on your work rail and goes nowhere else.
                 </Typography>
               ) : (
                 <>
@@ -1542,7 +1542,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               </Box>
               <Typography variant="caption" sx={{ color: FAINT }}>
                 {cfg.expire !== false
-                  ? "On — when this runs, the run before it is marked done and leaves your work rail. Nothing is deleted: it stays on the Timeline with its rows and its chart. A run that became a task is left alone."
+                  ? "On — when this runs, the run before it is marked done and leaves your work rail. Nothing is deleted: search finds it, with its rows and its chart. A run that became a task is left alone."
                   : "Off — every run waits for you separately, and they stack up in the reports band until you clear them by hand."}
               </Typography>
             </Box>
@@ -1624,7 +1624,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 <Box sx={{ display: "flex", gap: 1, mt: 1.25, flexWrap: "wrap", alignItems: "center" }}>
                   <TextField size="small" value={(cfg.deliver_findings || {}).to || ""}
                     onChange={(e) => setCfg({ ...cfg, deliver_findings: { ...(cfg.deliver_findings || { channel: "email" }), to: e.target.value } })}
-                    label="Send the findings to (optional)" placeholder="nobody — findings stay on the Timeline"
+                    label="Send the findings to (optional)" placeholder="nobody — findings stay under Reports on your rail"
                     sx={{ minWidth: 280, "& .MuiInputBase-root": { fontSize: 13 } }} />
                   <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
                     Still drafted for your approval first — nothing about a report makes a send automatic.
@@ -1645,7 +1645,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
       </Stepper>
       <SavedReportSummary source={cur} workflow={workflow} />
       <ConfirmDelete open={confirmDel} what={`the ${workflow ? "workflow" : "report"} "${cfg.title || cur?.Address || "untitled"}"`}
-        consequence={`It stops running on its schedule and disappears from the ${workflow ? "Workflows" : "Reports"} section. Anything it already filed stays on the Timeline.`}
+        consequence={`It stops running on its schedule and disappears from the ${workflow ? "Workflows" : "Reports"} section. Anything it already filed is kept - search finds it.`}
         onClose={() => setConfirmDel(false)}
         onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />
     </Box>

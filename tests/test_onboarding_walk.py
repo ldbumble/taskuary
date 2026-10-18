@@ -218,8 +218,8 @@ class TheAiStopKnowsWhatYouAlreadyHaveTests(unittest.TestCase):
         can = [c['text'] for c in next(st for st in walk.STOPS if st['key'] == 'ai')['can']]
         self.assertIn('API key', can[0])
         self.assertIn('Azure OpenAI', can[0])
-        self.assertTrue(any('coding CLI' in t for t in can), 'the CLI road is still offered')
-        self.assertEqual(sum('coding CLI' in t for t in can), 1, 'and offered once')
+        self.assertTrue(any('coding tool' in t for t in can), 'the coding-tool road is still offered')
+        self.assertEqual(sum('coding tool' in t for t in can), 1, 'and offered once')
 
 
 class _NoRows:

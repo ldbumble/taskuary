@@ -39,7 +39,8 @@ class ChooseAiTests(unittest.TestCase):
         with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'signin'))
-        self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in below', out['why'])
+        self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in', out['why'])
+        self.assertNotIn('below', out['why'], 'the cards are above the line that names them')
         self.assertEqual(self.s.get_setting('triage_ai') or '', '', 'a brain that does not answer is never made the brain')
 
     def test_signed_in_but_failing_never_sends_you_back_to_sign_in(self):
@@ -146,7 +147,7 @@ class KeyAndMailTests(unittest.TestCase):
 
     def test_a_failure_that_already_says_what_to_check_is_said_once(self):
         s = MemoryStore()
-        said = "The server's address could not be found. Check the host name for typos, and that this computer is online."
+        said = "The server's address could not be found. Check the server name for typos, and that this computer is online."
         with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': said}):
             out = firstrun.connect_mail(s, 'imap', 'alex@northwind.example', 'pw', 'imap.northwind.invalid')
         self.assertNotIn('..', out['why']); self.assertEqual(out['why'].count('Check'), 1, out['why'])
@@ -202,10 +203,14 @@ class StateTests(unittest.TestCase):
         self.assertEqual(at(False, [], [])['todo'], 'pick your AI')
         done = at(True, ['Work mail'], [{'MessageId': 1}])
         self.assertIn('optional', done['next']); self.assertNotIn('Walk me through my tasks', done['next'])   # a button setup does not offer is not named (Advisor audit, 2026-10-15)
-        self.assertEqual(done['todo'], '')
+        # the mail read and About your work unanswered: that is the step left, not "reading your mail" (2026-10-17)
+        self.assertEqual(done['todo'], 'about your work')
         s.set_setting('triage_ai', 'cli:codex', 'owner')
         self.assertEqual(at(True, [], [])['todo'], 'connect your email')
+        self.assertEqual(at(True, ['Work mail'], [])['todo'], 'about your work')
+        firstrun.skip_about(s)
         self.assertEqual(at(True, ['Work mail'], [])['todo'], 'reading your mail')
+        self.assertEqual(at(True, ['Work mail'], [{'MessageId': 1}])['todo'], '')
 
     def test_the_top_bar_chip_says_what_is_next_from_the_same_state(self):
         s = MemoryStore()
@@ -379,3 +384,99 @@ class ProvenOnMailTests(unittest.TestCase):
         out = self.pick(verdict={'intent': 'fyi'}, slow=2)
         self.assertFalse(out['ok']); self.assertIn('too long', firstrun.state(self.s)['fix']['detail'])
         self.assertEqual(self.s.get_setting('triage_ai') or '', '')
+
+
+class NonCoderAuditTests(unittest.TestCase):
+    """Setup read for an ops or finance person with no coding tool (the non-coder audit, 2026-10-17): it never closes on a day that
+    cannot fill, every failure is said on the line as well as the card, and a failing AI is said in a sentence, not an exception."""
+    def setUp(self):
+        p = mock.patch.object(firstrun, '_prove', return_value=''); p.start(); self.addCleanup(p.stop)
+        self.s = MemoryStore()
+
+    def at(self, ready=True, inbound=('Work mail',), items=(), ai=None):
+        return mock.patch('taskuary.setup._ai', return_value=ai or {'ready': ready, 'Name': 'x', 'pick': ''}), \
+            mock.patch('taskuary.setup._inbound', return_value=list(inbound)), mock.patch('taskuary.setup._first_items', return_value=list(items)), \
+            mock.patch('taskuary.clis.detect', return_value=[])
+
+    def test_finish_is_refused_with_no_ai_or_no_mail_and_says_what_first(self):
+        client = TestClient(server.app)
+        a, b, c, d = self.at(ready=False, inbound=())
+        with a, b, c, d, mock.patch.object(server, 'store', self.s):
+            r = client.post('/api/setup/first-run/finish')
+        self.assertEqual(r.status_code, 409); self.assertIn('Pick an AI', r.json()['detail'])
+        self.assertNotEqual(self.s.get_setting(firstrun.DISMISSED), '1')
+        self.s.set_setting('triage_ai', 'cli:codex', 'owner')
+        a, b, c, d = self.at(inbound=())
+        with a, b, c, d, mock.patch.object(server, 'store', self.s):
+            self.assertIn('Connect your email', client.post('/api/setup/first-run/finish').json()['detail'])
+        a, b, c, d = self.at()
+        with a, b, c, d, mock.patch.object(server, 'store', self.s), mock.patch.object(firstrun, 'first_digest'):
+            self.assertEqual(client.post('/api/setup/first-run/finish').status_code, 200)
+        self.assertEqual(self.s.get_setting(firstrun.DISMISSED), '1')
+
+    def test_finishing_clears_a_failed_pick(self):
+        self.s.set_setting(firstrun.FIX, json.dumps({'name': 'codex', 'why': 'x'}), 'owner')
+        firstrun.finish(self.s)
+        self.assertIsNone(firstrun._fix(self.s))
+
+    def test_a_failed_key_is_the_lines_too_and_survives_a_reload(self):
+        cid = self.s.get_connector_by_type('anthropic')['ConnectorId']
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': '401 invalid key'}):
+            out = firstrun.choose_key(self.s, 'anthropic', 'sk-ant-wrong-key-123')
+        fix = firstrun._fix(self.s)
+        self.assertEqual((fix['key'], fix['why']), (f'c{cid}', out['why']))
+        a, b, c, d = self.at(ready=False, inbound=())
+        with a, b, c, d: self.assertEqual(firstrun.state(self.s)['next'], out['why'])
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': True}):
+            self.assertTrue(firstrun.choose_key(self.s, 'anthropic', 'sk-ant-right-key-456')['ok'])
+        self.assertIsNone(firstrun._fix(self.s))
+
+    def test_every_mail_answer_writes_the_line_even_one_that_never_reached_the_server(self):
+        self.s.set_setting(firstrun.MAIL_ERR, "Couldn't sign in to old@northwind.example: turned away.", 'owner')
+        out = firstrun.connect_mail(self.s, 'imap', 'alex', 'pw')
+        self.assertEqual(self.s.get_setting(firstrun.MAIL_ERR), out['why'])
+        self.assertIn('full email address', self.s.get_setting(firstrun.MAIL_ERR))
+
+    def test_a_server_typed_with_its_port_is_split(self):
+        with mock.patch('taskuary.channels.test_connector', return_value={'ok': False, 'detail': 'no'}):
+            firstrun.connect_mail(self.s, 'imap', 'alex@northwind.example', 'pw', 'mail.northwind.example:143')
+        conf = json.loads(self.s.get_connector_by_type('imap')['ConfigJson'])
+        self.assertEqual((conf['imap_host'], conf['imap_port']), ('mail.northwind.example', 143))
+
+    def test_chatgpt_is_named_once_and_its_card_knows_it_is_the_ai(self):
+        cid = self.s.get_connector_by_type('chatgpt')['ConnectorId']
+        self.s.set_setting('triage_ai', f'connector:{cid}', 'owner')
+        a, b, c, d = self.at(ai={'ready': True, 'Name': 'ChatGPT (your plan)', 'pick': f'connector:{cid}'})
+        with a, b, c, d: st = firstrun.state(self.s)
+        self.assertEqual((st['brain']['name'], st['brain']['pick']), ('ChatGPT', f'connector:{cid}'))
+
+    def test_a_cli_that_cannot_install_here_says_what_to_pick_instead(self):
+        with detect(installed=False, installable=False, why_not='needs npm and WSL2'), mock.patch('taskuary.config.save'), \
+             mock.patch('taskuary.cli_connections.sync'):
+            out = firstrun.choose_cli(self.s, {}, 'codex')
+        self.assertIn("can't be installed on this computer - pick ChatGPT or an API key instead", out['why'])
+        self.assertNotIn('npm', out['why']); self.assertIn('npm', firstrun._fix(self.s)['detail'])
+
+    def test_an_empty_mailbox_says_nothing_new_rather_than_reading_for_good(self):
+        self.s.set_setting('triage_ai', 'cli:codex', 'owner'); firstrun.skip_about(self.s)
+        g = self.s.get_connector_by_type('gmail')
+        self.s.save_connector({'ConnectorId': g['ConnectorId'], 'Active': 1}, 'owner')
+        self.s._exec('UPDATE connector SET LastSyncAt=? WHERE ConnectorId=?', ('2026-10-17 09:00:00', g['ConnectorId']))
+        a, b, c, d = self.at()
+        with a, b, c, d: st = firstrun.state(self.s)
+        self.assertTrue(st['empty']); self.assertIn('nothing new to sort yet', st['next'])
+        self.s.set_setting('ingest_status', json.dumps({'state': 'running'}), 'system')
+        with a, b, c, d: self.assertFalse(firstrun.state(self.s)['empty'], 'still reading is not empty')
+
+    def test_a_failing_ai_is_said_in_a_sentence_and_ages_out(self):
+        self.assertEqual(firstrun.plain_ai_error("'claude' not found on PATH"), "it isn't installed on this computer any more")
+        self.assertIn("can't read", firstrun.plain_ai_error('its answers could not be read as a verdict (not JSON)'))
+        self.assertIn('sign in again', firstrun.plain_ai_error('HTTP 401 Unauthorized'))
+        self.assertEqual(firstrun.plain_ai_error('weird'), 'it stopped answering')
+        from datetime import datetime, timedelta
+        self.s.set_setting('triage_last_error', "'claude' not found on PATH", 'system')
+        self.s.set_setting('triage_last_error_at', datetime.now().isoformat(sep=' ', timespec='seconds'), 'system')
+        self.assertIn('installed', firstrun._ai_error(self.s))
+        old = datetime.now() - timedelta(hours=firstrun.AI_ERR_HOURS + 1)
+        self.s.set_setting('triage_last_error_at', old.isoformat(sep=' ', timespec='seconds'), 'system')
+        self.assertEqual(firstrun._ai_error(self.s), '')

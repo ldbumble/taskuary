@@ -36,7 +36,7 @@ def _refs():
 class SettingsPathTests(unittest.TestCase):
     def test_every_settings_path_names_a_place_that_exists(self):
         _, places = _places()
-        self.assertIn('Triage & agents', places)
+        self.assertIn('How mail is sorted', places)
         bad = [(f, a[:40]) for f, _, a in _refs() if not any(re.match(re.escape(n) + r'(?![\w&])', a) for n in places)]
         self.assertEqual(bad, [])
 
@@ -55,8 +55,9 @@ class SettingsPathTests(unittest.TestCase):
         for key in ('triage_ai', 'default_agent'): self.assertEqual(k[key]['group'], k['concierge_ai']['group'])
         self.assertNotIn('(Triage & routing)', k['concierge_ai']['help'])
         self.assertNotIn('(Coding agent)', k['concierge_ai']['help'])
-        # Triage & agents is stacked BEFORE Triage & routing, so the brain is above the switch, not below it
-        self.assertLess(s['groups'].index(k['triage_ai']['group']), s['groups'].index(k['intent_classify_enabled']['group']))
+        # one section now (U19, "How mail is sorted"): the brain and the switch it drives sit together, the panel above the knobs
+        self.assertEqual(k['triage_ai']['group'], k['intent_classify_enabled']['group'])
+        self.assertNotIn('Triage & agents', s['groups']); self.assertNotIn('Triage & routing', s['groups'])
         self.assertNotIn('brain below', k['intent_classify_enabled']['help'])
 
 

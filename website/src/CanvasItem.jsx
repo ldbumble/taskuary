@@ -9,7 +9,28 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 import ActionRow from "./ActionRow.jsx";
+import api from "./api.js";
+import { onLive } from "./live.js";
+import { adviceKeyFor, adviceShown } from "./advice.js";
 import { useHost, useVerbs } from "./actionRow.js";
+
+// THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
+// view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
+// this item, re-read when the Advisor's event names it, and dropped when the item moves on (adviceShown).
+function useItemAdvice(card, on) {
+  const [advice, setAdvice] = useState(null);
+  const key = card?.key || "";
+  useEffect(() => {
+    if (!on || !key) { setAdvice(null); return undefined; }
+    let live = true;
+    const read = () => api.get("/api/advice", { params: { key } })
+      .then(({ data }) => { if (live) setAdvice(data?.verb ? { ...data, for: key } : null); }).catch(() => { if (live) setAdvice(null); });
+    setAdvice(null); read();
+    const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
+    return () => { live = false; off?.(); };
+  }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return advice;
+}
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
 // against the chat body as a SIZE container (assistantView.css .tq-chat-body): a height measured in script was stale
@@ -44,6 +65,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   useVerbs("next", [{ id: "next", group: "next", label: "Next", disabled: !!busy, run: () => onNext(), title: "Puts this one down, still yours, and brings the next" }]);
+  const advised = adviceShown(useItemAdvice(card, phone), { key: card.key, lane: card.lane }, busy);
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -74,7 +96,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
-      {phone && <ActionRow inline />}
+      {phone && <ActionRow inline advised={advised} />}
     </Box>
     </>
   );

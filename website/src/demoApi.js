@@ -29,6 +29,9 @@ const demoRecord = (detail) => {
 };
 
 export const DEMO = import.meta.env?.VITE_DEMO === "1";
+// the demo's two no's, in the words taskuary/demo.py uses for the same doors
+const SENDS = "This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.";
+const STARTS = "This is the demo - the agents here are recordings, so nothing new starts.";
 
 const clone = (x) => JSON.parse(JSON.stringify(x ?? null));
 // Two clocks, each moved to the visitor's now (demoClock.js): the recording's (when it was dumped) and the
@@ -134,7 +137,7 @@ const read = (url) => {
   if (p === "/api/concierge/chips") {
     const key = new URLSearchParams(query(url)).get("key");
     const item = scriptedAssistant.pile.items.find((i) => i.key === key);
-    const words = { review: [["redraft", "Redraft it"], ["not_ours", "Not ours"], ["skip", "Tomorrow"]], agent: [["stop_agent", "Save and end session"], ["skip", "Tomorrow"]],
+    const words = { review: [["redraft", "Redraft it"], ["not_ours", "Not ours"], ["skip", "Tomorrow"]], agent: [["stop_agent", "Stop and save"], ["skip", "Tomorrow"]],
       asked: [["mine", "Put it on my list"], ["not_ours", "Not ours"], ["not_ours_sender", "Ignore this sender"]], fyi: [["not_ours_sender", "Ignore this sender"], ["mine", "Put it on my list"]],
       idea: [["followup", "Draft a follow-up"], ["mine", "Put it on my list"], ["done", "Handled"]], report: [["rerun", "Run it again"]] }[item?.kind] || [];
     return { key, chips: words.map(([verb, label]) => ({ verb, label })) };
@@ -328,7 +331,7 @@ const scriptedSay = (asked, key) => {
     ? ({ approve: "The demo will mark the invented draft handled; nothing is sent.", later: "I will move this invented item back in the demo pipe.", skip: "It will reappear tomorrow in the demo.", done: "Marked done in this temporary demo." }[decision.verb])
     : current
       ? `For this scripted example: ${scriptedItemLine(current)}`
-      : "This is a scripted demo response. I would use the Timeline and task history to answer that in a real Taskuary; no AI or agent is running here.";
+      : "This is a scripted demo response. In your own Taskuary I would read your list and the task history to answer that; no AI or agent is running here.";
   scriptedAssistant.messages.push({ id: `demo-user-${++nextId}`, role: "user", text, at: now() });
   scriptedAssistant.messages.push({ id: `demo-answer-${++nextId}`, role: "assistant", text: say, at: now() });
   return { say, options: [], decision, item: null, scripted: true };
@@ -483,6 +486,32 @@ const write = (method, url, body) => {
     if (item && body?.verb === "dismiss") scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i !== item);
     scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
     return { ok: true, verb: body?.verb, demo: true };
+  }
+
+  // THE CARD'S OWN BUTTONS (U8, 2026-10-17): Mark done, Remind me, Not ours and a draft were refused with "Report this bug" under
+  // them. They are this page's own state, so they happen here and say so in one plain line; Start and Send are the demo saying no
+  // in the same voice. No id on the answer = no card to confirm, the same shape the server uses for a refused verb.
+  if (method === "post" && p === "/api/concierge/propose") {
+    const verb = String(body?.verb || ""), item = scriptedAssistant.pile.items.find((i) => i.key === body?.key);
+    if (/^(approve|send)/.test(verb)) return { say: SENDS, chips: [] };
+    if (/^(regular|coding)_agent$|^(start|dispatch|continue)/.test(verb)) return { say: STARTS, chips: [] };
+    if ((verb === "reply" || verb === "redraft") && item?.mid) {
+      const out = write("post", `/api/messages/${item.mid}/reply`, {});
+      return { ...out, say: "A draft is on the card - read it there. In the demo it stays on this page.", chips: [] };
+    }
+    const said = { close: "Marked done", stop_agent: "Stopped and saved", defer: "Put away for later", not_ours: "Set aside as not yours", mine: "Kept as your task" }[verb];
+    if (!said || !item) return { say: "This is the demo - that one needs a Taskuary of your own.", chips: [] };
+    scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i !== item);
+    if (verb === "close" && item.tid) for (const t of taskRows()) if (t.TaskId === item.tid) Object.assign(t, { Status: "done", ClosedAt: now() });
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { say: `${said} - in the demo that only changes this page.`, chips: [{ verb: "next", label: "Next" }] };
+  }
+
+  if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/remind$/))) {
+    scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => String(i.tid) !== m[1]);
+    for (const t of taskRows()) if (String(t.TaskId) === m[1]) t.RemindAt = body?.until || null;
+    scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
+    return { ok: true, until: body?.until || null, demo: true };
   }
 
   if (method === "post" && (m = p.match(/^\/api\/reports\/(\d+)\/rerun$/))) {
@@ -697,9 +726,11 @@ const write = (method, url, body) => {
   if (p === "/api/settings" || p.startsWith("/api/setup")) return { ok: true };
 
   // everything else is a door out of the demo - and there is nothing on the other side of it
-  const why = /send|approve/.test(p) ? "Nothing sends from the demo — in your own Taskuary this is where you approve it and it goes."
-    : /connector|tools|agents|terminals|sync|ingest/.test(p) ? "This demo has no systems behind it: nothing to connect to, and nothing to run."
-    : "That one needs a Taskuary of your own — this page is a recording you can click.";
+  // said as the demo, not as a fault: the Assistant posts these as a plain line (AssistantView demoNo), never with "Report this bug"
+  const why = /send|approve/.test(p) ? SENDS
+    : /dispatch|continue|terminals|agents/.test(p) ? STARTS
+    : /connector|tools|sync|ingest/.test(p) ? "This is the demo - there are no real systems behind it, so nothing connects or runs."
+    : "This is the demo - that one needs a Taskuary of your own. This page is a recording you can click.";
   const err = new Error(why);
   err.response = { status: 403, data: { detail: why, demo: true } };
   throw err;

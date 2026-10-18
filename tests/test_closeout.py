@@ -397,7 +397,7 @@ class ContributorPullRequestTests(unittest.TestCase):
         self.assertIsNone(proposals.closeout_pending(s, tid))
 
     def test_a_saved_session_that_drafted_its_reply_gets_the_merge_too(self):
-        """TQ-0767: Save and end session wrote "Merging this one." - the answer says the work is done."""
+        """TQ-0767: Stop and save wrote "Merging this one." - the answer says the work is done."""
         s = armed(MemoryStore()); tid = self._reviewed(s)
         s.add_message({'TaskId': tid, 'ExternalId': 'gh-74', 'Channel': 'email', 'Subject': 'PR', 'FromName': 'Omar Keller',
                        'FromEmail': 'omar@vendor.example', 'BodyText': 'Adds tests for _cut', 'Status': 'routed'})

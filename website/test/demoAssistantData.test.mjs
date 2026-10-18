@@ -19,6 +19,13 @@ test("the demo has a current assistant conversation and distinct earlier threads
   }
 });
 
+test("the opening line counts what the scripted rail holds for you, never a written number", () => {
+  const demo = createDemoAssistantState();
+  const n = demo.pile.items.filter((i) => ["blocked", "approve", "asked"].includes(i.lane)).length;
+  assert.match(demo.messages[0].text, new RegExp(`\\b${n} things still deserve a look`));
+  assert.ok(demo.messages.every((m) => !String(m.text || "").includes("{n}")));
+});
+
 test("the scripted pipe demonstrates several kinds of work without claiming a live process", () => {
   const demo = createDemoAssistantState();
   assert.ok(demo.pile.items.length >= 6);

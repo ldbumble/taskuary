@@ -84,8 +84,9 @@ export function askLine(text, max = 220) {
 
 // WHAT TRIAGE DECIDED, as facts you read - never a control (the owner, 2026-10-16: "why are there dropdowns by the triage results?
 // you can't change it"). The task row is the live answer for who, profile, repository and priority; the verdict names the intent.
-const INTENT = { task: "task", reply_only: "reply", fyi: "fyi" };
-const WHO = { general: "an agent · general", coding: "an agent · coding" };
+// in plain words: "Who does it: an agent · general" was the app's own bookkeeping read out to a finance user (2026-10-17 audit)
+const INTENT = { task: "task", reply_only: "reply", fyi: "fyi" };   // TaskPage.sortedLine reads these ids into its own words
+const WHO = { general: "an agent", coding: "a coding agent" };
 export const repoTag = (tags, name = "repo") => (String(tags || "").match(new RegExp(`(?:^|[\\s,])${name}:([^\\s,]+)`)) || [])[1] || "";
 // A WORKFLOW RUN has no message behind it and nobody triaged it (workflows.run): what started it is on the task as a tag, and the
 // workflow it belongs to rides on the detail (workflows.of_task) - the owner, 2026-10-16: "what does it show triggered it in the task card?"
@@ -124,9 +125,9 @@ export function headerFacts({ verdict = null, route = null, task = {}, workflow 
       by && { key: "trigger", label: "Started by", value: by },
       // ...and what it runs on: the general agents' brain, or the harder model and effort this workflow asked for (workflows.brain)
       run && workflow?.runs_on && { key: "runs_on", label: "Runs on", value: workflow.runs_on, tone: "agent" },
-      intent && { key: "intent", label: "Intent", value: intent },
+      intent && { key: "intent", label: "What it is", value: intent },
       { key: "who", label: "Who does it", value: WHO[kind] || "yours", tone: WHO[kind] ? "agent" : "" },
-      profile && { key: "profile", label: "Profile", value: profile },
+      profile && { key: "profile", label: "Agent", value: profile },
       repo && { key: "repo", label: "Repository", value: repo, mono: true },
       // a start that stopped on "which repository?" (funnel.HELD_REPO) says so where the repository would be; the pick is on the bar
       !repo && kind === "coding" && /(?:^|[\s,])held:repo(?:$|[\s,])/.test(String(task?.Tags || "")) && { key: "repo", label: "Repository", value: "none - not started", tone: "alert" },
@@ -144,8 +145,8 @@ export function routeHead(reason, { intent = "", kind = "", repo = "" } = {}) {
   const i = intent || routeIntent(reason);
   if (i === "fyi") return "nothing to do";
   if (i === "reply_only") return "needs a reply";
-  if (kind === "coding") return `work for the coding agent${repo ? ` in ${repo}` : ""}`;
-  if (kind === "general") return "work for the assistant";
+  if (kind === "coding") return `work for a coding agent${repo ? ` in ${repo}` : ""}`;
+  if (kind === "general") return "work for an agent";
   if (kind === "reply") return "needs a reply";
   return i || kind === "task" ? "yours to do" : said;
 }

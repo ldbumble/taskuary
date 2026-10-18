@@ -751,7 +751,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
-                # the line typed after "Continue session" is what to tell the agent - a text field, not a word to read
+                # the line typed after "Keep going" is what to tell the agent - a text field, not a word to read
                 forget_offered(store, channel, chat)
                 send(store, channel, chat, _continue(store, pending, question), connector_id)
                 return
@@ -1200,7 +1200,7 @@ NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note
 
 
 def _continue(store, tid, note: str) -> str:
-    """Continue session, from the phone: the same road as the desktop's pill (server.continue_work)."""
+    """Keep going, from the phone: the same road as the desktop's pill (server.continue_work)."""
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
     try: continue_work(int(tid), ContinueBody(note=note or None))
@@ -1244,8 +1244,8 @@ def _remind(store, act: dict, actor: str) -> str:
     try: out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
     except remind.AgentOpen as e: return str(e)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
-    if not out.get('remindAt'): return 'It is back on your rail now.'
-    said = f"Away until {out['when']} - it is under Upcoming in Tasks, and back on your rail that morning." + (f" {out['warn']}" if out.get('warn') else '')
+    said = concierge.away_line(out)                       # the desktop's own sentence, word for word
+    if not out.get('remindAt'): return said
     back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
     return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
 
@@ -1365,7 +1365,7 @@ def _quote(text) -> str:
 
 
 def thread_line(store, msg: dict) -> str:
-    """"Email context · 2 messages combined by triage" - the card says how much of the thread is behind
+    """"Email context · 2 messages in this thread" - the card says how much of the thread is behind
     the one body it shows, and the chat showed one message as if it were the whole of it."""
     if store is None or not msg: return ''
     try: kin = store.thread_messages(msg.get('ConversationId'), msg.get('Subject'))
@@ -1376,7 +1376,7 @@ def thread_line(store, msg: dict) -> str:
     if n < 2: return ''
     key = str(msg.get('Channel') or '')
     ch = _SOURCE_WORDS.get(key) or key.replace('_', ' ').title() or 'Thread'
-    return f'{ch} context · {n} messages combined by triage'
+    return f'{ch} context · {n} messages in this thread'
 
 
 def status_line(item: dict | None) -> str:
@@ -1514,10 +1514,10 @@ def more_text(store, item: dict | None) -> str:
 THEN = {'approve': 'sends the draft above, in your name.',
         'answer_agent': 'goes straight to the agent; it picks up where it stopped.',
         'reply': 'writes a draft for you to approve here - nothing is sent.',
-        'regular_agent': 'hands it to an agent - triage picks a coding or a non-coding one, and you can switch before it starts.',
+        'regular_agent': 'hands it to an agent - you can change which one before it starts.',
         'coding_agent': 'starts a coding agent on it; it comes back here when it stops.',
         'mine': 'puts it on your own list - no agent starts.',
-        'stop_agent': 'saves what the agent did and ends its session; the task stays open.',
+        'stop_agent': 'saves what the agent did and stops it; the task stays open.',
         'close': 'ends the task - it stops coming back.'}
 # an action card's Send is "Run it": it runs what the card shows, it sends no mail
 THEN_KIND = {('approve', 'action'): 'runs what the card above shows.'}
@@ -1643,10 +1643,10 @@ def agent_state(item: dict | None) -> str:
     it = item or {}
     kind, lane = it.get('kind'), it.get('lane')
     if kind == 'agent':
-        return ('working' if lane == 'working' else 'stopped - its session is saved' if it.get('paused')
+        return ('working' if lane == 'working' else 'stopped - its work is saved' if it.get('paused')
                 else 'asks you' if it.get('asking') else 'is waiting on you')
     if kind == 'agentdone': return 'finished'
-    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': 'session saved'}.get(lane) or ('finished' if it.get('summary') else '')
+    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': 'stopped and saved'}.get(lane) or ('finished' if it.get('summary') else '')
 
 
 def move_title(item: dict | None, draft: str = '') -> str:

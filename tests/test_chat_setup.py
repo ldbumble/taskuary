@@ -180,7 +180,7 @@ class ConnectionSetupTests(unittest.TestCase):
         out = say(s, 'connect our Slack workspace', composer(sort={'kind': 'connection', 'provider': 'slack', 'why': 'a chat system'}))
         p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['type'], p['params']['scope']), ('connection.create', 'Create the connection', 'slack', scopes.default_scope('slack')))
-        self.assertIn('never take a token or password', out['say']); self.assertIn('stays off', out['say'])
+        self.assertIn('never take a password or key', out['say']); self.assertIn('stays off', out['say'])
         self.assertNotIn('Secret', json.dumps(p['params'])); self.assertIn('permissions', p['params'])
         r = run(s, p).json()
         self.assertEqual(r['status'], 'done'); o = r['outcome']

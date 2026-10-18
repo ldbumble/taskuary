@@ -12,7 +12,7 @@ test("each old link becomes a canvas request", () => {
   assert.deepEqual(canvasRequestFromHash("#report=new-agent").state, { section: "workflows", open: "new-agent" });
   assert.equal(canvasRequestFromHash("#connector=gmail").area, "connections");
   assert.equal(canvasRequestFromHash("#cli-agents").area, "connections");
-  assert.deepEqual(canvasRequestFromHash("#settings=config&group=Triage%20%26%20agents").state, { section: "config", open: "Triage & agents" });
+  assert.deepEqual(canvasRequestFromHash("#settings=config&group=How%20mail%20is%20sorted").state, { section: "config", open: "How mail is sorted" });
   assert.deepEqual(canvasRequestFromHash("#settings=policies").state, { section: "policies", open: "policies" });
   assert.deepEqual(canvasRequestFromHash("#settings=docs").state, { section: "docs", open: null }, "Docs opens on its shelf of files");
   assert.deepEqual(canvasRequestFromHash("#settings=playbooks").state, { section: "playbooks", open: null }, "Playbooks is a section of its own");

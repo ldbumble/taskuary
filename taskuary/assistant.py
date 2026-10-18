@@ -521,7 +521,7 @@ def health_ideas(store, now: datetime = None) -> list:
         if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in llm.AI_TYPES):
             out.append({'key': 'health:brain', 'kind': 'health', 'sig': 'no-brain',
                         'text': f'{waiting} messages wait for triage and no brain is set to read them.',
-                        'action': {'type': 'health', 'tab': 'Settings', 'hash': 'settings=config&group=Triage%20%26%20agents',
+                        'action': {'type': 'health', 'tab': 'Settings', 'hash': 'settings=config&group=How%20mail%20is%20sorted',
                                    'why': 'nothing is judged until a brain is chosen'}})
     except Exception as e: logger.debug(f'health: the brain check was skipped - {e}')
     return out

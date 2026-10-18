@@ -69,7 +69,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
             self.assertIsInstance(x['goto']['hash'], str)
         by = {x['key']: x['goto'] for x in setup.state(_fresh())['steps']}
         self.assertEqual(by['owner'], {'tab': 'Settings', 'hash': 'settings=about', 'label': 'Open About you'})
-        self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open AI CLI agents'})
+        self.assertEqual(by['ai'], {'tab': 'Connections', 'hash': 'cli-agents', 'label': 'Open your AI tools'})
         # no brain yet: the key road is offered beside the CLI one, so an owner holding an API key has a door too
         self.assertEqual(_step(setup.state(_fresh()), 'ai')['alt'], {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'})
         self.assertNotIn('models', by)

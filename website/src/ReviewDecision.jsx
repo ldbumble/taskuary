@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Box, Button, TextField, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
+import { promisesFiles } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
@@ -62,7 +63,8 @@ export const InvoiceLine = ({ meta }) => (
 // `onRemind`: the task's own Remind me - a close-out's "not now" (the owner, 2026-10-02: Not yet IS remind me later).
 // `onSent`: a send or close-out that went through - the task page reads the task and, when that closed it, walks on.
 // `toRow`: the decision's buttons are drawn by the action row above the chat line (layout B), not here - the same handlers, registered.
-export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null }) {
+// `onEmailInstead`: the task's Send out results - a chat reply that has to carry a file is answered by email instead (U17).
+export default function ReviewDecision({ review: r, closeout, onChanged, onOpenTask, onMarkDone = null, onSent = null, onRemind = null, toRow = false, simulated = false, onDrop = null, onEmailInstead = null }) {
   const [text, setText] = useState(null);           // the owner's edit; null means "the draft as filed"
   const [cc, setCc] = useState(null);               // null means "the CC the draft was filed with"
   const [busy, setBusy] = useState(false);
@@ -88,8 +90,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the button right there, if related to task in general then put button on bottom"): Send & close where sending finishes the task,
   // Send where it does not (one of several emails), Copy & close where this channel cannot carry it - and Redraft beside them.
   const sendWord = isSlot || !onTask ? "Send" : "Send & close";
+  // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so Send & close sent the promise without
+  // the file and closed the task on it. The move becomes answering by email with the file; sending the words alone stays beside it.
+  const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && r.CanSend !== false
+    && String(r.Channel || "email").toLowerCase() !== "email" && (deliveryFiles(filedDelivery).length > 0 || promisesFiles(value));
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
     : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""}.`
+    : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone - that closes the task.`
     : onTask && !r.Stale && r.CanSend !== false ? `${sendWord} sends this to ${replyContext(r)} and closes the task.`
     : onTask && !r.Stale && r.CanSend === false ? "Copy & close copies the draft for you to paste and send yourself, and closes the task." : "";
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({offers} = what fits instead)
@@ -194,6 +201,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).` },
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "Refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
+    ] : chatFile ? [
+      { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: busy, run: onEmailInstead,
+        title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
+      { id: no("approve"), label: busy ? "Sending…" : `${sendWord} without the file`, tone: "s", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
+        run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : [
       { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}` },
@@ -209,8 +221,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: "Mark done", disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && v.id !== no("approve")) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
+  // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
+  // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
   useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting || delivery.frozen, run: redraft,
-    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])], false);   // the draft's own buttons are drawn under it, never on the task's bar (2026-10-06)
+    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])].map((v) => ({ ...v, card: true })), toRow);
 
   if (r.Status === "held") {
     return (
@@ -370,6 +384,15 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             onClick={redraft} title="Rewrites the draft from the newest message, then you approve it">
             {busy ? "Refreshing…" : "Refresh the draft"}
           </Button>
+        ) : chatFile ? (
+          <>
+            <Button size="small" variant="contained" disableElevation disabled={busy} onClick={onEmailInstead}
+              title={`A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes`}>
+              Reply by email with the file</Button>
+            <Button size="small" variant="outlined" disabled={busy || !value.trim()} onClick={() => decide("approve")}
+              title={`Sends only the words to ${replyContext(r)} - no file goes with them`}>
+              {busy ? "Sending…" : `${sendWord} without the file`}</Button>
+          </>
         ) : (
           <Button size="small" variant="contained"
             disabled={busy || !value.trim()}

@@ -521,8 +521,8 @@ def news_line(store, tid, m=None) -> str:
     frm = str(m.get('FromName') or m.get('FromEmail') or 'Someone').split(' at ')[0]
     when = str(m.get('SentAt') or '')
     day = 'today' if when[:10] == datetime.now().strftime('%Y-%m-%d') else when[:10]
-    return (f"{frm} wrote again {day} at {when[11:16]}, after {who}'s last session - its record is below. "
-            'Continue the session to hand it the new message, or answer it yourself.')
+    return (f"{frm} wrote again {day} at {when[11:16]}, after {who} last worked on it - its record is below. "
+            f'Hand {who} the new message, or answer it yourself.')
 
 
 def _cap(x: str) -> str: return x[:1].upper() + x[1:]
@@ -561,9 +561,9 @@ def idle_state(store, tid) -> dict:
     news = news_since_agent(store, tid)
     if news: return out('news', news_line(store, tid, news))
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
-        return out('saved', 'You ended the session - its report is written. Continue it, or mark the task done.')
+        return out('saved', 'You stopped it and its report is written. Keep it going, or mark the task done.')
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
-        return out('interrupted', f'Taskuary closed while {agent} had this, so the session went with it. Nothing restarts by itself.' + old)
+        return out('interrupted', f'Taskuary closed while {agent} had this, so its work stopped there. Nothing restarts by itself.' + old)
     if held_for_repo(t):
         return out('held', f'Waiting for you. It needs a repository - pick one and {agent} starts.' + old, 'not started - pick a repository for it')
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
@@ -598,10 +598,10 @@ def idle_state(store, tid) -> dict:
     # ...and nothing came in since, or news_since_agent would have said so above: "Nothing has started on what came in since" was
     # said over a batch whose session closed with nothing new on it at all (TQ-1112 shape) - the task is simply still open
     if session_finished(store, tid):
-        return out('left', f'{_cap(agent)} finished its last session - its record is below. The task is still open: close it, '
-                           'or continue the session.' + old)
+        return out('left', f'{_cap(agent)} finished its work - its record is below. The task is still open: close it, '
+                           'or keep it going.' + old)
     if store.last_transcript(tid):
-        return out('left', f'{_cap(agent)} ran on this and left without finishing it. Continue the session, or hand it on.' + old)
+        return out('left', f'{_cap(agent)} ran on this and left without finishing it. Keep it going, or hand it on.' + old)
     msg = store.last_inbound_on_task(tid) or {}
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         said = held_clause(r.get('Reason'))
@@ -666,7 +666,7 @@ def agent_story(store, tid) -> dict | None:
         t0, t1 = _dt(run[0]['CreatedAt']), _dt(cut['CreatedAt'])
         mins = int((t1 - t0).total_seconds() // 60) if t0 and t1 else None
         into = f', {mins} minute{"" if mins == 1 else "s"} in,' if mins else ','
-        line = f'Taskuary {how} at {str(cut["CreatedAt"])[11:16]} while {who} had this{into} so the session went with it. Nothing restarts by itself.'
+        line = f'Taskuary {how} at {str(cut["CreatedAt"])[11:16]} while {who} had this{into} so its work stopped there. Nothing restarts by itself.'
     steps = []
     for e in run:
         k, src = e['Kind'], e.get('Source')
@@ -701,7 +701,7 @@ def general_not_started(task: dict, has_conversation: bool, routes=()) -> bool:
 
 
 def session_saved(store, tid) -> bool:
-    """The owner ended the agent's session and its result is written (Save and end session): `session saved`, never
+    """The owner ended the agent's session and its result is written (Stop and save): `session saved`, never
     "left without finishing" (A1, 2026-09-25). A new session clears it (terminal.open_session)."""
     from . import terminal
     return terminal.SAVED in [x.strip() for x in str((store.get_task(tid) or {}).get('Tags') or '').split(',')]
@@ -956,8 +956,9 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
             continue
         if slip: lane = slip
         why = a.get('why') or 'the assistant raised this'
-        if tri.get('error'): why = f"triage failed ({tri['error']}) - the next check retries; {why}"
-        elif tri.get('pending'): why = f'awaiting triage (no AI connector); {why}'
+        # in words, not the exception: "'claude' not found on PATH" tells someone who never wrote code nothing (U16)
+        if tri.get('error'): why = f"couldn't sort this yet - it tries again on the next check; {why}"
+        elif tri.get('pending'): why = f'waiting to be sorted - no AI is connected yet; {why}'
         m = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
         cid = m.get('ConversationId')
         if cid and (cid in used_cids or cid in seen_cids): continue     # one line per conversation
@@ -1690,6 +1691,11 @@ def fyi_batch(store, first: dict, items: list | None = None) -> list:
     return ([first] + [i for i in ready if i['key'] != first['key']])[:fyi_batch_size(store)]
 
 
+# a task's status in the owner's words - "in_progress general task you asked about" was the line under a task opened by name
+STATUS_SAYS = {'open': 'Open', 'in_progress': 'In progress', 'waiting': 'Waiting on someone', 'blocked': 'Stuck',
+               'review': 'Waiting for your yes', 'done': 'Done', 'dropped': 'Let go'}
+
+
 def item_for_key(store, key: str) -> dict | None:
     """An item for a Timeline row that is NOT on the pile - a newsletter, a filed note, anything the
     Recent list pulls into the chat by hand. The pile's own producers run on that one row with the
@@ -1707,7 +1713,7 @@ def item_for_key(store, key: str) -> dict | None:
             got = from_feed(store, [row | {'Category': 'info' if row.get('Category') in _QUIET else row.get('Category')}])
             if got: return _present_one(store, got[0] | {'lane': got[0]['lane'] if got[0]['lane'] != 'fyi' else 'asked'})
         return _present_one(store, _item(f'task:{tid}', 'task', 'asked', task.get('Title'), when=task.get('UpdatedAt') or task.get('CreatedAt'), tid=tid,
-                                               summary=agent_found(store, tid), why=f"{task.get('Status')} {task.get('Kind')} task you asked about"))
+                                               summary=agent_found(store, tid), why=f"{STATUS_SAYS.get(task.get('Status'), 'Open')} - you asked about it"))
     m = re.match(r'^(msg|report):(\d+)$', key or '')
     if not m: return None
     mid = int(m.group(2))

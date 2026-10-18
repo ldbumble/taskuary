@@ -38,7 +38,7 @@ test("Configuration is one page, not a strip of tabs", () => {
   assert.ok(!/FilterPills/.test(src), "the pill strip is gone - it was the thing that ran off the edge");
   assert.ok(!/cfgTab/.test(src), "and so is the state that remembered which tab you were on");
   // (Notifications lost its panel with the notify pushes, 2026-10-02 - its sound and desktop switches are plain rows)
-  for (const g of ["Triage & agents", "Assistant on your phone"]) {
+  for (const g of ["How mail is sorted", "Assistant on your phone"]) {
     assert.ok(src.includes(`"${g}":`), `${g} still gets its panel above its knobs`);
   }
   assert.ok(schema.groups.length > 8, "the point of the change: there are a lot of them, and more coming");

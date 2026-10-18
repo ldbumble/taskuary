@@ -64,26 +64,59 @@ ALLOWED_WRITES = (
     # the Assistant page: the pipe's own memory, the concierge's turns and the greeting when the visitor sits down
     # (arrive) - the demo's database, the demo's canned brain, nothing real behind either (funnel.py, concierge.py, welcome.py)
     r'^/api/(funnel/settle|concierge/(open|next|say|act|stream|ai|setup|arrive)|assistant/dock(/new)?)$',
+    # THE CARD'S OWN BUTTONS (U8, 2026-10-17): Mark done, Remind me and a draft were all refused, with "Report this bug" under
+    # them - the demo could not show its own walk. A proposal is a row in the demo's database; running one is gated by its
+    # KIND below (LOCAL_OPS), since the path cannot tell Mark done from Send. Remind me and a draft write nothing outside either.
+    r'^/api/concierge/propose$',
+    r'^/api/operations/[^/]+/execute$',
+    r'^/api/tasks/\d+/remind$',
+    r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
+    r'^/api/reviews/\d+/draft$',
 )
+
+# What a confirmed proposal may run here: each writes the demo's own database and nothing else. Start (dispatch.prepare,
+# agent.*) would start a program on the host, Send (review.approve, task.clarify, task.chase) would mail someone, and
+# reports, settings and connections reach systems - those stay refused, as before.
+LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
+             'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember',
+             'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
+             'review.reject', 'hub.publish', 'pipe.clear', 'script.start'}
+
+# The sentences the visitor sees, plain and said as the demo, not as a fault: the page posts them as an ordinary line.
+SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'
+STARTS = 'This is the demo - the agents here are recordings, so nothing new starts.'
+OFF = 'This is the demo - that would reach something real, so it is switched off. Everything here is invented.'
 
 # What is refused, and the sentence the visitor sees. Order matters: the first match wins.
 REFUSALS = (
-    (r'^/api/connectors', 'Connections are read-only in the demo - this is invented data, and '
-                          'there is nothing real behind these cards.'),
-    (r'^/api/(tools/run|agents/[^/]+/test)', 'Tools do not run in the demo: they would reach real '
-                                             'systems, and there are none here.'),
-    (r'^/api/(reviews?/\d+/send|tasks/\d+/handoff|board/send)', 'Nothing sends from the demo. In '
-                                                                'your own Taskuary this is where you approve it and it goes.'),
-    (r'^/api/(terminals|agents)(/|$)', 'Coding sessions are replays here - a real one would start a '
-                                       'CLI on the machine this is running on.'),
-    (r'^/api/(sync|ingest|poll|msauth|hooks)', 'Nothing is fetched or received in the demo; the '
-                                               'timeline you see was seeded.'),
-    (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview))', 'Editing the operator documents and '
-                                                                'running reports is disabled here.'),
+    (r'^/api/connectors', 'This is the demo - these connections are invented, and there is nothing real behind them to change.'),
+    (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
+    (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
+    (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume)$'
+     r'|^/api/messages/\d+/(dispatch|chat)$', STARTS),
+    (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
+    (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview))', 'This is the demo - editing your documents and running reports are switched off.'),
 )
 
 
-def refuse(method: str, path: str) -> str:
+def _store():
+    """The running app's store, without importing the server (an import runs its startup): the demo is always the server."""
+    import sys
+    return getattr(sys.modules.get(f'{__package__}.server'), 'store', None)
+
+
+def refuse_op(op) -> str:
+    """'' when a confirmed proposal only writes the demo's database, else the sentence. Making a task of a message is local;
+    handing it to an agent is a start."""
+    if not op: return ''                                    # no such proposal: the handler's own 404 says so
+    kind, p = op.get('kind'), op.get('params') or {}
+    if kind in LOCAL_OPS or (kind == 'task.create_from_message' and str(p.get('kind') or 'task').lower() == 'task'): return ''
+    if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff'): return SENDS
+    if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'task.create_from_message', 'task.create_from_text'): return STARTS
+    return OFF
+
+
+def refuse(method: str, path: str, store=None) -> str:
     """'' when the request may proceed, otherwise the sentence to answer with."""
     if not enabled(): return ''
     if method.upper() in READ_ONLY_METHODS: return ''
@@ -91,35 +124,68 @@ def refuse(method: str, path: str) -> str:
         if re.match(pattern, path): return why
     if method.upper() in ALLOWED_METHODS:
         for pattern in ALLOWED_WRITES:
-            if re.match(pattern, path): return ''
-    return ('That is switched off in the demo - it would reach something real. Everything you can '
-            'see here is invented.')
+            if not re.match(pattern, path): continue
+            if m := re.match(r'^/api/operations/([^/]+)/execute$', path):
+                from . import operations
+                st = store if store is not None else _store()
+                return refuse_op(operations.get(st, m.group(1))) if st is not None else OFF   # no store to read the kind: shut
+            return ''
+    return OFF
 
 
 # ── the canned brain ─────────────────────────────────────────────────────────────────────
 CANNED = [
     "Here is what I would do: read the thread, pull the numbers it refers to, and come back with "
     "the two lines that decide it. In the demo I answer from a script - in your own Taskuary this "
-    "is your CLI or your API key doing the work.",
-    "I looked at what is on the timeline. Three things are waiting on you and one of them has been "
-    "waiting since Tuesday; the rest is filed. Ask me to draft the chase and it lands on the task.",
+    "is your own AI doing the work.",
+    "I looked at your list. {list} Ask me to draft a reply and it lands on the task.",
     "That is a report, not a question - give me the schedule and I will write it every morning "
     "before you are up.",
 ]
 
+def _n(k: int, one: str, many: str) -> str: return f"{k} {one if k == 1 else many}"
 
-def brain(seed: int = 0):
+def _list_line(store) -> str:
+    """The count the rail shows, read from the rail: a line that said "Three things are waiting" beside a rail of nine
+    read as the assistant not looking (B23, 2026-10-17)."""
+    from . import funnel
+    try: items = funnel.pile(store)['items'] if store is not None else None
+    except Exception: items = None
+    if items is None: return 'Everything on it is in front of you on the left.'
+    if not items: return 'Nothing is waiting on you right now.'
+    yours = sum(1 for i in items if funnel.on_you(i))
+    return (f"{_n(len(items), 'thing is', 'things are')} on it"
+            + (f", and {_n(yours, 'is', 'are')} waiting on your answer or your yes." if yours else '.'))
+
+
+# THE ADVISOR, SCRIPTED (B17, 2026-10-17): its prompt says JSON, so it got triage's {"intent": "fyi"} and dropped every answer as
+# "nothing to say" - the demo, where newcomers first meet it, never showed a suggestion. It names the first offered verb that
+# someone waiting makes right, with a plain line - and like the real one says nothing on a newsletter: "Make a task" over an
+# fyi is the wrong suggestion that is worse than none.
+_VERBS = re.compile(r'^VERBS OFFERED: (.*)$', re.M)
+ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': 'The draft is ready - read it, then send it.',
+          'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway - pick it up where it left off.'}
+
+def _advice(text: str) -> str:
+    offered = dict(re.findall(r'([a-z_]+) \(([^)]*)\)', _VERBS.search(text).group(1)))
+    verb = next((v for v in ADVICE if v in offered), None)
+    return json.dumps({'verb': verb, 'line': ADVICE[verb] if verb else '', 'evidence': []})
+
+
+def brain(seed: int = 0, store=None):
     """A model that never leaves the process. Deterministic per conversation, so the demo reads
     the same for everyone who clicks the same thing."""
     pick = random.Random(seed)
     def llm(system, user, max_tokens=None, images=None, **kw):
         text = str(user or '')
+        if _VERBS.search(text): return _advice(text)
         if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
         # what the person actually typed, out of a prompt that also carries the task, the
         # documents and the conversation - quoting the whole thing back reads as a bug
         asked = [l[6:].strip() for l in text.splitlines() if l.startswith('USER: ')]
         said = pick.choice(CANNED)
+        if '{list}' in said: said = said.format(list=_list_line(store if store is not None else _store()))
         if not asked: return said
         return said + f'\n\n(You asked: "{asked[-1][:160]}" - and this is a scripted answer.)'
     return llm
@@ -156,20 +222,38 @@ DRAFTS = {
     'Invoice 88213 - past due': "Thanks Tom - it is approved and goes out in Friday's payment run.",
 }
 
+# EACH AGENT ITS OWN WORK (B23, 2026-10-17): every agent task replayed the month-end transcript, so the census issue's
+# terminal talked about the GL export. The coding issue replays its own fix; the GL reconciliation is a general agent's
+# task and reads as its conversation (GL_CHAT) - an accountant's task opened as a terminal.
 TRANSCRIPT = [
     ('$ claude', .4), ('', .2),
-    ("I'll take the month-end difference. Reading the export first.", 1.1),
-    ('→ Bash: python -m tools.gl_export --month 2026-08 --dry-run', .9),
-    ('  1,284 rows, 4 with no bank reference', 1.0),
-    ('→ Read: tools/gl_export.py', .7),
-    ('The four are inter-company transfers - the export drops them because they have no counterparty', 1.3),
-    ('reference, and the bank feed keeps them. That is the 4,180 exactly.', .9),
-    ('→ Edit: tools/gl_export.py  (keep inter-company rows, flagged)', 1.2),
-    ('→ Bash: pytest tests/test_gl_export.py -q', 1.0),
-    ('  14 passed', .8),
-    ('Fixed and tested. The August export now reconciles to the penny; I have left the four rows', 1.2),
-    ('flagged rather than silently included, so the close can see them.', .9),
+    ("I'll take #214. Reading the census sync first.", 1.1),
+    ('→ Read: importers/census_sync.py', .8),
+    ('One site with no manager stops the whole run - it should skip that row and say so.', 1.3),
+    ('→ Bash: pytest tests/test_census_sync.py -q', 1.0),
+    ('  1 failed: test_site_without_manager', .8),
+    ('→ Edit: importers/census_sync.py  (skip a row with no manager, log it once)', 1.2),
+    ('→ Bash: pytest tests/test_census_sync.py -q', 1.0),
+    ('  9 passed', .8),
+    ('Fixed and tested. Lakeview syncs again; the row with no manager is skipped and named once', 1.2),
+    ('in the log, so the morning report still adds up.', .9),
     ('Not pushing - that is yours to approve.', 1.6),
+]
+TRANSCRIPTS = [TRANSCRIPT]
+
+def _brief_replay(title: str) -> list:
+    """A coding task the seed did not write a recording for still replays its own words, never another task's."""
+    return [('$ claude', .4), ('', .2), (f'Reading the ask: {title}', 1.1), ('Nothing changed yet - waiting for you to say go.', 1.2)]
+
+# the GL reconciliation, as a general agent works it: in plain words, on the task's own conversation
+GL_CHAT = [
+    ('user', 'Reconcile the August GL export against the bank feed, and flag anything that does not match - the close is Thursday.'),
+    ('assistant', 'Reading the August export and the bank feed side by side. The export has 1,284 rows; 4 of them have no '
+                  'matching line in the bank feed.'),
+    ('assistant', 'Those four are transfers between our own companies. The export leaves them out because there is no outside '
+                  'party on them, and the bank feed keeps them. Together they come to 4,180 - the whole difference.'),
+    ('assistant', 'I have listed the four on the task, flagged rather than folded in, so the close can see them. Want me to draft a '
+                  'note to Marcus saying the 4,180 is explained?'),
 ]
 
 
@@ -198,15 +282,15 @@ ASSIST = [
     ('user', 'what is actually waiting on me this morning?'),
     ('assistant', """Six things came in, four are handled. What is actually yours:
 
-- **{gl} - month-end short by 4,180.** The coding agent is on the export; it found the four inter-company transfers the export drops.
+- **{gl} - month-end short by 4,180.** An agent is on it; it found the four transfers between our own companies that the export leaves out.
 - **{cutover} - AP cutover Thursday.** Ruth needs a yes or a date. A reply is drafted on the task.
 - **{q3} - Sam wants the Q3 numbers.** Also drafted.
 
 The newsletter, the thank-you and the maintenance notice are filed. Nothing there needs you."""),
     ('user', 'is Thursday safe for the AP cutover?'),
-    ('assistant', """Thursday is safe if the export lands first. The reconciliation fix is written and its tests pass, so the August close can be signed Wednesday night - that was the only thing the cutover was waiting on.
+    ('assistant', """Thursday is safe if the export lands first. The reconciliation is done - the four rows are explained and flagged - so the August close can be signed Wednesday night. That was the only thing the cutover was waiting on.
 
-One caveat worth telling Ruth: the AP importer needs pyodbc on the box before its tests mean anything (codex left that on the wall yesterday). If that is not installed by Wednesday, Thursday slips a day.
+One caveat worth telling Ruth: the AP importer still has a setup step to do on the server (an agent left that on the wall yesterday). If that is not done by Wednesday, Thursday slips a day.
 
 Want me to say that in the draft?"""),
 ]
@@ -326,13 +410,15 @@ def seed(store) -> int:
         from_name=ruth[0], from_email=ruth[1], sent_at=f.ago(hours=7),
         body='Are we still moving AP over on Thursday? I need to tell the team.',
         draft='Thursday still works - the export will be reconciled by Wednesday night.').tid
-    # the agent mid-run: Marcus's month-end difference, handed to a coding agent
-    gl = f.task(title='Reconcile the August GL export', status='in_progress', kind='coding')
+    # the agent mid-run: Marcus's month-end difference, handed to a general agent - accounting work, not code
+    gl = f.task(title='Reconcile the August GL export', status='in_progress', kind='general')
     gm = f.message(task_id=gl, subject='Reconcile the August GL export', from_name=marcus[0], from_email=marcus[1],
                    body='Can the export be reconciled against the bank feed? Flag anything that does not match - '
                         'the close is Thursday.', sent_at=f.ago(hours=6), conversation_id='email:gl-export')
-    f.route(gm, gl, 'create', 'a reconciliation with a clear check: a coding agent can run it')
-    f.run(gl, agent='coding')
+    f.route(gm, gl, 'create', 'a reconciliation with a clear check: an agent can work it through')
+    for role, body in GL_CHAT:
+        store.add_comment(gl, OWNER.split()[0] if role == 'user' else 'assistant',
+                          general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body)
     refs['gl'] = gl
     # ONE GOAL (spec 2026-10-12): an outcome with a date, its steps tasks of their own - one done by a coding agent, one waiting
     # on a person past its day, the rest not started. Dana's census migration.
@@ -399,13 +485,15 @@ def seed(store) -> int:
         subject = subject or (body[:60] + ('…' if len(body) > 60 else ''))
         source = ('Ops chat' if channel == 'teams' else 'northwind/importers' if channel == 'github'
                   else f'{name.split()[0]} (whatsapp)' if channel == 'whatsapp' else None)
-        tid = f.task(title=subject, status='done', kind='coding' if channel == 'github' else 'general',
-                     ) if verdict == 'task' else None
+        # a reply that asked something was answered on a task of its own, as triage makes it: seeded routed with no task,
+        # it landed under the fyi as "Nothing to decide" over "can you approve the Fairhaven PO?" (B23, 2026-10-17)
+        tid = (f.task(title=subject, status='done', kind='coding' if channel == 'github' else 'reply' if verdict == 'reply' else 'general')
+               if verdict in ('task', 'reply') else None)
         mid = f.message(task_id=tid, channel=channel, subject=subject, body=body, from_name=name,
                         from_email=email if channel == 'email' else None, sent_at=when,
                         status='filed' if verdict == 'fyi' else 'routed',
                         conversation_id=f'{channel}:{email or name}:{days}', source_name=source)
-        f.route(mid, tid, 'create' if verdict == 'task' else 'file' if verdict == 'fyi' else 'reply', why)
+        f.route(mid, tid, 'file' if verdict == 'fyi' else 'create', why)
         made += 1
 
     store.save_doc('soul', SOUL, 'demo')
@@ -422,9 +510,9 @@ def seed(store) -> int:
         store.add_comment(chat, 'Dana' if role == 'user' else 'assistant',
                           general.USER_TYPE if role == 'user' else general.ASSISTANT_TYPE, body.format(**names))
     for kind, agent, body in (
-        ('working', 'coding', 'on the month-end export - tools/gl_export.py is mine for the next hour'),
+        ('working', 'coding', 'on the census sync (#214) - importers/census_sync.py is mine for the next hour'),
         ('note', 'codex', 'the bank feed keeps inter-company transfers; the export drops them. That is the 4,180'),
-        ('ready', 'coding', 'export fixed, 14 tests green - safe to build on'),
+        ('ready', 'coding', 'census sync skips a site with no manager, 9 tests green - safe to build on'),
         ('summary', 'the wall', '2026-08-30 - the AP importer needs pyodbc installed before its tests mean anything; '
                                 'the census sync is behind a VPN and will not run from a laptop'),
     ):
@@ -591,7 +679,8 @@ class Replay:
     def idle(self): return time.time() - self.last
     def phase(self): return 'working' if self.busy else 'parked'
     def waiting(self): return not self.busy
-    def files(self): return ['tools/gl_export.py'] if not self.busy else []
+    def files(self):                                 # what ITS recording edited, not the month-end export on every board card
+        return [] if self.busy else [m.group(1) for t, _ in self.lines for m in [re.search(r'→ Edit: (\S+)', t)] if m]
     def tail(self, n=3): return [l.strip() for l in ''.join(self.buf).splitlines() if l.strip()][-n:]
     def close(self):
         self.alive, self.busy, self.ended = False, False, time.time()
@@ -611,7 +700,7 @@ def start_sessions(store) -> int:
     for t in store.list_tasks():
         if t.get('Kind') != 'coding' or t.get('Status') in ('done', 'dropped'): continue
         if any(getattr(x, 'task_id', None) == t['TaskId'] for x in terminal.SESSIONS.values()): continue
-        r = Replay(store, t['TaskId'])
+        r = Replay(store, t['TaskId'], lines=TRANSCRIPTS[n] if n < len(TRANSCRIPTS) else _brief_replay(t.get('Title') or ''))
         terminal.SESSIONS[r.sid] = r
         n += 1
     return n

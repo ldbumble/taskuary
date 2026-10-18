@@ -441,7 +441,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         store.audit('terminal', tid, 'wrap', actor, detail={'sid': sid or getattr(session, 'sid', None), 'close': close, 'mode': 'assistant'})
         last = next((m['content'][0]['text'] for m in reversed(general.history(store, tid)) if m['role'] == 'assistant'), '')
         # THE RESULT IS FILED, NOT JUST HANDED BACK. This branch returned `report: last` to whoever
-        # called it and wrote nothing but a human note, so pressing save on a conversation (now "Save and end session")
+        # called it and wrote nothing but a human note, so pressing save on a conversation (now "Stop and save")
         # left no result anywhere: the card still read `in conversation`, the button was still on
         # offer, and every reader of a task's outcome - the pipe's line, the responder's draft, the
         # next session's context - looks for an AGENT REPORT comment and found none (the owner,
@@ -578,7 +578,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # reply_target alone skipped the can-this-channel-even-reply rule, so a GitHub task with
     # replies off closed with no draft while the card still promised one on the task.
     # THE RUN ENDING IS WHEN THE ANSWER IS WRITTEN, whoever ended it. Only `close` decided this, so
-    # an agent that finished by itself drafted the reply and the owner pressing Save and end session
+    # an agent that finished by itself drafted the reply and the owner pressing Stop and save
     # got the report filed and nothing to send - on the one road where they had just read the work
     # and knew it was done (the owner, 2026-09-22). The draft is written either way now; what `close`
     # still decides is whether the TASK ends with the run (finish's keep_open).

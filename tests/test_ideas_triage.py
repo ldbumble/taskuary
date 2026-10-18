@@ -145,7 +145,7 @@ class SharedVerdictTests(unittest.TestCase):
         a = json.loads(s.get_idea(row['IdeaId'])['ActionJson'])
         self.assertIn('model down', a['triage']['error'])
         items = [i for i in pile(s) if i.get('idea') == row['IdeaId']]
-        self.assertIn('triage failed', items[0]['why'].lower())
+        self.assertIn("couldn't sort this yet", items[0]['why'].lower())
         assistant.triage_ideas(s, [s.get_idea(row['IdeaId'])], brain(intent='fyi'))
         a = json.loads(s.get_idea(row['IdeaId'])['ActionJson'])
         self.assertEqual(a['triage']['intent'], 'fyi'); self.assertIsNone(a['triage'].get('error'))

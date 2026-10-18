@@ -82,7 +82,13 @@ class VoiceTests(unittest.TestCase):
         lines += [concierge.fallback(None, False, ITEMS), concierge.fallback(None, False, ITEMS, brain=True), concierge.waiting_line(ITEMS)]
         lines += [concierge.fallback({**i, 'mid': n, 'channel': 'email', 'why': 'a notice'}, True) for n, i in enumerate(ITEMS, 1)]
         lines += [concierge.fallback({'kind': 'report', 'title': 'Weekly AR', 'bad': True, 'when': ago(1)}, False)]
-        for line in lines: self.assertEqual(banned(line), [], line)
+        # a button's own name is quoted, not said (U2: the line names the item's real buttons), and the one no-AI sentence is the
+        # owner's own wording for the setup it points at (U3)
+        quoted = sorted({*concierge.CHIP_WORDS.values(), concierge.NO_BRAIN, concierge.no_brain()}, key=len, reverse=True)
+        def unquote(s):
+            for w in quoted: s = s.replace(w, '')
+            return s
+        for line in lines: self.assertEqual(banned(unquote(line)), [], line)
 
     def test_the_end_of_the_walk_is_nothings_waiting(self):
         self.assertEqual(concierge.ALL_DONE, "Nothing's waiting.")
@@ -199,7 +205,7 @@ class ArrivalTests(unittest.TestCase):
         items = [{**i, 'when': ago(5, now=now)} for i in ITEMS]
         out = self.arrive(s, now, items)
         self.assertTrue(out['said'].startswith('Good morning.'), out['said'])
-        self.assertIn('Overnight: 4 came in, 3 need you.', out['said'])
+        self.assertIn('Overnight: 4 came in, 3 on you.', out['said'])
         self.assertIn("Three things today, Erin's first: Staffing sheet needed by noon. Then Gail and Paula.", out['said'])
         self.assertIn("I'm holding the rest.", out['said'])
         self.assertEqual(banned(out['said']), [])

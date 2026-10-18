@@ -98,7 +98,7 @@ fall back to an unrelated default working folder.
 **It is gone.** If the process died, the row reads ⏹ **agent stopped** and is forced unread, so
 it comes back to you rather than disappearing. Only **Later** holds it.
 
-**Save and end session** ends the session, files what it did and drafts the reply for you to
+**Stop and save** ends the session, files what it did and drafts the reply for you to
 approve; it leaves the task state alone and sends nothing. If you want the task closed, **Mark
 done** does both.
 

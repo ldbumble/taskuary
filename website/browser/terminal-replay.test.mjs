@@ -26,8 +26,9 @@ test("P0-BROWSER terminal replay becomes visible and accepts fixture input", { t
   // the demo's agent session, found by its title: the demo world is written out item by item and its numbering
   // moves with it (2026-09-23 put this task at #6 and left #4 an invoice reply with no terminal at all)
   const tasks = await (await fetch(`${harness.fixtureApi}/api/tasks`, { headers: { "X-Taskuary-Token": harness.token } })).json();
-  const gl = (tasks.data || []).find((t) => t.Title === "Reconcile the August GL export");
-  assert.ok(gl, "the demo world has no GL export session to replay");
+  // (2026-10-17: the GL reconciliation became a general agent's conversation - the census issue is the coding replay)
+  const gl = (tasks.data || []).find((t) => t.Kind === "coding" && /census sync/.test(t.Title) && !["done", "dropped"].includes(t.Status));
+  assert.ok(gl, "the demo world has no census sync session to replay");
   const replayStarted = performance.now();
   await page.goto(`${harness.ui}/#task=${gl.TaskId}`, { waitUntil: "domcontentloaded", timeout: 20000 });
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15000 });
@@ -40,7 +41,7 @@ test("P0-BROWSER terminal replay becomes visible and accepts fixture input", { t
   assert.ok(receivedFrames.some((frame) => {
     try { const message = JSON.parse(frame); return message.type === "out" && message.replay === true; } catch { return false; }
   }), "terminal websocket did not identify its initial output as replay");
-  assert.match(await page.$eval(".xterm-rows", (node) => node.textContent), /month-end difference|gl_export/,
+  assert.match(await page.$eval(".xterm-rows", (node) => node.textContent), /census sync|census_sync/,
     "replayed terminal content was not visibly rendered");
   const replayVisibleMs = Math.round(performance.now() - replayStarted);
   assert.ok(replayVisibleMs <= 10000, `terminal replay took ${replayVisibleMs}ms to become visible`);
@@ -77,7 +78,7 @@ test("P0-BROWSER terminal replay becomes visible and accepts fixture input", { t
   const reconnectMs = Math.round(performance.now() - reconnectStarted);
   assert.ok(readyAfterReload > readyBeforeReload, "terminal reconnect did not reach a new ready barrier");
   assert.ok(reconnectMs <= 10000, `terminal reconnect took ${reconnectMs}ms`);
-  assert.match(await page.$eval(".xterm-rows", (node) => node.textContent), /month-end difference|gl_export/,
+  assert.match(await page.$eval(".xterm-rows", (node) => node.textContent), /census sync|census_sync/,
     "terminal reconnect did not visibly restore replay content");
   assert.deepEqual(page.fixtureEscapes, [], `browser attempted non-fixture requests: ${page.fixtureEscapes.join(", ")}`);
   t.diagnostic(JSON.stringify({ fixture: "actual Taskuary --demo Replay; no PTY/worker; fixture intentionally ignores input",

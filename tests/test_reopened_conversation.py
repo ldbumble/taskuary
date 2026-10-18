@@ -92,7 +92,7 @@ class AdvisorReadsTheStoryTests(unittest.TestCase):
     def test_the_prompt_carries_the_mail_since_and_what_is_still_to_do(self):
         s, tid = reopened()
         p = advisor._prompt(s, 'message.attached', {'ref': 'TQ-0001', 'kind': 'agent', 'tid': tid},
-                            [{'verb': 'continue', 'label': 'Continue session'}], 1, 'task', tid)
+                            [{'verb': 'continue', 'label': 'Keep going'}], 1, 'task', tid)
         self.assertIn("NEW SINCE THE AGENT'S LAST TURN (2026-10-13 15:04:16) - its saved conversation is from BEFORE these", p)
         self.assertIn('Paula Vance', p); self.assertNotIn('Any news on the connector', p)
         self.assertIn('STILL TO DO ON THE TASK: Scope what building the connector would take', p)

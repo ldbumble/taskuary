@@ -1222,7 +1222,7 @@ def _run_operation(op: dict, background: BackgroundTasks):
         if out['state'] == 'no_request': return waitroom_add(tid, {'text': said})
         if not out['delivered']: raise RuntimeError(f"{out['state']}: {out.get('why') or ''}")
         return out
-    # the page's "Save and end session" (TasksView.wrapUp posts close=False): the agent ends, the task stays
+    # the page's "Stop and save" (TasksView.wrapUp posts close=False): the agent ends, the task stays
     if kind == 'agent.stop': return _wrap_task(tid, False) if p.get('wrap') else stop_task_agent(tid)
     if kind == 'report.rerun':
         from . import remote_assistant
@@ -1570,7 +1570,7 @@ CLOSED_CHAT = 'This task is closed. Reopen it, then continue the session, to pic
 def _refuse_closed_chat(task_id: int):
     """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
     "assistant is waiting on you" over a task that read done, and the bar offered only Reopen (the owner, 2026-10-14: "we need
-    to have general agent closed until i reopen and then continue session"). Reopen, then Continue session, picks it up. The
+    to have general agent closed until i reopen and then continue session"). Reopen, then Keep going, picks it up. The
     dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
     from . import general
     t = store.get_task(task_id) or {}
@@ -2926,7 +2926,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     if requested and requested not in ('general', 'coding'):
         raise HTTPException(422, 'kind must be general or coding')
 
-    # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue session
+    # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Keep going
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
     # door - button, chip, chat word, operation - comes through here, so the refusal is said here.
     live = hub_term.session_for(tid)
@@ -3693,7 +3693,7 @@ def hub_restore(lid: int, request: Request):
     if not store.lore_get(lid): raise HTTPException(404, 'no such entry')
     _require_hub_write(request)
     actor = _hub_actor(request)
-    store.lore_restore(lid); store.audit('lore', lid, 'restore', actor)
+    store.lore_restore(lid); store.audit('hub', lid, 'restore', actor)
     return dict(store.lore_get(lid))
 
 @app.post('/api/hub/{lid}/comment')
@@ -3728,7 +3728,7 @@ def hub_retire(lid: int, request: Request):
     _require_hub_write(request)
     actor = _hub_actor(request)
     store.lore_retire(lid, actor)
-    store.audit('lore', lid, 'retire', actor)
+    store.audit('hub', lid, 'retire', actor)
     return {'retired': True}
 
 class OutboxBody(BaseModel):
@@ -6202,6 +6202,8 @@ def first_run_suggest_connections():
 def first_run_finish():
     """Finish setup (or Walk me through my tasks): the canvas is the day from now on, until the top bar's Setup reopens it."""
     from . import firstrun, reports
+    # never closed on a day that will not fill: no AI, or no mailbox, is said with what to do instead (firstrun.unfinished)
+    if (why := firstrun.unfinished(store)): raise HTTPException(409, why)
     firstrun.finish(store)
     # ...and the opener's Morning digest is written now, once the mail is sorted - it says it waits, then that it writes
     try: firstrun.first_digest(store, lambda src: reports.run_one(store, src, _llm(), trigger='manual'))

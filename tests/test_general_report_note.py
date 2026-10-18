@@ -1,5 +1,5 @@
 """A chat's work ends with the same note a coding session's does (the owner, 2026-10-09: "general agent should also have the
-summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). Only Save and end session
+summary like cli no? ... that's all people want to see, it's the core thing what the agent did"). Only Stop and save
 filed it; a chat closed by the agent or put away left the Agent work step with nothing to show."""
 from taskuary import general
 from taskuary.store import MemoryStore

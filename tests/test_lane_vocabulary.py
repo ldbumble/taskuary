@@ -49,7 +49,8 @@ def test_only_the_lane_that_needs_a_counting_form_has_one():
     """"3 landed" is English; "3 report" is not - the one reason a lane ever carried two words.
     Every other lane counts under the word it wears, and `counted` defaults to it."""
     counted = {l['key']: l.get('counted') for l in VOCAB['lanes'] if l.get('counted')}
-    assert counted == {'report': 'landed'}
+    # ...and "3 couldn't sort this" is not either, since the unjudged lane says it in plain words (2026-10-17)
+    assert counted == {'report': 'landed', 'unjudged': "couldn't be sorted"}
     for lane in VOCAB['lanes']:
         assert funnel.LANE_COUNTED[lane['key']] == (lane.get('counted') or lane['word'])
 

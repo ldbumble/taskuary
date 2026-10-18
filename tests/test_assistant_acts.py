@@ -100,7 +100,7 @@ class ActsTests(unittest.TestCase):
         self.assertEqual(self.s.get_settings()['intent_classify_enabled'], '0')
         self.assertEqual(done['outcome']['undo']['params'], {'setting': 'intent_classify_enabled', 'value': '1'})
         line = concierge.receipt(self.s, done)
-        self.assertIn('Intent triage (Triage & routing): off', line); self.assertIn('Undo: Put Intent triage back to on', line)
+        self.assertIn('Intent triage (How mail is sorted): off', line); self.assertIn('Undo: Put Intent triage back to on', line)
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')

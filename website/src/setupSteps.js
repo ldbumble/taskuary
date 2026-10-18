@@ -11,18 +11,22 @@ export const stepsOf = (st, shown = "") => {
   const mailIn = mailInOf(st), ready = requiredDone(st);
   const rows = [
     { key: "ai", label: "Your AI", done: st.step !== "ai", sub: st.step !== "ai" ? st.brain?.name || "" : "" },
-    { key: "mail", label: "Your email", done: mailIn, sub: mailIn ? (st.step === "reading" ? "connected - sorting your mail" : "connected") : "" },
+    { key: "mail", label: "Your email", done: mailIn, sub: mailIn ? (st.step === "reading" ? (st.empty ? "connected - nothing new yet" : "connected - sorting your mail") : "connected") : "" },
     { key: "about", label: "About your work", done: !!st.about_done, sub: st.about_done ? "saved" : "" },
     // ticked by what is connected beyond the AI and the mail - optional, but it never ticked however many were set up (2026-10-16)
     { key: "other", label: "More connections", done: (st.more_connected || 0) > 0, optional: true,
       sub: st.more_connected ? `${st.more_connected} connected` : "optional" },
-    { key: "finish", label: "Finish", done: !!st.dismissed,
+    // ticked only once it is finished AND the three are done: a setup put away early read "✓ Finish" over no email (a demo walk, 2026-10-17)
+    { key: "finish", label: "Finish", done: !!st.dismissed && ready,
       // on Setup complete the move is its big Go to my day, not a Finish setup in the row (SetupDone)
       sub: ready ? (shown === "finish" ? "ready - Go to my day" : "ready - Finish setup is below") : "after AI, email and About your work" },
   ];
   const next = rows.find((r) => !r.done && !r.optional && (r.key !== "about" || mailIn))?.key || (ready ? "finish" : "");
   const at = shown || next;
-  return rows.map((r) => ({ ...r, current: r.key === at }));
+  // A ROW PAST WHAT IS DONE WAITS, and says for what (WAIT; Finish says it already): pressed, About your work opened over no AI and
+  // no mail (2026-10-17)
+  return rows.map((r) => { const ok = r.key === "finish" ? ready || !!st.dismissed : reachable(st, r.key);
+    return { ...r, current: r.key === at, disabled: !ok, ...(ok || r.done || r.key === "finish" ? {} : { sub: `waits - ${WAIT[prevOf(r.key)]}` }) }; });
 };
 
 // ONE STEP ON THE CANVAS, BACK AND NEXT ALWAYS (the owner, 2026-10-15: "always have next/back button if possible and move to next
@@ -36,6 +40,9 @@ export const frontierOf = (st) => !st ? "ai" : st.step === "ai" ? "ai" : st.step
 export const openAt = (st, reopened = false) => { const f = frontierOf(st); return reopened && f === "other" ? "ai" : f; };
 export const doneOf = (st, v) => !!st && (v === "ai" ? st.step !== "ai" : v === "mail" ? mailInOf(st) : v === "about" ? !!st.about_done : true);
 const WAIT = { ai: "pick an AI that works first", mail: "connect your email first", about: "save or skip the answers first" };
+// whether a step can be opened yet: the email after a working AI, About your work after the email; the AI and the optional
+// connections always
+export const reachable = (st, v) => !["mail", "about"].includes(v) || doneOf(st, prevOf(v));
 // [{id, disabled, why}] for the row: Back from any step but the first; Next while there is a next; on the last, Walk and Finish
 export const navMoves = (st, view, reopened = false) => {
   if (!st || !view) return [];

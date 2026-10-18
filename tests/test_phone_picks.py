@@ -69,8 +69,8 @@ class PickIsTheButtonTests(unittest.TestCase):
         s, _ = armed()
         offer(s, {'say': 'x', 'item': ITEM, 'chips': CHIPS})
         alts = [{'verb': 'not_ours', 'label': 'Just this once', 'current': True},
-                {'verb': 'not_ours_sender', 'label': 'From now on - triage learns this sender', 'current': False},
-                {'verb': 'block_sender', 'label': 'A rule in Settings - it never reaches triage', 'current': False}]
+                {'verb': 'not_ours_sender', 'label': 'From now on - their mail is filed for you', 'current': False},
+                {'verb': 'block_sender', 'label': 'A rule in Settings - their mail never comes in', 'current': False}]
         prop = {'id': 'op1', 'status': 'proposed', 'verb': 'not_ours', 'label': 'File it', 'summary': 'The export job → file it',
                 'key': 'msg:7', 'settles': True, 'alts': alts}
         with mock.patch.object(concierge, 'propose_direct', return_value=prop), \
@@ -80,8 +80,8 @@ class PickIsTheButtonTests(unittest.TestCase):
         run.assert_not_called()                                      # a question is open: nothing runs yet
         body, poll = got[0]
         self.assertIn('How far?', body)
-        self.assertEqual(poll, ['Just this once', 'From now on - triage learns this sender',
-                                'A rule in Settings - it never reaches triage', 'Cancel'])
+        self.assertEqual(poll, ['Just this once', 'From now on - their mail is filed for you',
+                                'A rule in Settings - their mail never comes in', 'Cancel'])
         # the owner taps "From now on" in the poll: a new proposal from the same road, run at once
         second = {**prop, 'id': 'op2', 'verb': 'not_ours_sender', 'label': 'Ignore this sender from now on'}
         with mock.patch.object(concierge, 'propose_direct', return_value=second) as pd, \
@@ -89,7 +89,7 @@ class PickIsTheButtonTests(unittest.TestCase):
              mock.patch.object(concierge, 'receipt', return_value='Done - Ignore this sender from now on.'), \
              mock.patch.object(concierge, 'surface', return_value={'say': 'All clear.', 'item': None}), \
              mock.patch.object(funnel, 'next_item', return_value=ITEM):
-            got = sent_to(s, 'From now on - triage learns this sender', poll=True)   # the poll tap
+            got = sent_to(s, 'From now on - their mail is filed for you', poll=True)   # the poll tap
         self.assertEqual(pd.call_args.args[1:3], ('not_ours_sender', 'msg:7'))
         self.assertTrue(pd.call_args.kwargs['exact'])
         run.assert_called_once()

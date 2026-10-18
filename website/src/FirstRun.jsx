@@ -19,7 +19,7 @@ import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
-import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf } from "./setupSteps.js";
+import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 
@@ -30,11 +30,6 @@ const errText = (e) => e?.response?.data?.detail || (e?.code === "ECONNABORTED" 
 // the logo each CLI wears is its maker's - the same mark as that maker's API card on Connections
 const CLI_LOGO = { claude: "anthropic", codex: "openai", gemini: "gemini", copilot: "github" };
 const MAIL_TYPES = ["outlook", "gmail", "imap"];
-// speech to text, Groq first: free to start and the quickest (voice.py). Offered once a chat that sends voice notes is connected
-const VOICE_TYPES = ["groq_stt", "openai_stt", "gemini_stt", "deepgram", "elevenlabs_stt", "stt_server", "local_whisper"];
-const VOICE_CHATS = ["whatsapp", "telegram", "teams", "slack", "discord", "imessage", "google_chat"];
-const OTHER_TYPES = ["whatsapp", "teams", "slack", "telegram", "github", "imessage", "discord", "google_chat", "mattermost",
-  "rocketchat", "matrix", "gitlab", "jira", "linear", "asana", "trello", "notion", "todoist", "clickup", "monday"];
 
 // THE QUESTION, in the Advisor's own line (ActionRow's AdvisorNext draws the same row over the composer)
 const Ask = ({ text }) => (
@@ -45,9 +40,11 @@ const Ask = ({ text }) => (
 
 // one shelf: the first four cards, and More for the rest of it - the catalogue's card, never one of our own. A card that is
 // open stands alone with its setup under it: under all twenty-one, the form landed a screen away from the card that opened it
-function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all" }) {
+// `group`: {label, cards} drawn under the shelf with a heading of its own - the coding tools, after the AI most people have
+function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all", group = null }) {
   const [all, setAll] = useState(false);
-  const one = opened && cards.find((c) => c.key === opened);
+  const every = group ? [...cards, ...group.cards] : cards;
+  const one = opened && every.find((c) => c.key === opened);
   const shown = one ? [one] : all ? cards : cards.slice(0, FIRST);
   const small = { color: DIM, fontSize: 12.5 };
   return (
@@ -56,6 +53,10 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all" }) {
       {one ? <>{detail}<Box><Button size="small" onClick={onAll} sx={small}>{allLabel}</Button></Box></>
         : cards.length > FIRST && <Box><Button size="small" onClick={() => setAll((v) => !v)} sx={small}>
           {all ? "Show fewer" : `${more} (${cards.length - FIRST})`}</Button></Box>}
+      {!one && group?.cards.length > 0 && <>
+        <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: DIM, mt: 1 }} data-tq-firstrun-group="">{group.label}</Typography>
+        <CardGrid>{group.cards.map((c) => <ConnCard key={c.key} c={c} />)}</CardGrid>
+      </>}
     </Box>
   );
 }
@@ -64,6 +65,7 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all" }) {
 // the mailbox can be changed from the same cards
 export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false }) {
   const [st, setSt] = useState(null), [err, setErr] = useState("");
+  const [loadErr, setLoadErr] = useState(""), [fails, setFails] = useState(0);   // the FIRST load failing: said, retried, Try again
   const [conns, setConns] = useState([]), [sources, setSources] = useState([]);
   const [busy, setBusy] = useState(""), [said, setSaid] = useState("");     // a pick in flight says so on the Advisor line
   const [open, setOpen] = useState(null);                                   // {id, simple}: a card's own setup, below its shelf
@@ -76,8 +78,11 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // change the AI used to leave no way forward but the rail.
   const [view, setView] = useState(null);
   const go = useCallback((v) => { setView(v); setOpen(null); setBrowse(false); }, []);
+  // a step on the rail opens only once the steps before it are done (SetupSteps disables the rest): About your work pressed from Your
+  // AI, then saved, put Setup complete over a day with no AI and no mail (the non-coder audit, 2026-10-17)
+  const stRef = useRef(null);
   useEffect(() => {
-    const on = (e) => go(e.detail === "finish" ? "other" : e.detail);
+    const on = (e) => { const v = e.detail === "finish" ? "other" : e.detail; if (!stRef.current || reachable(stRef.current, v)) go(v); };
     window.addEventListener("tq-setup-go", on);
     return () => window.removeEventListener("tq-setup-go", on);
   }, [go]);
@@ -113,8 +118,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // FINISH IS THE OWNER'S PRESS, in the row under the canvas like every other move (the owner, 2026-10-15: "we should be able to
   // dismiss the walk through and then the morning digest screen will show up ... button should be on bottom like normal"): until
   // then the canvas stays setup, never a half-finished day. Walking into the tasks finishes it too.
+  // ...and refused, with what to do, while there is no AI or no mail (409): a day with neither never fills
   const finishThen = (go) => async () => {
-    try { await api.post("/api/setup/first-run/finish"); } catch { /* the canvas still moves on; the flag is set next time */ }
+    try { await api.post("/api/setup/first-run/finish"); }
+    catch (e) { if (e?.response?.status === 409) { setErr(errText(e)); return; } /* else the canvas still moves on; the flag is set next time */ }
     window.dispatchEvent(new Event("tq-setup-changed")); go?.();
   };
   const reopened = revisit || !!st?.dismissed;
@@ -148,7 +155,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const fixRow = !st ? [] : [
     ...(view === "ai" && fix?.fix === "install" && fixed?.install && !busy ? [{ id: "setup:install", group: "decide", tone: "p", label: `Install ${fixed.title}`,
       title: "Installs it on this computer, then checks it works", run: () => install(fixed) }] : []),
-    ...(view !== "ai" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
+    // (on Setup complete its big button is Change AI itself - SetupDone)
+    ...(view !== "ai" && view !== "done" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
       title: "Back to Your AI, to pick one that sorts your mail", run: () => go("ai") }] : []),
   ];
   // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
@@ -177,19 +185,28 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     read(); const id = setInterval(read, 2000);
     return () => { on = false; clearInterval(id); };
   }, [pane?.sid]);
+  // A BACKGROUND READ NEVER CLEARS AN ERROR (the non-coder audit, 2026-10-17): the 3-5s poll wiped the Change AI road's error before
+  // it could be read. `err` goes on a user's own press or a step change; the first load's failure is its own (loadErr).
   const reload = useCallback(async () => {
     try {
       const [f, c, s] = await Promise.all([api.get("/api/setup/first-run", { timeout: 30_000 }), api.get("/api/connectors"), api.get("/api/sources")]);
-      setSt(f.data); setConns(c.data.data || []); setSources(s.data.data || []); setErr("");
-    } catch (e) { setErr(`${errText(e)} Retrying…`); }
+      setSt(f.data); setConns(c.data.data || []); setSources(s.data.data || []); setLoadErr("");
+      return f.data;
+    } catch (e) { setLoadErr(errText(e)); setFails((n) => n + 1); return null; }
   }, []);
   useEffect(() => { reload(); }, [reload]);
-  // while mail is being read - or a Microsoft sign-in may finish in another tab - read again until it is done
+  // ...and a first load that failed is tried again by itself - it said "Retrying…" and never did
   useEffect(() => {
-    if (!st || st.step === "done" || st.step === "ai") return undefined;
+    if (st || !fails) return undefined;
+    const id = setTimeout(reload, 3000);
+    return () => clearTimeout(id);
+  }, [st, fails, reload]);
+  // while mail is being read - or a Microsoft sign-in may finish in another tab, or a key is being tried on an AI card - read again
+  useEffect(() => {
+    if (!st || st.step === "done" || (st.step === "ai" && !open)) return undefined;
     const id = setTimeout(reload, st.step === "reading" ? 3000 : 5000);
     return () => clearTimeout(id);
-  }, [st, reload]);
+  }, [st, reload, open]);
   // a step moved: the rail reloads and says what is next, and so does the top bar's chip (TaskHubPage listens) - it went stale
   // ...and About your work saved is a step too: keyed on the step alone, the chip said "about your work" after it (2026-10-16)
   useEffect(() => {
@@ -201,45 +218,57 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
 
   // A CLI CARD IS ONE CLICK: connect, test, make it the AI (firstrun.choose_cli) - or install it first when it is not here
   const pick = async (ai) => {
+    setErr("");
     if (!ai.installed && ai.install && !ai.done) { install(ai); return; }
     setBusy(ai.name); setOpen(null); setBrowse(false);
     setSaid(`Checking that ${ai.title} works - it sorts one test email, up to two minutes…`);
     try { await api.post("/api/setup/first-run/ai", { name: ai.name }, { timeout: CHECK_MS }); }
-    catch (e) { setBusy(""); setSaid(""); setErr(`${errText(e)} Click the card to try again.`); return; }
+    catch (e) { setBusy(""); setSaid(""); setErr(`${errText(e)} Pick it again to retry.`); return; }
     await reload(); setBusy(""); setSaid("");         // what happened is the server's line now; cleared only once it is drawn (no flicker back)
   };
   // CHATGPT IS A BROWSER SIGN-IN, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
   // terminal??? no need for that. it's a regular oauth setup"): its card's own sign-in (chatgptauth), then tested and made the AI
+  // ONE SIGN-IN AT A TIME, ITS OWN TOKEN: Cancel (or leaving setup) drops it, and the loop checks after every wait - it kept polling
+  // past Cancel, found no sign-in in progress, and put up a red "didn't finish" on the very road the card recommends (2026-10-17)
+  const signRef = useRef(null);
+  useEffect(() => () => { signRef.current = null; }, []);
   const planSignin = async (c) => {
     setErr(""); setOpen(null); setBrowse(false);
+    const me = {}; signRef.current = me;
+    const gone = () => signRef.current !== me;
     let flow;
     try { flow = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/signin`)).data; }
-    catch (e) { setErr(`${errText(e)} Click ChatGPT to try again, or pick another AI.`); return; }
+    catch (e) { if (!gone()) setErr(`${errText(e)} Pick ChatGPT to try again, or pick another AI.`); return; }
+    if (gone()) return;
     setSigning({ cid: c.ConnectorId, flow: flow.flow, url: flow.url });
     window.open(flow.url, "_blank", "noopener");
     for (const until = Date.now() + 10 * 60_000; Date.now() < until;) {
       await new Promise((r) => setTimeout(r, 2000));
+      if (gone()) return;
       let d;
       try { d = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/poll`, { flow: flow.flow })).data; } catch { continue; }
+      if (gone()) return;
       if (d.status === "pending") continue;
-      setSigning(null);
-      if (d.status !== "ok") { setErr(`The ChatGPT sign-in didn't finish: ${d.detail || "no reason given"}. Click ChatGPT to try again.`); return; }
+      setSigning(null); signRef.current = null;
+      if (d.status !== "ok") { setErr(`The ChatGPT sign-in didn't finish: ${d.detail || "no reason given"}. Pick ChatGPT to try again.`); return; }
       return planCheck(c.ConnectorId);
     }
-    setSigning(null); setErr("The ChatGPT sign-in took too long. Click ChatGPT to start it again.");
+    if (gone()) return;
+    signRef.current = null; setSigning(null); setErr("The ChatGPT sign-in took too long. Pick ChatGPT to start it again.");
   };
   const planCheck = async (cid) => {
-    setBusy(`c${cid}`); setSaid("Checking ChatGPT works - it sorts one test email, up to two minutes…");
+    setErr(""); setBusy(`c${cid}`); setSaid("Checking ChatGPT works - it sorts one test email, up to two minutes…");
     try { await api.post("/api/setup/first-run/connector", { cid }, { timeout: CHECK_MS }); }
-    catch (e) { setErr(`${errText(e)} Click ChatGPT to try again.`); }
+    catch (e) { setErr(`${errText(e)} Pick ChatGPT to try again.`); }
     await reload(); setBusy(""); setSaid("");
   };
   const cancelSignin = () => {
+    signRef.current = null;
     if (signing) api.post(`/api/connectors/${signing.cid}/chatgpt/cancel`, { flow: signing.flow }).catch(() => {});
-    setSigning(null);
+    setSigning(null); setErr("");
   };
   const install = async (ai, verb = "Installing") => {
-    setBusy(ai.name); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
+    setErr(""); setBusy(ai.name); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
     try {
       await api.post("/api/cli/install", { name: ai.install });
       const until = Date.now() + INSTALL_MS;
@@ -252,25 +281,30 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
         if (Date.now() > until) throw new Error("the install is taking too long");
       }
       setBusy(""); await pick({ ...ai, installed: true, done: true });   // installed: test it right away - one click, the whole step
-    } catch (e) { setBusy(""); setSaid(""); setErr(`${ai.title} didn't install: ${errText(e)} Click its card to try again, or pick another AI.`); }
+    } catch (e) { setBusy(""); setSaid(""); setErr(`${ai.title} didn't install: ${errText(e)} Pick it again to retry, or pick another AI.`); }
   };
 
-  // the bar is never blank: while setup loads it says so, or what went wrong
-  if (!st) lineRef.current = err || "Getting set up…";
+  // the bar is never blank: while setup loads it says so, or what went wrong - and the failure is tried again, by itself or by Try again
+  stRef.current = st;
+  const loadLine = loadErr && `${loadErr} Trying again in a moment.`;
+  if (!st) lineRef.current = loadLine || "Getting set up…";
   if (!st) return <Box sx={{ p: 2, display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={16} />
-    <Typography sx={{ color: DIM }}>{err || "Getting set up…"}</Typography></Box>;
+    <Typography sx={{ color: DIM }}>{loadLine || "Getting set up…"}</Typography>
+    {loadErr && <Button size="small" onClick={reload}>Try again</Button>}</Box>;
 
   const byType = (types) => types.flatMap((t) => conns.filter((c) => c.Type === t));
   // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
   const card = (c, simple) => connCardOf(c, sources, () => setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })), true);
   // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
+  // ...in words that say what to do: one that can't install here says what to pick instead, one installed needs its sign-in
+  const noInstall = "Can't install on this computer - pick ChatGPT or a key instead";
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
-    : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - click to install"
-      : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : "Not answering"]
+    : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - press Install"
+      : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : !ai.installed ? noInstall : "Not answering"]
     : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts your mail"]
     // connected on the Connections page, just not the one sorting the mail: it read "Not set up" (the owner, 2026-10-16)
-    : ai.connected ? ["on", "Connected - click to make it your AI"]
-    : ["off", ai.installed ? "Not set up - on this computer" : "Not installed - click to install"]);
+    : ai.connected ? ["on", "Connected - pick it to make it your AI"]
+    : ["off", ai.installed ? "Installed - needs sign-in" : ai.install ? "Not installed - pick it to install" : noInstall]);
   const cliCards = st.ais.map((ai) => {
     const [state, words] = stateOf(ai);
     return { key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
@@ -279,17 +313,27 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ChatGPT leads: the plan most people already pay for, signed in through the browser (planSignin) - not the Codex CLI's terminal
   const plan = byType(["chatgpt"])[0], planKey = plan && `c${plan.ConnectorId}`;
   const planBusy = busy && busy === planKey;
-  const planCard = plan && { ...card(plan, true), title: "ChatGPT", channel: "openai", plain: true,
-    state: signing || planBusy ? "on" : fix?.key === planKey ? "failing" : "off",
-    desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : fix?.key === planKey ? "Signed in · not answering" : "Not set up"}`
-      + " · sign in with your ChatGPT account",
-    go: busy || signing ? undefined : () => planSignin(plan) };
-  const all = [...(planCard ? [planCard] : []), ...cliCards, ...byType(SETUP_AI).map((c) => card(c, true))];
+  // THE AI IN USE BY ITS CONNECTION, never its name: "ChatGPT (your plan)" never matched the card titled ChatGPT, which said
+  // "Not set up" under "Your AI is ChatGPT" and started a new sign-in when pressed (2026-10-17)
+  const inUseCid = (c) => st.step !== "ai" && st.brain?.pick === `connector:${c.ConnectorId}`;
+  const planOn = plan && inUseCid(plan) && fix?.key !== planKey;
+  const planCard = plan && { ...card(plan, true), title: "ChatGPT", channel: "openai", plain: true, pick: `connector:${plan.ConnectorId}`,
+    state: signing || planBusy || planOn ? "on" : fix?.key === planKey ? "failing" : "off",
+    desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : fix?.key === planKey ? "Signed in · not answering"
+      : planOn ? "Your AI - it sorts your mail" : "Not set up"}` + " · sign in with your ChatGPT account",
+    go: busy || signing || planOn ? undefined : () => planSignin(plan) };
+  const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), pick: `connector:${c.ConnectorId}` }));
+  // WHAT MOST PEOPLE HAVE LEADS (the non-coder audit, 2026-10-17): the first four were ChatGPT and three coding tools, with the
+  // organisation's card and the keys under More AI. ChatGPT, the organisation card when there is one, the keys - and the coding
+  // tools under a heading of their own
+  const lead = [...(planCard ? [planCard] : []), ...keyCards];
+  const all = [...lead, ...cliCards];
   // the AI in use leads the shelf, even one from More AI: the cards showed four others while the line named Azure OpenAI
   const inUse = st.step !== "ai" && st.brain?.name;
-  const ai = inUse ? [...all.filter((c) => c.title === inUse), ...all.filter((c) => c.title !== inUse)] : all;
+  const using = (c) => (c.pick ? inUseCid({ ConnectorId: Number(c.pick.slice(10)) }) : c.title === inUse);
+  const ai = inUse ? [...all.filter(using), ...lead.filter((c) => !using(c))] : lead;
+  const coding = cliCards.filter((c) => !(inUse && using(c)));
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
-  const other = byType(OTHER_TYPES).map((c) => card(c, false));
   const conn = open && conns.find((c) => c.ConnectorId === open.id);
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
@@ -299,32 +343,27 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   );
   const q = view || frontierOf(st);
   const aboutDue = q === "about";
-  const mailIn = doneOf(st, "mail");
   // the mail is sorted in the background: setup never waits on it, and says so (the owner, 2026-10-15: "it never says emails 45 are
-  // processed, moving on or doing it in background as no need to wait")
+  // processed, moving on or doing it in background as no need to wait") - and a mailbox read with nothing in it says that (st.empty)
   const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${st.sorting} email${st.sorting === 1 ? "" : "s"} to go; no need to wait.`
-    : " Your mail is being read in the background - no need to wait.") : "";
-  const finishWord = reopened ? "Back to my day" : "Finish setup";
+    : st.empty ? " Connected - nothing new to sort yet." : " Your mail is being read in the background - no need to wait.") : "";
   // the brain failing on the real mail, said the same on every step - the server's own line only came with its "reading" step
   const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting your mail - ${st.ai_error}.` : "";
   lineRef.current = said || err || {
-    ai: fix?.why || (aiErr ? `${aiErr} Pick another AI below - it is checked on a test email first.` : st.step === "ai" ? "What AI do you have? Click it below - Taskuary checks it works and uses it to sort your mail."
+    ai: fix?.why || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? "What AI do you have? Pick it - Taskuary checks it works and uses it to sort your mail."
       : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
     // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
     mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
       // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
-      : st.mail_error ? `${st.mail_error} Fix it in the card below and press Connect again - or pick a different email.`
-      : "What email do you have? Click it below - Microsoft 365 is one sign-in.",
+      : st.mail_error ? `${st.mail_error} Fix it in the card and press Connect again - or pick a different email.`
+      : "What email do you have? Pick it - Microsoft 365 is one sign-in.",
     about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
     done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
       : "Nothing else is needed - connect more here any time, from Connections."))
       : "Looking at what you told me about your work to suggest what to connect…",
   }[q];
-  const voice = byType(VOICE_TYPES).map((c) => card(c, true));
-  const voiceDue = q === "other" && voice.length
-    && conns.some((c) => VOICE_CHATS.includes(c.Type) && c.Active) && !conns.some((c) => VOICE_TYPES.includes(c.Type) && c.Active);
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
@@ -347,7 +386,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
       <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
         <Typography sx={{ fontSize: 14 }}>Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done.</Typography></Box>
       {/* a work ChatGPT can refuse other apps - OpenAI's own page says so in a code (3p_delegated_access_policy_denied, 2026-10-16) */}
-      <Typography sx={{ fontSize: 12.5, color: DIM, maxWidth: 620 }}>If OpenAI says your workspace's policy denies it, use the Codex CLI
+      <Typography sx={{ fontSize: 12.5, color: DIM, maxWidth: 620 }}>If OpenAI says your workspace's policy denies it, use Codex
         instead - press Cancel and pick Codex. (A workspace setting blocks other apps; its admin can change it.)</Typography>
       <Box sx={{ display: "flex", gap: 1 }}>
         <Button variant="outlined" href={signing.url} target="_blank" rel="noreferrer">Open the sign-in page</Button>
@@ -387,21 +426,27 @@ ${fix.detail || ""}`, screen: "Setup",
       </Box>
     </Box>
   ) : null;
-  const shelf = (k, cards, more) => q === k && (
+  const shelf = (k, cards, more, group = null) => q === k && (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <Shelf cards={cards} more={more} opened={(open && `c${open.id}`) || (k === "ai" && focus) || null}
+      <Shelf cards={cards} more={more} opened={(open && `c${open.id}`) || (k === "ai" && focus) || null} group={group}
         detail={open ? detail : cliDetail} allLabel={k === "ai" ? "Pick a different AI" : "Show all"}
         onAll={() => { setOpen(null); if (k === "ai") setBrowse(true); }} />
     </Box>
   );
+  // About your work saved: Setup complete only once the AI and the mail work too - else the first step still undone
+  const afterAbout = async () => {
+    const first = !reopened && !st.about_done, s = await reload();
+    go(!s ? "other" : !requiredDone(s) ? frontierOf(s) : first ? "done" : "other");
+  };
   return (
     <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
-      {shelf("ai", ai, "More AI")}
+      {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More email")}
-      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine}
-        onSaved={async () => { const first = !reopened && !st.about_done; await reload(); go(first ? "done" : "other"); }} />}
-      {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) */}
-      {q === "done" && <SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")} />}
+      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} />}
+      {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) - or, with the AI
+          failing on the mail, that problem and Change AI as its one big button */}
+      {q === "done" && <SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")}
+        aiError={aiErr} onChangeAi={() => go("ai")} />}
       {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
     </Box>
   );

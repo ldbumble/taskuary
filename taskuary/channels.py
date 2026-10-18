@@ -169,11 +169,13 @@ def plain_failure(e: Exception) -> str:
                             "paste it again if it was changed or has expired - then Save and Test again.")
     if code == 403: return ("The service knows this account but would not let it in. The key may not have permission "
                             "for this, or an administrator has to allow it.")
-    if _DNS.search(raw): return ("The server's address could not be found. Check the host name for typos, "
+    if _DNS.search(raw): return ("The server's address could not be found. Check the server name for typos, "
                                  "and that this computer is online.")
     if isinstance(e, TimeoutError) or _TIMEOUT.search(raw):
         return ("The server did not answer in time. It may be down, or this network may block it - try again in a minute.")
-    if _REFUSED.search(raw): return "The server turned the connection away. Check the host name and port."
+    # setup has one box for the server and none for a port: the name is what can be checked, and IT knows the rest (2026-10-17)
+    if _REFUSED.search(raw): return ("The server turned the connection away. Check the server name, or ask your IT team "
+                                     "for the right server and port.")
     return raw[:500] or type(e).__name__
 
 def test_connector(store, cid: int) -> dict:

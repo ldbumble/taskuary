@@ -281,7 +281,7 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         o = roles.apply(s, cfg, 'ap', route_mail=False)
         self.assertFalse(o['profile_added']); self.assertTrue(o['on_roster'])
         said = concierge._outcome_line('role.apply', {}, o)
-        self.assertIn("on triage's list", said); self.assertNotIn('where it went before', said)
+        self.assertIn('can still reach it', said); self.assertNotIn('where it went before', said)
 
     def test_the_catalogue_offers_it_with_its_questions(self):
         from taskuary import toolcatalog

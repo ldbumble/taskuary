@@ -107,7 +107,7 @@ export const FirstSync = ({ enabled, ready, firstItems = [], onSaved, onNavigate
   const start = async () => {
     setError(""); setResult(null); setStarting(true);
     try { await startFirstSync(api); setBusy(true); }
-    catch (e) { setError(e?.response?.data?.detail || e.message || "Could not start the source read."); }
+    catch (e) { setError(e?.response?.data?.detail || e.message || "Couldn't start reading your mail - try again."); }
     finally { setStarting(false); }
   };
   const items = (result?.state?.first_items || firstItems).slice(0, 5);
@@ -117,14 +117,14 @@ export const FirstSync = ({ enabled, ready, firstItems = [], onSaved, onNavigate
   };
   return <Box sx={{ mt: 1 }}>
     {!ready && !enabled && <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
-      Add your name, one AI and one work source first.
+      Add your name, one AI and your email first.
     </Typography>}
     <Button size="small" variant="contained" disableElevation disabled={starting || busy || !enabled} onClick={start}
       startIcon={starting || busy ? <CircularProgress size={12} color="inherit" /> : null}>
       {starting || busy ? "Reading…" : ready || result?.phase === "ready" ? "Read again" : "Read first items"}
     </Button>
     <Typography variant="caption" sx={{ color: DIM, display: "block", mt: 0.75 }} aria-live="polite">
-      {result?.message || (ready ? "Open one of your first items to review its verdict or draft." : "We will show up to five recent results here; sources keep their normal import scope.")}
+      {result?.message || (ready ? "Open one of your first items to see how it was sorted and any draft." : "Up to five of your newest items show here once your mail is read.")}
     </Typography>
     {(error || result?.phase === "failed") && <Alert severity="error" sx={{ mt: 1 }}>{error || result.message}</Alert>}
     {items.length > 0 && <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", mt: 1 }}>
@@ -232,7 +232,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
             <Typography variant="body2" sx={{ color: DIM, mt: 0.5 }}>
               {state.complete
                 ? "Your first result is ready. Open an item below to review it; add more sources, agents or reports when you need them."
-                : "Start with your name, one AI and one work source. Review the first result before adding anything else; model settings can wait."}
+                : "Start with your name, one AI and your email. Look at the first items before adding anything else - the rest can wait."}
             </Typography>
           </Box>
           <CloseIcon onClick={onClose} sx={{ fontSize: 18, color: FAINT, cursor: "pointer", mt: 0.5 }} />
@@ -245,7 +245,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
           ))}
         </Box>
 
-        <Button size="small" sx={{ mt: 1, color: DIM }} onClick={() => go({ tab: "Settings", hash: "settings=config&group=Triage%20%26%20agents" })}>
+        <Button size="small" sx={{ mt: 1, color: DIM }} onClick={() => go({ tab: "Settings", hash: "settings=config&group=How%20mail%20is%20sorted" })}>
           Optional: review models and agents
         </Button>
 

@@ -28,7 +28,8 @@ test("buttons.js reads buttons.json: one label, its state words, its hint, the r
   assert.equal(hint("approve", "action"), json.verbs.approve.state_hints.action);
   for (const [verb, b] of Object.entries(json.verbs)) for (const r of b.row) { assert.equal(verbOfRow(r), verb); assert.equal(labelOfRow(r), b.label); }
   assert.equal(verbOfRow("12:approve"), "approve", "a draft's own `<rid>:verb` id");
-  assert.equal(verbOfRow("kind"), null);
+  assert.equal(verbOfRow("kind"), "change_kind", "the task page's pickers are on the list too (the dead-end walk's NAMES, 2026-10-18)");
+  assert.equal(verbOfRow("no-such-row"), null);
   assert.deepEqual(rowsOf("regular_agent"), ["start-agent", "send-general"]);
   for (const b of Object.values(json.verbs)) { assert.ok(ALL_LABELS.includes(b.label)); for (const s of Object.values(b.states || {})) assert.ok(ALL_LABELS.includes(s)); }
   assert.equal(ALL_LABELS.length, new Set(ALL_LABELS).size);

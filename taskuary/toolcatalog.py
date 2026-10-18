@@ -277,7 +277,10 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
              'retriage': 'no tool sorts an item again yet', 'share': 'no tool mails results yet',
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
-             'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes'}
+             'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
+             'attach': "opens the file picker on the draft - a file is the owner's to choose",
+             'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
+             'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo'}
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
     if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True

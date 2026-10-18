@@ -2060,6 +2060,13 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
         raise
+    except Exception as e:
+        # A START THAT FAILED is said once, with its fix (failures.classify): a missing coding tool answered 500 with the raw
+        # "FileNotFoundError: [Errno 2] ... 'claude'" on the task page, and nothing to press (the dead-end walk, 2026-10-18)
+        from . import failures
+        logger.warning(f'dispatch of task {task_id} failed: {e}')
+        c = failures.classify(e, act='dispatch.prepare')
+        return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
 class RepoBody(BaseModel):
     repo: str | None = None          # None clears the tag and lets Taskuary guess again

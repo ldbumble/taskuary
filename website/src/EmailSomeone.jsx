@@ -123,7 +123,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
               <FormControlLabel key={f.key} sx={{ display: "flex", m: 0, "& .MuiTypography-root": { fontSize: 12.5 } }}
                 control={<Checkbox size="small" checked={picked.has(f.key)} onChange={() => flip(f.key)} />} label={f.name} />
             )) : <Typography variant="caption" sx={{ color: FAINT }}>No files on this task yet.</Typography>}
-            <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>Anything else: Attach a file on the draft.</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>Anything else: {label("attach")} on the draft.</Typography>
           </Box>
         )}
         {err && <Typography variant="body2" sx={{ color: "#a33b3b" }}>{err}</Typography>}

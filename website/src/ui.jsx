@@ -668,7 +668,7 @@ export const codingProfile = (agents = [], kinds = {}) => agents.find((a) => Str
 // One row of model choices, wherever they are asked for. `info.models` carries the CLI's own
 // [{id,label}] - Claude Code's catalog, codex's models_cache - so the menu reads the way that CLI's
 // own /model does; `choices` is the flat id list older payloads still send.
-export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "brain", sx, menuProps, empty }) => {
+export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "tool", sx, menuProps, empty }) => {
   const rows = (info.models || []).filter((m) => m && m.id);
   const ids = rows.length ? rows.map((m) => m.id) : (info.choices || []);
   const labels = Object.fromEntries(rows.map((m) => [m.id, m.label || m.id]));
@@ -735,7 +735,7 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
           {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}</MenuItem>)}
         </Select>
       )}
-      <ModelSelect size={size} model={model} onModel={onModel} whose={coding ? "brain" : "agent"}
+      <ModelSelect size={size} model={model} onModel={onModel} whose={coding ? "tool" : "agent"}
         info={handOff ? { models: chosenBrain.models, default: chosenBrain.model } : info} />
     </>
   );

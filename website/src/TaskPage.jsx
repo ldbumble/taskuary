@@ -90,7 +90,7 @@ const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the g
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 // the repository question in plain words - "pick a repo" read as code-speak on the card (the walk's WORDS, 2026-10-17); it is only
 // asked at all where a coding tool is connected (capabilities.coding)
-const PICK_CODE = "Choose where the code is";
+const PICK_CODE = btn("pick_repo");
 // a thread on the task reads newest first, like the task does (the owner, 2026-10-14)
 export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
 
@@ -1150,12 +1150,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
     title: hintOfRow("run-another") };
   const changeVerbs = !notDone ? [] : [
-    { id: "kind", group: "more", label: "Change who does it", run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }),
-      title: "You, an assistant, or a drafted reply for you to approve" },
-    { id: "priority", group: "more", label: "Change priority", run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: "Low, normal, high or urgent" },
-    { id: "assign", group: "more", label: "Assign it", run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: "You, an agent's profile, or nobody" },
+    { id: "kind", group: "more", label: labelOfRow("kind"), run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }), title: hintOfRow("kind") },
+    { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: hintOfRow("priority") },
+    { id: "assign", group: "more", label: labelOfRow("assign"), run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: hintOfRow("assign") },
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
-    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change where the code is" : PICK_CODE, run: pickRepo,
+    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
       title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
   ];
   const rowVerbs = !t ? [] : !notDone

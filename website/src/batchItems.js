@@ -1,6 +1,7 @@
 // A batch's items (batch.py): the ranked arrivals of one repository, let in as one task and worked top-down by one agent
 // (read-only only where the triage judged an item dangerous). One shape for the task page and the rail: what each item's state is called, what the owner may press on it, and
 // the one line that says how far the batch got.
+import { label } from "./buttons.js";
 
 export const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
 export const circled = (n) => CIRCLED[n - 1] || String(n);
@@ -32,7 +33,7 @@ export function actions(i) {
   if (i.State !== "needs_you") return [{ action: "settle", label: "Nothing to do" }];
   const p = i.Propose, fixed = i.Fix === "done";
   const canFix = isPull(i) && p === "changes" && i.canFix !== false;
-  const all = [...(canFix ? [{ action: "fix", label: i.Fix === "failed" ? "Fix it again" : "Fix it", primary: true }] : []),
+  const all = [...(canFix ? [{ action: "fix", label: i.Fix === "failed" ? `${label("fix")} again` : label("fix"), primary: true }] : []),
     ...(i.Link && p === "changes" ? [{ action: "open", label: "Ask for changes", href: i.Link, primary: !canFix }] : []),
     ...(fixed && i.FixLink ? [{ action: "open-fix", label: "See the fix", href: i.FixLink }] : []),
     ...(isPull(i) && i.reviewed ? [{ action: "merge", label: fixed ? "Merge the fix" : "Merge", primary: p === "merge" }] : []),

@@ -19,7 +19,7 @@ test("an item with a task behind it is shown by TaskPage; a proposal, a batch or
 // hides the conversation around it and never resizes it, so the pty inside can never be grown after it has output.
 test("Expand never changes the view's height, so the pane is never grown", () => {
   assert.match(item, /sx=\{\{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px",/);
-  assert.match(item, /export const CANVAS_ITEM_HEIGHT = "max\(340px, calc\(100cqh - 12px\)\)";/);
+  assert.match(item, /export const CANVAS_ITEM_HEIGHT = "max\(340px, calc\(100cqh \+ 14px\)\)";/);
   assert.match(view, /height: CANVAS_ITEM_HEIGHT, expanded,/);
   assert.match(src("assistantView.css"), /container-type: size;/);
   assert.doesNotMatch(view.slice(view.indexOf("const canvasState"), view.indexOf("const canvasState") + 400), /expanded \?/);

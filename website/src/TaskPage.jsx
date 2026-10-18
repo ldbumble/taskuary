@@ -1795,11 +1795,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {workspaceMode === "general" && (liveSession || stage === "agent") ? (
                   /* the chat is this task's session: it gets the room a terminal gets, not the
                      height of its own content squeezed between the cards above and below it. On the canvas that room is the
-                     VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh - 12px tall,
+                     VIEW'S: the chat body is a size container (assistantView.css .tq-chat-body) and the view is 100cqh + 14px tall,
                      so the agent takes all of it under the title and its own heading (the Task strip is scrolled above - agentUp):
                      its input on screen, Close out one scroll below. A fixed 420px floor in a shorter view put the input and the last
-                     lines out of sight. 104px = the view's 12px margin + the title strip + this step's heading + 8px under the chat. */
-                  <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 104px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
+                     lines out of sight. 78px = the title strip + this step's heading + 8px under the chat, less the 26px the view gained. */
+                  <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 78px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports} />

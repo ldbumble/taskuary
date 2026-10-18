@@ -40,7 +40,9 @@ function useItemAdvice(card, on) {
 // ...and ALL of it (the owner, 2026-10-18: "you can almost never see the full output text"): 100cqh is already the body's
 // content box, so taking its padding off again left 26px of cream under the view; only the view's own 12px margin comes off now.
 // The floor is lower too - at 1366x768 the 420px floor was taller than the body, and the view's head scrolled out of sight.
-export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh - 12px))";
+// ...and the body's PADDING is the view's too (2026-10-18, "top is not high enough"): its top meets the body's top (AssistantView
+// toEnd and the pin), so the 26px of padding plus 14 = the body's whole height less a 12px gap over the dock.
+export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh + 14px))";
 
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);

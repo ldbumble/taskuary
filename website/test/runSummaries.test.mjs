@@ -17,6 +17,17 @@ test("a run's last words are its last message, without the prompt box the screen
     "Done: the video is ready.");
 });
 
+test("a line said and then worked past is not the last words: the written result the agent filed after it is", () => {
+  // the agent said what it would check next, checked, and filed its answer through a tool - the run led with the progress line
+  const steps = [{ k: "tool", text: "grep", at: "2026-10-18T13:25:14Z" }, { k: "said", text: "Next I'm checking the run log.", at: "2026-10-18T13:25:16Z" },
+    { k: "tool", text: "taskuary --reply", at: "2026-10-18T13:25:38Z" }];
+  const s = { sid: "a", at: "2026-10-18T13:26:00Z", steps, result: "Looked into the run. Nothing for you to do." };
+  assert.equal(lastWords(s), "Looked into the run. Nothing for you to do.");
+  assert.equal(runsOf([s])[0].said, "Looked into the run. Nothing for you to do.");
+  // a said line that IS the result's end stays the last words, and so does one nothing came after
+  assert.equal(lastWords({ ...s, steps: steps.slice(0, 2) }), "Next I'm checking the run log.");
+});
+
 test("runs are numbered oldest-first and shown newest-first", () => {
   const runs = runsOf([{ sid: "c", result: "third" }, { sid: "b", result: "second" }, { sid: "a", result: "first" }]);
   assert.deepEqual(runs.map((r) => [r.n, r.said]), [[3, "third"], [2, "second"], [1, "first"]]);

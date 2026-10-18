@@ -29,7 +29,7 @@ test("the chat takes the room on the task page, the way a live session does", ()
   const mount = tasks.slice(at, tasks.indexOf('workspaceMode === "wrapping"', at));
   assert.match(mount, /flex: "1 1 0"/);
   // ...on the canvas, all of the view under the title and its heading (the owner, 2026-10-18: "see more of the agent canvas")
-  assert.match(mount, /minHeight: canvas \? "max\(240px, calc\(100cqh - 104px\)\)" : \{ xs: 360, md: 420 \}/);
+  assert.match(mount, /minHeight: canvas \? "max\(240px, calc\(100cqh - 78px\)\)" : \{ xs: 360, md: 420 \}/);
 });
 
 // THE AGENT'S CHAT OPENS PUSHED UP on the canvas: the folded Task strip scrolls above, and back down when another step opens

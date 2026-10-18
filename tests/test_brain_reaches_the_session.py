@@ -82,7 +82,7 @@ class ANonStartIsNotAStartTests(unittest.TestCase):
             c.post(f'/api/tasks/{tid}/dispatch', json={'kind': 'coding', 'agent': 'coding'})
         self.assertTrue(funnel.held_for_repo(s.get_task(tid)))
         self.assertEqual(sum('needs a repository' in str(x.get('Body')) for x in s.list_comments(tid)), 1, 'said once, not per press')
-        self.assertIn('needs a repository', funnel.not_started_why(s, tid))
+        self.assertIn('needs to know where the code is', funnel.not_started_why(s, tid))
         self.assertEqual(funnel.agent_story(s, tid)['kind'], 'held', 'the agent step wears "waiting on you"')
         c.put(f'/api/tasks/{tid}/repo', json={'repo': 'org/app'})
         self.assertFalse(funnel.held_for_repo(s.get_task(tid)), 'the pick answers the question')

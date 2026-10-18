@@ -26,12 +26,14 @@
 //   WAYOUT    a forced failure whose screen has no button from the list that gets past it, or whose way out does nothing
 //   LIVE      a cancelled or failed proposal card that still offers its buttons
 //   FOLD      a task folded by its X that its folded line or its rail row cannot open again
+//   UNDO      a receipt that says it can be undone ("Undo: ...") with no Take it back to press under it
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -41,7 +43,9 @@ import { JARGON_RES } from "./src/words.js";
 import { VERBS, ALL_LABELS, label, verbOfRow, choice } from "./src/buttons.js";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
+// no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
+// on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
+const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
 const only = new Set(String(arg("--only", "walk,sweep,faults,cards")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -77,7 +81,6 @@ const WALK_SKIP = {
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "pick_repo:set": "shows once a task has a repository - neither world has one chosen",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
-  "pick_repo": "on the task page's More menu only where a repository is known - a CI box has none, so it is pressed where it shows",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
 };
 
@@ -109,7 +112,17 @@ const note = (rule, at, what) => found.push(`${rule.padEnd(7)} ${at}: ${what}`);
 const mark = (key, at) => { if (key && !pressed.has(key)) pressed.set(key, at); };
 
 // ── a server: the demo (refusals ON), or a seeded world whose mailbox, coding tool and AI are the faults module's ────────────
-async function serve(p, { faults = false } = {}) {
+const freePort = () => new Promise((res, rej) => { const s = createServer(); s.unref(); s.on("error", rej);
+  s.listen(0, "127.0.0.1", () => { const { port: p } = s.address(); s.close(() => res(p)); }); });
+async function serve(n, opts = {}) {
+  // a free port can be taken between asking and binding: once more on a fresh one before saying it failed
+  for (let tries = 0; ; tries++) {
+    const p = fixed ? port + n : await freePort();
+    try { return await serveOn(p, opts); }
+    catch (e) { if (fixed || tries >= 1) throw e; }
+  }
+}
+async function serveOn(p, { faults = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
   const launchPy = `
 import sys, pathlib
@@ -127,15 +140,22 @@ if ${faults ? "True" : "False"}:
 sys.argv = ['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
   const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", ...(faults ? { TASKUARY_FAULTS: "1" } : { TASKUARY_DEMO: "1" }) };
   delete env[faults ? "TASKUARY_DEMO" : "TASKUARY_FAULTS"];
-  const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: "ignore" });
+  const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
+  let errTail = ""; srv.stderr.on("data", (d) => { errTail = (errTail + d).slice(-1500); });
   const base = `http://127.0.0.1:${p}`;
   let token = "";
   for (let i = 0; i < 90 && !token; i++) {
     await wait(1000);
+    if (srv.exitCode !== null) break;                               // it died: say why now, not after 90 seconds
     try { token = (readFileSync(join(home, "config.toml"), "utf8").match(/^token = "([^"]+)"/m) || [])[1] || ""; } catch { /* not written yet */ }
     if (token && !(await fetch(`${base}/api/funnel/pile`, { headers: { "X-Taskuary-Token": token } }).then((r) => r.ok).catch(() => false))) token = "";
   }
-  if (!token) { srv.kill(); throw new Error(`the ${faults ? "faults" : "demo"} server never came up`); }
+  if (!token) {
+    srv.kill();
+    const why = srv.exitCode !== null ? `it exited (${srv.exitCode})` : "no answer in 90 s";
+    const last = errTail.trim().split(/\r?\n/).slice(-4).join(" | ");
+    throw new Error(`the ${faults ? "faults" : "demo"} server never came up on port ${p}: ${why}${last ? ` - its last words: ${last}` : ""}`);
+  }
   const H = { "X-Taskuary-Token": token, "Content-Type": "application/json" };
   const api = async (method, path, body) => { const r = await fetch(`${base}${path}`, { method, headers: H, body: body ? JSON.stringify(body) : undefined }); return r.json().catch(() => ({})); };
   if (faults) await api("POST", "/api/setup/dismiss", { dismissed: true });
@@ -187,7 +207,10 @@ const look = (page) => page.evaluate(() => {
   const read = [card?.innerText || "", row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
+  const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
   return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops,
+    undoSaid: tail.some((m) => /Undo: /.test(m.innerText || "")),
+    chatBtns: tail.flatMap((m) => [...m.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim())),
     nmsg: msgs.length, last: (msgs[msgs.length - 1]?.innerText || "").slice(0, 200), url: location.href, focus: document.activeElement?.tagName || "",
     folded: [...document.querySelectorAll("[data-tq-folded]")].filter(vis).map((e) => e.getAttribute("data-tq-folded")),
     card: card ? { top: cr.top, shown: Math.min(cr.bottom, rr ? rr.top : hr.bottom) - Math.max(cr.top, hr.top), text: card.innerText.length } : null };
@@ -206,6 +229,7 @@ const judge = (s, at) => {
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))
     note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);
   for (const w of JARGON) { const m = s.read.match(w); if (m) note("WORDS", at, `"${m[0]}" in "${s.read.slice(Math.max(0, m.index - 40), m.index + 60).replace(/\s+/g, " ")}"`); }
+  if (s.undoSaid && !s.chatBtns.includes(label("take_back"))) note("UNDO", at, `a receipt offers an undo and no "${label("take_back")}" is drawn under it`);
   const odd = [...new Set(s.verbs.filter((v) => !named(v.word, v.id)).map((v) => v.word))];
   if (odd.length) note("NAMES", at, `on the row but on no list of buttons: ${JSON.stringify(odd)}`);
 };
@@ -234,7 +258,7 @@ const closePops = async (page) => { for (let i = 0; i < 2; i++) { await page.key
 
 // ── WALK: Next through the day, doing what each card's first button invites, so the paths behind it run too ─────────────────
 async function walk() {
-  const srv = await serve(port), page = await pageOn(srv, "walk");
+  const srv = await serve(0), page = await pageOn(srv, "walk");
   let s = await look(page);
   const did = new Set(), seen = new Map();
   for (let n = 0; n < 40; n++) {
@@ -276,7 +300,7 @@ async function walk() {
 
 // ── SWEEP: every button every row shows, in the row and its More menus, pressed once each ──────────────────────────────────
 async function sweep() {
-  const srv = await serve(port + 1), page = await pageOn(srv, "sweep");
+  const srv = await serve(1), page = await pageOn(srv, "sweep");
   const done = new Set(), unnamed = new Set();
   for (let round = 0; round < 3; round++) {
     for (const r of (await look(page)).rail) {
@@ -335,7 +359,7 @@ async function sweep() {
 
 // ── FAULTS: each failure the app knows, forced at the boundary, and its way out pressed ─────────────────────────────────────
 async function faults() {
-  const srv = await serve(port + 2, { faults: true }), page = await pageOn(srv, "faults");
+  const srv = await serve(2, { faults: true }), page = await pageOn(srv, "faults");
   const fault = (f) => srv.api("POST", "/api/test/fault", { fault: f });
   // each scenario from the chat as it opens: a fix that opened a place leaves the canvas on it
   const fresh = async () => { await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000); };
@@ -392,7 +416,7 @@ async function faults() {
     await wait(3000);
     await clickText(page, choice("agent", "coding_agent"));            // the card's question, when it asks which agent
     await wait(5000);
-    await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : "Choose where it works", (x) => /coding tool|where it works/i.test(x.word)]);
+    await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : label("pick_repo"), (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }
   // no AI at all: the strip asks for one, with the button that connects it
@@ -417,12 +441,31 @@ async function faults() {
     } else note("WAYOUT", page.step, `the closed task's card shows no ${label("defer")}`);
     page.expect.delete("/remind"); page.expect.delete("/execute");
   }
+  // an act that can be undone: Remind me on an open task - its receipt must carry Take it back, and pressing it must put it back
+  page.step = "faults undo"; await fresh();
+  if (await openItem(page, (x) => /📋/.test(x.text)) && (await pressVerb(page, "defer"))) {
+    await wait(1500);
+    const day = (await page.$$(".MuiPopover-paper button"))[0];
+    if (day) {
+      await day.click(); await wait(4500);
+      const s = await look(page); judge(s, page.step);
+      const tb = label("take_back");
+      if (!s.verbs.some((v) => v.word === tb) && !s.chatBtns.includes(tb)) note("UNDO", page.step, `${label("defer")}'s receipt offers no "${tb}" on the bar or under it`);
+      else {
+        const before = sig(s);
+        if ((await pressVerb(page, "take_back")) || (await clickText(page, tb, ".tq-chat-body") && (mark("take_back", page.step), true))) {
+          await wait(4000);
+          if (sig(await look(page)) === before) note("WAYOUT", page.step, `"${tb}" changed nothing`);
+        }
+      }
+    }
+  }
   await page.close(); srv.stop();
 }
 
 // ── CARDS: a proposal cancelled then pressed; a task folded by its X then opened again ────────────────────────────────────────
 async function cards() {
-  const srv = await serve(port + 3), page = await pageOn(srv, "cards");
+  const srv = await serve(3), page = await pageOn(srv, "cards");
   // a proposal card: Not ours on an idea asks its own question, Put it on my list proposes; whichever draws a card first
   page.step = "cards cancel";
   let card = null;

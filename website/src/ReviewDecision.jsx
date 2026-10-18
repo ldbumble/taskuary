@@ -20,6 +20,7 @@ import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
 import { replySendFailure, reviewDeliveryState, sendFix } from "./sendState.js";
 import { openAppLink } from "./appLinks.js";
+import { runOperation } from "./taskOps.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 
 // What they wrote, above what we would say back. The queue used to show only the draft: you
@@ -141,14 +142,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // Approving IS sending, so a send that failed has to say so HERE, the moment you click - it
   // used to return quietly and leave a "NOT SENT" line in the task history for you to find later.
   const copyClose = async () => { try { await navigator.clipboard.writeText(value); } catch { /* the draft stays on the task to copy by hand */ } return decide("close_unsent"); };
-  const decide = async (verb) => {
+  const decide = async (verb, anyway = false) => {
     if (delivery.active || (delivery.frozen && verb !== "approve")) return;
     setBusy(true); setErr(""); setSendErr("");
     try {
       const { data } = await api.post(`/api/reviews/${r.ReviewId}/decide`,
         { verb, final_text: verb === "approve" && !delivery.frozen ? value : null, note: null,
           // only on the send: rejecting or "no reply needed" copies nobody on nothing
-          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null });
+          cc: verb === "approve" && !proposal && !delivery.frozen ? ccNow : null, anyway });
       const it = interruptOf(data, r.ReviewId);
       if (it) { setInterrupt(it); onChanged?.(); setBusy(false); return; }
       // a close-out GitHub's state refused is "not now", with what fits instead - never "approved, but it did not send"
@@ -193,10 +194,22 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
+  // A SEND NOBODY CAN CONFIRM has two ways past it beside Check delivery, as in the chat (concierge.recover): Send anyway - the owner's
+  // own word that a second copy is fine - and Mark done, for when it went. Only Check delivery was here (the rebuilt walk, 2026-10-18)
+  const unconfirmed = delivery.state === "unknown" && !delivery.active;
+  const sendAnyway = () => decide("approve", true);
+  const doneAnyway = async () => {
+    setBusy(true); setErr("");
+    try { if (onMarkDone) await onMarkDone(); else { await runOperation(api, "task.complete", r.TaskId); onChanged?.(); } }
+    catch (e) { setErr(e?.message || e?.response?.data?.detail || `${btn("close")} didn't go through.`); }
+    setBusy(false);
+  };
   const moves = r.Status !== "pending" ? [] : [
     ...(delivery.frozen ? [
       { id: no("approve"), label: busy ? "Checking delivery…" : delivery.label, tone: "p", disabled: busy || !delivery.canCheck,
         run: () => decide("approve"), title: delivery.line, why: delivery.active ? "waiting for the provider" : "" },
+      ...(unconfirmed ? [{ id: no("anyway"), label: btn("approve", "unknown"), tone: "s", disabled: busy, run: sendAnyway, title: btnHint("approve", "unknown") },
+        ...(r.TaskId ? [{ id: no("done"), label: btn("close"), tone: "s", disabled: busy, run: doneAnyway, title: btnHint("close") }] : [])] : []),
     ] : co && !r.Stale ? [
       { id: no("approve"), label: busy ? co.busyLabel : co.approveLabel, tone: "p", title: blocked ? gh.reason : thenLine, disabled: busy || blocked || (sendable && !value.trim()), run: () => decideBoth("approve"),
         why: blocked ? gh.reason.split(" - ")[0] : sendable && !value.trim() ? "write the reply first" : "" },
@@ -229,7 +242,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
           title: btnHint("redraft") }] : []),
         ...(onMarkDone && canSendIt ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
-  ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && v.id !== no("approve")) }));
+  ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && ![no("approve"), no("anyway"), no("done")].includes(v.id)) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
@@ -356,12 +369,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {/* a channel that cannot carry the reply must SAY so: github with replies
             off gets 'No response required' as THE action, not a send that bounces */}
         <>
-        {delivery.frozen ? (
+        {delivery.frozen ? (<>
           <Button size="small" variant={solid} disableElevation disabled={busy || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
             {busy ? "Checking delivery…" : delivery.label}
           </Button>
-        ) : co && !r.Stale ? (
+          {unconfirmed && <Button size="small" variant="outlined" disabled={busy} onClick={sendAnyway} title={btnHint("approve", "unknown")}>{btn("approve", "unknown")}</Button>}
+          {unconfirmed && r.TaskId && <Button size="small" variant="outlined" disabled={busy} onClick={doneAnyway} title={btnHint("close")}>{btn("close")}</Button>}
+        </>) : co && !r.Stale ? (
           /* ONE PRESS FOR THE LAST TWO ACTS (the owner, 2026-09-27: "shouldn't we combine this?"): the merge or
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
              carry leaves just the close-out. */

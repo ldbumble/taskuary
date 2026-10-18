@@ -51,7 +51,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, phone = false }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, onReminded, phone = false }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -95,7 +95,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         // closed, put away or deleted here, the walk moves on - the same as Done on a walk card
         onSelect={(id) => { if (!id) onAfter(); }}
         onFinish={async (status, close) => { await close(); onAfter(); }}
-        onReminded={(out) => { if (out?.remindAt) onAfter(); }} backArrow={phone}
+        onReminded={(out) => { onReminded?.(out); if (out?.remindAt) onAfter(); }} backArrow={phone}
         // Mark done and Remind me put the task down AT THE PRESS, as Next does; a failure puts it back with the reason
         onLeave={onLeave} onStay={onStay} />
       </Box>

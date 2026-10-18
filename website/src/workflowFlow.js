@@ -77,7 +77,10 @@ export const badRefs = (flow, i) => {
 };
 export const slug = (x) => String(x || "").toLowerCase().replace(/[_-]/g, " ").split(/\s+/).filter(Boolean).join(" ");
 // v1 pastes text into a query - the editor says so where it happens
-export const tokenInQuery = (s) => s?.kind === "source" && /\{\{/.test(String(s.query || ""));
+// an earlier step's output in a query or filter (flow.pasted_sql): never saved - what a step read could rewrite the SQL. The owner's
+// inputs and the run's own facts ({{inputs.x}}, {{run.date}}) may fill one.
+export const tokenInQuery = (s) => s?.kind === "source"
+  && [s.query, s.filter].some((v) => [...String(v || "").matchAll(/\{\{\s*([^{}.\s]+)/g)].some((m) => !["inputs", "run"].includes(m[1])));
 
 // what the owner still has to fill in before Save means anything (the server's flow.validate has the last word)
 export const missingIn = (s) => s.kind === "source" ? (!s.type ? "a system" : "")

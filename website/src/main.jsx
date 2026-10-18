@@ -59,7 +59,7 @@ class Boundary extends React.Component {
         </button>
         <button type="button" onClick={() => this.setState({ report: { message: String(this.state.err?.message || this.state.err), stack: this.state.err?.stack } })}
           style={{ marginLeft: 12, padding: 0, border: 0, background: "none", color: "#4d4a43", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>
-          Report this bug
+          {btnLabel("report_bug")}
         </button>
         <BugReportDialog open={!!this.state.report} onClose={() => this.setState({ report: null })} screen="crash" error={this.state.report} />
       </div>

@@ -242,7 +242,9 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
     from . import outbound, slots, verdicts
     task = store.get_task(tid)
     if not task: raise ValueError('no such task')
-    if task.get('Status') in ('done', 'dropped'): raise ValueError('that task is closed - reopen it first')
+    if task.get('Status') in ('done', 'dropped'):
+        from .failures import Closed
+        raise Closed(tid, 'that task is closed - reopen it first')
     channel = str(channel or 'email').lower()
     if channel not in slots.KINDS: raise ValueError(f'{channel} cannot be sent from a task')
     no = capabilities.send_refusal(store, channel)

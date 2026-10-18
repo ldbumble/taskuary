@@ -100,3 +100,63 @@ class TheChatKeepsTheSendsFixTests(unittest.TestCase):
         halts = re.findall(r"raise operations\.Halt\(out(?:\.get\('send_error'\)|\['send_error'\]).*?\n(?:.*\n){0,2}", src)
         self.assertEqual(len(halts), 2)
         self.assertTrue(all("send_fix" in h for h in halts), halts)
+
+
+class OneFailureShapeTests(unittest.TestCase):
+    """failures.py: every road says a failure one way - {sentence, fix, retry, unknown} - and leaves it as the agreed op row."""
+    def test_a_missing_coding_tool_is_said_plainly_with_its_fix(self):
+        from taskuary import failures, words
+        c = failures.classify(FileNotFoundError(2, 'No such file or directory', 'claude'), act='dispatch.prepare')
+        self.assertEqual(c['sentence'], "The coding tool isn't installed on this computer")
+        self.assertEqual(c['fix'], {'label': 'Connect a coding tool', 'href': words.href('ai_apps')})
+        self.assertFalse(c['retry'], 'pressing it again starts the same missing program')
+
+    def test_each_kind_of_failure_names_its_place_or_says_try_again(self):
+        from taskuary import failures, words
+        self.assertEqual(failures.classify(ValueError('working directory does not exist: portal'))['fix']['href'], words.href('coding'))
+        self.assertEqual(failures.classify(RuntimeError('no AI connector is set up to write replies'))['fix']['href'], words.href('ai'))
+        self.assertEqual(failures.classify(RuntimeError('graph sendMail failed (401): expired'))['fix']['label'], 'Sign in again')
+        plain = failures.classify(RuntimeError('the remote end hung up'))
+        self.assertEqual((plain['fix'], plain['retry'], plain['unknown']), (None, True, False))
+
+    def test_only_a_send_can_be_unknown(self):
+        from taskuary import failures
+        self.assertTrue(failures.classify(TimeoutError('read timed out'), act='review.approve')['unknown'])
+        self.assertFalse(failures.classify(TimeoutError('read timed out'), act='task.complete')['unknown'])
+
+    def test_credentials_never_reach_the_sentence(self):
+        from taskuary import failures
+        self.assertNotIn('sk-ant-api03', failures.classify(RuntimeError('bad key sk-ant-api03-' + 'a' * 40))['sentence'])
+
+    def test_the_record_is_the_row_the_advisor_reads(self):
+        from taskuary import failures
+        s = MemoryStore(); it = draft(s, 'email')
+        failures.record(s, task_id=it['tid'], kind='report.run', error=RuntimeError('the site changed its layout'),
+                        what='the Monday invoices workflow stopped at step 3', source='workflow', step=3)
+        f = advisor.failure(s, it)
+        self.assertEqual((f['what'], f['why'], f['source']), ('the Monday invoices workflow stopped at step 3', 'the site changed its layout', 'workflow'))
+        verbs = [v['verb'] for v in advisor.offered(s, it)]
+        self.assertIn('report_bug', verbs); self.assertNotIn('new_task', verbs)       # a workflow run already IS a task
+
+    def test_a_confirmed_act_that_throws_keeps_the_shape(self):
+        s = MemoryStore(); it = draft(s, 'email')
+        op = operations.propose(s, 'dispatch.prepare', it['tid'], {'kind': 'coding'})
+        def run(): raise FileNotFoundError(2, 'No such file or directory', 'claude')
+        out = operations.execute(s, op['id'], op['version'], run)
+        self.assertEqual((out['status'], out['error']), ('error', "The coding tool isn't installed on this computer"))
+        self.assertEqual(out['outcome']['fix']['label'], 'Connect a coding tool')
+
+    def test_recover_offers_report_this_bug_when_nothing_else_will_work(self):
+        from taskuary import concierge
+        chips = []
+        with mock.patch.object(concierge, 'restore_current', return_value=None), mock.patch.object(concierge, 'chips_for', return_value=[]):
+            got = concierge.recover(MemoryStore(), {'id': 'x', 'version': 1, 'status': 'error', 'kind': 'task.complete', 'error': 'it broke',
+                                                    'outcome': {'retry': False}}, llm=False)
+        self.assertIn(buttons.label('report_bug'), [c['label'] for c in got['chips']])
+        self.assertNotIn(buttons.label('try_again'), [c['label'] for c in got['chips']])
+
+    def test_a_closed_task_says_how_to_reopen_it(self):
+        from taskuary import remind
+        s = MemoryStore(); t = s.create_task({'Title': 'Order badges', 'Status': 'done'}, 'owner')
+        with self.assertRaises(ValueError) as e: remind.set_reminder(s, t, 'tomorrow')
+        self.assertEqual(outbound.fix_of(e.exception)['href'], f'#task={t}')

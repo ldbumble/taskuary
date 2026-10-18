@@ -26,6 +26,7 @@ import { TaskuaryMark, asUtc, timeAgo } from "./ui.jsx";
 import AssistantView from "./AssistantView.jsx";
 import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
+import { label as btnLabel } from "./buttons.js";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
@@ -116,7 +117,7 @@ function Bell({ onGo }) {
                 title="I have read this. It returns if it happens again."
                 onClick={() => put(p)}>{busy === p.key ? "…" : "Dismiss"}</Button>
               <Button size="small" sx={{ fontSize: 10.5, color: DIM, textTransform: "none", p: 0, minWidth: 0 }}
-                onClick={() => { setEl(null); openBugReport(bellError(p)); }}>Report this bug</Button>
+                onClick={() => { setEl(null); openBugReport(bellError(p)); }}>{btnLabel("report_bug")}</Button>
             </Box>
           </Box>
         ))}

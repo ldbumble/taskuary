@@ -205,7 +205,7 @@ export const receiptChips = (m) => {
   const own = chipsOf(m);
   return [...own,
     ...(m?.tid && !own.some((c) => c.verb === "open" || c.verb === "opentask") ? [{ verb: "opentask", tid: m.tid, label: `Open ${m.ref || "the task"}` }] : []),
-    ...(m?.status === "error" ? [{ verb: "bug", text: m.text, label: "Report this bug" }] : [])];
+    ...(m?.status === "error" ? [{ verb: "bug", text: m.text, label: label("report_bug") }] : [])];
 };
 // A card whose verb was pressed is put down at once (`done`), not when the next card arrives: the
 // settle and the next pick take a second, and a card still standing there gets pressed twice (the

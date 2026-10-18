@@ -331,12 +331,16 @@ def failure(store, item: dict) -> dict | None:
     if last.get('Status') != 'error': return None
     try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
     except (TypeError, ValueError): out = {}
-    try:
-        from . import operations
-        what = concierge.describe_op(store, operations.get(store, last['OpId']))[0]
-    except Exception: what = str(last.get('Kind') or 'the last action')
-    return {'what': f'"{what}" did not happen', 'why': str(last.get('Error') or ''), 'fix': ok(out.get('fix')) if isinstance(out, dict) else None,
-            'unknown': bool(isinstance(out, dict) and out.get('delivery') == 'unknown'), 'kind': last.get('Kind')}
+    out = out if isinstance(out, dict) else {}
+    # the record's own words lead (failures.record - the workflow runner's step says which step stopped); else the act, described
+    if out.get('what'): what = str(out['what'])
+    else:
+        try:
+            from . import operations
+            what = f'"{concierge.describe_op(store, operations.get(store, last["OpId"]))[0]}" did not happen'
+        except Exception: what = f'"{last.get("Kind") or "the last action"}" did not happen'
+    return {'what': what, 'why': str(last.get('Error') or ''), 'fix': ok(out.get('fix')), 'unknown': out.get('delivery') == 'unknown',
+            'kind': last.get('Kind'), 'source': out.get('source') or 'app'}
 
 
 def fix_task(store, item: dict, f: dict) -> dict:
@@ -379,7 +383,10 @@ def offered(store, item: dict) -> list:
     # "fix" state, carrying what failed (the owner, 2026-10-18: "if it's a more complicated fix, the assistant should create a task")
     try: f = None if fix else failure(store, item)
     except Exception: f = None
-    if f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
+    # ...except a workflow run, which already IS a task: a second one to fix it would be the same work twice - it carries Report
+    # this bug instead (agreed with the workflow runner, taskhub-ca, 2026-10-18)
+    if f and f.get('source') == 'workflow': lead.append(buttons.chip('report_bug'))
+    elif f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
     return lead + verbs
 
 

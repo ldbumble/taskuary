@@ -37,6 +37,7 @@
     "fix":             {"label": "Fix it", "hint": "Opens where what failed is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"]},
     "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
     "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
+    "report_bug":      {"label": "Report this bug", "hint": "Opens a bug report with what went wrong filled in - you read it before anything is sent", "row": []},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": [],
                         "states": {"fix": "New task to fix this"}, "state_hints": {"fix": "A task of its own, carrying what failed and why - for an agent or for you to work"}}
   },

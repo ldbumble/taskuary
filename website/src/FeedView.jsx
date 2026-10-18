@@ -20,6 +20,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
+import { placeName } from "./words.js";
 import { hint as bHint, label as bLabel } from "./buttons.js";   // `btn` is this file's button style
 import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
@@ -1941,7 +1942,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                   <Confirm open={skipConfirm} onClose={() => setSkipConfirm(false)} confirmLabel="Skip this sender"
                     title={`Skip everything from ${sel.FromEmail}?`}
                     text={"Their mail leaves the Timeline now - what they already sent, and everything after it. "
-                      + "It is still received and kept; it just never shows here again. The rule lives under Settings → Routing policies, where it can be switched off."}
+                      + `It is still received and kept; it just never shows here again. The rule lives under ${placeName("rules")}, where it can be switched off.`}
                     onConfirm={skipSender} />
                 </Box>
               )}
@@ -2426,7 +2427,7 @@ const VoiceNoteRow = ({ sel, body, onRefresh, onMessageChanged }) => {
   ) : (
     <ChoiceRow tint="#eee7d6" icon={<MicOffIcon sx={{ fontSize: 14, color: "#8a7a5c" }} />}
       label="Voice note — not transcribed: no AI voice connector"
-      hint="add one under Connections → AI — voice (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe" />
+      hint={`add one under ${placeName("voice")} (Groq has a free tier; Local Whisper needs no key), then come back and click Transcribe`} />
   );
 };
 

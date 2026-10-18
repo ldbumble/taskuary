@@ -28,6 +28,7 @@ import WorkflowEditor from "./WorkflowEditor.jsx";
 import Composer from "./Composer.jsx";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
+import { placeName } from "./words.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -1473,7 +1474,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
               )}
               {cfg.ai_prompt && !aiActive && !cfg.ai_brain && (
                 <Typography variant="body2" sx={{ mt: 0.75, fontWeight: 600, color: "#55697a" }}>
-                  ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one (Connections → AI).
+                  ⚠ AI prompt set, but no active AI connector — the raw data will file until you enable one ({placeName("ai")}).
                 </Typography>
               )}
               {!cfg.ai_prompt && (

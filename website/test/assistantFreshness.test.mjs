@@ -12,7 +12,7 @@ test("Assistant consumes full display and presentation revisions without patch-m
   assert.match(view, /const requestedCurrentKey = currentRef\.current\?\.key \|\| null/);
   assert.match(view, /if \(\(cur\?\.key \|\| null\) !== requestedCurrentKey\) return/);
   assert.match(view, /const refreshed = refreshCurrentPresentation\(cur, fresh\)/);
-  assert.match(view, /currentRef\.current = refreshed/);
+  assert.match(view, /if \(newer \|\| refreshed !== cur\) putOnTable\(refreshed, "sync"\)/);
   assert.match(view, /const c = follows \? fresh : m\.card/);
   assert.doesNotMatch(view, /\{ \.\.\.cur, \.\.\.fresh \}/);
   assert.doesNotMatch(view, /\{ \.\.\.m\.card, \.\.\.fresh \}/);
@@ -23,7 +23,7 @@ test("selection freshness preserves explicit action advancement while background
   assert.match(view, /try \{ data = await turn\(\{ mode: "next", key, leaving, \.\.\.navigation \}\); \}/);
   assert.match(view, /\n\s*landed\(data\);/);
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
-  assert.doesNotMatch(events, /setCurrent|setCurrentItem|surfaceRef|deferInChat/);
+  assert.doesNotMatch(events, /setCurrent|setCurrentItem|putOnTable|surfaceRef|deferInChat/);
   // the grace is 500 ms unless the settle brought the rail back with it (pileAlong.test.mjs)
   assert.match(view, /deferInChat\(\(\) => surfaceRef\.current\?\.\(\), pile \|\| settled \? 120 : 500\)/);
   // explicit advancement after a confirmed proposal: only a success that settles the item on the table moves the walk (PW-125)

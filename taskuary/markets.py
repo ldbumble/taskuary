@@ -63,7 +63,9 @@ def _key(cfg, *names) -> str:
 
 def _need(cfg, card: str, *names) -> str:
     k = _key(cfg, *names)
-    if not k: raise MarketError(f'no {card} API key saved - Connections -> {card}')
+    if not k:
+        from . import words
+        raise MarketError(f'no {card} API key saved - {words.card(card)}')
     return k
 
 
@@ -476,8 +478,9 @@ def _edgar_contact(cfg) -> str:
     a 403. Nobody's email is hardcoded anywhere in this file: the owner types theirs on the card."""
     contact = str(cfg.get('contact') or '').strip()
     if not contact:
-        raise MarketError('no contact email saved for SEC EDGAR - add one under Connections -> SEC filings '
-                           '(EDGAR) -> contact; SEC requires a reachable contact in every request and refuses '
+        from . import words
+        raise MarketError(f"no contact email saved for SEC EDGAR - add one under {words.card('SEC filings (EDGAR)')} "
+                           '-> contact; SEC requires a reachable contact in every request and refuses '
                            'ones without it with a 403')
     return contact
 

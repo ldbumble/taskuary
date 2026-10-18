@@ -34,6 +34,7 @@ import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource }
 import { AI_SHELF } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
+import { placeName } from "./words.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -444,7 +445,7 @@ const META = {
     desc: "One key, the whole catalog — open-weights Llama / Qwen / Mistral and every closed model, through OpenRouter's OpenAI-compatible API.",
     howto: ["Create a key at openrouter.ai → Keys.",
       "Paste it under Credentials; optionally set a model from openrouter.ai/models (e.g. meta-llama/llama-3.3-70b-instruct). Empty = openrouter/auto picks per request.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under Settings → How mail is sorted."] },
+      `Test runs a real round trip. Enable to wire it into triage, drafts, the digest and LEARNED.md — or pick it explicitly under ${placeName("sorting")}.`] },
   meta: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default muse-spark-1.2)", "model"], ["base_url (default https://api.meta.ai/v1)", "base_url"]],
     secretLabel: "Meta Model API key",
@@ -452,7 +453,7 @@ const META = {
     howto: ["Create a key at dev.meta.ai → API keys (a payment method is required; Meta publishes no free tier).",
       "Paste it under Credentials. Leave model blank for muse-spark-1.2, or name muse-spark-1.3.",
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
-      "Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under Settings → How mail is sorted.",
+      `Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under ${placeName("sorting")}.`,
       "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (Windows, macOS and Linux)."] },
   // NINE PROVIDERS, ONE SURFACE. Each of these speaks the OpenAI chat-completions schema exactly,
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
@@ -536,7 +537,7 @@ const META = {
     fields: [["model (blank = the first model your plan lists)", "model"]], secretLabel: null,
     desc: "Your ChatGPT plan as Taskuary's brain - triage, the Assistant, reports - with no API key. Calls count against your ChatGPT allowance under a weekly cap you set in ChatGPT.",
     howto: ["Sign in with ChatGPT above: your browser opens auth.openai.com, you sign in with your own ChatGPT account and allow plan usage, and the card finishes by itself.",
-      "Then pick it as a brain under Settings → Configuration → How mail is sorted. It is text only: screenshots are not sent, and it has no tools.",
+      `Then pick it as a brain under ${placeName("sorting")}. It is text only: screenshots are not sent, and it has no tools.`,
       "Set or raise the weekly cap for Taskuary in ChatGPT's settings. When the cap is used up the brain stops and says so - it does not fall back to paid credits unless you allow that in ChatGPT.",
       "Test runs a real round trip on your plan."] },
   typesafe: { group: "AI — agents & models", channel: "ai", srcLabel: null,
@@ -544,7 +545,7 @@ const META = {
     desc: "TypeSafe's Jev — answers typed questions with calibrated probabilities instead of words. It can decide where a finished report goes; it cannot write one.",
     howto: ["Create a key at typesafe.ai → API keys.",
       "Paste it under Credentials. Test asks Jev one real question and reports the confidence it came back with — there is no completion to run.",
-      "Then pick it under Settings → Configuration → How mail is sorted → Where runs go. It appears in no other brain picker, on purpose.",
+      `Then pick it under ${placeName("sorting")} → Where runs go. It appears in no other brain picker, on purpose.`,
       "Before you trust it: open a report with an AI routing line and press try it on the last 5 runs, with and without this chosen. That replays both judges over the same real runs."] },
   ollama: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["base_url (default http://127.0.0.1:11434)", "base_url"], ["model — required, e.g. llama3.2 / qwen2.5", "model"]],
@@ -552,7 +553,7 @@ const META = {
     desc: "Open-source models on YOUR machine — Ollama out of the box, or any OpenAI-compatible server (LM Studio, llama.cpp, vLLM). Your mail never leaves the box.",
     howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
       "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
-      "Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under Settings → How mail is sorted.",
+      `Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under ${placeName("sorting")}.`,
       "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."],
     agent: ["Check for a local server yourself: GET http://127.0.0.1:11434/api/tags (Ollama) - and http://127.0.0.1:1234/v1/models for LM Studio. If Ollama is not installed, ask the owner once whether to install it, then do it (winget install Ollama.Ollama on Windows, brew install ollama on a Mac, the ollama.com script on Linux) and start it.",
       "If /api/tags lists no models, ask which to pull (suggest llama3.2 for a laptop, qwen2.5 for more headroom) and run `ollama pull <model>` yourself - it downloads gigabytes, so say so and wait for it.",
@@ -1694,7 +1695,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   const groups = [
     { title: "AI — agents & models", cards: [
-      { key: "agents", title: "AI CLI agents", desc: "Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in Settings → Configuration → How mail is sorted",
+      { key: "agents", title: "AI CLI agents", desc: `Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in ${placeName("sorting")}`,
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
         ...cliCardOf(clis) },
       ...channelCards(AI_SHELF),
@@ -3490,7 +3491,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         if (data.status === "pending") { setTimeout(tick, 2000); return; }
         setFlow(null);
         if (data.status === "ok") { setState("ok"); setDetail(data.adopted ? `Signed in as ${data.name || data.account} - it now sorts your mail.`
-          : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under Settings → How mail is sorted to switch.`); reload(); }
+          : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under ${placeName("sorting")} to switch.`); reload(); }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };

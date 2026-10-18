@@ -177,6 +177,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
 
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
+  // with the row carrying the item, the dark button is the Advisor's pick on the bar (actionRow.rowOf): the draft's own stay outlined
+  const solid = toRow ? "outlined" : "contained";
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
@@ -350,7 +352,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             off gets 'No response required' as THE action, not a send that bounces */}
         <>
         {delivery.frozen ? (
-          <Button size="small" variant="contained" disableElevation disabled={busy || !delivery.canCheck}
+          <Button size="small" variant={solid} disableElevation disabled={busy || !delivery.canCheck}
             onClick={() => decide("approve")} title={delivery.line}>
             {busy ? "Checking delivery…" : delivery.label}
           </Button>
@@ -359,7 +361,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              close runs first, and the reply above goes out only once it succeeded. A reply this channel cannot
              carry leaves just the close-out. */
           <>
-            <Button size="small" variant="contained" disableElevation disabled={busy || blocked || (sendable && !value.trim())}
+            <Button size="small" variant={solid} disableElevation disabled={busy || blocked || (sendable && !value.trim())}
               onClick={() => decideBoth("approve")} title={blocked ? gh.reason : thenLine}>
               {busy ? co.busyLabel : co.approveLabel}</Button>
             {co.alt && <Button size="small" variant="outlined" disabled={busy}
@@ -367,7 +369,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               {altSends ? `${co.alt.label} & send your text` : co.alt.label}</Button>}
           </>
         ) : proposal ? (
-          <Button size="small" variant="contained" disableElevation disabled={busy || (proposal.kind === "closeout" && blocked)}
+          <Button size="small" variant={solid} disableElevation disabled={busy || (proposal.kind === "closeout" && blocked)}
             onClick={() => decide("approve")}
             title={proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook"
               ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
@@ -376,7 +378,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             {busy ? proposal.busyLabel : proposal.approveLabel}
           </Button>
         ) : r.CanSend === false ? (
-          <Button size="small" variant="contained" disableElevation disabled={busy}
+          <Button size="small" variant={solid} disableElevation disabled={busy}
             sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
             title={`No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).`}
             onClick={copyClose}>
@@ -388,13 +390,13 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              new message arrived" was a dead end (the owner, 2026-09-21: "can't hit approve &
              send since there is warning? just reprocess it then"). Refreshing IS the primary
              action while the thread is ahead of the draft. */
-          <Button size="small" variant="contained" disableElevation disabled={busy}
+          <Button size="small" variant={solid} disableElevation disabled={busy}
             onClick={redraft} title={btnHint("redraft")}>
             {busy ? "Drafting…" : btn("redraft")}
           </Button>
         ) : chatFile ? (
           <>
-            <Button size="small" variant="contained" disableElevation disabled={busy} onClick={onEmailInstead}
+            <Button size="small" variant={solid} disableElevation disabled={busy} onClick={onEmailInstead}
               title={`A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes`}>
               Reply by email with the file</Button>
             <Button size="small" variant="outlined" disabled={busy || !value.trim()} onClick={() => decide("approve")}
@@ -402,7 +404,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
               {busy ? "Sending…" : `${sendWord} without the file`}</Button>
           </>
         ) : (
-          <Button size="small" variant="contained"
+          <Button size="small" variant={solid}
             disabled={busy || !value.trim()}
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>

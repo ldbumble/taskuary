@@ -271,7 +271,9 @@ def run_agent(cfg):
     writes = cfg.get('access') == 'write'
     llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
                        cli_tools=writes, read_only=not writes, research=not writes)
-    if llm is None: raise RuntimeError(f'no CLI agent named {name!r} - add one under Connections -> AI CLI agents')
+    if llm is None:
+        from . import words
+        raise RuntimeError(f"no CLI agent named {name!r} - add one under {words.name('ai_apps')}")
     # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
     # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
     # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.
@@ -445,7 +447,9 @@ def run_prometheus(cfg):
     The base URL (and an optional bearer token) live on the Prometheus card."""
     import requests
     base = (cfg.get('base_url') or '').strip().rstrip('/')
-    if not base: raise RuntimeError('no Prometheus base URL set - Connections → Prometheus')
+    if not base:
+        from . import words
+        raise RuntimeError(f"no Prometheus base URL set - {words.card('Prometheus')}")
     hdr = {'Authorization': f"Bearer {cfg['token']}"} if cfg.get('token') else {}
     r = requests.get(f'{base}/api/v1/query', params={'query': cfg['query']}, headers=hdr, timeout=30)
     r.raise_for_status()

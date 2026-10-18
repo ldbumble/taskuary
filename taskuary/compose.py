@@ -28,6 +28,7 @@ it up for you".
 import json, re
 
 from loguru import logger
+from . import words
 
 MAX_PEEKS = 3         # schema look-ups per compose: a table, its columns, and one lookup (a location id, say)
 
@@ -243,7 +244,7 @@ def _brain(store) -> dict:
 # what the composers answer when they cannot: what to change in the ask, or the place that lifts the block (`fix`: {label, href},
 # an app link the row turns into a button - outbound.Fixable). Developer words ("unsupported workflow type: (missing)") are not it.
 AGAIN = "I couldn't turn that into {}. Say it another way - what should happen, in which system, and when."
-NO_AI = {'error': 'This needs an AI to build it - none is connected yet.', 'fix': {'label': 'Connect an AI', 'href': '#connections=AI%20%E2%80%94%20agents%20%26%20models'}}
+NO_AI = {'error': 'This needs an AI to build it - none is connected yet.', 'fix': {'label': 'Connect an AI', 'href': words.href('ai')}}
 ZOHO = {'error': 'Invoicing runs through a connected Zoho Invoice account.', 'fix': {'label': 'Connect Zoho Invoice', 'href': '#connector=zoho_invoice'}}
 
 def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:

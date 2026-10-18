@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import llm as llm_mod, wrapup
+from . import llm as llm_mod, words, wrapup
 from .buttons import label as L          # the action card's buttons by their one name (buttons.json)
 
 
@@ -123,7 +123,7 @@ def provider_options(store) -> list:
     for key, conn in hub_agents.connection_brains(store):
         cmd = hub_agents.cli_of(conn, key)
         out.append({'id': f'cli:{key}', 'pick': f'cli:{key}', 'type': 'cli', 'cmd': cmd,
-                    'label': f'{labels.get(cmd) or cmd} (your CLI)', 'model': conn.get('model') or '', 'connection': True})
+                    'label': words.local(labels.get(cmd) or cmd), 'model': conn.get('model') or '', 'connection': True})
     for row in store.list_connectors():
         if row.get('Type') not in llm_mod.AI_TYPES or not row.get('Active'): continue
         if not row.get('HasSecret') and row.get('Type') != 'ollama': continue
@@ -150,7 +150,7 @@ def brain_options(store, keep: str = '') -> list:
     by_pick = {o['pick']: o for o in options}
     brains = dict(hub_agents.connection_brains(store))
     # not installed is not a choice - the same rule the coding brain list follows
-    out = [{**o, 'label': f"{o['cmd']} (your CLI)", 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
+    out = [{**o, 'label': words.local(o['cmd']), 'agent': o['pick'][4:], 'models': climodels.catalog(o['cmd'])['models']}
            for o in options if o.get('type') == 'cli' and hub_agents.runs_here(brains.get(o['pick'][4:]))]
     out += [o for o in options if o.get('type') != 'cli']
     # ...but a pick already in use never vanishes from its own picker. Collapsing five Claude

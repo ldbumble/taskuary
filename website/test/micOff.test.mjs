@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { canvasRequestFromHash } from "../src/canvasLinks.js";
+import { place } from "../src/words.js";
 
 // No voice AI, no live mic (the owner, 2026-10-15: "if there is no voice provider the mic icon in the bar on bottom should be crossed
 // out with popup to configure voice ai before it will activate").
@@ -17,7 +18,7 @@ test("with no voice AI the mic is crossed out, and its press asks instead of rec
 
 test("the popup opens the voice section of Connections, and that link lands there", () => {
   assert.match(mic, /Set up voice AI<\/Button>/);
-  assert.match(mic, /openAppLink\(`#connections=\$\{encodeURIComponent\("AI — voice"\)\}`\)/);
-  const r = canvasRequestFromHash(`#connections=${encodeURIComponent("AI — voice")}`);
+  assert.match(mic, /openAppLink\(place\("voice"\)\.href\)/);     // the place's link, from words.json
+  const r = canvasRequestFromHash(place("voice").href);
   assert.deepEqual([r.area, r.state], ["connections", { section: "AI — voice", open: null }]);
 });

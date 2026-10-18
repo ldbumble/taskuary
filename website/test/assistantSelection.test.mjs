@@ -171,7 +171,7 @@ test("Walk validates Current without creating a turn and stale gestures remove t
 test("background events can notify but cannot choose, clear, or advance Current", () => {
   const events = view.slice(view.indexOf("if (data.events?.length)"), view.indexOf("// the item on the table is live"));
   assert.match(events, /speakRef\.current/);
-  assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=|surfaceRef|deferInChat/);
-  assert.match(view, /const last = data\.current \|\| null/);   // the server's validated Current, never the last card (PW-162)
+  assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=|putOnTable|surfaceRef|deferInChat/);
+  assert.match(view, /putOnTable\(data\.current \|\| null, "sync"\)/);   // the server's validated Current, never the last card (PW-162)
   assert.match(view, /const lastCardIdx = useMemo\(\(\) => interactiveCardIndex\(shown\), \[shown\]\)/);
 });

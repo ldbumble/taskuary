@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, buttons, operations, workerstate as ws
+from . import asks, buttons, operations, workerstate as ws, words as places
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -608,9 +608,8 @@ SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'no
              'split': 'split', 'defer': 'put away', 'continue': 'continue', 'chase': 'chase', 'let_go': 'let go', 'elsewhere': 'close as answered elsewhere'}
 
 def _coding(store) -> bool:
-    from . import agents as hub_agents
-    try: return store is not None and bool(hub_agents.coding_ready(store))
-    except Exception: return False
+    from . import capabilities
+    return capabilities.can_code(store)
 
 
 def handoff_verb(store, verb):
@@ -675,18 +674,24 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
         how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
         return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
+    # A DRAFT THAT CANNOT LEAVE is not offered Send & close (capabilities.can_send_draft): a Teams chat is read here and never
+    # posted into, so the button - and the Advisor's line over it - could only ever end "not sent" (2026-10-18)
+    if verb == 'approve' and item.get('kind') == 'review' and item.get('rid') and store is not None:
+        from . import capabilities, outbound
+        if not capabilities.can_send_draft(store, item['rid']):
+            block = outbound.send_block(store, capabilities.draft_channel(store, item['rid'])) or 'its channel cannot deliver a reply'
+            return f"The draft on {what} cannot be sent from here - {block}."
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
     if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
         return f"{what} is already being worked on - it is not handed off a second time."
     if verb == 'coding_agent' and store is not None:
         # no coding tool connected: there is no coding agent to offer at all - not even as an alternative (2026-10-16)
-        from . import agents as hub_agents
-        if not hub_agents.coding_ready(store):
+        if not _coding(store):
             # ...which only keeps it off the chips and the card's question: every road that runs it first turns it into Send to agent (handoff_verb)
             return f"{buttons.label('regular_agent')} hands this to an agent."
         gone = no_agent(store)
         if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
-                         'Set it up under Connections, then say it again. Nothing has changed.')
+                         f"Set it up under {places.name('ai_apps')}, then say it again. Nothing has changed.")
     # ...and a message that is ALREADY a task is not made one again: "Make a task" sat on TQ-0748's own card, on the
     # desktop and in the phone's poll (the owner, 2026-09-25: "why am i getting make this a task?? it already is")
     if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
@@ -720,8 +725,8 @@ def brain_trouble(error) -> str:
         return (f"I've hit my limit for the moment ({detail}). Nothing is lost - it clears on its own, so wait a few minutes "
                 "and ask again, or go on with Next.")
     if _re.search(r'401|403|unauthori[sz]ed|invalid.*(key|token)|signed out|not logged in|login|expired', low):
-        return (f"I can't answer right now - my sign-in needs attention ({detail}). Nothing is lost. Sign me back in on the "
-                "Connections page and ask again.")
+        return (f"I can't answer right now - my sign-in needs attention ({detail}). Nothing is lost. Sign me back in under "
+                f"{places.name('connections')} and ask again.")
     if _re.search(r'timed out|timeout|connection|network|unreachable|502|503|504|500|server error', low):
         return (f"I couldn't get an answer just now - the service didn't respond ({detail}). Nothing is lost; ask again in "
                 "a moment.")
@@ -778,7 +783,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
-    if first and first in CHIP_WORDS and first != 'next':
+    # ...never the fix: it is the failed send's own button, with the place it opens (advisor.offered), not a word to promote
+    if first and first in CHIP_WORDS and first not in ('next', 'fix'):
         verbs = [first] + [v for v in verbs if v != first]
     out = []
     for v in verbs:
@@ -1954,7 +1960,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             typ = str(params.get('type') or '').strip().lower()
             if typ not in store_mod.DEFAULT_ROLES: return _miss('No connection of that type. The types: ' + ', '.join(sorted(store_mod.DEFAULT_ROLES)) + '.')
             ex = store.get_connector_by_type(typ)
-            if ex and ex.get('Active'): return _miss(f"{ex.get('Name') or typ} is already connected - nothing to create. Say test it, or open Connections.")
+            if ex and ex.get('Active'): return _miss(f"{ex.get('Name') or typ} is already connected - nothing to create. Say test it, or open {places.name('connections')}.")
             params.update(type=typ, name=str(params.get('name') or (ex or {}).get('Name') or typ.title()).strip())
             params['target'], named = (int(ex['ConnectorId']) if ex else None), f"{params['name']} ({typ})"
         elif tk == 'setting':
@@ -2320,7 +2326,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             aside = all(i.get('put_down') or i.get('deferred') for i in waiting)
             # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
             say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} "
-                   + (f"{'is' if n == 1 else 'are'} under For later" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
+                   + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
                    + f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
@@ -2457,8 +2463,7 @@ def triage_agent(store, item: dict) -> str:
     if not kind and item.get('mid'):
         try: kind = str(operations.verdict_of_message(store, store.get_message(item['mid']) or {})[0] or '')
         except Exception: kind = ''
-    from . import agents as hub_agents
-    return 'coding_agent' if kind == 'coding' and hub_agents.coding_ready(store) else 'regular_agent'
+    return 'coding_agent' if kind == 'coding' and _coding(store) else 'regular_agent'
 
 
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
@@ -2494,9 +2499,9 @@ AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue')
 SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles) | {'message.archive', 'item.settle'}
 # SAID ONCE, IN WORDS (U3): a typed question with no AI got "set one up" twice in one reply, the second as a raw "#cli-agents".
 # The desk gets the link to the AI page; a phone chat cannot open one, so it gets the words alone.
-NO_BRAIN = 'Connect an AI under Connections → AI so I can take instructions; until then use the buttons.'
+NO_BRAIN = f"Connect an AI under {places.name('ai')} so I can take instructions; until then use the buttons."
 def no_brain() -> str:
-    return NO_BRAIN if DELIVERY.get() == PHONE else '[Connect an AI under Connections → AI](#cli-agents) so I can take instructions; until then use the buttons.'
+    return NO_BRAIN if DELIVERY.get() == PHONE else f"[Connect an AI under {places.name('ai')}]({places.href('ai_apps')}) so I can take instructions; until then use the buttons."
 
 
 def handoff_task(store, text: str, kind: str = 'coding', actor: str = 'owner', title: str = None, dock_tid: int = None, repo: str = None,
@@ -2955,7 +2960,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     rec = lambda body, card=None: record_related(store, tid, item, 'assistant', body, card)
     cllm = llm or _compose_llm(store, trace, cancel)
     if not cllm:
-        say_ = 'I cannot set that up from the chat yet - the Reports and Connections tabs have the forms for it. Nothing has changed.'
+        say_ = (f"I cannot set that up from the chat yet - {places.name('workflows')} and {places.name('connections')} have the forms "
+                "for it. Nothing has changed.")
         rec(say_); return {'say': say_, 'options': [], 'decision': None}
     pending, answers = _pending_setup(store, tid), None
     if pending:
@@ -3082,7 +3088,7 @@ def away_line(o: dict) -> str:
     """Remind me's receipt, ONE sentence for the picker, the chat and the phone (B8): two of them sent the owner to "Upcoming in
     Tasks", a tab that no longer exists. `o` is remind.set_reminder's answer."""
     if not o.get('remindAt'): return 'It is back on your rail now.'
-    return f"Away until {o['when']} - it is under For later on your rail, and back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')
+    return f"Away until {o['when']} - it is under {places.name('later')}, and back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')
 
 
 def op_label(kind: str, p: dict) -> str:
@@ -3440,7 +3446,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     llm = _brain_for(store, tid, llm, trace, cancel)
     if not llm:
         fb = fallback(item, False, p['items'], store=store)
-        say_ = fb if 'Connections → AI' in fb else f"{fb} {no_brain()}".strip()     # the empty table's facts already say it
+        say_ = fb if places.name('ai') in fb else f"{fb} {no_brain()}".strip()     # the empty table's facts already say it
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
     reply, options, decision, call, did_read, failed = '', [], None, None, False, None

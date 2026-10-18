@@ -9,7 +9,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useCoding } from "./capabilities.js";
+import { useCapabilities } from "./capabilities.js";
 import { createPortal } from "react-dom";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -44,7 +44,7 @@ import CloseNote from "./CloseNote.jsx";
 import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
-import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, previewRows, triageLine, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, previewRows, triageLine, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -88,6 +88,9 @@ import EmailSomeone from "./EmailSomeone.jsx";
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
+// the repository question in plain words - "pick a repo" read as code-speak on the card (the walk's WORDS, 2026-10-17); it is only
+// asked at all where a coding tool is connected (capabilities.coding)
+const PICK_CODE = "Choose where the code is";
 // a thread on the task reads newest first, like the task does (the owner, 2026-10-14)
 export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt || "").localeCompare(String(a.SentAt || "")));
 
@@ -326,7 +329,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
-  const canCode = useCoding();                    // no coding tool connected: coding is not offered (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   const [detail, setDetail] = useState(null);
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
@@ -864,7 +867,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THE ASK IS TRIAGE'S SUMMARY, whole (the owner, 2026-10-16: "the ask should be the triage summary") - its first sentence alone
   // read as the sender's voice ("Assistant for Backend Monitoring flags…") with the point cut off
   const askText = cleanText(verdict?.summary || t?.Summary || opener?.ReadText || opener?.BodyText || "") || taskAsk;
-  const made = t ? `from ${t.Source || "manual"} · created ${timeAgo(t.CreatedAt)}${t.CreatedBy ? ` by ${t.CreatedBy}` : ""}` : "";
+  const made = t ? madeLine(t, timeAgo(t.CreatedAt)) : "";   // "sorted 1m ago", never "created ... by triage" (taskSources.madeLine)
   // WHAT RUNS THIS, in the vocabulary the brain layer landed on 2026-09-16: a ROLE picks the
   // document (every coding task's role is the profile of kind coding), a BRAIN is the CLI that runs it, and the model
   // is the brain's - it is not a property of the task, so the card does not offer one. A live
@@ -1138,7 +1141,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     { id: "priority", group: "more", label: "Change priority", run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: "Low, normal, high or urgent" },
     { id: "assign", group: "more", label: "Assign it", run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: "You, an agent's profile, or nobody" },
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
-    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change repository" : "Pick a repo", run: pickRepo,
+    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: repoOf(t) ? "Change where the code is" : PICK_CODE, run: pickRepo,
       title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
   ];
   const rowVerbs = !t ? [] : !notDone
@@ -1245,11 +1248,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
                             the pick resumes this start - the same road a start that ran into the question takes */}
                         {!generalOnly && startRepo === "" && <>
-                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>Pick a repo first</Typography>
+                          <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>{PICK_CODE} first</Typography>
                           <Button size="small" variant="outlined" sx={chipBtn} disabled={!!startingAgent}
                             startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                             title="Which checkout the session works in - the session starts once you pick"
-                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>pick a repo</Button>
+                            onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>{PICK_CODE.toLowerCase()}</Button>
                         </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
@@ -1741,8 +1744,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
                         title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
-                        onClick={pickRepo}>{repoOf(t) || "pick a repo"}</Button>}
-                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - pick a repo</Typography>}
+                        onClick={pickRepo}>{repoOf(t) || PICK_CODE.toLowerCase()}</Button>}
+                      {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
                     </Box>
                   )}
                   </>}

@@ -261,9 +261,10 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             if moved:
                 store.mark_review_stale(rid)
                 finished = store.finish_review_delivery(rid, token, 'failed',
-                                                        reason='The earlier attempt was confirmed absent, but the conversation changed; redraft before sending.')
+                                                        reason=f"The earlier attempt was confirmed absent, but the conversation changed - {buttons.label('redraft')} before sending.")
+                # the way on is the draft's own button, by its one name (buttons.json) - never a description of what to do
                 return {'ok': False, 'status': 'pending', 'sent': None, 'delivery': 'failed', 'stale': True,
-                        'send_error': 'The earlier attempt was not delivered. New messages arrived; redraft with the latest context before sending.'}
+                        'send_error': f"The earlier attempt was not delivered, and new messages arrived since - {buttons.label('redraft')} before sending."}
             if not store.start_review_delivery(rid, token, snapshot): return _delivery_busy(store, rid)
             attempted = snapshot
         if not outgoing:

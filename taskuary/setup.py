@@ -13,6 +13,7 @@ The first useful result needs your identity, one AI and one source. Model assign
 agents are available afterwards; opening their settings is not a prerequisite for doing work.
 """
 from .llm import AI_TYPES, brain_status
+from . import words
 
 DISMISSED = 'setup_dismissed'      # the owner's "I know, leave me alone" - a setting, so it sticks
 
@@ -123,7 +124,8 @@ def state(store) -> dict:
          'why': 'Start with your mailbox - or a work chat if that is where your work arrives. Sign in, '
                 'test it on its card, and the rest can wait.',
          'done': bool(inbound), 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
-         'goto': {'tab': 'Connections', 'hash': '', 'label': 'Connect your email'}},
+         # the Email section itself, by its one link (words.json) - '' opened Connections at the top, AI first
+         'goto': {'tab': 'Connections', 'hash': words.href('mail').lstrip('#'), 'label': 'Connect your email'}},
         {'key': 'sync', 'title': 'Look at your first items',
          'why': 'Taskuary reads what you connected and shows up to five of your newest items here. Open one '
                 'to see how it was sorted and any draft. Everything else is still read - this is only a sample.',

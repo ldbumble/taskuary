@@ -12,7 +12,7 @@ starts once: a later message on the same task reuses what is live.
 import json, pathlib, unittest
 from unittest import mock
 
-from taskuary import buttons, general, ingest, senders
+from taskuary import buttons, general, ingest, senders, words
 from taskuary.ingest import auto_start_ok, ingest_message
 from taskuary.store import MemoryStore
 
@@ -72,10 +72,11 @@ class AutoStartTests(unittest.TestCase):
         out, spawned = ingested(s, mail(), 'general')
         self.assertEqual(spawned, [])
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')
-        self.assertIn('held for you: Starting the assistant by itself is switched off in Settings.', last_reason(s))
+        # the switch's place, by its one name (words.json) - never a typed "Settings" path
+        self.assertIn(f"held for you: Starting an agent by itself is switched off in {words.name('coding')}.", last_reason(s))
         s2 = store(coding_auto_enabled='0')
         _out, spawned = ingested(s2, mail(external_id='c1'), 'coding')
-        self.assertEqual(spawned, []); self.assertIn('Starting the coding agent by itself is switched off in Settings.', last_reason(s2))
+        self.assertEqual(spawned, []); self.assertIn(f"Starting the coding agent by itself is switched off in {words.name('coding')}.", last_reason(s2))
         _out, spawned = ingested(s2, mail(external_id='g1', conversation_id='AAQk-2'), 'general')    # the other switch is untouched
         self.assertEqual(spawned, ['_auto_general'])
 
@@ -87,19 +88,19 @@ class AutoStartTests(unittest.TestCase):
                 out = ingest_message(s, mail(from_email='stranger@evil.example'), llm=llm_says(kind))
             self.assertEqual(spawn.call_args_list, [], kind)
             self.assertTrue(s.task_has_tag(out['task_id'], ingest.HOLD_TAG), kind)
-            # one whole sentence naming the sender, then ONE next step - not "send it yourself if real" and a second one
+            # one whole sentence naming the sender, then where it stands - a state, never an instruction: the row has the button
             note = next(c for c in comments(s, out['task_id']) if c.startswith('Waiting for you:'))
             self.assertIn('Sam (stranger@evil.example) is not on your domain and you have never written to them', note)
-            self.assertTrue(note.endswith(f"If it is real, press {buttons.label('regular_agent')}, or do it yourself."), note)
-            self.assertNotIn('send it yourself', note)
+            self.assertTrue(note.endswith('No agent has started on it.'), note)
+            self.assertNotIn('yourself', note); self.assertNotIn(buttons.label('regular_agent'), note)
             self.assertIn('held for you: Sam (stranger@evil.example) is not on your domain', last_reason(s))
 
     def test_no_configured_assistant_provider_is_a_visible_hold_not_a_crash(self):
         s = store()
         out, spawned = ingested(s, mail(), 'general', providers=())
         self.assertEqual(spawned, [])
-        self.assertIn('No AI is set up for the assistant', last_reason(s))
-        self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith(f"Press {buttons.label('regular_agent')}, or do it yourself.") for c in comments(s, out['task_id'])))
+        self.assertIn(f"No AI is set up for an agent to run on yet ({words.name('ai')})", last_reason(s))
+        self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith('No agent has started on it.') for c in comments(s, out['task_id'])))
 
     def test_coding_with_no_repository_stays_coding_and_the_coding_agent_is_asked_which(self):
         """Coding stays coding (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it

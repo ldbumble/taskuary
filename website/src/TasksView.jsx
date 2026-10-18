@@ -1,7 +1,7 @@
 // Tasks: dense two-pane - list rows on the left, the selected task's full story right.
 import { says } from "./laneSays.js";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useCoding } from "./capabilities.js";
+import { useCapabilities } from "./capabilities.js";
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, IconButton, InputAdornment, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
@@ -109,7 +109,7 @@ const askedAgo = (t) => {
 };
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {
-  const canCode = useCoding();                    // no coding tool connected: no coding kind to make (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: no coding kind to make (capabilities.js)
   const [tasks, setTasks] = useState(null);
   const [leavingId, setLeavingId] = useState(null);     // a task closed at the press, still closing on the server (finishWith)
   // "live" on arrival: what is still on somebody's plate is what you came here for. "done"

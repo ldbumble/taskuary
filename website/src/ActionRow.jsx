@@ -1,11 +1,11 @@
 // THE ONE ROW ABOVE THE CHAT LINE (layout B): whatever is on the table, its verbs are here - the decision first, the session's verbs
 // next, the rare ones behind More; Next is FIRST (the owner, 2026-09-30). The card registers them (actionRow.js); this only draws. Centred over the composer,
-// ONE filled button at most (the decision; Next only when there is no decision), and a greyed decision says why it is greyed.
+// ONE filled button at most - the Advisor's pick, and none before it answers - and a greyed decision says why it is greyed.
 import React, { useEffect, useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, holdsMove, press, rowOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, press, rowOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
 // the advice again, and the line says the suggestion is the new one
@@ -25,13 +25,12 @@ export function AdvisorNext({ advice, onPropose }) {
   const lacks = !!(advice?.verb && advice.line && onPropose) && !advisedAny(theirs, advice);
   // ...a 409 says so once and stays over the suggestion the page reads next for this item; another item starts clean
   useEffect(() => { setGoing(""); }, [advice?.for || advice?.key]);
-  const run = async () => {
+  const run = async (e, anchor) => {
     setGoing("…");
-    try { await onPropose(advice); setGoing(""); } catch (e) { setGoing(proposeFailed(e)); }
+    try { await onPropose(advice, anchor || e?.currentTarget || null); setGoing(""); } catch (err) { setGoing(proposeFailed(err)); }
   };
-  // ...outlined where the card already holds the move (a draft's Send, under it): one dark button per screen
-  const held = holdsMove(theirs);
-  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: held ? "s" : "p", disabled: going === "…",
+  // ...it IS the advice, so it is the dark one (rowOf fills it like any advised verb)
+  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: "p", disabled: going === "…",
     title: "What the Advisor suggests", run }] : [], lacks);
   if (!advice?.verb || !advice.line) return null;
   // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
@@ -52,7 +51,7 @@ export function AdvisorNext({ advice, onPropose }) {
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{word}</b> - {onRow.card ? (onRow.tone === "p" ? "the dark button under the draft" : "under the draft") : holdsMove(verbs.list) ? "on the row below" : "the dark button below"}</div>
+          <div className="pick">Suggested: <b>{word}</b> - the dark button below</div>
           <div className="said">{advice.line}</div>
           {/* each count in words of what it measures (advisor.says) - a close that held is not an answer to a chase */}
           {!!advice.says && <div className="fact">{advice.says}</div>}

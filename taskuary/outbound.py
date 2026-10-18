@@ -13,7 +13,7 @@ from pathlib import Path
 import requests
 from loguru import logger
 
-from . import redact
+from . import redact, words
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -29,8 +29,8 @@ class Fixable(RuntimeError):
     def __init__(self, msg, label, href): super().__init__(msg); self.fix = {'label': label, 'href': href}
 
 def fix_of(e) -> dict | None: return getattr(e, 'fix', None)
-MAIL = ('Connect a mailbox', '#connections=Email')
-REPLIES = ('Turn replies on', '#settings=config&group=Replies')
+MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)
+REPLIES = ('Turn replies on', words.href('replies'))
 
 
 def _source_connector_id(store, channel, address):
@@ -322,7 +322,8 @@ def send_block(store, channel) -> str:
     if not ch: return 'this message has no channel to reply on'
     if ch in NEVER: return f'{ch} items cannot be replied to from here'
     if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
-    if ch in SENDABLE and ch not in reply_channels(store): return f'replies are off for {ch} (Settings → Replies)'
+    if ch in SENDABLE and ch not in reply_channels(store):
+        return f"replies are off for {ch} ({words.name('replies')})"
     if ch in NO_SENDER: return NO_SENDER[ch]                 # switched on, and still no road out of here
     if ch == 'email': return send_probe(store, ch)
     return ''

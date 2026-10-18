@@ -13,7 +13,7 @@ And "Done" is a plain close - no report, no proposals, no reply draft; the conne
 result is the report.
 """
 import json
-from . import config
+from . import config, words
 
 
 KIND = 'setup'
@@ -81,7 +81,7 @@ def prompt(c: dict, server: dict, guide: list, fields: list, secret_label: str, 
 # Nothing to hand the setup to (B10, 2026-10-11): a new install without any AI CLI answered the card's
 # biggest button with "command not found: claude" - true, and nothing the owner could do with it.
 NO_AI = ("No AI app is set up on this computer yet, so there is nothing to hand this setup to. Set one up under "
-         "Connections > AI CLI agents and press this again - or follow the Guide tab and fill the card yourself.")
+         f"{words.name('ai_apps')} and press this again - or follow the Guide tab and fill the card yourself.")
 
 
 def runner(store, agent: str = None) -> str:
@@ -91,7 +91,7 @@ def runner(store, agent: str = None) -> str:
     from . import agents as hub, terminal as term
     agent = (agent or hub.default_agent(store)).strip()
     row = store.get_agent(agent)
-    if not row: raise ValueError(f'no CLI agent named {agent!r} - add one under Connections > AI CLI agents first')
+    if not row: raise ValueError(f'no CLI agent named {agent!r} - add one under {words.name("ai_apps")} first')
     profile = term.with_brain(json.loads(row.get('Config') or '{}'), hub.brain_command(store, agent))
     try: hub._resolve_cmd(profile.get('cmd') or 'claude')
     except FileNotFoundError: raise ValueError(NO_AI) from None
@@ -125,7 +125,7 @@ def start(store, server: dict, cid: int, guide: list, fields: list = None, secre
     except Exception as e:
         # found is not always runnable (a shim whose target went): the task this press made goes with it
         if not reused: store.delete_task(tid)
-        if isinstance(e, OSError): raise ValueError(f"{agent} is set up here but would not start ({e}). Open Connections > AI CLI agents "
+        if isinstance(e, OSError): raise ValueError(f"{agent} is set up here but would not start ({e}). Open {words.name('ai_apps')} "
                                                     "and press Test or Update on it, then press this again.") from None
         raise
     t.keep_transcript = False

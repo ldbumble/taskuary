@@ -3,7 +3,7 @@ import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT } from "./taskLifecycle.js";
 import React, { useEffect, useState } from "react";
-import { useCoding } from "./capabilities.js";
+import { useCapabilities } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -42,6 +42,7 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import StopCircleIcon from "@mui/icons-material/StopCircle";
 import { IconButton as MuiIconButton, Popover, Tooltip as MuiTooltip } from "@mui/material";
 import { openAppLink } from "./appLinks.js";
+import { place, placeName } from "./words.js";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
@@ -529,7 +530,7 @@ export const MicButton = ({ onText, size = 18, sx }) => {
   const title = err || (!voice ? ""
     : rec ? "Stop and transcribe"
     : voice.ready ? `Dictate (${voice.label || voice.provider})`
-    : viaBrowser ? "Dictate — your browser's own recogniser. A voice AI (Connections → AI — voice) is more accurate and reads voice notes."
+    : viaBrowser ? `Dictate — your browser's own recogniser. A voice AI (${placeName("voice")}) is more accurate and reads voice notes.`
     : "Voice is off — no voice AI is set up yet");
   const useBrowser = () => {
     try { localStorage.setItem(BROWSER_VOICE, "1"); } catch { /* private window: this visit only */ }
@@ -548,11 +549,11 @@ export const MicButton = ({ onText, size = 18, sx }) => {
       slotProps={{ paper: { sx: { p: 1.75, maxWidth: 320, borderRadius: 2, mt: -0.75 } } }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: INK }}>Set up voice to talk instead of type</Typography>
       <Typography sx={{ fontSize: 12.5, color: DIM, mt: 0.5, lineHeight: 1.5 }}>
-        Pick a voice AI under Connections → AI — voice. Groq has a free tier; Local Whisper runs on this computer with no key.
+        Pick a voice AI under {placeName("voice")}. Groq has a free tier; Local Whisper runs on this computer with no key.
       </Typography>
       <Box sx={{ display: "flex", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
         <Button size="small" variant="contained" disableElevation sx={{ textTransform: "none" }}
-          onClick={() => { setAsk(null); openAppLink(`#connections=${encodeURIComponent("AI — voice")}`); }}>Set up voice AI</Button>
+          onClick={() => { setAsk(null); openAppLink(place("voice").href); }}>Set up voice AI</Button>
         {SR && <Button size="small" sx={{ textTransform: "none" }} onClick={useBrowser}>Use this browser's own (free)</Button>}
       </Box>
     </Popover>
@@ -872,7 +873,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
 // One door, then an explicit choice. Triage may suggest which kind fits, but it must not silently
 // choose the regular API agent or a coding CLI on the owner's behalf.
 export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, row, first }) => {
-  const canCode = useCoding();                    // no coding tool connected: no Coding agent, and nothing suggests one (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent, and nothing suggests one (capabilities.js)
   const suggestedKind = canCode && (!taskKind || String(taskKind).toLowerCase() === "coding") ? "coding" : "general";
   const [agentKind, setAgentKind] = useState("");
   const coding = agentKind === "coding";

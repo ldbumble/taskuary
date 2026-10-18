@@ -91,6 +91,14 @@ export const repoTag = (tags, name = "repo") => (String(tags || "").match(new Re
 // A WORKFLOW RUN has no message behind it and nobody triaged it (workflows.run): what started it is on the task as a tag, and the
 // workflow it belongs to rides on the detail (workflows.of_task) - the owner, 2026-10-16: "what does it show triggered it in the task card?"
 const STARTED_BY = { schedule: "its schedule", manual: "you (Run now)", assistant: "the assistant", phone: "you, from your phone" };
+// WHERE A TASK CAME FROM, in plain words: "from email · created 1m ago by triage" named the machinery (the walk's WORDS, 2026-10-17).
+// The sorter that made it is "sorted", the owner is "you", anything else just made it.
+const SORTERS = new Set(["triage", "router", "routing", "classifier"]), OWNER = new Set(["owner", "manual", "you", "user"]);
+export function madeLine(task = {}, ago = "") {
+  const by = String(task?.CreatedBy || "").trim().toLowerCase(), src = String(task?.Source || "").trim();
+  const how = SORTERS.has(by) ? `sorted ${ago}` : OWNER.has(by) || !src || src === "manual" ? `made by you ${ago}` : `made ${ago}`;
+  return [src && src !== "manual" ? `from ${src}` : "", how.trim()].filter(Boolean).join(" · ");
+}
 export const isWorkflowRun = (task) => task?.Source === "workflow";
 export function startedBy(task = {}, wf = null) {
   const t = wf?.trigger || repoTag(task?.Tags, "workflow-trigger");

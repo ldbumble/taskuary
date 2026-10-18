@@ -12,7 +12,9 @@
 //   RECEIPT   an item that leaves the rail leaves a line in the chat naming it
 //   OPENS     a chip that says "Open TQ-x" puts TQ-x on the table
 //
-//   WORDS     no developer word on the card, the row or the Advisor's line (JARGON - the plain-words audit, 2026-10-17)
+//   WORDS     no developer word on the card, the row or the Advisor's line (words.json's jargon - the plain-words audit, 2026-10-17)
+//   NAMES     every button the row shows is a named button - a label (or a state's label) in buttons.json - so the bar never
+//             grows a word that is not on the one list (the owner, 2026-10-17: "make a complete list of buttons")
 //   CALLS     no /api request fails while the walk runs
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build]    # exits 1 with every finding
@@ -25,14 +27,20 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
+import { JARGON_RES } from "./src/words.js";
+import { ALL_LABELS } from "./src/buttons.js";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
 const root = join(dirname(fileURLToPath(import.meta.url)), ".."), home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// words the owner should never have to read (the plain-words audit, 2026-10-17); the shared words list replaces this when it lands
-const JARGON = [/\blane\b/i, /\btriage\b/i, /\bsession\b/i, /\brepo\b/i, /Regular agent/, /Stranger's words/, /\bJOB\.md\b/, /\bTimeline\b/,
-  /\bconfig\b/i, /\bpty\b/i, /\bendpoint\b/i, /\bnull\b/, /\bundefined\b/, /Traceback/, /\b[45]\d\d(?= \()/];
+// words the owner should never have to read: the one list the server's sentences are held to as well (taskuary/words.json) - and
+// what only a crash leaves on a screen, which is no word anyone chose
+const JARGON = [...JARGON_RES, /\bnull\b/, /\bundefined\b/, /Traceback/, /\b[45]\d\d(?= \()/];
+// a word on the row that is no named button: not a label on the list, not a state's label, not a working state ("Sending…"), not
+// the More arrow, and not an item's own name (the end of the walk's "Open TQ-12 · ...")
+const NAMED = new Set(ALL_LABELS.map((l) => l.trim()));
+const named = (w) => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w);
 const web = build ? mkdtempSync(join(tmpdir(), "tq-deadend-web-")) : "";
 if (build && spawnSync("npx", ["vite", "build", "--outDir", web, "--emptyOutDir"], { cwd: join(root, "website"), shell: true, stdio: "ignore" }).status) {
   console.error("the page did not build"); process.exit(2);
@@ -107,6 +115,8 @@ const judge = (s, at) => {
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view ${JSON.stringify(s.cards)}`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off)) note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);
   for (const w of JARGON) { const m = s.read.match(w); if (m) note("WORDS", at, `"${m[0]}" in "${s.read.slice(Math.max(0, m.index - 40), m.index + 40).replace(/\s+/g, " ")}"`); }
+  const odd = [...new Set(s.verbs.map((v) => v.word).filter((w) => !named(w)))];
+  if (odd.length) note("NAMES", at, `on the row but on no list of buttons: ${JSON.stringify(odd)}`);
 };
 const receipts = (before, after, at) => {
   const keys = new Set(after.rail.map((r) => r.key));

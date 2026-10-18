@@ -31,6 +31,7 @@ import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { dropEcho, forScreen } from "./agentMarkers.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
+import { placeName } from "./words.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -825,7 +826,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           </Typography>
         </Box>
       )}
-      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Add a CLI agent under Connections → AI CLI agents to run this work. API providers are optional.</Alert>}
+      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Connect an AI app under {placeName("ai_apps")} to run this work. An online AI is optional.</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}

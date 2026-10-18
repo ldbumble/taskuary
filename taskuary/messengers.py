@@ -362,10 +362,10 @@ def _read_media(path: str):
 
 def _unheard(store, channel: str, chat: str, c, e):
     """Say in the chat that a voice note could not be heard - instead of the note simply never arriving."""
-    from . import remote_assistant
+    from . import remote_assistant, words
     logger.warning(f'{channel}: a voice note to Taskuary was not transcribed - {e}')
     try: remote_assistant.send(store, channel, chat, f"I could not hear that voice note - {str(e)[:200]}. "
-                               "Type it, or add a voice connector under Connections > AI - voice.", c.get('ConnectorId'))
+                               f"Type it, or add a voice connector under {words.name('voice')}.", c.get('ConnectorId'))
     except Exception as e2: logger.warning(f'{channel}: could not say so either - {e2}')
 
 

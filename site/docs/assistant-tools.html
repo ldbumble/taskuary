@@ -121,7 +121,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
+<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -163,57 +163,55 @@ except the few that can be undone, which run at once with an undo on the receipt
 <h2 id="table">Table<a class="anchor" href="#table" aria-label="Link to this section">#</a></h2>
 <p>Decide about the item on the table.</p>
 <h3 id="reply"><code>reply</code><a class="anchor" href="#reply" aria-label="Link to this section">#</a></h3>
-<p>Write a reply to the sender. Nothing is sent.</p>
+<p>The &quot;Reply&quot; button: write a reply to the sender. Nothing is sent.</p>
 <ul>
 <li><code>text</code> - the gist, in the owner&#39;s words</li>
 <li><code>cc</code> (optional) - people to loop in on it, by name or address (&quot;loop Gail in and ask her&quot; is a reply with Gail copied, never an agent)</li>
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="approve"><code>approve</code><a class="anchor" href="#approve" aria-label="Link to this section">#</a></h3>
-<p>The owner&#39;s yes to what is drafted on the item: sends the reply as it stands - on a task&#39;s close-out (Close out) it merges the pull request or closes the issue FIRST, then sends the reply; on an agent&#39;s proposal it runs that action. It never continues an agent&#39;s session - that is agent.continue.</p>
+<p>The &quot;Send &amp; close&quot; button (&quot;Approve&quot; on an agent&#39;s proposal or a task&#39;s close-out): the owner&#39;s yes to what is drafted on the item: sends the reply as it stands - on a task&#39;s close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent&#39;s proposal it runs that action. It never continues an agent&#39;s session - that is agent.continue.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="redraft"><code>redraft</code><a class="anchor" href="#redraft" aria-label="Link to this section">#</a></h3>
-<p>Write the draft again.</p>
+<p>The &quot;Redraft&quot; button (&quot;Draft with AI&quot; when nothing is drafted yet): write the draft again.</p>
 <ul>
 <li><code>text</code> - the change</li>
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="mine"><code>mine</code><a class="anchor" href="#mine" aria-label="Link to this section">#</a></h3>
-<p>Make it a task on the owner&#39;s own list - no agent.</p>
+<p>The &quot;Put it on my list&quot; button: make it a task on the owner&#39;s own list - no agent.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
-<p>Send it to a non-coding agent - it becomes a task of its own.</p>
+<p>The &quot;Send to agent&quot; button: send it to an agent that does not write code - it becomes a task of its own.</p>
 <ul>
 <li><code>text</code> - the job</li>
 <li><code>as</code> (optional) - a profile from agents.list, only when one fits</li>
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="coding-agent"><code>coding_agent</code><a class="anchor" href="#coding-agent" aria-label="Link to this section">#</a></h3>
-<p>Send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.</p>
+<p>The &quot;Send to coding agent&quot; button: send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.</p>
 <ul>
 <li><code>text</code> - what is wanted</li>
 <li><code>as</code> (optional) - the repository (repos.list), only when sure</li>
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="not-ours"><code>not_ours</code><a class="anchor" href="#not-ours" aria-label="Link to this section">#</a></h3>
-<p>File it, just this once - its card asks whether from now on, or as a rule.</p>
+<p>The &quot;Not ours&quot; button: file it, just this once - its card asks whether from now on, or as a rule.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-sender"><code>not_ours_sender</code><a class="anchor" href="#not-ours-sender" aria-label="Link to this section">#</a></h3>
-<p>File everything from this sender from now on - their mail still arrives and stays readable.</p>
+<p>The &quot;Ignore this sender&quot; button: file everything from this sender from now on - their mail still arrives and stays readable.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
-<p>An exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.</p>
+<p>The &quot;Block this sender&quot; button: an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-kind"><code>not_ours_kind</code><a class="anchor" href="#not-ours-kind" aria-label="Link to this section">#</a></h3>
-<p>An Advisor idea only: put it down AND no more ideas like it - the Advisor&#39;s next run reads that.</p>
+<p>The &quot;No more ideas like this&quot; button: an Advisor idea only: put it down AND no more ideas like it - the Advisor&#39;s next run reads that.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="close"><code>close</code><a class="anchor" href="#close" aria-label="Link to this section">#</a></h3>
-<p>Mark done - the task behind the item is finished.</p>
-<p class="runs">At once.</p><h3 id="done"><code>done</code><a class="anchor" href="#done" aria-label="Link to this section">#</a></h3>
-<p>The owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled.</p>
+<p>The &quot;Mark done&quot; button: the task behind the item is finished.</p>
 <p class="runs">At once.</p><h3 id="next"><code>next</code><a class="anchor" href="#next" aria-label="Link to this section">#</a></h3>
-<p>Move on to the next thing.</p>
+<p>The &quot;Next&quot; button: move on to the next thing.</p>
 <p class="runs">At once.</p><h3 id="answer-agent"><code>answer_agent</code><a class="anchor" href="#answer-agent" aria-label="Link to this section">#</a></h3>
-<p>Answer the agent waiting on the owner.</p>
+<p>The &quot;Answer it&quot; button: answer the agent waiting on the owner.</p>
 <ul>
 <li><code>text</code></li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="stop-agent"><code>stop_agent</code><a class="anchor" href="#stop-agent" aria-label="Link to this section">#</a></h3>
-<p>Save and end the agent&#39;s session on the item.</p>
+<p>The &quot;Stop and save&quot; button: save and end the agent&#39;s session on the item.</p>
 <p class="runs">At once.</p><h3 id="rerun"><code>rerun</code><a class="anchor" href="#rerun" aria-label="Link to this section">#</a></h3>
-<p>Run the report on the table again.</p>
+<p>The &quot;Run it again&quot; button: run the report on the table again.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="remember"><code>remember</code><a class="anchor" href="#remember" aria-label="Link to this section">#</a></h3>
 <p>Keep a fact.</p>
 <ul>
@@ -229,11 +227,11 @@ except the few that can be undone, which run at once with an undo on the receipt
 <p class="runs">At once.</p><h3 id="cancel"><code>cancel</code><a class="anchor" href="#cancel" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s no to it.</p>
 <p class="runs">At once.</p><h3 id="chase"><code>chase</code><a class="anchor" href="#chase" aria-label="Link to this section">#</a></h3>
-<p>Chase the person who has gone quiet on the item - a short nudge in the owner&#39;s voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.</p>
+<p>The &quot;Chase them&quot; button: chase the person who has gone quiet on the item - a short nudge in the owner&#39;s voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="let-go"><code>let_go</code><a class="anchor" href="#let-go" aria-label="Link to this section">#</a></h3>
-<p>Let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.</p>
+<p>The &quot;Let it go&quot; button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
-<p>They answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
+<p>The &quot;They answered elsewhere&quot; button: they answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
 <ul>
 <li><code>text</code> - where (a call, a meeting)</li>
 </ul>
@@ -395,9 +393,9 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>select</code> - below</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
-<p>Put the item down.</p>
+<p>Put the item down, read and settled.</p>
 <ul>
-<li><code>verb</code> - done | later | skip (the item on the table is the target)</li>
+<li><code>verb</code> - done (the item on the table is the target)</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="message-file"><code>message.file</code><a class="anchor" href="#message-file" aria-label="Link to this section">#</a></h3>
 <p>File it - not ours, just this one.</p>

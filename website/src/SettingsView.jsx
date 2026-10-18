@@ -4,7 +4,8 @@
 // Search reaches EVERYTHING (knobs, rules, memory, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useCoding } from "./capabilities.js";
+import { useCapabilities } from "./capabilities.js";
+import { placeName } from "./words.js";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
@@ -330,7 +331,7 @@ const SECTION_HELP = {
   policies: { title: "Routing policies — the deterministic layer",
     body: "Rules evaluated BEFORE any AI touches a message; no model confidence can override them. Precedence: skip > ignore > escalate — within one action, lowest order number wins.\n\nKINDS: keyword (pipe-separated substrings matched against subject+body), sender (exact addresses), sender_domain (domains), noreply (built-in matcher for automated addresses), first_time_sender (fires when the address has never been seen).\n\nACTIONS: ignore (no task, message stays visible in the feed), escalate (a human always decides, and the task is marked urgent - this is the ONLY thing that marks one urgent, so name the senders whose mail jumps your queue). Everything else is triage's to judge.\n\nNothing writes into this table by itself: 'Not a task' teaches a verdict in Memory, not a rule here, and muting a sender is 'Skip this sender'." },
   memory: { title: "Verdicts & notes — the evidence behind LEARNED.md",
-    body: "Two layers, one loop. LEARNED.md (Settings → Docs) is the GENERAL profile — your style, your responsibilities, what deserves a task — and it is written by a nightly pass. This page is the EVIDENCE that pass reads: one dated line per verdict you gave ('Not our task' on this subject from this sender, 'Not a task' on that one) plus notes you type yourself, each tied to a sender, a domain, a subject, or everyone.\n\nWhen a new message arrives, the lines that bear on it (same sender, same topic) ride into triage and into the reply draft, and the model judges how alike the new message really is — the same sender asking the same thing is binding, a shared word is not. The general lessons in LEARNED.md are distilled from these same lines under a stricter rule (LEARNED.md → Verdicts lists which ones fed which lesson).\n\nSo nothing was removed: LEARNED.md is what it concluded, this is what it concluded it from. Toggle off a line learned wrong — it stays for the record and is never injected again; the next distillation drops it too." },
+    body: `Two layers, one loop. LEARNED.md (${placeName("docs")}) is the GENERAL profile — your style, your responsibilities, what deserves a task — and it is written by a nightly pass. This page is the EVIDENCE that pass reads: one dated line per verdict you gave ('Not our task' on this subject from this sender, 'Not a task' on that one) plus notes you type yourself, each tied to a sender, a domain, a subject, or everyone.\n\nWhen a new message arrives, the lines that bear on it (same sender, same topic) ride into triage and into the reply draft, and the model judges how alike the new message really is — the same sender asking the same thing is binding, a shared word is not. The general lessons in LEARNED.md are distilled from these same lines under a stricter rule (LEARNED.md → Verdicts lists which ones fed which lesson).\n\nSo nothing was removed: LEARNED.md is what it concluded, this is what it concluded it from. Toggle off a line learned wrong — it stays for the record and is never injected again; the next distillation drops it too.` },
   audit: { title: "Audit integrity — what the log is, and how to read it",
     body: "Every consequential thing Taskuary does is one row in an append-only log: a message routed or filed and why, a verdict you gave, a reply sent, an agent session opened or wrapped, a connector saved or signed in, a setting changed, a task deleted. Each row stores a hash of its own contents PLUS the hash of the row before it, so the rows form a chain: change any row after the fact — even one character in the database — and its hash no longer matches, and every row after it points at a parent that no longer exists.\n\nVerify recomputes the whole chain from the first row. Intact means the record you see is the record that was written. 'Contents altered' names the exact rows that were changed after writing — the thing this log exists to catch. 'Out of order' means two writers raced at the same instant once; nothing was changed, and it cannot recur.\n\nThe history below is that log, newest first: when, who (you, the router, an agent, a scheduled report), what was done, to what. It is the answer to 'why did this happen' and 'who did this' for anything on the Timeline or the Board." },
 };
@@ -388,7 +389,7 @@ const PageHead = ({ page, first }) => (
 // no-undef is what caught it before it shipped.
 // `only` (the assistant canvas): draw ONE page - and on Configuration, one group of it - instead of the whole document
 function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDocSel, onCatalog, only = null }) {
-  const canCode = useCoding();                    // no coding tool connected: coding is not offered (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   const [memory, setMemory] = useState([]);
@@ -1014,7 +1015,7 @@ const RAIL = 236, GUTTER = 24;   // the rail's own width, and the grid gap besid
 // `browse` (the assistant canvas, CanvasBrowse.jsx): the pages are the sections, Configuration's groups its cards, and one
 // group (or one page) opens with its own controls - drawn through the canvas's frame instead of this tab's rail.
 export default function SettingsView({ onNavigate, browse = null, browseState = {}, onBrowseState = null }) {
-  const canCode = useCoding();                    // no coding tool connected: no Coding agent section (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent section (capabilities.js)
   const [page, setPage] = useState(NAV[0]);      // the rail's first entry is where Settings opens - About you
   // Docs' rail entries switch the document, so the selection belongs here beside `page` - and the
   // catalog they draw comes from DocsView, which already fetches and derives both lists.

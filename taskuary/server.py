@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import buttons, config
+from . import buttons, config, words
 from . import store as store_mod
 from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
@@ -1606,7 +1606,7 @@ def assistant_browser(task_id: int):
     if not task: raise HTTPException(404, 'task not found')
     if not general.handles(task): raise HTTPException(422, 'a browser belongs to an assistant conversation')
     if not browserview.installed():
-        raise HTTPException(422, 'agent-browser is not installed - Connections -> AI CLI agents lists it')
+        raise HTTPException(422, f"agent-browser is not installed - {words.name('ai_apps')} lists it")
     store.tag_task(task_id, browserview.WANTS, actor=ACTOR)
     session = general.session_for(task_id)
     if session:
@@ -1874,7 +1874,7 @@ def continue_task(task_id: int, body: CodeBody):
     agent = str(body.agent or previous.get('Agent') or hub_agents.default_agent(store)).strip()
     if not store.get_agent(agent):
         raise HTTPException(422, f'the previous profile "{agent}" is no longer configured; choose an agent from Start session'
-                            if agent else 'no coding profile is set up - add one under Settings > Agents')
+                            if agent else f"no coding profile is set up - add one under {words.name('profiles')}")
     try:
         session = hub_term.start_on_task(store, task_id, agent, body.model, instruction, ACTOR,
                                          brain=getattr(body, 'brain', None),
@@ -1943,7 +1943,7 @@ def continue_work(task_id: int, body: ContinueBody = None):
         # THE THREAD MOVED AFTER ITS LAST TURN: the mail that reopened the task goes in first, in the turn's instructions - "pick up
         # where work stopped" alone woke the assistant at "reply sent, task closed" while two people had since asked for more (2026-10-14)
         news = continuity.news_block(store, task_id)
-        if not general.provider_options(store): raise HTTPException(422, 'Connect an AI provider in Connections to continue this work.')
+        if not general.provider_options(store): raise HTTPException(422, f"Connect an AI under {words.name('ai')} to continue this work.")
         if task.get('Status') not in ('open', 'waiting', 'in_progress'): store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         def go():
             try: general.start_session(store, task_id, actor=ACTOR).send_prompt(note or continuity.RESUME_PROMPT, imgs or None, as_owner=bool(note or imgs), echo=bool(note),
@@ -2024,7 +2024,7 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
         if task_id in general.OPENING or any(s.task_id == task_id and s.alive for s in list(hub_term.SESSIONS.values())):
             return {'action': 'open', 'taskId': task_id}
         if general.handles(task) and not general.provider_options(store):
-            raise HTTPException(422, 'Connect an AI provider in Connections to resume this work.')
+            raise HTTPException(422, f"Connect an AI under {words.name('ai')} to resume this work.")
         if reopened: store.update_task(task_id, {'Status': 'in_progress'}, ACTOR)
         general.OPENING.add(task_id)
     if general.handles(task):
@@ -3327,9 +3327,9 @@ def handoff(task_id: int, body: HandoffBody):
             # WhatsApp yourself, which is the app this one exists to keep you out of. send_out is
             # the same road a report's delivery takes: same senders, same credentials, and a
             # channel switched off for replies is off for this too.
-            if not outbound.can_reply(store, body.channel):
-                raise HTTPException(422, f'{body.channel} cannot send from here - turn its replies '
-                                         'on in Connections, or pick another channel')
+            from . import capabilities
+            no = capabilities.send_refusal(store, body.channel)
+            if no: raise HTTPException(422, no)
             sent = outbound.send_out(store, body.channel, body.to, subject, text)
     except HTTPException: raise
     except Exception as e: raise HTTPException(422, str(e)[:400])
@@ -4639,7 +4639,7 @@ def _walk_opens(task_id: int, text: str):
             # a session with no brain parks forever, looking live
             logger.info(f'no AI connector, so the walk-through {task_ref(task_id)} cannot start')
             _walk_cannot(task_id, 'No AI is connected yet, so I cannot start the walk. Connect one under '
-                                  'Connections and ask me again.')
+                                  f"{words.name('ai')} and ask me again.")
             return
         try:
             if concierge.walk_is_external(store, text): store.tag_task(task_id, general.SETUP_EXTERNAL, actor=ACTOR)
@@ -5165,7 +5165,7 @@ def brains():
     # A brain is a CLI TOOL or an AI connection, never a profile: one entry per connected CLI, its value the tool's own key
     # (the owner, 2026-10-15: "it's models or cli tools only"). Its gears live on the connection.
     from . import climodels
-    out += [{'value': f"cli:{o['value']}", 'label': f"{o['label']} (your CLI)",
+    out += [{'value': f"cli:{o['value']}", 'label': words.local(o['label']),
              'kind': 'cli', 'ready': o['ready'],
              'models': climodels.catalog(o['cli'])['choices']}
             for o in hub_agents.cli_agent_options(store, preferred=preferred)]
@@ -5590,9 +5590,9 @@ def tool_run(body: dict, request: Request):
         # disk, any database, another agent run (audit 2026-09-02)
         raise HTTPException(403, f'{t} has no connection card an owner turned on - it is not an agent tool')
     if not conn.get('Active'):
-        raise HTTPException(403, f'the {t} connection is off - turn it on under Connections')
+        raise HTTPException(403, f"the {t} connection is off - turn it on under {words.name('connections')}")
     if 'tool' not in store_mod.roles_of(conn):
-        raise HTTPException(403, f'the {t} connection is not marked as an agent tool (Connections → {t} → Role)')
+        raise HTTPException(403, f'the {t} connection is not marked as an agent tool ({words.card(t)} → Role)')
     hub_tools = {'handbook_search', 'handbook_write', 'handbook_vote',
                  'hub_search', 'hub_write', 'hub_vote', 'hub_comment'}
     actor = _hub_actor(request, (body or {}).get('author')) if t in hub_tools else ACTOR
@@ -6161,9 +6161,10 @@ def first_run_about_suggest():
 
 @app.get('/api/capabilities')
 def capabilities():
-    """What this install can do, for the screens that offer it: coding only where a coding tool is connected (agents.coding_ready)."""
-    from . import agents
-    return {'coding': agents.coding_ready(store)}
+    """What this install can do, for the screens that offer it - the one answer the server's own checks read (capabilities.py).
+    A read like any other: the token gate lets an agent ask it and keeps a stranger's session out."""
+    from . import capabilities as caps
+    return caps.capabilities(store)
 
 @app.post('/api/signature/learn')
 def signature_learn():
@@ -6746,7 +6747,7 @@ def _playbook_opens(task_id: int):
 def setup_playbook(body: PlaybookSetupBody, background: BackgroundTasks):
     from . import general
     if not general.provider_options(store):
-        raise HTTPException(422, 'Connect an AI provider in Connections first, then return to create your playbook.')
+        raise HTTPException(422, f"Connect an AI under {words.name('ai')} first, then return to create your playbook.")
     try:
         made = playbooks.setup_task(store, body.text, body.message_id, body.connector_type, ACTOR)
     except ValueError as e:

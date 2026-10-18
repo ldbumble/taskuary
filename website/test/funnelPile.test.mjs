@@ -242,7 +242,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   // the chat keeps its bottom in view as it grows - except while a browse card is read from its top (the canvas redesign)
-  assert.match(view, /new ResizeObserver\(\(\) => \{ if \(!holdBottom\.current && el\.scrollHeight/);
+  assert.match(view, /new ResizeObserver\(\(\) => \{ if \(keepTable\(\)\) return; if \(!holdBottom\.current && el\.scrollHeight/);
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
@@ -291,7 +291,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(cards, /function CombinedTaskText/);
   assert.match(cards, /useFetched\(card\?\.tid \? `\/api\/tasks\/\$\{card\.tid\}`/);
   assert.match(cards, /filter\(\(m\) => String\(m\.Status \|\| ""\) !== "context"\)/);
-  assert.match(cards, /messages combined by triage/);
+  assert.match(cards, /messages read together/);
   assert.match(cards, /<Clamp><CombinedTaskText card=\{card\} list=\{false\} \/><\/Clamp>/);   // the message shown, More only when it is cut off
   assert.match(cards, /\(over \|\| open\) && <button/);
   // reply + ordinary message, each WITHOUT the checklist - that stays on the task (2026-09-23)

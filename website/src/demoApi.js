@@ -202,7 +202,7 @@ const hubRows = (removed) => { const box = hubBox(); return removed ? (box.remov
 
 // ── the writes a visitor is invited to make ──────────────────────────────────────────────
 const REPLIES = [
-  "In your own Taskuary this is your CLI or your AI connector answering. Here it is a script - " +
+  "In your own Taskuary this is the AI you connected answering. Here it is a script - " +
   "but everything else on this page is the real application.",
   "I would read the thread, pull the numbers it names, and come back with the two lines that " +
   "decide it. Then you approve the reply and it goes.",

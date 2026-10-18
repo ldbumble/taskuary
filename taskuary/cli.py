@@ -454,8 +454,9 @@ def main():
         store = SQLiteStore(config.db_path())
         brain = _llm.build_llm(store)
         if not brain:
+            from . import words
             print('No AI is connected, so the summaries will only be stripped of their footers '
-                  'and no todos can be drawn. Connect one under Connections, then choose it under Settings > How mail is sorted.')
+                  f"and no todos can be drawn. Connect one under {words.name('ai')}, then choose it under {words.name('sorting')}.")
         rows = ingest.backfill_asks(store, brain, dry_run=not args.apply, include_closed=args.include_closed)
         touched = [r for r in rows if r['action'] in ('rewrote', 'would rewrite')]
         for r in touched:

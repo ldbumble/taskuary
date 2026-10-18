@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.mime.text import MIMEText
 from loguru import logger
+from . import words
 
 BATCH = 25                  # messages per batch: the watermark is saved after each, the poll goes on until the gap is drained
 TRANSPORT = (imaplib.IMAP4.abort, OSError)   # the CONNECTION went, not one message: stop, keep the watermark, retry next poll
@@ -55,8 +56,8 @@ def _cfg(c): return json.loads(c.get('ConfigJson') or '{}')
 # The fingerprint to paste is in the error you get when it refuses, so accepting one is: read the
 # message, copy the line it gives you. There is no dialog because there is nobody at the screen
 # when a scheduled reply goes out at 6am.
-TLS_HELP = ('the mailbox card can accept it: put the fingerprint above in tls_accept (Connections '
-            "→ the mailbox → TLS certificate), or 'any' to stop checking certificates for this "
+TLS_HELP = (f"the mailbox card can accept it: put the fingerprint above in tls_accept ({words.card('the mailbox')} "
+            "→ TLS certificate), or 'any' to stop checking certificates for this "
             'mailbox altogether')
 
 

@@ -28,6 +28,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from . import words
 from .routing import norm_subject
 from .triage import addressed_to_you
 from .categories import route_intent
@@ -369,7 +370,7 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         return p
     if what == 'jev':
         row = next((c for c in store.list_connectors() if c['Type'] == 'typesafe' and c['Active']), None)
-        if not row: raise SystemExit('no active TypeSafe Jev connector - add one under Connections -> AI first')
+        if not row: raise SystemExit(f"no active TypeSafe Jev connector - add one under {words.name('ai')} first")
         key, strong = store.get_connector(row['ConnectorId'], with_secret=True)['Secret'] or '', [c for c in cases if not c['weak']]
         out = {k: evaluate_jev(store, strong, key, **kw) for k, kw in {'asof': dict(notes='asof'), 'bare': dict(notes='none', learned=False)}.items()}
         Path(home, 'eval').mkdir(parents=True, exist_ok=True); (Path(home) / 'eval' / 'jev_last.json').write_text(json.dumps(out, indent=1, default=str), encoding='utf-8')
@@ -378,7 +379,7 @@ def run(store, what: str, home: Path, share_to=None, llm=None):
         if llm is None:
             from .llm import build_llm
             llm = build_llm(store)
-        if llm is None: raise SystemExit('no AI connector is configured - connect one under Connections -> AI first')
+        if llm is None: raise SystemExit(f"no AI connector is configured - connect one under {words.name('ai')} first")
         strong = [c for c in cases if not c['weak']]
         return evaluate(store, strong, llm) if what == 'evaluate' else ablate(store, strong, llm, save=Path(home) / 'eval' / 'ablate_last.json')
     raise SystemExit(f'unknown evalset action {what!r}: build | share | evaluate | ablate | jev')

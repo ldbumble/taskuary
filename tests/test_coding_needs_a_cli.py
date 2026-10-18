@@ -53,7 +53,7 @@ class OfferedTests(unittest.TestCase):
         from taskuary import server
         s = MemoryStore()
         with mock.patch.object(server, 'store', s), mock.patch.object(agents, 'coding_ready', return_value=False):
-            self.assertEqual(TestClient(server.app).get('/api/capabilities').json(), {'coding': False})
+            self.assertIs(TestClient(server.app).get('/api/capabilities').json()['coding'], False)
 
 
 class AssistantTests(unittest.TestCase):

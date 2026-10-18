@@ -149,7 +149,8 @@ def require(c, action):
     """Raise unless this connection may take this action. The message names the dropdown to
     move and the level to move it to, because 'forbidden' with no next step is a dead end."""
     if allows(c, action): return
+    from . import words
     want, have, t = needs(action), scope_of(c), c.get('Type') or 'this connection'
     raise PermissionError(
         f"'{action}' needs {want} authority on {t}, which is set to {have} - "
-        f"raise it under Connections → {t} → Authority, or leave it and the agents stay hands-off")
+        f"raise it under {words.card(t)} → Authority, or leave it and the agents stay hands-off")

@@ -186,7 +186,7 @@ class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):
             keys = [i['key'] for i in funnel.pile(s, force=True)['items'] if i.get('lane') == 'approve' or i.get('kind') in ('asked', 'todo')]
             self.assertTrue(keys)
             tgt = advisor.target_of(s, keys[0])
-            advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2)
+            advisor.judge(s, advisor.SHOWN, *tgt, advisor.revision(s, *tgt), tier=2, key=keys[0])
             got = advisor.for_key(s, keys[0])
         funnel.invalidate()
         self.assertTrue(got.get('verb'), got); self.assertTrue(got.get('line'), got)

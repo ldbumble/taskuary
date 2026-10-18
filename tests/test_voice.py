@@ -3,8 +3,9 @@ filed with the reason and the audio attached when not - and the same road serves
 import base64, json, os, sys, tempfile, types, unittest
 from unittest import mock
 from fastapi.testclient import TestClient
-from taskuary import messengers, server, voice
+from taskuary import messengers, server, voice, words
 from taskuary.store import MemoryStore
+VOICE = words.name('voice')      # the voice shelf, by its one name (words.json)
 
 c_api = TestClient(server.app)
 
@@ -26,7 +27,7 @@ class ProviderTests(unittest.TestCase):
         s = MemoryStore()
         self.assertEqual(voice.ready(s), {'ready': False, 'provider': None, 'label': None, 'vocabulary': []})
         with self.assertRaises(RuntimeError) as e: voice.transcribe(s, b'x', 'audio/ogg')
-        self.assertIn('AI - voice', str(e.exception)); self.assertIn('Groq', str(e.exception))
+        self.assertIn(VOICE, str(e.exception)); self.assertIn('Groq', str(e.exception))
 
     def test_groq_and_openai_ride_the_openai_shape_with_their_own_defaults(self):
         for t, host, model in (('groq_stt', 'api.groq.com/openai/v1', 'whisper-large-v3-turbo'),
@@ -130,7 +131,7 @@ class ProviderTests(unittest.TestCase):
     def test_note_body_is_the_transcript_or_the_honest_placeholder(self):
         s = MemoryStore()
         body, ok, why = voice.note_body(s, b'x', 'audio/ogg', 'v.ogg', 7, 'WhatsApp')
-        self.assertFalse(ok); self.assertTrue(voice.is_placeholder(body)); self.assertIn('(7s) from WhatsApp', body); self.assertIn('AI - voice', body)
+        self.assertFalse(ok); self.assertTrue(voice.is_placeholder(body)); self.assertIn('(7s) from WhatsApp', body); self.assertIn(VOICE, body)
         s = _voice_store('groq_stt')
         with mock.patch.object(voice.requests, 'post', return_value=R(200, {'text': 'please call the vendor back'})):
             body, ok, _ = voice.note_body(s, b'x', 'audio/ogg', 'v.ogg', 7, 'WhatsApp')
@@ -190,7 +191,7 @@ class FunnelTests(unittest.TestCase):
         self.assertEqual(c_api.post('/api/voice/transcribe', content=b'').status_code, 422)
         with mock.patch.object(voice, 'transcribe', side_effect=RuntimeError(voice.NO_CONNECTOR)):
             r = c_api.post('/api/voice/transcribe', content=b'x', headers={'content-type': 'audio/webm'})
-        self.assertEqual(r.status_code, 409); self.assertIn('AI - voice', r.json()['detail'])
+        self.assertEqual(r.status_code, 409); self.assertIn(VOICE, r.json()['detail'])
         self.assertIn('ready', c_api.get('/api/voice/status').json())
 
     def test_voice_vocabulary_api_is_shared_validated_and_audited(self):

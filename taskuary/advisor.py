@@ -25,6 +25,12 @@ def target_of(store, key: str):
     """A rail key -> (target kind, id), or None for a key with nothing to advise on (a connection, a meeting, a batch)."""
     m = re.match(r'^(task|agent|wrap|msg|report):(\d+)$', str(key or ''))
     if m: return ('task' if m.group(1) in ('task', 'agent', 'wrap') else 'message', int(m.group(2)))
+    # a draft waiting for your yes is keyed by its review (funnel's review:N, in a bare store and the demo): advised as the
+    # task it answers for, else the message - read as "nothing to advise on", every draft on the demo's rail had an empty bar
+    m = re.match(r'^review:(\d+)$', str(key or ''))
+    if m:
+        r = store.get_review(int(m.group(1))) or {}
+        return ('task', int(r['TaskId'])) if r.get('TaskId') else ('message', int(r['MessageId'])) if r.get('MessageId') else None
     if str(key or '').startswith('processing:'):
         # the inventory's key names an ITEM; its members say what it is made of (a task outranks its mail rows)
         try:
@@ -61,13 +67,25 @@ def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line=
 # tries again. "nothing to say", "verb not offered", "no item", "no actions" stand for the revision.
 RETRY = ('no brain', 'cap', 'no answer')
 def retryable(r) -> bool: return bool(r) and not r.get('Verb') and str(r.get('Dropped') or '').startswith(RETRY)
-def _at(store, target_kind, target_id, revision) -> list:
-    return store._rows('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? AND Revision=? ORDER BY Id DESC', (target_kind, int(target_id), revision))
-def row(store, target_kind: str, target_id, revision: str):
+def _at(store, target_kind, target_id, revision, own=None) -> list:
+    """The rows at this revision - only those written for the item whose keys are `own`, when given."""
+    rs = store._rows('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? AND Revision=? ORDER BY Id DESC', (target_kind, int(target_id), revision))
+    return rs if own is None else [r for r in rs if r.get('Key') in own]
+def row(store, target_kind: str, target_id, revision: str, own=None):
     """The row that stands at this revision: the newest with a verb at any tier - a later tier-2 drop sorted first by tier hid
     a good tier-1 line - else the newest verdict. Retryable drops are never it."""
-    rs = _at(store, target_kind, target_id, revision)
+    rs = _at(store, target_kind, target_id, revision, own)
     return next((r for r in rs if r.get('Verb')), None) or next((r for r in rs if not retryable(r)), None)
+
+
+# ADVICE IS KEYED TO ITS ITEM: one task can stand on the rail twice - its draft (review:N) and its agent (agent:N) - and a line
+# written for one, with a verb only that one's row carries, stood over the other (2026-10-18). A row belongs to the item it was
+# judged as: its rail key, or a key that names that same item (its aliases: task:N for the processing inventory's key).
+def keys_of(item: dict | None, key: str = None) -> set:
+    return {k for k in (key, *((item or {}).get('key'), *((item or {}).get('aliases') or []))) if k}
+def _own(store, tgt, key: str, rs: list) -> set:
+    """The keys whose rows are `key`'s - read off the item only when a row at this revision was written under another key."""
+    return {key} if all(r.get('Key') == key for r in rs) else keys_of(_item(store, *tgt, key=key), key)
 def rows(store, target_kind: str, target_id, limit: int = 10) -> list:
     return store._rows('SELECT * FROM advice WHERE TargetKind=? AND TargetId=? ORDER BY Id DESC LIMIT ?', (target_kind, int(target_id), limit))
 
@@ -89,7 +107,8 @@ SYSTEM = (
     "\"evidence\": [\"<ids from the lines below>\"]}. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something: {L('answer_agent')}; nothing "
-    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}) - whichever of those is "
+    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a reply that failed to "
+    "send: the fix offered with it) - whichever of those is "
     "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
@@ -105,9 +124,10 @@ WANT = {'type': 'object', 'properties': {'verb': {'type': ['string', 'null']}, '
 _EV = re.compile(r'^(out|mem|rv|task)\d+$')
 
 
-def _item(store, target_kind, target_id):
-    """The card the rail would show for this target - found by its task or message id, since the rail's key spelling is the
-    processing inventory's (`processing:...`) in a real install and a legacy alias in a bare store."""
+def _item(store, target_kind, target_id, key: str = None):
+    """The card the rail would show for this target - the one keyed `key` when asked for an item (keys_of), else found by its task
+    or message id, since the rail's key spelling is the processing inventory's (`processing:...`) in a real install and a legacy
+    alias in a bare store."""
     from . import funnel
     if target_kind == 'task':
         t = store.get_task(target_id) or {}
@@ -117,7 +137,9 @@ def _item(store, target_kind, target_id):
         items = (funnel.full_items(store) or []) + pile                      # read items kept: the one on the table is often read
     except Exception: items = []
     f = 'tid' if target_kind == 'task' else 'mid'
-    return next((i for i in items if i.get(f) == int(target_id)), None) or funnel.item_for_key(store, key_of(target_kind, target_id))
+    mine = [i for i in items if i.get(f) == int(target_id)]
+    return (next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
+            or funnel.item_for_key(store, key_of(target_kind, target_id)))
 
 
 def habit(store, verb: str, item: dict) -> tuple:
@@ -213,20 +235,23 @@ def _offered(verbs: list, said: str):
                  or bare == v['verb'].lower()), None)
 
 
-def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1, llm=None) -> int:
-    key = key_of(target_kind, target_id)
+def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1, llm=None, key: str = None) -> int:
+    """Judge one item at one revision - the item keyed `key` when the strip asked for it, else the target's first card - and
+    write the row under that item's own key (keys_of), so it is never read back over another item of the same task."""
+    item = _item(store, target_kind, target_id, key)
+    key = (item or {}).get('key') or key or key_of(target_kind, target_id)
+    own = keys_of(item, key)
     def W(**kw): return _write(store, target_kind=target_kind, target_id=target_id, key=key, event=event, revision=rev, tier=tier, **kw)
-    item = _item(store, target_kind, target_id)
     if not item: return W(dropped='no item')
     if quiet(item): return W(dropped='left to the item')
     verbs = offered(store, item)
     if not verbs: return W(dropped='no actions')
-    have = row(store, target_kind, target_id, rev)                           # two events in one poll: the second finds the first's row
+    have = row(store, target_kind, target_id, rev, own)                      # two events in one poll: the second finds the first's row
     if judged(have, tier): return have['Id']
     brain = llm or build_llm(store)
     if not brain:
         # once per revision, and said: the strip asks for an AI (for_key's {"none": "no_ai"}) - a repeat would loop the re-read
-        last = next(iter(_at(store, target_kind, target_id, rev)), None)
+        last = next(iter(_at(store, target_kind, target_id, rev, own)), None)
         if last and last.get('Dropped') == 'no brain': return last['Id']
         rid = W(dropped='no brain'); _emit(key, target_kind, target_id); return rid
     model = getattr(brain, 'last_pick', None) or getattr(brain, 'model', None) or 'light'
@@ -234,7 +259,7 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     d = ans.data if isinstance(ans.data, dict) else {}
     # a line that landed while this one was thinking stands: a tier-2 answer, drop or not, never replaces a line the owner may
     # already be reaching for (B5 - the filled button moved under the cursor seconds after the item opened)
-    now = row(store, target_kind, target_id, rev)
+    now = row(store, target_kind, target_id, rev, own)
     if now and now.get('Verb'): return now['Id']
     if not d: return W(dropped=f'no answer: {ans.error or "not an object"}'[:200], model=model)
     verb, line = d.get('verb'), ' '.join(str(d.get('line') or '').split())[:200]
@@ -268,11 +293,35 @@ def quiet(item: dict) -> bool:
     return item.get('lane') == 'unjudged' or (item.get('kind') == 'report' and not item.get('bad'))
 
 
+def delivery_fix(store, item: dict) -> dict | None:
+    """{label, href} of the place that fixes the item's failed send - the draft's envelope (Deliver.fix, kept across a reload),
+    else the newest act on the item when it failed with one (OutcomeJson.fix). None when nothing failed, or it named no place."""
+    ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or {}
+    try: env = json.loads(r.get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    if isinstance(env, dict) and (r.get('DeliveryState') or env.get('delivery')) == 'failed' and ok(env.get('fix')): return ok(env['fix'])
+    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
+    except Exception: ops = []
+    last = ops[-1] if ops else {}
+    try: out = json.loads(last.get('OutcomeJson') or '{}') if last.get('Status') == 'error' else {}
+    except (TypeError, ValueError): out = {}
+    return ok((out or {}).get('fix')) if isinstance(out, dict) else None
+
+
 def offered(store, item: dict) -> list:
-    """The verbs the item's row carries, minus Next. An agent waiting on the owner carries Answer it there (chips_for) - its card
-    once offered only End and Remind me, which the prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17
-    audit). Not added here: a paused, stalled or stopped agent has nobody listening, and the row knows which is which."""
-    return [c for c in concierge.chips_for(store, item) if c.get('verb') != 'next']
+    """THE ITEM'S REAL BUTTONS, AND NOTHING IT CANNOT DO: the verbs its row carries minus Next - chips_for, which already drops
+    what this install cannot do (capabilities.py: no Send & close on a draft whose channel cannot send, no coding agent with no
+    coding tool) - plus the row's own fix when a send failed and named the place that fixes it, under that place's own name.
+    An agent waiting on the owner carries Answer it there (chips_for) - its card once offered only End and Remind me, which the
+    prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17 audit). Not added here: a paused, stalled or
+    stopped agent has nobody listening, and the row knows which is which."""
+    verbs = [c for c in concierge.chips_for(store, item) if c.get('verb') != 'next']
+    try: fix = delivery_fix(store, item)
+    except Exception as e:
+        logger.debug(f'advisor: no fix read for {item.get("key")} - {e}'); fix = None
+    # the fix leads: a send that failed is fixed before it is sent again (ReviewDecision.jsx draws it as '<rid>:fix')
+    return ([buttons.chip('fix') | {'label': fix['label'], 'href': fix['href']}] if fix else []) + verbs
 
 
 def _capped(store) -> bool:
@@ -285,29 +334,31 @@ def _capped(store) -> bool:
 _INFLIGHT, _LOCK = set(), threading.Lock()      # (kind, id, revision, tier) being judged right now
 
 
-def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wait: bool = False, llm=None):
-    """The one door every event calls. Never raises: a hook, a close or a poll must not fail for advice.
+def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wait: bool = False, llm=None, key: str = None):
+    """The one door every event calls. Never raises: a hook, a close or a poll must not fail for advice. `key` is the item the
+    strip asked for (for_key): only that item's rows count as judged. An event names a target, and any row at its revision does.
     Returns the row id when judged inline (tests, `wait=True`), None when skipped or sent to the background."""
     try:
         if str(store.get_setting(ON_KEY, '1') or '1') != '1' or not target_id: return None
         rev = revision(store, target_kind, target_id)
-        if judged(row(store, target_kind, target_id, rev), tier): return None    # judged at this revision already
+        own = _own(store, (target_kind, target_id), key, _at(store, target_kind, target_id, rev)) if key else None
+        if judged(row(store, target_kind, target_id, rev, own), tier): return None    # judged at this revision already
         if _capped(store):
-            last = next(iter(_at(store, target_kind, target_id, rev)), None)
+            last = next(iter(_at(store, target_kind, target_id, rev, own)), None)
             if last and last.get('Dropped') == 'cap': return last['Id']          # one cap row per revision, retried next look
-            return _write(store, target_kind=target_kind, target_id=target_id, key=key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
-        mark = (target_kind, int(target_id), rev, int(tier))
+            return _write(store, target_kind=target_kind, target_id=target_id, key=key or key_of(target_kind, target_id), event=event, revision=rev, tier=tier, dropped='cap')
+        mark = (target_kind, int(target_id), rev, int(tier), key)
         with _LOCK:
             if mark in _INFLIGHT: return None                                   # the same moment, judged on another thread
             _INFLIGHT.add(mark)
         def done():
             with _LOCK: _INFLIGHT.discard(mark)
         if wait:
-            try: return judge(store, event, target_kind, target_id, rev, tier, llm)
+            try: return judge(store, event, target_kind, target_id, rev, tier, llm, key)
             finally: done()
         if not BACKGROUND: done(); return None
         def go():
-            try: judge(store, event, target_kind, target_id, rev, tier, llm)
+            try: judge(store, event, target_kind, target_id, rev, tier, llm, key)
             except Exception as e: logger.warning(f'advisor: {event} on {target_kind} {target_id} not judged - {e}')
             finally: done()
         threading.Thread(target=go, daemon=True, name=f'advise-{target_kind}-{target_id}').start()
@@ -320,7 +371,8 @@ def _payload(r: dict) -> dict:
     # a row judged under an older wording ("Take it myself", "Close out") shows today's name; a state's name (Approve) is kept
     verb = concierge.canon_verb(r['Verb']) if r.get('Verb') else r.get('Verb')
     if r.get('Verb') and not verb: r = {**r, 'Line': ''}                  # its button is gone (Prep me): the line pointed at nothing
-    lbl = r['Label'] if r.get('Label') in buttons.labels() else buttons.label(verb or '') or r.get('Label')
+    # a fix is named by the place it opens ("Connect a mailbox"), never the generic button word
+    lbl = r['Label'] if r.get('Label') in buttons.labels() or (verb == 'fix' and r.get('Label')) else buttons.label(verb or '') or r.get('Label')
     return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': pill(lbl, count), 'count': count,
             'says': says(r['Verb'] or '', count), 'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
@@ -341,12 +393,22 @@ def for_key(store, key: str) -> dict:
     opened, under the owner's hand (B5, 2026-10-17). {"none": "no_ai"} is the strip's cue to ask for an AI."""
     tgt = target_of(store, key)
     if not tgt or _at_work(store, *tgt): return {}
-    rev = revision(store, *tgt); rs = _at(store, tgt[0], tgt[1], rev); r = row(store, tgt[0], tgt[1], rev)
-    if r and r.get('Verb'): return _payload(r)
+    rev = revision(store, *tgt); rs = _at(store, tgt[0], tgt[1], rev)
+    # only the rows written for THIS item (keys_of): a line judged over the same task's other card is not this one's
+    own = _own(store, tgt, key, rs); rs = [x for x in rs if x.get('Key') in own]; r = row(store, tgt[0], tgt[1], rev, own)
+    if r and r.get('Verb'):
+        out = _payload(r) | {'key': key}
+        # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed
+        # act with no draft on the table) - read live, so a fix already made carries no stale link
+        if out.get('verb') == 'fix':
+            try: f = delivery_fix(store, _item(store, *tgt, key=key) or {})
+            except Exception: f = None
+            if f: out['href'] = f['href']
+        return out
     # NEVER LEFT GUESSING (the owner, 2026-10-15: "the advisor ... should be guiding at all times never leaving it guessing"): only
     # eight events ever judged an item, so a fresh email or a task that moved since its last event had an empty bar for good. The
     # item on the table is judged now, at this revision, once - the line arrives by the `advice` live event the page already reads
-    if not judged(r, 2): notice(store, r['Event'] if r else SHOWN, tgt[0], tgt[1], tier=2)
+    if not judged(r, 2): notice(store, r['Event'] if r else SHOWN, tgt[0], tgt[1], tier=2, key=key)
     return {'none': 'no_ai'} if rs and rs[0].get('Dropped') == 'no brain' else {}
 
 

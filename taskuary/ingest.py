@@ -12,7 +12,7 @@ from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent
 from .store import task_ref, auto_code_enabled, _now
-from . import remind, senders
+from . import remind, senders, words
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -191,22 +191,20 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
     cfg = store.get_settings()
     said = senders._said
     if kind == 'general':
-        if cfg.get('general_auto_enabled', '1') != '1': return False, said('Starting the assistant by itself is switched off in Settings.')
+        if cfg.get('general_auto_enabled', '1') != '1': return False, said(f"Starting an agent by itself is switched off in {words.name('coding')}.")
         from . import general
-        if not general.provider_options(store): return False, said('No AI is set up for the assistant to run on yet (Settings, AI).')
+        if not general.provider_options(store): return False, said(f"No AI is set up for an agent to run on yet ({words.name('ai')}).")
     elif kind == 'coding':
-        if not auto_code_enabled(cfg): return False, said('Starting the coding agent by itself is switched off in Settings.')
+        if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
     else: return False, said('A person has to do this one, so it is on your list.')
     return senders.known(store, msg, exclude_mid=mid, deep=True)
 
 
 def held_note(who, kind: str) -> str:
-    """The task's line for a start that waited: the reason as its own sentence, then the one thing the owner can do. A
-    stranger's hold was told "send it yourself if real" AND "send it to the coding agent yourself" - two next steps."""
-    # the task page's start button, by its one name (buttons.json) - "start the assistant" named no button it has
-    from .buttons import label
-    go = f"press {label('regular_agent')}, or do it yourself."
-    return f"Waiting for you: {who} " + (f'If it is real, {go}' if getattr(who, 'stranger', False) else go[:1].upper() + go[1:])
+    """The task's line for a start that waited: the reason as its own sentence, then where it stands. A STATE, NEVER AN
+    INSTRUCTION: the task's own row carries the button that starts it, so the line names none - "press Send to agent" stood on
+    tasks whose row had no such button, and a stranger's hold was told two next steps at once (2026-10-18)."""
+    return f"Waiting for you: {who} No agent has started on it."
 
 
 # One drain at a time: a conversation's second line must find the task its first one opened.
@@ -552,7 +550,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     said = said_about(store, msg.get('conversation_id'))
     if said: thread = {**thread, 'assistant_said': said}
     from .projects import context_for_message
-    from . import agents as hub_agents
+    from . import agents as hub_agents, capabilities
     project = context_for_message(store, msg)
     from .triage import job_doc
     intent = classify_intent(msg, llm=_guarded, soul=store.doc('soul'), job=job_doc(store), thread=thread, seen=carried,
@@ -572,7 +570,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              # judged. The loop closes here: a verdict, a correction, a better verdict.
                              routing_history=_routing_history(store, msg),
                              # ...and whether coding exists here at all: no coding tool connected, no coding kind (2026-10-16)
-                             coding=hub_agents.coding_ready(store))
+                             coding=capabilities.can_code(store))
     intent['notes'], intent['notes_left'] = notes, notes_left
     return intent, fail
 
@@ -782,7 +780,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # not on the remind day (B2, the owner, 2026-10-11 - "the board needs it tomorrow" sat under For later for two weeks)
         if remind.waiting(store.get_task(tid) or {}) and str(msg.get('from_email') or '').lower() not in mine:
             store.update_task(tid, {'RemindAt': ''}, actor)
-            store.add_comment(tid, actor, 'agent', f"{msg.get('from_name') or msg.get('from_email') or 'They'} wrote again - brought back from For later.")
+            store.add_comment(tid, actor, 'agent', f"{msg.get('from_name') or msg.get('from_email') or 'They'} wrote again - brought back from {words.name('later')}.")
         # a drafted reply on this task was written against the thread as it WAS (PW-051): mark it behind, and
         # when the fresh verdict says a reply is still owed, redraft that same review - never a second one
         behind = store.pending_review(tid, kind='draft')
@@ -837,7 +835,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                 # be filed, wearing the same face as "nothing to do"
                 mid = _land(store, msg, None, 'error')
                 store.add_route(mid, None, 'file', None,
-                                'awaiting AI triage - connect an AI connector (Connections → AI) to classify inbound automatically', [], 'triage')
+                                # the prefix is a marker store.TRIAGE_UNJUDGED matches on: the words after it are the owner's
+                                f"awaiting AI triage - connect an AI ({words.name('ai')}) and new mail is sorted by itself", [], 'triage')
                 logger.debug(f"ingest: awaiting triage (no AI connector) - {msg.get('subject') or ''}")
                 return {'status': 'error', 'task_id': None, 'message_id': mid}
             else:

@@ -29,6 +29,7 @@ import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 import { useVerbs } from "./actionRow.js";
 import { openAppLink } from "./appLinks.js";
+import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 
 const KINDS = [
@@ -187,7 +188,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   }, [open]);
   // ...and what it needs is a button on the row, not a sentence pointing at Connections
   useVerbs("new-send", [{ id: "new:connect-sending", group: "decide", tone: "s", label: "Connect a mailbox",
-    title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink("#connections=Email") }], open && targetsRead && kind === "send" && !targets.length);
+    title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink(place("mail").href) }], open && targetsRead && kind === "send" && !targets.length);
 
   const chanTargets = (targets.find((t) => t.channel === channel)?.to) || [];
   const close = () => { if (!busy) onClose?.(); };

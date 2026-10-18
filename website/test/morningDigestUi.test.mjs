@@ -64,5 +64,5 @@ test("the calendar side says none connected, unreadable or no meetings, with the
   const cards = read("assistantCards.jsx");
   assert.match(cards, /Array\.isArray\(today\.sources\) && !today\.sources\.length \? "none"/);
   assert.match(cards, /No calendar connected/);
-  assert.match(cards, /openAppLink\("#connections=Email"\)/);
+  assert.match(cards, /openAppLink\(place\("mail"\)\.href\)/);
 });

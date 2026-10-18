@@ -21,10 +21,18 @@ def _places():
     return s, set(s['groups']) | set(pages) | set(secs) | {'Profiles', 'Playbooks'} | {k['label'] for k in s['knobs'].values()}
 
 
+WORDS = ROOT / 'taskuary' / 'words.json'
+_NAMES = {k: v['name'] for k, v in json.loads(WORDS.read_text(encoding='utf-8'))['places'].items() if not k.startswith('_')}
+# A PLACE IS NAMED BY ITS ID NOW (words.json): `${placeName("sorting")}` reads as the path it prints, and words.json's own names
+# are references like any other - words.js, the reader, only explains the rule
+_PLACE = re.compile(r'\$\{\s*placeName\(\s*"(\w+)"\s*\)\s*\}|placeName\(\s*"(\w+)"\s*\)')
+
+
 def _refs():
     "(file, text before, the place named) for every reference that is ours, `Configuration →` stepped through"
-    for p in [*sorted(SRC.rglob('*.js')), *sorted(SRC.rglob('*.jsx')), SCHEMA]:
-        s = p.read_text(encoding='utf-8')
+    for p in [*sorted(SRC.rglob('*.js')), *sorted(SRC.rglob('*.jsx')), SCHEMA, WORDS]:
+        if p.name == 'words.js': continue
+        s = _PLACE.sub(lambda m: _NAMES.get(m.group(1) or m.group(2), m.group(0)), p.read_text(encoding='utf-8'))
         for m in REF.finditer(s):
             pre = s[max(0, m.start() - 80):m.start()]
             if THEIRS.search(pre): continue

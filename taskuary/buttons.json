@@ -22,7 +22,8 @@
     "let_go":          {"label": "Let it go", "hint": "Puts it down: the step is dropped or the follow-up closed", "row": []},
     "elsewhere":       {"label": "They answered elsewhere", "hint": "Say where they answered - the step closes as done", "row": []},
     "test_connection": {"label": "Test it", "hint": "Asks the connection again, here", "row": []},
-    "next":            {"label": "Next", "hint": "Puts this one down - still yours - and brings the next", "row": []},
+    "next":            {"label": "Next", "hint": "Puts this one down - still yours - and brings the next", "row": [],
+                        "states": {"batch": "All read, next"}, "state_hints": {"batch": "Marks every notice on the card read - search finds them later - and brings the next"}},
     "split":           {"label": "Split or merge", "hint": "Split this task in two, or merge it with another", "row": ["reshape"]},
     "reopen":          {"label": "Reopen task", "hint": "Opens the task again", "row": ["reopen"]},
     "close_note":      {"label": "Close with a note", "hint": "Closes the task with a line saying how it ended", "row": ["close-note"]},
@@ -33,6 +34,7 @@
     "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
     "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
     "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},
+    "fix":             {"label": "Fix the send", "hint": "Opens where the failed send is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"]},
     "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
     "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
     "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": []}

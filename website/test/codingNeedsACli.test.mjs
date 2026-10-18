@@ -9,8 +9,18 @@ const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8"
 test("the capability is asked once, re-asked when setup moves, and shows coding until the answer is in", () => {
   const c = read("capabilities.js");
   assert.match(c, /api\.get\("\/api\/capabilities"\)/);
-  assert.match(c, /useState\(true\)/);
+  assert.match(c, /export const ASSUMED = \{ coding: true, ai: true, mail: true, send: \{\}, known: false \};/, "until the answer is in, everything shows");
   assert.match(c, /tq-setup-changed/);
+  assert.match(c, /onLive\(\["feed-changed", "task-changed"\]/, "and re-read when the live feed says something changed");
+  // every screen reads the one hook - no screen keeps its own coding check
+  for (const f of ["ui.jsx", "assistantCards.jsx", "TaskPage.jsx", "TasksView.jsx", "SettingsView.jsx", "AssistantView.jsx"])
+    assert.match(read(f), /useCapabilities\(\)/, f);
+});
+
+test("a channel the server names as unable to send hides its Send; one it does not name can send", async () => {
+  // capabilities.js imports the page's api client; the pure rule is read from its source
+  const c = read("capabilities.js");
+  assert.match(c, /export const canSend = \(caps, channel\) => !channel \|\| caps\?\.send\?\.\[String\(channel\)\.toLowerCase\(\)\] !== false;/);
 });
 
 test("no coding tool: no Coding agent button, no coding kind to pick, no Coding agent settings", () => {

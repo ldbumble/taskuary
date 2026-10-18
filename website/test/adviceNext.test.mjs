@@ -13,9 +13,10 @@ const css = fs.readFileSync(new URL("../src/assistantView.css", import.meta.url)
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
 
-test("the advised verb is the one filled button, whatever the row would have filled", () => {
+test("the advised verb is the one filled button, whatever the row would have filled - and with no advice, none is", () => {
   const list = [v("approve", "decide", { tone: "p", label: "Send & close" }), v("continue", "agent", { label: "Keep going" }), v("done", "more", { label: "Mark done" }), v("next", "next")];
-  assert.deepEqual(filled(rowOf({ ref: "", list })), ["approve"]);
+  assert.deepEqual(filled(rowOf({ ref: "", list })), []);
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "approve", label: "Send & close" })), ["approve"]);
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "continue", label: "Keep going" })), ["continue"]);
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["done"]);   // Mark done is the advisor's close
 });
@@ -25,7 +26,7 @@ test("a pick waiting behind More comes onto the bar, filled; nothing advised lea
   const r = rowOf({ ref: "", list }, { verb: "rerun", label: "Run it again" });
   assert.deepEqual(filled(r), ["rerun"]); assert.ok(!r.more.some((x) => x.id === "rerun"));
   assert.deepEqual(filled(rowOf({ ref: "", list }, null)), filled(rowOf({ ref: "", list })));
-  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "chase", label: "Chase them" })), ["continue"]);   // not on the row: unchanged
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "chase", label: "Chase them" })), []);   // not on the row: nothing dark (AdvisorNext adds it)
 });
 
 test("the advisor's Reply is the task's Write reply: matched by the verb's id, so no second Reply is drawn", () => {
@@ -36,7 +37,7 @@ test("the advisor's Reply is the task's Write reply: matched by the verb's id, s
 
 test("a greyed verb is never the advised one", () => {
   const list = [v("continue", "agent", { lead: true, label: "Keep going" }), v("done", "more", { label: "Mark done", disabled: true }), v("next", "next")];
-  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["continue"]);
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), []);
 });
 
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {

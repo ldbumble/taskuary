@@ -17,7 +17,8 @@ class AlchemyError(RuntimeError):
 def _key(cfg):
     key = str(cfg.get('api_key') or '').strip()
     if not key:
-        raise AlchemyError('no Alchemy API key saved - Connections -> Alchemy')
+        from . import words
+        raise AlchemyError(f"no Alchemy API key saved - {words.card('Alchemy')}")
     return key
 
 

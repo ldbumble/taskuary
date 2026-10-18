@@ -4,6 +4,7 @@ import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, Dialo
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
+import { placeName } from "./words.js";
 import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
 import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
@@ -223,7 +224,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
           {connections.map((c) => <MenuItem key={c.name} value={`cli:${c.name}`}>{c.label}</MenuItem>)}
           {draft.provider && !connections.some((c) => `cli:${c.name}` === draft.provider) && <MenuItem value={draft.provider}>{draft.provider} (unavailable)</MenuItem>}
         </TextField>
-        {!connections.length && <Alert severity="info">Configure a CLI under Connections → AI CLI agents first.</Alert>}
+        {!connections.length && <Alert severity="info">Connect an AI app under {placeName("ai_apps")} first.</Alert>}
         <Autocomplete freeSolo options={modelOptions} inputValue={draft.model} onInputChange={(_, model) => setDraft((d) => ({ ...d, model }))}
           renderInput={(params) => <TextField {...params} label="Model name" helperText="Choose a model or type its name. Leave blank for the provider default." />} />
         <TextField select label="Type of work" value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value })}>

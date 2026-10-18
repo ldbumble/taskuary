@@ -2,6 +2,8 @@
 // reloaded against a Taskuary process that has not restarted yet; older /api/brains responses
 // contain one CLI row per profile (coding, researcher, analyst...) even though those are all the
 // same Claude executable. Keep a selected legacy value when possible, but show each CLI once.
+import { localName } from "./words.js";
+
 export function normalizeBrainOptions(rows = [], agentModels = {}, selected = []) {
   const wanted = new Map((selected || []).filter(Boolean).map((v, i) => [v, i]));
   const ordered = [...(rows || [])].sort((a, b) =>
@@ -17,7 +19,8 @@ export function normalizeBrainOptions(rows = [], agentModels = {}, selected = []
     const identity = `cli:${cli}`;
     if (seen.has(identity)) return [];
     seen.add(identity);
-    return [{ ...row, label: `${cli} (your CLI)`, cli,
+    // ...said in plain words: "(your CLI)" stood on the agent card as code-speak (the walk's WORDS, 2026-10-18)
+    return [{ ...row, label: localName(cli), cli,
       models: row.models?.length ? row.models : (info.choices || []) }];
   });
 }

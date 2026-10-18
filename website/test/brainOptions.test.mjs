@@ -15,7 +15,7 @@ test("old profile-shaped brain rows collapse to one choice per CLI", () => {
     copilot: { cli: "copilot", choices: ["auto", "gpt-5.4"] },
   };
   const got = normalizeBrainOptions(rows, models, ["cli:researcher"]);
-  assert.deepEqual(got.map((r) => r.label), ["claude (your CLI)", "auto", "copilot (your CLI)"]);
+  assert.deepEqual(got.map((r) => r.label), ["claude (on this computer)", "auto", "copilot (on this computer)"]);
   assert.equal(got[0].value, "cli:researcher");
   assert.deepEqual(got[2].models, ["auto", "gpt-5.4"]);
 });

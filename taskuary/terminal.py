@@ -2029,7 +2029,9 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if resume: chain = chain[:1]
     agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
     row = store.get_agent(agent or '')
-    if not row: raise ValueError(f'unknown agent: {agent}' if agent else 'no coding profile is set up - add one under Settings > Agents')
+    if not row:
+        from . import words
+        raise ValueError(f'unknown agent: {agent}' if agent else f"no coding profile is set up - add one under {words.name('profiles')}")
     term = repo = why = None
     chosen = None
     last_error = None

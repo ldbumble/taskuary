@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
+import { askLine, cameFromLabel, expands, groupConversations, groupMeta, headerFacts, hidden, latestRows, madeLine, previewRows, routeHead, startedBy, triageLine, workflowOrigin, workflowTitle } from "../src/taskSources.js";
 
 const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
 let id = 0;
@@ -157,6 +157,14 @@ test("a workflow run's header names the workflow and who started it, never Triag
   assert.equal(workflowTitle({ Title: "Vendor bill sweep - 2026-10-12 08:00" }), "Vendor bill sweep");
   assert.equal(headerFacts({ task: { ...task, Tags: "" }, workflow: null }).pills.find((p) => p.key === "trigger"), undefined,
     "a run from before the tag says nothing it does not know");
+});
+
+test("where a task came from is said in plain words - sorted, made by you - never 'created ... by triage'", () => {
+  assert.equal(madeLine({ Source: "email", CreatedBy: "triage" }, "1m ago"), "from email · sorted 1m ago");
+  assert.equal(madeLine({ Source: "manual", CreatedBy: "owner" }, "2h ago"), "made by you 2h ago");
+  assert.equal(madeLine({ Source: "github", CreatedBy: "ci" }, "now"), "from github · made now");
+  assert.match(page, /const made = t \? madeLine\(t, timeAgo\(t\.CreatedAt\)\) : "";/);
+  assert.doesNotMatch(page, /created \$\{timeAgo/);
 });
 
 test("a workflow run's Came from is the workflow and its trigger, with the way back to it", () => {

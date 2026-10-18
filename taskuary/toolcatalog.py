@@ -266,9 +266,8 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
     if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True
-    from . import agents
-    try: return bool(agents.coding_ready(store))
-    except Exception: return False
+    from . import capabilities
+    return capabilities.can_code(store)
 
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
 WHERE = (

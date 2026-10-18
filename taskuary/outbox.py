@@ -25,6 +25,7 @@ import json
 import re
 from datetime import datetime
 from loguru import logger
+from . import capabilities
 
 MODES = ('draft', 'task')
 DRAFT_TOKENS = 400
@@ -148,9 +149,8 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
         cc = []
         if not to: raise ValueError('say who it goes to')
     if mode not in MODES: raise ValueError(f"mode must be one of {', '.join(MODES)}")
-    if not outbound.can_reply(store, channel):
-        raise ValueError(f'{channel or "that channel"} cannot send from here - turn its replies on '
-                         'in Connections, or pick another channel')
+    no = capabilities.send_refusal(store, channel)
+    if no: raise ValueError(no)
     subject = (subject or '').strip() or (subject_for(store, about, llm) if channel == 'email' else about[:120])
 
     tid = store.create_task({'Title': subject[:300], 'Summary': about,
@@ -245,8 +245,8 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
     if task.get('Status') in ('done', 'dropped'): raise ValueError('that task is closed - reopen it first')
     channel = str(channel or 'email').lower()
     if channel not in slots.KINDS: raise ValueError(f'{channel} cannot be sent from a task')
-    if not outbound.can_reply(store, channel):
-        raise ValueError(f'{channel} cannot send from here - turn its replies on in Connections, or pick another channel')
+    no = capabilities.send_refusal(store, channel)
+    if no: raise ValueError(no)
     if channel == 'email':
         who = outbound.addrs([to])
         if not who: raise ValueError(f'not a valid email address: {to}')

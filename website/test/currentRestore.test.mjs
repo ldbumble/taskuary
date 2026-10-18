@@ -10,7 +10,7 @@ const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, impo
 test("Current comes from the server's validated state, never from the last historical card", () => {
   const view = read("AssistantView.jsx");
   const load = view.slice(view.indexOf("const loadState = useCallback"), view.indexOf("const deferredChat = useRef"));
-  assert.match(load, /const last = data\.current \|\| null/);
+  assert.match(load, /putOnTable\(data\.current \|\| null, "sync"\)/);
   assert.doesNotMatch(load, /restorableCurrent|data\.messages\[|surface\(|turn\(/);
   assert.doesNotMatch(view, /restorableCurrent\(/);
 });
@@ -34,10 +34,9 @@ test("the freshness poll adopts the server's Current, except while a turn of our
   const poll = view.slice(view.indexOf('const { data: st } = await api.get("/api/concierge")'),
                           view.indexOf("if (data.events?.length)"));
   assert.match(poll, /const said = st\.current \|\| null;/);
-  assert.match(poll, /if \(!turnFlight\.current\)/, "a local answer is the newer truth");
-  assert.match(poll, /setCurrent\(said\?\.key \|\| null\);/);
-  assert.match(poll, /setCurrentItem\(said\);/);
-  assert.match(poll, /currentRef\.current = said;/);
+  assert.match(poll, /if \(!turnFlight\.current && !cardRef\.current\)/, "a local answer is the newer truth, and a task opened by name here is what this tab shows");
+  // the table follows through the one road - the rail's mark, the advice and the card move together - without jumping the view
+  assert.match(poll, /putOnTable\(said, "sync"\);/);
 });
 
 // The bracket round a batch is drawn behind its rows, between a sticky opaque band heading above it

@@ -5,7 +5,7 @@
 // happens IN the card (the full text unfolds under it) and every card links to where the whole of
 // it lives - the task, or the row on the Timeline - because everything is the chat.
 import React, { useEffect, useRef, useState } from "react";
-import { useCoding } from "./capabilities.js";
+import { useCapabilities } from "./capabilities.js";
 import { movesOf, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, label as btn } from "./buttons.js";
 import { Button, TextField } from "@mui/material";
@@ -20,6 +20,7 @@ import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
+import { place } from "./words.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
@@ -525,7 +526,7 @@ function CombinedTaskText({ card, list = true }) {
     {task}
     <div className="tq-card-full tq-card-context">
       <div className="tq-card-note" style={{ marginBottom: 7, fontWeight: 600 }}>
-        Email context · {messages.length} messages combined by triage
+        Email context · {messages.length} messages read together
       </div>
       {messages.map((m, n) => {
         const body = noImages(cleanText(m.ReadText ?? m.BodyText ?? ""));
@@ -1125,7 +1126,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
           <div className="tq-day-h">Your day · {cal === "empty" ? "no meetings" : "calendar"}</div>
           <div className="ev cal-note"><span className="s">{cal === "none" ? "No calendar connected - your Microsoft 365 or Gmail card reads it once it is allowed to."
             : cal === "error" ? `Your calendar could not be read - ${String(today.errors[0]).slice(0, 140)}` : "Nothing on your calendar today."}</span></div>
-          {cal !== "empty" && <button type="button" className="tq-linkish cal-go" onClick={() => openAppLink("#connections=Email")}>
+          {cal !== "empty" && <button type="button" className="tq-linkish cal-go" onClick={() => openAppLink(place("mail").href)}>
             {cal === "none" ? "Connect a calendar" : "Open your mail card"}</button>}
         </div>
       )}
@@ -1178,7 +1179,7 @@ export function BriefCard({ card, onStart }) {
 const FOLD_AT = 6;
 
 export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
-  const canCode = useCoding();                    // no coding tool connected: no Coding agent (capabilities.js)
+  const canCode = useCapabilities().coding;                   // no coding tool connected: no Coding agent (capabilities.js)
   const [open, setOpen] = useState(null);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -1241,8 +1242,8 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
       ))}
       </div>
       {/* the one card whose verb IS Next: marking the handful read moves on (fyis carries no `next`) */}
-      <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>All read, next</Button>}
-        then={<><b>All read, next</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
+      <Foot verb={<Button size="small" variant="contained" disableElevation onClick={() => onDone?.(`Read — ${items.length} fyi let go.`)} sx={primary}>{btn("next", "batch")}</Button>}
+        then={<><b>{btn("next", "batch")}</b> marks {items.length === 1 ? "it" : `all ${items.length}`} read - search finds {items.length === 1 ? "it" : "them"} later.</>}
         where={null} />
     </CardShell>
   );

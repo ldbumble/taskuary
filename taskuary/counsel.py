@@ -179,11 +179,9 @@ def without_coding(text: str) -> str:
     return f'{t}\n\n{NO_CODING}' if re.search(r'coding|repositor', t, re.I) else t
 
 def for_chat(store) -> str:
-    from . import agents
+    from . import capabilities
     text = load(store)
-    try: ready = agents.coding_ready(store)
-    except Exception: ready = False
-    return text if ready else without_coding(text)
+    return text if capabilities.can_code(store) else without_coding(text)
 def for_brief(store) -> str: return pick(store, GOAL_HEAD, VOICE_HEAD)
 def for_discussion(store) -> str: return pick(store, VOICE_HEAD)
 def for_worker(store) -> str: return pick(store, VOICE_HEAD)

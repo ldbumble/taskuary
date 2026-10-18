@@ -23,6 +23,7 @@ export function put(owner, verbs, ref = "") {
   sig = s; snap = next; subs.forEach((f) => f());
 }
 export const press = (id, e, anchor) => live.get(id)?.run?.(e, anchor);
+export const rowNow = () => snap;          // what the row carries this moment - an Advisor press looks for its real button here
 const subscribe = (f) => { subs.add(f); return () => subs.delete(f); };
 export const useRowVerbs = () => useSyncExternalStore(subscribe, () => snap);
 
@@ -63,9 +64,9 @@ export function movesOf(node, group = "decide", prefix = "m") {
 }
 
 // the row's layout, from the registered verbs: the decision first, the session's verbs, then the rest behind More.
-// A task with no decision waiting has Mark done as its decision (unless a live session holds the page: that has no primary) - or, when
-// the session's way back in leads, Mark done stands outlined beside it.
-// ONE FILLED BUTTON AT MOST: Next is the filled one only when nothing else on the row is a move of its own.
+// NOTHING IS DARK UNTIL THE ADVISOR ANSWERS (the owner, 2026-10-17: "nothing dark until advisor ... keep it ai"): the one filled
+// button is the verb the Advisor advised for the item on the table. A card's own tone, Next, the first chip, Mark done when
+// nothing else waits - every fallback of the row's own - is outlined. No advice, no dark button.
 const ROOM = 4;                                            // how many chips the row holds before the rest wait behind More
 const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the same id (the task registers `reply`, `continue`), the
@@ -85,37 +86,33 @@ export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disab
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
 export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
 
-// A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, never drawn here
-// ...and it holds the move only through its FILLED button: a card of outlined ones (a greyed draft's) leaves the bar its own
+// A `card` verb is one the card draws itself, under the draft (ReviewDecision): registered so the Advisor can find it, drawn here
+// only when it is the advice. holdsMove: the card holds a move of its own under the draft (its filled button, or the task's Mark done
+// standing on it) - what the Advisor's Why? names as "under the draft".
 export const holdsMove = (list) => list.some((v) => v.onCard || (v.card && v.tone === "p"));
 export function rowOf({ list, ref }, pick = null) {
   const by = (g) => list.filter((v) => v.group === g && !v.card);
-  let decide = by("decide"), more = by("more"), agent = by("agent");
-  // THE CARD ALREADY HOLDS THE MOVE (a waiting draft's Send & close, under the draft): the bar fills nothing, Next included -
-  // two filled buttons on one screen leave the owner to work out which one is meant. Advice no longer overrides it: an advised
-  // Send filled a second Send on the bar that took the proposal road and dropped the edit in the box (the audit, 2026-10-17)
-  const onCard = holdsMove(list);
+  // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
+  const head = by("decide").find((v) => v.tone === "p") || null;
+  const plain = (xs) => xs.map((v) => (v.tone === "p" ? { ...v, tone: "s" } : v));
+  let decide = plain(by("decide")), more = plain(by("more")), agent = plain(by("agent"));
   // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice"):
-  // the verb it advises is the one filled - off More and onto the bar if it waited there - and every other one is outlined.
-  // The card's own button is already the dark one; a row verb advised beside it comes onto the bar outlined.
-  const hit = advisedIn(list, pick), advised = hit && !hit.card ? hit : null;
-  if (advised) {
-    const tone = onCard ? "s" : "p";
-    const fill = (xs) => (onCard ? xs : xs.map((v) => (v.id === advised.id ? { ...v, tone: "p" } : v.tone === "p" ? { ...v, tone: "s" } : v)));
+  // the verb it advises is the one filled - off More and onto the bar if it waited there. A card's own verb advised (a draft's Send)
+  // comes onto the bar too, filled, running the card's own handler: the press sends what is in the box, exactly as the button under
+  // the draft does - the second Send that dropped the edit was the proposal road, which an advised press no longer takes (2026-10-18)
+  const advised = advisedIn(list, pick), primary = advised ? { ...advised, tone: "p" } : null;
+  if (advised?.card) decide = [primary, ...decide];
+  else if (advised) {
+    const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));
     decide = fill(decide); agent = fill(agent);
-    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [{ ...advised, tone }, ...agent]; }
+    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [primary, ...agent]; }
   }
-  let primary = advised && !onCard ? { ...advised, tone: "p" } : decide.find((v) => v.tone === "p") || null;
-  // no decision waiting: the session's way back in (Keep going / Start an agent) is the move, else Mark done
-  const lead = !primary && !onCard && agent.find((v) => v.lead);
-  if (lead) { agent = agent.map((v) => (v === lead ? { ...v, tone: "p" } : v)); primary = lead; }
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
-  // single task not inside the more button"; before that it went behind More whenever a decision waited, or a live session left no room).
-  // The move when nothing else is (filled); otherwise outlined, so the row keeps one filled button.
+  // single task not inside the more button"). With no decision waiting it leads the bar; dark only when it is the advice.
   const done = more.find((v) => v.id === "done");
   if (done) {
     more = more.filter((v) => v !== done);
-    if (done.promote && !primary) { primary = { ...done, tone: "p" }; decide = [primary, ...decide]; }
+    if (done.promote && !head && !agent.some((v) => v.lead)) decide = [{ ...done, tone: "s" }, ...decide];
     else agent = [...agent, { ...done, tone: "s" }];
   }
   // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
@@ -138,8 +135,9 @@ export function rowOf({ list, ref }, pick = null) {
   decide = once(decide); agent = once(agent); more = once(more);
   const next = by("next")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
-  return { ref, decide, agent, more, primary, next: next && { ...next, tone: primary || onCard ? "s" : "p" },
-    why: primary?.disabled && primary.why ? `${primary.label} is off - ${primary.why}` : "" };
+  // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
+  return { ref, decide, agent, more, primary, next: next && { ...next, tone: "s" },
+    why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 
 // THE ROW BY TYPE (the owner, 2026-10-13, canvas H2: "2 most common buttons per type and then down arrow for more on all of them"):

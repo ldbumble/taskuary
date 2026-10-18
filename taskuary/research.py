@@ -26,6 +26,10 @@ def _key(cfg, *names) -> str:
     for n in names:
         if str(cfg.get(n) or '').strip(): return str(cfg[n]).strip()
     return ''
+def _no_key(what: str, card: str) -> RuntimeError:
+    """The one sentence for a search card with no key - its card named by words.card, never a typed path."""
+    from . import words
+    return RuntimeError(f'no {what} saved - {words.card(card)}')
 
 
 def run_exa(cfg):
@@ -36,7 +40,7 @@ def run_exa(cfg):
     afterwards is the thing this connector exists to avoid.
     """
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Exa API key saved - Connections → Exa')
+    if not key: raise _no_key('Exa API key', 'Exa')
     body = {'query': cfg['query'], 'numResults': int(cfg.get('num') or 8),
             'contents': {'text': {'maxCharacters': int(cfg.get('chars') or 2000)}}}
     if cfg.get('category'): body['category'] = cfg['category']
@@ -56,7 +60,7 @@ def run_tavily(cfg):
     """{"query", "depth", "num", "topic", "answer", "days"} - search built for agents: it can
     hand back a written ANSWER with the sources beside it, not only a result list."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Tavily API key saved - Connections → Tavily')
+    if not key: raise _no_key('Tavily API key', 'Tavily')
     body = {'query': cfg['query'], 'search_depth': cfg.get('depth') or 'basic',
             'max_results': min(int(cfg.get('num') or 8), 20),
             'topic': cfg.get('topic') or 'general',
@@ -80,7 +84,7 @@ def run_firecrawl(cfg):
     """{"url"} - one page, as clean markdown. onlyMainContent strips the nav and the cookie
     banner, which is most of what a raw fetch returns."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Firecrawl API key saved - Connections → Firecrawl')
+    if not key: raise _no_key('Firecrawl API key', 'Firecrawl')
     if not cfg.get('url'): raise RuntimeError('no url to read')
     body = {'url': cfg['url'], 'formats': ['markdown'],
             'onlyMainContent': cfg.get('main', True) is not False}
@@ -123,7 +127,7 @@ def run_brave(cfg):
     """{"query", "num", "country", "freshness"} - Brave's own index, not a reseller of someone
     else's. The free tier is real (2,000 queries a month) and needs no card."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Brave Search key saved - Connections → Brave Search')
+    if not key: raise _no_key('Brave Search key', 'Brave Search')
     params = {'q': cfg['query'], 'count': int(cfg.get('num') or 10)}
     for a, b in (('country', 'country'), ('freshness', 'freshness')):
         if cfg.get(a): params[b] = str(cfg[a])
@@ -140,7 +144,7 @@ def run_serpapi(cfg):
     """{"query", "num", "engine", "location"} - a real SERP as a search engine renders it, which
     is the point: ranking and the answer box, not a neural re-ranking of the web."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no SerpApi key saved - Connections → SerpApi')
+    if not key: raise _no_key('SerpApi key', 'SerpApi')
     params = {'q': cfg['query'], 'api_key': key, 'engine': cfg.get('engine') or 'google',
               'num': int(cfg.get('num') or 10)}
     if cfg.get('location'): params['location'] = str(cfg['location'])
@@ -157,7 +161,7 @@ def run_serper(cfg):
     """{"query", "num", "country"} - Google results at a fraction of SerpApi's price. Same job,
     different bill; the card exists so the choice is yours rather than ours."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Serper key saved - Connections → Serper')
+    if not key: raise _no_key('Serper key', 'Serper')
     body = {'q': cfg['query'], 'num': int(cfg.get('num') or 10)}
     if cfg.get('country'): body['gl'] = str(cfg['country'])
     r = requests.post('https://google.serper.dev/search', headers={'X-API-KEY': key}, json=body, timeout=TIMEOUT)
@@ -176,7 +180,7 @@ def run_scrapingbee(cfg):
     render on, a headless browser run on THEIR machine. Reader and Firecrawl are cheaper and
     quieter; this is the one for a page that refuses them."""
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no ScrapingBee key saved - Connections → ScrapingBee')
+    if not key: raise _no_key('ScrapingBee key', 'ScrapingBee')
     if not cfg.get('url'): raise RuntimeError('scrapingbee needs a url')
     params = {'api_key': key, 'url': cfg['url'],
               'render_js': 'true' if str(cfg.get('render') or '') .lower() in ('1', 'true', 'yes') else 'false'}
@@ -197,7 +201,7 @@ def run_apify(cfg):
     timeout is the wrong shape for this card, and the error says so rather than hanging.
     """
     key = _key(cfg, 'api_key', 'secret')
-    if not key: raise RuntimeError('no Apify token saved - Connections → Apify')
+    if not key: raise _no_key('Apify token', 'Apify')
     actor = str(cfg.get('actor') or '').strip()
     if not actor: raise RuntimeError('apify needs an actor, e.g. apify~website-content-crawler')
     payload = cfg.get('input') or {}

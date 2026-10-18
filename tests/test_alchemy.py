@@ -62,7 +62,8 @@ class AlchemyReports(unittest.TestCase):
         self.assertEqual(row['error'], 'metadata unavailable')
 
     def test_missing_key_and_http_error_do_not_expose_secret(self):
-        with self.assertRaisesRegex(alchemy.AlchemyError, 'Connections -> Alchemy'):
+        from taskuary import words
+        with self.assertRaisesRegex(alchemy.AlchemyError, words.card('Alchemy')):     # its card, by words.json's path
             alchemy.run_alchemy_prices({})
         with mock.patch.object(alchemy.requests, 'request', return_value=response({'message': 'bad key'}, 401)):
             with self.assertRaises(alchemy.AlchemyError) as ctx:

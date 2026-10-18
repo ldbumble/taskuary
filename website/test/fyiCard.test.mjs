@@ -38,7 +38,7 @@ test("the grouped context, the task summary and the checklist stay renderable - 
   const combined = cards.slice(cards.indexOf("function CombinedTaskText"), cards.indexOf("export function CardShell"));
   assert.match(combined, /doc\.task\?\.Summary/); assert.match(combined, /className="tq-task-focus"/);
   assert.match(combined, /items\.map/); assert.match(combined, /tq-task-focus-item/);
-  assert.match(combined, /Email context · \{messages\.length\} messages combined by triage/);
+  assert.match(combined, /Email context · \{messages\.length\} messages read together/);
   // the walk's cards lead with who wants what and link to the task; the checklist lives on the task
   // (the owner, 2026-09-23: "let's keep the detail task list on the actual task tab")
   assert.match(combined, /const task = list && /);

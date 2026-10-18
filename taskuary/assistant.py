@@ -1912,8 +1912,8 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     kind = str(a.get('kind') or (a.get('triage') or {}).get('kind') or (t or {}).get('Kind') or 'general').lower()
     kind = kind if kind in ('coding', 'general') else 'general'
     # an idea that would be coding, on an install with no coding tool, is the general agent's (agents.coding_ready, 2026-10-16)
-    from . import agents as hub_agents
-    if kind == 'coding' and not hub_agents.coding_ready(store): kind = 'general'
+    from . import capabilities
+    if kind == 'coding' and not capabilities.can_code(store): kind = 'general'
     if t:
         tid = t['TaskId']
         if agent and t.get('Kind') not in ('coding', 'general'): store.update_task(tid, {'Kind': kind}, actor)

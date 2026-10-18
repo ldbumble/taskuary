@@ -92,8 +92,9 @@ def _ai_error(store) -> str:
 
 def state(store) -> dict:
     """{step, brain, ais, keys, mail, connected, sorting, sorted, next}. `step` is ai -> email -> reading -> done."""
-    from . import clis, setup as setup_mod
-    brain, inbound, items = setup_mod._ai(store), setup_mod._inbound(store), setup_mod._first_items(store)
+    from . import clis, setup as setup_mod, capabilities
+    # an AI and a mailbox are asked the way every offer asks them (capabilities.py), so setup and the chips never disagree
+    brain, inbound, items = capabilities.ai_brain(store), capabilities.mail_cards(store), setup_mod._first_items(store)
     # the CLIs, not the profiles that run them: detect also lists every worker on claude, and the first run showed eight
     # "Claude Code" cards (a fresh-install screenshot, 2026-10-14)
     found = list({k['name']: k for k in clis.detect(store) if not k.get('profile')}.values())

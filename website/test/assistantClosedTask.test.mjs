@@ -13,9 +13,9 @@ test("a historical finished-task card is never restored as current funnel work",
     { card: { key: "agent:2", kind: "agentdone" } },
   ]), live);
   assert.equal(restorableCurrent([{ card: { key: "agent:2", kind: "agentdone" } }]), null);
-  assert.match(source, /const last = data\.current \|\| null/);   // the server's validated Current, never the last card (PW-162)
+  assert.match(source, /putOnTable\(data\.current \|\| null, "sync"\)/);   // the server's validated Current, never the last card (PW-162)
   const events = source.slice(source.indexOf("if (data.events?.length)"), source.indexOf("// the item on the table is live"));
-  assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=/,
+  assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=|putOnTable/,
     "live watcher updates do not choose any historical card as Current");
 });
 

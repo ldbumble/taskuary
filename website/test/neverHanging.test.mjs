@@ -10,7 +10,9 @@ const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", impo
 test("with nothing on the table the row's floor is Next, and the chat says to press it", () => {
   // ...only over an EMPTY row: a task card registers its own Next, and the hint over it read as a bug (2026-10-08)
   assert.match(view, /const rowEmpty = !rowVerbs\.list\.some\(\(v\) => !String\(v\.id\)\.startsWith\("floor:"\)\)/);
-  assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canAdvance \|\| !!err\)/);
+  assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canAdvance \|\| !!err \|\| proposing\)/);
+  // ...a proposal waiting on its Confirm keeps Next on the row: the item folded away with its row (the walk's INLINE, 2026-10-17)
+  assert.match(view, /proposing = !!asked && asked\.version != null && \(asked\.status \|\| "proposed"\) === "proposed"/);
   assert.match(view, /useVerbs\("floor", \[\{ id: "floor:next", group: "next", label: btn\("next"\)/);
   assert.doesNotMatch(view, /Press <b>Next<\/b> below to continue/, "the filled Next is enough - no line telling you to press it");
 });

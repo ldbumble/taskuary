@@ -15,6 +15,7 @@ that expires within the hour, and the owner wants the image on the task, not a d
 import base64, json, time
 import requests
 from loguru import logger
+from . import words
 
 IMAGE_TYPES = ('openai_image', 'azure_openai_image', 'xai_image', 'image_server',
                'gemini_image', 'stability_image', 'openrouter_image', 'replicate_image')
@@ -32,7 +33,7 @@ SHAPES = {**{t: 'openai' for t in COMPAT}, 'gemini_image': 'gemini', 'stability_
           'openrouter_image': 'openrouter', 'replicate_image': 'replicate'}
 DEFAULT_MODEL = {'gemini_image': 'gemini-3-flash-image', 'stability_image': 'core',
                  'openrouter_image': 'google/gemini-3-flash-image', 'replicate_image': 'black-forest-labs/flux-schnell'}
-NO_CONNECTOR = ('no image model is set up - add one under Connections > AI - images '
+NO_CONNECTOR = (f"no image model is set up - add one under {words.name('images')} "
                 '(OpenAI, Azure, Gemini, Stability, OpenRouter, Replicate, xAI, or any '
                 'OpenAI-compatible server running on this machine)')
 SIZES = ('1024x1024', '1024x1536', '1536x1024')

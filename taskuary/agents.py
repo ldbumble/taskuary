@@ -274,11 +274,11 @@ def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
     The name that arrives here is the PROFILE's - every install ships one called `coding` - so the
     CLI is read off the command it runs, which is the rule cliinstall.recipe_for exists for. Told
     the profile name, _LOGIN_HOW.get('coding') missed every time and always had."""
-    from . import cliinstall
+    from . import cliinstall, words
     cli = cliinstall.recipe_for(cmd) or name
     how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
     return (f"{name} is signed out on this machine ({why.strip()[:160]}). Press Set it up on "
-            f"Connections > AI CLI agents and sign in there in the pane that opens - or {how} in a terminal.")
+            f"{words.name('ai_apps')} and sign in there in the pane that opens - or {how} in a terminal.")
 
 
 # Windows refuses to START some installs rather than failing inside them, and says only

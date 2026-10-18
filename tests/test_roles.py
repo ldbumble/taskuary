@@ -164,14 +164,14 @@ class AFinishedAgentLeavesItsProposalForTheOwnerTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'waiting')
         self.assertEqual(len([r for r in pending if r['TaskId'] == tid and r['Kind'] == 'action']), 1)
 
-    def test_answering_the_last_proposal_closes_it_yes_or_no(self):
+    def test_answering_the_last_proposal_puts_it_back_on_the_owner_yes_or_no(self):
         from taskuary import proposals
         for verb, status in (('reject', 'rejected'), ('approve', 'approved')):
             s, tid, pending = self.finished()
             rv = next(r for r in pending if r['TaskId'] == tid and r['Kind'] == 'action')
             s.decide_review(rv['ReviewId'], status, None, 'owner', '')
             proposals.settle(s, rv, verb, 'owner')
-            self.assertEqual(s.get_task(tid)['Status'], 'done', verb)
+            self.assertEqual(s.get_task(tid)['Status'], 'open', verb)          # open, for Mark done - Approve closes nothing (2026-10-18)
 
     def test_the_owners_own_done_still_closes_at_once(self):
         from taskuary import wrapup, proposals

@@ -74,7 +74,7 @@ def test_concurrent_approvals_across_connections_deliver_once(tmp_path, outgoing
                 assert pending.result(timeout=5)['ok']
             assert sender.call_count == 1
         assert first.get_review(rid)['DeliveryState'] == 'sent'
-        assert first.get_task(tid)['Status'] == 'done'
+        assert first.get_task(tid)['Status'] == 'open'         # sent - and the task stays open for Mark done (2026-10-18)
         with mock.patch(provider(outgoing)) as sender:
             assert verdicts.decide(second, old, 'approve')['already']
             sender.assert_not_called()
@@ -124,7 +124,7 @@ def test_hard_interruption_recovers_original_attempt_on_reopen(tmp_path, outgoin
             result = verdicts.decide(second, recovered, 'approve')
         sender.assert_not_called()
         assert result['delivery'] == 'reconciled'
-        assert second.get_task(tid)['Status'] == 'done'
+        assert second.get_task(tid)['Status'] == 'open'
         assert second.sent_reply(message_id=mid)['DeliveryState'] == 'sent'
     finally:
         second.close()
@@ -159,11 +159,11 @@ def test_explicit_confirmed_absence_allows_one_new_approved_attempt(s, outgoing)
     assert result['status'] == 'edited'
     assert s.get_review(rid)['FinalText'] == changed
     assert s.get_review(rid)['DeliveryState'] == 'sent'
-    assert s.get_task(tid)['Status'] == 'done'
+    assert s.get_task(tid)['Status'] == 'open'
 
 
 @pytest.mark.parametrize('outgoing', [False, True])
-def test_definite_failure_remains_retryable_and_success_finishes_the_task(s, outgoing):
+def test_definite_failure_remains_retryable_and_success_sends_it(s, outgoing):
     tid, mid, rid = make_review(s, outgoing)
     with mock.patch(provider(outgoing), side_effect=RuntimeError('fixture provider refused (403)')):
         failed = verdicts.decide(s, s.get_review(rid), 'approve')
@@ -175,7 +175,7 @@ def test_definite_failure_remains_retryable_and_success_finishes_the_task(s, out
         sent = verdicts.decide(s, s.get_review(rid), 'approve')
     sender.assert_called_once()
     assert sent['delivery'] == 'sent'
-    assert s.get_task(tid)['Status'] == 'done'
+    assert s.get_task(tid)['Status'] == 'open'
 
 
 @pytest.mark.parametrize('outgoing', [False, True])

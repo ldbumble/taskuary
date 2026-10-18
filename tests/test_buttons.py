@@ -135,7 +135,15 @@ class NoRemovedButton(unittest.TestCase):
 
 class PhantomGuard(unittest.TestCase):
     """A sentence about an item names only buttons that item shows. Next is left out of the scan: the walk always carries it."""
-    def names(self, text): return {l for l in LABELS - {buttons.label('next')} if re.search(rf'(?<![\w]){re.escape(l)}(?![\w])', text)}
+    def names(self, text, it=None):
+        """The buttons a line names. A label inside a longer one ("Send" in "Send to agent") is the longer one, and the item's own
+        title ("Send Omar the numbers") names no button - both read as Send once approve's label became that word (2026-10-18)."""
+        for own in ((it or {}).get('title'), (it or {}).get('ref')): text = text.replace(own, ' ') if own else text
+        found = set()
+        for l in sorted(LABELS - {buttons.label('next')}, key=len, reverse=True):
+            pat = rf'(?<![\w]){re.escape(l)}(?![\w])'
+            if re.search(pat, text): found.add(l); text = re.sub(pat, ' ', text)
+        return found
 
     def test_every_fallback_line(self):
         with mock.patch.object(concierge, '_agent_running', return_value=False):
@@ -143,8 +151,8 @@ class PhantomGuard(unittest.TestCase):
                 shown = {c['label'] for c in chips(it)}
                 for opening in (True, False):
                     line = concierge.fallback(dict(it), opening)
-                    self.assertLessEqual(self.names(line), shown, (it['kind'], it.get('lane'), line))
-                self.assertLessEqual(self.names(concierge._from_you(None, it)), shown)
+                    self.assertLessEqual(self.names(line, it), shown, (it['kind'], it.get('lane'), line))
+                self.assertLessEqual(self.names(concierge._from_you(None, it), it), shown)
 
     def test_the_cannot_lines(self):
         with mock.patch.object(concierge, '_agent_running', return_value=True):
@@ -152,7 +160,7 @@ class PhantomGuard(unittest.TestCase):
                 shown = {c['label'] for c in chips(it)}
                 for v in ('not_ours_kind', 'approve', 'regular_agent', 'coding_agent'):
                     why = concierge.cannot(it, v)
-                    self.assertLessEqual(self.names(why) - {buttons.label('regular_agent')}, shown, (it['kind'], v, why))
+                    self.assertLessEqual(self.names(why, it) - {buttons.label('regular_agent')}, shown, (it['kind'], v, why))
 
     def test_lane_hints_name_no_button_they_do_not_carry(self):
         for row in funnel._VOCAB['lanes'] + funnel._VOCAB['kinds'] + funnel._VOCAB['states']:

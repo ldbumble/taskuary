@@ -31,6 +31,7 @@ import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { dropEcho, forScreen } from "./agentMarkers.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
+import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -222,6 +223,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState("");
+  const caps = useCapabilities();                   // a draft's Send asks its channel here (capabilities.js) and its row
 
   const load = useCallback(async () => {
     try {
@@ -265,7 +267,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
       });
       if (data.send_error) throw new Error(data.send_error);
       const message = verb === "approve"
-        ? (r.Kind === "action" ? "Action completed." : `Sent to ${reviewTarget(r)}.`)
+        ? (r.Kind === "action" ? "Action completed." : `Sent to ${reviewTarget(r)}.`) + (r.TaskId ? ` The task stays open until you ${btn("close")}.` : "")
         : verb === "reject" ? "Action dismissed; nothing was run." : "Marked done; no reply was sent.";
       setEdits((old) => { const next = { ...old }; delete next[r.ReviewId]; return next; });
       await refresh(message);
@@ -326,7 +328,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
               onClick={() => decide(review, "approve")}>{busy ? "Working…" : btn("approve", "action")}</Button>
             <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>Dismiss</Button>
           </> : <>
-            {review.CanSend === false ? null : (
+            {!draftCanSend(caps, review) ? null : (
               <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewDraft(review)).trim()}
                 startIcon={<SendRoundedIcon />} onClick={() => decide(review, "approve")}>
                 {busy.includes("approve") ? "Sending…" : btn("approve")}

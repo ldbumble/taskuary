@@ -388,16 +388,21 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # the word for that. Both used to say "asked you", which claimed a person had asked for
         # something on rows triage derived from a report (the owner, 2026-09-16: "i don't like this
         # asked you, it's queued, working on it, or agent waiting on you").
-        def _work(open_only=False):
+        def _work(open_only=False, why=''):
             handed = str((store.get_task(r['TaskId']) or {}).get('Assignee') or '').startswith('agent:')
             lane = 'time' if urgent else ('queued' if handed and not r.get('Working') else 'yours')
             # open_only: the row is here for the open task alone (its own line was a thank-you, an
             # fyi) - build() lets the wrap-up outrank exactly these, and never a line triage kept as work
             out.append(_item(f"msg:{r['MessageId']}", 'todo', lane, subj, coding=cat == 'coding', open_only=open_only,
-                             why=('urgent - ' if urgent else '') + (r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
+                             why=('urgent - ' if urgent else '') + (why or r.get('RouteReason') or ('a coding task with no agent on it' if cat == 'coding' else 'real work with nobody on it')), **base))
             if group and threads.get(group) is None: threads[group] = out[-1]
         if cat in ('coding', 'todo') and (r.get('NeedsYou') or r.get('Working') or open_work):   # a worked row is kept, tagged, and let go in build()
             _work(); continue
+        # ANSWERED IS NOT ASKED (the owner, 2026-10-18: "sending and closing are two steps"): a reply sent leaves its task open, and
+        # the thread behind it said "asked you" over an answer that had gone - the task stands as itself, on you, for its Mark done
+        if r.get('TaskId') and r.get('TaskStatus') not in ('done', 'dropped') and (r.get('TheirTurn') or r.get('AnsweredAt')) \
+                and not r.get('NeedsYou'):
+            _work(open_only=True, why='you answered - the task is still open'); continue
         if cat == 'review' or (r.get('NeedsYou') and cat not in ('info',)):
             out.append(_item(f"msg:{r['MessageId']}", 'asked', 'time' if urgent else 'asked', subj,
                              why=r.get('RouteReason') or 'a person asked you for something', **base))

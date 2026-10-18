@@ -842,7 +842,7 @@ def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
     t = store.get_task(task_id)
     if not t: raise HTTPException(404, 'task not found')
     from . import slots
-    # an email that closes the task (slots.py): ticking it lets that email go - its draft is never sent
+    # one of the task's emails (slots.py): ticking it lets that email go - its draft is never sent, and the task stays open
     if body.done and any(i['id'] == item_id for i in slots.open_(store, task_id)):
         closed = slots.drop(store, task_id, item_id, ACTOR)
         return {'ok': True, 'checklist': store.task_checklist(task_id), 'closed': closed}
@@ -1414,7 +1414,7 @@ def task_detail(task_id: int):
     tr = store.last_transcript(task_id)
     rs = _resumable(task_id)[0]
     from . import concierge, origin, workflows
-    # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send & close, and
+    # ...and whether its channel can carry a reply, as /api/reviews says: without it a Teams draft offered Send, and
     # the press came back "not sent" instead of the card offering Copy & close from the start
     memo = {}
     for r in d.get('reviews') or []:

@@ -184,7 +184,7 @@ test("a draft that cannot be sent says why on the card, not in a tooltip", () =>
   // outbound.send_block writes one sentence for exactly this (PW-044) and every other surface
   // shows it; the task page kept it in the hover of the button that replaced Send
   const decision = fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8");
-  assert.match(decision, /r\.CanSend === false && \(/);
+  assert.match(decision, /!proposal && !carried && !canSendIt && \(/);                 // canSendIt: capabilities.js draftCanSend
   assert.match(decision, /No reply can be sent from here — \{r\.SendBlock/);
   assert.match(decision, /The draft stays for you to use/);
 });

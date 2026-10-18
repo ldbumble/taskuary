@@ -1,7 +1,7 @@
-"""Close-out and playbook are TWO things (the owner, 2026-10-01): a task closes only when both are settled - its close-out
-(the reply sent, the pull request merged or closed, the issue closed) AND any playbook proposal its agent left (approved or
-dismissed). A sent reply used to close the task and throw the undecided playbook away as "no reply"; deciding the playbook
-after a sent reply then closed nothing. Either order now ends the same way, and neither half alone closes it."""
+"""Close-out and playbook are TWO things (the owner, 2026-10-01): its close-out (the reply sent, the pull request merged or
+closed, the issue closed) and any playbook proposal its agent left (approved or dismissed). A sent reply used to throw the
+undecided playbook away as "no reply". Neither half closes the task, in either order - only the owner's Mark done does
+(2026-10-18: "sending and closing are two steps, never automatic")."""
 import json, unittest
 from unittest import mock
 
@@ -43,25 +43,25 @@ class PlaybookAndCloseOutTests(unittest.TestCase):
         self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
         self.assertEqual(s.get_review(book)['Status'], 'pending', 'the playbook is still the owner\'s to decide')
 
-    def test_then_approving_the_playbook_closes_it(self):
+    def test_then_approving_the_playbook_still_leaves_it_open(self):
         s, tid, reply, book = finished()
         send(s, reply)
         self.assertTrue(decide_book(s, book, 'approve')['ok'])
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
 
-    def test_then_dismissing_the_playbook_closes_it_too(self):
+    def test_then_dismissing_the_playbook_leaves_it_open_too(self):
         s, tid, reply, book = finished()
         send(s, reply)
         decide_book(s, book, 'reject')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
 
     def test_a_decided_playbook_leaves_the_task_open_while_the_reply_waits(self):
         s, tid, reply, book = finished()
         decide_book(s, book, 'approve')
         self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
         self.assertEqual(s.get_review(reply)['Status'], 'pending')
-        send(s, reply)                                   # ...and the reply then is the last half
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        send(s, reply)                                   # ...and the reply then is the last half - still not a close
+        self.assertNotIn(s.get_task(tid)['Status'], ('done', 'dropped'))
 
     def test_a_decided_playbook_alone_closes_nothing(self):
         s, tid, reply, book = finished()

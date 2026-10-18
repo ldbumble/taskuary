@@ -692,8 +692,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try { await (onFinish ? onFinish("done", async () => {}) : loadDetail(selected)); } catch { /* already closed on the server */ }
     loadTasks(); onChanged?.();
   };
-  // SENT (Close out / Approve & send): the send already went through, so the task is read again - closed by it means walk on,
-  // still open (a playbook not yet settled, an agent still working) means stay on it with the new state
+  // SENT (Send / Approve): the send already went through, so the task is read again - it stays open (a send never closes it,
+  // 2026-10-18) and the page stays on it, its Mark done the move now; closed by something else meanwhile means walk on
   const sent = async () => {
     let done = false;
     try { done = String((await api.get(`/api/tasks/${selected}`)).data?.task?.Status || "") === "done"; } catch { /* read it below */ }
@@ -1181,7 +1181,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(!liveSession ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
-      // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
+      // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
       // ONE VERB FOR IT, button and dialog (U13): "Dismiss" on the bar deleted the task behind a dialog that said Delete
       { id: "nat", group: "more", label: labelOfRow("nat"), run: () => setConfirmNAT(true), title: NAT_TITLE },
@@ -1851,13 +1851,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     description={term?.alive
                       ? (replyMessage ? "Close-out controls return when the agent stops." : "No inbound sender is attached to this task.")
                       : closeoutRv
-                        ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them closes the task." : "The last act on GitHub - approving it closes the task.")
+                        ? (replyMessage ? "Your reply to the sender and the last act on GitHub - approving them runs only that; Mark done closes the task." : "The last act on GitHub - approving it runs only that; Mark done closes the task.")
                       : ended && !pendingReview ? "It ended upstream, so no reply is owed. What already went out is below."
                       : replyMessage
-                        ? (owesEmails ? "What goes back to the sender, and the emails this task owes. It closes when they are all sent or dropped."
-                          : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it closes the task.")
+                        ? (owesEmails ? "What goes back to the sender, and the emails this task owes. Sending never closes the task - Mark done does."
+                          : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it never closes the task - Mark done does.")
                       : owesEmails
-                        ? "The emails this task owes - each waits for your yes. It closes when the last is sent or dropped."
+                        ? "The emails this task owes - each waits for your yes. Mark done closes the task."
                         : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
                       : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}

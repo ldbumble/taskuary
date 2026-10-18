@@ -31,8 +31,8 @@ phone the task view is the screen, and **Expand** takes the session full screen 
 |---|---|---|---|
 | **Next** | every card | Marks it read and moves on. Open work you pass comes back after a few hours (Settings → Passed work comes back after) | at once |
 | **Mark done** | a draft reply, a finished agent, a task | The one close: the task is done, an unsent draft is retired, a live agent is stopped, and it leaves your rail | at once |
-| **Close out** | a draft reply, a task's close-out (a pull request to merge, an issue to close) | Finishes the task the normal way for where it lives, then Mark done: sends the draft; on GitHub merges the pull request or closes the issue and posts the reply as its comment. The line under the card says which | you confirm |
-| **Run it** | an agent's proposal | Runs the action the agent proposed | you confirm |
+| **Send** | a draft reply, one of a task's emails, a question for the sender | Sends it, and only that: the task stays open - on the table with its receipt, Mark done or Next - until you **Mark done** | you confirm |
+| **Approve** | an agent's proposal, a task's close-out (a pull request to merge, an issue to close) | Runs only that action - on GitHub merges the pull request or closes the issue and posts the reply as its comment. The task stays open until you **Mark done** | you confirm |
 | **Reply** | a person's ask, a finished agent with no draft | Writes a draft reply. Nothing is sent | at once |
 | **Make a task** | an ask, an fyi, an idea | A task on your own list. No agent starts | you confirm |
 | **Send to agent** | an ask, an fyi, an idea, a meeting, a report | A task and an agent on it. The card asks which agent | you confirm |

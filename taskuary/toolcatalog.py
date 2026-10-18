@@ -43,7 +43,8 @@ PURPOSE = {
                                  'the one on the table. "Remind me about <a task that exists>" - named by ref, sender or '
                                  'subject - is this, never a new to-do'),
     'review.approve':           ("the owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull "
-                                 "request (or closes the issue) FIRST, sending the reply only if that worked"),
+                                 "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
+                                 "task.complete (Mark done) is the close"),
     'agent.answer':             'answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table',
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
@@ -225,8 +226,9 @@ _DECIDE = {
     'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
                         "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
     'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges "
-                        "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never "
-                        "continues an agent's session - that is agent.continue"),
+                        "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only "
+                        "that. It never closes the task - that is close, the owner's own Mark done, a separate step - and never continues an "
+                        "agent's session - that is agent.continue"),
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
     'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
@@ -255,7 +257,7 @@ _DECIDE = {
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons
 _STATES = {'action': "on an agent's proposal or a task's close-out", 'none': 'when nothing is drafted yet'}
 def button_words(v: str) -> str:
-    """'the "Send & close" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
+    """'the "Send" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
     if v not in buttons.VERBS: return ''
     st = buttons.VERBS[v].get('states') or {}
     return f'the "{L(v)}" button' + ''.join(f' ("{w}" {_STATES.get(s, s)})' for s, w in st.items())

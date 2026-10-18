@@ -1,8 +1,9 @@
-"""What closes a task: output slots on its checklist (docs/superpowers/specs/2026-10-05-task-close-slots-design.md).
+"""What a task owes: output slots on its checklist (docs/superpowers/specs/2026-10-05-task-close-slots-design.md).
 
 A task's ending used to be implied by where it came from - one reply to its sender. An ask whose result is several
 messages to several people had nowhere to live, and the first send closed the task and superseded the rest. A slot is
-a checklist item that names one output; the task stays open until every slot is sent or dropped (proposals.closed_out).
+a checklist item that names one output. Sending or dropping one ticks it and closes nothing: only the owner's Mark done
+closes the task (the owner, 2026-10-18: "sending and closing are two steps, never automatic").
 
 Its draft is a review of kind `slot`, never `draft_reply`: every "the task's reply" lookup (pending_review, hold_reviews,
 agent_reply, the close-out redirect) reads draft kinds, so a slot can never be mistaken for the reply or overwritten by it.
@@ -92,39 +93,33 @@ def of_review(rv) -> str | None:
 
 
 def settled(store, rv: dict, sent: bool, actor: str) -> bool:
-    """A slot's draft was sent (or dropped): tick the slot, then close the task if nothing else of it waits.
-    The same gate the reply goes through (proposals.closed_out) - whichever lands last closes it."""
+    """A slot's draft was sent (or dropped): tick the slot and say what is left. The last one closes nothing (2026-10-18)."""
     sid, tid = of_review(rv), rv.get('TaskId')
     if not (sid and tid): return False
     mark(store, tid, sid, done=True, actor=actor)
-    return _close_if_settled(store, tid, f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}.", actor)
+    return _left(store, tid, f"{'Sent' if sent else 'Dropped'}: {rv.get('Reason') or 'one of its emails'}.", actor)
 
 
-def _close_if_settled(store, tid: int, said: str, actor: str) -> bool:
-    """Close only past every guard the reply's own send keeps (verdicts._settle_task_after_sent_reply): an email left,
-    the reply (pending or held while an agent works), an agent still on it, a close-out the owner has not answered."""
+def _left(store, tid: int, said: str, actor: str) -> bool:
+    """Say on the task what one email's send or drop leaves. False always: the task stays open - it used to close on the
+    last one, past the reply's own guards; now only the owner's Mark done closes it."""
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
-    from . import funnel, proposals
-    left = len(open_(store, tid))
-    reply = store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status IN ('pending','held') AND Kind NOT IN ('action', ?) LIMIT 1", (tid, KIND))
-    why = (f"{left} email{'s' if left != 1 else ''} still to go" + (' and the reply' if reply else '') if left or reply
-           else 'the agent is still working on it' if tid in funnel.working_tids(store)
-           else 'its close-out still waits on you' if proposals.closeout_pending(store, tid) else '')
-    if why:
-        store.add_comment(tid, actor, 'human', f'{said} The task stays open - {why}.')
-        return False
-    return proposals.closed_out(store, tid, actor, said)
+    from . import buttons
+    n = len(open_(store, tid))
+    store.add_comment(tid, actor, 'human', f"{said} " + (f"{n} email{'s' if n != 1 else ''} still to go." if n
+                                                       else f"Every email is sent or dropped - {buttons.label('close')} when the task is finished."))
+    return False
 
 
 def drop(store, tid: int, slot_id: str, actor: str) -> bool:
-    """The owner lets one email go: its waiting draft is rejected (never sent), the slot ticked, the task closed if that
-    was the last thing it owed. Not taught as a rejected reply - nothing about the sender's mail was judged."""
+    """The owner lets one email go: its waiting draft is rejected (never sent) and the slot ticked - the task stays open.
+    Not taught as a rejected reply - nothing about the sender's mail was judged."""
     hit = next((i for i in all_(store, tid) if i['id'] == slot_id), None)
     if not hit: return False
     rv = store.get_review(hit['rid']) if hit.get('rid') else None
     if rv and rv.get('Status') == 'pending': store.decide_review(rv['ReviewId'], 'rejected', None, actor, 'dropped - this email is not owed')
     mark(store, tid, slot_id, done=True, actor=actor)
-    return _close_if_settled(store, tid, f"Dropped: {hit['text']}.", actor)
+    return _left(store, tid, f"Dropped: {hit['text']}.", actor)
 
 
 def seen(store, tid: int):
@@ -156,7 +151,7 @@ def draft(store, tid: int, text: str, to: str = '', subject: str = '', slot: str
         made = add(store, tid, [{'to': to, 'about': subject, 'kind': channel, **({} if agent == 'owner' else {'by': 'agent'}), **({'name': name} if name else {})}], f'agent:{agent}')
         if not made: return {'ok': False, 'why': f'could not add an email to {to}'}
         hit, added = made[0], True
-        store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what closes this task.')
+        store.add_comment(tid, agent, 'agent', f'{agent} added an email to {to} to what this task owes.')
     o = hit['out']; kind = o.get('kind') or 'email'
     subj = str(subject or o.get('subject') or (store.get_task(tid) or {}).get('Title') or '')[:200] if kind == 'email' else ''
     deliver = json.dumps({'channel': kind, 'to': [o['to']], 'cc': [], 'subject': subj, 'slot': hit['id'], 'seen': seen(store, tid)})

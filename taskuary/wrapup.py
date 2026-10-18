@@ -372,7 +372,7 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
     from . import slots
     # ...and its proposals: `done` supersedes every pending review, so a bill the agent proposed for the owner's yes was
     # cancelled by the agent's own finish before anyone saw it (the AP portal workflow, live, 2026-10-08). The owner's Mark
-    # done is still the owner's decision and closes as it always did; the last proposal answered closes it (settle).
+    # done is still the owner's decision and closes as it always did; the last proposal answered puts it back on them (settle).
     asks = not owner_done and not keep_open and proposals.owed(store, task_id)
     if asks: store.audit('task', task_id, 'awaits_proposals', actor)
     if not keep_open: store.update_task(task_id, {'Status': 'waiting' if (mid or due or asks or slots.open_(store, task_id)) else 'done'}, actor)

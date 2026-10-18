@@ -58,6 +58,7 @@ import StateMark from "./StateMark.jsx";
 
 
 import NewSheet from "./NewSheet.jsx";
+import { channelCanSend, useCapabilities } from "./capabilities.js";
 import AddIcon from "@mui/icons-material/Add";
 import { isVoicePlaceholder, voiceNoteBody } from "./voiceNote.js";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -1317,6 +1318,8 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
   // mail is deduped but never shows on the timeline again, and their HISTORY goes with it
   const [skipped, setSkipped] = useState(null);
   const [skipConfirm, setSkipConfirm] = useState(false);
+  // can a reply leave on this row's channel: asked of capabilities.js, the one answer - the row's own CanSend until it is in
+  const sendable = channelCanSend(useCapabilities(), sel.Channel, sel.CanSend);
   const [tab, setTab] = useState("summary");      // overview first; the deeper stages stay one click away
   const [filing, setFiling] = useState("");       // "once" teaches nothing; "learn" writes one Memory verdict
   const [fileErr, setFileErr] = useState("");
@@ -1493,14 +1496,14 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
       {pending && (
         <ReviewActions key={`${sel.MessageId}:${pendingId}`} reviewId={pendingId} draft={replyDraft} review={livePending}
           editText={editText} setEditText={writeEditText} decide={decide}
-          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sendable}
           onChanged={onRefresh} channel={sel.Channel} compare={compare} clearCompare={clearCompare} />
       )}
       {!pending && opened && (
         <ReviewActions key={`${sel.MessageId}:${opened.reviewId}`} reviewId={opened.reviewId} draft={replyDraft}
           review={(detail?.reviews || []).find((r) => r.ReviewId === opened.reviewId)}
           editText={editText} setEditText={writeEditText} decide={decide}
-          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sel.CanSend}
+          sendErr={sendErr} clearSendErr={clearSendErr} canSend={sendable}
           onChanged={onRefresh} channel={sel.Channel} compare={compare} clearCompare={clearCompare} />
       )}
       {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (

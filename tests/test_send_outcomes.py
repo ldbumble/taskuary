@@ -33,13 +33,13 @@ SENT = {'channel': 'email', 'to': ['dana@vendor.example'], 'cc': []}
 
 
 class OutcomeTests(unittest.TestCase):
-    def test_a_confirmed_send_closes_the_task_whatever_its_checklist_says(self):
-        s, tid, mid, rid = thread()
+    def test_a_confirmed_send_leaves_the_task_and_its_checklist_as_they_were(self):
+        s, tid, mid, rid = thread(); boxes = [i['done'] for i in s.task_checklist(tid)]
         with mock.patch.object(outbound, 'reply_to_message', return_value=SENT):
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out['ok']); self.assertEqual(out['status'], 'approved')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, True])        # done is the whole job (TQ-0646, 2026-09-18)
+        self.assertEqual(s.get_task(tid)['Status'], 'open')                                  # sending is not closing (2026-10-18)
+        self.assertEqual([i['done'] for i in s.task_checklist(tid)], boxes)                 # ...Mark done ticks every box, a send none
         self.assertEqual(s.get_review(rid)['Status'], 'approved')
 
     def test_a_definite_failure_keeps_the_draft_and_the_task_open_with_a_retry(self):
@@ -51,7 +51,7 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['DraftText'], 'Here it is.')
         with mock.patch.object(outbound, 'reply_to_message', return_value=SENT) as send:
             out2 = verdicts.decide(s, s.get_review(rid), 'approve')
-        self.assertTrue(out2['ok']); send.assert_called_once(); self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertTrue(out2['ok']); send.assert_called_once(); self.assertEqual(s.get_task(tid)['Status'], 'open')
 
     def test_a_provider_that_did_not_answer_is_delivery_unknown_not_a_failure(self):
         s, tid, mid, rid = thread()
@@ -70,7 +70,7 @@ class OutcomeTests(unittest.TestCase):
              mock.patch.object(outbound, 'reconcile_sent', return_value={'channel': 'email', 'to': ['dana@vendor.example'], 'id': 'AAMk'}):
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertTrue(out['ok']); self.assertEqual(out['delivery'], 'reconciled')
-        self.assertEqual(s.get_task(tid)['Status'], 'done'); self.assertEqual(s.get_review(rid)['Status'], 'approved')
+        self.assertEqual(s.get_task(tid)['Status'], 'open'); self.assertEqual(s.get_review(rid)['Status'], 'approved')
 
     def test_a_retry_while_unknown_reconciles_first_and_sends_only_when_the_provider_has_nothing(self):
         s, tid, mid, rid = thread()

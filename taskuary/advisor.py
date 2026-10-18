@@ -107,7 +107,8 @@ SYSTEM = (
     "\"evidence\": [\"<ids from the lines below>\"]}. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something: {L('answer_agent')}; nothing "
-    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a reply that failed to "
+    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a draft waiting: {L('approve')}; "
+    f"a reply already sent - sending never closes the task - and nothing left to do: {L('close')}; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
     "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all.")
 def _system(store) -> str:
@@ -228,7 +229,7 @@ def plain(line: str, verb: str, label: str) -> str:
 
 
 def _offered(verbs: list, said: str):
-    """The verb the model named, as the prompt listed it: "approve (Send & close)" copied whole, the bare id, or the label alone -
+    """The verb the model named, as the prompt listed it: "approve (Send)" copied whole, the bare id, or the label alone -
     an exact-id match dropped three right answers as "verb not offered" (2026-10-13)."""
     w = ' '.join(str(said or '').split()).lower(); bare = re.sub(r'\s*\(.*\)\s*$', '', w)
     return next((v for v in verbs if w in (v['verb'].lower(), f"{v['verb']} ({v['label']})".lower(), str(v['label']).lower())
@@ -311,7 +312,7 @@ def delivery_fix(store, item: dict) -> dict | None:
 
 def offered(store, item: dict) -> list:
     """THE ITEM'S REAL BUTTONS, AND NOTHING IT CANNOT DO: the verbs its row carries minus Next - chips_for, which already drops
-    what this install cannot do (capabilities.py: no Send & close on a draft whose channel cannot send, no coding agent with no
+    what this install cannot do (capabilities.py: no Send on a draft whose channel cannot send, no coding agent with no
     coding tool) - plus the row's own fix when a send failed and named the place that fixes it, under that place's own name.
     An agent waiting on the owner carries Answer it there (chips_for) - its card once offered only End and Remind me, which the
     prompt forbids for someone waiting, so the Advisor stood silent (2026-10-17 audit). Not added here: a paused, stalled or

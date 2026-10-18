@@ -65,7 +65,7 @@ class AgentReplyTests(NoHook):
 
     def test_a_reply_that_already_went_out_is_not_put_back_on_the_table(self):
         # a resumed session saved its first session's reply again after the owner had sent it, and the sender's "Thanks!"
-        # got the same letter queued as a new draft (2026-10-16) - Send & close would have sent it twice
+        # got the same letter queued as a new draft (2026-10-16) - Send would have sent it twice
         s = MemoryStore(); tid, mid = task_with(s)
         rid = wrapup.agent_reply(s, tid, OWN, 'coding')['review_id']
         s._exec("UPDATE review SET Status='approved', FinalText=?, DecidedBy='owner', DecidedAt='2026-09-06 10:00:00' WHERE ReviewId=?", (OWN, rid))

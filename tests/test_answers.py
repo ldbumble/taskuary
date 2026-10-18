@@ -16,13 +16,13 @@ def seed_review(s, draft='Hi Sarah - rerunning tonight.'):
 
 
 class VerdictTests(unittest.TestCase):
-    def test_approve_sends_and_closes(self):
+    def test_approve_sends_and_leaves_the_task_open(self):
         s = MemoryStore(); tid, _, rid = seed_review(s)
         with mock.patch.object(outbound, 'reply_to_message', return_value={'channel': 'email', 'to': ['sarah@x.com']}) as send:
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual((out['status'], out['send_error']), ('approved', None))
         self.assertEqual(send.call_args[0][2], 'Hi Sarah - rerunning tonight.')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
+        self.assertEqual(s.get_task(tid)['Status'], 'open')            # sending is not closing (2026-10-18)
 
     def test_edited_text_wins_and_teaches(self):
         s = MemoryStore(); _, _, rid = seed_review(s)
@@ -41,7 +41,7 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(s.get_review(rid)['Status'], 'pending')      # back in the queue
         self.assertNotEqual(s.get_task(tid)['Status'], 'done')
 
-    def test_sent_manual_reply_closes_coding_task_and_stops_its_agent(self):
+    def test_sent_manual_reply_leaves_a_coding_task_and_its_agent_alone(self):
         s = MemoryStore()
         tid = s.create_task({'Title': 'bank transfer', 'Kind': 'coding', 'Status': 'in_progress'}, 't')
         mid = s.add_message({'TaskId': tid, 'ExternalId': 'manual-answer', 'Channel': 'email',
@@ -55,12 +55,12 @@ class VerdictTests(unittest.TestCase):
              mock.patch.object(terminal, 'close', return_value=True) as close:
             out = verdicts.decide(s, s.get_review(rid), 'approve')
         self.assertEqual(out['status'], 'approved')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
-        close.assert_called_once_with('live-agent')
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')     # Send only sends: Mark done closes it and stops the agent
+        close.assert_not_called()
 
-    def test_a_sent_reply_closes_even_a_task_the_owner_opened_a_session_on(self):
-        """Since 0.3.2.9 a task the owner opened a session on (stay:open) stayed open after its reply went out; the
-        owner, 2026-09-24: "task should close when sending reply". The tag guards against the judge, not the send."""
+    def test_a_sent_reply_closes_no_task_the_owner_opened_a_session_on(self):
+        """It closed here on the send (2026-09-24: "task should close when sending reply"); the owner, 2026-10-18: "sending
+        and closing are two steps, never automatic" - the session and its stay-open mark are left for Mark done."""
         from taskuary import selfclose
         s = MemoryStore()
         tid = s.create_task({'Title': 'long migration', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
@@ -75,10 +75,10 @@ class VerdictTests(unittest.TestCase):
              mock.patch.object(terminal, 'session_for', return_value=live), \
              mock.patch.object(terminal, 'close', return_value=True) as close:
             verdicts.decide(s, s.get_review(rid), 'approve')
-        self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertFalse(selfclose.stays_open(s, tid))                       # the mark came off with it
-        close.assert_called_once()                                          # the parked session ends with the task
-        # ...the one thing that still holds it open is an agent actually WORKING it
+        self.assertEqual(s.get_task(tid)['Status'], 'in_progress')
+        self.assertTrue(selfclose.stays_open(s, tid))                        # the mark stays until the task is marked done
+        close.assert_not_called()
+        # ...and an agent actually WORKING it is left at it all the more
         tid2 = s.create_task({'Title': 'second batch', 'Kind': 'coding', 'Status': 'in_progress'}, 'owner')
         selfclose.claim(s, tid2)
         mid2 = s.add_message({'TaskId': tid2, 'ExternalId': 'progress-2', 'Channel': 'email', 'Subject': 'Migration',

@@ -11,7 +11,7 @@ each stage owns exactly one state badge.
 |---|---|---|---|
 | **Task** | The durable job and who owns it | owner, kind, priority, Reopen, Mark done | Starting or ending an agent session does not complete it |
 | **Agent work** | One or more attempts by a coding or non-coding agent, plus the saved result | harness, model, start, save and end session | Ending a session does not mark the task done or send a reply |
-| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit; **Close out**, **Decline**, **Not yet** | Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits |
+| **Close out** | The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue) | write, generate, edit; **Send**, **Approve**, **Decline**, **Not yet** | Closing the task: sending and approving never do — the task stays open until you **Mark done** |
 
 While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
 the workspace takes most of the page. Full controls, saved results and restart choices come back
@@ -19,45 +19,46 @@ when the agent stops.
 
 ### Who is allowed to close it
 
-![Every way a task ends: you press Mark done, send the reply, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
+![Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges](img/how-a-task-ends.svg "Every road ends in Mark done, or says why the task stays open.")
 
-There is one close, **Mark done**, and every road below leads to it. Mark done always does the
+There is one close, **Mark done**. Sending a reply or approving an agent's act never closes a task by itself (the
+owner's rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
 it leaves your work rail, and the "yours to end" mark comes off.
 
 | You or an agent does | What happens | Stays open when |
 |---|---|---|
 | **Mark done** — the task page, the Assistant's button or card, "done" or "close" in the chat, the phone | Mark done | never |
-| **Close out** with a reply | Sends it, then Mark done | an agent is still working on it, or a new message came in while you were answering — it says why |
+| **Send** a reply (or one of the task's emails) | Sends it, and nothing else: the item stays in front of you with its receipt, and **Mark done** or **Next** | always - sending and closing are two steps |
 | **Tick the last checklist box** | Mark done | an agent is still working on it |
 | **Hand it to a person** | Forwards it, then Mark done | never |
 | **Not ours** / **Not a task** | Deleted if nothing was done on it, otherwise Mark done | never |
 | **Mark done** on a channel that cannot send (the draft stays unsent) | Mark done | never |
 | **An agent says it is finished** (`taskuary --done`) | The session is written up; the task waits for you with its close-out (below) and the draft if a reply is owed, otherwise it is done | its close-out or a reply waits on you, or you opened the session yourself |
-| **Close out** on GitHub, or **Decline** | Merges or closes the pull request, or closes the issue, posts your reply, then Mark done | never |
-| **The pull request or issue it came from is merged or closed** | Same as an agent saying it is finished, with nothing owed | never |
+| **Approve** on GitHub, or **Decline** | Merges or closes the pull request, or closes the issue, and posts your reply - only that | always - **Mark done** when you are finished |
+| **The pull request or issue it came from is merged or closed** | Its close-out is answered and the task says so | always - **Mark done** when you are finished |
 
 A task an agent or a merged pull request closed stays on your work rail until you have read it.
 
 ### The close-out: what finishes it where it lives
 
-Mail is finished by the reply. A pull request is finished by merging it, and an issue by closing it. Whatever the
-system, the card has the same three buttons - only the line under them says what they do there:
+Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
+same three buttons - only the line under them says what they do there. None of them closes the task: **Mark done** does.
 
 | Button | What it does |
 |---|---|
-| **Close out** | Finishes the task the normal way for its system, sends your reply with it, then Mark done |
+| **Approve** (**Send** on a reply alone) | Does the task's last act the normal way for its system, sending your reply with it - and only that |
 | **Decline** | Closes it without doing it, where the system has that difference - a pull request closed unmerged |
 | **Not yet** | Nothing happens; the task stays open and on you (in the Assistant's walk this is **Next**) |
 
-| The task's work is | The rail says | What **Close out** does there |
+| The task's work is | The rail says | What **Approve** does there |
 |---|---|---|
-| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository's rules say it cannot merge yet it says why and offers what fits - **Update branch**, **Re-run checks**, or **Close out anyway** where you allowed it |
+| A pull request the agent opened, or the one the task came from | ✉️ **ready to close out** | Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository's rules say it cannot merge yet it says why and offers what fits - **Update branch**, **Re-run checks**, or **Approve anyway** where you allowed it |
 | An issue the task came from | ✉️ **ready to close out** | Posts your reply as the closing comment and closes the issue |
 | Mail, chat, anything else | ✉️ **ready to close out** | Sends your reply |
 
 If the act is refused, nothing is sent. Merging or closing the pull request on GitHub yourself counts as answering
-it: the task closes by itself. The buttons are yours, so **Agents may push / deploy** does not have to be on - that
+it: the card goes, and the task waits for your **Mark done**. The buttons are yours, so **Agents may push / deploy** does not have to be on - that
 switch is about what an agent may do. A task an agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is
 finished anyway its sentence is filed on the task and the task stays open until you mark it done.

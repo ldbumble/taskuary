@@ -57,11 +57,11 @@ def dock_lines(s):
 def rail(): return mock.patch('taskuary.asks._rail', return_value=[])
 
 
-def test_a_reply_that_asks_closes_the_task_and_starts_the_watch(s):
+def test_a_reply_that_asks_starts_the_watch_and_leaves_the_task_open(s):
     tid, rid = asked(s)
     out = send(s, rid)
     t = s.get_task(tid)
-    assert out['ok'] and t['Status'] == 'done' and 'watching' not in out       # the button never waited on the model
+    assert out['ok'] and t['Status'] != 'done' and 'watching' not in out       # the button never waited on the model
     assert t['AskedWatch'] == 'reply' and t['AskedWatchAt'] and t['AskedVia'] == 'desktop'
     assert s.list_comments(tid)[-1]['Body'] == "Sent. I'll watch for Erin's answer."
 
@@ -112,7 +112,8 @@ def test_an_auto_reply_is_not_an_answer(s):
 
 
 def test_the_sweep_reaches_a_watch_on_a_closed_task(s):
-    tid, rid = asked(s); send(s, rid)
+    from taskuary import concierge
+    tid, rid = asked(s); send(s, rid); concierge.close_task(s, tid, 'owner')    # sent, then Mark done (two steps, 2026-10-18)
     with rail(): asks.check(s, tid)                                             # its close is told (quietly) - still watched
     assert s.get_task(tid)['AskedTold'] == 'finished'
     with mock.patch.object(asks, 'check') as check, mock.patch.object(asks, 'nudge'): asks.sweep(s)

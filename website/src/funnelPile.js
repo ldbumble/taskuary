@@ -195,6 +195,9 @@ export const chipsOf = (message) => {
 };
 // ...and a RECEIPT's, with its task and its bug report among them: both were buttons drawn in the line, against "no button in line
 // ever" (the owner, 2026-10-06) - an Open TQ-x and a Report this bug stood under a failure in the chat (2026-10-17)
+// ...and a SEND'S receipt, which is where the item now stands (the owner, 2026-10-18: "sending and closing are two steps"): Mark
+// done while there is a task to close - never on an item with none - and Next. The server's own (concierge.sent_chips) match these.
+export const sentChips = (tid, ref = null) => ({ chips: [...(tid ? [{ verb: "close", tid, ref, label: label("close") }] : []), { verb: "next", label: label("next") }] });
 export const receiptChips = (m) => {
   const own = chipsOf(m);
   return [...own,

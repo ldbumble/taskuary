@@ -413,7 +413,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
             <Label>And then</Label>
             <Box sx={{ display: "flex", gap: 1 }}>
               <Fork on={mode === "draft"} onClick={() => setMode("draft")} title="Draft it and show me"
-                hint="written in your voice from the thread. It opens for you as 🏁 ready to send and close out." />
+                hint="written in your voice from the thread. It opens for you as 🏁 ready to send - sending it leaves the task open." />
               <Fork on={mode === "task"} onClick={() => setMode("task")} title="Find out first"
                 hint="an agent researches it, then drafts the message from what it actually found." />
             </Box>

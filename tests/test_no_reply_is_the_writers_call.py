@@ -1,6 +1,6 @@
 """Nothing to send is the writer's call, carried out - never an email of one signature (the owner, 2026-10-08: "it hit close with
 not our task and created email with no message?"). The agent was told "not ours, no reply"; the close-out still asked for a reply,
-the writer had nothing to say and signed off, and the card offered Send & close on the signature to six people."""
+the writer had nothing to say and signed off, and the card offered Send on the signature to six people."""
 from unittest import mock
 
 import pytest

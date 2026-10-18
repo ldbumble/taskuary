@@ -1,5 +1,5 @@
 """WHAT THIS INSTALL CAN DO, from one function (capabilities.py) - and the Advisor offered only what the item can really do:
-no Send & close on a draft that cannot leave, the failed send's fix under its own name, advice read back only for its item."""
+no Send on a draft that cannot leave, the failed send's fix under its own name, advice read back only for its item."""
 import json, unittest
 from unittest import mock
 from fastapi.testclient import TestClient

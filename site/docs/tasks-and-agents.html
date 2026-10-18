@@ -135,16 +135,17 @@ each stage owns exactly one state badge.</p>
 <tr>
 <td><strong>Close out</strong></td>
 <td>The reply to the person who asked, and the last act where the task lives (merge its pull request, close its issue)</td>
-<td>write, generate, edit; <strong>Close out</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
-<td>Sending it marks the task done — unless an agent is still working, a new message came in, or its merge still waits</td>
+<td>write, generate, edit; <strong>Send</strong>, <strong>Approve</strong>, <strong>Decline</strong>, <strong>Not yet</strong></td>
+<td>Closing the task: sending and approving never do — the task stays open until you <strong>Mark done</strong></td>
 </tr>
 </tbody></table>
 <p>While a terminal or an assistant chat is live, the task collapses to a one-line context strip and
 the workspace takes most of the page. Full controls, saved results and restart choices come back
 when the agent stops.</p>
 <h3 id="who-is-allowed-to-close-it">Who is allowed to close it<a class="anchor" href="#who-is-allowed-to-close-it" aria-label="Link to this section">#</a></h3>
-<p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, send the reply, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
-<p>There is one close, <strong>Mark done</strong>, and every road below leads to it. Mark done always does the
+<p><figure><img src="img/how-a-task-ends.svg" alt="Every way a task ends: you press Mark done, tick the last box, hand it to a person or say Not ours; or an agent says it is done or its pull request merges" loading="lazy"><figcaption>Every road ends in Mark done, or says why the task stays open.</figcaption></figure></p>
+<p>There is one close, <strong>Mark done</strong>. Sending a reply or approving an agent&#39;s act never closes a task by itself (the
+owner&#39;s rule: sending and closing are two steps). Mark done always does the
 same five things: the task is done, any unsent draft is kept but retired, a live agent is stopped,
 it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <table>
@@ -161,9 +162,9 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>never</td>
 </tr>
 <tr>
-<td><strong>Close out</strong> with a reply</td>
-<td>Sends it, then Mark done</td>
-<td>an agent is still working on it, or a new message came in while you were answering — it says why</td>
+<td><strong>Send</strong> a reply (or one of the task&#39;s emails)</td>
+<td>Sends it, and nothing else: the item stays in front of you with its receipt, and <strong>Mark done</strong> or <strong>Next</strong></td>
+<td>always - sending and closing are two steps</td>
 </tr>
 <tr>
 <td><strong>Tick the last checklist box</strong></td>
@@ -191,20 +192,20 @@ it leaves your work rail, and the &quot;yours to end&quot; mark comes off.</p>
 <td>its close-out or a reply waits on you, or you opened the session yourself</td>
 </tr>
 <tr>
-<td><strong>Close out</strong> on GitHub, or <strong>Decline</strong></td>
-<td>Merges or closes the pull request, or closes the issue, posts your reply, then Mark done</td>
-<td>never</td>
+<td><strong>Approve</strong> on GitHub, or <strong>Decline</strong></td>
+<td>Merges or closes the pull request, or closes the issue, and posts your reply - only that</td>
+<td>always - <strong>Mark done</strong> when you are finished</td>
 </tr>
 <tr>
 <td><strong>The pull request or issue it came from is merged or closed</strong></td>
-<td>Same as an agent saying it is finished, with nothing owed</td>
-<td>never</td>
+<td>Its close-out is answered and the task says so</td>
+<td>always - <strong>Mark done</strong> when you are finished</td>
 </tr>
 </tbody></table>
 <p>A task an agent or a merged pull request closed stays on your work rail until you have read it.</p>
 <h3 id="the-close-out-what-finishes-it-where-it-lives">The close-out: what finishes it where it lives<a class="anchor" href="#the-close-out-what-finishes-it-where-it-lives" aria-label="Link to this section">#</a></h3>
-<p>Mail is finished by the reply. A pull request is finished by merging it, and an issue by closing it. Whatever the
-system, the card has the same three buttons - only the line under them says what they do there:</p>
+<p>Mail is answered by the reply. A pull request is merged, and an issue closed. Whatever the system, the card has the
+same three buttons - only the line under them says what they do there. None of them closes the task: <strong>Mark done</strong> does.</p>
 <table>
 <thead>
 <tr>
@@ -213,8 +214,8 @@ system, the card has the same three buttons - only the line under them says what
 </tr>
 </thead>
 <tbody><tr>
-<td><strong>Close out</strong></td>
-<td>Finishes the task the normal way for its system, sends your reply with it, then Mark done</td>
+<td><strong>Approve</strong> (<strong>Send</strong> on a reply alone)</td>
+<td>Does the task&#39;s last act the normal way for its system, sending your reply with it - and only that</td>
 </tr>
 <tr>
 <td><strong>Decline</strong></td>
@@ -230,13 +231,13 @@ system, the card has the same three buttons - only the line under them says what
 <tr>
 <th>The task&#39;s work is</th>
 <th>The rail says</th>
-<th>What <strong>Close out</strong> does there</th>
+<th>What <strong>Approve</strong> does there</th>
 </tr>
 </thead>
 <tbody><tr>
 <td>A pull request the agent opened, or the one the task came from</td>
 <td>✉️ <strong>ready to close out</strong></td>
-<td>Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository&#39;s rules say it cannot merge yet it says why and offers what fits - <strong>Update branch</strong>, <strong>Re-run checks</strong>, or <strong>Close out anyway</strong> where you allowed it</td>
+<td>Merges it the way you set on the GitHub connection (a draft is marked ready first), then posts your reply as its comment. The card reads the pull request from GitHub first: when the repository&#39;s rules say it cannot merge yet it says why and offers what fits - <strong>Update branch</strong>, <strong>Re-run checks</strong>, or <strong>Approve anyway</strong> where you allowed it</td>
 </tr>
 <tr>
 <td>An issue the task came from</td>
@@ -250,7 +251,7 @@ system, the card has the same three buttons - only the line under them says what
 </tr>
 </tbody></table>
 <p>If the act is refused, nothing is sent. Merging or closing the pull request on GitHub yourself counts as answering
-it: the task closes by itself. The buttons are yours, so <strong>Agents may push / deploy</strong> does not have to be on - that
+it: the card goes, and the task waits for your <strong>Mark done</strong>. The buttons are yours, so <strong>Agents may push / deploy</strong> does not have to be on - that
 switch is about what an agent may do. A task an agent finished before this existed gets its card on the next sync.
 A session you started yourself is yours to complete: the agent is told so, and if it says it is
 finished anyway its sentence is filed on the task and the task stays open until you mark it done.</p>

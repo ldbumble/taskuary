@@ -115,7 +115,7 @@ DONE = ('The work this thread asked for is FINISHED - the complete result below 
         'is that nothing was needed, that is a sentence about their thing, never about our handling '
         'of it.\n'
         # ...and NOTHING is a choice the writer makes, not an empty email: told "not ours, no reply", it had no way to say so,
-        # signed off with nothing above it, and the card offered Send & close on a signature (the owner, 2026-10-08)
+        # signed off with nothing above it, and the card offered Send on a signature (the owner, 2026-10-08)
         f'If the result says no answer should go back - the owner decided not to reply, or there is nothing the sender '
         f'needs to hear - write exactly {NO_REPLY} and nothing else.')
 

@@ -57,7 +57,7 @@ def test_the_files_picked_ride_on_it_and_go_with_it_when_it_is_sent(s):
          mock.patch('taskuary.learn.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
     assert [f['name'] for f in sent.call_args.kwargs['attachments']] == ['corporate-supervisors-template.xlsx']
-    assert s.get_task(tid)['Status'] == 'done'                                                 # sending it was the last thing owed
+    assert s.get_task(tid)['Status'] == 'open'                                                 # sent - Mark done is the owner's (2026-10-18)
 
 
 def test_a_bad_address_or_a_closed_task_is_refused(s):
@@ -139,7 +139,7 @@ def test_the_mailbox_picked_is_the_one_it_is_sent_from(s):
     with pytest.raises(ValueError, match='not a connected mailbox'): email(s, tid, to='paula@northwind.example', mailbox='who@else.example')
 
 
-def test_a_chat_message_goes_to_the_chat_and_closes_the_task_when_sent(s):
+def test_a_chat_message_goes_to_the_chat_and_leaves_the_task_open_when_sent(s):
     tid = work(s)
     out, seen = email(s, tid, to='19:ops@thread.v2', channel='teams', name='Ops channel')
     env = json.loads(s.get_review(out['review_id'])['Deliver'])
@@ -150,7 +150,7 @@ def test_a_chat_message_goes_to_the_chat_and_closes_the_task_when_sent(s):
     with mock.patch('taskuary.outbound.send_out', return_value={'channel': 'teams', 'to': ['19:ops@thread.v2']}) as sent, \
          mock.patch.object(outbound, 'send_block', return_value=''), mock.patch('taskuary.learn.learn_from'):
         verdicts.decide(s, s.get_review(out['review_id']), 'approve')
-    assert sent.call_args.args[1:3] == ('teams', ['19:ops@thread.v2']) and s.get_task(tid)['Status'] == 'done'
+    assert sent.call_args.args[1:3] == ('teams', ['19:ops@thread.v2']) and s.get_task(tid)['Status'] == 'open'
 
 
 def test_a_chat_message_takes_no_cc_and_no_files(s):

@@ -25,9 +25,19 @@ test("the chat renders with or without a live session - a session only adds the 
 });
 
 test("the chat takes the room on the task page, the way a live session does", () => {
-  const mount = tasks.slice(tasks.indexOf('workspaceMode === "general"'), tasks.indexOf('workspaceMode === "wrapping"'));
+  const at = tasks.indexOf('{workspaceMode === "general" && (liveSession');
+  const mount = tasks.slice(at, tasks.indexOf('workspaceMode === "wrapping"', at));
   assert.match(mount, /flex: "1 1 0"/);
-  assert.match(mount, /minHeight: \{ xs: 360, md: 420 \}/);
+  // ...on the canvas, all of the view under the title and its heading (the owner, 2026-10-18: "see more of the agent canvas")
+  assert.match(mount, /minHeight: canvas \? "max\(240px, calc\(100cqh - 104px\)\)" : \{ xs: 360, md: 420 \}/);
+});
+
+// THE AGENT'S CHAT OPENS PUSHED UP on the canvas: the folded Task strip scrolls above, and back down when another step opens
+test("on the canvas the agent step scrolls the Task strip away, and another step scrolls it back", () => {
+  assert.match(tasks, /const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;/);
+  assert.match(tasks, /if \(!agentUp\) \{ if \(canvas && stepsBox\.current\) stepsBox\.current\.scrollTop = 0; return undefined; \}/);
+  assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{\{ px: liveSession/);
+  assert.match(tasks, /\{!sessionView && !\(canvas && stage === "agent"\) && <Box data-tq-triage-facts=""/);
 });
 
 // END SESSION ON A GENERAL AGENT (the owner, 2026-10-13): its chat stayed drawn under Agent work with Close out folded below,

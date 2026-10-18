@@ -37,7 +37,10 @@ function useItemAdvice(card, on) {
 // against the chat body as a SIZE container (assistantView.css .tq-chat-body): a height measured in script was stale
 // whenever the body was measured hidden or before it settled, and the view sat at its 420px floor under a screen of
 // empty canvas (the owner, 2026-09-29: "fill up more width and more height ... see more in one screen")
-export const CANVAS_ITEM_HEIGHT = "max(420px, calc(100cqh - 26px))";
+// ...and ALL of it (the owner, 2026-10-18: "you can almost never see the full output text"): 100cqh is already the body's
+// content box, so taking its padding off again left 26px of cream under the view; only the view's own 12px margin comes off now.
+// The floor is lower too - at 1366x768 the 420px floor was taller than the body, and the view's head scrolled out of sight.
+export const CANVAS_ITEM_HEIGHT = "max(340px, calc(100cqh - 12px))";
 
 // an item the canvas shows as a task view: it has a task, and it is not a proposal, a set-up step or a batch
 export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "walk", "brief", "fyis", "meeting"].includes(kind);

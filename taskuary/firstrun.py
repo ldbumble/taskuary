@@ -28,6 +28,19 @@ MAIL_TYPES = tuple(t for t, _l, _s in MAIL)
 TEST_SECONDS = 60          # a CLI that has not answered in a minute is not going to: say so, never spin
 # a pick that failed, kept until one works: the NEXT line said "pick your AI" again after it, and a reload lost Sign in (2026-10-15)
 FIX = 'first_run_fix'
+# ONE "SETUP IS PUT AWAY" FLAG. The old checklist kept its own (setup_dismissed) beside this one, so setup could be put away on one
+# road and still open on the other (2026-10-18). An older install's flag is folded in on the first read, then only this one is kept.
+DISMISSED, OLD_DISMISSED = 'first_run_dismissed', 'setup_dismissed'
+
+
+def dismissed(store) -> bool:
+    if store.get_setting(OLD_DISMISSED) == '1':
+        store.set_setting(DISMISSED, '1', 'system'); store.set_setting(OLD_DISMISSED, '', 'system')
+    return store.get_setting(DISMISSED) == '1'
+
+
+def set_dismissed(store, on: bool, actor: str = 'owner'):
+    dismissed(store); store.set_setting(DISMISSED, '1' if on else '0', actor)
 
 
 def unchosen(store) -> bool:
@@ -147,10 +160,43 @@ def state(store) -> dict:
     done_about = about(store)['done']
     todo = ('about your work' if step in ('reading', 'done') and not done_about
             else {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step])
-    return {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'pick': pick, 'why': brain.get('why') or ''}, 'fix': fix,
-            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'empty': empty, 'next': nxt,
-            'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
-            'more_connected': more_connected(store), 'dismissed': store.get_setting(DISMISSED) == '1'}
+    out = {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'pick': pick, 'why': brain.get('why') or '',
+                                                 'type': brain.get('Type') or ''}, 'fix': fix,
+           'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'first_items': items,
+           'empty': empty, 'next': nxt, 'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
+           'more_connected': more_connected(store), 'dismissed': dismissed(store)}
+    return {**out, **rail(out)}
+
+
+# THE SETUP RAIL, said here once: which steps are done, which can be opened yet, and what a waiting one waits for. setupSteps.js
+# re-derived all of it from `step` on the page (2026-10-18); it now only marks the row on the canvas.
+RAIL = (('ai', 'Your AI', 'pick an AI that works first'), ('mail', 'Your email', 'connect your email first'),
+        ('about', 'About your work', 'save or skip the answers first'), ('other', 'More connections', ''), ('finish', 'Finish', ''))
+PREV = {'mail': 'ai', 'about': 'mail'}
+
+
+def rail(st: dict) -> dict:
+    """{rail, ready, frontier, left} from a state's step, about_done, dismissed, more_connected, brain and empty.
+
+    THREE STEPS ARE SETUP, the rest is optional (the owner, 2026-10-15: "it should be after email/ai/survey rest is optional"): Finish
+    opens once the AI, the email and About your work are done. A row past what is done waits, and says for what: pressed, About your
+    work opened over no AI and no mail (2026-10-17). Finish ticks only when finished AND the three are done: a setup put away early
+    read "Finish" ticked over no email (a demo walk, 2026-10-17)."""
+    step, about_done, put_away, more = st.get('step'), bool(st.get('about_done')), bool(st.get('dismissed')), st.get('more_connected') or 0
+    ai, mail = step != 'ai', step in ('reading', 'done')
+    ready = mail and about_done
+    done = {'ai': ai, 'mail': mail, 'about': about_done, 'other': more > 0, 'finish': put_away and ready}
+    opens = {**{k: k not in PREV or done[PREV[k]] for k in done}, 'finish': ready or put_away}
+    sub = {'ai': (st.get('brain') or {}).get('name') or '' if ai else '',
+           'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting your mail') if step == 'reading' else 'connected' if mail else '',
+           'about': 'saved' if about_done else '', 'other': f'{more} connected' if more else 'optional',
+           'finish': 'ready - Finish setup is below' if ready else 'after AI, email and About your work'}
+    need = {k: n for k, _l, n in RAIL}
+    rows = [{'key': k, 'label': l, 'done': done[k], 'open': opens[k], 'optional': k == 'other', 'need': n,
+             'sub': sub[k] if opens[k] or done[k] or k == 'finish' else f'waits - {need[PREV[k]]}'} for k, l, n in RAIL]
+    # where setup opens: the first step not done, More connections once the three are
+    frontier = 'ai' if not ai else 'mail' if not mail else 'about' if not about_done else 'other'
+    return {'rail': rows, 'ready': ready, 'frontier': frontier, 'left': {'ai': 2, 'email': 1}.get(step, 0) + (not about_done)}
 
 
 # ONE PICK IS THE AI (the owner, 2026-10-14: "this is only triage ai not the other ai's"): the four brains - triage, general
@@ -406,7 +452,7 @@ def _connect_mail(store, typ: str, address: str, secret: str, host: str = '') ->
 # them fill out name/org/name of role/ then what they are responsible or job description should be prefilled using ai from their email
 # and ask them if it's good description"): name, organisation, title and systems, suggested from the mail; then JOB.md's learned block,
 # written with those in hand, shown for the owner to correct.
-ABOUT_KEY, DISMISSED = 'first_run_about', 'first_run_dismissed'
+ABOUT_KEY = 'first_run_about'
 ABOUT_GROUPS = ('Corporate systems', 'Project management', 'Files & sheets')
 ABOUT_SYSTEM = (
     "From the owner's own mailbox, fill in their setup answers. JSON only:\n"
@@ -617,7 +663,7 @@ def unfinished(store) -> str:
     """Why setup cannot finish yet, in a sentence - '' when it can. The AI and the mail come first: About your work saved from the
     rail closed setup on a day with no AI and no mailbox, under "Setup complete" (the non-coder audit, 2026-10-17). One already
     finished and reopened to change something can always go back to its day."""
-    if store.get_setting(DISMISSED) == '1': return ''
+    if dismissed(store): return ''
     step = state(store)['step']
     return {'ai': 'Pick an AI that works first - setup finishes once it is sorting your mail.',
             'email': 'Connect your email first - setup finishes once your mail is being read.'}.get(step, '')
@@ -626,12 +672,12 @@ def unfinished(store) -> str:
 def finish(store):
     """The owner pressed Finish setup (or walked into the tasks): the canvas is the day from now on, until Setup reopens it. A pick
     that failed on the way is done with too - it stood over "Your AI is X" on the Advisor's line long after (2026-10-17)."""
-    store.set_setting(DISMISSED, '1', 'owner'); store.set_setting(FIX, '', 'owner')
+    set_dismissed(store, True); store.set_setting(FIX, '', 'owner')
 
 
 def settle_existing(store):
     """Once, at start: an install that was already working before the finish button existed is finished; a new one is not."""
-    if store.get_setting(DISMISSED) is not None: return
+    if dismissed(store) or store.get_setting(DISMISSED) is not None: return
     store.set_setting(DISMISSED, '1' if state(store).get('step') == 'done' else '0', 'system')
 
 
@@ -642,7 +688,7 @@ def offer_about(store):
     them once (the owner, 2026-10-16: "on startup i still don't see ... the survey questions"). Finish or Skip closes it for good."""
     if store.get_setting(ABOUT_OFFERED) is not None or about(store)['done']: return
     store.set_setting(ABOUT_OFFERED, '1', 'system')
-    if store.get_setting(DISMISSED) == '1': store.set_setting(DISMISSED, '0', 'system')
+    if dismissed(store): set_dismissed(store, False, 'system')
 
 
 # WHICH CONNECTIONS, said by the Advisor over the row (the owner, 2026-10-15: "use ai to process their survey questions and then

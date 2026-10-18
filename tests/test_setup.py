@@ -41,6 +41,15 @@ def _step(st, key):
     return next(x for x in st['steps'] if x['key'] == key)
 
 
+# The readers each row is built on. Whether a ROW ticks is the one setup state's rule (firstrun.rail: the AI once it is picked and
+# works, the email once the AI is), pinned in OneSetupStateTests; these pin what counts as a brain and as a mailbox at all.
+def _brain(s): return setup._ai(s)['ready']
+def _mail(s): return bool(setup._inbound(s))
+def _pick(s, typ='anthropic'):
+    s.set_setting('triage_ai', f'connector:{typ}', 't')
+    return s
+
+
 class WhatCountsAsSetUpTests(unittest.TestCase):
     def test_a_fresh_install_has_four_steps_before_its_first_result(self):
         st = setup.state(_fresh())
@@ -101,9 +110,9 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
     def test_an_ai_card_with_no_key_is_not_a_brain(self):
         s = _fresh()
         _with_ai(s, secret=None, active=1)
-        self.assertFalse(_step(setup.state(s), 'ai')['done'])
+        self.assertFalse(_brain(s))
         _with_ai(s, secret='sk-real')
-        self.assertTrue(_step(setup.state(s), 'ai')['done'])
+        self.assertTrue(_brain(s))
 
     def test_a_local_model_counts_without_a_key(self):
         """Ollama carries no secret, so "has a key" is the wrong test for it - and getting this
@@ -111,7 +120,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s = _fresh()
         cid = s.get_connector_by_type('ollama')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
-        self.assertTrue(_step(setup.state(s), 'ai')['done'])
+        self.assertTrue(_brain(s))
 
     def test_an_unrelated_working_key_does_not_hide_a_missing_selected_brain(self):
         s = _fresh()
@@ -136,9 +145,9 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         s = _fresh()
         cid = s.get_connector_by_type('outlook')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'tok', 'Active': 1}, 't')
-        self.assertFalse(_step(setup.state(s), 'inbound')['done'])
+        self.assertFalse(_mail(s))
         s.save_source({'Channel': 'email', 'Address': 'me@ours.com', 'ConnectorId': cid, 'Active': 1}, 't')
-        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+        self.assertTrue(_mail(s))
 
     def test_a_report_only_connection_is_not_a_funnel(self):
         """AWS brings no work in. Counting it would call an install ready that can never show a
@@ -155,9 +164,9 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
         cid = s.get_connector_by_type('github')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'ghp_x', 'Active': 1}, 't')
         s.save_source({'Channel': 'github', 'Address': 'ours/repo', 'ConnectorId': cid, 'Active': 1}, 't')
-        self.assertFalse(_step(setup.state(s), 'inbound')['done'])
+        self.assertFalse(_mail(s))
         s.save_connector({'ConnectorId': cid, 'Roles': 'trigger,tool'}, 't')
-        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+        self.assertTrue(_mail(s))
 
     def test_the_seeded_reports_are_not_your_first_messages(self):
         """Also found by running it: the Morning digest and Automation ideas file their own rows
@@ -213,7 +222,7 @@ class WhatCountsAsSetUpTests(unittest.TestCase):
     def test_it_un_does_itself_when_a_connection_is_removed(self):
         """The whole reason it is derived rather than stored."""
         s = _fresh()
-        _with_ai(s)
+        _pick(_with_ai(s))
         self.assertTrue(_step(setup.state(s), 'ai')['done'])
         cid = s.get_connector_by_type('anthropic')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Active': 0}, 't')
@@ -232,7 +241,7 @@ class ACliCountsAsABrainTests(unittest.TestCase):
         with mock.patch('taskuary.agents.runs_here', return_value=True):     # ...one that is installed
             st = _step(setup.state(s), 'ai')
         self.assertTrue(st['done'])
-        self.assertIn('CLI', st['detail'])          # says WHICH kind of brain it is
+        self.assertEqual(st['detail'], 'running on Claude')   # by the name the setup canvas gives it (firstrun.state)
 
     def test_pointing_at_an_agent_that_is_gone_is_not_a_brain(self):
         s = _fresh()
@@ -242,7 +251,7 @@ class ACliCountsAsABrainTests(unittest.TestCase):
     def test_a_key_still_counts_when_no_cli_is_chosen(self):
         s = _fresh()
         _with_ai(s)
-        self.assertTrue(_step(setup.state(s), 'ai')['done'])
+        self.assertTrue(_brain(s))
 
     def test_detection_finds_what_is_on_PATH_and_what_is_configured(self):
         from taskuary import clis
@@ -325,7 +334,7 @@ class TheWizardActuallySetsUpTests(unittest.TestCase):
         with mock.patch('taskuary.llm.test_ai', return_value='model responded: ok'):
             out = c.post(f'/api/connectors/{cid}/test', json={}).json()
         self.assertTrue(out['ok'], out)
-        self.assertTrue(_step(c.get('/api/setup').json(), 'ai')['done'])
+        self.assertTrue(c.get('/api/setup').json()['brain']['ready'])
 
     def test_a_wrong_key_is_reported_and_leaves_the_step_undone(self):
         self._reset()
@@ -356,7 +365,7 @@ class TheWizardActuallySetsUpTests(unittest.TestCase):
                 return 'logged in as dana@gmail.com'
             t.side_effect = _register
             self.assertTrue(c.post(f'/api/connectors/{cid}/test', json={}).json()['ok'])
-        self.assertTrue(_step(c.get('/api/setup').json(), 'inbound')['done'])
+        self.assertIn('Gmail', c.get('/api/setup').json()['connected'])
         self._reset()
 
 
@@ -380,7 +389,7 @@ class AMailboxTriedBeforeStillCountsTests(unittest.TestCase):
         s.save_connector({'ConnectorId': gmail, 'Secret': 'app-password', 'Active': 1,
                           'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
         self.assertIn('logged in', self._mailbox(s, gmail, 'alex@northwind.example'))
-        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+        self.assertTrue(_mail(s))
         # ...and it is one source still, not a second row for the same mailbox
         self.assertEqual(sum(1 for x in s.list_sources(active_only=False) if x['Address'] == 'alex@northwind.example'), 1)
 
@@ -392,7 +401,7 @@ class AMailboxTriedBeforeStillCountsTests(unittest.TestCase):
                           'ConfigJson': json.dumps({'address': 'alex@northwind.example'})}, 't')
         from taskuary import imapmail
         imapmail.ensure_source(s, s.get_connector(gmail))
-        self.assertTrue(_step(setup.state(s), 'inbound')['done'])
+        self.assertTrue(_mail(s))
 
 
 class OptionalModelReviewCompatibilityTests(unittest.TestCase):
@@ -513,10 +522,10 @@ class TheAiRowCanBeTickedFromThePageItSendsYouToTests(unittest.TestCase):
             for cli in ('gemini', 'claude'):
                 server.store.set_setting('triage_ai', '', 't')
                 self.assertIsNotNone(llm._build_llm(server.store), f'before {cli}')
-                self.assertTrue(self._ai_row()['done'], f'before {cli}')
+                self.assertTrue(self._ai_row()['detail'].startswith('running on'), f'before {cli}')
                 c.post('/api/setup/adopt-brain', json={'cli': cli})
                 self.assertIsNotNone(llm._build_llm(server.store), f'after {cli}')
-                self.assertTrue(self._ai_row()['done'], f'after {cli}')
+                self.assertTrue(self._ai_row()['detail'].startswith('running on'), f'after {cli}')
         finally:
             server.store.save_connector({'ConnectorId': had['ConnectorId'], 'Secret': '',
                                          'Active': int(had['Active'] or 0)}, 't')

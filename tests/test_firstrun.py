@@ -214,15 +214,18 @@ class StateTests(unittest.TestCase):
 
     def test_the_top_bar_chip_says_what_is_next_from_the_same_state(self):
         s = MemoryStore()
-        def chip(**st):
-            with mock.patch.object(server, 'store', s), mock.patch('taskuary.firstrun.state', return_value=st):
+        def chip(inbound, items):
+            with mock.patch.object(server, 'store', s), mock.patch('taskuary.setup._ai', return_value={'ready': True, 'Name': 'x', 'pick': ''}),                     mock.patch('taskuary.setup._inbound', return_value=inbound), mock.patch('taskuary.setup._first_items', return_value=items),                     mock.patch('taskuary.clis.detect', return_value=[]):
                 return TestClient(server.app).get('/api/setup').json()
-        out = chip(step='email', todo='connect your email', about_done=True)
-        self.assertEqual((out['first_step'], out['first_todo'], out['first_left']), ('email', 'connect your email', 1))
+        s.set_setting('triage_ai', 'cli:codex', 'owner'); firstrun.skip_about(s)
+        out = chip([], [])
+        self.assertEqual((out['step'], out['todo'], out['left']), ('email', 'connect your email', 1))
         # About your work unanswered is a step left too: the chip read plain "Setup" over a survey never seen (2026-10-16)
-        out = chip(step='done', todo='', about_done=False)
-        self.assertEqual((out['first_left'], out['first_todo']), (1, 'about your work'))
-        self.assertEqual(chip(step='done', todo='', about_done=True)['first_left'], 0)
+        s.set_setting(firstrun.ABOUT_KEY, '', 't')
+        out = chip(['Work mail'], [{'MessageId': 1}])
+        self.assertEqual((out['left'], out['todo']), (1, 'about your work'))
+        firstrun.skip_about(s)
+        self.assertEqual(chip(['Work mail'], [{'MessageId': 1}])['left'], 0)
 
     def test_no_report_asks_an_ai_nobody_picked_yet(self):
         """The shipped Advisor report ran at the first start on the signed-out claude a blank brain falls to, and the bell

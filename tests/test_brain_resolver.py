@@ -58,7 +58,8 @@ def test_no_cli_and_a_key_runs_on_the_key_everywhere(real_pick):
         assert llm.effective_pick(s) == f'connector:{cid}'
         step = _ai_step(s)
         brain = llm.build_llm(s)                                   # the door triage asks
-    assert step['done'] and 'Anthropic' in step['detail']
+    # the brain that runs, by name; the row itself ticks once it is picked (firstrun.rail, test_setup_state)
+    assert step['detail'] == 'running on Anthropic API'
     assert brain is not None and made.call_args[0][0] == 'anthropic'
 
 
@@ -68,7 +69,7 @@ def test_a_migrated_claude_that_is_not_installed_gives_way_to_the_key(real_pick)
     s.set_setting('default_brain', 'claude', 'migration')
     with _cli(False):
         assert llm.effective_pick(s) == f'connector:{cid}'
-        assert _ai_step(s)['done']
+        assert _ai_step(s)['detail'] == 'running on Anthropic API'
 
 
 def test_a_working_cli_and_no_key_runs_on_the_cli_and_ticks(real_pick):
@@ -78,7 +79,7 @@ def test_a_working_cli_and_no_key_runs_on_the_cli_and_ticks(real_pick):
         assert s.get_setting('default_brain') == 'claude'
         assert llm.effective_pick(s) == 'cli:claude'
         step = _ai_step(s)
-    assert step['done'] and 'claude (CLI)' in step['detail']
+    assert step['detail'] == 'running on Claude'                  # by the name the setup canvas gives it
 
 
 def test_a_working_cli_wins_over_a_key_when_nothing_is_chosen(real_pick):

@@ -64,6 +64,7 @@ class TheStopsTests(unittest.TestCase):
         self.assertFalse(by['ai']['done'])
         cid = s.get_connector_by_type('anthropic')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Secret': 'sk-x', 'Active': 1}, 't')
+        s.set_setting('triage_ai', 'connector:anthropic', 't')          # picked: the AI step is a choice (firstrun.rail)
         by = {x['key']: x for x in walk.state(s)['stops']}
         self.assertTrue(by['ai']['done'])
         self.assertEqual(by['ai']['detail'],
@@ -203,6 +204,7 @@ class TheAiStopKnowsWhatYouAlreadyHaveTests(unittest.TestCase):
         s = MemoryStore()
         cid = s.get_connector_by_type('azure_openai')['ConnectorId']
         s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'k', 'Name': 'Azure OpenAI'}, 'o')
+        s.set_setting('triage_ai', 'connector:azure_openai', 'o')
         step = self._ai_step(s)
         self.assertTrue(step['done'])
         self.assertEqual(step['goto']['hash'], 'connector=azure_openai')

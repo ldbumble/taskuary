@@ -358,7 +358,7 @@ Pick up the agent's own last session on a task where it left off, coding or not.
 
 ### `agent.answer`
 
-Answer the agent that is waiting. With no agent on the task (TASK NOW says so) the words wait there for the next agent that starts on it - say that; starting one is the owner's call, never this.
+Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is the owner's call, never this.
 
 - `text`
 - `ref` (optional) - its task when it is not the one on the table

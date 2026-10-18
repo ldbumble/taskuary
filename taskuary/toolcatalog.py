@@ -47,8 +47,8 @@ PURPOSE = {
                                  "request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: "
                                  "task.complete (Mark done) is the close"),
     'agent.answer':             ('answer the agent that is waiting - `text`; `ref` names its task when it is not the one on the table. With no '
-                                 'agent on the task (TASK NOW says so) the words wait there for the next agent that starts on it - say that; '
-                                 'starting one is the owner\'s call, never this'),
+                                 'agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is '
+                                 'the owner\'s call, never this'),
     'agent.stop':               "save and end an agent's session - the one on the table, or the task `ref` names; never a guess at which",
     'report.rerun':             'run that report again',
     'memory.remember':          'keep a fact - `note`',

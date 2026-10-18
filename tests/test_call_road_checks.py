@@ -51,6 +51,28 @@ class TheCallRoadChecksWhatTheButtonsCheckTests(unittest.TestCase):
         self.assertEqual(out['proposal']['kind'], 'agent.stop')
 
 
+    def test_an_answer_with_no_agent_on_the_named_task_goes_back_with_the_real_roads(self):
+        s, tid, mid, item = table()
+        with mock.patch.object(concierge, '_agent_running', return_value=False):
+            said = miss(s, None, 'agent.answer', ref=f'TQ-{tid}', text='use the main branch')
+        self.assertIn(f'No agent is on TQ-{tid:04d}', said); self.assertIn('dispatch.prepare', said)
+        self.assertEqual(s._rows("SELECT * FROM operation WHERE Kind='agent.answer'"), [], 'no card nobody hears')
+
+    def test_an_answer_with_an_agent_on_the_named_task_is_a_card(self):
+        s, tid, mid, item = table()
+        dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+        with mock.patch.object(concierge, '_agent_running', return_value=True):
+            out = concierge.call_turn(s, dock, {'kind': 'agent.answer', 'params': {'ref': f'TQ-{tid}', 'text': 'main'}}, None, 'tell it main')
+        self.assertEqual(out['proposal']['kind'], 'agent.answer')
+
+    def test_a_task_named_in_the_sentence_comes_with_its_facts(self):
+        s, tid, mid, item = table()
+        tid2 = table(s, subject='Laptop for Gail Moreno')[1]
+        now = concierge.named_now(s, f'tell the agent on TQ-{tid2} to hurry', item)
+        self.assertIn(f'TASK NOW: TQ-{tid2:04d}', now); self.assertIn('no agent on it right now', now)
+        self.assertEqual(concierge.named_now(s, f'about TQ-{tid}', item), '', 'the table item has its own facts already')
+
+
 class TheCardSaysWhatIsSoTests(unittest.TestCase):
     def test_a_fact_is_summed_up_by_what_it_says_never_the_tool_name(self):
         s, tid, mid, item = table()

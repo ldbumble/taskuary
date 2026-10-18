@@ -7094,7 +7094,9 @@ def _open_drain_workers(target_store=None) -> bool:
 
 def _close_drain_workers(timeout=None, target_store=None) -> bool:
     with _DRAIN_WORKERS_LOCK:
-        targets = [target_store] if target_store is not None else [w.store for w in _DRAIN_WORKERS.values()]
+        # closing everything closes the app's own store too, worker or not: left open, a drain a finished request
+        # queued a moment later starts a new worker on it after the close (a macOS CI flake, 2026-10-18)
+        targets = [target_store] if target_store is not None else [*{id(o): o for o in [store, *(w.store for w in _DRAIN_WORKERS.values())] if o is not None}.values()]
         keys = [id(target) for target in targets]
         _DRAIN_CLOSED.update(targets)
         workers = [(key, _DRAIN_WORKERS.get(key)) for key in keys if _DRAIN_WORKERS.get(key)]

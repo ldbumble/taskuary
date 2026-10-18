@@ -936,7 +936,7 @@ def from_forgotten(store, used_mids: set, used_tids: set, used_cids: set = froze
         # A closed source task does NOT mean the Assistant post was read. The post may also name a
         # separate follow-up or a pattern learned across several tasks (for example, recurring blank
         # logins). It leaves Unread only through its own idea state, never as a side effect of closing
-        # the task it cited.
+        # the task it cited. (Closing the task it is ABOUT - its `about`, or its mail - writes that state: _task_ideas.)
         m0 = (store.get_message(a['mid']) or {}) if a.get('mid') else {}
         tid = a.get('tid') or m0.get('TaskId')
         if not tid and m0.get('ConversationId'):
@@ -1679,11 +1679,24 @@ def item_for_key(store, key: str) -> dict | None:
 VERBS = ('surfaced', 'done', 'later', 'skip', 'ack')
 
 
+def _task_ideas(store, tid: int) -> list:
+    """The Advisor's open ideas ABOUT this task: tied to it (its `about`), or raised on a mail of it. The task's close settles
+    `task:<n>` and nothing else, so an idea on its mail stood alone on the rail as 'asked' with the work it named already
+    closed (real-AI walk, 2026-10-18). Closing is the owner's word on that work, written into the idea's own state."""
+    mids = {r['MessageId'] for r in store.list_messages(tid)}
+    def about(i):
+        try: a = json.loads(i.get('ActionJson') or '{}')
+        except ValueError: return False
+        return a.get('tid') == tid or (a.get('mid') is not None and a['mid'] in mids)
+    return [i['IdeaId'] for i in store.list_ideas() if i.get('Status') in ('open', 'snoozed') and about(i)]
+
+
 def _idea_done(store, key: str, by: str):
     """Done on an Advisor idea's own row puts the IDEA down, not only the row: the rail wrote its own state and
     nothing else, so the Advisor went on reading the idea as open (I4, 2026-09-27). Not ours is a dismiss before this."""
-    m = re.fullmatch(r'idea:(\d+)', str(key or ''))
-    try: ids = [int(m.group(1))] if m else store.processing_item_ideas(key) if str(key).startswith('processing:') else []
+    m, t = re.fullmatch(r'idea:(\d+)', str(key or '')), re.fullmatch(r'task:(\d+)', str(key or ''))
+    try: ids = ([int(m.group(1))] if m else _task_ideas(store, int(t.group(1))) if t else
+                store.processing_item_ideas(key) if str(key).startswith('processing:') else [])
     except Exception as e: logger.debug(f'the idea behind {key} was not read: {e}'); ids = []
     for i in ids:
         if (store.get_idea(i) or {}).get('Status') in ('open', 'snoozed'): store.set_idea_status(i, 'done', by)

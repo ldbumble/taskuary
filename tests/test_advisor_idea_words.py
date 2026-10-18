@@ -122,6 +122,21 @@ class DoneTests(unittest.TestCase):
         self.assertNotEqual(out.get('task_id'), tid)
 
 
+    def test_closing_a_task_puts_down_the_ideas_about_it_and_no_other(self):
+        """A closed task's mail stood alone on the rail under 'asked': an Advisor idea raised on it held it there (2026-10-18)."""
+        from taskuary import concierge
+        s = MemoryStore(); mid = _mail(s)
+        tid = s.create_task({'Title': 'Reconcile the Q3 ledger', 'Kind': 'task'}, 't'); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (tid, mid))
+        on_mail = s.upsert_idea({'key': 'idea:erin-waits', 'kind': 'idea', 'text': 'Erin still waits on the ledger.', 'sig': 'a',
+                                 'action': {'mid': mid, 'triage': {'intent': 'task'}}}, ago(hours=1))
+        on_task = s.upsert_idea({'key': 'idea:ledger-late', 'kind': 'idea', 'text': 'The ledger is late.', 'sig': 'b', 'action': {'tid': tid}}, ago(hours=1))
+        other = s.upsert_idea({'key': 'idea:gail', 'kind': 'idea', 'text': 'Gail Moreno asked about payroll.', 'sig': 'c', 'action': {}}, ago(hours=1))
+        self.assertIn(on_mail['IdeaId'], [i['idea'] for i in funnel.from_forgotten(s, set(), set())], 'the idea holds the mail before the close')
+        concierge.close_task(s, tid, 'owner')
+        self.assertEqual([s.get_idea(i['IdeaId'])['Status'] for i in (on_mail, on_task, other)], ['done', 'done', 'open'])
+        self.assertEqual([i['idea'] for i in funnel.from_forgotten(s, set(), set())], [other['IdeaId']], 'nothing about the closed task asks')
+
+
 class RailTests(unittest.TestCase):
     NOW = datetime.now()
 

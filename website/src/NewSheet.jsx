@@ -27,6 +27,8 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
+import { useVerbs } from "./actionRow.js";
+import { openAppLink } from "./appLinks.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
@@ -137,6 +139,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
 
   // send
   const [targets, setTargets] = useState([]);          // [{channel, to: [{to, name, hint}]}]
+  const [targetsRead, setTargetsRead] = useState(false);   // an empty list before the answer is not "nothing can send"
   const [channel, setChannel] = useState("");
   const [to, setTo] = useState("");
   const [emailTo, setEmailTo] = useState([]);
@@ -174,10 +177,16 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     if (!open) return;
     api.get("/api/send-targets").then(({ data }) => {
       const list = data.data || [];
-      setTargets(list);
+      setTargets(list); setTargetsRead(true);
       setChannel((c) => c || list[0]?.channel || "");
+      // NOTHING CAN SEND: New opened on Send something anyway, a whole form to fill that could only fail (the walk click-through,
+      // 2026-10-17). It opens on the next tab that works; Send something stays one click away and says what it needs.
+      if (!list.length) setKind((k) => (k === "send" && initialKind === "send" ? "agent" : k));
     }).catch(() => setTargets([]));
   }, [open]);
+  // ...and what it needs is a button on the row, not a sentence pointing at Connections
+  useVerbs("new-send", [{ id: "new:connect-sending", group: "decide", tone: "s", label: "Connect a mailbox",
+    title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink("#connections=Email") }], open && targetsRead && kind === "send" && !targets.length);
 
   const chanTargets = (targets.find((t) => t.channel === channel)?.to) || [];
   const close = () => { if (!busy) onClose?.(); };
@@ -293,7 +302,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 ))}
                 {!targets.length && (
                   <Typography variant="caption" sx={{ color: FAINT }}>
-                    No channel here can send yet — turn replies on for a mailbox or a chat in Connections.
+                    Nothing here can send yet - connect a mailbox, or turn replies on for a chat (the button below).
                   </Typography>
                 )}
               </Box>

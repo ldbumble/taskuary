@@ -192,6 +192,14 @@ export const chipsOf = (message) => {
   if (options.length) return options;
   return message?.chips || message?.card?.chips || [];
 };
+// ...and a RECEIPT's, with its task and its bug report among them: both were buttons drawn in the line, against "no button in line
+// ever" (the owner, 2026-10-06) - an Open TQ-x and a Report this bug stood under a failure in the chat (2026-10-17)
+export const receiptChips = (m) => {
+  const own = chipsOf(m);
+  return [...own,
+    ...(m?.tid && !own.some((c) => c.verb === "open" || c.verb === "opentask") ? [{ verb: "opentask", tid: m.tid, label: `Open ${m.ref || "the task"}` }] : []),
+    ...(m?.status === "error" ? [{ verb: "bug", text: m.text, label: "Report this bug" }] : [])];
+};
 // A card whose verb was pressed is put down at once (`done`), not when the next card arrives: the
 // settle and the next pick take a second, and a card still standing there gets pressed twice (the
 // owner, 2026-09-25, on "All read, next"). It stays the newest card, so nothing older comes back to life.

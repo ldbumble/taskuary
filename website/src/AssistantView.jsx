@@ -41,13 +41,14 @@ import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { ReportLink } from "./BugReportDialog.jsx";
+import { openBugReport, shownError } from "./bugReportOpen.js";
 import { RemindPicker } from "./RemindMe.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns } from "./assistantTurns.js";
@@ -621,11 +622,11 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   );
   if (m.role === "receipt") return (
     <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
-      {!!m.tid && <button type="button" className="tq-chip" style={{ marginLeft: 8 }} onClick={() => actions.openTask?.(m.tid)}>Open {m.ref || "the task"}</button>}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
-          than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons. */}
-      {last && <BarVerbs owner={`line:${m.id}`} chips={chipsOf(m)} busy={actions.busy} onChip={actions.chip} />}
-      {m.status === "error" && <ReportLink text={m.text} />}
+          than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons.
+          ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
+          and an Open TQ-x and a Report this bug link stood in the chat under a failure (the walk click-through, 2026-10-17) */}
+      {last && <BarVerbs owner={`line:${m.id}`} chips={receiptChips(m)} busy={actions.busy} onChip={actions.chip} />}
     </div></div>);
   // The funnel deliberately renames msg:<mid> to agent:<tid> when somebody takes the task. Follow
   // the task identity across that rename; matching only the old key left a live agent displayed as
@@ -1650,6 +1651,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
     // THE PLACE THAT FIXES IT (concierge.recover, outbound.Fixable): an app link, opened on the canvas like any other
     if (c.verb === "go" && c.href) { openAppLink(c.href); return; }
+    // ...a receipt's own task, and its bug report, from the row (they were buttons in the line)
+    if (c.verb === "opentask" && c.tid) { openTaskRef.current?.({ tid: c.tid }); return; }
+    if (c.verb === "bug") { openBugReport(shownError(c.text)); return; }
     if (c.verb === "setupask") { askSetup(); return; }
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
@@ -1990,7 +1994,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // A ROW, A TASK OR AN FYI PUTS THE BROWSE CARD DOWN AT THE CLICK, as one sidebar area replaces another (the owner, 2026-10-01:
   // "if i click on settings while hub is open it closes hub right away ... same should happen if you hit show task after
   // connection tab open"): the open view folds to its line now, and the "…" waits under it while the item loads
-  const browseDown = () => { openCardRef.current = null; setMsgs((m) => m.map((x) => (x.role === "browse" && !x.down ? { ...x, down: true } : x))); };
+  // ...but a New card left behind is no record of anything - nothing was made - so it goes, the way its Cancel takes it: folded,
+  // it stood in the chat as a bare "New" (the walk click-through, 2026-10-17)
+  const browseDown = () => { openCardRef.current = null; setMsgs((m) => m.filter((x) => !(x.role === "browse" && x.area === "new"))
+    .map((x) => (x.role === "browse" && !x.down ? { ...x, down: true } : x))); };
   const openTaskCard = (req) => {
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false); setFoldedKey(null); browseDown();
     const ref = `TQ-${String(req.tid).padStart(4, "0")}`;

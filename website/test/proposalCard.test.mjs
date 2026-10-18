@@ -85,7 +85,7 @@ test("the receipt after a sweep carries Next, and the page puts the table down w
   assert.match(view, /role: "receipt", status: out\.status, text: out\.receipt, tid: p\.tid \|\| res\?\.outcome\?\.taskId, ref: p\.ref \|\| res\?\.outcome\?\.ref, chips/);
   // ...and a failed act's receipt carries its way on (concierge.recover), not the sweep's lone Next
   assert.match(view, /const chips = out\.status !== "done" && res\?\.chips\?\.length \? res\.chips/);
-  assert.match(view, /\{last && <BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{chipsOf\(m\)\}/);   // the receipt hands them to the row by the prompt
+  assert.match(view, /\{last && <BarVerbs owner=\{`line:\$\{m\.id\}`\} chips=\{receiptChips\(m\)\}/);   // the receipt hands them to the row by the prompt
   assert.match(view, /const clearTable = \(\) => \{/);                 // putting the table down is not advancing
   assert.doesNotMatch(view, /if \(step === "offer"\) advance\(\)/);
 });
@@ -157,4 +157,16 @@ test("an answered proposal drops its 'confirm below' - the receipt under it says
   assert.equal(proposalSay(say, { id: "op1", status: "done" }, true), "Put it on my list.");
   assert.equal(proposalSay(say, { id: "op1" }, false), "Put it on my list."); // walked past, its card folded
   assert.equal(proposalSay("Nothing has been started - confirm below, or tell me what to change.", { status: "cancelled" }, true), "");
+});
+
+test("a receipt's Open and Report this bug go to the row, never into the line", async () => {
+  const { receiptChips } = await import("../src/funnelPile.js");
+  const failed = { role: "receipt", status: "error", text: "Not done - no mailbox", tid: 7, ref: "TQ-0007", chips: [{ verb: "next", label: "Next" }] };
+  assert.deepEqual(receiptChips(failed).map((c) => c.verb), ["next", "opentask", "bug"]);
+  assert.deepEqual(receiptChips({ role: "receipt", status: "done", text: "Done", tid: 7 }).map((c) => c.verb), ["opentask"]);
+  assert.deepEqual(receiptChips({ role: "receipt", status: "done", text: "Done", tid: 7, chips: [{ verb: "open", key: "task:7", label: "Open TQ-0007" }] })
+    .map((c) => c.verb), ["open"]);                              // one Open, not two
+  const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(view, /<ReportLink text=\{m\.text\} \/>/);
+  assert.doesNotMatch(view, /className="tq-chip" style=\{\{ marginLeft: 8 \}\} onClick=\{\(\) => actions\.openTask/);
 });

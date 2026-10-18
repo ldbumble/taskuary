@@ -5,6 +5,8 @@ import React, { useState } from "react";
 import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
+import { useVerbs } from "./actionRow.js";
+import { openAppLink } from "./appLinks.js";
 import { NL } from "./sourceShape.js";
 import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
 
@@ -25,6 +27,10 @@ export default function Composer({ onDraft, kind = "report" }) {
     setBusy(false);
   };
 
+  // A MISS THAT NAMES ITS FIX (compose.py: no AI connected, a connection switched off) puts that fix on the row - the sentence
+  // alone said where to go and gave nothing to press (2026-10-17). A miss the owner fixes by asking again leaves Build it as the move.
+  const fix = out?.error && out?.fix?.href ? out.fix : null;
+  useVerbs(`composer:${kind}`, fix ? [{ id: `composer:${kind}:fix`, group: "decide", tone: "s", label: fix.label, run: () => openAppLink(fix.href) }] : [], !!fix);
   const answered = out?.questions?.length && out.questions.every((q) => String(answers[q] || "").trim());
   return (
     <Box sx={{ ...card, p: 1.5, mb: 2, bgcolor: PANEL2 }}>

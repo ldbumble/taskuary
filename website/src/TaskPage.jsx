@@ -32,6 +32,7 @@ import { ClosingCard, completeTask, writeUpSession } from "./closeAgent.jsx";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
+import { FailWays, failOf } from "./failure.jsx";
 import { progressLine } from "./checklist.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
@@ -355,6 +356,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const { agents, models, kinds, brains, brainList, brainModels, generalBrains } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
+  const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line
   const [run, setRun] = useState({ agent: "", model: "", instruction: "" });
   // the next run's pictures - pasted, dropped or attached - ride in its instruction as paths, like Continue's (ContinueBox)
   const runPics = usePromptImages();
@@ -970,7 +972,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const startCodingAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("coding"); setErr("");
+    setStartingAgent("coding"); setErr(""); setStartFail(null);
     try {
       // the repository chosen in the panel is pinned first - the tag is the override the start obeys
       if (startRepo) await api.put(`/api/tasks/${id}/repo`, { repo: startRepo, ...(run.agent ? { agent: run.agent } : {}) });
@@ -995,13 +997,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       const msg = e?.response?.data?.detail || e?.message || "Could not start the coding agent";
       if (e?.outcome?.dispatch === "needs_repo" || /no local path|could not tell which checkout/i.test(msg)) {
         setErr(""); setRepoPick(true); setResumeAfterRepo({ dispatch: true });
-      } else setErr(msg);
+      } else { setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startCodingAgent }); }
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   const startGeneralAgent = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("general"); setErr("");
+    setStartingAgent("general"); setErr(""); setStartFail(null);
     try {
       // one shared dispatch whatever the task's kind was: it switches the kind, starts (or reuses) the
       // assistant session and records the live worker - a relabelled task is not a started one (PW-213)
@@ -1012,11 +1014,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           instruction: withImages(run.instruction.trim(), runPics.paths) || null });
       const outcome = outcomeOf(data);
       if (!stale(id)) setTerm(outcome.state === "started" || outcome.state === "existing" ? (data.session || null) : null);
+      // where the code is, still to say: the same question the coding start asks - it came back quietly and nothing opened
+      if (!stale(id) && outcome.state === "needs_repo") { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }
       if (!stale(id)) { setRun((current) => ({ ...current, instruction: "" })); runPics.clear(); setRestartOpen(false); }
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.");
+      if (!stale(id)) {
+        const msg = e?.response?.data?.detail || "Could not start the agent - check that an AI is connected under Connections, then press it again.";
+        setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGeneralAgent });
+      }
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   // START AN AGENT ON A GOAL (the owner, 2026-10-12): the goal is up to its first step not done. That step becomes a task
@@ -1154,8 +1161,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     { id: "priority", group: "more", label: labelOfRow("priority"), run: (e, a) => setPick({ what: "priority", at: a || e?.currentTarget }), title: hintOfRow("priority") },
     { id: "assign", group: "more", label: labelOfRow("assign"), run: (e, a) => setPick({ what: "assign", at: a || e?.currentTarget }), title: hintOfRow("assign") },
     // a repository is a coding tool's question: with none connected there is nothing to pick one for (B3)
-    ...(!isGeneral && canCode ? [{ id: "repo", group: "more", label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
-      title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
+    // ...and a start HELD for it is the row's own move, not a More item: "It needs a repository" sat over a row with nothing to press
+    ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
+      title: heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo") }] : []),
   ];
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
@@ -1308,7 +1316,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         <Box sx={{ ...frameInner, display: "flex", flexDirection: "column",
           ...(canvas ? { boxSizing: "border-box", flex: "1 1 auto", minHeight: 0 } : { height: "100%" }) }}>
           {/* this view's own errors - they were drawn over the list column when the two were one component */}
-          {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1, flexShrink: 0 }}>{err}</Alert>}
+          {err && <Alert severity="error" onClose={() => { setErr(""); setStartFail(null); }} sx={{ mb: 1, flexShrink: 0 }}>{err}
+            {startFail && startFail.text === err && <FailWays fail={startFail} onRetry={() => { const go = startFail.again; setErr(""); setStartFail(null); go?.(); }} />}</Alert>}
           {!t ? (
             <Box sx={{ height: "100%", display: "grid", placeItems: "center" }}>
               {selected ? <CircularProgress size={20} /> : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
@@ -1757,7 +1766,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* the repository pill only where a coding tool is connected (B3) */}
                       {!isGeneral && canCode && <Button size="small" variant="outlined" sx={chipBtn}
                         startIcon={<AccountTreeIcon sx={{ fontSize: 14, color: "#55697a" }} />}
-                        title={heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in"}
+                        title={heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo")}
                         onClick={pickRepo}>{repoOf(t) || PICK_CODE.toLowerCase()}</Button>}
                       {!isGeneral && canCode && heldRepo && !repoOf(t) && <Typography variant="caption" sx={{ color: "#6b2733", fontWeight: 600 }}>not started - {PICK_CODE.toLowerCase()}</Typography>}
                     </Box>
@@ -1769,7 +1778,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75 }}>
                       <AccountTreeIcon sx={{ fontSize: 16, color: "#55697a" }} />
                       <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1 }}>
-                        Which repository is this about?
+                        Which code is this about?
                       </Typography>
                       <IconButton aria-label="Close repository picker" size="small" onClick={() => { setRepoPick(false); setResumeAfterRepo(null); }}><CloseIcon sx={{ fontSize: 16 }} /></IconButton>
                     </Box>

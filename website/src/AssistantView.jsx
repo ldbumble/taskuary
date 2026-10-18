@@ -575,6 +575,13 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 // THE WORDS LIVE IN THE ROW BY THE PROMPT, never as buttons under a chat line (the owner, 2026-10-06: "no button in line ever
 // anyway. it should on bottom by the prompt"). A line hands its words to the same row the task view fills (actionRow.js).
+// THE LAST UNDO STAYS ON THE BAR (2026-10-18): a receipt's buttons sit on the bar only while it is the newest line, and Remind me moves the
+// walk on at once - its Take it back was gone before it could be pressed. It stays, quiet (never dark), until the next press or a minute
+function UndoVerb({ offer, busy, onRun }) {
+  useVerbs("undo", offer ? [{ id: "chat:undo:take_back", label: offer.label, group: "decide", tone: "s", title: btnHint("take_back"), disabled: busy, run: onRun }] : [], !!offer);
+  return null;
+}
+
 function BarVerbs({ owner, chips, busy, onChip }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
@@ -696,7 +703,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     <div className="tq-canvas-live">
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
-        onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)}
+        onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
         onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} />
     </div>
   );
@@ -865,6 +872,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
+  const [undoOffer, setUndoOffer] = useState(null);   // the last undoable act's Take it back (UndoVerb)
+  useEffect(() => { if (!undoOffer) return; const t = setTimeout(() => setUndoOffer(null), 60000); return () => clearTimeout(t); }, [undoOffer]);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Keep going: { task, anchor, ref }
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
@@ -1712,6 +1721,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
     if (busy || resetting || handoff || !c) return;
+    if (c.verb !== "undo") setUndoOffer(null);                  // another press: the old undo no longer applies
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
     // THE PLACE THAT FIXES IT (concierge.recover, outbound.Fixable): an app link, opened on the canvas like any other
@@ -1747,6 +1757,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref, live: agentOpen(item) }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
+    // TAKE IT BACK (a receipt's undo): the undo is a proposal of its own, run down the same road as any press - flagged so the put-back
+    // offers no undo of itself (concierge's receipt)
+    if (c.verb === "undo" && c.undo?.kind) {
+      try {
+        const { data: op } = await api.post("/api/operations", { kind: c.undo.kind, target: Number(c.undo.target) || 0, params: { ...(c.undo.params || {}), _undo: true } });
+        await runProposal({ id: op.id, version: op.version, kind: op.kind, label: c.undo.label || btn("take_back"), key: item?.key, tid: item?.tid, ref: item?.ref });
+      } catch (e) { setErr(errText(e)); }
+      return;
+    }
     if (c.verb === "retry" && c.op) {
       await runProposal({ id: c.op, version: c.version, kind: c.kind, label: btn("try_again"), key: item?.key, tid: item?.tid, ref: item?.ref,
                           settles: !!c.settles });
@@ -2185,7 +2204,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...but the browser demo has no setup to run - it cannot connect an inbox - so its door is the install note (setup() above), never
   // a setup that waits on "Getting set up…" for good (the browser CI, 2026-10-15)
   setupRef.current = () => (DEMO ? setup() : setFirstRun(true));
+  // A REMINDER'S RECEIPT, from the walk's picker or the task view's: where it went, and its undo under it (remind.set_reminder returns
+  // one) - Take it back puts the old day back. The task view's Remind me left no line at all, and neither offered the undo (2026-10-18)
+  const remindReceipt = (out, tid, ref) => {
+    const undo = out?.undo?.kind ? { verb: "undo", label: btn("take_back"), undo: out.undo } : null;
+    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid, ref,
+      text: out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now.",
+      chips: undo ? [undo] : [] }]);
+    setUndoOffer(undo);
+  };
   const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
+    reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref),
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
@@ -2298,12 +2327,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
+      <UndoVerb offer={undoOffer} busy={busy} onRun={() => { const c = undoOffer; setUndoOffer(null); runChip(c); }} />
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
-        onDone={(out) => {
-          setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: remindOn.path ? null : remindOn.task.TaskId, ref: remindOn.ref,
-            text: out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now." }]);
-          if (out?.remindAt) advance();
-        }} />}
+        onDone={(out) => { remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref); if (out?.remindAt) advance(); }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
         <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>

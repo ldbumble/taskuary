@@ -14,6 +14,7 @@
     "assistant":         {"name": "Settings → Assistant", "href": "#settings=config&group=Assistant"},
     "advisor":           {"name": "Settings → Advisor", "href": "#settings=config&group=Advisor"},
     "coding":            {"name": "Settings → Coding agent", "href": "#settings=config&group=Coding%20agent"},
+    "code":              {"name": "Connections → GitHub", "href": "#connector=github"},
     "agent_permissions": {"name": "Settings → Agent permissions", "href": "#settings=config&group=Agent%20permissions"},
     "rules":             {"name": "Settings → Routing policies", "href": "#settings=policies"},
     "docs":              {"name": "Settings → Docs", "href": "#settings=docs"},

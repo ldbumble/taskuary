@@ -632,8 +632,8 @@ def test_a_start_held_for_a_repository_stays_on_the_rail_saying_so(store):
     funnel.hold_for_repo(store, tid, 'I could not tell which checkout this belongs in')
     _, unread = both(store)
     card = next(i for i in unread['items'] if i.get('tid') == tid)
-    assert card['lane'] == 'queued' and 'needs a repository' in card['why'], card    # a state, never a button the row may not show
-    assert 'needs a repository' in card['why_idle']
+    assert card['lane'] == 'queued' and 'needs to know where the code is' in card['why'], card    # a state, never a button the row may not show
+    assert 'needs to know where the code is' in card['why_idle']
 
 
 def test_a_sender_writing_again_after_the_agent_is_on_you_saying_so(store):

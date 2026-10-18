@@ -41,7 +41,7 @@
     "change_kind":     {"label": "Change who does it", "hint": "You, an assistant, or a drafted reply for you to approve", "row": ["kind"]},
     "priority":        {"label": "Change priority", "hint": "Low, normal, high or urgent", "row": ["priority"]},
     "assign":          {"label": "Assign it", "hint": "You, an agent's profile, or nobody", "row": ["assign"]},
-    "pick_repo":       {"label": "Choose where the code is", "hint": "Which checkout the session works in", "row": ["repo"], "states": {"set": "Change where the code is"}},
+    "pick_repo":       {"label": "Choose where the code is", "hint": "Which folder of code the agent works in", "row": ["repo"], "states": {"set": "Change where the code is"}},
     "attach":          {"label": "Attach a file", "hint": "Adds a file to the reply - nothing is sent until you approve it", "row": ["attach"],
                         "states": {"more": "Attach another"}},
     "report_bug":      {"label": "Report this bug", "hint": "Opens a bug report with what went wrong filled in - you read it before anything is sent", "row": []},

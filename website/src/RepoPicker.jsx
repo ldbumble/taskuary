@@ -10,6 +10,8 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import api from "./api";
 import { namedRepo } from "./repoNames.js";
 import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { openAppLink } from "./appLinks.js";
+import { LOCAL, place } from "./words.js";
 
 // Not every task is about a codebase. "None" is a real answer here, not a blank one: unpinning
 // lets Taskuary guess again (and it will pick something), where this says there is nothing to pick.
@@ -38,7 +40,7 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
       const { data } = await api.put(`/api/tasks/${taskId}/repo`,
         { repo: r.repo, path: withPath || null, ...(agent ? { agent } : {}), restart: !!hasSession });
       setOpen(null); load(); onDone?.(data);
-    } catch (e) { setErr(e?.response?.data?.detail || "Could not set the repo"); }
+    } catch (e) { setErr(e?.response?.data?.detail || "Could not choose that code"); }
     setBusy(false);
   };
 
@@ -50,33 +52,35 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
         <AccountTreeIcon sx={{ fontSize: 14, color: general ? "#55697a" : FAINT }} />
         <Typography variant="caption" sx={{ fontWeight: 600, color: general ? "#55697a" : INK, flex: 1, minWidth: 0 }} noWrap>
-          General — no repository
+          Not code work
         </Typography>
         {general ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
           : <Button size="small" sx={{ fontSize: 10.5, minWidth: 0, px: 0.75 }} disabled={busy}
               onClick={() => choose({ repo: NO_REPO, has_path: true })}>use this</Button>}
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", pl: 2.6, lineHeight: 1.35 }}>
-        A question to answer, not code to change — the session opens in the agent's own folder and is told so.
+        A question to answer, not code to change — the agent works in its own folder and is told so.
       </Typography>
     </Box>
   );
   if (!rows.length) return (
     <Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
-        No code repositories connected yet. Connect GitHub under Connections and Taskuary can work in one - or, if this
-        isn't code work, use the non-coding agent.
+        No code is connected yet. Connect GitHub and the agent can work in your code - or, if this isn't code work, choose
+        it below.
       </Typography>
+      {/* THE PLACE THAT CONNECTS IT, as a button (the rebuilt walk, 2026-10-18): the words named a place with nothing to press */}
+      <Button size="small" variant="outlined" sx={{ mb: 0.75 }} onClick={() => openAppLink(place("code").href)}>Connect GitHub</Button>
       {noRepoRow}
     </Box>
   );
   return (
     <Box>
       <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 0.75 }}>
-        {general ? "No repository — this one is a general question, and the agent is told so."
+        {general ? "Not code work — this one is a question, and the agent is told so."
           : picked ? <>Working in <b style={mono}>{picked}</b>{why ? ` — ${why}` : ""}.</>
-            : "No checkout chosen — the session opens in the agent's own folder."}
-        {" "}Pick another and the session restarts there with the prompt rewritten.
+            : "No code chosen yet — the agent works in its own folder until you pick one."}
+        {" "}Pick another and the agent starts again there, told where it is.
       </Typography>
       {rows.map((r) => {
         const on = r.repo === picked;
@@ -89,7 +93,7 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
                 flex: 1, minWidth: 0 }} noWrap>{r.repo}</Typography>
               {r.tagged && <Chip size="small" label="pinned" sx={{ height: 16, fontSize: 9, bgcolor: "#eae4d8", color: "#55697a" }} />}
               {!r.has_path && (
-                <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label="no local path"
+                <Chip size="small" icon={<WarningAmberIcon sx={{ fontSize: 11 }} />} label={`not ${LOCAL}`}
                   sx={{ height: 16, fontSize: 9, bgcolor: "#dfeade", color: "#55697a" }} />
               )}
               {on && r.has_path ? <CheckIcon sx={{ fontSize: 15, color: "#47654a" }} />
@@ -112,15 +116,15 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
               <Box sx={{ mt: 0.75, pl: 2.6 }}>
                 <Typography variant="caption" sx={{ color: r.found ? "#47654a" : "#55697a", display: "block", mb: 0.5 }}>
                   {r.found
-                    ? `Found a checkout of ${r.repo} (matched by its git remote) — confirm or correct the path.`
-                    : `Where is ${r.repo} checked out on this machine? Saved on the ${agent || "coding"} agent, so every
-                       future task routed here uses it.`}
+                    ? `Found ${r.repo} ${LOCAL} — confirm or correct the folder.`
+                    : `Which folder holds ${r.repo} ${LOCAL}? It is saved on the ${agent || "coding"} agent, so every
+                       later task about it uses it.`}
                 </Typography>
                 <Box sx={{ display: "flex", gap: 0.75, alignItems: "center" }}>
                   <TextField size="small" fullWidth autoFocus value={path} placeholder="C:\\Users\\you\\Documents\\portal"
                     onChange={(e) => setPath(e.target.value)}
                     inputProps={{
-                      "aria-label": "Folder where this repository is checked out",
+                      "aria-label": "The folder that holds this code",
                        style: { fontSize: 11.5, fontFamily: "ui-monospace, monospace" } }} />
                   <Button size="small" variant="contained" disableElevation disabled={busy || !path.trim()}
                     onClick={() => choose(r, path.trim())}>Save</Button>
@@ -134,8 +138,7 @@ export const RepoPicker = ({ taskId, agent = "", hasSession, onDone }) => {
       {noRepoRow}
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>{err}</Typography>}
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-        Paths saved here land on the agent — its repo → folder map (cwd_map) in config.toml, the
-        one place to edit them in bulk.
+        Folders saved here are kept on the agent, so you only say each one once.
       </Typography>
       {picked && (
         <Button size="small" sx={{ fontSize: 10.5, color: DIM }} disabled={busy}
@@ -172,11 +175,11 @@ export const RepoSelect = ({ taskId, agent = "", instruction = "", value, onChan
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mt: 0.75 }}>
       <AccountTreeIcon sx={{ fontSize: 15, color: DIM }} />
-      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>repository</Typography>
-      <select className="tq-start-repo" aria-label="repository" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
+      <Typography variant="caption" sx={{ color: DIM, fontWeight: 600 }}>code</Typography>
+      <select className="tq-start-repo" aria-label="which code" value={value || ""} onChange={(e) => { setManual(true); onChange?.(e.target.value); }}
         style={{ fontSize: 12.5, padding: "4px 6px", borderRadius: 6, border: `1px solid ${BORDER}`, background: "#fff", color: INK, minWidth: 220 }}>
-        {!value && <option value="">choose a repository…</option>}
-        {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : " (no local folder)"}</option>)}
+        {!value && <option value="">choose the code…</option>}
+        {rows.map((r) => <option key={r.repo} value={r.repo}>{r.repo}{r.has_path ? "" : ` (not ${LOCAL})`}</option>)}
       </select>
       <Typography variant="caption" sx={{ color: FAINT }}>
         {!value ? "not clear from the task - choose one to start"

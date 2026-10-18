@@ -364,7 +364,8 @@ def task_now(store, tid: int) -> str:
                  f"{who} is PARKED at its prompt, waiting on you (idle {idle}s)" if waiting else
                  f"{who} is WORKING right now (idle {idle}s) - nothing for the owner until it stops")
     elif t.get('RunStatus') == 'running': state = f"{t.get('RunAgent') or 'an agent'} is running headless - nothing for the owner until it stops"
-    else: state = 'no agent on it right now'
+    # ...and whether its last session can be picked up, so "no agent" comes with the road that is real (2026-10-18)
+    else: state = 'no agent on it right now' + (f" - its last session is saved ({buttons.label('continue')} reopens it)" if store.resumable_session(tid) else '')
     rv = store.pending_review(tid)
     last = next((c for c in reversed(store.list_comments(tid)) if c.get('ActorType') in ('agent', 'assistant_agent')), None)
     lines = [f"TASK NOW: {task_ref(tid)} [{t.get('Status')}, {t.get('Kind')}] {t.get('Title') or ''} - {state}"]
@@ -381,6 +382,14 @@ def task_now(store, tid: int) -> str:
     if last: lines.append(f"  the agent last said ({str(last.get('CreatedAt') or '')[:16]}): {_cut(last.get('Body'), 300)}")
     if t.get('Status') in ('done', 'dropped'): lines.append(f"  CLOSED {str(t.get('ClosedAt') or t.get('UpdatedAt') or '')[:16]} - do not present it as open work")
     return '\n'.join(lines)
+
+
+def named_now(store, text: str, item: dict | None = None) -> str:
+    """TASK NOW for each task the owner NAMED (a TQ ref - an id, not meaning) other than the one on the table: "tell the agent on
+    TQ-n ..." was answered blind about TQ-n, and a coding agent proposed for a task with no session on it (real-AI walk, 2026-10-18)."""
+    own = int((item or {}).get('tid') or 0)
+    refs = [int(n) for n in dict.fromkeys(_TQ_REF.findall(text or '')) if int(n) != own][:4]
+    return '\n'.join(x for x in (task_now(store, n) for n in refs) if x)
 
 
 def _task_whole(store, tid: int) -> str:
@@ -1975,6 +1984,14 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                                f"their email address (task.handoff takes an address as `who`). Nothing was written.")
         if kind == 'agent.stop' and not _agent_running(t) and (store.get_task(t) or {}).get('RunStatus') != 'running':
             raise CallMiss(f"No agent is running on {named} - there is nothing to stop. Say so in plain words. Nothing was changed.")
+        # ...and an ANSWER with nobody to hear it (real-AI walk, 2026-10-18): "tell the agent on TQ-n ..." with no session on TQ-n
+        # came back as a card, and on the next try as a coding agent nobody asked for. The fact goes back, with the real roads
+        # (an agent's own card on the table was built from its live session: it is the run that asked)
+        if (kind == 'agent.answer' and not (it.get('kind') == 'agent' and int(it.get('tid') or 0) == int(t)) and not _agent_running(t)
+                and (store.get_task(t) or {}).get('RunStatus') != 'running'):
+            again = f"{buttons.label('continue')} (agent.continue) reopens its last session, or " if store.resumable_session(t) else ''
+            raise CallMiss(f"No agent is on {named} - nothing would hear that. Say so in plain words and offer what is real: {again}"
+                           "starting an agent on it (dispatch.prepare), which is the owner's call. Nothing was sent.")
     if tk in ('source', 'connector', 'setting', 'script'):
         from . import appfacts
         def _miss(say_): raise CallMiss(say_)         # the model's to fix (say), never passed on as it stands
@@ -3546,6 +3563,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
         asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
+                      + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')
                       + (f"{rail}\n\n" if (rail := _rail_block(p)) else '')

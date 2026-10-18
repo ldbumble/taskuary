@@ -59,7 +59,7 @@ def test_an_expired_sign_in_is_the_apps_fault_and_no_repair_is_asked_for():
     assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page()
     [op] = ops(s, tid)
     assert (op['Kind'], op['Status'], op['out']['cause'], op['out']['source'], op['out']['step']) == ('report.run', 'error', 'taskuary', 'workflow', 1)
-    assert op['out']['app'] == {'area': 'connection', 'name': 'reader'} and op['out']['fix'] == {'label': buttons.label('fix'), 'href': '#connector=reader'}
+    assert op['out']['area'] == {'area': 'connection', 'name': 'reader'} and op['out']['fix'] == {'label': buttons.label('fix'), 'href': '#connector=reader'}
     assert op['out']['what'] == 'the Vendor prices workflow stopped at step 1' and op['out']['retry'] is True
     assert 'in Taskuary, not the steps' in s.list_comments(tid)[-1]['Body']
 
@@ -82,7 +82,7 @@ def test_the_repair_model_may_say_the_app_is_what_broke_and_the_steps_stay():
         out = flow.execute(s, src, tid, llm=answering({'cause': 'taskuary', 'area': 'setting', 'name': 'Web reading', 'why': 'the reader is switched off'}))
     assert out['cause'] == 'taskuary' and workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page()
     [op] = ops(s, tid)
-    assert op['out']['app'] == {'area': 'setting', 'name': 'Web reading'} and op['out']['fix']['href'].startswith('#settings=')
+    assert op['out']['area'] == {'area': 'setting', 'name': 'Web reading'} and op['out']['fix']['href'].startswith('#settings=')
 
 
 def test_after_the_repair_cap_the_run_stops_with_one_failure_record_pointing_at_the_workflow():
@@ -93,7 +93,7 @@ def test_after_the_repair_cap_the_run_stops_with_one_failure_record_pointing_at_
         out = flow.execute(s, src, tid, llm=answering(same, again))
     assert out['failed'] and len(out['repairs']) == flow.MAX_REPAIRS and out['cause'] == 'step'
     [op] = ops(s, tid)
-    assert op['out']['cause'] == 'step' and op['out']['fix'] == {'label': buttons.label('fix'), 'href': f"#report={src['SourceId']}&fix={out['run_id']}"} and 'app' not in op['out']
+    assert op['out']['cause'] == 'step' and op['out']['fix'] == {'label': buttons.label('fix'), 'href': f"#report={src['SourceId']}&fix={out['run_id']}"} and 'area' not in op['out']
     assert any(f"{buttons.label('fix')} on the workflow" in c['Body'] for c in s.list_comments(tid))
 
 

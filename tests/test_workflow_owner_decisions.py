@@ -253,7 +253,7 @@ def test_an_expired_sign_in_is_the_apps_to_fix_so_no_repair_is_tried(s):
         out, run = run_now(s, src, Model())                      # any model call fails the test
     [op] = ops(s, out['task_id'])
     assert run['failed'] and run['repairs'] == [] and saved(s, src) == steps()
-    assert op['out']['cause'] == 'taskuary' and op['out']['app']['area'] == 'connection' and op['out']['fix']['href'].startswith('#connector=')
+    assert op['out']['cause'] == 'taskuary' and op['out']['area']['area'] == 'connection' and op['out']['fix']['href'].startswith('#connector=')
     assert 'sk-live-1234567890abcdef' not in op['Error']
 
 

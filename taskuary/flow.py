@@ -574,18 +574,15 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
 
 
 def _failed_op(store, tid, sid, rid, title, stop, bad, app) -> None:
-    """ONE operation row for a run that stopped on a failed step - what the Advisor reads to say it and offer the fix. The run is
-    already a task, so the fix is the place that mends it: the app's card when the app broke, else the workflow itself."""
-    import uuid
-    from . import buttons
-    out = {'what': f'the {title} workflow stopped at step {stop + 1}', 'source': 'workflow', 'step': stop + 1, 'retry': bool(app),
-           'cause': 'taskuary' if app else 'step', 'fix': {'label': buttons.label('fix'), 'href': app['href'] if app else f'#report={sid}&fix={rid}'},
-           **({'app': {'area': app['area'], 'name': app['name']}} if app else {})}
+    """ONE operation row for a run that stopped on a failed step - what the Advisor reads to say it and offer the fix, written by the
+    shared writer (failures.record) so it is the same row every failure leaves. The run is already a task, so the fix is the place that
+    mends it: the app's card when the app broke, else the workflow itself."""
+    from . import buttons, failures
     try:
-        store.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'report.run', 'TargetKind': 'task', 'TargetId': int(tid), 'Actor': 'workflow',
-                             'ParamsJson': json.dumps({'source_id': sid, 'run_id': rid}), 'Version': 1, 'Status': 'error', 'Evidence': 'none',
-                             'Error': redact.scrub(f"Step {stop + 1} ({bad.get('label')}) failed: {bad.get('error')}")[:500],
-                             'ExecutedAt': datetime.now().isoformat(sep=' ', timespec='seconds'), 'OutcomeJson': json.dumps(out, default=str)})
+        failures.record(store, task_id=tid, kind='report.run', error=f"Step {stop + 1} ({bad.get('label')}) failed: {bad.get('error')}",
+                        what=f'the {title} workflow stopped at step {stop + 1}', source='workflow', step=stop + 1, retry=bool(app),
+                        cause='taskuary' if app else 'step', area={'area': app['area'], 'name': app['name']} if app else None,
+                        fix={'label': buttons.label('fix'), 'href': app['href'] if app else f'#report={sid}&fix={rid}'})
     except Exception as e: logger.warning(f'workflow {title!r}: the failure was not recorded as an operation - {e}')
 
 

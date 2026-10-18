@@ -113,10 +113,11 @@ def targets(flow) -> set:
             # or `base_url` would hand the card's token to a host a page or a mail named. `url` is the page a reader or a scraper
             # reads (its key goes to the provider), and a page that moved is the repair this is for - so it is not counted here.
             out |= {f"creds:{card_of(t)}:{x}:{_host(s.get(x))}" for x in sorted(CONNECTION_KEYS - {'connector_id', 'url', 'endpoint'}) if s.get(x)}
-            if writes(t):
-                out.add(f"write:{scopes.needs(t)}:{t}:{cid}:" + '|'.join(str(s.get(x) or '') for x in WHERE))
-                out |= {f"write:{t}:{cid}:{' '.join(v.lower().split())}:{o.strip(chr(34) + '[]`').lower()}"
-                        for v, o in SQL_WRITE.findall(str(s.get('query') or s.get('script') or ''))}
+            if writes(t): out.add(f"write:{scopes.needs(t)}:{t}:{cid}:" + '|'.join(str(s.get(x) or '') for x in WHERE))
+            # a SQL card is read-level in scopes, yet a card with write access runs the statement as written: an UPDATE repaired
+            # into a DELETE FROM is a wider write whatever the card's level, so the statement's verb and object count on every card
+            out |= {f"write:{t}:{cid}:{' '.join(v.lower().split())}:{o.strip(chr(34) + '[]`').lower()}"
+                    for v, o in SQL_WRITE.findall(str(s.get('query') or s.get('script') or ''))}
             if str(s.get('method') or 'GET').upper() not in ('GET', 'HEAD'): out.add(f"method:{card_of(t)}:{cid}:{str(s['method']).upper()}")
     return out
 
@@ -577,7 +578,7 @@ def _failed_op(store, tid, sid, rid, title, stop, bad, app) -> None:
     import uuid
     from . import buttons
     out = {'what': f'the {title} workflow stopped at step {stop + 1}', 'source': 'workflow', 'step': stop + 1, 'retry': bool(app),
-           'cause': 'taskuary' if app else 'step', 'fix': {'label': buttons.label('fix'), 'href': app['href'] if app else f'#report={sid}'},
+           'cause': 'taskuary' if app else 'step', 'fix': {'label': buttons.label('fix'), 'href': app['href'] if app else f'#report={sid}&fix={rid}'},
            **({'app': {'area': app['area'], 'name': app['name']}} if app else {})}
     try:
         store.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'report.run', 'TargetKind': 'task', 'TargetId': int(tid), 'Actor': 'workflow',

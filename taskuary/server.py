@@ -5714,9 +5714,19 @@ def workflow_repair(sid: int, body: dict = None):
     if not run or run.get('sourceId') != sid: raise HTTPException(404, 'that run is not one of this workflow\'s')
     cfg = workflows.cfg_of(src)
     if isinstance(b.get('flow'), list) and b['flow']: cfg = {**cfg, 'flow': b['flow']}     # the editor's own unsaved list
-    out = flow.repair(store, cfg, run, _llm())
+    out = flow.repair(store, cfg, run, _llm(), sid)
     if out.get('flow'): store.audit('workflow', sid, 'repair_drafted', ACTOR, detail={'run': run['runId'], 'explain': out.get('explain')})
     return out
+
+@app.post('/api/workflows/{sid}/undo-repair')
+def workflow_undo_repair(sid: int, body: dict = None):
+    """Undo the newest self-repair a run made (flow.undo): the steps it replaced come back, while nothing has changed them since."""
+    from . import flow
+    b = body or {}
+    if not str(b.get('run_id') or '').isdigit(): raise HTTPException(422, 'say which run')
+    try: return flow.undo(store, sid, int(b['run_id']), ACTOR)
+    except LookupError as e: raise HTTPException(404, str(e))
+    except (ValueError, RuntimeError) as e: raise HTTPException(409, str(e))
 
 # ── QuickBooks Online (quickbooks.py): OAuth against Intuit, with a redirect back to this server ──
 @app.get('/api/connectors/{cid}/quickbooks/status')

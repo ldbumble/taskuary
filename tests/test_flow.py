@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from taskuary import compose, flow, ingest, proposals, server, workflows
+from taskuary import compose, flow, ingest, proposals, reports, server, workflows
 from taskuary.store import MemoryStore
 
 
@@ -252,45 +252,115 @@ def test_testing_a_write_step_dry_runs_it():
     assert r['status'] == 'dry' and r['head'] == 'would run smb_write' and '"path": "out/20' in r['body']
 
 
-# ── repair ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
-def test_a_failed_scheduled_run_proposes_a_repair_that_is_validated_and_kept_on_yes(db):
-    s = MemoryStore()
-    broken = {**read_dupes(db), 'query': 'SELECT * FROM bills'}
-    src = source(s, [broken, {'id': 's2', 'kind': 'task', 'label': 'T', 'title': 't'}], repair='propose')
-    fixed = [{**read_dupes(db), 'query': 'SELECT * FROM bill'}, {'id': 's2', 'kind': 'task', 'label': 'T', 'title': 't'}]
-    tid, seen = run_task(s, src), []
-    out = flow.execute(s, src, tid, 'schedule', llm=answering({'flow': fixed, 'explain': 'the table is called bill'}, seen=seen))
-    assert out['failed'] and json.loads(seen[0]['user'])['failed_step']['error'].startswith('no such table')
-    rv = s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))
-    p = json.loads(rv['DraftText'])
-    assert (p['action'], p['source_id'], p['why']) == ('repair_workflow', src['SourceId'], 'the table is called bill')
-    assert 'query: SELECT * FROM bills -> SELECT * FROM bill' in p['changes']
-    proposals.execute(s, rv)
-    assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed
-    # ...and a list that does not hold is refused at the yes, never saved
-    rv2 = {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps({**p, 'flow': [{'id': 's1', 'kind': 'task'}]})}
-    with pytest.raises(RuntimeError, match='do not hold'): proposals.execute(s, rv2)
-    assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed
+# ── repair: a workflow is a goal ────────────────────────────────────────────────────────────────────────────────────────
+OLD_PAGE, NEW_PAGE = 'https://vendor.example/prices', 'https://vendor.example/catalog/prices'
 
 
-def test_auto_repair_keeps_the_fix_and_reruns_from_the_failed_step_once(db):
+def page_flow(**cfg):
+    return [{'id': 's1', 'kind': 'source', 'label': 'Read the price page', 'type': 'reader', 'url': OLD_PAGE},
+            {'id': 's2', 'kind': 'task', 'label': 'File the prices', 'title': 'Prices: {{s1.head}}'}]
+
+
+@pytest.fixture
+def site():
+    """A vendor's price page that moved: the old address now fails, the new one reads."""
+    def read(cfg):
+        if cfg.get('url') != NEW_PAGE: raise RuntimeError('404: the page has no price table any more')
+        return '3 rows', '{"item": "Badge", "price": 4}'
+    with mock.patch.dict(reports.REGISTRY, {'reader': read}), mock.patch.object(reports, 'gate', lambda *a: None): yield
+
+
+def fixed(**more):
+    return [{'id': 's1', 'kind': 'source', 'label': 'Read the price page', 'type': 'reader', 'url': NEW_PAGE},
+            {'id': 's2', 'kind': 'task', 'label': 'File the prices', 'title': 'Prices: {{s1.head}}', **more}]
+
+
+def test_a_site_that_changed_its_layout_is_repaired_by_itself_and_the_run_completes(site):
+    s, seen = MemoryStore(), []
+    src = source(s, page_flow(), goal='File this week\'s vendor prices as a task for the owner.')
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=answering({'same_goal': True, 'size': 'small', 'flow': fixed(), 'why': 'the page moved'}, seen=seen))
+    asked = json.loads(seen[0]['user'])
+    assert asked['goal'].startswith("File this week's") and asked['error'].startswith('404') and 'untrusted_data' in asked
+    assert [r['status'] for r in out['steps']] == ['repaired', 'ok', 'ok'] and not out['failed']
+    assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed() and s.get_task(tid)['Status'] == 'done'
+    [rp] = s.report_run_of_task(tid)['repairs']
+    assert rp['error'].startswith('404') and rp['why'] == 'the page moved' and rp['was'] == page_flow()
+    assert any(c['Body'].startswith('Repaired step 1 (Read the price page) itself') for c in s.list_comments(tid))
+    assert s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)) == []
+    # Take it back: the steps before the repair come back, once, and only while nothing else changed them
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        assert c.post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': out['run_id']}).status_code == 200
+        assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page_flow()
+        assert c.post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': out['run_id']}).status_code == 409
+
+
+def test_a_repair_that_adds_a_recipient_waits_for_the_owner(site):
     s = MemoryStore()
-    src = source(s, [{**read_dupes(db), 'query': 'SELECT * FROM bills'}], repair='auto')
-    still_broken = [{**read_dupes(db), 'query': 'SELECT * FROM bils'}]
-    llm = answering({'flow': still_broken, 'explain': 'try bils'}, {'flow': [read_dupes(db)], 'explain': 'never asked'})
-    out = flow.execute(s, src, run_task(s, src), 'schedule', llm=llm)
-    assert out['failed'] and workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == still_broken
-    assert len(s.report_runs(src['SourceId'])) == 2               # the run and its one rerun - no loop
+    steps = [*page_flow()[:1], {'id': 's2', 'kind': 'draft', 'label': 'Email Gail', 'to': 'gmoreno@northwind.example', 'about': '{{s1}}'}]
+    src = source(s, steps)
+    new = [fixed()[0], {**steps[1], 'to': 'gmoreno@northwind.example, buyer@vendor.example'}]
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=answering({'same_goal': True, 'size': 'small', 'flow': new, 'why': 'page moved'}))
+    assert out['failed'] and workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == steps
+    p = json.loads(s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))['DraftText'])
+    assert p['action'] == 'repair_workflow' and 'buyer@vendor.example' in p['why']
+
+
+def test_a_repair_that_changes_the_goal_waits_for_the_owner(site):
+    s = MemoryStore()
+    src = source(s, page_flow())
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=answering({'same_goal': False, 'size': 'small', 'flow': fixed(), 'why': 'a different page'}))
+    assert out['failed'] and workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page_flow()
+    p = json.loads(s._one("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (tid,))['DraftText'])
+    assert 'it would change the goal' in p['why']
+    proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps(p)})          # the owner's yes keeps it
+    assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == fixed()
+    with pytest.raises(RuntimeError, match='do not hold'):                                  # a list that does not hold is never saved
+        proposals.execute(s, {'ReviewId': 0, 'TaskId': tid, 'DraftText': json.dumps({**p, 'flow': [{'id': 's1', 'kind': 'task'}]})})
+
+
+def test_repairs_stop_at_the_cap_and_never_loop(site):
+    s = MemoryStore()
+    src = source(s, page_flow())
+    still = lambda n: [{**page_flow()[0], 'url': f'https://vendor.example/try{n}'}, page_flow()[1]]
+    llm = answering(*[{'same_goal': True, 'size': 'small', 'flow': still(n), 'why': f'try {n}'} for n in range(5)])
+    tid = run_task(s, src)
+    out = flow.execute(s, src, tid, 'schedule', llm=llm)
+    assert out['failed'] and len(out['repairs']) == flow.MAX_REPAIRS
+    assert [r['status'] for r in out['steps']] == ['repaired', 'repaired', 'failed']
+    assert any(c['Body'].startswith(f'Stopped after {flow.MAX_REPAIRS} repairs') for c in s.list_comments(tid))
+
+
+def test_repair_off_just_stops_and_propose_always_asks(site):
+    s = MemoryStore()
+    src = source(s, page_flow(), repair='off')
+    assert flow.execute(s, src, run_task(s, src), llm=no_model)['failed']
+    src = source(s, page_flow(), repair='propose')
+    tid = run_task(s, src)
+    flow.execute(s, src, tid, llm=answering({'same_goal': True, 'size': 'small', 'flow': fixed(), 'why': 'moved'}))
+    assert 'repairs wait on you' in json.loads(s._one("SELECT * FROM review WHERE TaskId=?", (tid,))['DraftText'])['why']
+
+
+def test_the_gate_reads_the_steps_not_the_models_word():
+    old = page_flow()
+    assert flow.targets(fixed()) == flow.targets(old)                                         # a moved URL reaches nothing new
+    assert flow.targets(fixed(assignee='ap')) - flow.targets(old) == {'task:ap'}
+    put = {'id': 's3', 'kind': 'source', 'type': 'smb_write', 'path': 'Prices/now.csv'}
+    assert any(t.startswith('write:') for t in flow.targets([*old, put]) - flow.targets(old))
+    assert flow.targets([*old, {**put, 'path': 'Elsewhere/now.csv'}]) != flow.targets([*old, put])
 
 
 def test_fix_with_ai_returns_a_diff_and_saves_nothing(db):
     s = MemoryStore()
-    src = source(s, [{**read_dupes(db), 'query': 'SELECT * FROM bills'}])
+    src = source(s, [{**read_dupes(db), 'query': 'SELECT * FROM bills'}], repair='off')
     out = flow.execute(s, src, run_task(s, src), llm=no_model)
-    fixed = [{**read_dupes(db), 'query': 'SELECT * FROM bill'}]
-    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_llm', return_value=answering({'flow': fixed, 'explain': 'bill'})):
+    good = [{**read_dupes(db), 'query': 'SELECT * FROM bill'}]
+    with mock.patch.object(server, 'store', s), mock.patch.object(server, '_llm', return_value=answering({'flow': good, 'why': 'bill', 'same_goal': True, 'size': 'small'})):
         r = TestClient(server.app).post(f"/api/workflows/{src['SourceId']}/repair", json={'run_id': out['run_id']}).json()
-    assert r['flow'] == fixed and r['diff'][0]['keys'] == [{'key': 'query', 'was': 'SELECT * FROM bills', 'now': 'SELECT * FROM bill'}]
+    assert r['flow'] == good and r['auto_ok'] and r['diff'][0]['keys'] == [{'key': 'query', 'was': 'SELECT * FROM bills', 'now': 'SELECT * FROM bill'}]
     assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'][0]['query'] == 'SELECT * FROM bills'
 
 
@@ -324,3 +394,38 @@ def test_the_composer_may_peek_at_a_schema_before_it_writes_a_step(db):
 
 
 TELL = {'id': 's2', 'kind': 'task', 'label': 'Tell finance', 'title': 'Duplicate bills: {{s1.rows}}'}
+
+
+# ── a workflow that only reads is a report (the owner, 2026-10-18) ──────────────────────────────────────────────────────
+def test_an_ask_that_only_pulls_and_summarizes_gets_the_report_verdict_not_steps():
+    """The model judges the ask; the door says plainly it is a report and hands back the report drafted from the same read."""
+    s, seen = MemoryStore(), {}
+    s.upsert_agent('assistant', 'assistant', 'general', '{}')
+    report = {'type': 'taskuary', 'card': 'work', 'title': 'Open work summary', 'daily_at': '08:00', 'ai_prompt': 'Summarize what is open.'}
+    def llm(system, user, **_):
+        seen.update(system=system); return json.dumps({'report': report, 'explain': 'It only reads and summarizes.'})
+    out = compose.compose_workflow(s, 'every morning pull the open work and summarize it for me', llm)
+    assert out['verdict'] == 'report' and 'config' not in out and 'flow' not in out['report']
+    assert out['report']['type'] == 'taskuary' and out['report']['ai_prompt'] == 'Summarize what is open.'
+    assert out['explain'].startswith(compose.REPORT_VERDICT) and 'every run of one is a task' in out['explain']
+    assert 'Judge it from what they ask for' in seen['system']
+
+
+def test_drafted_steps_that_only_read_come_back_as_the_report_with_the_same_query(db):
+    s = MemoryStore(); s.upsert_agent('assistant', 'assistant', 'general', '{}')
+    steps = [read_dupes(db), {'id': 's2', 'kind': 'ai', 'label': 'Summary', 'prompt': 'Summarize these:\n{{s1}}\n{{s1.rows}} found', 'output': 'text'}]
+    out = compose.compose_workflow(s, 'x', lambda *a, **k: json.dumps({'config': {'type': 'agent', 'title': 'Dupes', 'agent': 'assistant',
+                                                                                   'flow': steps, 'cron': '0 8 * * 1'}}))
+    r = out['report']
+    assert out['verdict'] == 'report' and (r['type'], r['db'], r['query']) == ('sqlite', db, read_dupes(db)['query'])
+    assert r['ai_prompt'] == 'Summarize these:\n[sqlite.read ap bills]\n found' and r['cron'] == '0 8 * * 1' and 'access' not in r
+    assert flow.only_reads(steps) and not flow.only_reads([*steps, TELL]) and not flow.only_reads([])
+
+
+def test_every_run_of_a_read_only_flow_is_still_a_task(db):
+    """No record-only road: a saved workflow runs as a task whatever its steps are."""
+    s = MemoryStore()
+    src = source(s, [read_dupes(db)])
+    with mock.patch.object(workflows, '_spawn', lambda fn: fn()):
+        out = workflows.run(s, src, trigger='schedule')
+    assert s.get_task(out['task_id'])['Source'] == 'workflow'

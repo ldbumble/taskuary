@@ -174,7 +174,10 @@ FLOW_RULES = (
     '{{s2.fields.<name>}}, {{inputs.<key>}}, {{run.date}}.\n'
     '- "only_if": {"step": "s2", "is": "yes|no|rows|empty"} skips a step unless an earlier one answered so - use it instead of asking the '
     'AI whether to continue.\n'
-    '- "repair": "propose" when the owner wants a failed run fixed for them to approve; leave it out otherwise.\n')
+    '- "goal": one plain sentence of what the workflow is FOR - the outcome, the people and the places it reaches, not the steps. '
+    'When a step breaks later (a page moved, a column was renamed) the fix is kept by itself only while this goal still holds.\n'
+    '- "repair": "propose" when the owner wants every fix to wait for them, "off" when a failure should just stop; leave it out '
+    'otherwise (fixes that keep the goal are applied by themselves).\n')
 
 WORKFLOW_SYSTEM = (
     'You turn a plain-English request into ONE Taskuary workflow configuration. Workflows do work '
@@ -226,7 +229,7 @@ WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
     'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
-              'flow', 'repair', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
+              'flow', 'repair', 'goal', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
 
@@ -327,7 +330,9 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
                 if lone: cfg.pop('flow')          # one agent step IS the prompt-only workflow (flow.steps_of)
             elif not (str(cfg.get('skill') or '').strip() or str(cfg.get('prompt') or '').strip()):
                 return {'error': AGAIN.format('a workflow')}
-            if str(cfg.get('repair') or '') not in ('propose', 'auto'): cfg.pop('repair', None)
+            if str(cfg.get('repair') or '') not in ('propose', 'off'): cfg.pop('repair', None)      # auto is the default (flow.repair_mode)
+            if not str(cfg.get('goal') or '').strip(): cfg.pop('goal', None)
+            else: cfg['goal'] = str(cfg['goal']).strip()[:400]
             if cfg.get('skill'): cfg['skill'] = str(cfg['skill']).strip().lstrip('/')
             known = {x['id'] for x in options['connections']}
             uses = [int(x) for x in (cfg.get('uses') or []) if str(x).isdigit()]

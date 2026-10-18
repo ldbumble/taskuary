@@ -93,7 +93,7 @@ def test_after_the_repair_cap_the_run_stops_with_one_failure_record_pointing_at_
         out = flow.execute(s, src, tid, llm=answering(same, again))
     assert out['failed'] and len(out['repairs']) == flow.MAX_REPAIRS and out['cause'] == 'step'
     [op] = ops(s, tid)
-    assert op['out']['cause'] == 'step' and op['out']['fix'] == {'label': buttons.label('fix'), 'href': f"#report={src['SourceId']}"} and 'app' not in op['out']
+    assert op['out']['cause'] == 'step' and op['out']['fix'] == {'label': buttons.label('fix'), 'href': f"#report={src['SourceId']}&fix={out['run_id']}"} and 'app' not in op['out']
     assert any(f"{buttons.label('fix')} on the workflow" in c['Body'] for c in s.list_comments(tid))
 
 

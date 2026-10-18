@@ -210,7 +210,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
           {/* READS ONLY IS A REPORT (the owner, 2026-10-18): every workflow run is a task, so steps that only read and judge are
               offered as the report they are - the same reads and prompt, one press away. Saving as a workflow still works. */}
           {onlyReads(cfg.flow, types) && <Alert severity="info" data-tq-report-suggestion="" sx={{ mb: 1.25, fontSize: 12.5 }}
-            action={onReport ? <Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }} onClick={() => onReport(asReport(cfg))}>Make it a report</Button> : null}>
+            action={onReport ? <Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }} onClick={() => onReport(asReport(cfg))}>{btnLabel("make_report")}</Button> : null}>
             {REPORT_WORDS} Add a step that acts - open a task, draft a message, write to a system - or make it a report.</Alert>}
           <WorkflowSteps flow={cfg.flow || []} setFlow={setFlow} outputs={outputs} setOutputs={setOutputs} connectors={connectors} types={types}
             agents={roles} title={cfg.title} sourceId={cur?.SourceId} inputs={cfg.inputs} changed={changed} />

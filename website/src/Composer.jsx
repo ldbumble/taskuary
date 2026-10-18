@@ -6,6 +6,7 @@ import { Alert, Box, Button, CircularProgress, TextField, Typography } from "@mu
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { useVerbs } from "./actionRow.js";
+import { label as btnLabel } from "./buttons.js";
 import { openAppLink } from "./appLinks.js";
 import { NL } from "./sourceShape.js";
 import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
@@ -64,7 +65,7 @@ export default function Composer({ onDraft, kind = "report" }) {
       {/* THE WORKFLOW DOOR, ASKED FOR A REPORT (the owner, 2026-10-18): said plainly, with the report drafted from the same reads */}
       {out?.verdict === "report" && out.report && <Alert severity="info" data-tq-report-verdict="" sx={{ mt: 1.25, fontSize: 12.5 }}
         action={<Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }}
-          onClick={() => { onDraft(out.report, { ...out, explain: "Drafted as a report from what you described." }); setAsk(""); setOut(null); }}>Make it a report</Button>}>
+          onClick={() => { onDraft(out.report, { ...out, explain: "Drafted as a report from what you described." }); setAsk(""); setOut(null); }}>{btnLabel("make_report")}</Button>}>
         {out.explain}</Alert>}
 
       {/* it did not know something. Better here than as a silently wrong WHERE clause. */}

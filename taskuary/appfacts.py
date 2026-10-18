@@ -47,8 +47,17 @@ def reports(store) -> list:
                     'workflow': bool(workflows.is_workflow(cfg)), 'schedule': rep.schedule_words(cfg), 'reach': rep.route_words(cfg),
                     'goes': _goes(cfg), 'active': bool(src.get('Active')), 'last_at': str((last or {}).get('at') or ''),
                     'last_ok': (not last.get('failed')) if last else None,
-                    'last_said': str((last or {}).get('error') or (last or {}).get('summary') or (last or {}).get('said') or '')[:200]})
+                    'last_said': str((last or {}).get('error') or (last or {}).get('summary') or (last or {}).get('said') or '')[:200],
+                    'fix': _fix(store, 'source', src['SourceId'])})
     return out
+
+
+def _fix(store, kind: str, oid) -> str:
+    """The place that fixes a run or test that failed and still stands (failures.standing), by its label - '' when none does."""
+    from . import failures
+    try: f = failures.standing(store, kind, oid)
+    except Exception: f = None
+    return str(((f or {}).get('fix') or {}).get('label') or '')
 
 
 def settings(store) -> list:
@@ -65,7 +74,8 @@ def settings(store) -> list:
 def connections(store) -> list:
     return [{'connector_id': c['ConnectorId'], 'type': c.get('Type') or '', 'name': c.get('Name') or c.get('Type') or '',
              'active': bool(c.get('Active')), 'has_secret': bool(c.get('HasSecret')),
-             'last_sync': str(c.get('LastSyncAt') or ''), 'last_error': str(c.get('LastError') or '')[:200]}
+             'last_sync': str(c.get('LastSyncAt') or ''), 'last_error': str(c.get('LastError') or '')[:200],
+             'fix': _fix(store, 'connector', c['ConnectorId']) if c.get('LastError') else ''}
             for c in store.list_connectors()]
 
 

@@ -66,22 +66,55 @@ def area_fix(area) -> dict | None:
     return {'label': f"Open {words.name(pid)}", 'href': words.href(pid)} if pid and words.href(pid) else None
 
 
-def record(store, *, task_id: int, kind: str, error, what: str, fix: dict = None, source: str = 'app', retry: bool = None,
-           step: int = None, unknown: bool = False, cause: str = 'taskuary', area: dict = None) -> str:
+def record(store, *, task_id: int = None, kind: str, error, what: str, fix: dict = None, source: str = 'app', retry: bool = None,
+           step: int = None, unknown: bool = False, cause: str = 'taskuary', area: dict = None, on: tuple = None) -> str:
     """Leave a failure on the task as the agreed op row: Kind a known kind, Status error, Error the scrubbed sentence, OutcomeJson
     {what, fix, source, step, retry, delivery, cause, area}. `cause` is 'taskuary' (the app failed) or 'step' (a workflow's own step:
     fixed in the run, never a new task); `area` {area, name} names where it lives, and a known area's place is its fix. The workflow
-    runner writes the same row for a step past its self-repair attempts."""
+    runner writes the same row for a step past its self-repair attempts. `on` (target kind, id) leaves it on what has no task: a
+    report ('source') or a connector."""
     from .operations import KINDS
     if kind not in KINDS: raise ValueError(f'not a kind of act: {kind}')
     c = classify(error, act=kind)
     fix = fix or c['fix'] or area_fix(area); retry = (not fix and not unknown) if retry is None else retry
-    oid = uuid.uuid4().hex[:12]
-    store.add_operation({'OpId': oid, 'Kind': kind, 'TargetKind': 'task', 'TargetId': int(task_id), 'ParamsJson': '{}', 'Version': 1,
+    oid, (tk, ti) = uuid.uuid4().hex[:12], on or ('task', task_id)
+    store.add_operation({'OpId': oid, 'Kind': kind, 'TargetKind': tk, 'TargetId': int(ti), 'ParamsJson': '{}', 'Version': 1,
                          'Status': 'error', 'Error': c['sentence'],
                          'OutcomeJson': json.dumps(outcome({'fix': fix, 'retry': retry, 'unknown': unknown}, what=what, source=source, step=step,
                                                            cause=cause, area=area))})
     return oid
+
+
+# A REPORT OR A CONNECTION HAS NO TASK (real-AI walk, 2026-10-18): a rerun or a test that failed was said once on its card and then
+# lost - nothing the Advisor or the chat could read. It is the same row, on the report or the connector, and it stands until a run
+# or a test since has gone well: a newer good run, a connection whose error has cleared.
+ON = {'source': ('report', ('report.run', 'report.rerun')), 'connector': ('connection', ('connection.test',))}
+def record_on(store, target_kind: str, target_id, *, kind: str, error, what: str, name: str = '') -> str:
+    return record(store, on=(target_kind, int(target_id)), kind=kind, error=error, what=what, area={'area': ON[target_kind][0], 'name': name})
+
+
+def _stamp(s) -> str: return str(s or '').replace('T', ' ')[:19]
+def standing(store, target_kind: str, target_id) -> dict | None:
+    """The newest run or test failure on a report or connector that nothing since has cleared, in advisor.failure's shape."""
+    if target_kind not in ON or not target_id: return None
+    kinds = ON[target_kind][1]
+    r = store._one(f"SELECT * FROM operation WHERE TargetKind=? AND TargetId=? AND Kind IN ({','.join('?' * len(kinds))}) "
+                   "ORDER BY CreatedAt DESC, rowid DESC LIMIT 1", (target_kind, int(target_id), *kinds))
+    if not r or r.get('Status') != 'error': return None
+    if target_kind == 'connector' and not (store.get_connector(int(target_id)) or {}).get('LastError'): return None
+    if target_kind == 'source' and any(not x.get('failed') and _stamp(x.get('at')) > _stamp(r.get('CreatedAt')) for x in store.report_runs(int(target_id), 3)):
+        return None
+    try: o = json.loads(r.get('OutcomeJson') or '{}') or {}
+    except (TypeError, ValueError): o = {}
+    return {'what': str(o.get('what') or f"{r['Kind']} did not happen"), 'why': str(r.get('Error') or ''), 'fix': o.get('fix') or area_fix(o.get('area')),
+            'unknown': False, 'kind': r['Kind'], 'source': o.get('source') or 'app', 'cause': o.get('cause') or 'taskuary', 'on': (target_kind, int(target_id))}
+
+
+def target_of(item: dict) -> tuple | None:
+    """What an item with no task stands for: a report's card its report, a broken connection's row its connector."""
+    i, key = item or {}, str((item or {}).get('key') or '')
+    if i.get('kind') == 'report' and i.get('source_id') and not i.get('tid'): return ('source', int(i['source_id']))
+    return ('connector', int(key[5:])) if key.startswith('conn:') and key[5:].isdigit() else None
 
 
 def chips(o: dict, *, op: dict = None) -> list:

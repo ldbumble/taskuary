@@ -230,3 +230,42 @@ class StoppedWorkIsSaidTests(unittest.TestCase):
         self.assertEqual(concierge._stopped_work(s, {'tid': t}), '')
         rid = s.start_run(t, 'coding', 'move the export', 'owner'); s._exec("UPDATE run SET Status='stopped' WHERE RunId=?", (rid,))
         self.assertIn('an agent worked on it and stopped', concierge._stopped_work(s, {'tid': t}))
+
+
+class AReportOrConnectionFailureHasAHomeTests(unittest.TestCase):
+    """A rerun or a connection test that failed had no task to carry it: said once on its card, then lost (real-AI walk, 2026-10-18)."""
+    def report(self, s):
+        return s.save_source({'Channel': 'report', 'Address': 'ar@report', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Payworth AR'})}, 't')
+
+    def test_a_failed_run_stands_on_the_report_with_its_fix_until_a_good_run(self):
+        from taskuary import appfacts, concierge, failures
+        s = MemoryStore(); sid = self.report(s)
+        s.add_report_run(sid, {'at': '2026-10-18 06:00:00', 'title': 'Payworth AR', 'failed': True, 'error': 'graph (401): token expired'})
+        failures.record_on(s, 'source', sid, kind='report.run', error='graph (401): token expired', what='Payworth AR did not run', name='Payworth AR')
+        it = {'key': 'report:7', 'kind': 'report', 'lane': 'broken', 'title': 'Payworth AR', 'source_id': sid, 'mid': 7, 'bad': True}
+        f = advisor.failure(s, it)
+        self.assertEqual((f['what'], f['fix']['label']), ('Payworth AR did not run', 'Sign in again'))
+        self.assertEqual(advisor.offered(s, it)[0]['label'], 'Sign in again')
+        self.assertIn('WHAT FAILED: Payworth AR did not run', concierge.facts(s, it))
+        self.assertEqual(next(r for r in appfacts.reports(s) if r['source_id'] == sid)['fix'], 'Sign in again')
+        s.add_report_run(sid, {'at': '2099-01-01 06:00:00', 'title': 'Payworth AR', 'failed': False, 'summary': 'ok'})
+        self.assertIsNone(failures.standing(s, 'source', sid), 'a good run since clears it')
+
+    def test_the_tabs_run_now_leaves_its_failure_on_the_report(self):
+        from taskuary import failures, server
+        s = MemoryStore(); sid = self.report(s)
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, '_spawn_rerun', side_effect=lambda fn: fn()), \
+             mock.patch.object(server, 'run_one', side_effect=RuntimeError('the database refused the login')):
+            server._rerun_report(sid)
+        f = failures.standing(s, 'source', sid)
+        self.assertIn('refused the login', f['why']); self.assertEqual(f['on'], ('source', sid))
+
+    def test_a_failed_test_stands_on_the_connector_until_its_error_clears(self):
+        from taskuary import failures, words
+        s = MemoryStore()
+        cid = s.save_connector({'Type': 'github', 'Name': 'Northwind GitHub', 'Active': 1, 'ConfigJson': '{}'}, 't')
+        s.touch_connector(cid, 'unreachable'); failures.record_on(s, 'connector', cid, kind='connection.test', error='unreachable',
+                                                                  what='Northwind GitHub failed its test', name='Northwind GitHub')
+        self.assertEqual(advisor.failure(s, {'key': f'conn:{cid}', 'kind': 'connection'})['fix']['href'], words.href('connections'))
+        s.touch_connector(cid)
+        self.assertIsNone(failures.standing(s, 'connector', cid))

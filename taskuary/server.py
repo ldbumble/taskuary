@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import buttons, config, words
+from . import buttons, config, failures, words
 from . import store as store_mod
 from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
@@ -1084,6 +1084,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
             from .channels import test_connector
             out = test_connector(store, tid)
             store.audit('connector', tid, 'test_ok' if out.get('ok') else 'test_failed', 'assistant', detail=out.get('detail'))
+            if not out.get('ok'): _failed_test(tid, name, out)
             # `answered`, not `ok`: a test that heard nothing still RAN - ok=False made it a failed act, and the owner was
             # told "the action did not complete" instead of what the connection said (2026-09-29 audit)
             return {'name': name, 'answered': bool(out.get('ok')), 'detail': out.get('detail'), 'undo': None}
@@ -4606,6 +4607,10 @@ def _rerun_report(sid: int, asked: dict | None = None, by: str = 'manual') -> di
         try: out = run_one(store, src, _llm(), trigger='manual')
         except Exception as e:
             logger.warning(f'rerun of report {sid} failed: {e}'); out = {'error': str(e)[:300], 'failed': True}
+        # ...left on the report, where the Advisor and the chat read it - a run has no task to carry it (failures.record_on)
+        if out.get('failed') or out.get('error'):
+            try: failures.record_on(store, 'source', sid, kind='report.run', error=out.get('error') or 'the run failed', what=f'{title} did not run', name=title)
+            except Exception as e: logger.debug(f'the failed run of report {sid} was not recorded: {e}')
         if asked:
             from . import remote_assistant
             said = str(out.get('summary') or out.get('said') or out.get('error') or out.get('subject') or 'done').strip()
@@ -5351,12 +5356,19 @@ def deps_install(body: dict):
     return out
 
 
+def _failed_test(cid: int, name: str, out: dict):
+    """A test that failed, left on the connector (failures.record_on): the card said it once, and nothing could read it after."""
+    try: failures.record_on(store, 'connector', cid, kind='connection.test', error=out.get('detail') or 'the test failed', what=f'{name} failed its test', name=name)
+    except Exception as e: logger.debug(f'the failed test of connector {cid} was not recorded: {e}')
+
 @app.post('/api/connectors/{cid}/test')
 def connector_test(cid: int):
     from .channels import test_connector
-    if not store.get_connector(cid): raise HTTPException(404, 'connector not found')
+    c = store.get_connector(cid)
+    if not c: raise HTTPException(404, 'connector not found')
     out = test_connector(store, cid)
     store.audit('connector', cid, 'test_ok' if out['ok'] else 'test_failed', ACTOR, detail=out['detail'])
+    if not out['ok']: _failed_test(cid, c.get('Name') or c.get('Type'), out)
     # the test rewrote LastError, which the rail does not count as a change (touch_connector): without this the pile kept the old
     # error, Next put the row down under it, and the new one raised it again the moment Next was pressed (the card's Check again)
     from . import funnel

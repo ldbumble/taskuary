@@ -68,6 +68,9 @@ ALLOWED_WRITES = (
     # them - the demo could not show its own walk. A proposal is a row in the demo's database; running one is gated by its
     # KIND below (LOCAL_OPS), since the path cannot tell Mark done from Send. Remind me and a draft write nothing outside either.
     r'^/api/concierge/propose$',
+    # ...and the task view's and cards' own road (taskOps.runOperation) proposes here first: refused, Mark done never reached
+    # the kind check below (error sweep, 2026-10-18). Proposing and editing a proposal write only its row.
+    r'^/api/operations(/[^/]+)?$',
     r'^/api/operations/[^/]+/execute$',
     r'^/api/tasks/\d+/remind$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends

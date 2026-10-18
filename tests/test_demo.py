@@ -108,7 +108,20 @@ class TheCardsOwnButtonsTests(unittest.TestCase):
     database and nothing else, so they work; Start and Send stay shut, and every refusal is said as the demo, in plain words."""
     def test_done_remind_and_a_draft_are_allowed(self):
         with on():
-            for path in ('/api/concierge/propose', '/api/tasks/3/remind', '/api/messages/9/reply', '/api/reviews/4/draft'):
+            for path in ('/api/concierge/propose', '/api/operations', '/api/tasks/3/remind', '/api/messages/9/reply', '/api/reviews/4/draft'):
+                self.assertEqual(demo.refuse('POST', path), '', path)
+            self.assertEqual(demo.refuse('PATCH', '/api/operations/abc'), '')
+
+    def test_the_task_views_road_reaches_the_kind_check(self):
+        """The task view and the cards propose through /api/operations (taskOps.runOperation), not the chat's
+        /api/concierge/propose: only the chat's door was allowed, so Mark done from a card was refused (2026-10-18)."""
+        import pathlib, re
+        src = (pathlib.Path(__file__).parents[1] / 'website/src/taskOps.js').read_text(encoding='utf-8')
+        posted = {re.sub(r'\$\{[^}]+\}', 'x', p) for p in re.findall(r'api\.post\(`?"?(/api/[^"`,]+)', src)}
+        assert posted, 'taskOps.js posts nowhere?'
+        with on(), mock.patch.object(demo, '_store', lambda: None):
+            for path in posted:
+                if path.endswith('/execute'): continue                      # judged by the proposal's kind (above)
                 self.assertEqual(demo.refuse('POST', path), '', path)
 
     def test_a_confirmed_proposal_runs_by_its_kind(self):

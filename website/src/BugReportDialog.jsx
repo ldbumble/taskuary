@@ -8,6 +8,7 @@ import { fullReport, issueUrl, joinBody, techOf } from "./bugReport.js";
 import { draftRequest, howToOpen, openBugReport, rawError, shownError } from "./bugReportOpen.js";
 import { capture, copyShot } from "./shot.js";
 import { DIM, FAINT } from "./theme.jsx";
+import { label as btnLabel } from "./buttons.js";
 
 const CUT = "The full report is on your clipboard - paste it into the issue.";
 const SHOT_ON = "The screenshot is on your clipboard - paste it into the issue.";
@@ -69,7 +70,7 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
 
   return <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="bug-report-title"
     PaperProps={{ sx: { maxHeight: "90vh" } }}>
-    <DialogTitle id="bug-report-title">Report this bug</DialogTitle>
+    <DialogTitle id="bug-report-title">{btnLabel("report_bug")}</DialogTitle>
     <DialogContent>
       {refused ? <Typography sx={{ fontSize: 13.5 }}>{refused}</Typography>
         : !draft ? <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, color: DIM, fontSize: 13 }}><CircularProgress size={16} />Preparing the report…</Box>
@@ -105,4 +106,4 @@ export default function BugReportDialog({ open, onClose, screen, error, supportU
 // the quiet link under an error the page drew: small, dim, no icon - an offer, not an alarm
 export const ReportLink = ({ text, style }) => <button type="button" onClick={() => openBugReport(shownError(text))}
   style={{ display: "block", marginTop: 4, padding: 0, border: 0, background: "none", color: DIM, fontSize: 11.5, cursor: "pointer", textDecoration: "underline", ...style }}>
-  Report this bug</button>;
+  {btnLabel("report_bug")}</button>;

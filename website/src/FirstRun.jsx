@@ -423,7 +423,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
         <Button variant={fix.fix === "update" || fix.key ? "outlined" : "contained"} disableElevation onClick={check}>{btnLabel("try_again")}</Button>
         <Button onClick={() => openBugReport({ message: `${fix.title} didn't answer the setup test
 ${fix.detail || ""}`, screen: "Setup",
-          route: `first-run ${fix.name}` })}>Report this bug</Button>
+          route: `first-run ${fix.name}` })}>{btnLabel("report_bug")}</Button>
       </Box>
     </Box>
   ) : null;

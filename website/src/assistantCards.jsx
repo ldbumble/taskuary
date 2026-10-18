@@ -20,6 +20,7 @@ import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
 import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
+import { CardErr, failOf } from "./failure.jsx";
 import { place } from "./words.js";
 import { Md, looksMd } from "./md.jsx";
 import { jsonRows } from "./reportRows.js";
@@ -318,7 +319,7 @@ function useClose(card, onDone) {
   const run = async () => {
     setBusy(true); setErr("");
     try { await runOperation(api, "task.complete", card.tid); onDone?.(`${card.ref || "The task"} is closed.`); }
-    catch (e) { setErr(errText(e)); setBusy(false); }
+    catch (e) { setErr(failOf(e)); setBusy(false); }
   };
   return { run, busy, err };
 }
@@ -390,7 +391,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
           <Button key={a.verb || a.label} size="small" variant="outlined" title={a.title || undefined} disabled={a.disabled} onClick={a.onClick} sx={quiet}>{a.label}</Button>
         ))}</div>
       )}
-      {shut.err && <div className="tq-card-err">{shut.err}</div>}
+      <CardErr err={shut.err} />
     </>
   );
 }
@@ -561,7 +562,7 @@ export function CardShell({ card, kicker, title, lead, sub, children, err }) {
           again?" (the owner, 2026-09-15: "if they ask why explain it should be closed") */}
       {card?.why_open && <div className="tq-card-sub">{card.why_open}</div>}
       {children}
-      {err && <div className="tq-card-err">{err}</div>}
+      <CardErr err={err} />
     </div>
   );
 }
@@ -598,7 +599,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         && (draftCanSend(caps, x) || String(x.Channel || "").toLowerCase() === "github")) || null : null);   // the close-out carries a GitHub comment
       // the task's close-out, whichever card is on the table - the reply's card reads GitHub's state through it too
       setCoRv(found && closeoutOf(found) ? found : found ? (data.data || []).find((x) => x.TaskId === found.TaskId && closeoutOf(x)) || null : null);
-    }).catch((e) => live && setErr(errText(e)));
+    }).catch((e) => live && setErr(failOf(e)));
     return () => { live = false; };
   }, [card.rid, card.mid, card.presentation_revision]);
   // A REPLY OPENED AT ONCE is drawn before its draft exists (replyDraft.js): "Drafting…" until it lands, then it fills the box;
@@ -645,13 +646,13 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
       // its receipt - Mark done and Next on its row - where it used to settle the item and walk on as if the task were finished
       if (ran && onSent) onSent(said, card.tid, card.ref);
       else onDone?.(said);
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   const redraft = async () => {
     setBusy("redraft"); setErr("");
     try { const { data } = await api.post(`/api/reviews/${card.rid}/draft`); setRv((r) => ({ ...r, DraftText: data.draft, Stale: false })); setText(null); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   // SEND IT BACK TO THE AGENT (the owner, 2026-09-28: "don't see button to send back to agent?"): the one road every
@@ -663,7 +664,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     try {
       await api.post(`/api/tasks/${card.tid}/continue-work`, { note: note || null });
       onDone?.(`Sent back to ${card.agent || "the agent"}${note ? `: “${note.slice(0, 80)}”` : ""}. It comes back here when it stops.`);
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   const conflict = blocked && gh?.state === "dirty" && !!card.tid;
@@ -673,7 +674,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
     try {
       await runOperation(api, "task.complete", card.tid);
       onDone?.(`${card.ref || "The task"} marked done. No reply was sent.`);
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) { setErr(failOf(e)); }
     finally { setBusy(""); }
   };
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
@@ -751,7 +752,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
           onClick: async () => {
             if (o === "anyway") return decide("merge_anyway");
             setBusy(o); setErr("");
-            try { const said = await act(o); onDone?.(`${said}. Press ${btn("approve", "action")} again once the checks pass.`); } catch (e) { setErr(errText(e)); }
+            try { const said = await act(o); onDone?.(`${said}. Press ${btn("approve", "action")} again once the checks pass.`); } catch (e) { setErr(failOf(e)); }
             setBusy("");
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
@@ -854,7 +855,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const post = async (verb, path, body, receipt, after) => {
     setBusy(verb); setErr("");
     try { const { data } = await api.post(path, body || {}); after?.(data); if (receipt) onDone?.(typeof receipt === "function" ? receipt(data) : receipt); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   const asks = card.kind !== "fyi";
@@ -886,7 +887,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const draftReply = async () => {
     setBusy("reply"); setErr("");
     try { const data = await openReply(api, card.mid); onSurface?.(data?.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   // A BROKEN CONNECTION is not a message and has no task: its row clears itself on the next good check,
@@ -919,7 +920,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           // this the very next Next brought the same card straight back under its new words
           await api.post("/api/funnel/settle", { key: card.key, verb: "surfaced", read: true }).catch(() => {});
         }
-      } catch (e) { setErr(errText(e)); }
+      } catch (e) { setErr(failOf(e)); }
       setBusy("");
     };
     // RESTART FROM THE CARD (the owner, 2026-10-15: "where is the button to restart it from the page itself?"): a bridge this
@@ -937,7 +938,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           if (phase === "failed") { setBusy(""); setNote(""); setStuck(true); setErr(`The bridge did not start: ${data.manager.detail || "no reason given"}`); return; }
           if (data?.bridge || phase === "running") break;
         }
-      } catch (e) { setBusy(""); setNote(""); setStuck(true); setErr(errText(e)); return; }
+      } catch (e) { setBusy(""); setNote(""); setStuck(true); setErr(failOf(e)); return; }
       setBusy("");
       await check();
     };
@@ -953,7 +954,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           {said && <><div className="tq-conn-label">What it said</div><div className="tq-conn-said">{said}</div></>}
           {signin && <div className="tq-conn-note">Once you are signed in again this clears by itself.</div>}
           {note && <div className="tq-conn-note">{note}</div>}
-          {err && <div className="tq-conn-note bad">{err}</div>}
+          <CardErr err={err} className="tq-conn-note bad" bug={false} />
           {/* Check again IS the walk's own "Test it" chip, answered on the card at once - so the chip steps aside (the phone keeps it) */}
           <Foot covers={["test_connection"]} verb={signin
             ? <Button size="small" variant="contained" disableElevation sx={primary} onClick={openIt}>Sign in again</Button>
@@ -967,7 +968,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
                 {/* WHAT A CHECK CANNOT FIX IS OURS TO HEAR ABOUT (the owner, 2026-10-15: "if not solvable i thought we added button create
                     issue in github"): once Check again or the restart has failed here, the same scrubbed, previewed popup every error offers */}
                 {stuck && <Button size="small" variant="outlined" sx={quiet} onClick={() => openBugReport(connError(card, said))}
-                  title="Draft a GitHub issue from this error - you see and edit everything before it opens">Report this bug</Button>}</>} />
+                  title="Draft a GitHub issue from this error - you see and edit everything before it opens">{btn("report_bug")}</Button>}</>} />
         </div>
       </div>
     );
@@ -980,7 +981,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const startTask = async () => {
     setBusy("agent"); setErr("");
     try { await runOperation(api, "dispatch.prepare", card.tid, { kind: suggestedKind }); onDone?.(`Started on ${card.ref || "it"}.`); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   // NOT WHILE AN AGENT RUNS ON IT (the owner, 2026-10-01): its own session is the way in, and the dispatch door refuses it too
@@ -996,7 +997,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const sendBack = async () => {
     setBusy("back"); setErr("");
     try { await api.post(`/api/tasks/${card.tid}/continue-work`, { note: (back || "").trim() || null }); onDone?.(`Sent back to the agent on ${card.ref || "it"}. It comes back here when it stops.`); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   // what they wrote, in their words, inside the ask - never for your own task, whose words the story already said
@@ -1018,7 +1019,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
               <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={sendBack} sx={moveSx}>{busy === "back" ? "Sending…" : "Send back"}</Button>
             </div>
           )}
-          {shut.err && <div className="tq-card-err">{shut.err}</div>}
+          <CardErr err={shut.err} />
         </YourMove>
       ) : verb ? (
         <YourMove title={own || mineAlone ? "who should take it?" : `reply to ${asker}`} go={verb}
@@ -1200,12 +1201,12 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   const reply = async (i) => {
     setBusy(i.key); setErr("");
     try { const data = await openReply(api, i.mid); onSurface?.(data.reviewId ? `review:${data.reviewId}` : null, "Drafting a reply…"); }
-    catch (e) { setErr(errText(e)); }
+    catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   const propose = async (verb, i) => {
     setBusy(i.key); setErr("");
-    try { await onPropose?.(verb, i.key); } catch (e) { setErr(errText(e)); }
+    try { await onPropose?.(verb, i.key); } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };
   return (

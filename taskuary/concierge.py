@@ -3248,7 +3248,9 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     # model picks among them - so "no mailbox is connected" comes with Connect a mailbox, never only the words (2026-10-17)
     fix = o.get('fix') or o.get('send_fix')
     if isinstance(fix, dict) and fix.get('href') and fix.get('label'): chips.append({'verb': 'go', 'href': fix['href'], 'label': fix['label']})
-    if st == 'error' and not o.get('needs') and not o.get('refused') and o.get('dispatch') != 'needs_repo':
+    # ...and Try again only where the failure says it could work (failures.classify: never over a fix, never over a send that may
+    # have gone - pressed, it repeated "nothing was sent" and sent nothing, 2026-10-18)
+    if st == 'error' and o.get('retry', True) and o.get('delivery') != 'unknown' and not o.get('needs') and not o.get('refused') and o.get('dispatch') != 'needs_repo':
         chips.append({'verb': 'retry', 'label': buttons.label('try_again'), 'op': op['id'], 'version': op['version'], 'kind': op.get('kind'),
                       'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())})
     chips += [{'verb': 'closeout', 'act': a, 'rid': o['rid'], 'label': OFFER_WORDS[a]}
@@ -3259,6 +3261,8 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
         from . import terminal as term
         chips += [{'verb': 'repo', 'label': f'Use {r}', 'op': op['id'], 'repo': r, 'params': op.get('params') or {},
                    'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())} for r in term.known_repos(store)[:6]]
+    # nothing here fixes it and pressing again will not: the bug report, with what went wrong filled in (failures.chips)
+    if st == 'error' and not chips: chips.append({'verb': 'bug', 'label': buttons.label('report_bug'), 'text': str(op.get('error') or '')})
     gone = {v for v, row in PROPOSALS.items() if row[0] == op.get('kind')}
     chips += [c for c in chips_for(store, item) if c['verb'] not in gone]
     if not any(c.get('verb') == 'next' for c in chips): chips.append({'verb': 'next', 'label': CHIP_WORDS['next']})

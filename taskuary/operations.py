@@ -15,6 +15,7 @@ onto the task it later becomes, per item, never onto its batch siblings.
 import contextlib, hashlib, json, re, threading, uuid
 from datetime import datetime
 from loguru import logger
+from . import failures
 
 # kind -> (target kind, required parameters, how to read "what the owner made of it" for the correction
 # comparison: a fixed word, 'kind' for the parameter of that name, or None when the action is never a
@@ -290,21 +291,25 @@ def execute(store, op_id: str, version: int, run, actor: str = 'owner') -> dict:
     _running.op = op_id
     try: outcome = run()
     except Halt as e:
-        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'OutcomeJson': json.dumps(e.outcome, default=str), 'Actor': actor})
+        # a halt says its own way on (offers, needs, a repository to pick); the one failure shape only fills a fix it did not name
+        c = failures.classify(e, act=op['Kind']); o = e.outcome if isinstance(e.outcome, dict) else {}
+        o = {**o, **({'fix': c['fix']} if c['fix'] and not o.get('fix') else {})}
+        store.update_operation(op_id, {'Status': 'error', 'Error': c['sentence'], 'OutcomeJson': json.dumps(o, default=str), 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     except Exception as e:
         logger.warning(f'operation {op_id} ({op["Kind"]}) failed: {e}')
-        # a failure that names its own fix (outbound.Fixable) keeps it, so the way on can offer it (concierge.recover)
-        fix = getattr(e, 'fix', None)
-        store.update_operation(op_id, {'Status': 'error', 'Error': plain(e)[:500], 'Actor': actor,
-                                       **({'OutcomeJson': json.dumps({'fix': fix})} if fix else {})})
+        # ONE FAILURE SHAPE (failures.py, 2026-10-18): the fix it names (outbound.Fixable) or the one its words point at, whether a
+        # retry could work, and a sentence with no raw "[Errno 2]" - read by recover, the cards and the Advisor alike
+        c = failures.classify(e, act=op['Kind'])
+        store.update_operation(op_id, {'Status': 'error', 'Error': c['sentence'], 'Actor': actor, 'OutcomeJson': json.dumps(failures.outcome(c))})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     finally: _running.op = None
     if _failed(outcome):
         # the handler came back, but its own word is that nothing happened: an error the owner can retry, and
         # never a lesson - a 'not a task' success was recorded off a start that never launched (PW-130)
-        store.update_operation(op_id, {'Status': 'error', 'Error': plain(outcome.get('error') or 'the action did not complete')[:500],
-                                       'OutcomeJson': json.dumps(outcome, default=str), 'Evidence': 'none', 'Actor': actor})
+        c = failures.classify(str(outcome.get('error') or 'the action did not complete'), act=op['Kind'])
+        o = {**outcome, **({'fix': c['fix']} if c['fix'] and not outcome.get('fix') else {}), 'retry': outcome.get('retry', c['retry'])}
+        store.update_operation(op_id, {'Status': 'error', 'Error': c['sentence'], 'OutcomeJson': json.dumps(o, default=str), 'Evidence': 'none', 'Actor': actor})
         return {**_public(store.get_operation(op_id)), 'duplicate': False}
     store.update_operation(op_id, {'Status': 'done', 'OutcomeJson': json.dumps(outcome, default=str) if outcome is not None else None,
                                    'Error': None, 'ExecutedAt': _now(), 'Actor': actor})

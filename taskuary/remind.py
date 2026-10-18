@@ -143,7 +143,9 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
     """Put the task away until `until` (or bring it back now with none). The receipt carries the undo."""
     t = store.get_task(tid)
     if not t: raise ValueError('task not found')
-    if t.get('Status') in ('done', 'dropped'): raise ValueError('that task is done - reopen it first')
+    if t.get('Status') in ('done', 'dropped'):
+        from .failures import Closed
+        raise Closed(tid, 'that task is done - reopen it first')
     # "after my meetings" is the calendar's to answer; with no meetings in front of her there is nothing to wait for
     if str(until or '').strip().lower() == AFTER_MEETINGS:
         free = after_meetings(store)

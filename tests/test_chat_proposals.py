@@ -15,7 +15,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, ingest, operations, server, terminal
+from taskuary import buttons, concierge, funnel, ingest, operations, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -74,7 +74,7 @@ class ProposalTests(unittest.TestCase):
             out = say(s, 'send it to the coding agent', key=item['key'], model='On it.\nCALL: {"kind": "coding_agent", "params": {}}')
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind'], p['status']), ('task.create_from_message', mid, 'coding', 'proposed'))
-        self.assertEqual(p['label'], 'Send to the coding agent'); self.assertIn(f'TQ-{tid:04d}', p['summary'])
+        self.assertEqual(p['label'], buttons.label('coding_agent')); self.assertIn(f'TQ-{tid:04d}', p['summary'])
         spawn.assert_not_called()                                                   # nothing ran on the words
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         self.assertIn('nothing has been started', out['say'].lower())
@@ -90,7 +90,7 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(dispatch.call_count, 1)                                     # the shared handler, once
         from taskuary import general
         dock, _ = general.dock_task(s, 'owner')
-        self.assertTrue(any('Done - Send to the coding agent' in (r.get('Body') or '') for r in general.chat_rows(s, dock['TaskId'])))
+        self.assertTrue(any(f"Done - {buttons.label('coding_agent')}" in (r.get('Body') or '') for r in general.chat_rows(s, dock['TaskId'])))
 
     def test_a_proposal_whose_context_moved_is_refused_at_the_click(self):
         s, tid, mid, item = asked()
@@ -139,8 +139,8 @@ class InterpretationTests(unittest.TestCase):
     def test_a_clarifying_question_proposes_nothing(self):
         s, tid, mid, item = asked()
         # every hand-off is Send to agent (COUNSEL, 2026-10-17): the question that is left is yours or an agent's
-        out = say(s, 'deal with this', key=item['key'], model='Should I put it on your list, or hand it off?\nOPTIONS: Make a task | Send to agent')
-        self.assertIsNone(out.get('proposal')); self.assertEqual(out['options'], ['Make a task', 'Send to agent'])
+        out = say(s, 'deal with this', key=item['key'], model='Should I put it on your list, or hand it off?\nOPTIONS: Put it on my list | Send to agent')
+        self.assertIsNone(out.get('proposal')); self.assertEqual(out['options'], ['Put it on my list', 'Send to agent'])
 
     def test_a_decision_that_names_another_item_targets_that_one_and_an_unknown_name_asks(self):
         s, tid, mid, item = asked()
@@ -190,8 +190,9 @@ class InterpretationTests(unittest.TestCase):
 class ExecutionTests(unittest.TestCase):
     def test_done_is_confirmed_then_settles_the_item_and_closes_its_task(self):
         s, tid, mid, item = asked()
+        # Handled is gone (buttons.json `removed`): a model still saying "done" lands on Mark done
         p = say(s, 'done, I handled it', key=item['key'], model='Done.\nCALL: {"kind": "done", "params": {}}')['proposal']
-        self.assertEqual((p['kind'], p['params']['key'], p['label']), ('item.settle', item['key'], 'Mark it handled'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, buttons.label('close')))
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])                # nothing moved yet
         self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertEqual(pile(s), []); self.assertEqual(s.get_task(tid)['Status'], 'done')
@@ -323,7 +324,7 @@ class NoCodingToolTests(unittest.TestCase):
         with mock.patch.object(agents, 'coding_ready', return_value=False): text = counsel.for_chat(s)
         self.assertNotRegex(text.lower(), r'coding|repositor'); self.assertIn('Send to agent', text)
         with mock.patch.object(agents, 'coding_ready', return_value=True): text = counsel.for_chat(s)
-        self.assertIn('OPTIONS: Coding agent | Regular agent', text)
+        self.assertIn('OPTIONS: ' + ' | '.join(w for _, w in buttons.choices('agent')), text)    # the card's own answers, by name
 
     def test_an_owners_copy_that_still_talks_coding_gets_the_one_rule(self):
         from taskuary import agents, counsel

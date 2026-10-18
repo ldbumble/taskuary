@@ -70,7 +70,7 @@ export function matchFor(item, agents = []) {
   if (kind === "agent" && item.paused) return { who: "you", verb: "resume", why: "its session was saved - pick it up where it stopped" };
   if (kind === "agent") return { who: item.working || item.agent || coding, verb: "watch", why: "already with an agent" };
   if (kind === "agentdone" || kind === "wrapup") return { who: "you", verb: "close", why: "the agent finished - read what it found, then close it" };
-  if (kind === "meeting") return { who: "you", verb: "prep", why: "coming up - get prepped first" };
+  if (kind === "meeting") return { who: "you", verb: "read", why: "coming up - it is on your calendar" };   // Prep me is gone (buttons.json)
   if (lane === "approve") return { who: "you", verb: "approve", why: "a draft is written - it only needs your yes" };
   if (lane === "forgotten") return { who: "you", verb: "followup", why: "gone quiet - a nudge keeps it alive" };
   if (lane === "fyi" || lane === "report") return { who: "nobody", verb: "read", why: "nothing to do but know it" };
@@ -82,21 +82,21 @@ export function matchFor(item, agents = []) {
 
 // ── points ────────────────────────────────────────────────────────────────────────────────────
 export const XP = {
-  answer: 60, dispatch: 45, approve: 40, followup: 35, file: 25, draft: 20, prep: 20, resume: 15, wrap: 15, vote: 10,
+  answer: 60, dispatch: 45, approve: 40, followup: 35, file: 25, draft: 20, resume: 15, wrap: 15, vote: 10,
   sort: 10, rerun: 10, done: 12, read: 8, open: 5, ask: 5, pull: 3, later: 0, rest: 6, set: 30, rep: 5, next: 2, bottom: 50, gymclear: 30,
 };
 export const MOVE_WORDS = {
   answer: "Unblocked an agent", dispatch: "Handed off", approve: "Reply sent", followup: "Ghost busted",
   file: "Filed to memory", draft: "Draft summoned", vote: "Upvoted a file", done: "Cleared", read: "Caught up",
   open: "Jumped in", ask: "Asked the core", pull: "Pulled a file", later: "Dodged", rest: "Laid to rest",
-  bottom: "Inbox Boss defeated", gymclear: "Gym cleared - every set done", set: "Set complete - task done", rep: "Rep", next: "Moved on", prep: "Prepped for a meeting", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
+  bottom: "Inbox Boss defeated", gymclear: "Gym cleared - every set done", set: "Set complete - task done", rep: "Rep", next: "Moved on", resume: "Agent back on its feet", wrap: "Session saved", sort: "Sorted away", rerun: "Report rerun",
 };
 
 // the chat's action words (concierge.CHIP_WORDS) scored as the move they are - a word the server adds
 // later still runs, it just scores as a plain "done" - `coder` is `coding_agent`'s old name, still sent by an older server
 export const CHIP_MOVE = { approve: "approve", redraft: "draft", reply: "draft", coding_agent: "dispatch", coder: "dispatch", regular_agent: "dispatch",
-  mine: "done", not_ours: "sort", not_ours_sender: "sort", block_sender: "sort", archive: "sort", close: "done", done: "done",
-  later: "later", skip: "later", defer: "later", continue: "dispatch", answer_agent: "answer", stop_agent: "wrap", rerun: "rerun", split: "done", prep: "prep", followup: "followup" };
+  mine: "done", not_ours: "sort", not_ours_sender: "sort", block_sender: "sort", close: "done",
+  defer: "later", continue: "dispatch", answer_agent: "answer", stop_agent: "wrap", rerun: "rerun", split: "done", followup: "followup" };
 
 export const TITLES = ["Intern", "Inbox Rookie", "Reply Ranger", "Agent Wrangler", "Combo Clerk",
   "Thread Slayer", "Ghostbuster", "Chief of Vibes", "Office Legend", "Inbox Zero Deity"];

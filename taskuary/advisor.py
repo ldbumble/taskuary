@@ -11,8 +11,9 @@ a per-hour cap, the light gear, a small prompt, the bigger read only for the ite
 import hashlib, json, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
-from . import concierge
+from . import buttons, concierge
 from .llm import build_llm, ask_json
+L = buttons.label        # the prompt names a button by its one label (buttons.json)
 
 ON_KEY, CAP_KEY, CAP_DEFAULT = 'advisor_events', 'advisor_event_cap', 30
 BACKGROUND = True        # the suite turns this off (tests/conftest.py): a judgement runs only when a test asks for it inline
@@ -87,9 +88,9 @@ SYSTEM = (
     "Answer with JSON only:{\"verb\": \"<one of the verbs>\" or null, \"line\": \"<sentence>\" or \"\", "
     "\"evidence\": [\"<ids from the lines below>\"]}. "
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
-    "item's own facts make right (a person waiting on them: answer; an agent asking them something: Answer it; nothing for them to "
-    "do: close or let go; work an agent left: continue or review it) and say why in plain words - say nothing only when no verb "
-    "offered fits at all.")
+    f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something: {L('answer_agent')}; nothing "
+    f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}) - whichever of those is "
+    "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
     speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
@@ -316,7 +317,11 @@ def notice(store, event: str, target_kind: str, target_id, *, tier: int = 1, wai
 
 def _payload(r: dict) -> dict:
     count = json.loads(r.get('CountJson') or '[0,0]')
-    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', r['Label'] or '') if r.get('Line') else r.get('Line'), 'verb': r['Verb'], 'label': r['Label'], 'pill': pill(r['Label'], count), 'count': count,
+    # a row judged under an older wording ("Take it myself", "Close out") shows today's name; a state's name (Approve) is kept
+    verb = concierge.canon_verb(r['Verb']) if r.get('Verb') else r.get('Verb')
+    if r.get('Verb') and not verb: r = {**r, 'Line': ''}                  # its button is gone (Prep me): the line pointed at nothing
+    lbl = r['Label'] if r.get('Label') in buttons.labels() else buttons.label(verb or '') or r.get('Label')
+    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': pill(lbl, count), 'count': count,
             'says': says(r['Verb'] or '', count), 'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 

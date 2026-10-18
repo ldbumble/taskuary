@@ -24,7 +24,7 @@ test("a failed digest leads with the failure and keeps raw evidence explicitly u
   assert.match(component, /component="ol"/);
   assert.match(component, /Show unreviewed source data/);
   // ...and a way on: the digest written again, and the connection that would fix it
-  assert.match(component, /Try again/);
+  assert.match(component, /btnLabel\("try_again"\)/);
   assert.match(component, /#connector=/);
 });
 

@@ -316,13 +316,13 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
             if review.get('Kind') not in ('action', 'slot'):
                 other = proposals.closeout_pending(store, tid)
                 if other: card.update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
-            # the task's close-out (merge the PR, close the issue): ONE word, Close out - the card's sentence says what it does there
+            # the task's close-out (merge the PR, close the issue): ONE word, Approve - the card's sentence says what it does there
             closeout = proposals.CLOSEOUT.get(proposals._action(review)) if review.get('Kind') == 'action' else None
             if closeout:
                 ev = finish_evidence(store, tid)
                 # a reply waiting beside it rides WITH it (verdicts reply_text) - the same one button
                 rides = bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind NOT IN ('action','slot')", (tid,)))
-                card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - Close out {closeout}"
+                card.update(closeout=closeout, rides=rides, why=f"{(ev or {}).get('who') or 'The agent'} finished it - {proposals.CLOSE_WORD} {closeout}"
                                                    + (' and posts your reply' if rides else '')
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     if review and review.get('Kind') == 'slot':     # the task's emails (slots.py), counted - never called its reply

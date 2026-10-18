@@ -9,8 +9,9 @@ import { fileURLToPath } from "node:url";
 const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
 
 test("a Start coding session held for a repository says so and offers the picker beside it", () => {
-  const at = page.indexOf('"Start new coding session" : "Start coding session"');
-  const start = page.slice(at, page.indexOf("Use non-coding agent", at));
+  const at = page.indexOf('startingAgent === "coding" ? "Starting…" : btn("coding_agent")');
+  assert.ok(at > 0);
+  const start = page.slice(at, page.indexOf('choice("agent", "regular_agent")', at));
   assert.match(start, /startRepo === "" && <>/, "only while no repository is chosen");
   assert.match(start, /Pick a repo first/);
   assert.match(start, /onClick=\{\(\) => \{ setRepoPick\(true\); setResumeAfterRepo\(\{ dispatch: true \}\); \}\}/, "the pick starts the session");

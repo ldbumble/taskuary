@@ -14,6 +14,7 @@ from pathlib import Path
 from loguru import logger
 
 from .store import task_ref, auto_code_enabled
+from . import buttons
 from .categories import agent_word
 from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
@@ -331,7 +332,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
             if not action and r.get('TaskId'):         # a reply whose task also waits on its merge: Close out runs both
                 other = proposals.closeout_pending(store, r['TaskId'])
                 if other: out[-1].update(closeout=proposals.CLOSEOUT.get(proposals._action(other)), rides=True)
-            if co: out[-1].update(closeout=co, why=f'the agent finished - Close out {co}',
+            if co: out[-1].update(closeout=co, why=f"the agent finished - {buttons.label('approve', 'action')} {co}",
                                   rides=bool(store._one("SELECT 1 x FROM review WHERE TaskId=? AND Status='pending' AND Kind<>'action'", (r.get('TaskId'),))))
             if group: threads[group] = out[-1]                 # the draft speaks for its task/thread
             continue
@@ -521,8 +522,9 @@ def news_line(store, tid, m=None) -> str:
     frm = str(m.get('FromName') or m.get('FromEmail') or 'Someone').split(' at ')[0]
     when = str(m.get('SentAt') or '')
     day = 'today' if when[:10] == datetime.now().strftime('%Y-%m-%d') else when[:10]
-    return (f"{frm} wrote again {day} at {when[11:16]}, after {who} last worked on it - its record is below. "
-            f'Hand {who} the new message, or answer it yourself.')
+    # THE STATE, never a move: a sentence that names a button names one the item shows (2026-10-17), and this one is read on the task
+    # page, the rail and the walk alike - each says its own buttons (concierge._from_you)
+    return f"{frm} wrote again {day} at {when[11:16]}, after {who} last worked on it - its record is below."
 
 
 def _cap(x: str) -> str: return x[:1].upper() + x[1:]
@@ -561,11 +563,11 @@ def idle_state(store, tid) -> dict:
     news = news_since_agent(store, tid)
     if news: return out('news', news_line(store, tid, news))
     if terminal.SAVED in [x.strip() for x in tags.split(',')]:
-        return out('saved', 'You stopped it and its report is written. Keep it going, or mark the task done.')
+        return out('saved', 'You stopped it and its report is written.')     # the moves are the item's own buttons (news_line)
     if terminal.INTERRUPTED in [x.strip() for x in tags.split(',')]:
         return out('interrupted', f'Taskuary closed while {agent} had this, so its work stopped there. Nothing restarts by itself.' + old)
     if held_for_repo(t):
-        return out('held', f'Waiting for you. It needs a repository - pick one and {agent} starts.' + old, 'not started - pick a repository for it')
+        return out('held', f'Waiting for you. It needs a repository before {agent} can start.' + old, 'not started - it needs a repository')
     # THE QUEUE SAYS WHY (A3, 2026-09-25): a full house, a start that keeps failing and a CLI that is not installed all
     # read "nothing has started it" - only the Tasks list showed the queue
     q = store.get_dispatch(tid) or {}
@@ -598,10 +600,9 @@ def idle_state(store, tid) -> dict:
     # ...and nothing came in since, or news_since_agent would have said so above: "Nothing has started on what came in since" was
     # said over a batch whose session closed with nothing new on it at all (TQ-1112 shape) - the task is simply still open
     if session_finished(store, tid):
-        return out('left', f'{_cap(agent)} finished its work - its record is below. The task is still open: close it, '
-                           'or keep it going.' + old)
+        return out('left', f'{_cap(agent)} finished its work - its record is below. The task is still open.' + old)
     if store.last_transcript(tid):
-        return out('left', f'{_cap(agent)} ran on this and left without finishing it. Keep it going, or hand it on.' + old)
+        return out('left', f'{_cap(agent)} ran on this and left without finishing it.' + old)
     msg = store.last_inbound_on_task(tid) or {}
     for r in reversed(store.message_routes(msg.get('MessageId')) or []) if msg.get('MessageId') else []:
         said = held_clause(r.get('Reason'))
@@ -610,11 +611,11 @@ def idle_state(store, tid) -> dict:
         if said.startswith('github items queue') and str(msg.get('Channel') or '') == 'github':
             from .ingest import gh_hold_why
             said = gh_hold_why(store, {'source_name': msg.get('SourceName'), 'body': msg.get('BodyText')})
-        return out('held', f'Waiting for you. {_sentence(said)} Start {agent}, or do it yourself.' + old, 'held for you - not started')
+        return out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started')
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
-        return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you to press Start.' + old,
+        return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,
                    'held for you - not started')
-    return out('idle', f'Not started yet. Nothing has started {agent} on this - press Start when you want it on it.' + old, 'not started yet')
+    return out('idle', f'Not started yet. Nothing has started {agent} on this.' + old, 'not started yet')
 
 
 def not_started_why(store, tid) -> str: return idle_state(store, tid)['line']

@@ -3,6 +3,7 @@
 // unchanged: the row calls the LATEST one, so a press costs what the old button cost and nothing in the card re-renders for it.
 // Only a change in what the row SHOWS (a label, a disabled flag, a verb arriving or going) wakes the row; a fresh closure does not.
 import React, { useEffect, useSyncExternalStore } from "react";
+import { label, liveVerb, verbOfRow } from "./buttons.js";
 
 // verb: { id, label, group: "decide" | "agent" | "more" | "next", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
 //   `why`: what a DISABLED verb is waiting for, said in the row itself ("write the reply first") - a greyed button that does not say why is a dead end
@@ -68,17 +69,17 @@ export function movesOf(node, group = "decide", prefix = "m") {
 const ROOM = 4;                                            // how many chips the row holds before the rest wait behind More
 const isDone = (v) => v.id === "done" || /:done$/.test(String(v.id));
 // THE ADVISOR'S PICK (advisor.py, {verb, label}) as the row verb it names: the same id (the task registers `reply`, `continue`), the
-// chip's own words, or the act behind them when the card words it differently - the advisor's Reply is the task's "Write reply"
-// (it drew a second Reply on the strip, 2026-10-13), Mark done is its `close`, a draft's Send is its `approve`
-// ...the same act under the card's own id: Remind me is the row's Snooze, ending the agent its End, a fresh agent its Start
-const ALIAS = { defer: ["remind"], stop_agent: ["save-end"], regular_agent: ["start-agent", "send-general"] };
+// chip's own words, or the task's own id for the same act read off buttons.json's `row` lists - the Advisor's `close` is the row's
+// `done`, `defer` its `remind`, `stop_agent` its `save-end` - so it fills the REAL button and never draws a second one beside it
+// (it drew a second Reply on the strip, 2026-10-13). An old saved pick of a removed verb (`done`, `later`) lands on the live one.
 const sameAct = (v, pick) => {
+  const verb = liveVerb(pick?.verb);
+  if (!verb) return false;
   const l = String(v.label || "").trim().toLowerCase(), want = String(pick?.label || "").trim().toLowerCase(), id = String(v.id || "");
-  // ADVISED SEND IS A SEND: the draft's button keeps its `approve` id while it reads Refresh the draft, Mark done or Checking
-  // delivery…, and the line said "Send" over the one that was not (the Advisor audit, 2026-10-15)
-  if (pick?.verb === "approve" && !l.startsWith("send") && !l.startsWith("run") && !l.startsWith("merge") && !l.startsWith("close")) return false;
-  return id === pick?.verb || id.endsWith(`:${pick?.verb}`) || (want && l === want) || (pick?.verb === "close" && isDone(v))
-    || (ALIAS[pick?.verb] || []).some((a) => id === a || id.endsWith(`:${a}`));
+  // ADVISED SEND IS A SEND: the draft's button keeps its `approve` id while it reads Redraft, Mark done or Checking delivery…,
+  // and the line said "Send" over the one that was not (the Advisor audit, 2026-10-15)
+  if (verb === "approve" && ![label("approve"), label("approve", "action")].some((w) => l === w.toLowerCase()) && !l.startsWith("send")) return false;
+  return id === verb || id.endsWith(`:${verb}`) || verbOfRow(id) === verb || (!!want && l === want);
 };
 export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disabled && v.group !== "next" && sameAct(v, pick)) || null : null);
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
@@ -143,7 +144,7 @@ export function rowOf({ list, ref }, pick = null) {
 
 // THE ROW BY TYPE (the owner, 2026-10-13, canvas H2: "2 most common buttons per type and then down arrow for more on all of them"):
 // what a button acts on - the reply, the agent, closing the task, the task itself - read off its id (a draft's own verbs are
-// `<rid>:approve`, so the last part counts). A card's own words (a report's "Make a task", a chat chip) are none of these:
+// `<rid>:approve`, so the last part counts). A card's own words (a report's chip, a chat chip) are none of these:
 // they lead, unlabelled. The order inside each type is rowOf's - the decision first - and its filled button is always in view.
 export const TYPES = [["reply", "Reply"], ["agent", "Agent"], ["close", "Close"], ["task", "Task"]];
 const TYPE_OF = {
@@ -154,9 +155,9 @@ const TYPE_OF = {
   // what the task's pills used to change (section 1's redesign, 2026-10-16): the pills read now, the row changes
   kind: "task", priority: "task", assign: "task", repo: "task",
   // the Advisor's moves a card has no button for join the row in their type (AdvisorNext), never beside the line (2026-10-16)
-  chase: "reply", prep: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
-  elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task", archive: "task",
-  let_go: "task", later: "task", skip: "task", defer: "task", split: "task", test_connection: "task",
+  chase: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
+  elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task",
+  let_go: "task", defer: "task", split: "task", test_connection: "task",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 export function clustersOf(row, keep = 2) {
@@ -170,20 +171,3 @@ export function clustersOf(row, keep = 2) {
   }).filter(Boolean);
 }
 
-// ONE WORD ON THE BAR (the owner, 2026-10-13: "the buttons look horrible with double words on one button"): the section's label
-// names the noun - REPLY, AGENT, CLOSE, TASK - so the button is the verb. The full name rides in the hover text and in the
-// section's menu, which can afford it. A label that says a state ("Drafting…", "Back Tue") is kept as it is.
-// ...and plain words for someone who never wrote code (the audit, 2026-10-17): "New", "Who" and "End" said nothing to them, and
-// "Dismiss" deleted the task - Remove is what its dialog says too. Repo is drawn only where a coding tool is connected (TaskPage).
-const SHORT = {
-  reply: "Draft", approve: "Send", redraft: "Redraft", email: "Share", hand: "Forward", "ask-sender": "Ask",
-  continue: "Continue", "run-another": "Another agent", "start-agent": "Start", "send-general": "Start", "save-end": "Stop", diff: "Changes",
-  done: "Done", "close-note": "Note", reopen: "Reopen", remind: "Snooze", nat: "Remove", reshape: "Split",
-  kind: "Reassign", priority: "Priority", assign: "Assign", repo: "Repo", answer_agent: "Answer it", "email-file": "Email it",
-};
-export const shortLabel = (v) => {
-  const label = String(v?.label || "");
-  if (/…$/.test(label) || /^Back /.test(label)) return label;
-  if (/^Draft with AI$/i.test(label)) return "Draft";      // nothing drafted yet: there is nothing to redraft
-  return SHORT[String(v?.id || "").split(":").pop()] || label;
-};

@@ -13,12 +13,11 @@ test("the assistant offers ONE Send to agent, and the card asks coding or not", 
   // a label, not a verb
   assert.doesNotMatch(cards, /<Button[^>]*>[^<{]*(Coding|Regular) agent[^<]*<\/Button>/);
   assert.doesNotMatch(cards, /"Regular agent"/);
-  const py = fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "concierge.py"), "utf8");
   // one button (the owner, 2026-09-25) - and still two separate roads, never one guessed kind: the card's own
-  // question offers both, triage's pick first (concierge.ALTS)
-  assert.match(py, /'regular_agent': 'Send to agent'/);
-  assert.match(py, /'mine', 'regular_agent', 'not_ours'/);
-  assert.match(py, /'agent': \(\('coding_agent', 'A coding agent'\), \('regular_agent', 'A non-coding agent'\)\)/);
+  // question offers both - its words in buttons.json, the one list the server and the page read
+  const buttons = JSON.parse(fs.readFileSync(path.join(process.cwd(), "..", "taskuary", "buttons.json"), "utf8"));
+  assert.equal(buttons.verbs.regular_agent.label, "Send to agent");
+  assert.deepEqual(buttons.choices.agent.map(([v]) => v), ["coding_agent", "regular_agent"]);
   assert.doesNotMatch(cards, /kind: coding \? "coding" : "general"/);
 });
 
@@ -26,8 +25,8 @@ test("the timeline handoff asks for an agent type before Send is enabled", () =>
   const ui = src("ui.jsx");
   const handoff = ui.slice(ui.indexOf("export const SendToAgent"), ui.indexOf("export const TASK_STATES"));
   assert.match(handoff, /Which kind of agent\?/);
-  assert.match(handoff, /Coding agent/);
-  assert.match(handoff, /Regular agent/);
+  assert.match(handoff, /choice\("agent", "coding_agent"\)/);       // the answers are buttons.json's choices
+  assert.match(handoff, /choice\("agent", "regular_agent"\)/);
   assert.match(handoff, /disabled=\{busy \|\| !agentKind\}/);
   assert.match(handoff, /\{ kind: agentKind/);
 });
@@ -49,15 +48,15 @@ test("every live agent ends the same way, and never without being written up", (
   // Three controls all ended the session and differed only in what they wrote down - a result, a
   // handover note, or nothing - which is unreadable as three labels (the owner, 2026-09-16: "save
   // result vs end session vs stop session???"). One ending now, and it writes up either way.
-  assert.match(controls, />Stop and save<\/Button>/);
+  assert.match(controls, />\{labelOfRow\("save-end"\)\}<\/Button>/);
   // and NO way to end one without that write-up (the owner: "meaning no stop without saving")
   assert.doesNotMatch(controls, />Stop session<\/Button>/);
   assert.doesNotMatch(controls, /handover<\/Button>/);
   // the parity this has always guarded: the ending is not gated on a coding session, so a general
   // agent ends exactly as a coding one does
-  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>Stop and save/);
+  assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>\{labelOfRow\("save-end"\)/);
   // ...and the action row (layout B) registers the same ending for the canvas, gated on the live session alone
-  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: "Stop and save"/);
+  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: labelOfRow\("save-end"\)/);
 });
 
 test("task references use readable sans-serif digits", () => {

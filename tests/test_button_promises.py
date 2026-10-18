@@ -22,7 +22,7 @@ def test_every_state_changing_chip_word_says_what_it_does():
 
 def test_the_end_session_sentence_is_the_handlers():
     # concierge's stop_agent wraps only when there is a transcript to write from; the sentence must not promise a write-up unconditionally
-    assert 'nothing to write up' in concierge.CHIP_HINTS['stop_agent']
+    # the hover is buttons.json's one sentence; the chat's own receipt says it when there is nothing to write up (propose_for)
     assert 'task stays open' in concierge.CHIP_HINTS['stop_agent']
 
 

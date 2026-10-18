@@ -46,7 +46,7 @@ test("plain words: the AI popover, the Advisor's notes and the FYI rows (J)", ()
   assert.doesNotMatch(view, /`dropped: \$\{r\.dropped\}/, "a raw drop reason");
   assert.doesNotMatch(view, /r\.event, r\.tier/, "an event id like item.shown");
   assert.match(view, /No AI connected yet - connect one under Connections, AI\./);
-  assert.match(cards, />Send to agent<\/Button>/);
+  assert.match(cards, />\{btn\("regular_agent"\)\}<\/Button>/);
   assert.doesNotMatch(cards, /regular agent/i);
 });
 

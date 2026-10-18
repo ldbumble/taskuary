@@ -29,6 +29,7 @@ import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 import { useVerbs } from "./actionRow.js";
 import { openAppLink } from "./appLinks.js";
+import { label as btn } from "./buttons.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
@@ -252,8 +253,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, onDone, onOpenTask, onClose, pics]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
-  const verb = kind === "send" ? (mode === "task" ? "Send an agent" : "Draft it")
-    : kind === "agent" ? (how === "general" ? "Start the agent" : "Start the session") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
+  // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
+  const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
+    : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
 
   // the card: a bordered block in the conversation's width, Esc closes it, nothing floats over the page
   const Shell = inline ? Box : Dialog;

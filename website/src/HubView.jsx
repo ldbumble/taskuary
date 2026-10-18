@@ -28,6 +28,7 @@ import { pollWhileVisible } from "./visible.js";
 import { plainError } from "./apiError.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { TaskuaryMark } from "./ui.jsx";
+import { label as btnLabel } from "./buttons.js";
 import {
   ACCENT, ACCENT2, ALERT_INK, BORDER, DIM, FAINT, GRADIENT, INK, PANEL, PANEL2, ROLES, mono,
 } from "./theme.jsx";
@@ -293,7 +294,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
   } });
   const failed = loadErr && (
     <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}
-      action={<Button size="small" color="inherit" onClick={load}>Retry</Button>}>{loadErr}</Alert>
+      action={<Button size="small" color="inherit" onClick={load}>{btnLabel("try_again")}</Button>}>{loadErr}</Alert>
   );
   useEffect(() => { load(); return pollWhileVisible(load, 30000); }, [load]);
   useEffect(() => { const t = setTimeout(() => setQ(typed.trim()), 300); return () => clearTimeout(t); }, [typed]);

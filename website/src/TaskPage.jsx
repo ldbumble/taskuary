@@ -19,6 +19,7 @@ import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
 import { useVerbs } from "./actionRow.js";
+import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow } from "./buttons.js";   // theme.jsx owns `label`
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import DifferenceIcon from "@mui/icons-material/Difference";
@@ -303,7 +304,8 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
           {s.who && <Typography variant="caption" sx={{ color: FAINT }}>{s.who}</Typography>}
           {s.ref
             ? <Button size="small" variant="text" onClick={() => onOpenTask?.(s.tid)} sx={{ fontSize: 11, textTransform: "none" }}>{s.ref} · {s.state || s.status}</Button>
-            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}>Start</Button>}
+            : !s.done && <Button size="small" variant="outlined" onClick={() => start(s)} sx={{ fontSize: 11, textTransform: "none" }}
+              title={btnHint("regular_agent")}>{btn("regular_agent")}</Button>}
         </Box>
         {/* the mail triage said served this step (store.step_arrivals) - who sent what, under the step it moved */}
         {(s.arrivals || []).map((a) => (
@@ -887,7 +889,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const replyCc = deliveryCc(replyOf), replyFiles = deliveryFiles(replyOf);
   // the AI writes the draft inside the request (server.open_reply), which can take a while: both buttons spin and say
   // "Drafting…" until it lands (the owner, 2026-09-24: "it should say spinning as it's waiting on ai to draft reply")
-  const replyPrimary = pendingReview ? "Open the draft" : sentReview ? "Write another" : "Write reply";
+  // ONE NAME (buttons.json): "Write reply", "Open the draft" and "Write another" were three names for the one Reply
+  const replyPrimary = labelOfRow("reply");
   const checklist = detail?.checklist || [];
   // what the To do list shows: the emails a task owes are Close out's, not boxes to tick here
   const todo = checklist.filter((i) => !i.out);
@@ -1071,19 +1074,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={(e) => setContinueAt(e.currentTarget)}>
-        {startingAgent === "resume" ? "Continuing…" : "Keep going"}</Button>}
+        {startingAgent === "resume" ? "Continuing…" : labelOfRow("continue")}</Button>}
       {canSave && <Button size="small" variant={barContinue ? "outlined" : "contained"} disableElevation
         disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
         startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
         title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>Stop and save</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
+        onClick={wrapUp}>{labelOfRow("save-end")}</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
       {!isGeneral && <>
         {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
           sx={canContinue || canSave ? barBtn : primaryBtn}
           startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
           title="A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
-          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+          onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
       </>}
     </Box>
   );
@@ -1126,9 +1129,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // more? it should be not in more"). It was offered only behind More, only on a coding task, only once its session had ended -
   // so a general task could never be handed to the coding agent from here. It opens the agent step; a live session is paused
   // (its handover kept for the next) when the new one starts (startCodingAgent).
-  const runAnother = { id: "run-another", group: "agent", label: "Run another agent",
+  const runAnother = { id: "run-another", group: "agent", label: labelOfRow("run-another"),
     run: () => { if (canvas) window.dispatchEvent(new CustomEvent("tq-next-run")); else setOpenStage("agent"); setRestartOpen(true); },
-    title: "A fresh agent, with new instructions if you want. One still working is paused, and what it found goes to the new one." };
+    title: hintOfRow("run-another") };
   const changeVerbs = !notDone ? [] : [
     { id: "kind", group: "more", label: "Change who does it", run: (e, a) => setPick({ what: "kind", at: a || e?.currentTarget }),
       title: "You, an assistant, or a drafted reply for you to approve" },
@@ -1139,63 +1142,53 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       title: heldRepo ? "Not started: it needs a repository - the session starts once you pick" : "Which checkout the session works in" }] : []),
   ];
   const rowVerbs = !t ? [] : !notDone
-    ? [{ id: "reopen", group: "decide", tone: "s", label: "Reopen task", run: reopen, title: "Reopens the task only. No agent starts until you choose one." }]
+    ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
     : [
       ...(replyMessage && !liveSession && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
-        disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)),
-        title: pendingReview ? "Opens the drafted reply and its close-out" : "Drafts the reply here, from this task's own context. Nothing is sent until you approve it." }] : []),
+        disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
-      ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: "Close with a note", run: (e, a) => setNoteAt(a || e?.currentTarget),
-        title: "Closes the task with what came of it. The note is kept on the task; nothing is sent." }] : []),
+      ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(a || e?.currentTarget),
+        title: hintOfRow("close-note") }] : []),
       ...(liveSession ? [
-        // the Advisor's "Answer it" is this verb (answer_agent): an agent waiting on you has the one filled move on the row
-        ...(askKey ? [{ id: "answer_agent", group: "agent", lead: true, label: "Answer it", run: answerAgent, title: "Shows the agent's screen so you can type your answer" }] : []),
-        ...(liveCodingSession ? [{ id: "diff", group: "agent", label: "Review changes", run: () => setDiffOpen(true), title: "A viewer of the agent's diff. Nothing is approved or committed here." }] : []),
-        { id: "save-end", group: "agent", label: "Stop and save", disabled: !!wrapping, run: wrapUp,
-          title: "Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it." },
+        // the Advisor's answer_agent is this verb: an agent waiting on you has the one filled move on the row
+        ...(askKey ? [{ id: "answer_agent", group: "agent", lead: true, label: labelOfRow("answer_agent"), run: answerAgent, title: hintOfRow("answer_agent") }] : []),
+        ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
+        { id: "save-end", group: "agent", label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") },
         ...(notDone ? [runAnother] : []),
-      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : "Keep going", disabled: !!startingAgent,
-        run: (e, a) => setContinueAt(a || e?.currentTarget),
-        title: isGeneral ? "Reopens the saved provider conversation and continues from its existing context."
-          : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.` }]
-      : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : "Send to agent",
+      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : labelOfRow("continue"), disabled: !!startingAgent,
+        run: (e, a) => setContinueAt(a || e?.currentTarget), title: hintOfRow("continue") }]
+      : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("send-general"),
         disabled: !!startingAgent, run: startGeneralAgent,
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
         // the profile, brain and model pickers stay in that card for whoever wants to change them first
-        title: "Starts the assistant on this task and its messages, with the choices in Agent work." }]
+        title: hintOfRow("send-general") }]
       // ON A GOAL the agent starts on the step the goal is up to - the first box not done: its child, made if it has none - and
       // that step opens on the table (the owner, 2026-10-12: "it should start an agent on what it's up to")
-      : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : "Start an agent on the next step",
-        disabled: !!startingAgent, run: startGoalStep,
-        title: "Finds the first step not done, makes it a task of its own if it is not one yet, starts the regular agent on it and opens it here." }]
-      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): Start (and the Advisor's Send to agent, aliased
-      // to it) starts it at once - it opened the coding form, whose Start coding session could not work on this computer
-      : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : "Send to agent",
-        disabled: !!startingAgent, run: startGeneralAgent, title: "Starts the assistant on this task and its messages. Nothing is sent to anyone without your yes." }]
-      : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? "Run another agent" : "Start an agent",
-        run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")),
-        // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own Start button
-        title: ranBefore ? "A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
-          : "Opens the agent step so you can choose the agent and add instructions. Nothing starts until you press Start there." }] : []),
+      : startHere && t?.DoneWhen ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "step" ? "Starting…" : labelOfRow("start-agent"),
+        disabled: !!startingAgent, run: startGoalStep, title: hintOfRow("start-agent") }]
+      // WITH NO CODING TOOL CONNECTED the general agent is simply THE agent (B3): Send to agent starts it at once - it opened the
+      // coding form, whose coding session could not work on this computer
+      : startHere && !canCode && !ranBefore ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("start-agent"),
+        disabled: !!startingAgent, run: startGeneralAgent, title: hintOfRow("start-agent") }]
+      // it OPENS the step where the agent and its instructions are chosen - nothing starts until that step's own button
+      : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
+        run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")), title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
-      ...(!liveSession ? [{ id: "email", group: "agent", label: "Send out results", run: () => setEmailOpen(true),
-        title: "An email or a chat message about this task, to anyone - the AI drafts it from your words and the work. It waits in Close out for your approval; the task closes once it is sent." }] : []),
-      ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: "Ask sender", run: () => setAskSenderOpen(true),
-        title: "Drafts a question to the sender. It waits here for your approval; nothing is sent now." }] : []),
-      { id: "done", group: "more", label: finishing ? "Marking done…" : "Mark done", disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
+      ...(!liveSession ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
+      ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
+      { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send & close, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
       // ONE VERB FOR IT, button and dialog (U13): "Dismiss" on the bar deleted the task behind a dialog that said Delete
-      { id: "nat", group: "more", label: "Remove - not a task", run: () => setConfirmNAT(true), title: NAT_TITLE },
-      { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : "Remind me", run: (e, a) => setRemindAt(a || e?.currentTarget),
-        title: "Put it away until a day; it is back on your work rail that morning" },
-      { id: "hand", group: "more", label: "Hand it to a person", run: () => setHandoff(true),
-        title: report ? "Forwards it to a person with the agent's result in it — the AI writes the forward, you send it." : "Not ours to do — the AI writes the forward, you send it." },
-      { id: "reshape", group: "more", label: "Split or merge", run: () => setReshape(true), title: "Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats." },
+      { id: "nat", group: "more", label: labelOfRow("nat"), run: () => setConfirmNAT(true), title: NAT_TITLE },
+      { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => setRemindAt(a || e?.currentTarget),
+        title: hintOfRow("remind") },
+      { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand") },
+      { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
       // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
-      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: "Stop and save", disabled: !!wrapping, run: wrapUp,
-        title: "Writes up what the session did and files it as the task's result. The task stays open until you press Mark done." }] : []),
+      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp,
+        title: hintOfRow("save-end") }] : []),
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
       // WHAT THE PILLS USED TO CHANGE, on the row now that the pills only read (section 1's redesign, 2026-10-16): the same PATCHes
@@ -1212,7 +1205,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const nextRunForm = (
                     <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       <Typography sx={{ color: INK, fontSize: 12.5, fontWeight: 600, mb: 0.75 }}>
-                        {report || detail?.transcript || term?.alive || generalStarted ? "Start another agent" : "Start an agent"}
+                        {report || detail?.transcript || term?.alive || generalStarted ? labelOfRow("run-another") : labelOfRow("start-agent")}
                       </Typography>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                         {/* coding asks ONE question (which CLI); a hand-off asks three - which profile,
@@ -1247,7 +1240,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         {!generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
-                          {startingAgent === "coding" ? "Starting…" : detail?.transcript ? "Start new coding session" : "Start coding session"}
+                          {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
                         </Button>}
                         {/* HELD FOR A REPOSITORY it said nothing (the owner, 2026-10-01): it says why, with the picker beside it, and
                             the pick resumes this start - the same road a start that ran into the question takes */}
@@ -1260,16 +1253,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </>}
                         {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>Stop and save</Button>}
+                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>{labelOfRow("save-end")}</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}
                           startIcon={<TaskuaryMark size={13} />}
-                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Use non-coding agent</Button>}
+                          onClick={() => { setHandOff(true); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>{choice("agent", "regular_agent")}</Button>}
                         {generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || runPics.busy}
                           startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                           onClick={startGeneralAgent}>
-                          {startingAgent === "general" ? "Starting…" : canCode ? "Send to non-coding agent" : "Send to agent"}
+                          {startingAgent === "general" ? "Starting…" : btn("regular_agent")}
                         </Button>}
                         {handOff && canCode && <Button size="small" variant="text" disabled={!!startingAgent}
                           onClick={() => { setHandOff(false); setRun((r) => ({ ...r, agent: "", pick: "", model: "" })); }}>Back to coding</Button>}
@@ -1348,17 +1341,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={11} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 13 }} />}
                         sx={{ fontSize: 10.5, minHeight: 24, py: 0, px: 1 }}
                         title={markDoneHint}
-                        disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
-                      <Tooltip title={`Remove - not a task. ${NAT_TITLE}`}>
+                        disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
+                      <Tooltip title={`${labelOfRow("nat")}. ${NAT_TITLE}`}>
                         <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
-                      <Tooltip title="Hand it to a person — the AI writes the forward, you send it">
+                      <Tooltip title={`${labelOfRow("hand")} - ${hintOfRow("hand")}`}>
                         <IconButton size="small" sx={{ color: "#55697a" }} onClick={() => setHandoff(true)}>
                           <ForwardToInboxIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
-                      <Tooltip title="Split or merge — break it in two, or fold it into the task it repeats">
+                      <Tooltip title={`${labelOfRow("reshape")} - ${hintOfRow("reshape")}`}>
                         <IconButton size="small" sx={{ color: "#6f8a6e" }} onClick={() => setReshape(true)}>
                           <CallSplitIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
@@ -1643,14 +1636,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
                               title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
-                              onClick={(e) => setContinueAt(e.currentTarget)}>Keep going</Button>
+                              onClick={(e) => setContinueAt(e.currentTarget)}>{labelOfRow("continue")}</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={<TerminalIcon sx={{ fontSize: 14 }} />}
                               title="Opens the agent step so you can choose the agent and add instructions."
                               onClick={() => setOpenStage("agent")}>
-                              {report || detail?.transcript ? "Run another agent" : startLabel(story, t.Kind, false) || "Start an agent"}</Button>
+                              {report || detail?.transcript ? labelOfRow("run-another") : labelOfRow("start-agent")}</Button>
                           )}
                         </Box>
                       : null} />
@@ -1673,7 +1666,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           the notification stays on the chip and beside the waiting room. */}
                       {liveCodingSession && <Button size="small" variant="outlined" sx={liveCtl} startIcon={<DifferenceIcon sx={{ fontSize: 13 }} />}
                         title="A viewer of the agent's diff. Nothing is approved or committed here."
-                        onClick={() => setDiffOpen(true)}>Review changes</Button>}
+                        onClick={() => setDiffOpen(true)}>{labelOfRow("diff")}</Button>}
                       {/* ONE ENDING. Three buttons all ended the session and differed only in what they
                           wrote down - a result, a handover note, or nothing - and the labels buried the
                           half they shared (the owner, 2026-09-16: "save result vs end session vs stop
@@ -1683,13 +1676,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           Task completion stays separate (PW-217/218): this ends the AGENT. */}
                       <Button size="small" variant="outlined" sx={liveCtl} disabled={!!wrapping} startIcon={<DoneAllIcon sx={{ fontSize: 13 }} />}
                         title="Writes up what this session did, ends it, and drafts the reply to whoever asked. The task stays open until you complete it."
-                        onClick={wrapUp}>Stop and save</Button>
+                        onClick={wrapUp}>{labelOfRow("save-end")}</Button>
                       {/* A STUCK AGENT (a rate limit, a token ceiling) had only the two moves above, and neither gets the work done:
                           the way on is another agent - startCodingAgent pauses this one and files its handover first */}
                       {!isGeneral && agentState === AGENT.waiting && subState(term) === "stalled" && (
                         <Button size="small" variant="contained" disableElevation sx={liveCtl} startIcon={<RefreshIcon sx={{ fontSize: 13 }} />}
                           title="Pauses this one (its notes are kept) and starts a fresh agent - you choose which."
-                          onClick={() => setRestartOpen(true)}>Run another agent</Button>
+                          onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
                       )}
                     </Box>
                   )}
@@ -1721,7 +1714,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!inRow && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent}
                         startIcon={startingAgent === "general" ? <CircularProgress size={11} /> : <TaskuaryMark size={13} />}
                         onClick={startGeneralAgent}>
-                        {startingAgent === "general" ? "Starting…" : "Send to agent"}
+                        {startingAgent === "general" ? "Starting…" : labelOfRow("send-general")}
                       </Button>}
                       <Typography variant="caption" sx={{ color: FAINT, ml: inRow ? 0 : 1 }}>
                         {inRow ? "Send to agent starts it with these choices, this task and its messages."
@@ -1829,7 +1822,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {asking && <Box data-tq-agent-asks="" role="status" sx={{ position: "absolute", inset: 0, zIndex: 2, bgcolor: "rgba(255,253,251,.97)",
                         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1.25, p: 3, textAlign: "center" }}>
                         <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.5, maxWidth: 560, overflowWrap: "anywhere" }}>{askLine}</Typography>
-                        {!inRow && <Button size="small" variant="contained" disableElevation sx={primaryBtn} onClick={answerAgent}>Answer it</Button>}
+                        {!inRow && <Button size="small" variant="contained" disableElevation sx={primaryBtn} onClick={answerAgent}>{labelOfRow("answer_agent")}</Button>}
                         <Link component="button" type="button" underline="hover" onClick={() => setSeenAsk(askKey)} sx={{ fontSize: 12, color: DIM }}>Show details</Link>
                       </Box>}
                     </Box>
@@ -1875,7 +1868,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             startIcon={openingReply ? <CircularProgress size={11} /> : <ForwardToInboxIcon sx={{ fontSize: 14 }} />}
                             onClick={() => (pendingReview ? setOpenStage("reply") : openReply(true))}>
                             {openingReply ? "Drafting…" : replyPrimary}</Button>
-                          <Tooltip title="Ask sender — a question waits on the task for your approval">
+                          <Tooltip title={`${labelOfRow("ask-sender")} - ${hintOfRow("ask-sender")}`}>
                             <IconButton size="small" sx={{ color: "#8a3646" }} onClick={() => setAskSenderOpen(true)}>
                               <ChatBubbleOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
                           </Tooltip>
@@ -1919,7 +1912,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {!inRow && <Button size="small" variant="outlined" sx={barBtn}
                             startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 15, color: "#8a3646" }} />}
                             title="Drafts a question to the sender. It waits here for your approval; nothing is sent now."
-                            onClick={() => setAskSenderOpen(true)}>Ask sender</Button>}
+                            onClick={() => setAskSenderOpen(true)}>{labelOfRow("ask-sender")}</Button>}
                           <Box sx={{ flex: 1, minWidth: 12 }} />
                           <Typography variant="caption" sx={{ color: FAINT, textAlign: "right", maxWidth: 320 }}>
                             {/* no More button: with these on the surface there is nothing left to hide */}
@@ -2139,28 +2132,28 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Button size="small" variant="contained" disableElevation startIcon={finishing ? <CircularProgress size={14} color="inherit" /> : <DoneAllIcon sx={{ fontSize: 16 }} />}
                       sx={primaryBtn}
                       title={markDoneHint}
-                      disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : "Mark done"}</Button>
+                      disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
                     <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                       sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                       title={NAT_TITLE}
-                      onClick={() => setConfirmNAT(true)}>Remove - not a task</Button>
+                      onClick={() => setConfirmNAT(true)}>{labelOfRow("nat")}</Button>
                     <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                     <Button size="small" variant="outlined" sx={barBtn}
                       startIcon={<ForwardToInboxIcon sx={{ fontSize: 16, color: "#55697a" }} />}
                       title="Not ours to do — the AI writes the forward, you send it."
-                      onClick={() => setHandoff(true)}>Hand it to a person</Button>
+                      onClick={() => setHandoff(true)}>{labelOfRow("hand")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn}
                       startIcon={<CallSplitIcon sx={{ fontSize: 16, color: "#6f8a6e" }} />}
                       title="Two jobs in here, or a duplicate? Break it in two, or fold it into the task it repeats."
-                      onClick={() => setReshape(true)}>Split or merge</Button>
+                      onClick={() => setReshape(true)}>{labelOfRow("reshape")}</Button>
                     <Button size="small" variant="outlined" sx={barBtn} endIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
                       title={`Who does it, the priority${canCode ? ", who it is assigned to, or the repository" : " or who it is assigned to"}`}
                       onClick={(e) => setPick({ what: "menu", at: e.currentTarget })}>Change</Button>
                   </> : (
                     <Button size="small" variant="outlined" startIcon={<RefreshIcon sx={{ fontSize: 15 }} />}
                       title="Reopens the task only. No agent starts until you choose one."
-                      onClick={reopen}>Reopen task</Button>
+                      onClick={reopen}>{labelOfRow("reopen")}</Button>
                   )}
                 </Box>
               )}

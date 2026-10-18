@@ -3,6 +3,7 @@ import { Box, Button, Popover, TextField, Typography } from "@mui/material";
 import api from "./api.js";
 import { MicButton } from "./ui.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
+import { label } from "./buttons.js";
 
 // CONTINUE SESSION (A19, the owner, 2026-09-25: "should work for both coding and non coding agents? Maybe add a new
 // prompt inside that continue session"). The agent picks up where it left off - its own CLI session, or its saved
@@ -28,7 +29,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 320 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Keep going{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{label("continue")}{taskRef ? ` · ${taskRef}` : ""}</Typography>
       <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="Anything to tell it as it picks up? (optional) - paste or drop a picture too"
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy} {...pics.drop}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
@@ -41,7 +42,7 @@ export default function ContinueBox({ task, anchor, onClose, onDone, inline = fa
       <ImageTray pics={pics} />
       <Box sx={{ display: "flex", gap: 0.75 }}>
         <Button size="small" variant="contained" disableElevation disabled={busy || pics.busy} onClick={go}>
-          {busy ? "Continuing…" : said ? "Continue with this" : "Continue as is"}</Button>
+          {busy ? "Continuing…" : label("continue")}</Button>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
       </Box>
       {err && <Typography sx={{ fontSize: 11.5, color: "#7a2f3c" }}>{err}</Typography>}

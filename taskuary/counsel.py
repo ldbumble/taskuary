@@ -12,6 +12,7 @@ its own clock instead (assistant.py), reading this same dossier; COUNSEL.md is t
 import json, re
 from datetime import datetime, timedelta
 from loguru import logger
+from . import buttons
 
 
 DAYS = 30                 # how far back the dossier reads
@@ -167,7 +168,7 @@ def pick(store, *heads: str) -> str:
 # an install without one drops them; an owner's copy written before that still talking coding gets the one rule after it
 CODING_ONLY = 'With a coding tool connected'
 NO_CODING = ("No coding tool is connected on this computer: never mention, offer or ask about a coding agent or a repository. "
-             "Every hand-off is Send to agent - a regular agent.")
+             f"Every hand-off is {buttons.label('regular_agent')} - a regular agent.")
 
 def without_coding(text: str) -> str:
     out, skip = [], False

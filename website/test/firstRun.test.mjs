@@ -110,6 +110,6 @@ test("setup reads for someone with no coding tool, and its loops and errors beha
   // a background read never clears an error; the first load that failed is tried again, with Try again
   assert.doesNotMatch(fr, /setSources\(s\.data\.data \|\| \[\]\); setErr\(""\)/);
   assert.match(fr, /if \(st \|\| !fails\) return undefined;\n\s+const id = setTimeout\(reload, 3000\);/);
-  assert.match(fr, /\{loadErr && <Button size="small" onClick=\{reload\}>Try again<\/Button>\}/);
+  assert.match(fr, /\{loadErr && <Button size="small" onClick=\{reload\}>\{btnLabel\("try_again"\)\}<\/Button>\}/);
   assert.doesNotMatch(fr, /VOICE_TYPES|voiceDue/, "the speech-to-text offer was never shown");
 });

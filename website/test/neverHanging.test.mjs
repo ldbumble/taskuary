@@ -11,6 +11,6 @@ test("with nothing on the table the row's floor is Next, and the chat says to pr
   // ...only over an EMPTY row: a task card registers its own Next, and the hint over it read as a bug (2026-10-08)
   assert.match(view, /const rowEmpty = !rowVerbs\.list\.some\(\(v\) => !String\(v\.id\)\.startsWith\("floor:"\)\)/);
   assert.match(view, /const hanging = [^\n]*rowEmpty[^\n]*\(canAdvance \|\| !!err\)/);
-  assert.match(view, /useVerbs\("floor", \[\{ id: "floor:next", group: "next", label: "Next"/);
+  assert.match(view, /useVerbs\("floor", \[\{ id: "floor:next", group: "next", label: btn\("next"\)/);
   assert.doesNotMatch(view, /Press <b>Next<\/b> below to continue/, "the filled Next is enough - no line telling you to press it");
 });

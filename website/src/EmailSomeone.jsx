@@ -12,6 +12,7 @@ import { EmailRecipients } from "./NewSheet.jsx";
 import { recipientLabel, recipientOptions } from "./recipientOptions.js";
 import { ACCENT, BORDER, DIM, FAINT, INK } from "./theme.jsx";
 import { ChannelIcon } from "./ui.jsx";
+import { label } from "./buttons.js";
 
 // what a task can send on (slots.KINDS): email, and the chats outbound.send_out carries
 export const TASK_CHANNELS = ["email", "teams", "whatsapp", "telegram", "imessage", "discord"];
@@ -130,7 +131,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
       <DialogActions>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
         <Button variant="contained" disableElevation onClick={go} disabled={busy || !ready}>
-          {busy ? <CircularProgress size={15} /> : "Draft with AI"}
+          {busy ? <CircularProgress size={15} /> : label("redraft", "none")}
         </Button>
       </DialogActions>
     </Dialog>

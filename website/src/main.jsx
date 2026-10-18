@@ -5,6 +5,7 @@ import { startTracking } from "./demoTrack";
 import { needsLink, UNLINKED_LINE, UNLINKED_EVENT } from "./unlinked.js";
 import { record } from "./lastError.js";
 import BugReportDialog from "./BugReportDialog.jsx";
+import { label as btnLabel } from "./buttons.js";
 
 // a crash that draws no Assistant line still leaves its report ready behind the Help icon
 window.addEventListener("error", (e) => record(e.error || e.message));
@@ -49,7 +50,7 @@ class Boundary extends React.Component {
         <button onClick={() => this.setState({ err: null, report: null })}
           style={{ padding: "6px 16px", borderRadius: 8, border: "1px solid #d8cfbe", background: "#eae4d8",
             color: "#55697a", fontWeight: 600, cursor: "pointer" }}>
-          Try again
+          {btnLabel("try_again")}
         </button>
         <button onClick={() => location.reload()}
           style={{ marginLeft: 8, padding: "6px 16px", borderRadius: 8, border: "1px solid #e1dcd5",

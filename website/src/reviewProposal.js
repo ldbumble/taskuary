@@ -1,3 +1,5 @@
+import { label } from "./buttons.js";
+
 export const proposalFrom = (review) => {
   if (review?.Kind !== "action") return null;
   try {
@@ -11,13 +13,15 @@ export const proposalFrom = (review) => {
 // THE CLOSE-OUT (the owner, 2026-09-27): what finishes a task where it lives - merge the PR the agent opened, close
 // the issue it came from. Its text is the summary a merge is squashed with, or the comment the issue closes with.
 // ONE SET OF WORDS FOR EVERY SYSTEM (the owner, 2026-09-27: "if we have button to close out per system it will be
-// endless"): Close out / Decline / Remind me (the task's own - 2026-10-02: "not yet is really remind me later"). Only `then` - what it does THERE - differs; a new connector adds a line.
-export const CLOSE_OUT = "Close out";
+// endless"): Approve / Decline / Remind me (the task's own - 2026-10-02: "not yet is really remind me later"). Only `then` - what it does THERE - differs; a new connector adds a line.
+// ...and Approve is the one word for every proposal (buttons.json: approve's `action` state) - "Merge & close", "Run action" and
+// "Save playbook" were three more names for the same press
+const APPROVE = label("approve", "action");
 export const CLOSEOUT = {
-  merge_pr: { label: "Merge & close", busy: "merging…", then: "merges the pull request on GitHub", reject: null,
+  merge_pr: { label: APPROVE, busy: "merging…", then: "merges the pull request on GitHub", reject: null,
     // the other answer, where the system has one: the work is not wanted - the PR closes unmerged
     alt: { verb: "close_pr", label: "Decline", busy: "declining…", then: "closes the pull request without merging it" } },
-  close_issue: { label: "Close issue & task", busy: "closing…", then: "closes the issue on GitHub", reject: null },
+  close_issue: { label: APPROVE, busy: "closing…", then: "closes the issue on GitHub", reject: null },
 };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
@@ -62,7 +66,7 @@ export const proposalPresentation = (review) => {
         : "Playbook proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
       destination: `Docs → Playbooks → ${slug}.md`,
-      approveLabel: "Save playbook",
+      approveLabel: APPROVE,
       busyLabel: "saving…",
       rejectLabel: "Discard proposal",
     };
@@ -73,7 +77,7 @@ export const proposalPresentation = (review) => {
     context: "Proposed action · nothing will be sent to the conversation",
     destinationLabel: "Action",
     destination: String(proposal?.action || "proposed action").replaceAll("_", " "),
-    approveLabel: "Run action",
+    approveLabel: APPROVE,
     busyLabel: "running…",
     rejectLabel: "Dismiss",
   };

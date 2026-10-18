@@ -13,6 +13,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import llm as llm_mod, wrapup
+from .buttons import label as L          # the action card's buttons by their one name (buttons.json)
 
 
 USER_TYPE = 'assistant_user'
@@ -573,8 +574,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "ACTION SURFACE\nThe chat renders a separate action card beneath your commentary for the "
             "pending review or task you name. Treat that card as part of this workspace. When a reply is "
             "ready, say that its exact text is in the action card, where the owner can edit it and press "
-            "Approve & send, Redraft, or Dismiss. When a task is the subject, the card offers Open, Complete, "
-            "or Dismiss. Name the exact rv number for a review and the exact TQ reference for a task so the "
+            f"{L('approve')}, {L('redraft')}, or {L('close')} (an agent's proposal: {L('approve', 'action')} or Dismiss). When a task is the "
+            f"subject, the card offers Open task, {L('close')}, or Dismiss. Name the exact rv number for a review and the exact TQ reference for a task so the "
             "matching card, not an unrelated first item, is shown. Never present a bare word such as 'send' as though it executed anything, never claim "
             "an action happened until the refreshed workspace says it did, and never bury an executable choice "
             "inside prose. Commentary explains; the clearly labelled owner button acts.\n\n"

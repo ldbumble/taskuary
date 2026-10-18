@@ -9,6 +9,7 @@ import ForwardToInboxIcon from "@mui/icons-material/ForwardToInbox";
 import api from "./api";
 import { ContactPicker } from "./ui.jsx";
 import { FAINT, selSx } from "./theme.jsx";
+import { label } from "./buttons.js";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
   ? "This needs the new server — restart Taskuary and try again."
@@ -65,7 +66,7 @@ export const Handoff = ({ taskId, onSent, onLeave, onStay }) => {
         <ContactPicker people={people} value={to} onChange={setTo} onPick={setTo}
           placeholder="who should own this — name or email" sx={{ flex: 1, minWidth: 220 }} />
         <Button size="small" onClick={draft} disabled={!!busy}>
-          {busy === "draft" ? <CircularProgress size={12} /> : text ? "Rewrite" : "Draft with AI"}
+          {busy === "draft" ? <CircularProgress size={12} /> : text ? label("redraft") : label("redraft", "none")}
         </Button>
       </Box>
       <TextField multiline minRows={4} size="small" value={text} onChange={(e) => setText(e.target.value)}

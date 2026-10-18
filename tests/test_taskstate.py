@@ -2,7 +2,7 @@
 decided once on the server."""
 import unittest
 
-from taskuary import taskstate, terminal
+from taskuary import buttons, taskstate, terminal
 from taskuary.store import MemoryStore
 
 
@@ -75,7 +75,9 @@ class MakeATaskTests(unittest.TestCase):
         self.assertIn('already a task', concierge.cannot(mine, 'mine', s))
         # ...but on a task an agent holds it takes it back, and says so
         s.update_task(t, {'Assignee': 'agent:coding'}, 'o')
-        self.assertEqual([c['label'] for c in concierge.chips_for(s, mine) if c['verb'] == 'mine'], ['Take it myself'])
+        # ONE name per button (buttons.json): the hover says it takes the work back
+        took = [c for c in concierge.chips_for(s, mine) if c['verb'] == 'mine']
+        self.assertEqual([c['label'] for c in took], [buttons.label('mine')]); self.assertIn('back', took[0]['hint'])
 
     def test_an_idea_or_an_fyi_that_already_has_its_task_is_not_offered_make_a_task(self):
         # the owner, 2026-10-01: "no Make a task on an item that already IS a task" - an Advisor idea that triage opened a
@@ -87,13 +89,13 @@ class MakeATaskTests(unittest.TestCase):
         t = s.create_task({'Title': 'Chase the invoice', 'Kind': 'general', 'Status': 'open'}, 'o')
         idea = {'key': 'idea:3', 'kind': 'idea', 'idea': 3, 'tid': t, 'ref': f'TQ-{t:04d}', 'title': 'Chase the invoice'}
         self.assertNotIn('mine', on(idea))
-        self.assertNotIn('Make a task', concierge.fallback(idea, True))
+        self.assertNotIn(buttons.label('mine'), concierge.fallback(idea, True))
         s.update_task(t, {'Status': 'done'}, 'o')
         self.assertIn('mine', on(idea), "a closed task is history - new work on it may be a task again")
         live = s.create_task({'Title': 'Payroll notice', 'Kind': 'task', 'Status': 'open'}, 'o')
         fyi = {'key': 'msg:9', 'kind': 'fyi', 'mid': 9, 'tid': live, 'ref': f'TQ-{live:04d}', 'title': 'Payroll notice', 'who': 'Erin Blake'}
-        self.assertNotIn('Make a task', concierge.fallback(fyi, True))
-        self.assertIn('Make a task', concierge.fallback({**fyi, 'tid': None}, True))
+        self.assertNotIn(buttons.label('mine'), concierge.fallback(fyi, True))
+        self.assertIn(buttons.label('mine'), concierge.fallback({**fyi, 'tid': None}, True))
 
     def test_the_mine_door_on_a_message_with_a_task_returns_that_task_and_makes_no_second(self):
         from unittest import mock

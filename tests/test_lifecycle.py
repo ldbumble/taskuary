@@ -10,7 +10,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, general, server, terminal, verdicts
+from taskuary import buttons, concierge, funnel, general, server, terminal, verdicts
 from taskuary.store import MemoryStore
 
 
@@ -61,7 +61,7 @@ class LifecycleTests(unittest.TestCase):
         # ...the introduction is the model's when there is one (PW-153); this walk has none, so the facts spoke
         self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
         self.assertIn('Nothing has been started', said['say'])                                            # the proposal says what WILL happen
-        self.assertIn('Done - Send to the coding agent', self.chat()[-1][1])                                # ...and the receipt what did
+        self.assertIn(f"Done - {buttons.label('coding_agent')}", self.chat()[-1][1])                       # ...and the receipt what did
         # 5. the coding agent works: the item rides at the top, in hand, under the agent's key; the watcher says so.
         # The watcher only believes a state that HOLDS (funnel.DWELL, so a moment of quiet is not "it
         # stopped") - this walk changes state on purpose, line by line, so it opts out of the wait.

@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useCoding } from "./capabilities.js";
 import { movesOf, useVerbs } from "./actionRow.js";
+import { choice, hint as btnHint, label as btn } from "./buttons.js";
 import { Button, TextField } from "@mui/material";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
@@ -331,9 +332,8 @@ function useClose(card, onDone) {
 // it's confusing").
 // the task page's own actions, reached from a card (the owner, 2026-09-28: "whatever actions you can do in tasks should
 // have those buttons ... it can be in more") - each opens the task with that dialog up
-const TASK_ACTS = [["not_a_task", "Not a task…", "Delete it and teach Taskuary why - on the task"],
-                   ["handoff", "Hand it to a person…", "The AI writes the forward, you send it - on the task"],
-                   ["reshape", "Split or merge…", "Break it in two, or fold it into the task it repeats - on the task"]];
+// the task page's own acts, by their buttons.json verbs - the same words the task page draws
+const TASK_ACTS = [["not_a_task", "remove"], ["handoff", "forward"], ["reshape", "split"]].map(([act, v]) => [act, btn(v), btnHint(v)]);
 
 export function Foot({ verb, then, where, covers = [], close, onDone, more, promote, extra = [], inline = false, openTask, taskId }) {
   const nav = React.useContext(CardNav);
@@ -344,19 +344,19 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
   // a reply still unsent behind the card is dismissed by closing - the button says so (the owner, 2026-09-24)
   const unsent = !!(close?.draft || close?.reply_pending);
   const words = [...also, ...(close?.tid && !also.some((a) => a.verb === "close")
-    ? [{ verb: "close", label: shut.busy ? "Closing…" : "Mark done",
-         title: unsent ? "Mark done - the drafted reply is not sent; it stays on the task" : "Mark done - it stops coming back to Work",
+    ? [{ verb: "close", label: shut.busy ? "Closing…" : btn("close"),
+         title: unsent ? `${btnHint("close")} - the drafted reply is not sent; it stays on the task` : btnHint("close"),
          onClick: shut.run, disabled: shut.busy }] : []),
     ...((close?.tid || taskId) && openTask ? TASK_ACTS.map(([act, label, title]) => ({ verb: `task:${act}`, label, title, onClick: () => openTask(close?.tid || taskId, { act }) })) : [])];
   // THE ROW ABOVE THE CHAT LINE (layout B, 2026-09-30): Next and the card's other words ride there, in the one place every item
   // keeps them; the card keeps its own move. The same handlers - a word's click still gets the element it was pressed on.
   const rowed = !!nav.row;
-  // The first three of the card's own words stand in the row (a report's "Make a task", "Send to agent"); the rest - and Mark done and
+  // The first three of the card's own words stand in the row (a report's Put it on my list, Send to agent); the rest - and Mark done and
   // the task page's acts - sit behind More. The card's own move (its Foot `verb`) stays in the card.
   const asVerb = (a, group) => ({ id: `w:${a.verb || a.label}`, group, tone: "s", label: a.label, title: a.title, disabled: a.disabled,
     run: (e, anchor) => a.onClick?.({ currentTarget: anchor || e?.currentTarget }) });
   useVerbs("foot", rowed ? [
-    ...(nav.onNext ? [{ id: "next", group: "next", label: "Next", disabled: nav.busy, run: () => nav.onNext(), title: "Puts this one down, still yours, and brings the next" }] : []),
+    ...(nav.onNext ? [{ id: "next", group: "next", label: btn("next"), disabled: nav.busy, run: () => nav.onNext(), title: btnHint("next") }] : []),
     // a Foot's move acts on the WHOLE item on the table - a batch's "All read, next", a report's, a message's - so it rides the row with
     // the task's verbs (the owner, 2026-10-06: "all read next should be on bottom no as it relates to the whole lot?"); what acts on a
     // PIECE of it (a draft under a task, YourMove's send) stays on the piece. Mark done is never behind More.
@@ -369,7 +369,7 @@ export function Foot({ verb, then, where, covers = [], close, onDone, more, prom
       {then && <div className="tq-card-then">{then}</div>}
       <div className="tq-card-actions">
         {!rowed && (verb || (lifted && <Button size="small" variant="contained" disableElevation disabled={lifted.disabled} onClick={lifted.onClick} title={lifted.title} sx={primary}>{lifted.label}</Button>))}
-        {nav.onNext && !rowed && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>Next</Button>}
+        {nav.onNext && !rowed && <Button size="small" variant="outlined" disabled={nav.busy} onClick={nav.onNext} sx={quiet}>{btn("next")}</Button>}
         {more}
         {!inline && !rowed && !!words.length && (
           <Button size="small" onClick={() => setOpen((o) => !o)} sx={faint} aria-expanded={open}>
@@ -671,26 +671,26 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
   if (rv?.gone) return <CardShell card={card} kicker="already handled" title={card.title} sub="This one is no longer waiting on you." />;
   const goSx = conflict || (co && blocked) ? alertSx : moveSx;
   const verb = conflict
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => sendBack(`Close out was refused: ${gh.reason.split(" - ")[0]}. Resolve that on the pull request and push; the owner closes out once it is clean.`)} sx={goSx}>
-        {busy === "back" ? "Sending…" : "Send back to the agent"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => sendBack(`The merge was refused: ${gh.reason.split(" - ")[0]}. Resolve that on the pull request and push; the owner approves it once it is clean.`)} sx={goSx}>
+        {busy === "back" ? "Sending…" : btn("continue")}</Button>
     : action
-    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : undefined} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>{busy === "approve" ? (co ? co.busy : "Running…") : co ? co.label : "Run it"}</Button>
+    ? <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || (co && blocked)} title={co && blocked ? gh.reason : btnHint("approve", "action")} startIcon={<DoneRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>{busy === "approve" ? (co ? co.busy : "Running…") : btn("approve", "action")}</Button>
     : rv?.CanSend === false && !card.closeout ? null : rv && !value.trim() && !stale ? (
       /* NOTHING TO SEND YET: a disabled Send was the only button, and the redraft word it covers was
          hidden as its duplicate - no way to get a draft from the card at all (2026-09-23) */
       <Button size="small" variant="contained" disableElevation disabled={!!busy || drafting} startIcon={<RefreshRoundedIcon />}
-        onClick={redraft} sx={goSx}>{busy === "redraft" || drafting ? "Drafting…" : "Draft with AI"}</Button>
+        onClick={redraft} sx={goSx}>{busy === "redraft" || drafting ? "Drafting…" : btn("redraft", "none")}</Button>
     ) : stale ? (
       /* the road out of the warning, on the card that carries it: a stale draft disabled the
          only button here and named no way forward (the owner, 2026-09-21: "just reprocess it
          then"). Refreshing is the primary action while the thread is ahead of the draft. */
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv}
         startIcon={<RefreshRoundedIcon />} onClick={redraft} sx={goSx}
-        title="Rewrites the draft from the newest message, then you approve it">
-        {busy === "redraft" ? "Refreshing…" : "Refresh the draft"}</Button>
+        title={btnHint("redraft")}>
+        {busy === "redraft" ? "Drafting…" : btn("redraft")}</Button>
     ) : (
       <Button size="small" variant="contained" disableElevation disabled={!!busy || !rv || !value.trim() || blocked} title={blocked ? gh.reason : undefined} startIcon={<SendRoundedIcon />} onClick={() => decide("approve")} sx={goSx}>
-        {busy === "approve" ? "Sending…" : card.tid ? "Send & close" : "Send reply"}</Button>
+        {busy === "approve" ? "Sending…" : btn("approve")}</Button>
     );
   const then = conflict ? <>tells it to resolve the conflicts and push; this card comes back when it stops, and nothing is merged or sent until then.</>
     : co ? <>{co.then}{mate ? <>, then the reply above {sendsBy(mate.Channel, mate.FromName || "them")}</> : null}.</>
@@ -712,13 +712,13 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
         {/* what GitHub says about this pull request now - why Close out is off, or the red it will merge past */}
         {gh && blocked && <div className="tq-move-say">{capital(gh.reason)}.</div>}
         {/* WHAT THE BOX IS (the owner, 2026-09-28: "what does the words mean?"): the reply, to whom, and when it goes */}
-        {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes ${stopped ? "with Close out, once it can merge" : card.tid || co ? "when you Close out" : "when you press Send"}. Edit it here first if you like.`}</div>}
+        {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes when you press ${btn("approve", action ? "action" : undefined)}${stopped ? ", once it can merge" : ""}. Edit it here first if you like.`}</div>}
         {rv && (
           <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
             placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
             sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}
-        {!action && stale && <div className="tq-card-err">New messages arrived after this draft. Refresh the draft with the latest context before sending.</div>}
+        {!action && stale && <div className="tq-card-err">{`New messages arrived after this draft. Press ${btn("redraft")} to write it from the latest message before sending.`}</div>}
         {!action && rv && drafting && !value.trim() && <div className="tq-card-excerpt">Drafting… it fills in here when the AI is done - or write it yourself.</div>}
         {!action && rv && !drafting && draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line && <div className={draftState(rv).state === "failed" ? "tq-card-err" : "tq-card-excerpt"}>{draftState({ ...rv, HasDraft: value.trim() ? 1 : 0 }).line}</div>}
         {!action && !card.closeout && sendBlockLine(rv) && <div className="tq-card-excerpt">{sendBlockLine(rv)}</div>}
@@ -733,7 +733,7 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
             placeholder={`What should ${card.agent || "the agent"} change?`} sx={{ "& textarea": { fontSize: 12.5 } }} />
           <Button size="small" variant="outlined" disabled={!!busy || !back.trim()} onClick={() => sendBack(back.trim())} sx={quiet}>
-            {busy === "back" ? "Sending…" : "Send back"}</Button>
+            {busy === "back" ? "Sending…" : btn("continue")}</Button>
         </div>
       )}
       {/* "Mark done" arrives as a conversation word; off the walk (no words), the same road is still offered
@@ -743,19 +743,19 @@ export function ReplyCard({ card, onDone, onOpenTask, onTimeline }) {
           onClick: async () => {
             if (o === "anyway") return decide("merge_anyway");
             setBusy(o); setErr("");
-            try { const said = await act(o); onDone?.(`${said}. Close out again once the checks pass.`); } catch (e) { setErr(errText(e)); }
+            try { const said = await act(o); onDone?.(`${said}. Press ${btn("approve", "action")} again once the checks pass.`); } catch (e) { setErr(errText(e)); }
             setBusy("");
           } })),
           ...(cop?.alt ? [{ verb: cop.alt.verb, label: busy === cop.alt.verb ? cop.alt.busy : cop.alt.label, title: `${cop.alt.label} ${cop.alt.then}.`,
           disabled: !!busy || !rv, onClick: () => decide(cop.alt.verb) }] : []),
         // a draft's choices are Close out, Redraft or Mark done (the owner, 2026-10-01: "rejected is useless - it should be redraft
         // or close task") - an empty or stale draft has its redraft as the move itself
-        ...(rv && !action && !stale && value.trim() ? [{ verb: "redraft", label: busy === "redraft" ? "Drafting…" : "Redraft",
-          title: "Writes the draft again from the thread as it is now", disabled: !!busy, onClick: redraft }] : []),
-        ...(card.tid && !conflict ? [{ verb: "back", label: "Send back to the agent", title: "Tell the agent what to change - it picks up where it stopped",
+        ...(rv && !action && !stale && value.trim() ? [{ verb: "redraft", label: busy === "redraft" ? "Drafting…" : btn("redraft"),
+          title: btnHint("redraft"), disabled: !!busy, onClick: redraft }] : []),
+        ...(card.tid && !conflict ? [{ verb: "back", label: btn("continue"), title: btnHint("continue"),
           disabled: !!busy, onClick: () => setBack((b) => (b === null ? "" : null)) }] : []),
-        ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : "Mark done",
-          title: "Marks the task done, dismisses the draft, and stops any agent still working on it. No reply is sent.",
+        ...(card.tid && !nav.also?.length ? [{ verb: "finish", label: busy === "finish" ? "Closing…" : btn("close"),
+          title: `${btnHint("close")} - the draft is dismissed, any agent still on it stops, and no reply is sent`,
           disabled: !!busy || !rv, onClick: finish }] : [])]}
         where={<Where card={card} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
     </CardShell>
@@ -952,7 +952,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           <Foot covers={["test_connection"]} verb={signin
             ? <Button size="small" variant="contained" disableElevation sx={primary} onClick={openIt}>Sign in again</Button>
             : <>{cid && <Button size="small" variant="contained" disableElevation sx={primary} disabled={!!busy} onClick={check}
-                  title="Test it now - if it answers, this row clears">{busy === "check" ? "Checking…" : "Check again"}</Button>}
+                  title={btnHint("test_connection")}>{busy === "check" ? "Checking…" : btn("test_connection")}</Button>}
                 {cid && card.restart && <Button size="small" variant="outlined" sx={quiet} disabled={!!busy} onClick={restart}
                   title="Stop the bridge if it is stuck and start it again on this machine - you stay paired">
                   {busy === "restart" ? "Restarting…" : "Restart bridge"}</Button>}
@@ -970,7 +970,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // WORK YOU STARTED has nobody behind it (the owner, 2026-09-28: "the cards of tasks I started looked wrong"): no
   // reply to yourself, no "not ours", and a New task - no message at all - still gets its button
   const mineAlone = isOwn(card);
-  const hand = suggestedKind === "coding" ? "Hand to coding agent" : "Hand to agent";
+  const hand = btn(suggestedKind === "coding" ? "coding_agent" : "regular_agent");
   const startTask = async () => {
     setBusy("agent"); setErr("");
     try { await runOperation(api, "dispatch.prepare", card.tid, { kind: suggestedKind }); onDone?.(`Started on ${card.ref || "it"}.`); }
@@ -982,7 +982,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const verb = !asks ? null : own || mineAlone
     ? handIt && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={handIt} sx={moveSx}>
         {busy === "agent" ? "Handing it over…" : hand}</Button>
-    : card.mid && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : "Draft a reply"}</Button>;
+    : card.mid && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : btn("reply")}</Button>;
   const asker = String(card.who || "them").replace(/\s*<[^>]*>/g, "");
   // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
   // the agent that took it): once a report is filed the move is to close the task, or send it back with what to change
@@ -1001,10 +1001,10 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
         fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
       {reported ? (
-        <YourMove title="close it, or send it back"
-          go={<><Button size="small" variant="contained" disableElevation disabled={shut.busy || !!busy} onClick={shut.run} sx={moveSx}>{shut.busy ? "Closing…" : "Mark done"}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setBack((b) => (b === null ? "" : null))} sx={quiet}>Send back to the agent</Button></>}
-          then={back === null ? "if it is not finished, send it back with what is left." : null}>
+        <YourMove title={`${btn("close")}, or ${btn("continue")}`}
+          go={<><Button size="small" variant="contained" disableElevation disabled={shut.busy || !!busy} onClick={shut.run} sx={moveSx} title={btnHint("close")}>{shut.busy ? "Closing…" : btn("close")}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setBack((b) => (b === null ? "" : null))} sx={quiet} title={btnHint("continue")}>{btn("continue")}</Button></>}
+          then={back === null ? `if it is not finished, ${btn("continue")} says what is left.` : null}>
           {back !== null && (
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 8 }}>
               <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
@@ -1228,12 +1228,12 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
               task is never offered to be made one (the owner, 2026-10-01) */}
           {open === i.key && (
             <div className="tq-card-actions tq-fyi-acts">
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title="Writes a reply here - nothing is sent until you approve it" sx={quiet}>Reply</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title="Proposes a task on your own list - nothing is made until you confirm" sx={quiet}>Make task</Button>}
-              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title="Proposes sending it to a coding agent - nothing starts until you confirm" sx={quiet}>Coding agent</Button>}
-              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title="Sends it to an agent to work on - nothing starts until you confirm" sx={quiet}>Send to agent</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => reply(i)} title={btnHint("reply")} sx={quiet}>{btn("reply")}</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("mine", i)} title={btnHint("mine")} sx={quiet}>{btn("mine")}</Button>}
+              {i.mid && !i.tid && canCode && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("coding_agent", i)} title={btnHint("coding_agent")} sx={quiet}>{btn("coding_agent")}</Button>}
+              {i.mid && !i.tid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("regular_agent", i)} title={btnHint("regular_agent")} sx={quiet}>{btn("regular_agent")}</Button>}
               {/* one line of the handful can be put down on its own - All read was the only way to let any of it go */}
-              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title="Proposes filing just this one - nothing is filed until you confirm" sx={quiet}>Not ours</Button>}
+              {i.mid && <Button size="small" variant="outlined" disabled={!!busy} onClick={() => propose("not_ours", i)} title={btnHint("not_ours")} sx={quiet}>{btn("not_ours")}</Button>}
               <Button size="small" onClick={() => onSurface?.(i.key)} sx={faint}>Talk about it</Button>
             </div>
           )}

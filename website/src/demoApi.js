@@ -11,6 +11,7 @@
 // make a task and it appears, ask the assistant and it answers - and none of it survives a
 // reload, which is exactly what a visitor expects of a demo.
 import FIXTURES from "./demoFixtures.json";
+import { hint, label } from "./buttons.js";
 import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
@@ -44,7 +45,7 @@ installDemoAssistantTimeline(state, scripted(clone(DEMO_ASSISTANT_TIMELINE)));
 // Two tasks that are the owner's own ("your task": nothing works them) - the recording has none, and
 // the Assistant Game's gym is where they train. Invented, like everything in the demo world.
 for (const [id, title, boxes] of [[31, "Renew the building access badges", [["Collect the expiring list", true], ["Order new badges", false], ["Book the handover", false]]],
-  [32, "Quarterly vendor spend review", [["Pull the spend export", true], ["Flag the three biggest changes", true], ["Send the summary to finance", false], ["File it", false]]]]) {
+  [32, "Quarterly vendor spend review", [["Pull the spend export", true], ["Flag the three biggest changes", true], ["Send the summary to finance", false], ["File the export", false]]]]) {
   const row = { TaskId: id, Title: title, Summary: null, Kind: "task", Status: "open", Priority: "normal", Source: "owner", CreatedBy: "owner",
     CreatedAt: "2026-09-02 09:00:00", ref: `TQ-00${id}`, Session: null, Waiting: 0, HadAgent: false,
     Checklist: JSON.stringify(boxes.map(([text, done], n) => ({ id: `c${id}-${n}`, text, done }))) };
@@ -137,10 +138,10 @@ const read = (url) => {
   if (p === "/api/concierge/chips") {
     const key = new URLSearchParams(query(url)).get("key");
     const item = scriptedAssistant.pile.items.find((i) => i.key === key);
-    const words = { review: [["redraft", "Redraft it"], ["not_ours", "Not ours"], ["skip", "Tomorrow"]], agent: [["stop_agent", "Stop and save"], ["skip", "Tomorrow"]],
-      asked: [["mine", "Put it on my list"], ["not_ours", "Not ours"], ["not_ours_sender", "Ignore this sender"]], fyi: [["not_ours_sender", "Ignore this sender"], ["mine", "Put it on my list"]],
-      idea: [["followup", "Draft a follow-up"], ["mine", "Put it on my list"], ["done", "Handled"]], report: [["rerun", "Run it again"]] }[item?.kind] || [];
-    return { key, chips: words.map(([verb, label]) => ({ verb, label })) };
+    // real verbs only, each in its buttons.json words - the demo offered Tomorrow, Draft a follow-up and Handled, none of them a button
+    const verbs = { review: ["redraft", "not_ours", "defer"], agent: ["stop_agent", "defer"], asked: ["mine", "not_ours", "not_ours_sender"],
+      fyi: ["not_ours_sender", "mine"], idea: ["mine", "not_ours", "not_ours_kind"], report: ["rerun"] }[item?.kind] || [];
+    return { key, chips: verbs.map((verb) => ({ verb, label: label(verb), hint: hint(verb) })) };
   }
   if (p === "/api/concierge/chats") return clone({ data: scriptedAssistant.chats });
   if (p === "/api/reviews") {
@@ -312,7 +313,7 @@ const scriptedNext = (key = null, only = null) => {
   }
   const say = scriptedItemLine(item);
   // ...with Next under it, as a live turn has: without the word the walk stopped on its second card
-  const shown = item ? { ...clone(item), chips: [{ verb: "next", label: "Next", hint: "Read it and move on" }] } : null;
+  const shown = item ? { ...clone(item), chips: [{ verb: "next", label: label("next"), hint: hint("next") }] } : null;
   scriptedAssistant.messages.push({ id: `demo-turn-${++nextId}`, role: "assistant", text: say, card: shown, at: now() });
   return { item: clone(shown), say, options: [], left: Math.max(0, candidates.length - (item ? 1 : 0)), exhausted: null, scripted: true };
 };
@@ -504,7 +505,7 @@ const write = (method, url, body) => {
     scriptedAssistant.pile.items = scriptedAssistant.pile.items.filter((i) => i !== item);
     if (verb === "close" && item.tid) for (const t of taskRows()) if (t.TaskId === item.tid) Object.assign(t, { Status: "done", ClosedAt: now() });
     scriptedAssistant.pile.rev = `demo-assistant-${++nextId}`;
-    return { say: `${said} - in the demo that only changes this page.`, chips: [{ verb: "next", label: "Next" }] };
+    return { say: `${said} - in the demo that only changes this page.`, chips: [{ verb: "next", label: label("next") }] };
   }
 
   if (method === "post" && (m = p.match(/^\/api\/tasks\/(\d+)\/remind$/))) {

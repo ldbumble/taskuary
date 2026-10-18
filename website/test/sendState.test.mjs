@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { label } from "../src/buttons.js";
 import { sendBlockLine, draftState, replyEnvelope, replySendFailure, reviewDeliveryState, sendFix } from "../src/sendState.js";
 
 test("reply envelopes preserve exact saved To and CC and distinguish other delivery kinds", () => {
@@ -69,7 +70,7 @@ test("a blocked channel yields the server's reason, an open one yields nothing",
 
 test("the draft state names a failed draft with its reason and offers the retry", () => {
   assert.deepEqual(draftState({ HasDraft: 0, DraftError: "no AI connector is set up to write replies" }),
-    { state: "failed", line: "Draft failed: no AI connector is set up to write replies. Retry drafting or write the answer yourself.", retry: true });
+    { state: "failed", line: `Draft failed: no AI connector is set up to write replies. Press ${label("redraft", "none")} again or write the answer yourself.`, retry: true });
   assert.deepEqual(draftState({ HasDraft: 0, DraftError: "" }), { state: "undrafted", line: "No draft yet — draft it with AI or write the answer.", retry: true });
   assert.deepEqual(draftState({ HasDraft: 1, DraftError: "" }), { state: "drafted", line: "", retry: false });
   assert.deepEqual(draftState({ DraftText: "hello", DraftError: null }), { state: "drafted", line: "", retry: false });

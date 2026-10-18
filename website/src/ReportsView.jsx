@@ -27,6 +27,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, C
 import WorkflowEditor from "./WorkflowEditor.jsx";
 import Composer from "./Composer.jsx";
 import { onDraftHanded, takeDraft } from "./draftHandoff.js";
+import { label as btnLabel } from "./buttons.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -426,7 +427,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
 
   // a failed load is said, with a way to try again - a spinner here waited for ever
   if (!sources) return err
-    ? <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={retry}>Try again</Button>}>{err}</Alert>
+    ? <Alert severity="error" sx={{ m: 2 }} action={<Button color="inherit" size="small" onClick={retry}>{btnLabel("try_again")}</Button>}>{err}</Alert>
     : <CircularProgress size={22} sx={{ m: 4 }} />;
 
   /* Reports and workflows use the same durable scheduler rows, but they are not the same
@@ -2202,7 +2203,7 @@ function RunHistory({ sid, title, onClose }) {
       </DialogTitle>
       <DialogContent sx={{ display: "flex", gap: 1.5, minHeight: 420 }}>
         <Box sx={{ width: 260, flexShrink: 0, borderRight: `1px solid ${BORDER}`, pr: 1, overflowY: "auto", maxHeight: "70vh" }}>
-          {lost && <Alert severity="warning" sx={{ fontSize: 12 }} action={<Button color="inherit" size="small" onClick={() => setTries((n) => n + 1)}>Try again</Button>}>
+          {lost && <Alert severity="warning" sx={{ fontSize: 12 }} action={<Button color="inherit" size="small" onClick={() => setTries((n) => n + 1)}>{btnLabel("try_again")}</Button>}>
             The run history could not be loaded.</Alert>}
           {!lost && runs && !runs.length && <Empty>No runs kept yet — the history starts with the next run.</Empty>}
           {(runs || []).map((r) => (
@@ -2224,7 +2225,7 @@ function RunHistory({ sid, title, onClose }) {
               </Typography>
               {full[pick] ? <LastRun r={{ ...cur, inputs: cur.inputs || "" }} embedded />
                 : missed === pick ? <Typography variant="caption" sx={{ color: DIM }}>This run's details could not be loaded.{" "}
-                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>Try again</Box></Typography>
+                  <Box component="button" type="button" onClick={() => setMissed(null)} sx={{ color: "#55697a", fontWeight: 600, cursor: "pointer", textDecoration: "underline", border: 0, bgcolor: "transparent", p: 0, font: "inherit" }}>{btnLabel("try_again")}</Box></Typography>
                   : <CircularProgress size={16} />}
             </>
           ) : <Typography variant="caption" sx={{ color: FAINT }}>Pick a run on the left.</Typography>}

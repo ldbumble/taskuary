@@ -14,18 +14,19 @@ test("each control carries the caption that names its effect on task versus agen
   for (const [label, title] of [
     // ...and while the close runs it greys out and says "Marking done…" (2026-09-25)
     // ...and says only what it does HERE: the session part when one is live, the kept draft when one waits (T11)
-    ['{finishing ? "Marking done…" : "Mark done"}', "title={markDoneHint}"],
-    ["Reopen task", "Reopens the task only. No agent starts until you choose one."],
+    // the words are buttons.json's, read by row id (labelOfRow) - the caption is the button's own
+    ['{finishing ? "Marking done…" : labelOfRow("done")}', "title={markDoneHint}"],
+    ['{labelOfRow("reopen")}', "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
-    ["Stop and save", "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ["Stop and save", "Saves the stopped session's result and report. The task stays open."],
+    ['{labelOfRow("save-end")}', "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
+    ['{labelOfRow("save-end")}', "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
     // ...and while the AI writes it the label says "Drafting…" (2026-09-24)
     ['{openingReply ? "Drafting…" : replyPrimary}', "Drafts the reply here, from this task's own context. Nothing is sent until you approve it."],
-    ["Ask sender", "nothing is sent now."],
-    ["Review changes", "Nothing is approved or committed here."],
+    ['{labelOfRow("ask-sender")}', "nothing is sent now."],
+    ['{labelOfRow("diff")}', "Nothing is approved or committed here."],
   ]) {
     // one name can sit on several buttons (every ending is "Stop and save", 2026-09-25): each
     // caption must be on one of them
@@ -34,8 +35,8 @@ test("each control carries the caption that names its effect on task versus agen
     assert.ok(ats.length, `${label} button`);
     assert.ok(ats.some((at) => tasks.slice(tasks.lastIndexOf("<Button", at), at).includes(title)), `${label}: caption "${title}"`);
   }
-  // and the one dynamic label still says what it does in every state it can take
-  assert.match(tasks, /const replyPrimary = pendingReview \? "Open the draft" : sentReview \? "Write another" : "Write reply";/);
+  // ONE name for the reply, whatever state the draft is in (buttons.json, 2026-10-17)
+  assert.match(tasks, /const replyPrimary = labelOfRow\("reply"\);/);
 });
 
 test("the agent card's bar is the same bar as the task's and the reply's", () => {

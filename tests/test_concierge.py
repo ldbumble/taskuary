@@ -7,7 +7,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, general, server, terminal
+from taskuary import buttons, concierge, funnel, general, server, terminal
 from taskuary.store import MemoryStore
 
 
@@ -146,7 +146,7 @@ class TurnTests(unittest.TestCase):
         s = store()
         out = decided(s, 'can you do a deep dive on the ECC agent harness?', 'regular_agent', arg='do a deep dive on the ECC agent harness')
         p = out['proposal']
-        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'general', 'Start an agent on it'))
+        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'general', buttons.label('regular_agent')))
         self.assertIn('deep dive', p['params']['text']); self.assertEqual(s.list_tasks(active_only=True), [])   # nothing started on the words
         session = mock.Mock()
         with mock.patch.object(concierge.general, 'start_session', return_value=session), \
@@ -181,7 +181,7 @@ class TurnTests(unittest.TestCase):
         with mock.patch.object(concierge, 'brain', return_value=None):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
-        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send & close, Redraft it, or move on', out['say'])
+        self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send & close, Redraft, or move on', out['say'])
         self.assertEqual(out['options'], [])
 
     def test_a_model_that_fails_still_leaves_a_line(self):
@@ -288,7 +288,7 @@ class DecisionTests(unittest.TestCase):
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
         out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nCALL: {\"kind\": \"not_ours\", \"params\": {}}")
         self.assertIsNone(out['decision']); p = out['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, 'File it'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, buttons.label('not_ours')))
         self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
         self.assertIn('confirm below', out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
@@ -302,7 +302,7 @@ class DecisionTests(unittest.TestCase):
         out = concierge.say(s, 'who is Dana again?', key=f'review:{r}', llm=lambda *a, **k: 'Dana is the vendor contact on the export.')
         self.assertIsNone(out['decision']); self.assertIsNone(out.get('proposal'))
         # ...and nothing on the table means nothing to decide - the words move the WALK instead
-        out = concierge.say(s, 'done', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "done", "params": {}}')
+        out = concierge.say(s, 'next', key=None, llm=lambda *a, **k: 'Nothing is on the table.\nCALL: {"kind": "next", "params": {}}')
         self.assertIsNone(out.get('decision'))
         # shown, never walked past with Next: still On you, and the line says so (2026-10-08 - For later is only what you put there)
         self.assertIn('still waits on you', out['say'])
@@ -362,7 +362,7 @@ class BrainTests(unittest.TestCase):
             out = concierge.surface(s)
             # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
             # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
-            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft it, or move on.')
+            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft, or move on.')
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
@@ -927,7 +927,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft it, or move on.')      # the facts, instant (2026-09-07)
+            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send & close, Redraft, or move on.')      # the facts, instant (2026-09-07)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)
@@ -1089,7 +1089,7 @@ class NonCoderWordsTests(unittest.TestCase):
     def test_nothing_drafted_offers_draft_with_ai(self):
         it = {'key': 'review:1', 'kind': 'review', 'rid': 1, 'mid': 2, 'tid': 3, 'title': 'Lease', 'draft': ''}
         self.assertIn('Draft with AI', [c['label'] for c in concierge.chips_for(None, it)])
-        self.assertIn('Redraft it', [c['label'] for c in concierge.chips_for(None, {**it, 'draft': 'Hi Gail'})])
+        self.assertIn(buttons.label('redraft'), [c['label'] for c in concierge.chips_for(None, {**it, 'draft': 'Hi Gail'})])
 
     def test_with_no_coding_tool_a_coding_hand_off_is_send_to_agent(self):
         """B3: Coding agent was offered, then refused with "There is no coding agent on this computer"."""

@@ -203,7 +203,9 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
 def held_note(who, kind: str) -> str:
     """The task's line for a start that waited: the reason as its own sentence, then the one thing the owner can do. A
     stranger's hold was told "send it yourself if real" AND "send it to the coding agent yourself" - two next steps."""
-    go = f'start {agent_word(kind)}, or do it yourself.'
+    # the task page's start button, by its one name (buttons.json) - "start the assistant" named no button it has
+    from .buttons import label
+    go = f"press {label('regular_agent')}, or do it yourself."
     return f"Waiting for you: {who} " + (f'If it is real, {go}' if getattr(who, 'stranger', False) else go[:1].upper() + go[1:])
 
 

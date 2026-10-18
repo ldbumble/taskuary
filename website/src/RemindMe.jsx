@@ -3,6 +3,7 @@ import { Box, Button, IconButton, Popover, Tooltip, Typography } from "@mui/mate
 import EventIcon from "@mui/icons-material/Event";
 import api from "./api.js";
 import { remindDay, remindWaiting } from "./taskFilter.js";
+import { hint, label } from "./buttons.js";
 
 // REMIND ME (the owner, 2026-09-25): put an open task away until a day - "remind me of this in 2 weeks, or
 // whenever I want". Until then it is Upcoming in Tasks and off the work rail; that morning it is back. One road
@@ -75,14 +76,14 @@ export default function RemindMe({ task, compact = false, sx, onDone, onLeave, o
   const [at, setAt] = useState(null);
   const away = remindWaiting(task);
   const title = away ? `Away until ${remindDay(task.RemindAt)} - change the day or bring it back now`
-                     : "Remind me - put it away until a day; it waits under For later on your rail, and is back in front of you that morning";
+                     : `${label("defer")} - ${hint("defer")}`;
   return (
     <>
       {compact
         ? <Tooltip title={title}><IconButton size="small" sx={{ color: "#55697a", ...sx }} onClick={(e) => setAt(e.currentTarget)}>
             <EventIcon sx={{ fontSize: 16 }} /></IconButton></Tooltip>
         : <Button size="small" variant="outlined" sx={sx} title={title} startIcon={<EventIcon sx={{ fontSize: 16, color: "#55697a" }} />}
-            onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : "Remind me"}</Button>}
+            onClick={(e) => setAt(e.currentTarget)}>{away ? `Back ${remindDay(task.RemindAt)}` : label("defer")}</Button>}
       <RemindPicker task={task} anchor={at} onClose={() => setAt(null)} onDone={onDone} onLeave={onLeave} onStay={onStay} live={live} />
     </>
   );

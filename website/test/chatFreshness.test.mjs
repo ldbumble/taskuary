@@ -54,9 +54,9 @@ test("same-tick composer submits are synchronously locked", () => {
 test("a stale reply draft offers a refresh in place of the send", () => {
   assert.match(card, /New messages arrived after this draft/);
   assert.match(card, /stale \? \(/);
-  assert.match(card, /Refresh the draft/);
+  assert.match(card, /stale \? \([\s\S]{0,600}btn\("redraft"\)/);   // the refresh is Redraft, buttons.json's one word for it
   assert.doesNotMatch(card, /!value\.trim\(\) \|\| !!stale/);      // no dead end behind the warning
   assert.match(reviews, /r\.Stale \? \(/);
-  assert.match(reviews, /Refresh the draft/);
+  assert.match(reviews, /r\.Stale \? \([\s\S]{0,800}btn\("redraft"\)/);
   assert.doesNotMatch(reviews, /r\.Stale \|\| !\(edits/);
 });

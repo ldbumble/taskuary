@@ -14,7 +14,8 @@ Nothing here executes. A CALL becomes a proposal exactly as a verb does; the own
 still what runs it (PW-123/124), and the AUTO verbs are still the only things that go straight through.
 """
 import json, re
-from . import operations, roles
+from . import buttons, operations, roles
+L = buttons.label        # a button is named by its one label (buttons.json) - never retyped in a tool's sentence
 
 # the roles a role.apply call may name, from roles.ROLES - a list in prose here would drift from what applies
 _ROLES = ' | '.join(f"{k} ({r['title'].lower()})" for k, r in roles.ROLES.items())
@@ -33,9 +34,9 @@ PURPOSE = {
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
     'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
-    'item.settle':              'put the item down - `verb`: done | later | skip (the item on the table is the target)',
-    'task.complete':            'Mark done - the task is finished (note: optional, what came of it - kept on the task)',
-    'task.defer':               ('Remind me: put an open task away until a day and bring it back then - `until`: a date '
+    'item.settle':              'put the item down, read and settled - `verb`: done (the item on the table is the target)',
+    'task.complete':            f'{L("close")} - the task is finished (note: optional, what came of it - kept on the task)',
+    'task.defer':               (f'{L("defer")}: put an open task away until a day and bring it back then - `until`: a date '
                                  '(2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", '
                                  '"friday 2pm"), "after_meetings" when they mean once the day\'s meetings or calls are over (the calendar picks the '
                                  'time), or "none" to bring it back now; `ref` names the task (TQ-0123) when it is not '
@@ -200,7 +201,10 @@ def block(store=None) -> str:
               'or tools.describe with {"kind": "<tool>"}. When you already know a tool and what it needs, CALL it directly.']
     for name, what, kinds in BUCKETS:
         lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
-    lines += ['', selector(store), '',
+    lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - name a button only by its name here:',
+              '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
+                               + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),
+              '', selector(store), '',
         'WHICH ONE, in this order:',
         '  1. the owner means one of the action words under your line - do that (bucket table).',
         '  2. they want detail, history or a summary - LOOK IT UP and answer with what you read. Search the period',
@@ -217,15 +221,15 @@ def block(store=None) -> str:
 # THE DECISIONS about the item on the table, as tools like any other (2026-09-25). The model named tools on
 # DECIDE lines and verbs on CALL lines; there is one line now, and concierge turns a CALL to one of these into
 # the decision road the card's buttons take. Each takes `on` for an item other than the one on the table.
-DECISIONS = {
+_DECIDE = {
     'reply':           ("write a reply to the sender - `text`: the gist, in the owner's words; `cc`: people to loop in on it, by name "
                         "or address (\"loop Gail in and ask her\" is a reply with Gail copied, never an agent). Nothing is sent"),
-    'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges "
+    'approve':         ("the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges "
                         "the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never "
                         "continues an agent's session - that is agent.continue"),
     'redraft':         'write the draft again - `text`: the change',
     'mine':            "make it a task on the owner's own list - no agent",
-    'regular_agent':   ('send it to a non-coding agent - `text`: the job; `as`: a profile from agents.list, only when one fits; '
+    'regular_agent':   ('send it to an agent that does not write code - `text`: the job; `as`: a profile from agents.list, only when one fits; '
                         '`new`: true when the job is NOT about the item on the table - it becomes a task of its own'),
     'coding_agent':    ('send it to a coding agent - `text`: what is wanted; `as`: the repository (repos.list), only when sure. '
                         'Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick. '
@@ -234,8 +238,7 @@ DECISIONS = {
     'not_ours_sender': 'file everything from this sender from now on - their mail still arrives and stays readable',
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
     'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",
-    'close':           'Mark done - the task behind the item is finished',
-    'done':            'the owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled',
+    'close':           'the task behind the item is finished',
     'next':            'move on to the next thing',
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
@@ -249,6 +252,23 @@ DECISIONS = {
     'let_go':          'let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them',
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
+# ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons
+_STATES = {'action': "on an agent's proposal or a task's close-out", 'none': 'when nothing is drafted yet'}
+def button_words(v: str) -> str:
+    """'the "Send & close" button ("Approve" on an agent's proposal...)' - '' for a decision that is no button."""
+    if v not in buttons.VERBS: return ''
+    st = buttons.VERBS[v].get('states') or {}
+    return f'the "{L(v)}" button' + ''.join(f' ("{w}" {_STATES.get(s, s)})' for s, w in st.items())
+DECISIONS = {k: (f'{button_words(k)}: ' if button_words(k) else '') + v for k, v in _DECIDE.items()}
+def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((buttons.VERBS[v].get('states') or {}).values()))
+# the buttons whose verb is not itself a decision, and the tool each one is
+CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split'}
+def _has(store, v: str) -> bool:
+    """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
+    if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True
+    from . import agents
+    try: return bool(agents.coding_ready(store))
+    except Exception: return False
 
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
 WHERE = (
@@ -430,7 +450,7 @@ def valid(kind: str, params: dict) -> str:
 # `python -m taskuary.toolcatalog` rewrites it; tests/test_task_tools.py fails when the page and the catalogue differ.
 DOCS_PAGE = 'docs/site/assistant-tools.md'
 # the decisions that do not wait for a card (concierge.AUTO, and the two that only ever write a draft)
-DECISION_RUNS = {'next': 'at once', 'close': 'at once', 'done': 'at once', 'stop_agent': 'at once', 'confirm': 'at once',
+DECISION_RUNS = {'next': 'at once', 'close': 'at once', 'stop_agent': 'at once', 'confirm': 'at once',
                  'cancel': 'at once', 'reply': 'at once - a draft, nothing sent', 'redraft': 'at once - a draft, nothing sent'}
 
 

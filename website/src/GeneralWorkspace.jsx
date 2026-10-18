@@ -30,6 +30,7 @@ import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
 import { dropEcho, forScreen } from "./agentMarkers.js";
+import { hint as btnHint, label as btn } from "./buttons.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -321,18 +322,18 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
         <div className="tq-dock-action-buttons">
           {review.Kind === "action" ? <>
             <Button size="small" variant="contained" disabled={!!busy} startIcon={<DoneRoundedIcon />}
-              onClick={() => decide(review, "approve")}>{busy ? "Working…" : "Run action"}</Button>
+              onClick={() => decide(review, "approve")}>{busy ? "Working…" : btn("approve", "action")}</Button>
             <Button size="small" variant="outlined" color="error" disabled={!!busy} onClick={() => decide(review, "reject")}>Dismiss</Button>
           </> : <>
             {review.CanSend === false ? null : (
               <Button size="small" variant="contained" disabled={!!busy || !(edits[review.ReviewId] ?? reviewDraft(review)).trim()}
                 startIcon={<SendRoundedIcon />} onClick={() => decide(review, "approve")}>
-                {busy.includes("approve") ? "Sending…" : "Approve & send"}
+                {busy.includes("approve") ? "Sending…" : btn("approve")}
               </Button>
             )}
             <Button size="small" variant="outlined" disabled={!!busy} startIcon={<RefreshRoundedIcon />}
-              onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? "Redraft" : "Draft with AI"}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title="Marks the task done without sending this draft" onClick={() => decide(review, "no_reply")}>Mark done</Button>
+              onClick={() => redraft(review)}>{busy.includes("redraft") ? "Drafting…" : review.DraftText ? btn("redraft") : btn("redraft", "none")}</Button>
+            <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }} title={`${btnHint("close")} - this draft is not sent`} onClick={() => decide(review, "no_reply")}>{btn("close")}</Button>
           </>}
           <Box sx={{ flex: 1 }} />
           <Button size="small" onClick={() => onNavigate?.("Assistant")}>All that needs you</Button>
@@ -346,7 +347,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
         <div className="tq-dock-action-buttons">
           <Button size="small" variant="contained" onClick={() => openTask(focusedTask.TaskId)}>Open task</Button>
           <Button size="small" variant="outlined" disabled={!!busy} startIcon={<DoneRoundedIcon />}
-            onClick={() => settleTask(focusedTask, "done")}>{busy.includes("done") ? "Completing…" : "Complete"}</Button>
+            title={btnHint("close")} onClick={() => settleTask(focusedTask, "done")}>{busy.includes("done") ? "Marking done…" : btn("close")}</Button>
           <Button size="small" variant="outlined" disabled={!!busy} sx={{ color: "#867f74", borderColor: "#d6cec1" }}
             onClick={() => settleTask(focusedTask, "dropped")}>Dismiss</Button>
         </div>

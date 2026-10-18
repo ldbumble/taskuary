@@ -17,7 +17,7 @@ test("a playbook review is a save process, not a reply", () => {
   assert.equal(shown.kind, "playbook");
   assert.equal(shown.title, "Playbook · Run manual PTO import");
   assert.equal(shown.destination, "Docs → Playbooks → run-manual-pto-import.md");
-  assert.equal(shown.approveLabel, "Save playbook");
+  assert.equal(shown.approveLabel, "Approve");          // one word for every proposal (buttons.json approve.states.action)
   assert.match(shown.context, /nothing will be sent/);
 });
 
@@ -29,7 +29,7 @@ test("the editable review body is the playbook markdown, not its action envelope
 test("even an unreadable action is never presented as a reply", () => {
   const shown = proposalPresentation({ Kind: "action", DraftText: "not json" });
   assert.equal(shown.kind, "action");
-  assert.equal(shown.approveLabel, "Run action");
+  assert.equal(shown.approveLabel, "Approve");
   assert.match(shown.context, /nothing will be sent/);
 });
 

@@ -12,7 +12,7 @@ starts once: a later message on the same task reuses what is live.
 import json, pathlib, unittest
 from unittest import mock
 
-from taskuary import general, ingest, senders
+from taskuary import buttons, general, ingest, senders
 from taskuary.ingest import auto_start_ok, ingest_message
 from taskuary.store import MemoryStore
 
@@ -90,7 +90,7 @@ class AutoStartTests(unittest.TestCase):
             # one whole sentence naming the sender, then ONE next step - not "send it yourself if real" and a second one
             note = next(c for c in comments(s, out['task_id']) if c.startswith('Waiting for you:'))
             self.assertIn('Sam (stranger@evil.example) is not on your domain and you have never written to them', note)
-            self.assertTrue(note.endswith(f"If it is real, start {'the coding agent' if kind == 'coding' else 'the assistant'}, or do it yourself."), note)
+            self.assertTrue(note.endswith(f"If it is real, press {buttons.label('regular_agent')}, or do it yourself."), note)
             self.assertNotIn('send it yourself', note)
             self.assertIn('held for you: Sam (stranger@evil.example) is not on your domain', last_reason(s))
 
@@ -99,7 +99,7 @@ class AutoStartTests(unittest.TestCase):
         out, spawned = ingested(s, mail(), 'general', providers=())
         self.assertEqual(spawned, [])
         self.assertIn('No AI is set up for the assistant', last_reason(s))
-        self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith('Start the assistant, or do it yourself.') for c in comments(s, out['task_id'])))
+        self.assertTrue(any(c.startswith('Waiting for you:') and c.endswith(f"Press {buttons.label('regular_agent')}, or do it yourself.") for c in comments(s, out['task_id'])))
 
     def test_coding_with_no_repository_stays_coding_and_the_coding_agent_is_asked_which(self):
         """Coding stays coding (the owner, 2026-09-25: "why not ask the coding CLI to choose it instead of turning it

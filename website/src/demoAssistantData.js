@@ -1,6 +1,7 @@
 // The static demo has no concierge process behind it. These are deliberately scripted,
 // invented conversations and Timeline posts: enough real-shaped data to demonstrate the
 // product without implying that an AI, mailbox, or agent is running in the visitor's browser.
+import { hint, label } from "./buttons.js";
 
 export const DEMO_ASSISTANT_TIMELINE = [
   {
@@ -108,7 +109,7 @@ const currentMessages = [
     text: "Yes. It confirms Thursday and says the export will be reconciled Wednesday night. Read the invented draft below; in this demo, Approve never sends anything.",
     card: reviewCard,
     // the words under it, as a live turn carries them - without them the demo opened on a card with no Next
-    chips: [{ verb: "next", label: "Next", hint: "Read it and move on" }],
+    chips: [{ verb: "next", label: label("next"), hint: hint("next") }],
   },
 ];
 

@@ -48,7 +48,7 @@ class WhyNotStartedTests(unittest.TestCase):
         st = funnel.idle_state(s, t)
         self.assertEqual((st['kind'], st['row']), ('held', 'held for you - not started'))
         self.assertEqual(st['line'], 'Waiting for you. no-reply@vendor.example is not on your domain and you have never written to '
-                                     'them, so no agent starts on their words by itself. Start the coding agent, or do it yourself.')
+                                     'them, so no agent starts on their words by itself.')   # the moves are the item's own buttons
 
     def test_a_route_written_in_the_old_words_still_reads_as_a_hold(self):
         s = MemoryStore(); t = handed(s)
@@ -87,7 +87,7 @@ class WhyNotStartedTests(unittest.TestCase):
 
     def test_with_no_other_reason_it_still_says_nobody_is_on_it(self):
         s = MemoryStore(); t = handed(s)
-        self.assertEqual(funnel.not_started_why(s, t), 'Not started yet. Nothing has started the coding agent on this - press Start when you want it on it.')
+        self.assertEqual(funnel.not_started_why(s, t), 'Not started yet. Nothing has started the coding agent on this.')
 
     def test_work_from_before_today_says_it_has_been_waiting(self):
         s = MemoryStore(); t = handed(s)
@@ -146,7 +146,7 @@ class AgentStoryTests(unittest.TestCase):
         s = MemoryStore(); st = funnel.agent_story(s, self.held_pr(s))
         self.assertEqual(st['kind'], 'held')
         self.assertTrue(st['line'].startswith('Waiting for you. First message from pat@vendor.example'), st['line'])
-        self.assertTrue(st['line'].endswith('Start the coding agent, or do it yourself.'), st['line'])
+        self.assertTrue(st['line'].endswith('not one of your domains.'), st['line'])     # a state, never a button it may not show
         self.assertNotIn('did not start', st['line'])
 
     def test_a_restart_mid_run_says_when_how_far_in_and_what_it_last_said(self):

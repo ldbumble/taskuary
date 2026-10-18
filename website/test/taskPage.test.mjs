@@ -32,7 +32,7 @@ test("Write reply calls the draft helper, not itself - the component's own openR
 // THE AUDIT FOR NON-CODERS (2026-10-17): what the task view offers and says when the person using it never wrote code
 test("with no coding tool connected, Start is the general agent and nothing asks for a repository (B3)", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*"Send to agent",\n\s+disabled: !!startingAgent, run: startGeneralAgent/);
+  assert.match(page, /startHere && !canCode && !ranBefore \? \[\{ id: "start-agent"[^\n]*labelOfRow\("start-agent"\),\n\s+disabled: !!startingAgent, run: startGeneralAgent/);
   assert.match(page, /const generalOnly = handOff \|\| !canCode;/);
   assert.match(page, /\{!generalOnly && <RepoSelect/);
   assert.match(page, /\{!generalOnly && startRepo === "" && <>/);
@@ -44,7 +44,7 @@ test("with no coding tool connected, Start is the general agent and nothing asks
 
 test("one verb for removing a task: the button, its tooltip and its dialog all say Remove (U13)", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /\{ id: "nat", group: "more", label: "Remove - not a task"/);
+  assert.match(page, /\{ id: "nat", group: "more", label: labelOfRow\("nat"\)/);
   assert.match(page, /title="Remove this task\?" confirmLabel="Remove"/);
   assert.match(page, /Taskuary will stop making tasks from messages like this\. The email itself is kept \(search finds it\)/);
   assert.doesNotMatch(page, /triage is taught|stay on the Timeline/);
@@ -66,7 +66,7 @@ test("the header says what triage made of it in one plain line, and the kind hin
 
 test("an agent waiting on you leads with what it asked, over a pane that keeps its size, and Answer it is the row's move (U20)", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /\{ id: "answer_agent", group: "agent", lead: true, label: "Answer it", run: answerAgent/);
+  assert.match(page, /\{ id: "answer_agent", group: "agent", lead: true, label: labelOfRow\("answer_agent"\), run: answerAgent/);
   assert.match(page, /<Box ref=\{termBox\} sx=\{\{ flex: "1 1 0", minHeight: \{ xs: 360, md: 0 \}, position: "relative"/);
   assert.match(page, /asking && <Box data-tq-agent-asks="" role="status" sx=\{\{ position: "absolute", inset: 0/);
   assert.match(page, />Show details<\/Link>/);

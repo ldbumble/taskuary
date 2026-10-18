@@ -9,6 +9,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from . import buttons
+
 VERB2STATUS = {'approve': 'approved', 'edit': 'edited', 'reject': 'rejected', 'no_reply': 'no_reply',
                'close_unsent': 'closed_unsent',   # the owner's explicit close when sending is unavailable (PW-145) - never 'sent'
                'close_pr': 'rejected',            # a merge close-out answered "close it unmerged": the merge was turned down
@@ -464,7 +466,8 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         if moved:
             if not rv.get('Stale'): store.mark_review_stale(rid)
             return {'ok': False, 'status': 'pending', 'sent': None, 'stale': True,
-                    'send_error': 'New messages arrived after this draft was written - nothing was sent. Redraft it with the latest context and approve again.'}
+                    'send_error': 'New messages arrived after this draft was written - nothing was sent. '
+                                  f"Press {buttons.label('redraft')} for one written from the latest message, then {buttons.label('approve')}."}
     # Close without sending (PW-145): the owner's own word that no reply will go out - the unsent draft stays,
     # the closure and its reason are recorded, the reply obligation ends, and nothing here ever reads as Sent
     if verb_in == 'close_unsent' and rv.get('Kind') == 'slot':

@@ -43,7 +43,7 @@
       "word": "on you",
       "role": "working",
       "mark": "📋",
-      "hint": "real work with nobody on it - do it yourself, or send it to an agent"
+      "hint": "real work with nobody on it yet"
     },
     {
       "key": "theirs",
@@ -64,14 +64,14 @@
       "word": "agent stopped",
       "role": "working",
       "mark": "⏹",
-      "hint": "an agent worked this and left without finishing - continue the session, or hand it on"
+      "hint": "an agent worked this and left without finishing - its work so far is kept"
     },
     {
       "key": "saved",
       "word": "stopped and saved",
       "role": "working",
       "mark": "💾",
-      "hint": "you ended the agent's session - its report is written; continue it, or mark the task done"
+      "hint": "you ended the agent's session - its report is written and the task is still open"
     },
     {
       "key": "broken",
@@ -175,7 +175,7 @@
       "word": "new sender",
       "role": "muted",
       "mark": "🔒",
-      "hint": "first message from this address — nothing was started; release it if it is real"
+      "hint": "first message from this address — nothing was started on it by itself"
     },
     {
       "key": "mine",

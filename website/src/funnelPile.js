@@ -1,4 +1,5 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
+import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
 export { says, subState };
 // The pipe, as the Assistant page draws it: what each lane is called and coloured, which item is a
@@ -402,7 +403,8 @@ export const LEVEL_META = {
   agents: { word: "agents working", hint: "an agent has these; nothing for you until one stops or asks" },
   later: { word: "for later", hint: "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
   reports: { word: "reports", hint: "a report you set up landed - information, never a task" },
-  ideas: { word: "advisor ideas", hint: "something the Advisor noticed - make it a task, hand it to an agent, or let it go" },
+  // an idea's own buttons, by name - "let it go" named a word an idea refuses (Let it go is a waiting step's)
+  ideas: { word: "advisor ideas", hint: `something the Advisor noticed - ${label("mine")}, ${label("regular_agent")}, or ${label("not_ours")}` },
   fyi: { word: "fyi", hint: "people told you things - read them or don't" },
 };
 // FOR LATER: work you walked past with Next, and work Remind me put away. Next settles nothing - the task is still

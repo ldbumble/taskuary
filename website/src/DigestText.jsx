@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api.js";
 import { parseDigest } from "./digestText.js";
+import { label as btnLabel } from "./buttons.js";
 
 // A failed digest names its way on: the connection that would fix it, and the digest written again. `sourceId` is
 // the Morning digest report when the caller knows it; else it is looked up by name, the way the cards spot one.
@@ -22,7 +23,7 @@ function DigestWayOn({ sourceId }) {
   };
   return <Box sx={{ mt: 0.75 }}>
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-      <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? "Starting…" : "Try again"}</Button>
+      <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? "Starting…" : btnLabel("try_again")}</Button>
       <Button size="small" component="a" href="#connector=">Check the AI connection</Button>
     </Box>
     {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "#55697a" }}>{said}</Typography>}

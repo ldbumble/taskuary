@@ -9,6 +9,7 @@ import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import ReviewDecision from "./ReviewDecision.jsx";
 import { Md } from "./md.jsx";
 import { BORDER, DIM, INK, PANEL, PANEL2 } from "./theme.jsx";
+import { label as btnLabel } from "./buttons.js";
 
 export default function DemoJourney({ onChanged }) {
   const [journey, setJourney] = useState(demoJourneySnapshot);
@@ -75,7 +76,7 @@ export default function DemoJourney({ onChanged }) {
         </Box>
         <Button component="a" href="https://taskuary.com/docs/" variant="contained" disableElevation>Set up your own inbox</Button>
         <Button component="a" href="?demo=explore" sx={{ ml: 1 }}>Explore the full demo</Button>
-        <Button component="a" href="?workflow=numbers">Try again</Button>
+        <Button component="a" href="?workflow=numbers">{btnLabel("try_again")}</Button>
       </Box>}
       {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
       {phase !== "complete" && <Typography sx={{ mt: 1.5, fontSize: 11.5, color: DIM }}>

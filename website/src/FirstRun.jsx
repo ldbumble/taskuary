@@ -22,6 +22,7 @@ import { useVerbs } from "./actionRow.js";
 import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
+import { label as btnLabel } from "./buttons.js";
 
 const CHECK_MS = 200_000;           // its test, then one test email sorted (firstrun._prove, 90s at most): past this we say so
 const INSTALL_MS = 6 * 60_000;
@@ -290,7 +291,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   if (!st) lineRef.current = loadLine || "Getting set up…";
   if (!st) return <Box sx={{ p: 2, display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={16} />
     <Typography sx={{ color: DIM }}>{loadLine || "Getting set up…"}</Typography>
-    {loadErr && <Button size="small" onClick={reload}>Try again</Button>}</Box>;
+    {loadErr && <Button size="small" onClick={reload}>{btnLabel("try_again")}</Button>}</Box>;
 
   const byType = (types) => types.flatMap((t) => conns.filter((c) => c.Type === t));
   // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
@@ -419,7 +420,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
         {fix.key && plan && fix.key === planKey && <Button variant="contained" disableElevation onClick={() => planSignin(plan)}>Sign in again</Button>}
         {fix.fix === "update" && fix.install && <Button variant="contained" disableElevation
           onClick={() => install({ ...fixed, install: fix.install }, "Updating")}>Update {fix.title}</Button>}
-        <Button variant={fix.fix === "update" || fix.key ? "outlined" : "contained"} disableElevation onClick={check}>Try again</Button>
+        <Button variant={fix.fix === "update" || fix.key ? "outlined" : "contained"} disableElevation onClick={check}>{btnLabel("try_again")}</Button>
         <Button onClick={() => openBugReport({ message: `${fix.title} didn't answer the setup test
 ${fix.detail || ""}`, screen: "Setup",
           route: `first-run ${fix.name}` })}>Report this bug</Button>

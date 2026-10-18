@@ -29,7 +29,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, funnel, general, ingest, operations, server, terminal, wrapup
+from taskuary import buttons, concierge, funnel, general, ingest, operations, server, terminal, wrapup
 from taskuary.store import MemoryStore
 
 
@@ -432,8 +432,9 @@ class ResponseTests(unittest.TestCase):
 
     def test_done_is_confirmed_then_closes_the_task_behind_the_item(self):
         s, tid, mid, item = self._asked()
+        # Handled is gone (buttons.json `removed`): "done" lands on Mark done, the task's own close
         p = decide(s, 'done, i handled it', 'done', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['params']['verb'], p['params']['key'], p['label']), ('item.settle', 'done', item['key'], 'Mark it handled'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, buttons.label('close')))
         self.assertEqual([i['key'] for i in pile(s)], [item['key']])   # nothing moved on the words
         self.assertEqual(run(s, p).json()['status'], 'done')
         self.assertEqual([i['key'] for i in pile(s)], []); self.assertEqual(s.get_task(tid)['Status'], 'done')
@@ -468,13 +469,13 @@ class ResponseTests(unittest.TestCase):
     def test_not_ours_files_it_and_never_again_writes_the_verdict_down(self):
         s, tid, mid, item = self._asked()
         p = decide(s, "not my issue, let them sort it out", 'not_ours', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('message.file', mid, {'learn': False}, 'File it'))
+        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('message.file', mid, {'learn': False}, buttons.label('not_ours')))
         self.assertNotEqual(s.get_message(mid)['Status'], 'ignored')  # untouched until the click
         run(s, p)
         self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
         s3, tid3, mid3, item3 = self._asked()
         p3 = decide(s3, 'that sender is junk, block them', 'not_ours_sender', key=item3['key'])['proposal']
-        self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', 'Ignore this sender from now on'))
+        self.assertEqual((p3['kind'], p3['params']['scope'], p3['label']), ('preference.exclude_sender', 'sender', buttons.label('not_ours_sender')))
         run(s3, p3)
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s3.list_memories(active_only=True)))
 
@@ -492,7 +493,7 @@ class ResponseTests(unittest.TestCase):
         s = store()
         # LEGACY verb on purpose: `coder` is the old name a model may still say, and VERB_ALIAS still reads it
         p = decide(s, 'look into why the bulk approve fix did not stick', 'coder', text_arg='look into why the bulk approve fix did not stick')['proposal']
-        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'coding', 'Start a coding agent on it'))
+        self.assertEqual((p['kind'], p['params']['kind'], p['label']), ('task.create_from_text', 'coding', buttons.label('coding_agent')))
         self.assertEqual(s.list_tasks(active_only=True), [])           # no task on the words
         with mock.patch.object(ingest, '_spawn') as spawn:
             r = run(s, p)
@@ -557,7 +558,7 @@ class ResponseTests(unittest.TestCase):
         item = pile(s)[0]
         self.assertEqual(item['source_id'], sid)
         p = decide(s, 'run it again', 'rerun', key=item['key'])['proposal']
-        self.assertEqual((p['kind'], p['target'], p['label']), ('report.rerun', sid, 'Run the report again'))
+        self.assertEqual((p['kind'], p['target'], p['label']), ('report.rerun', sid, buttons.label('rerun')))
         with mock.patch('taskuary.reports.run_report_source') as ran:    # queued on a thread, so wait for it
             r = run(s, p)
             for _ in range(50):
@@ -602,7 +603,7 @@ class ResponseTests(unittest.TestCase):
             # split is a TOOL now, not a DECIDE verb (the owner, 2026-09-25) - the model CALLs it
             p = say(s, 'these are two different things, split it', key=item['key'],
                     model='Ok.' + chr(10) + 'CALL: ' + json.dumps({'kind': 'task.split', 'params': {'text': 'split it'}}))['proposal']
-            self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, 'Split it in two'))
+            self.assertEqual((p['kind'], p['target'], p['label']), ('task.split', tid, buttons.label('split')))
             self.assertEqual(len(s.list_tasks(active_only=True)), 1)   # one task until the click
             r = run(s, p)
         self.assertEqual(s.get_task(tid)['Title'], 'Fix the nightly export')
@@ -829,7 +830,7 @@ class WordsTheOwnerUsesTests(unittest.TestCase):
         # later, skip, archive and not_ours_remember were retired with their buttons (the owner, 2026-09-25)
         for verb, kind in (('not_ours', 'message.file'), ('not_ours_sender', 'preference.exclude_sender'),
                            ('coding_agent', 'task.create_from_message'), ('regular_agent', 'task.create_from_message'),
-                           ('mine', 'task.create_from_message'), ('close', 'task.complete'), ('done', 'item.settle')):
+                           ('mine', 'task.create_from_message'), ('close', 'task.complete')):
             s, tid, mid, item = ResponseTests()._asked()
             p = decide(s, verb, verb, key=item['key'])['proposal']
             self.assertEqual((p['kind'], p['label'], p['status']), (kind, concierge.PROPOSALS[verb][1], 'proposed'), verb)
@@ -958,7 +959,8 @@ class AgentEndingsTests(unittest.TestCase):
     def test_done_on_a_parked_agent_closes_the_task_and_the_session(self):
         s, tid, live, item = self._parked()
         p = decide(s, 'done', 'done', key=item['key'], live=live)['proposal']
-        self.assertEqual((p['kind'], p['target'], p['params'], p['label']), ('task.complete', tid, {'agent': True}, 'Mark done'))
+        # "done" is Mark done (Handled is gone); the same close stops the session (close_task)
+        self.assertEqual((p['kind'], p['target'], p['label']), ('task.complete', tid, buttons.label('close')))
         with mock.patch.object(terminal, 'session_for') as found, mock.patch.object(terminal, 'close') as closed:
             found.return_value = mock.Mock(sid='s1', alive=True)
             run(s, p, live=live)
@@ -986,7 +988,7 @@ class WalkFromWordsTests(unittest.TestCase):
         return s
 
     def test_next_and_done_with_nothing_on_the_table_bring_the_next_thing_up(self):
-        for words, verb in (('next', 'next'), ('done', 'done'), ('walk me through my tasks', 'next'), ("what's next", 'next')):
+        for words, verb in (('next', 'next'), ('walk me through my tasks', 'next'), ("what's next", 'next')):
             s = self._three()
             out = decide(s, words, verb, key=None)
             self.assertIsNotNone(out.get('item'), words)                      # something came out of the pipe
@@ -1049,8 +1051,8 @@ class WalkFromWordsTests(unittest.TestCase):
         self.assertTrue(card['item']['key'].startswith('fyis:'))
         self.assertEqual((card['item']['kind'], len(card['item']['items'])), ('fyis', 2))
         self.assertEqual(decide(s, 'next', 'next', key=card['item']['key'])['decision'], {'verb': 'next'})
-        p = decide(s, 'done', 'done', key=card['item']['key'])['proposal']
-        self.assertEqual((p['kind'], p['params']['key']), ('item.settle', card['item']['key']))
+        # Handled is gone: "done" is Mark done, and a handful has no task to close - nothing is proposed in its name
+        self.assertIsNone(decide(s, 'done', 'done', key=card['item']['key']).get('proposal'))
 
     def test_a_new_chat_brings_a_waiting_agent_back(self):
         s, tid, mid, item = ResponseTests()._asked()

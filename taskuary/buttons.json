@@ -1,0 +1,50 @@
+{
+  "_": "THE ONE LIST OF BUTTONS (the owner, 2026-10-17: 'make a complete list of buttons and remove the other ones', 'centralize it - if it's in one code place it's easy to update it later'). Every button the owner can press has ONE name, here, read by the server (taskuary/buttons.py), the page (website/src/buttons.js), the phone, the Advisor and the assistant's tools. A sentence may name a button only by a label on this list, and only when the item shows it. `row` lists the task page's own ids for the same act. `states` are the other words the same button shows while it works or before there is anything to act on.",
+  "verbs": {
+    "reply":           {"label": "Reply", "hint": "Write back to whoever asked - you see the draft before anything is sent", "row": ["reply"]},
+    "approve":         {"label": "Send & close", "hint": "Sends the drafted reply and closes the task", "row": ["approve"],
+                        "states": {"action": "Approve"}, "state_hints": {"action": "Lets the agent do what it proposes - nothing happens before you press it"}},
+    "redraft":         {"label": "Redraft", "hint": "Has the AI write the draft again", "row": ["redraft"], "states": {"none": "Draft with AI"}},
+    "close":           {"label": "Mark done", "hint": "Closes the task - it stops coming back", "row": ["done"]},
+    "defer":           {"label": "Remind me", "hint": "Put the task away until a day - it waits under For later on your rail and is back in front of you that morning", "row": ["remind"]},
+    "not_ours":        {"label": "Not ours", "hint": "File it - the card asks whether just this once, from now on, or as a rule", "row": []},
+    "not_ours_sender": {"label": "Ignore this sender", "hint": "Their mail is filed for you from now on", "row": []},
+    "block_sender":    {"label": "Block this sender", "hint": "A rule in Settings - their mail never comes in", "row": []},
+    "not_ours_kind":   {"label": "No more ideas like this", "hint": "The Advisor stops raising this kind of idea", "row": []},
+    "mine":            {"label": "Put it on my list", "hint": "A task on your own list - no agent starts", "row": []},
+    "regular_agent":   {"label": "Send to agent", "hint": "Hand the work to an agent - the answer comes back here, and the card lets you change which agent", "row": ["start-agent", "send-general"]},
+    "coding_agent":    {"label": "Send to coding agent", "hint": "Hand a change to code or a system to the coding agent", "row": [], "needs": "coding"},
+    "stop_agent":      {"label": "Stop and save", "hint": "Writes up what was done, stops the work, and drafts the reply to whoever asked - the task stays open", "row": ["save-end"]},
+    "answer_agent":    {"label": "Answer it", "hint": "Type your answer in the box below - it goes straight to the agent that is waiting", "row": ["answer_agent"]},
+    "continue":        {"label": "Keep going", "hint": "Pick the work up where it left off - say what to add, or keep going as is", "row": ["continue"]},
+    "rerun":           {"label": "Run it again", "hint": "Runs the report again in the background - its result goes where the report sends it, and if it fails the bell says why", "row": []},
+    "chase":           {"label": "Chase them", "hint": "Drafts a short nudge on the thread, in your voice, copying whoever usually gets them to answer", "row": []},
+    "let_go":          {"label": "Let it go", "hint": "Puts it down: the step is dropped or the follow-up closed", "row": []},
+    "elsewhere":       {"label": "They answered elsewhere", "hint": "Say where they answered - the step closes as done", "row": []},
+    "test_connection": {"label": "Test it", "hint": "Asks the connection again, here", "row": []},
+    "next":            {"label": "Next", "hint": "Puts this one down - still yours - and brings the next", "row": []},
+    "split":           {"label": "Split or merge", "hint": "Split this task in two, or merge it with another", "row": ["reshape"]},
+    "reopen":          {"label": "Reopen task", "hint": "Opens the task again", "row": ["reopen"]},
+    "close_note":      {"label": "Close with a note", "hint": "Closes the task with a line saying how it ended", "row": ["close-note"]},
+    "review_changes":  {"label": "Review changes", "hint": "See what the agent changed", "row": ["diff"]},
+    "share":           {"label": "Send out results", "hint": "Email what was found to someone", "row": ["email"]},
+    "ask_sender":      {"label": "Ask sender", "hint": "Ask whoever sent it a question", "row": ["ask-sender"]},
+    "forward":         {"label": "Hand it to a person", "hint": "Pass it to a colleague", "row": ["hand"]},
+    "remove":          {"label": "Remove - not a task", "hint": "Taskuary stops making tasks from messages like this; the email itself is kept", "row": ["nat"]},
+    "run_another":     {"label": "Run another agent", "hint": "Start a second agent on the same task", "row": ["run-another"]},
+    "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},
+    "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
+    "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
+    "new_task":        {"label": "New task", "hint": "Start a task of your own", "row": []}
+  },
+  "choices": {
+    "_": "The card's own question after Not ours / Send to agent - answers, not buttons of their own",
+    "not_ours": [["not_ours", "Just this once"], ["not_ours_sender", "From now on - their mail is filed for you"], ["block_sender", "A rule in Settings - their mail never comes in"]],
+    "idea": [["not_ours", "Just this one"], ["not_ours_kind", "No more ideas like this"]],
+    "agent": [["coding_agent", "A coding agent"], ["regular_agent", "An agent"]]
+  },
+  "removed": {
+    "_": "Buttons that no longer exist - an old saved card or a typed word lands on the verb named, the button is never drawn",
+    "prep": null, "later": "defer", "skip": "defer", "archive": "not_ours", "done": "close"
+  }
+}

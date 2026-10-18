@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, operations, workerstate as ws
+from . import asks, buttons, operations, workerstate as ws
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -58,41 +58,19 @@ _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
-         'rerun', 'setup', 'done', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
+         'rerun', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
 # The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
 # profile of kind coding on any CLI. An old saved card or phone button, or a model still saying it, lands on the name it has
-# now; the model is never shown the old one.
+# now; the model is never shown the old one. A REMOVED button (buttons.json `removed`: Handled, Later, Archive it...) lands the same way.
 VERB_ALIAS = {'coder': 'coding_agent'}
-def canon_verb(v): return VERB_ALIAS.get(v, v) if isinstance(v, str) else v
-# The action words offered INSIDE the assistant's own line, and what each one reads as. The vocabulary is
-# CODE's and it is fixed (the owner, 2026-09-07: "make it hardcoded, meaning add inline in the chat words
-# that map to actions"); only which of them fits the thing on the table is decided per item, from its kind.
-# The model still reads free text - it just never invents a button. Every word here maps to a verb the cards
-# and the typed sentence already run, so a chip, a button and a sentence are one road.
-CHIP_WORDS = {'chase': 'Chase them', 'let_go': 'Let it go', 'elsewhere': 'They answered elsewhere',
-              'approve': 'Send & close', 'redraft': 'Redraft it', 'reply': 'Reply', 'coding_agent': 'Send to a coding agent',
-              'regular_agent': 'Send to agent', 'mine': 'Make a task', 'not_ours': 'Not ours',
-              'not_ours_sender': 'Ignore this sender', 'block_sender': 'Block them in Settings',
-              'not_ours_kind': 'No more ideas like this', 'archive': 'Archive it', 'close': 'Mark done',
-              'done': 'Handled', 'later': 'Later', 'skip': 'Tomorrow', 'next': 'Next', 'answer_agent': 'Answer it',
-              'stop_agent': 'Stop and save', 'rerun': 'Run it again', 'split': 'Split it in two',
-              'prep': 'Prep me', 'defer': 'Remind me', 'continue': 'Keep going', 'test_connection': 'Test it'}
-# What the word will actually DO, on hover - written where the difference matters.
-CHIP_HINTS = {'chase': 'Drafts a short nudge on the thread, in your voice, copying whoever usually gets them to answer',
-              'let_go': 'Puts it down: the step is dropped or the follow-up closed; three on one person and the Advisor stops raising them',
-              'elsewhere': 'Say where they answered - the step closes as done',
-              'not_ours': 'File it - the card asks whether just this once, from now on, or as a rule in Settings',
-              'regular_agent': 'Hand the work to an agent - the answer comes back here, and the card lets you change which agent',
-              'mine': "A task on your own list - no agent starts", 'next': 'Read it and move on',
-         'defer': 'Put the task away until a day - it waits under For later on your rail and is back in front of you that morning',
-         'continue': 'Pick the work up where it left off - say what to add, or keep going as is',
-         'answer_agent': 'Type your answer in the box below - it goes straight to the agent that is waiting',
-         # the words that said nothing on hover: each line is what the handler does (TaskPage's own titles are the same sentences)
-         'stop_agent': "Writes up what was done, stops the work, and drafts the reply to whoever asked (with nothing to write up it just stops) - the task stays open",
-         'close': 'Closes the task - it stops coming back to Work',
-         # where the result shows is the report's own routing, and a failure only ever reaches the bell (reports.run_lands)
-         'rerun': 'Runs the report again in the background - its result goes where the report sends it, and if it fails the bell says why'}
+def canon_verb(v): return buttons.canon(VERB_ALIAS.get(v, v)) if isinstance(v, str) else v
+# The action words offered INSIDE the assistant's own line, and what each one reads as - the one list of buttons
+# (buttons.json), never retyped here: only which of them fits the thing on the table is decided per item, from its kind.
+# The model still reads free text - it just never invents a button. Every word maps to a verb the cards and the typed
+# sentence already run, so a chip, a button and a sentence are one road.
+CHIP_WORDS = {v: buttons.label(v) for v in buttons.VERBS}
+CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
@@ -180,9 +158,7 @@ RECEIPTS = {'chase': "I'll draft the nudge - nothing goes out until you say so."
             'mine': "On your list. Moving on.", 'close': 'Closing the task. Moving on.', 'rerun': "Running it again - its result goes where the report sends it, and if it fails the bell says why. Moving on.",
             'setup': "I'll walk you through it, one step at a time - nothing is built and nothing changes until you say so.",
             'answer_agent': "Passing that on - right away if it's waiting on you, otherwise the moment it next pauses.",
-            'redraft': "Writing it again with that - the new draft lands below for your yes.",
-            'archive': 'Archived and closed - nothing deleted. Moving on.',
-            'done': 'Done. Moving on.', 'later': "Pushed back a few hours.", 'skip': 'Tomorrow, then.', 'next': 'Next.'}
+            'redraft': "Writing it again with that - the new draft lands below for your yes.", 'next': 'Next.'}
 
 # The end of the walk, in COUNSEL's calm voice: what is true, and nothing to do (2026-10-06). all_done() adds the
 # next meeting and a promise of the owner's that is due today - each only when there is one.
@@ -343,7 +319,7 @@ def tools_block(store) -> str:
             "back - never say you cannot. "
             # coding exists only where a coding tool is connected (B3): without one, every hand-off is Send to agent
             + ("When it needs a checkout or a long job, say so and name the coding agent. " if _coding(store) else
-               "When it needs a long job, say so - Send to agent hands it off. Never mention or offer a coding agent. ") +
+               f"When it needs a long job, say so - {buttons.label('regular_agent')} hands it off. Never mention or offer a coding agent. ") +
             "NEVER use your "
             "own task, todo or plan tools, and never create tasks, files or records yourself: a decision of the owner's is carried out by "
             "Taskuary from your CALL line, and you report it only after the receipt says it happened.")
@@ -505,7 +481,7 @@ def facts(store, item: dict, whole: bool = False) -> str:
     if item.get('rid'):
         rv = store.get_review(item['rid']) or {}
         d = str(rv.get('DraftText') or '').strip()
-        lines.append(f"THE DRAFT (shown to the owner in the card):\n{_cut(d, 1200)}" if d else 'no draft yet - the card offers Draft with AI')
+        lines.append(f"THE DRAFT (shown to the owner in the card):\n{_cut(d, 1200)}" if d else f"no draft yet - the card offers {buttons.label('redraft', 'none')}")
         if item.get('stale'):
             lines.append('IMPORTANT: newer messages arrived after that draft. It is stale and must be redrafted before sending; do not recommend approving it.')
     if item['kind'] == 'agent':
@@ -689,22 +665,25 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     # the slipped answers belong to a slipped card: typed on anything else, or pressed after they wrote back, they do nothing
     if verb in ('chase', 'let_go', 'elsewhere') and item.get('lane') != 'forgotten': return f"Nothing has slipped on {what} - nobody is quiet past their day on it."
     if item.get('kind') == 'idea' and item.get('idea') and (verb in IDEA_ACT or verb == 'defer'): return ''
-    if verb == 'not_ours_kind': return f"{what} is not one of the assistant's ideas - say Not ours."
+    # A SENTENCE NAMES ONLY A BUTTON THE ITEM SHOWS (2026-10-17): these said Not ours, reply and Continue over cards with none of them
+    if verb == 'not_ours_kind':
+        own = 'not_ours' in CHIPS.get(item.get('kind'), ()) and not item.get('closeout') and not cannot(item, 'not_ours', store)
+        return f"{what} is not one of the assistant's ideas" + (f" - say {buttons.label('not_ours')}." if own else '.')
     if verb == 'answer_agent' and item.get('kind') != 'agent':
         return f"There's nothing to answer on {what} - nothing on it is waiting for an answer."
     if verb == 'approve' and item.get('kind') in ('review', 'action') and not item.get('draft') and item.get('kind') == 'review':
-        # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03)
-        return (f"There is nothing to approve yet - no reply has been drafted on {what}. Say reply and what to tell them, "
-                'and it lands here for your yes.')
+        # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
+        how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
+        return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
     # an agent already RUNNING on the task is not handed it again (the owner, 2026-10-01) - the dispatch door refuses it too
     if verb in ('coding_agent', 'regular_agent') and item.get('tid') and _agent_running(item['tid']):
-        return f"{what} is already being worked on - press Continue to add to it instead of handing it off again."
+        return f"{what} is already being worked on - it is not handed off a second time."
     if verb == 'coding_agent' and store is not None:
         # no coding tool connected: there is no coding agent to offer at all - not even as an alternative (2026-10-16)
         from . import agents as hub_agents
         if not hub_agents.coding_ready(store):
             # ...which only keeps it off the chips and the card's question: every road that runs it first turns it into Send to agent (handoff_verb)
-            return 'Send to agent hands this to an agent.'
+            return f"{buttons.label('regular_agent')} hands this to an agent."
         gone = no_agent(store)
         if gone: return (f"There's no one to hand it to yet - {gone} isn't set up on this computer. "
                          'Set it up under Connections, then say it again. Nothing has changed.')
@@ -759,12 +738,10 @@ def walk_chips(left) -> list:
 
 
 def closeout_label(item: dict) -> str:
-    """The ONE button of a task's close-out: "Close out", whatever the system (the owner, 2026-09-27: "we can't have a
-    bunch of them"). What it does there is the card's sentence (proposals.CLOSEOUT), never a new word."""
-    from .proposals import CLOSE_WORD, CLOSE_WORDS, CLOSEOUT
-    then = (item or {}).get('closeout')
-    if not then: return ''
-    return next((CLOSE_WORDS[a] for a, t in CLOSEOUT.items() if t in str(then) and a in CLOSE_WORDS), CLOSE_WORD)
+    """The ONE button of a task's close-out, whatever the system (the owner, 2026-09-27: "we can't have a bunch of them"):
+    approve as it shows on an agent's proposal - Approve (buttons.json). What it does there is the card's sentence
+    (proposals.CLOSEOUT), never a new word."""
+    return buttons.label('approve', 'action') if (item or {}).get('closeout') else ''
 
 
 def _general(store, item: dict) -> bool:
@@ -800,12 +777,11 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         verbs = ['answer_agent'] + [v for v in verbs if v != 'answer_agent']
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
+    first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
     if first and first in CHIP_WORDS and first != 'next':
         verbs = [first] + [v for v in verbs if v != first]
     out = []
     for v in verbs:
-        # the page's own action rather than a proposal, so NEEDS does not describe it: prep wants the invite
-        if v == 'prep' and not item.get('event'): continue
         if v != 'next' and cannot(item, v, store): continue
         # Reply on a finished agent is for the one it left without a draft - never a pull request's, where
         # nobody is owed an answer (the owner, 2026-09-25)
@@ -815,22 +791,20 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
         # ONE WORD for the one close (the owner, 2026-09-24: "mark done everywhere as the word") - it was "Close the
         # task", "Close without sending" and "Mark task done" for the same act; only the hint says a draft stays unsent
         if v == 'close' and (item.get('kind') == 'review' or item.get('reply_pending')):
-            out.append({'verb': v, 'label': 'Mark done',
-                        'hint': 'Marks the task done without sending the draft, and stops any work still running on it.'})
-        # an agent's proposal runs an action rather than sending a reply, so the word says that
-        # ...and a task's close-out says its own act (the owner, 2026-09-27: merge the PR, close the issue)
-        elif v == 'approve' and item.get('kind') == 'action': out.append({'verb': v, 'label': closeout_label(item) or 'Run it'})
-        # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25)
-        elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append({'verb': v, 'label': 'Take it myself', 'hint': "Takes the work back - it stays on your list."})
+            out.append(buttons.chip(v) | {'hint': 'Marks the task done without sending the draft, and stops any work still running on it.'})
+        # an agent's proposal runs an action rather than sending a reply - and a task's close-out (merge the PR, close the
+        # issue) is one too: the same button, in its Approve state (buttons.json)
+        elif v == 'approve' and item.get('kind') == 'action': out.append(buttons.chip(v, 'action'))
+        # on a task an agent holds, "mine" TAKES it - it is a task already (the owner, 2026-09-25); the name stays one name
+        elif v == 'mine' and item.get('tid') and item.get('kind') != 'idea': out.append(buttons.chip(v) | {'hint': "Takes the work back - it stays on your list."})
         # nothing drafted yet: there is nothing to RE-draft, and the card's own button already says Draft with AI
-        elif v == 'redraft' and not item.get('draft'): out.append({'verb': v, 'label': 'Draft with AI', 'hint': 'Writes a reply for you to check - nothing goes out until you say so'})
-        else:
-            out.append({'verb': v, 'label': CHIP_WORDS[v], **({'hint': CHIP_HINTS[v]} if v in CHIP_HINTS else {})})
+        elif v == 'redraft' and not item.get('draft'): out.append(buttons.chip(v, 'none') | {'hint': 'Writes a reply for you to check - nothing goes out until you say so'})
+        else: out.append(buttons.chip(v))
     return out
 
 
 # the chips whose verb is not itself a decision tool, and the tool each one is
-CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split'}
+CHIP_TOOL = toolcatalog.CHIP_TOOL
 
 def table_actions(store, item: dict | None, chips: list = None) -> str:
     """THE BUTTONS UNDER THE LINE, BY NAME. The model was told the action words "are already chosen for this item" and
@@ -1023,7 +997,7 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # A HELD START IS WHAT HAPPENED (the owner, 2026-10-16): "nothing has been done with it yet" was said over work the
         # sender gate held, a start that failed and a real queue alike - the task's own sentence says which, and what to do
         idle = item.get('why_idle') if item.get('lane') == 'queued' and item['kind'] in ('asked', 'todo') else ''
-        if idle: return f"{frm}. No agent has started on it. {idle}"
+        if idle: return f"{frm}. No agent has started on it. {idle} From you: {_from_you(store, item)}."   # the moves are its own buttons
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
         done = (f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
                 'I read it as needing a reply' if item['kind'] == 'review' else 'something is ready to run, waiting for your yes' if item['kind'] == 'action' else
@@ -1034,15 +1008,18 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
     if item['kind'] == 'agent' and item.get('paused') and item.get('why'):
         # a SAVED conversation, nobody running: "assistant is waiting on you - answer it below" over a task reopened by new mail
         # sent the owner looking for a question no agent had asked (the owner, 2026-10-14) - its own sentence says what is true
-        why = str(item['why'])
-        return f"{item.get('ref') or item['title']}: {why[:1].upper() + why[1:]}."
+        why = str(item['why']).strip().rstrip('.')
+        return f"{item.get('ref') or item['title']}: {_cap(why)}. {_cap(_from_you(store, item))}."
     if item['kind'] == 'agent':
         # ONE sentence per state (lanes.json): the item's `why` when the run said what it needs, else the
         # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit
         # sent the owner typing at a wall.
         sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
         line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or 'An agent', item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
-        return f"{line} ({item.get('ref') or item['title']}) - " + ("it picks up again on its own when the limit lifts. Nothing is lost." if sub == 'stalled' else 'answer it below.')
+        if sub == 'stalled': return f"{line} ({item.get('ref') or item['title']}) - it picks up again on its own when the limit lifts. Nothing is lost."
+        # "answer it below" only where Answer it is on the row - a stopped or saved run has nobody listening (chips_for)
+        ans = any(c['verb'] == 'answer_agent' for c in chips_for(store, item))
+        return f"{line} ({item.get('ref') or item['title']}) - " + ('answer it below.' if ans else f"{_cap(_from_you(store, item))}.")
     if item['kind'] == 'wrapup':
         return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the work is done ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'
     if item['kind'] == 'idea':
@@ -1688,7 +1665,7 @@ def read_op(store, kind: str, params: dict) -> str:
         # answered "there's no checklist on this task" (the replay, 2026-09-25)
         boxes = store.task_checklist(tid)
         if boxes: out.append('checklist: ' + '; '.join(f"{n}. [{'x' if b.get('done') else ' '}] {b['text']}" for n, b in enumerate(boxes, 1)))
-        if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} (Remind me)")
+        if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} ({buttons.label('defer')})")
         for msg in (store.list_messages(tid) or [])[:6]:
             out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
                        f"{_cut(msg.get('Subject') or '', 120)} - {_cut(msg.get('BodyText') or '', 400)}")
@@ -2456,12 +2433,10 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
 # ours asks how far - just this once, triage learns the sender, or a hard rule in Settings (Ignore this sender and
 # Block them were two more buttons for that). Send to agent asks which agent - triage's pick is the one proposed.
 # Picking another answer re-proposes through the same road (/api/concierge/propose), so nothing runs until confirmed.
-ALTS = {'not_ours': (('not_ours', 'Just this once'), ('not_ours_sender', 'From now on - their mail is filed for you'),
-                     ('block_sender', 'A rule in Settings - their mail never comes in')),
-        'agent': (('coding_agent', 'A coding agent'), ('regular_agent', 'A non-coding agent'))}
+ALTS = {'not_ours': buttons.choices('not_ours'), 'agent': buttons.choices('agent')}
 # ...and on an ADVISOR IDEA there is no sender to learn: how far means this one, or this kind of idea (the owner, 2026-10-02:
 # "feedback on assistant ideas ... does it teach it anything? we should have that") - the kind is a lesson the Advisor reads
-IDEA_ALTS = (('not_ours', 'Just this one'), ('not_ours_kind', 'No more ideas like this'))
+IDEA_ALTS = buttons.choices('idea')
 ALT_OF = {v: k for k, vs in ALTS.items() for v, _ in vs} | {v: 'not_ours' for v, _ in IDEA_ALTS}
 
 
@@ -2489,31 +2464,24 @@ def triage_agent(store, item: dict) -> str:
 # What the owner may decide about the thing on the table, as PROPOSALS (PW-123): verb -> (operation kind,
 # the button's label, whether confirming it settles the item on the table). Nothing here runs on the words;
 # the confirmed proposal runs through server._run_operation, the same handler every entry point uses.
-PROPOSALS = {
-    'coding_agent': ('task.create_from_message', 'Send to the coding agent', True), 'regular_agent': ('task.create_from_message', 'Send to agent', True),
-    'mine': ('task.create_from_message', 'Put it on my list', True),
-    'not_ours': ('message.file', 'File it', True), 'not_ours_remember': ('preference.exclude_sender', 'File it and remember this kind', True),
-    'not_ours_sender': ('preference.exclude_sender', 'Ignore this sender from now on', True),
-    'not_ours_kind': ('idea.act', 'No more ideas like this', True),
-    'block_sender': ('preference.sender_rule', 'Add an exclusion rule in Settings', True),
-    'archive': ('message.archive', 'Archive it', True),
-    'close': ('task.complete', 'Mark done', True), 'done': ('item.settle', 'Mark it handled', True),
-    'later': ('item.settle', 'Push it back', True), 'skip': ('item.settle', 'Skip until tomorrow', True),
-    'approve': ('review.approve', 'Send & close', True), 'answer_agent': ('agent.answer', 'Send the answer to the agent', True),
-    # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
-    # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
-    'stop_agent': ('agent.stop', 'Stop and save', True), 'rerun': ('report.rerun', 'Run the report again', True),
-    'continue': ('agent.continue', 'Keep going', False),
-    # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
-    'chase': ('task.chase', 'Chase them', False), 'let_go': ('task.let_go', 'Let it go', True), 'elsewhere': ('task.elsewhere', 'They answered elsewhere', True),
-    'test_connection': ('connection.test', 'Test the connection', False),
-    'remember': ('memory.remember', 'Remember it', False), 'split': ('task.split', 'Split it in two', False),
-    'setup': ('task.setup', 'Open the walk-through', False),
-}
+# The button's words are buttons.json's (the verb's own label); only the three that are no button of their own keep a phrase.
+_OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('task.create_from_message', True), 'mine': ('task.create_from_message', True),
+        'not_ours': ('message.file', True), 'not_ours_sender': ('preference.exclude_sender', True), 'not_ours_kind': ('idea.act', True),
+        'block_sender': ('preference.sender_rule', True), 'close': ('task.complete', True), 'approve': ('review.approve', True),
+        'answer_agent': ('agent.answer', True),
+        # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
+        # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
+        'stop_agent': ('agent.stop', True), 'rerun': ('report.rerun', True), 'continue': ('agent.continue', False),
+        # the slipped card's answers (spec 2026-10-12): a chase is a draft for your yes; the other two settle the item
+        'chase': ('task.chase', False), 'let_go': ('task.let_go', True), 'elsewhere': ('task.elsewhere', True),
+        'test_connection': ('connection.test', False), 'split': ('task.split', False)}
+PROPOSALS = {v: (k, buttons.label(v), s) for v, (k, s) in _OPS.items()} | {
+    'not_ours_remember': ('preference.exclude_sender', f"{buttons.label('not_ours')} - and remember this kind", True),
+    'remember': ('memory.remember', 'Remember it', False), 'setup': ('task.setup', 'Open the walk-through', False)}
 # ...and ending the agent's session, which the task page's own button does on the click: it writes the
 # session up and drafts the reply for your yes - nothing leaves (the owner, 2026-09-23: "it should be save
 # end session as well same as in task", having been asked to confirm a card that read "wrap: false")
-AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue',     # settles what is on the table; nothing leaves, nothing is handed off
+AUTO = ('close', 'stop_agent', 'continue',                              # settles what is on the table; nothing leaves, nothing is handed off
         'test_connection',                                              # ...and a connection test, which only asks and changes nothing
         # ...and the ANSWER to an agent that asked: the words matched to its Answer pill go to the run at once, desktop and phone alike -
         # the phone used to skip the AI for this and sent "next" to the agent (the owner, 2026-10-08: "ai should match to pill action")
@@ -2522,7 +2490,8 @@ AUTO = ('done', 'skip', 'later', 'close', 'stop_agent', 'continue',     # settle
 AGENT_STARTS = ('coding_agent', 'regular_agent', 'continue')
 # the operations that take the item off the table, so the walk moves on after them (the page reads
 # `settles` off the proposal it is holding; a chat comes back a turn later and has only the kind)
-SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles)
+# (filing to the archive and putting the item down are no buttons any more, but still tools a CALL may name - and still settle)
+SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() if settles) | {'message.archive', 'item.settle'}
 # SAID ONCE, IN WORDS (U3): a typed question with no AI got "set one up" twice in one reply, the second as a raw "#cli-agents".
 # The desk gets the link to the AI page; a phone chat cannot open one, so it gets the words alone.
 NO_BRAIN = 'Connect an AI under Connections → AI so I can take instructions; until then use the buttons.'
@@ -2650,7 +2619,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     """The owner's decision as a proposal row (operations.propose): the exact target and parameters, a label
     for its button, and the line that says what WILL happen. A decision that changes the proposal already on the
     table revises it (a new confirmation version) instead of stacking a second one (PW-123)."""
-    verb = handoff_verb(store, VERB_ALIAS.get(decision['verb'], decision['verb'])); kind, label, settles = PROPOSALS[verb]   # a stale page still sends `coder`
+    verb = handoff_verb(store, canon_verb(decision['verb']))      # a stale page still sends `coder`, an old card `later` or `archive`
+    if verb not in PROPOSALS: raise ValueError('that button is gone - use the ones on the card')
+    kind, label, settles = PROPOSALS[verb]
     d_text = (decision.get('text') or '').strip()
     it = item or {}
     target, params, note, clear, choices = None, {}, '', False, []
@@ -2687,7 +2658,7 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 # it starts" let the start quietly guess instead (the owner, 2026-09-24: "it should be dropdown to
                 # choose repo if it's not clear but it just started it in taskuary")
                 choices = term.known_repos(store)
-                label = 'Start a coding agent on it'
+                label = buttons.label('coding_agent')
             else:
                 # ...and a general one names its WORKER - the profile the model picked off the roster, validated
                 # the way triage's pick is (agents.routed_role). Typed in the chat it used to get the plain default
@@ -2696,21 +2667,15 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
                 role = hub_agents.routed_role(store, 'general', decision.get('as') or '')
                 params['profile'] = role or None
                 clear = bool(role) or not hub_agents.roster(store).strip()
-                label = f'Start the {role} on it' if role else 'Start an agent on it'
+                label = buttons.label('regular_agent')         # the worker picked is said in the line, never in the button's name
+                if role: note = f' The {role} takes it.'
     elif verb == 'not_ours': target, params = it.get('mid'), {'learn': False}
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
-    elif verb == 'archive': target = it.get('mid')
-    elif verb == 'close': target = it.get('tid')
+    elif verb == 'close': target = it.get('tid')        # an agent parked on it is stopped by the same close (close_task)
     elif verb in ('chase', 'let_go', 'elsewhere'):
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}
-    elif verb in ('done', 'later', 'skip'):
-        if not it.get('key'): raise ValueError('nothing is on the table')
-        # "done" said about an agent parked on a question is not a row to tick: the job is over, so the task
-        # closes and the session ends with it - the shared task.complete road does both
-        if verb == 'done' and it.get('kind') == 'agent' and it.get('tid'): kind, label, target, params = 'task.complete', 'Mark done', it['tid'], {'agent': True}
-        else: target, params = it.get('tid') or 0, {'key': it['key'], 'verb': verb, 'tid': it.get('tid'), 'rid': it.get('rid'), 'kind': it.get('kind')}
     elif verb == 'approve':
         target = it.get('rid')
         label = closeout_label(it) or label          # "Send the reply" is not what a merge card's yes does
@@ -3126,22 +3091,25 @@ def op_label(kind: str, p: dict) -> str:
     label it put that sentence on the button of a plain to-do, and said an agent had started when none had."""
     by_kind = {kind_: [PROPOSALS[v][1] for v in PROPOSALS if PROPOSALS[v][0] == kind_][0] for kind_ in {PROPOSALS[v][0] for v in PROPOSALS}}
     label = by_kind.get(kind) or toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
-    if kind == 'task.create_from_message': label = {'coding': 'Send to the coding agent', 'general': 'Send to agent'}.get(str(p.get('kind')), 'Put it on my list')
-    if kind == 'task.create_from_text': label = {'coding': 'Start a coding agent on it', 'task': 'Put it on my list'}.get(str(p.get('kind')), 'Start an agent on it')
-    if kind == 'preference.exclude_sender': label = 'Silence this sender' if p.get('scope') == 'sender' else 'File it and remember this kind'
-    if kind == 'item.settle': label = {'later': 'Push it back', 'skip': 'Skip until tomorrow'}.get(str(p.get('verb')), 'Mark done' if p.get('tid') else 'Mark it handled')
+    L = buttons.label        # a label that names a button is the button's own name (buttons.json), never a second wording
+    hand = {'coding': L('coding_agent'), 'general': L('regular_agent'), 'task': L('mine')}
+    if kind == 'task.create_from_message': label = hand.get(str(p.get('kind')), L('mine'))
+    if kind == 'task.create_from_text': label = hand.get(str(p.get('kind')), L('regular_agent'))
+    if kind == 'preference.exclude_sender': label = L('not_ours_sender') if p.get('scope') == 'sender' else PROPOSALS['not_ours_remember'][1]
+    if kind == 'item.settle': label = L('close') if p.get('tid') else L('next')
     if kind == 'report.create': label = 'Create the report'
     if kind == 'connection.create': label = 'Create the connection'
     if kind == 'role.apply': label = 'Set it up'
     if kind in toolcatalog.INSTANT or kind == 'report.delete': label = toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
     label = {'hub.publish': 'Save it to the Hub', 'task.update': 'Change the task', 'task.set_kind': 'Change what kind of work it is', 'task.set_repo': 'Put it in that repository',
              'task.check': 'Tick the checklist item', 'task.checklist': 'Change the checklist', 'task.watch': 'Watch it for you', 'task.comment': 'File the note', 'task.handoff': 'Write the hand-off for your yes',
-             'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': 'Reopen it',
-             'task.not_a_task': 'Delete it - not a task', 'dispatch.prepare': 'Start an agent on it', 'agent.continue': 'Continue the agent',
-             'review.reject': 'Reject the draft'}.get(kind, label)
-    if kind == 'idea.act': label = {'task': 'Put it on my list', 'agent': 'Send to an agent', 'dismiss': 'Not ours - put this one down',
-                                    'dismiss_kind': 'No more ideas like this'}.get(str(p.get('verb')), label)
-    if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"Remind me: {p.get('until')}"
+             'task.merge': 'Fold it into that task', 'task.clarify': 'Write the question for your yes', 'task.reopen': L('reopen'),
+             'task.not_a_task': L('remove'), 'dispatch.prepare': L('regular_agent'), 'agent.continue': L('continue'),
+             'review.reject': 'Reject the draft', 'task.split': L('split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection')}.get(kind, label)
+    if kind == 'dispatch.prepare' and str(p.get('kind')) == 'coding': label = L('coding_agent')
+    if kind == 'idea.act': label = {'task': L('mine'), 'agent': L('regular_agent'), 'dismiss': L('not_ours'),
+                                    'dismiss_kind': L('not_ours_kind')}.get(str(p.get('verb')), label)
+    if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"{L('defer')}: {p.get('until')}"
     return label[0].upper() + label[1:] if label else kind
 
 
@@ -3256,7 +3224,7 @@ def receipt(store, op: dict, actor: str = 'owner') -> str:
 
 
 # the close-out's own other buttons, when GitHub's reading offered them with the refusal (ghcloseout.assess)
-OFFER_WORDS = {'update': 'Update branch', 'rerun': 'Re-run checks', 'anyway': 'Close out anyway'}
+OFFER_WORDS = {'update': 'Update branch', 'rerun': 'Re-run checks', 'anyway': f"{buttons.label('approve', 'action')} anyway"}
 _PICK = re.compile(r'\n?\s*PICK:\s*(\d+)\s*$', re.I)
 
 
@@ -3281,7 +3249,7 @@ def recover(store, op: dict, actor: str = 'owner', llm=None) -> dict:
     fix = o.get('fix') or o.get('send_fix')
     if isinstance(fix, dict) and fix.get('href') and fix.get('label'): chips.append({'verb': 'go', 'href': fix['href'], 'label': fix['label']})
     if st == 'error' and not o.get('needs') and not o.get('refused') and o.get('dispatch') != 'needs_repo':
-        chips.append({'verb': 'retry', 'label': 'Try again', 'op': op['id'], 'version': op['version'], 'kind': op.get('kind'),
+        chips.append({'verb': 'retry', 'label': buttons.label('try_again'), 'op': op['id'], 'version': op['version'], 'kind': op.get('kind'),
                       'settles': any(row[0] == op.get('kind') and row[2] for row in PROPOSALS.values())})
     chips += [{'verb': 'closeout', 'act': a, 'rid': o['rid'], 'label': OFFER_WORDS[a]}
               for a in o.get('offers') or [] if a in OFFER_WORDS and o.get('rid')]
@@ -3604,7 +3572,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             redo = parse_decision(parse_call(again)[0])[1]
             if redo and redo.get('verb') == decision.get('verb') and redo.get('on'): decision = {**decision, **redo}
         except Exception as e: logger.warning(f'concierge: asking for the row again failed - {e}')
-    if decision and not item and decision.get('on') and decision.get('verb') not in ('next', 'done', 'skip', 'later'):
+    if decision and not item and decision.get('on') and decision.get('verb') != 'next':
         other = _resolve_named(store, decision['on'], None)
         it2 = None if other == '?' else (funnel.next_item(store, other) or funnel.item_for_key(store, other))
         if not it2:
@@ -3615,7 +3583,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         target_item, elsewhere = it2, True
     # NOTHING ON THE TABLE: next / done / later move the WALK; a verb that needs something to act on says so
     if decision and not item and not target_item:
-        if verb in ('next', 'done', 'skip', 'later'):
+        if verb == 'next':
             return surface(store, None, llm, actor, None, trace, cancel)
         # "remind me to renew the contract" read as `mine` - theirs to do - with nothing on the table to be
         # theirs: that is a new to-do in their words, not "nothing is on the table" (2026-09-23)
@@ -3702,7 +3670,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # THE AI FAILED: say so and what to do, with Try again (the owner's own words, sent again) and the way on
     if not reply and failed is not None and not decision:
         say_ = brain_trouble(failed)
-        chips = [{'label': 'Try again', 'ask': text}, *(chips_for(store, item) or walk_chips(len(p['items'])))]
+        chips = [{'label': buttons.label('try_again'), 'ask': text}, *(chips_for(store, item) or walk_chips(len(p['items'])))]
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': chips, 'decision': None, 'error': True}
     # NEVER A REFERENCE THAT DOES NOT EXIST: a choice naming one is dropped, and an answer naming one is asked for again once

@@ -13,6 +13,7 @@ import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown } from "./advice.js";
 import { useHost, useVerbs } from "./actionRow.js";
+import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
 // THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
 // view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
@@ -64,7 +65,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   const h = phone ? phoneH : height;
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
-  useVerbs("next", [{ id: "next", group: "next", label: "Next", disabled: !!busy, run: () => onNext(), title: "Puts this one down, still yours, and brings the next" }]);
+  useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
   const advised = adviceShown(useItemAdvice(card, phone), { key: card.key, lane: card.lane }, busy);
   return (
     <>

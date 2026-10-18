@@ -14,6 +14,7 @@ import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { useVerbs } from "./actionRow.js";
+import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
 import { interruptOf, resolveInterrupt } from "./approvalInterrupt.js";
@@ -89,8 +90,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const onTask = !proposal && !!r.TaskId && r.Kind !== "clarification" && !isSlot;
   // THE BUTTONS THAT ACT ON THE DRAFT ARE UNDER THE DRAFT (the owner, 2026-10-06: "any button that relates to a piece of a task ... put
   // the button right there, if related to task in general then put button on bottom"): Send & close where sending finishes the task,
-  // Send where it does not (one of several emails), Copy & close where this channel cannot carry it - and Redraft beside them.
-  const sendWord = isSlot || !onTask ? "Send" : "Send & close";
+  // Copy & close where this channel cannot carry it - and Redraft beside them. ONE NAME for the send (buttons.json): "Send" on one
+  // email of several was a second name for the same press; the line under it says what closes
+  const sendWord = btn("approve");
   // A CHAT REPLY THAT PROMISES A FILE (U17): WhatsApp and the other chats carry words only, so Send & close sent the promise without
   // the file and closed the task on it. The move becomes answering by email with the file; sending the words alone stays beside it.
   const chatFile = !!onEmailInstead && !proposal && !co && !isSlot && !r.Stale && !delivery.frozen && r.CanSend !== false
@@ -176,11 +178,11 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
-  const remindTitle = "Puts the task away until a day - nothing is merged, closed or sent; it is back on your rail that morning";
-  const doneTitle = "Marks the task done without sending - the draft stays on it, to send later if you want";
-  // Redraft / Refresh / Draft with AI: the same handler the in-card button has
+  const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
+  const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
+  // Redraft (Draft with AI while nothing is drafted): the same handler the in-card button has
   const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isSlot;   // the redrafter writes a REPLY to the sender
-  const redraftWord = r.Stale ? "Refresh draft" : r.DraftText ? "Redraft" : "Draft with AI";
+  const redraftWord = r.DraftText || r.Stale ? btn("redraft") : btn("redraft", "none");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
   const altTitle = co?.alt ? `${co.alt.label} ${co.alt.then}${altSends ? ", then sends the text above exactly as you have it - edit it first if it reads as an accept" : ". The box is empty, so nothing is sent"}.` : "";
@@ -198,10 +200,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
     ] : r.CanSend === false ? [
-      { id: no("approve"), label: busy ? "Closing…" : "Mark done", tone: "p", disabled: busy, run: () => decide("close_unsent"),
+      { id: no("approve"), label: busy ? "Closing…" : btn("close"), tone: "p", disabled: busy, run: () => decide("close_unsent"),
         title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is kept; the task is marked done (PW-145).` },
     ] : r.Stale ? [
-      { id: no("approve"), label: busy ? "Refreshing…" : "Refresh the draft", tone: "p", disabled: busy, run: redraft, title: "Rewrites the draft from the newest message, then you approve it" },
+      { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },
     ] : chatFile ? [
       { id: no("email-file"), label: "Reply by email with the file", tone: "p", disabled: busy, run: onEmailInstead,
         title: `A ${r.Channel} message cannot carry a file - this writes an email with the file on it, which waits here for your yes` },
@@ -213,19 +215,19 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
     // A CLOSE-OUT HAS NO "NOT YET" (the owner, 2026-10-02): Next keeps it open and moves on, Remind me keeps it open until a day
-    ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: "Remind me", tone: "q", disabled: busy, run: onRemind, title: remindTitle }] : [])
+    ...(co || proposal?.kind === "closeout" ? (onRemind ? [{ id: no("remind"), label: btn("defer"), tone: "q", disabled: busy, run: onRemind, title: remindTitle }] : [])
       : proposal ? [{ id: no("reject"), label: proposal.rejectLabel, tone: "q", disabled: busy, run: () => decide("reject"), title: rejectTitle }]
       // A REPLY DRAFT IS NEVER REJECTED (the owner, 2026-10-01: "rejected is useless - it should be redraft or close task"): Reject
       // threw the draft away and left the task open, which is neither. Its other choices are Redraft and the task's own Mark done.
       : [...(canRedraft && !r.Stale ? [{ id: no("redraft"), group: "decide", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting, run: redraft,
-          title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : []),
-        ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: "Mark done", disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
+          title: btnHint("redraft") }] : []),
+        ...(onMarkDone && r.CanSend !== false ? [{ id: no("done"), group: "decide", closes: true, tone: "s", label: btn("close"), disabled: busy, run: onMarkDone, title: doneTitle }] : [])]),
   ].map((v) => ({ ...v, group: "decide", disabled: v.disabled || (delivery.frozen && v.id !== no("approve")) }));
   // ...and behind More where the decision does not carry it already (a close-out; a stale draft's Refresh is the move itself)
   // The draft's own buttons are drawn under it, never on the task's bar (2026-10-06) - but they are REGISTERED as `card` verbs, so
   // the row knows the card holds the move and the Advisor's Send finds this Send instead of drawing a second one (B4, 2026-10-17)
   useVerbs(`decision:${r.ReviewId}`, [...moves, ...(canRedraft && moves.length && !moves.some((v) => v.id === no("redraft")) ? [{ id: no("redraft"), group: "more", tone: "s", label: drafting ? "Drafting…" : redraftWord, disabled: busy || drafting || delivery.frozen, run: redraft,
-    title: "Writes the draft again from the thread as it is now; your edit is kept beside it until you choose" }] : [])].map((v) => ({ ...v, card: true })), toRow);
+    title: btnHint("redraft") }] : [])].map((v) => ({ ...v, card: true })), toRow);
   // A FAILED SEND'S FIX IS A BUTTON ON THE ROW, not directions in the error ("add one under Connections" with nothing to press,
   // 2026-10-17) - and an ordinary row verb, so the Advisor can pick it like any other
   const fix = sendFix(r, sendErr);
@@ -387,8 +389,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
              send since there is warning? just reprocess it then"). Refreshing IS the primary
              action while the thread is ahead of the draft. */
           <Button size="small" variant="contained" disableElevation disabled={busy}
-            onClick={redraft} title="Rewrites the draft from the newest message, then you approve it">
-            {busy ? "Refreshing…" : "Refresh the draft"}
+            onClick={redraft} title={btnHint("redraft")}>
+            {busy ? "Drafting…" : btn("redraft")}
           </Button>
         ) : chatFile ? (
           <>
@@ -404,14 +406,14 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
             disabled={busy || !value.trim()}
             onClick={() => decide("approve")}
             title={simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}`}>
-            {/* on a task the one word is Close out, as everywhere; a draft with no task behind it is just sent */}
+            {/* the one word for the send, as everywhere (buttons.json) */}
             {busy ? (simulated ? "Simulating…" : "Sending…")
               : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`}
           </Button>
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
         {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy || drafting} onClick={redraft}
-          title="Writes the draft again from the thread as it is now; your edit is kept beside it until you choose">
+          title={btnHint("redraft")}>
           {drafting ? "Drafting…" : redraftWord}</Button>}
         {/* ...but one email of several can be let go without closing anything: it drops that slot (slots.settled) */}
         {isSlot && onDrop && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy} onClick={onDrop}
@@ -419,7 +421,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {/* no "No reply needed" - Mark done on the task is that (the owner, 2026-09-24: "no button should be that") */}
         {proposal?.alt && <Button size="small" variant="outlined" disabled={busy || delivery.frozen} onClick={() => decide(proposal.alt.verb)}
           title={`${proposal.alt.label} - ${proposal.alt.then}`}>{proposal.alt.label}</Button>}
-        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>Remind me</Button>}
+        {(co || proposal?.kind === "closeout") && onRemind && <Button size="small" disabled={busy || delivery.frozen} onClick={(e) => onRemind(e)} title={remindTitle}>{btn("defer")}</Button>}
         {/* a close-out card is Close out / Decline / Remind me and nothing else (the owner, 2026-09-28: "what does reject
             reply mean here? don't think we need that") - the reply is edited or redrafted in place, never rejected apart;
             and a plain draft is Close out, Redraft (at the row's end) or the task bar's own Mark done (2026-10-01) */}
@@ -446,7 +448,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Alert>
         );
       })()}
-      {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}. Close out again once the checks pass.</Alert>}
+      {said && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setSaid("")}>{said}. Press {btn("approve", "action")} again once the checks pass.</Alert>}
       {sendErr && (
         <Alert severity="error" sx={{ mt: 1 }} onClose={() => setSendErr("")}>
           <b>{sendErr.unknown ? "Delivery has not been confirmed." : "The reply was not sent."}</b> {sendErr.message}

@@ -23,6 +23,7 @@ import { ALERT, GRADIENT, PANEL, PANEL2, BORDER, CATPPUCCIN, DIM, FAINT, INK, RO
 import { ChannelIcon, ActionChip, useAgents, codingProfile, timeAgo, Empty, IDLE_WAITING, isWaiting, TellAgent, WorkPane, TaskuaryMark, assignedAgent } from "./ui.jsx";
 import { AGENT } from "./taskLifecycle.js";
 import QueuedStart from "./QueuedStart.jsx";
+import { label } from "./buttons.js";
 import { LANE_META, KIND_META } from "./funnelPile.js";
 import { remindWaiting } from "./taskFilter.js";
 
@@ -333,7 +334,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
         <Button size="small" variant="outlined" disableElevation onClick={() => setFeedOpen(true)}
           sx={{ color: "#6b5f45", borderColor: "#d8cfbe", bgcolor: "#f1ead9", "&:hover": { borderColor: "#8a7a5c", bgcolor: "#e9dfc5" } }}>✎ Feed the agent</Button>
         <Button size="small" variant="contained" disableElevation startIcon={<AddIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>New task for the agent</Button>
+          onClick={() => setNewOpen(true)} sx={{ background: GRADIENT }}>{label("new_task")}</Button>
       </Box>
       <Dialog open={feedOpen} onClose={() => setFeedOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ pb: 0.5 }}>Feed the agent

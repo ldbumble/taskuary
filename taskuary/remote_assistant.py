@@ -16,6 +16,7 @@ chats and groups continue through the normal funnel.
 import collections, json, re, threading, time
 
 from loguru import logger
+from . import buttons
 
 
 CHANNELS = ('whatsapp', 'telegram')
@@ -352,8 +353,9 @@ def push_alerts(store, force: bool = False) -> int:
     lead = 'By the way — '            # the same words the desktop strip uses, in the place he is reading
     say = lead + named[0].rstrip('.') + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
     handle = next((refs[a['item']] for a in fresh if refs.get(a['item'])), '')
-    tail = (f'Say {handle} to take it now, or keep going.' if handle
-            else 'Name it and I will take you to it, or keep going.')
+    # "or keep going" read as the Keep going button, which this line does not offer
+    tail = (f'Say {handle} to take it now, or carry on with this one.' if handle
+            else 'Name it and I will take you to it, or carry on with this one.')
     send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'))
     concierge.record(store, task['TaskId'], 'assistant', say)
     # ...onto the hand-off as it is NOW: a Take it back that landed while this was sending must stay taken back - writing
@@ -1146,7 +1148,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if t == 'closeout':
             from fastapi import HTTPException
             from .server import closeout_act
-            try: return f"{closeout_act(int(act['rid']), str(act['act']))['said']}. Close out again once the checks pass."
+            try: return f"{closeout_act(int(act['rid']), str(act['act']))['said']}. Press {buttons.label('approve', 'action')} again once the checks pass."
             except HTTPException as e: return f'Not done - {e.detail}.'
         if t in ('confirm', 'cancel', 'repo'):
             op = operations.get(store, act.get('id') or '')
@@ -1169,8 +1171,10 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if verb == 'continue':
             here = asking() or {}
             if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", str(on.get('tid') or ''), 'assistant')
-            rows = [('Continue as is', {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay'})]
-            return turn_text({'say': f"Continue {on.get('ref') or 'it'}? Type what to tell it as it picks up, or tap Continue as is.",
+            # the desktop's box says the same one word (buttons.json) - "Continue as is" was a second name for Keep going
+            go = buttons.label('continue')
+            rows = [(go, {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay'})]
+            return turn_text({'say': f"{go} on {on.get('ref') or 'it'}? Type what to tell it as it picks up, or tap {go}.",
                               'item': None}, store=store, extra=rows)
         if verb == 'defer':
             # Remind me asks for the day, as the desktop's picker does; a day typed instead goes to the model's task.defer
@@ -1539,7 +1543,7 @@ def primary(out: dict) -> dict | None:
     never by a reply (the desktop's button there is Hand to agent, 2026-09-28)."""
     chips = [c for c in (out.get('chips') or []) if isinstance(c, dict) and c.get('verb') and c.get('verb') != 'next']
     it = out.get('item') or {}
-    if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', 'start it'):
+    if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', buttons.label('regular_agent')):
         hand = next((c for c in chips if c['verb'] in _HAND), None)
         if hand: return hand
     return next((c for c in chips if c['verb'] not in _DOWN), chips[0] if chips else None)
@@ -1657,11 +1661,13 @@ def move_title(item: dict | None, draft: str = '') -> str:
     if kind == 'agent':
         if len(it.get('questions') or []) > 1: return f"{len(it['questions'])} questions from the agent"
         return '' if lane == 'working' else 'pick it up again' if it.get('paused') else 'answer the agent' if it.get('asking') else "tell the agent what's next"
-    if kind == 'agentdone': return 'answer them from what it found' if it.get('mid') else ''
+    # a move that IS a button says the button's own name (buttons.json) - "answer them" and "start it" named none the card had
+    if kind == 'agentdone':
+        return f"{buttons.label('reply')} to {who} with what it found" if it.get('mid') and str(it.get('channel') or '').lower() != 'github' else ''
     if kind == 'wrapup': return 'close it'
-    if lane == 'queued': return 'start it'
+    if lane == 'queued': return buttons.label('regular_agent')
     if lane in ('stopped', 'saved'): return 'pick it up again'
-    if kind == 'action': return 'close out' if it.get('closeout') else 'do what you asked for' if is_own(it) else 'run what the agent proposed'
+    if kind == 'action': return buttons.label('approve', 'action') if it.get('closeout') else 'do what you asked for' if is_own(it) else 'run what the agent proposed'
     if kind == 'review':
         return ('send your draft' if is_own(it) else f'reply to {who}') if draft or it.get('draft') else 'no reply drafted yet'
     if kind == 'fyi' or lane == 'fyi': return ''
@@ -1904,7 +1910,8 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)
-        first_ += [w for w in rest if w == _c.CHIP_WORDS['redraft'] and w not in first_]
+        redo = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'redraft'}   # Redraft, or Draft with AI
+        first_ += [w for w in rest if w in redo and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
     if item.get('kind') == 'fyis':

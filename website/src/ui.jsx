@@ -44,6 +44,7 @@ import { IconButton as MuiIconButton, Popover, Tooltip as MuiTooltip } from "@mu
 import { openAppLink } from "./appLinks.js";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
+import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -808,7 +809,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
         textTransform: "none", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap", boxShadow: "none",
         color: "#5a3e83", bgcolor: "#f8f5fc", border: "1px solid #d9cbea",
         "&:hover": { bgcolor: "#f1eafa", borderColor: "#bca3d8", boxShadow: "none" } }}>
-      Not ours
+      {btnLabel("not_ours")}
       <Box component="span" aria-hidden sx={{ ml: 1, px: 0.65, py: 0.08, borderRadius: 0.8,
         bgcolor: "rgba(90,62,131,.1)", fontSize: 8.5, fontWeight: 600, letterSpacing: 0.7,
         lineHeight: 1.5 }}>MEMORY</Box>
@@ -817,10 +818,10 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
   if (!open) return row ? (
     <ChoiceRow first={first} tint="#e9e3d8" onClick={() => setOpen(true)}
       icon={<BlockIcon sx={{ fontSize: 15, color: "#867f74" }} />}
-      label="Not our task" hint="say why once — triage remembers it for this topic, or this sender" />
+      label={btnLabel("not_ours")} hint="say why once — triage remembers it for this topic, or this sender" />
   ) : (
     <Button size="small" sx={{ color: "#867f74", fontSize: 11 }} onClick={() => setOpen(true)}
-      title="Not our responsibility — and remember why, so triage learns it">Not our task</Button>
+      title="Not our responsibility — and remember why, so triage learns it">{btnLabel("not_ours")}</Button>
   );
   return (
     <Box sx={{ width: "100%", flexBasis: compact ? "100%" : "auto", mt: row ? 0 : 1, p: 1.25, bgcolor: PANEL2,
@@ -946,9 +947,9 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       </Box>
       <Box sx={{ display: "flex", gap: 0.75, mb: agentKind ? 0.75 : 0, flexWrap: "wrap" }}>
         {canCode && <Button size="small" variant={agentKind === "coding" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("coding")}>Coding agent</Button>}
+          onClick={() => setAgentKind("coding")}>{choice("agent", "coding_agent")}</Button>}
         <Button size="small" variant={agentKind === "general" ? "contained" : "outlined"} disableElevation
-          onClick={() => setAgentKind("general")}>Regular agent</Button>
+          onClick={() => setAgentKind("general")}>{choice("agent", "regular_agent")}</Button>
       </Box>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: agentKind ? 0.5 : 0 }}>
         Triage tagged this {suggestedKind}; your choice here is what actually runs.
@@ -956,7 +957,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
       {agentKind && <TextField fullWidth multiline minRows={2} size="small" autoFocus value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={coding ? `What should it do? e.g. "Find why this failed and fix it, then tell me what changed."`
-            : "What should the regular agent do with this?"}
+            : "What should the agent do with this?"}
           sx={{ bgcolor: "#fff" }} />}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
         <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 0 }} noWrap>
@@ -966,7 +967,7 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
         <Button size="small" variant="contained" disableElevation disabled={busy || !agentKind} onClick={send}
           startIcon={busy ? <CircularProgress size={11} sx={{ color: "#fff" }} /> : null}
           sx={{ fontSize: 11.5, bgcolor: "#6f8a6e", "&:hover": { bgcolor: "#5b7259" } }}>
-          {busy ? "sending…" : "Send"}
+          {busy ? "sending…" : btnLabel(agentKind === "coding" ? "coding_agent" : "regular_agent")}
         </Button>
       </Box>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block", mt: 0.5 }}>{err}</Typography>}

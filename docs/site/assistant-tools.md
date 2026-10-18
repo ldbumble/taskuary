@@ -9,7 +9,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, done, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere |
+| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere |
 | **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete, task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
 | **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -26,7 +26,7 @@ Decide about the item on the table.
 
 ### `reply`
 
-Write a reply to the sender. Nothing is sent.
+The "Reply" button: write a reply to the sender. Nothing is sent.
 
 - `text` - the gist, in the owner's words
 - `cc` (optional) - people to loop in on it, by name or address ("loop Gail in and ask her" is a reply with Gail copied, never an agent)
@@ -35,13 +35,13 @@ Write a reply to the sender. Nothing is sent.
 
 ### `approve`
 
-The owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out (Close out) it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never continues an agent's session - that is agent.continue.
+The "Send & close" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action. It never continues an agent's session - that is agent.continue.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `redraft`
 
-Write the draft again.
+The "Redraft" button ("Draft with AI" when nothing is drafted yet): write the draft again.
 
 - `text` - the change
 
@@ -49,13 +49,13 @@ Write the draft again.
 
 ### `mine`
 
-Make it a task on the owner's own list - no agent.
+The "Put it on my list" button: make it a task on the owner's own list - no agent.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `regular_agent`
 
-Send it to a non-coding agent - it becomes a task of its own.
+The "Send to agent" button: send it to an agent that does not write code - it becomes a task of its own.
 
 - `text` - the job
 - `as` (optional) - a profile from agents.list, only when one fits
@@ -65,7 +65,7 @@ Send it to a non-coding agent - it becomes a task of its own.
 
 ### `coding_agent`
 
-Send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.
+The "Send to coding agent" button: send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.
 
 - `text` - what is wanted
 - `as` (optional) - the repository (repos.list), only when sure
@@ -75,49 +75,43 @@ Send it to a coding agent. Not sure which repository is no reason to ask - CALL 
 
 ### `not_ours`
 
-File it, just this once - its card asks whether from now on, or as a rule.
+The "Not ours" button: file it, just this once - its card asks whether from now on, or as a rule.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `not_ours_sender`
 
-File everything from this sender from now on - their mail still arrives and stays readable.
+The "Ignore this sender" button: file everything from this sender from now on - their mail still arrives and stays readable.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `block_sender`
 
-An exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.
+The "Block this sender" button: an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `not_ours_kind`
 
-An Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that.
+The "No more ideas like this" button: an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `close`
 
-Mark done - the task behind the item is finished.
-
-<p class="runs">At once.</p>
-
-### `done`
-
-The owner handled it - Mark done on a task; on an idea, a report or an fyi it is read and settled.
+The "Mark done" button: the task behind the item is finished.
 
 <p class="runs">At once.</p>
 
 ### `next`
 
-Move on to the next thing.
+The "Next" button: move on to the next thing.
 
 <p class="runs">At once.</p>
 
 ### `answer_agent`
 
-Answer the agent waiting on the owner.
+The "Answer it" button: answer the agent waiting on the owner.
 
 - `text`
 
@@ -125,13 +119,13 @@ Answer the agent waiting on the owner.
 
 ### `stop_agent`
 
-Save and end the agent's session on the item.
+The "Stop and save" button: save and end the agent's session on the item.
 
 <p class="runs">At once.</p>
 
 ### `rerun`
 
-Run the report on the table again.
+The "Run it again" button: run the report on the table again.
 
 <p class="runs">Waits for your yes on a card.</p>
 
@@ -165,19 +159,19 @@ The owner's no to it.
 
 ### `chase`
 
-Chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.
+The "Chase them" button: chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `let_go`
 
-Let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.
+The "Let it go" button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.
 
 <p class="runs">Waits for your yes on a card.</p>
 
 ### `elsewhere`
 
-They answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.
+The "They answered elsewhere" button: they answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.
 
 - `text` - where (a call, a meeting)
 
@@ -430,9 +424,9 @@ Clear a SET of items from the pipe at once - takes `select` (below); read, never
 
 ### `item.settle`
 
-Put the item down.
+Put the item down, read and settled.
 
-- `verb` - done | later | skip (the item on the table is the target)
+- `verb` - done (the item on the table is the target)
 
 <p class="runs">Waits for your yes on a card.</p>
 

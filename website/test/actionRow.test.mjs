@@ -267,23 +267,12 @@ test("how long it has waited on you: owed lanes only, from an hour, in the rail'
   assert.equal(waitedText({ lane: "theirs", when: at(5) }, now), "");             // waiting on THEM is not on you
 });
 
-test("one word on the bar, the whole name on hover and in the menus (canvas J3, 2026-10-13)", async () => {
-  const { shortLabel } = await import("../src/actionRow.js");
-  assert.equal(shortLabel({ id: "continue", label: "Keep going" }), "Continue");
-  // plain words for someone who never wrote code (the audit, 2026-10-17): no "New", "Who", "End"; and Remove is what its dialog says
-  assert.equal(shortLabel({ id: "run-another", label: "Run another agent" }), "Another agent");
-  assert.equal(shortLabel({ id: "close-note", label: "Close with a note" }), "Note");
-  assert.equal(shortLabel({ id: "nat", label: "Remove - not a task" }), "Remove");
-  assert.equal(shortLabel({ id: "kind", label: "Change who does it" }), "Reassign");
-  assert.equal(shortLabel({ id: "save-end", label: "Stop and save" }), "Stop");
-  assert.equal(shortLabel({ id: "12:redraft", label: "Draft with AI" }), "Draft", "nothing drafted yet is not a Redraft");
-  assert.equal(shortLabel({ id: "answer_agent", label: "Answer it" }), "Answer it");
-  assert.equal(shortLabel({ id: "12:approve", label: "Send & close" }), "Send");      // a draft's own verb, by its act
-  assert.equal(shortLabel({ id: "reply", label: "Drafting…" }), "Drafting…");         // a state is said as it is
-  assert.equal(shortLabel({ id: "remind", label: "Back Tue" }), "Back Tue");
-  assert.equal(shortLabel({ id: "w:Make a task", label: "Make a task" }), "Make a task");   // a card's own words stay its own
+test("one name per button: the bar says the label itself, no short bar word (buttons.json, 2026-10-17)", async () => {
+  const mod = await import("../src/actionRow.js");
+  assert.equal(mod.shortLabel, undefined, "no second, shorter name for the bar");
   const src = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(src, /title=\{\(v\.disabled && v\.why\) \|\| \[full, v\.title\]\.filter\(Boolean\)\.join\(" - "\) \|\| undefined\}/);
+  assert.match(src, />\{v\.label\}<\/button>/);
+  assert.doesNotMatch(src, /\bSHORT\b|shortLabel/);
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.doesNotMatch(view, /tq-compose-hint|Enter sends · Shift\+Enter/);           // no hint under the box
 });

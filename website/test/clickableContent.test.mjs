@@ -24,7 +24,7 @@ test("a failed report run offers Try again as a real button, not a span", () => 
   // Anchor on setMissed: other Box components exist in the same file.
   const source = read("ReportsView.jsx");
   const retry = source.match(
-    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?setMissed\(null\)(?:(?!<Box)[\s\S])*?)>Try again<\/Box>/
+    /<Box component="(\w+)"((?:(?!<Box)[\s\S])*?setMissed\(null\)(?:(?!<Box)[\s\S])*?)>\{btnLabel\("try_again"\)\}<\/Box>/
   );
   assert.ok(retry, "Try again control exists in ReportsView.jsx");
   assert.equal(retry[1], "button");

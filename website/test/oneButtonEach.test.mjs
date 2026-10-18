@@ -12,18 +12,18 @@ test("the write-up is Stop and save, live or ended, and only one of them is ever
   assert.doesNotMatch(page, /Save result/);
   assert.equal((page.match(/\{ id: "save-end"/g) || []).length, 2);   // live (agent group) or ended (More) - never both
   assert.match(page, /\.\.\.\(liveSession \? \[/);
-  assert.match(page, /\.\.\.\(!liveSession && canSave && agentBar \? \[\{ id: "save-end", group: "more", label: "Stop and save"/);
+  assert.match(page, /\.\.\.\(!liveSession && canSave && agentBar \? \[\{ id: "save-end", group: "more", label: labelOfRow\("save-end"\)/);
 });
 
 test("a finished agent's result is sent on by Hand it to a person", () => {
   const page = read("TaskPage.jsx");
   assert.doesNotMatch(page, /Send this result to someone|send-result/);
-  assert.match(page, /title: report \? "Forwards it to a person with the agent's result in it/);
+  assert.match(page, /\{ id: "hand", group: "more", label: labelOfRow\("hand"\)/);
 });
 
 test("a close-out offers Remind me, never Not yet", () => {
   const dec = read("ReviewDecision.jsx"), rp = read("reviewProposal.js");
   assert.doesNotMatch(rp, /"Not yet"/);
-  assert.match(dec, /\{ id: no\("remind"\), label: "Remind me", tone: "q", disabled: busy, run: onRemind, title: remindTitle \}/);
-  assert.match(dec, /\(co \|\| proposal\?\.kind === "closeout"\) && onRemind && <Button[^\n]*>Remind me<\/Button>/);
+  assert.match(dec, /\{ id: no\("remind"\), label: btn\("defer"\), tone: "q", disabled: busy, run: onRemind, title: remindTitle \}/);
+  assert.match(dec, /\(co \|\| proposal\?\.kind === "closeout"\) && onRemind && <Button[^\n]*>\{btn\("defer"\)\}<\/Button>/);
 });

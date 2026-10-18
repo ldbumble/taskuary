@@ -20,6 +20,7 @@ import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import api from "./api";
+import { hint as bHint, label as bLabel } from "./buttons.js";   // `btn` is this file's button style
 import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.jsx";
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
@@ -967,7 +968,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
           {err && (
             <Alert severity="error" variant="outlined" onClose={() => setErr("")}
               action={<Button size="small" color="error" onClick={() => { setErr(""); setRows(null); load(rowsLen.current); }}
-                sx={{ fontSize: 11 }}>Retry</Button>}
+                sx={{ fontSize: 11 }}>{bLabel("try_again")}</Button>}
               sx={{ py: 0, borderRadius: 2, bgcolor: PANEL, alignItems: "center",
                 "& .MuiAlert-message": { fontSize: 11.5, py: 0.5 }, "& .MuiAlert-action": { pt: 0, alignItems: "center" } }}>
               {err}
@@ -1858,7 +1859,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                       await api.patch(`/api/tasks/${sel.TaskId}`, { Status: "done" });
                       setClosed("Closed"); onRefresh?.();
                     } catch { /* the row keeps its state */ }
-                  }}>{closed || "Mark done"}</TrayBtn>
+                  }}>{closed || bLabel("close")}</TrayBtn>
               )}
               {onIt && sel.MessageId && (
                 <TrayBtn disabled={handed} onClick={handToAgent} icon={<ForwardToInboxIcon sx={{ fontSize: 15 }} />}
@@ -1909,7 +1910,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                     sx={{ flex: 1, minWidth: 210, "& .MuiInputBase-input": { fontSize: 12.5, py: 0.7 } }} />
                   <TrayBtn tone="teach" teaches disabled={mining} onClick={takeItMine}
                     icon={<PsychologyOutlinedIcon sx={{ fontSize: 16 }} />}>
-                    {mining ? "Teaching triage…" : "Put it on my list"}</TrayBtn>
+                    {mining ? "Teaching triage…" : bLabel("mine")}</TrayBtn>
                   <TrayBtn tone="quiet" disabled={mining} onClick={() => { setMineAsk(false); setMineWhere(""); }}>Cancel</TrayBtn>
                 </Box>
               )}
@@ -2759,16 +2760,16 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
             {open ? (
               <Box sx={{ mt: 0.75, display: "flex", gap: 0.6, flexWrap: "wrap", alignItems: "center" }}>
                 <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={() => act(i, "task")}
-                  title="A task on your own list - no agent starts" sx={{ ...btn, ...primary }}>
-                  {busy === `${i.id}:task` ? "making…" : "Make a task"}</Button>
+                  title={bHint("mine")} sx={{ ...btn, ...primary }}>
+                  {busy === `${i.id}:task` ? "making…" : bLabel("mine")}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "agent")}
-                  title="An agent takes it - triage picks a coding or a non-coding one" sx={{ ...btn, ...quiet }}>
-                  {busy === `${i.id}:agent` ? "sending…" : "Send to agent"}</Button>
+                  title={bHint("regular_agent")} sx={{ ...btn, ...quiet }}>
+                  {busy === `${i.id}:agent` ? "sending…" : bLabel("regular_agent")}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={(e) => setRemindAt({ idea: i, anchor: e.currentTarget })}
-                  title="Put it away until a day - it comes back then" sx={{ ...btn, ...quiet }}>Remind me</Button>
+                  title={bHint("defer")} sx={{ ...btn, ...quiet }}>{bLabel("defer")}</Button>
                 <Button size="small" variant="outlined" disabled={!!busy} onClick={() => act(i, "dismiss")}
-                  title="Put it down - the Advisor never raises it again" sx={{ ...btn, ...quiet }}>
-                  {busy === `${i.id}:dismiss` ? "…" : "Not ours"}</Button>
+                  title={bHint("not_ours")} sx={{ ...btn, ...quiet }}>
+                  {busy === `${i.id}:dismiss` ? "…" : bLabel("not_ours")}</Button>
                 {a.tid && <Button size="small" variant="outlined" onClick={() => onOpenTask?.(a.tid)} sx={{ ...btn, ...quiet }}>Open {ref(a.tid)}</Button>}
               </Box>
             ) : (
@@ -2966,18 +2967,18 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
         <Button size="small" variant="contained" disableElevation
           sx={{ bgcolor: "#8a8276", "&:hover": { bgcolor: "#6b6459" } }}
           title="GitHub replies are off (GitHub card → Reply to issue/PR authors) — mark it done without sending"
-          onClick={() => decide(reviewId, "close_unsent")}>Mark done</Button>
+          onClick={() => decide(reviewId, "close_unsent")}>{bLabel("close")}</Button>
       ) : (
         <>
           <Button size="small" variant="contained" disabled={!text.trim() || (channel === "email" && !review) || (envelope && !envelope.to.length)}
             onClick={() => decide(reviewId, "approve", text, cc)}
             title="Sends the text above on the channel it arrived on">
             {deliveryUnknown ? "Check delivery and retry"
-              : [`Approve & send`, files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
+              : [bLabel("approve"), files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
                  cc.length ? `copying ${cc.length}` : ""].filter(Boolean).join(" · ")}</Button>
           {/* Mark done, not "No reply needed": one word for the one close (the owner, 2026-09-24) */}
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}
-            title="Marks the task done without sending this draft">Mark done</Button>
+            title={`${bHint("close")} - this draft is not sent`}>{bLabel("close")}</Button>
         </>
       )}
       <Box sx={{ flex: 1 }} />

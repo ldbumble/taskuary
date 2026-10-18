@@ -33,6 +33,7 @@ import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { AI_SHELF } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
+import { label as btnLabel } from "./buttons.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -2965,7 +2966,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
   return (
     <Box sx={{ mt: 1, maxWidth: 640 }}>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-        What <b>Close out</b> does on GitHub when a task an agent finished comes to you. These are your choices; what each
+        What <b>{btnLabel("approve", "action")}</b> does on GitHub when a task an agent finished comes to you. These are your choices; what each
         repository <b>requires</b> (branch protection, required checks and reviews) is read from GitHub for every pull request,
         and the card only offers what it allows.
       </Typography>
@@ -3323,7 +3324,7 @@ const WaPair = ({ conn, reload }) => {
                 : "Starting the bridge…"}
             </Typography>
             {phase === "failed" && (
-              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>Try again</Button>
+              <Button size="small" variant="contained" disableElevation startIcon={<PlayArrowIcon sx={{ fontSize: 15 }} />} onClick={startBridge}>{btnLabel("try_again")}</Button>
             )}
           </Box>
         ) : st.pairing_code ? (

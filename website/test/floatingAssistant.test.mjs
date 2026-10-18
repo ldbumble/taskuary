@@ -64,8 +64,8 @@ test("Taskuary has compact and Timeline-stage expanded modes without moving the 
 test("assistant commentary and owner actions are separate surfaces", () => {
   const source = read("GeneralWorkspace.jsx");
   assert.match(source, /export function DockActions/);
-  assert.match(source, /"Approve & send"/);
-  assert.match(source, /"Redraft"/);
+  assert.match(source, /btn\("approve"\)/);          // the words come from buttons.json
+  assert.match(source, /btn\("redraft"\)/);
   assert.match(source, />Dismiss<\/Button>/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/decide/);
   assert.match(source, /\/api\/reviews\/\$\{r\.ReviewId\}\/draft/);

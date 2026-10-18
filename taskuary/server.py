@@ -10,7 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import config
+from . import buttons, config
 from . import store as store_mod
 from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
@@ -1568,7 +1568,8 @@ def assistant_session(task_id: int, body: AssistantSessionBody = None):
     except (ValueError, RuntimeError) as e: raise HTTPException(422, str(e))
     return _assistant_payload(task_id, session)
 
-CLOSED_CHAT = 'This task is closed. Reopen it, then continue the session, to pick the conversation back up.'
+CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {buttons.label('continue')}, "
+               'to pick the conversation back up.')
 
 def _refuse_closed_chat(task_id: int):
     """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
@@ -3455,7 +3456,7 @@ def decide(rid: int, body: DecideBody, background: BackgroundTasks = None):
                                   'triage': triage, 'yours': yours or None, 'refreshed': draft},
                     'send_error': ('New messages arrived after this draft. '
                                    + ('I refreshed it with the latest context; review it and approve again.' if draft
-                                      else 'Nothing was sent. Redraft it with the latest context before approving.'))}
+                                      else f"Nothing was sent. Press {buttons.label('redraft')} to write it with the latest context before approving."))}
     return land(store, rv, body.verb, body.final_text, body.note, ACTOR,
                 learn_async=(background.add_task if background is not None else None), cc=body.cc, reply_text=body.reply_text)
 
@@ -3490,7 +3491,7 @@ def closeout_act(rid: int, act: str):
     except github.Refused as e:
         github.learn(tok, p['repo'], e); raise HTTPException(422, str(e))
     except (RuntimeError, requests.RequestException) as e: raise HTTPException(422, str(e))
-    if rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f"{said} - {p['repo']}#{p['number']}. Close out again once the checks pass.")
+    if rv.get('TaskId'): store.add_comment(rv['TaskId'], ACTOR, 'human', f"{said} - {p['repo']}#{p['number']}. Press {buttons.label('approve', 'action')} again once the checks pass.")
     return {'ok': True, 'said': said}
 
 @app.get('/api/github/closeout-check')

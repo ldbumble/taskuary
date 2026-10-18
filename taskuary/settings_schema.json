@@ -329,7 +329,7 @@
       "label": "Auto-start the coding agent",
       "type": "switch",
       "desc": "Every new coding task immediately opens a live CLI session in its repository. Off: the task waits on the Board for you to send it.",
-      "help": "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you press Start session yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way."
+      "help": "On: the moment triage says 'this is work' your CLI opens in the task's repository (picked from the SOUL.md repo map) with the full ask seeded: visible on the Board, watchable, interruptible. General work uses the separate assistant auto-start switch. Only plain questions (a reply is drafted instead) and notices (filed) stay out of it. Off: tasks queue as 'needs you' and you start the agent from the task yourself.\n\nA first-time sender from outside your domains never starts an agent by itself - the task lands, you press the button. Requires the CLI installed and signed in on this machine. Nothing ships or sends without your approval either way."
     },
     "general_auto_enabled": {
       "group": "Coding agent",

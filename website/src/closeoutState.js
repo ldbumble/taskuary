@@ -1,11 +1,13 @@
 // THE CLOSE-OUT CARD READS GITHUB BEFORE IT OFFERS ANYTHING (the owner, 2026-09-28: "the close out should use api to get
 // the state of the pr and have the correct buttons"). One reading - server ghcloseout.assess, the same one that guards the
 // merge - says whether Close out may merge now, why not, and which other buttons fit: Update branch, Re-run checks,
-// Close out anyway. Nothing here decides; the card only draws what the reading says.
+// Approve anyway. Nothing here decides; the card only draws what the reading says.
 import { useCallback, useEffect, useState } from "react";
 import api from "./api";
+import { label } from "./buttons.js";
 
-export const OFFER_LABEL = { update: "Update branch", rerun: "Re-run checks", anyway: "Close out anyway" };
+// Update branch and Re-run checks are GitHub's own offers; "anyway" is the close-out's Approve, past the rules (concierge.OFFER_WORDS)
+export const OFFER_LABEL = { update: "Update branch", rerun: "Re-run checks", anyway: `${label("approve", "action")} anyway` };
 export const OFFER_HINT = {
   update: "GitHub merges the base into the pull request, so its checks run again against today's base",
   rerun: "Re-runs the failed checks on the pull request's head commit",

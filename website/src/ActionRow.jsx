@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, holdsMove, press, rowOf, shortLabel, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, holdsMove, press, rowOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
 // the advice again, and the line says the suggestion is the new one
@@ -38,7 +38,7 @@ export function AdvisorNext({ advice, onPropose }) {
   // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
   const onRow = advisedIn(verbs.list, advice);
   if (!onRow) return null;
-  const word = shortLabel(onRow);
+  const word = onRow.label;
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);
     api.get("/api/advice/notes", { params: { key: advice.key, limit: 5 } })
@@ -97,15 +97,12 @@ export default function ActionRow({ inline = false, advised = null }) {
   const hosted = useHosted();
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
-  // the bar says the verb; the hover says the whole thing - the full name first, then what it does
-  const btn = (v) => {
-    const word = shortLabel(v), full = word === v.label ? "" : v.label;
-    return (
-      <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} aria-label={full || undefined}
-        title={(v.disabled && v.why) || [full, v.title].filter(Boolean).join(" - ") || undefined}
-        onClick={(e) => press(v.id, e, e.currentTarget)}>{word}</button>
-    );
-  };
+  // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
+  // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
+  const btn = (v) => (
+    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id}
+      title={(v.disabled && v.why) || v.title || undefined} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
+  );
   return (
     <div className={inline ? "tq-arow inline" : "tq-arow"} role="toolbar" aria-label={ref ? `What to do with ${ref}` : "What to do with this one"} data-tq-row="">
       <div className="tq-arow-verbs">

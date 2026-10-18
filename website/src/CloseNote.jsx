@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, Button, Popover, TextField, Typography } from "@mui/material";
 import { MicButton } from "./ui.jsx";
+import { hint, label } from "./buttons.js";
 
 // CLOSE WITH A NOTE (the owner, 2026-10-05: "i called him, i should be able to write free note to close out task"): work done
 // off the app has no reply to send, so what came of it is the close-out - kept on the task as a note, and the task closes.
@@ -20,7 +21,7 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
   };
   const body = (
     <Box sx={{ p: 1.5, display: "grid", gap: 1, ...(inline ? {} : { width: 340 }) }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>Close out with a note{taskRef ? ` · ${taskRef}` : ""}</Typography>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: "#41525f" }}>{label("close_note")}{taskRef ? ` · ${taskRef}` : ""}</Typography>
       <TextField size="small" multiline minRows={inline ? 3 : 2} autoFocus placeholder="What came of it - a call, a fix, a decision"
         value={note} onChange={(e) => setNote(e.target.value)} disabled={busy}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) go(); }}
@@ -30,8 +31,8 @@ export default function CloseNote({ anchor, onClose, onSubmit, inline = false, t
           </Box>) }}
         sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7", alignItems: "flex-start" } }} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-        <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={go}>
-          {busy ? "Closing…" : "Close task"}</Button>
+        <Button size="small" variant="contained" disableElevation disabled={busy || !note.trim()} onClick={go} title={hint("close_note")}>
+          {busy ? "Closing…" : label("close_note")}</Button>
         <Button size="small" disabled={busy} onClick={onClose}>Cancel</Button>
         <Typography variant="caption" sx={{ color: "#8b857b", ml: "auto" }}>Kept on the task. Nothing is sent.</Typography>
       </Box>

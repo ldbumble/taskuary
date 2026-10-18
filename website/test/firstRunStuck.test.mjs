@@ -10,7 +10,7 @@ test("signed in and failing shows the error and Update / Try again / Report this
   assert.match(fr, /const stuck = q === "ai" && \["update", "retry"\]\.includes\(fix\?\.fix\)/);
   assert.match(fr, /What it said: \{fix\.detail\}/);
   assert.match(fr, />Update \{fix\.title\}</);
-  assert.match(fr, />Try again</);
+  assert.match(fr, />\{btnLabel\("try_again"\)\}</);
   assert.match(fr, />Report this bug</);
   assert.match(fr, /"Signed in · not answering"/);
 });

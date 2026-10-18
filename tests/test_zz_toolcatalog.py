@@ -7,7 +7,7 @@ target was resolved by matching the WORD "report" against subject lines (the own
 import json, time, unittest
 from unittest import mock
 
-from taskuary import concierge, funnel, ingest, operations, server, terminal, toolcatalog
+from taskuary import buttons, concierge, funnel, ingest, operations, server, terminal, toolcatalog
 import tests.test_assistant_reactions as T
 
 
@@ -295,7 +295,7 @@ class ReadsTests(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'research this GitHub project for me', llm=brain)
         self.assertIn(concierge.LAST_READ, prompts[-1])
-        self.assertIn('an agent', (out.get('proposal') or {}).get('label', '').lower())
+        self.assertEqual((out.get('proposal') or {}).get('label'), buttons.label('regular_agent'))
 
     def _handoff(self, answer, workers=True, soul=''):
         """One typed turn with nothing on the table, the model answering `answer`; returns (turn, proposal)."""
@@ -507,8 +507,8 @@ class AppReadTests(unittest.TestCase):
     def test_a_brief_for_my_list_says_so_on_the_button_and_the_receipt(self):
         """"Add a to-do: call Ruth" put the MODEL's catalogue sentence on the button ("Start an agent from a
         brief when there is no message behind it"), and the receipt said a regular agent had it."""
-        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'task'}), 'Put it on my list')
-        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'coding'}), 'Start a coding agent on it')
+        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'task'}), buttons.label('mine'))
+        self.assertEqual(concierge.op_label('task.create_from_text', {'kind': 'coding'}), buttons.label('coding_agent'))
         line = concierge._outcome_line('task.create_from_text', {'kind': 'task'}, {'ref': 'TQ-0009', 'title': 'Call Erin'})
         self.assertIn('on your list', line); self.assertNotIn('agent now', line)
 

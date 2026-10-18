@@ -18,6 +18,7 @@ proposal is never a partially-executed one.
 """
 import json, re
 from loguru import logger
+from . import buttons
 
 MARK = 'TASKUARY-PROPOSE'
 BLOCK = re.compile(MARK + r'\s*(\{.*?\})', re.S)     # only for cutting junk a decode could not read (strip)
@@ -192,12 +193,10 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
 # done until that last act is approved - the same yes-gated review as any proposal, raised by wrapup.finish. The
 # words (the summary, the closing comment) are the card's text; the act is plain code on the owner's click.
 # ONE button word for every system (the owner, 2026-09-27: "if we have button to close out per system it will be endless")
-# - "Close out" - and per action only the sentence saying what it does there. A new connector adds a line here, never a word.
-CLOSE_WORD = 'Close out'
+# - approve, as it shows on an agent's proposal (buttons.json: Approve) - and per action only the sentence saying what it does
+# there. A new connector adds a line here, never a word.
+CLOSE_WORD = buttons.label('approve', 'action')
 CLOSEOUT = {'merge_pr': 'merges the pull request on GitHub', 'close_issue': 'closes the issue on GitHub'}
-# ...and its BUTTON says what it does (the owner, 2026-10-06: "send & close", "merge & close" under what they act on) - the step is
-# still the close-out; the word on the button is its act
-CLOSE_WORDS = {'merge_pr': 'Merge & close', 'close_issue': 'Close issue & task'}
 _ISSUE = re.compile(r'github\.com/([^/]+/[^/]+)/issues/(\d+)')
 _PULL = re.compile(r'github\.com/([^/]+/[^/]+)/pull/(\d+)')
 

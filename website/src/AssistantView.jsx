@@ -25,6 +25,7 @@ import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import DemoJourney from "./DemoJourney.jsx";
 import { useRowVerbs, useVerbs } from "./actionRow.js";
+import { hint as btnHint, label as btn, liveVerb } from "./buttons.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
@@ -115,7 +116,7 @@ const errText = (e) => {
 const DEMO_SAID = new Set();
 const demoNo = (e) => (e?.response?.status === 403 && e.response.data?.demo ? String(e.response.data.detail || "This is the demo - nothing is sent.") : "");
 // what an empty rail offers: the same doors as the welcome block (runChip knows these three)
-const IDLE_CHIPS = [{ verb: "newtask", label: "New task" }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)
+const IDLE_CHIPS = [{ verb: "newtask", label: btn("new_task") }, { verb: "setupask", label: "Set something up" }, { verb: "tour", label: "Change my setup" }];   // not a second "set up" beside "Set something up" (U14)
 // THE AI POPOVER, from what is connected (J): it named "your coding tool" to people with none, and "chosen elsewhere" with no way there
 export const AI_DEFAULTS = `#settings=config&group=${encodeURIComponent("How mail is sorted")}`;
 export const aiSays = (providers = []) => {
@@ -380,7 +381,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
            owner, on a fresh install on another machine, had nothing to read anywhere (2026-09-22). */
         <div className="tq-pile-empty" role="alert">
           <span className="mark">!</span><b>The timeline did not load</b>{error}
-          <button type="button" className="tq-pile-retry" onClick={() => onRetry?.()}>Try again</button>
+          <button type="button" className="tq-pile-retry" onClick={() => onRetry?.()}>{btn("try_again")}</button>
         </div>
       ) : (
         <div className="tq-pile-empty" role="status"><CircularProgress size={18} /><b>Loading timeline</b>Reading what arrived and what still needs you.</div>
@@ -599,8 +600,8 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
     setBusy(false); onDone?.();
   };
   useVerbs("retriage", [
-    { id: "retriage", label: "Sort it again", group: "decide", tone: "p", disabled: busy, run: () => go(false), title: "Ask the AI to read this one again and decide where it goes" },
-    ...(failed > 1 ? [{ id: "retriage-all", label: `Retry all that failed (${failed})`, group: "decide", tone: "s", disabled: busy, run: () => go(true),
+    { id: "retriage", label: btn("retriage"), group: "decide", tone: "p", disabled: busy, run: () => go(false), title: btnHint("retriage") },
+    ...(failed > 1 ? [{ id: "retriage-all", label: `${btn("retriage")} - all ${failed}`, group: "decide", tone: "s", disabled: busy, run: () => go(true),
       title: "Every message that could not be sorted, oldest first - whatever its age" }] : []),
   ], on);
   return null;
@@ -659,7 +660,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   const idle = !(actions.items || []).length;
   const chips = barHolds && !m.card ? []          // the task view's own row under the chat holds its words, Next included
     : said.length || !last || m.role !== "assistant" || m.proposal || kind === "proposal" || kind === "fyis"
-    ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: "Next" }];
+    ? said : idle ? IDLE_CHIPS : [{ verb: "next", label: btn("next") }];
   const card = live && m.card && kind ? {
     proposal: <ProposalCard p={m.proposal || c} onConfirm={actions.confirm} onCancel={actions.cancel} onPreview={actions.preview} />,
     reply: <ReplyCard card={c} onDone={actions.done} onOpenTask={actions.openTask} onTimeline={actions.timeline} />,
@@ -745,7 +746,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
               at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
           {last && card && actions.handedTo && (
-            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press Take it back below to use these buttons here.</div>
+            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press {btn("take_back")} below to use these buttons here.</div>
           )}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
@@ -1496,7 +1497,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       if (demoNo(e)) setErr(why);
       else setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error",
         text: e?.name === "AbortError" ? "Stopped." : raw ? "I didn't get an answer through. Nothing was changed." : `Not answered - ${why}`,
-        chips: [{ ask: t, label: "Try again" }, ...((pile?.items || []).length ? [{ verb: "next", label: "Next" }] : [])] }]);
+        chips: [{ ask: t, label: btn("try_again") }, ...((pile?.items || []).length ? [{ verb: "next", label: btn("next") }] : [])] }]);
     }
     turnFlight.current = answering.current = false;
     setBusy(false);
@@ -1550,7 +1551,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
       if (verb === "setting" || verb === "forwarded") { loadPile(); return; }   // Taskuary put these on the task itself
       setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: cur?.tid, ref: cur?.ref,
-                              text: `I couldn't line that up${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again, or use the buttons on the card.`, chips: [{ verb: "next", label: "Next" }] }]);
+                              text: `I couldn't line that up${cur?.ref ? ` - ${cur.ref} is untouched` : ""}. Say it again, or use the buttons on the card.`, chips: [{ verb: "next", label: btn("next") }] }]);
     } catch (e) { setErr(errText(e)); }
   };
   // the confirmation button (PW-124/125): the structured proposal by id and version - never a phrase sent
@@ -1573,7 +1574,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // item's other verbs, Next - it said "Not done" and offered nothing (2026-09-29)
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
       const chips = out.status !== "done" && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
-        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: "Next" }] : [];
+        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : [];
       setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
@@ -1619,6 +1620,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const key = a.for || a.key;
     setChanged(null);
     if (a.verb === "answer_agent") { askAnswer(currentRef.current); return null; }
+    // a move that is no proposal (it drafts, asks for a day, or asks what to add) takes the chip's own road - the server refuses it
+    if (["reply", "redraft", "defer", "continue"].includes(liveVerb(a.verb))) { await runChip({ verb: liveVerb(a.verb) }); return null; }
     try { return await proposeDirect(a.verb, key, true, a.revision); }
     catch (e) {
       if (demoNo(e)) { setErr(errText(e)); return null; }          // the demo saying no is a line in the chat, not the row's error
@@ -1632,14 +1635,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const askAnswer = (item) => {
     noteLine(`Type your answer below - it goes straight to ${item?.agent || "the agent"} that is waiting.`);
     setTimeout(() => composeRef.current?.focus(), 0);
-  };
-  // Get me ready for this meeting: a conversation with the assistant, no checkout (server: calendar/prep)
-  const prep = async (item) => {
-    const e = item?.event || {};
-    const { data } = await api.post("/api/calendar/prep", { ...e, instruction: "Get me ready for this meeting: who is in it, what came before it, what I should say." });
-    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: data.taskId, ref: data.ref,
-                            text: `${data.ref} - prep is open as its own conversation with the assistant.` }]);
-    advance();
   };
   // ONE road for every action word in the chat. A word the assistant offered is a word that runs: the
   // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
@@ -1672,7 +1667,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
     if (c.verb === "retry" && c.op) {
-      await runProposal({ id: c.op, version: c.version, kind: c.kind, label: "Try again", key: item?.key, tid: item?.tid, ref: item?.ref,
+      await runProposal({ id: c.op, version: c.version, kind: c.kind, label: btn("try_again"), key: item?.key, tid: item?.tid, ref: item?.ref,
                           settles: !!c.settles });
       return;
     }
@@ -1691,17 +1686,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       try {
         const { data } = await api.post(`/api/reviews/${c.rid}/closeout/${c.act}`);
         setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: item?.tid, ref: item?.ref,
-                                text: `${data?.said || c.label}. Close out again once the checks pass.` }]);
+                                text: `${data?.said || c.label}. Press ${btn("approve", "action")} again once the checks pass.` }]);
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
     }
     setBusy(true); setErr("");
     try {
-      if (c.verb === "prep") await prep(item);
-      else {
-        const pr = c.revision ? await pressAdvice({ verb: c.verb, key, revision: c.revision }) : await proposeDirect(c.verb, key, true, null);
-        if (pr?.auto) await runProposal(pr);
-      }
+      // Prep me is gone (buttons.json `removed`): an old saved chip of a removed verb runs as the verb it became, or not at all
+      const verb = liveVerb(c.verb);
+      if (!verb) return;
+      const pr = c.revision ? await pressAdvice({ verb, key, revision: c.revision }) : await proposeDirect(verb, key, true, null);
+      if (pr?.auto) await runProposal(pr);
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   // a dry run of a proposed report (PW-195): the server refuses anything that could write
@@ -1710,7 +1705,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     try { await api.delete(`/api/operations/${p.id}`); } catch { /* it may be gone already */ }
     const out = afterCancel(p);
     setMsgs((m) => [...m.map((x) => (x.proposal?.id === p.id ? { ...x, proposal: { ...x.proposal, status: out.status } } : x)),
-                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips: [{ verb: "next", label: "Next" }] }]);
+                     { id: `r${Date.now()}`, role: "receipt", text: out.receipt, tid: p.tid, ref: p.ref, chips: [{ verb: "next", label: btn("next") }] }]);
   };
   // a card did its thing: say so in the thread, then move on
   // the table is put down - nothing is chosen in its place. Walking on is advance(), which is this
@@ -1746,7 +1741,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         if (!receipt && ![404, 422].includes(e?.response?.status)) {
           setNextComing(false);
           setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
-            { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: "Next" }] }]);
+            { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: btn("next") }] }]);
           return;
         }
       }
@@ -1803,7 +1798,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     setWalking(true);
     try { pushStop((await api.get("/api/setup/walk")).data); }
-    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", status: "error", text: "The walk-through didn't load.", chips: [{ verb: "tour", label: "Try again" }] }]); }
+    catch { setMsgs((m) => [...m, { id: `w${Date.now()}`, role: "receipt", status: "error", text: "The walk-through didn't load.", chips: [{ verb: "tour", label: btn("try_again") }] }]); }
     finally { setWalking(false); }
   };
   // -1 is Finish: walking off the end clears the place server-side, so the next press starts over.
@@ -2132,7 +2127,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)
   const hanging = !!state && !old && !walk && !browsing && shown.length > 0 && !busy && !starting && rowEmpty && (canAdvance || !!err);
-  useVerbs("floor", [{ id: "floor:next", group: "next", label: "Next", tone: "p", title: "Bring the next one up",
+  useVerbs("floor", [{ id: "floor:next", group: "next", label: btn("next"), tone: "p", title: btnHint("next"),
     run: () => { setErr(""); surface(null, null); } }], hanging);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";
   // WHAT THE PAGE ASKS THE CANVAS TO OPEN (TaskHubPage canvasReq): once each, and only once the chat has loaded - the
@@ -2225,7 +2220,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {current && <AdvisorNotes keyOnTable={current} />}
             {chatsLoading && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>Loading past chats…</Typography>}
             {chatsErr && <Typography role="alert" sx={{ color: "#7a2f3c", fontSize: 12, p: 1.5 }}>{chatsErr}{" "}
-              <button type="button" className="tq-chip" onClick={openChats}>Try again</button></Typography>}
+              <button type="button" className="tq-chip" onClick={openChats}>{btn("try_again")}</button></Typography>}
             {!chatsLoading && !chatsErr && !chats.length && <Typography sx={{ color: FAINT, fontSize: 12, p: 1.5 }}>No earlier chats yet.</Typography>}
             {chats.map((c) => (
               <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
@@ -2318,7 +2313,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
           <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
             <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
-          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>Take it back</button>
+          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>{btn("take_back")}</button>
         </div>
       )}
       {!old && !handoff && !walk && (

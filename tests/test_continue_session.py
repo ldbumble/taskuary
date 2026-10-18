@@ -5,7 +5,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from taskuary import concierge, messengers, remote_assistant as ra, server
+from taskuary import buttons, concierge, messengers, remote_assistant as ra, server
 from taskuary.store import MemoryStore
 
 JID = '15550001234@s.whatsapp.net'
@@ -113,7 +113,7 @@ class PhoneTests(unittest.TestCase):
         ra._ASKING.chat = {'channel': 'whatsapp', 'chat': JID, 'connector_id': None}
         try: asked = ra.run_act(s, {'t': 'verb', 'verb': 'continue', 'key': 'k'}, item)
         finally: ra._ASKING.chat = None
-        self.assertIn('Continue as is', asked)
+        self.assertIn(f"tap {buttons.label('continue')}", asked)
         with mock.patch.object(messengers, 'wa_send'), mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 99}, False)), \
              mock.patch.object(concierge, 'restore_current', return_value=None), \
              mock.patch.object(concierge, 'say', side_effect=AssertionError('the note is not words for the model')), \

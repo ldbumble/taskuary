@@ -23,6 +23,7 @@ import { isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
 import { isWorkflowRun, startedBy } from "./taskSources.js";
 import { KIND_OPTIONS, kindLabel, shortKind } from "./kinds.js";
+import { label as btn } from "./buttons.js";
 
 // three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
 // "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
@@ -58,9 +59,9 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what Create leads to, said for the kind picked - the caption promised a terminal and a draft that Create never made.
 // A reply is not offered here: a task you type yourself has nobody to answer, so its draft step was a dead end.
 const NEXT_STEP = {
-  task: "Create puts it on your In progress list. Press Mark done on it when it's finished.",
-  general: "Create opens it with your summary already asked. Press Start an agent on it to have one work it.",
-  coding: "Create opens it. Press Start an agent on it to choose the agent and start it in the repository.",
+  task: `Create puts it on your In progress list. Press ${btn("close")} on it when it's finished.`,
+  general: `Create opens it with your summary already asked. Press ${btn("regular_agent")} on it to have one work it.`,
+  coding: `Create opens it. Press ${btn("coding_agent")} on it to choose the agent and start it in the repository.`,
 };
 
 // The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,

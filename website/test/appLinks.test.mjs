@@ -30,10 +30,15 @@ test("a reply opens the page it names - else the one task it points at, never on
   assert.equal(firstAppLink("That is [TQ-0012](#task=12)."), "#task=12");
   assert.equal(firstAppLink("Both [TQ-0012](#task=12) and [TQ-0013](#task=13) are open."), null);
   assert.equal(firstAppLink("Read [the docs](https://example.com/x)."), null);
+  // two pages is no choice to make for the owner, and the same page twice is one
+  assert.equal(firstAppLink("[Outlook](#connector=outlook) or [Gmail](#connector=gmail)?"), null);
+  assert.equal(firstAppLink("[Outlook](#connector=outlook) - [open it](#connector=outlook)"), "#connector=outlook");
+  // setup replaces the page, the answer with it: its link is pressed, never followed
+  assert.equal(firstAppLink("Run [setup](#setup) to connect your mail."), null);
 });
 
 test("the chat opens it on a fresh reply, and a link in the text opens it in place", () => {
-  assert.match(read("AssistantView.jsx"), /const page = data\.open \|\| firstAppLink\(data\.say\);\n\s*if \(page\) openAppLink\(page\);/);
+  assert.match(read("AssistantView.jsx"), /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);\n\s*if \(page\) openAppLink\(page\);/);
   assert.match(read("md.jsx"), /else if \(page\) \{ e\.preventDefault\(\); openAppLink\(page\); \}/);
   assert.match(read("ChatThread.jsx"), /\{hasFiles && <Attachments messageId=\{m\.MessageId\} \/>\}/);    // pictures at reading size
 });

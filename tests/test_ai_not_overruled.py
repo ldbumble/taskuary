@@ -63,3 +63,12 @@ def test_the_answer_to_the_asking_agent_runs_at_once_by_the_tool_road_too():
     with mock.patch.object(terminal, 'live_sessions', return_value=[]), mock.patch('taskuary.workerstate.answer_open', return_value={'delivered': True}):
         out = concierge.say(s, 'use main', item=item, llm=lambda *a, **k: line)
     assert out['proposal']['kind'] == 'agent.answer' and out['proposal'].get('auto') is True
+
+
+def test_the_apps_own_words_with_no_ai_open_no_page():
+    # 2026-10-19 UI walk: "show me TQ-0003" with no AI was answered in the app's words, whose [Connect an AI](#...) link the page
+    # then FOLLOWED - Connections covered the task on the table. `open: ''` says these words decided: their link is to press.
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    out = concierge.say(s, 'show me TQ-0003', llm=None)
+    assert out.get('open') == '', out

@@ -3555,7 +3555,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         fb = fallback(item, False, p['items'], store=store)
         say_ = fb if places.name('ai') in fb else f"{fb} {no_brain()}".strip()     # the empty table's facts already say it
         rec('assistant', say_)
-        return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None}
+        # `open: ''` - these are the app's words, and their AI link is to press: the page followed it, and "show me TQ-0003" with no
+        # AI answered about the table and then covered it with Connections (2026-10-19 UI walk)
+        return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None, 'open': ''}
     reply, options, decision, call, did_read, failed = '', [], None, None, False, None
     try:
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a

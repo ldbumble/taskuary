@@ -168,7 +168,8 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
 test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as one sidebar area replaces another (2026-10-01)", () => {
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
-  assert.match(view, /const openTaskCard = \(req\) => \{\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
+  // a task opened by name goes the rail's road (pull, below) - only a busy walk lands the bare card, and that puts the view down too
+  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`\); return;\n\s+\}\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
   assert.match(view, /setStageMode\("chat"\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
   assert.match(view, /const pullOrOpen = \(key, asUser, openByMid, openByItem\) => \{\n\s+browseDown\(\);/);
   assert.match(view, /\{ \.\.\.x, state, down: false \}/, "opening the same area again picks it back up");

@@ -336,7 +336,14 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
   // but you are still on it, so it keeps its band until Next takes you past it (the owner, 2026-09-23:
   // "it started in your task and moved to passed without touching anything")
   const atTable = (i) => !!current && (i.key === current.key || (current.aliases || []).includes(i.key) || (i.aliases || []).includes(current.key));
-  const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)));
+  // ...and the row on the table stays in the band it was clicked in (2026-10-19 UI walk): a For later row clicked was taken up by the
+  // server (no longer put down) and jumped to On you under the pointer. It moves when the owner moves on, never while they look.
+  const lastLevel = useRef({}), pin = useRef(null);
+  const tableRow = current ? drawn.find(atTable) : null;
+  if (!tableRow) pin.current = null;
+  else if (pin.current?.key !== tableRow.key) pin.current = { key: tableRow.key, level: lastLevel.current[tableRow.key] || null };
+  const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)), pin.current);
+  lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.map((i) => [i.key, b.level])));
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
   const [room, setRoom] = useState(0);
@@ -920,6 +927,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const chatEpoch = useRef(0);
   const resettingRef = useRef(false);
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
+  const openExtra = useRef(null);         // the agent start / act a task opened by name rides in on (openTaskCard -> landed)
   const stopRef = useRef(null);           // the Stop beside the dots: aborts the turn being waited on
   // ...only a turn the model is ANSWERING. Next loading the following item is a fetch, not an answer: it showed "Stop"
   // beside the dots after every let-go (the owner, 2026-10-07: "why is there a button though it should just be ...")
@@ -1375,7 +1383,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, []);
   const landed = useCallback((data) => {
     if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
-    const card = data.item ? { ...data.item } : null;
+    // a task opened to start its agent or an act (the Board's, a workflow's) carries that start onto the row the server answered with
+    const extra = openExtra.current; openExtra.current = null;
+    const card = data.item ? { ...data.item, ...(extra && extra.tid === data.item.tid ? { autostart: extra.autostart, act: extra.act } : {}) } : null;
     // the end of the walk's "Open TQ-12" words come as `chips`: dropped here, its only button was a Next that said it again
     setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }]);
     putOnTable(card);
@@ -1549,7 +1559,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         say(data.say);
         // THE PAGE IT NAMED, OPENED (appLinks.js): "set up Intacct" puts the Sage Intacct card beside the answer, not a sentence
         // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.
-        const page = data.open || firstAppLink(data.say);
+        // ...a reply that carries `open` has decided for itself: "" is the app's own words (no AI), whose links are to press
+        const page = "open" in data ? data.open : firstAppLink(data.say);
         if (page) openAppLink(page);
         if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
         else if (!prop && data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
@@ -1610,7 +1621,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
       if (verb === "redraft" && cur?.rid && mid) {
         const { data } = await api.post(`/api/messages/${mid}/reply`, { draft: true, redraft: true, instruction: d.text || null });
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: data.draft ? "Rewritten - read it below before you send it." : "I could not rewrite it here; edit the draft on the card and send that." }]);
+        // "below" only when it lands below: a redraft on another task said "read it below" over nothing (2026-10-19 UI walk) - there
+        // the receipt names the task and its chip opens it
+        const ref = cur.ref || `TQ-${String(cur.tid).padStart(4, "0")}`;
+        const there = elsewhere && cur.tid ? { tid: cur.tid, ref, chips: [{ verb: "opentask", tid: cur.tid, label: `Open ${ref}` }] } : {};
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", ...there, text: data.draft
+          ? (there.tid ? `Rewritten on ${ref} - read it there before you send it.` : "Rewritten - read it below before you send it.")
+          : `I could not rewrite it here; edit the draft on ${there.tid ? ref : "the card"} and send that.` }]);
         if (!elsewhere) { putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${cur.rid}`), 300); } else loadPile();
         return;
       }
@@ -2121,8 +2138,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // it stood in the chat as a bare "New" (the walk click-through, 2026-10-17)
   const browseDown = () => { openCardRef.current = null; setMsgs((m) => m.filter((x) => !(x.role === "browse" && x.area === "new"))
     .map((x) => (x.role === "browse" && !x.down ? { ...x, down: true } : x))); };
+  // ...and it goes the rail's own road (2026-10-19 UI walk): a task opened by name was put down as a bare "task:N" card the server
+  // never heard of, so the rail marked nothing, Next served it again and a reload put back the walk's last item. The server answers
+  // `task:N` for any task (funnel.item_for_key), through the task's own row when the rail has one. Only a busy walk, which refuses
+  // a pull, still lands the bare card - opening must never do nothing.
   const openTaskCard = (req) => {
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false); setFoldedKey(null); browseDown();
+    setExpanded(false); setFoldedKey(null);
+    if (!(busy || resetting || handoff || turnFlight.current)) {
+      openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
+      pull(`task:${req.tid}`); return;
+    }
+    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown();
     const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
     // the task from the Board is what is on the table now: the rail kept marking the item before it "on the table"
     const card = { kind: "task", key: `task:${req.tid}`, tid: req.tid, title: ref, ref, autostart: req.start || null, act: req.act || null };

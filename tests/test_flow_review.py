@@ -64,14 +64,14 @@ def test_an_expired_sign_in_is_the_apps_fault_and_no_repair_is_asked_for():
     assert 'in Taskuary, not the steps' in s.list_comments(tid)[-1]['Body']
 
 
-def test_a_moved_selector_is_the_steps_fault_and_repairs_itself_with_its_undo_on_the_receipt():
+def test_a_moved_selector_is_the_steps_fault_and_repairs_itself_with_what_it_replaced_on_the_run():
     s = MemoryStore(); src = source(s, page()); tid = run_task(s, src)
     moved = [{**page()[0], 'selector': '.catalog .price'}, page()[1]]
     with reading(lambda c: 'no element matches the selector .price' if c.get('selector') == '.price' else ''):
         out = flow.execute(s, src, tid, 'schedule', llm=answering({'same_goal': True, 'size': 'small', 'flow': moved, 'why': 'the price moved into the catalog'}))
     assert not out['failed'] and [r['status'] for r in out['steps']] == ['repaired', 'ok', 'ok'] and ops(s, tid) == []
     [rp] = out['repairs']
-    assert rp['undo'] == {'kind': 'report.edit', 'target': src['SourceId'], 'params': {'config': {'flow': page()}}, 'label': buttons.label('take_back')}
+    assert rp['was'] == page() and 'undo' not in rp                  # a record of what it replaced; no Take it back (the owner, 2026-10-19)
     note = next(c for c in s.list_comments(tid) if c['Actor'] == 'taskuary')
     assert note['Body'].startswith('Fixed itself: no element matches the selector .price - the price moved into the catalog')
 

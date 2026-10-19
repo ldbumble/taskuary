@@ -11,8 +11,8 @@ import { openAppLink } from "./appLinks.js";
 import { NL } from "./sourceShape.js";
 import { PANEL2, DIM, FAINT, INK, ACCENT2, card } from "./theme.jsx";
 
-export default function Composer({ onDraft, kind = "report" }) {
-  const [ask, setAsk] = useState("");
+export default function Composer({ onDraft, kind = "report", initial = "" }) {
+  const [ask, setAsk] = useState(initial);   // the words the Assistant wrote it up with (concierge._new)
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState(null);
   const [answers, setAnswers] = useState({});

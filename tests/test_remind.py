@@ -74,11 +74,10 @@ class RailTests(unittest.TestCase):
         self.assertTrue([i for i in self.rail(s, t, datetime.now()) if i['actionable']], 'not back on its day')
         self.assertEqual(remind.due(s, day), 0)
 
-    def test_the_undo_puts_it_back_now(self):
+    def test_none_brings_it_back_now_and_nothing_carries_an_undo(self):
         s = store(); t = asked(s)
-        out = remind.set_reminder(s, t, 'tomorrow')
-        self.assertEqual(out['undo']['params'], {'until': 'none'})
-        remind.set_reminder(s, t, out['undo']['params']['until'])
+        self.assertNotIn('undo', remind.set_reminder(s, t, 'tomorrow'))     # no Take it back (the owner, 2026-10-19)
+        remind.set_reminder(s, t, 'none')
         self.assertFalse(remind.waiting(s.get_task(t)))
 
     def test_a_done_task_cannot_be_put_away(self):
@@ -87,13 +86,17 @@ class RailTests(unittest.TestCase):
 
 
 class ToolTests(unittest.TestCase):
-    def test_the_assistant_puts_a_named_task_away_at_once_and_the_receipt_says_where_it_went(self):
+    def test_the_assistant_brings_a_named_task_up_with_remind_me_lit_and_the_receipt_says_where_it_went(self):
         s = store(); t = asked(s)
         call = {'kind': 'task.defer', 'params': {'until': '2 weeks', 'ref': task_ref(t)}}
+        llm = lambda *a, **k: 'Putting it away.\nCALL: ' + json.dumps(call)
         with mock.patch.object(server, 'store', s):
-            out = concierge.say(s, 'bring TQ back in 2 weeks', llm=lambda *a, **k: 'Putting it away.\nCALL: ' + json.dumps(call))
-            p = out['proposal']
-            self.assertEqual((p['kind'], p['target'], p.get('auto')), ('task.defer', t, True))
+            # the desk: the task up, its Remind me lit - nothing put away on the words (the owner, 2026-10-19)
+            out = concierge.say(s, 'bring TQ back in 2 weeks', llm=llm)
+            self.assertEqual((out['light']['verb'], out['light']['tid']), ('defer', t)); self.assertFalse(remind.waiting(s.get_task(t)))
+            # the phone: a yes or no, and the yes puts it away
+            with concierge.delivering(concierge.PHONE): p = concierge.say(s, 'bring TQ back in 2 weeks', llm=llm)['proposal']
+            self.assertEqual((p['kind'], p['target']), ('task.defer', t))
             done = concierge.run_proposal(s, p)
         self.assertTrue(remind.waiting(s.get_task(t)))
         self.assertIn('under For later on your rail', concierge.receipt(s, done))

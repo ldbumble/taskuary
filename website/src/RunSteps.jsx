@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import { ALERT, ALERT_INK, BORDER, DIM, FAINT, INK, PANEL2, ROLES, mono } from "./theme.jsx";
-import api from "./api";
 import { label as btnLabel } from "./buttons.js";
 import { STATUS, recHead, runWords, secs } from "./workflowFlow.js";
 import { plural } from "./timeWords.js";
@@ -34,25 +33,14 @@ export function StepResult({ rec, compact }) {
 }
 
 // a run read back: the same list, each step's status, time and headline, its output a click away, the fix when one failed - and
-// every repair the run made to its own steps, with what broke, why, what changed, and Take it back (flow.undo)
-export default function RunSteps({ steps, onFix, fixing, dense, repairs, sourceId, runId, onChanged }) {
+// every repair the run made to its own steps, with what broke, why and what changed - a record, with no Take it back (the owner,
+// 2026-10-19: "no take it back button. hate that"): a repair the owner does not want is changed back in the step editor
+export default function RunSteps({ steps, onFix, fixing, dense, repairs }) {
   const [open, setOpen] = useState(null);
-  const [undoing, setUndoing] = useState(false);
-  const [said, setSaid] = useState("");
-  const [back, setBack] = useState(0);           // repairs taken back here, before the page's next read says so
   if (!steps?.length) return null;
   const failed = steps.some((r) => r.status === "failed");
   // a step the APP broke (a sign-in expired, an AI missing - flow.app_fault) is fixed in that place, never by rewriting the steps
   const app = steps.find((r) => r.status === "failed" && r.app?.href)?.app;
-  const takeBack = async () => {
-    setUndoing(true); setSaid("");
-    try { await api.post(`/api/workflows/${sourceId}/undo-repair`, { run_id: runId }); setBack((k) => k + 1); setSaid("The previous steps are back."); onChanged?.(); }
-    catch (e) { setSaid(e?.response?.data?.detail || "It could not be taken back."); }
-    finally { setUndoing(false); }
-  };
-  // the newest `back` repairs not yet marked undone are the ones just taken back: a stale Take it back would only meet a refusal
-  const open_ = (repairs || []).filter((x) => !x.undone), gone = new Set(open_.slice(Math.max(0, open_.length - back)));
-  const undone = (x) => x.undone || gone.has(x), live = (repairs || []).filter((x) => !undone(x));
   const shown = (v) => (typeof v === "string" ? v : JSON.stringify(v) ?? "");
   let n = 0;
   return (
@@ -67,11 +55,8 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs, sourceI
       {(repairs || []).map((x, k) => (
         <Box key={k} data-tq-self-repair="" sx={{ mb: 0.6, px: 1, py: 0.6, borderRadius: 1, border: "1px solid #ddd0e5", bgcolor: "#f7f3f9" }}>
           <Typography variant="caption" sx={{ display: "flex", alignItems: "baseline", gap: 1, color: INK, flexWrap: "wrap" }}>
-            <Box component="span" sx={{ fontWeight: 600 }}>{undone(x) ? "Taken back" : "Repaired itself"} · {x.label}</Box>
+            <Box component="span" sx={{ fontWeight: 600 }}>Repaired itself · {x.label}</Box>
             <Box component="span" sx={{ color: DIM, flex: 1, minWidth: 160 }}>{x.why}</Box>
-            {!undone(x) && x === live[live.length - 1] && sourceId != null && runId != null &&
-              <Button size="small" disabled={undoing} onClick={(e) => { e.stopPropagation(); takeBack(); }} sx={{ fontSize: 11.5, py: 0, minWidth: 0 }}>
-                {btnLabel("take_back")}</Button>}
           </Typography>
           <Typography variant="caption" sx={{ display: "block", color: FAINT }}>what broke · {x.error}</Typography>
           {(x.diff || []).flatMap((d) => (d.keys || []).map((c) => (
@@ -79,7 +64,6 @@ export default function RunSteps({ steps, onFix, fixing, dense, repairs, sourceI
               {d.label || d.id} · {c.key}: {shown(c.was)} → {shown(c.now)}</Typography>)))}
         </Box>
       ))}
-      {said && <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.5 }}>{said}</Typography>}
       {steps.map((r, i) => (
         <Box key={`${r.id}-${i}`} sx={{ display: "flex", gap: 1 }}>
           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", width: 10, flexShrink: 0, pt: 0.75 }}>

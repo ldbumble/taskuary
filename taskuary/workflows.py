@@ -257,7 +257,7 @@ def of_task(store, task) -> dict | None:
             'started_by': STARTED_BY.get(trig, ''), 'runs_on': brain(store, cfg, task)['said'] if src and not by_code else '',
             **({'by_code': True} if by_code else {}),
             **({'steps': run['steps'], 'run_id': run['runId'], 'failed': run['failed'], 'summary': run.get('summary') or '',
-                'repairs': [{k: r.get(k) for k in ('at', 'label', 'error', 'why', 'diff', 'undone')} for r in run.get('repairs') or []]}
+                'repairs': [{k: r.get(k) for k in ('at', 'label', 'error', 'why', 'diff')} for r in run.get('repairs') or []]}
                if run and run.get('steps') else {})}
 
 

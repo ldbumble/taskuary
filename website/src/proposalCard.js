@@ -2,7 +2,6 @@
 // card is built from the proposal the server returned, never from a guess about the words; the receipt
 // after the click is what the server said happened. The action words themselves are no longer here -
 // they are concierge.CHIPS, chosen per item and rendered inside the assistant's own line.
-import { label } from "./buttons.js";
 
 export function proposalOf(data) { return data && data.proposal && data.proposal.id ? data.proposal : null; }
 
@@ -12,10 +11,6 @@ export const pickingRepo = (p) => !!p && p.kind === "task.create_from_text" && p
   && p.clear === false && Array.isArray(p.repo_choices) && p.repo_choices.length > 0;
 
 export function describe(p) {
-  // AN UNDO IS TAKE IT BACK (buttons.json take_back): the receipt's undo card confirmed with the act's own name ("Remind me") and
-  // printed its `_undo` flag as a field - no receipt anywhere offered the one button an undo has (the rebuilt walk, 2026-10-18)
-  if (p?.params?._undo) return { ...describe({ ...p, params: Object.fromEntries(Object.entries(p.params).filter(([k]) => k !== "_undo")) }),
-                                 confirm: label("take_back") };
   const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context", "wrap"]);   // wrap: whether a transcript exists - machinery, never a fact to confirm   // a revision map, not a fact for the owner
   // A nested value printed as "[object Object]", which is the one thing a confirmation card must never
   // do: the selector IS what the owner is being asked to approve (the owner, 2026-09-07). Flatten it

@@ -90,9 +90,11 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => (
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of
 // that on every keystroke and made an ordinary sentence feel like terminal input over a slow
 // connection. The parent only hears when empty/non-empty changes and reads the value on submit.
-const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics }, ref) {
-  const [value, setValue] = useState("");
+const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics, initial = "" }, ref) {
+  const [value, setValue] = useState(initial);
   const ready = useRef(false);
+  // the words the Assistant wrote it up with (concierge._new) count as typed: the button is live from the first render
+  useEffect(() => { if (initial.trim()) { ready.current = true; onReady(true); bus?.current?.(initial); } }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const timer = useRef(0);
   useEffect(() => () => clearTimeout(timer.current), []);
   useImperativeHandle(ref, () => ({ value, clear: () => { ready.current = false; setValue(""); bus?.current?.(""); } }), [value, bus]);
@@ -131,7 +133,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 
 // `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send" }) {
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "" }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -160,7 +162,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // "terminal" = a CLI on a keyboard, "general" = a general agent with no repository. Held here rather
   // than inferred from the words: a question landing in a terminal by ACCIDENT is exactly what
   // newTask.planTask exists to stop, and it will not guess for us.
-  const [how, setHow] = useState("terminal");
+  const [how, setHow] = useState(initialHow || "terminal");
   // A session you open here is usually one you mean to sit in, so it does not end itself: the
   // judge that closes a router's task on a quiet screen would close this one while you read it.
   // note
@@ -393,14 +395,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {REPEATS.includes(kind) && (
-          <Composer kind={kind} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); window.location.hash = DRAFT_HASH[k]; }} />
+          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); window.location.hash = DRAFT_HASH[k]; }} />
         )}
 
         {!REPEATS.includes(kind) && <Box>
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
             : "What do you want to remember"}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} />
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.

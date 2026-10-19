@@ -10,8 +10,8 @@ registry server._run_operation dispatches on, so this catalogue cannot drift fro
 and it answers with a CALL naming the kind and its parameters, including a SELECTOR when the target is
 a description rather than one row.
 
-Nothing here executes. A CALL becomes a proposal exactly as a verb does; the owner's confirmation is
-still what runs it (PW-123/124), and the AUTO verbs are still the only things that go straight through.
+Nothing here executes. On the desk a CALL brings up the button that does it, lit, or the page that holds it
+(concierge.routes, the owner 2026-10-19) - the press is the confirmation; on a phone it is a yes-or-no (PW-123/124).
 """
 import json, re
 from . import buttons, operations, roles
@@ -107,30 +107,26 @@ PURPOSE = {
                                  "false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say "
                                  "they sign in to the portal themselves in the browser pane"),
     # THE APP ITSELF, by name. A report is named by `title` (part of its name) or `source_id`; a
-    # connection by `name` or `connector_id`; a setting by `key` or `label`. These run AT ONCE
-    # (INSTANT below) with an undo in the receipt, except report.delete, which asks first.
+    # connection by `name` or `connector_id`; a setting by `key` or `label`. Each opens its page, the knob or button to press on it.
     'report.run':               ('run a report or workflow now - `title` (or `source_id`); a report lands in the pipe when done, '
                                  'a workflow starts as its task at once (the ref comes back)'),
     'report.pause':             'stop a report or workflow running on its clock - `title`',
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
     'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule)',
     'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
-    'report.delete':            'delete a report or workflow for good - `title`; asks first',
+    'report.delete':            'delete a report or workflow for good - `title`',
     'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
     'connection.test':          'test a connection now and say what it answered - `name`',
     'connection.pause':         'switch a connection off - `name`; nothing is deleted',
     'connection.resume':        'switch a connection back on - `name`',
-    'script.start':             'start a script by its name: walk me through my tasks | set up Taskuary | set up a report',
+    'script.start':             'start a script by its name: walk me through my tasks | set up a report',
 }
 
-# THE TIERS (the spec, 2026-09-18). Reads run at once (READS). These WRITES run at once too, because
-# each can be put back: the receipt carries the undo. Everything else waits for the owner's yes -
-# deleting, sending to a person, spending, stopping an agent mid-run.
+# THE APP'S OWN KNOBS - reports, settings, connections, scripts - named by what they do. They ran at once, put back from the receipt
+# (the tiers, 2026-09-18) until the owner ruled out undo and the chat's own acts (2026-10-19): each is its page's button now (concierge._route).
 INSTANT = frozenset({'report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'setting.set', 'task.defer', 'task.watch',
                      'connection.test', 'connection.pause', 'connection.resume', 'script.start'})
 
-
-def is_instant(kind: str) -> bool: return kind in INSTANT
 
 # A set of items, described rather than listed. This is the part the verb vocabulary never had: it is
 # how "all the reports" or "everything from that sender" is said in a way code can carry out exactly.
@@ -191,8 +187,8 @@ def block(store=None) -> str:
         'HOW YOU ACT (code reads your last line)',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
-        'A look-up runs at once and answers you. Anything that changes something becomes a card the',
-        'owner confirms - a few that can be undone run at once, with the undo on the receipt. When two different',
+        'A look-up runs at once and answers you. Anything that changes something is the owner\'s to press: Taskuary',
+        'brings up the button that does it, lit, or the page that holds it - never say it is done. When two different',
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
         'Never both, never a tool that is not listed. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
         "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
@@ -214,7 +210,7 @@ def block(store=None) -> str:
         '  1. the owner means one of the action words under your line - do that (bucket table).',
         '  2. they want detail, history or a summary - LOOK IT UP and answer with what you read. Search the period',
         '     THEY mean: six months ago means days: 200, not the last week.',
-        '  3. they want something DONE and it says what - CALL it now; the card is their confirmation. A reminder or',
+        '  3. they want something DONE and it says what - CALL it now; its button is their confirmation. A reminder or',
         '     a to-do they will do themselves is task.create_from_text kind task; a task that exists is never a new',
         '     one - change it with the task bucket.',
         '  4. it is not clear which - LOOK first; then, if two different things still fit, ASK one short question',
@@ -274,7 +270,7 @@ CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connecti
              'remove': 'task.not_a_task', 'retriage': 'message.retriage', 'share': 'task.share'}
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
-PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'take_back': "a receipt's undo",
+PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'walk_here': 'the walk handed to a phone chat, brought back to the desk',
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
@@ -351,7 +347,7 @@ def describe(kind: str) -> str:
     if kind in PURPOSE:
         target, required, _ = operations.KINDS[kind]
         asks = [r for r in required if r not in CONTEXT_FILLED]
-        runs = 'runs at once, with an undo' if kind in INSTANT else 'a card the owner confirms'
+        runs = 'the owner presses its button'
         return f"{kind} (on a {target}; {runs}){' - needs ' + ', '.join(asks) if asks else ''} - {PURPOSE[kind]}"
     return f'There is no tool {kind!r}. The buckets: ' + ', '.join(n for n, _, _ in BUCKETS) + ', look.'
 
@@ -468,8 +464,8 @@ def valid(kind: str, params: dict) -> str:
 # `python -m taskuary.toolcatalog` rewrites it; tests/test_task_tools.py fails when the page and the catalogue differ.
 DOCS_PAGE = 'docs/site/assistant-tools.md'
 # the decisions that do not wait for a card (concierge.AUTO, and the two that only ever write a draft)
-DECISION_RUNS = {'next': 'at once', 'close': 'at once', 'stop_agent': 'at once', 'confirm': 'at once',
-                 'cancel': 'at once', 'reply': 'at once - a draft, nothing sent', 'redraft': 'at once - a draft, nothing sent'}
+DECISION_RUNS = {'next': 'at once', 'confirm': 'at once', 'cancel': 'at once',
+                 'reply': 'at once - a draft, nothing sent', 'redraft': 'at once - a draft, nothing sent'}
 
 
 def _cell(s: str) -> str: return str(s).replace('|', '/').replace('`', '').replace('\n', ' ').strip()
@@ -481,8 +477,8 @@ def docs_markdown() -> str:
              '',
              'What the Assistant is told about its tools. It gets the **summary** on every turn: the buckets, and',
              'each tool\'s name and what it needs. It asks for the **detail** of a bucket (`tools.list`) or a tool',
-             '(`tools.describe`) only when a turn needs it. Everything it can change becomes a card you confirm,',
-             'except the few that can be undone, which run at once with an undo on the receipt.',
+             '(`tools.describe`) only when a turn needs it. Everything it can change, it brings up for you to press:',
+             'the button that does it, lit, or the page that holds it. On a phone it asks yes or no.',
              '',
              '## The summary, sent every turn',
              '',
@@ -546,7 +542,7 @@ def _entry(k: str) -> list:
                            'the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text')
     prose = ''.join(s + c for s, c in keep).strip(' -;')
     runs = ('Runs at once and changes nothing.' if k in READS else DECISION_RUNS.get(k, '').capitalize() + '.' if k in DECISION_RUNS
-            else 'Runs at once, with an undo on the receipt.' if k in INSTANT else 'Waits for your yes on a card.')
+            else 'Brings up its button for you to press.')
     stop = '' if prose.endswith(('.', ')', '"')) else '.'
     out = [f'### `{k}`', '', f'{prose[:1].upper()}{prose[1:]}{stop}', '']
     out += [f"- `{a}`{' (optional)' if a in optional else ''}{' - ' + d if d else ''}" for a, d in args.items()]

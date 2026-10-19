@@ -4,7 +4,7 @@
 const optimistic = (m) => typeof m?.id === "string" && /^(?:a|u|r|context)\d+$/.test(m.id);
 const words = (v) => String(v || "").replace(/\s+/g, " ").trim();
 // a receipt drawn at the click is the server's recorded line, come back as an assistant turn - the
-// same words, so it is the same turn (a card-carrying line, the undo offer, is its own). A failure's line is
+// same words, so it is the same turn (a card-carrying line is its own). A failure's line is
 // recorded with its way on as a words card (concierge.receipt_turn): read as its own turn, every failed or
 // stale press showed its receipt twice (re-audit, 2026-10-18)
 const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && (!b?.card || b.card.kind === "words")))
@@ -15,7 +15,7 @@ export function mergeDurableTurns(local = [], durable = []) {
   // A reconciled bubble answers to BOTH names: the optimistic id it is keyed by on screen, and the
   // comment id the server gave it. Tracking only the visible one made every freshness read re-match
   // a turn that had already been reconciled.
-  const ids = new Set(messages.flatMap((m) => [m.id, m.commentId]).filter((v) => v != null));
+  const ids = new Set(messages.flatMap((m) => [m.id, m.commentId, ...(m.alias || [])]).filter((v) => v != null));
   const claimed = new Set();
   const added = [];
   for (const turn of durable || []) {
@@ -53,15 +53,26 @@ export function mergeDurableTurns(local = [], durable = []) {
     }
     ids.add(turn.id);
   }
-  return { messages, added };
+  return { messages: oneCopy(messages), added };
 }
 
-// THE NEWEST TAKE IT BACK A READ BROUGHT (Stream B, 2026-10-18): a press on the table's task view records its receipt and its undo on
-// the server, as a notice that never takes the table from the view - so its Take it back rides the bar by the prompt (UndoVerb). Only
-// from a turn this read ADDED to a chat already on screen: an undo read back from history on a first load is not this press's. A chat's
-// own undo stays on its card, which is live under it.
-export function freshUndo(local = [], added = []) {
-  if (!(local || []).length) return null;
-  const t = [...(added || [])].reverse().find((x) => x?.card?.kind === "proposal" && x.card.undo && x.card.background_event && x.card.op);
-  return t ? { verb: "undo", op: t.card.op, title: t.card.title || "" } : null;
+// ONE COPY OF AN ITEM IN THE CHAT (the 2026-10-19 UI walk: TQ-0010 stood five times, once per search, Board or rail pick): an item
+// opened again moves its line to the end - folded there as the walk's record, live there when it is the table - never a second line.
+// The copies it replaces stay its aliases, so a later read of the server's history does not bring them back.
+const NOT_ITEM = new Set(["proposal", "words", "brief", "setup", "walk", "firstrun", "setup_questions"]);
+export const itemKey = (m) => (m?.role === "assistant" && m.card?.key && !m.proposal && !NOT_ITEM.has(m.card.kind) ? m.card.key : "");
+const ids = (m) => [m.id, m.commentId, ...(m.alias || [])].filter((v) => v != null);
+export function placeLine(messages = [], line) {
+  const key = itemKey(line);
+  const at = key ? messages.map(itemKey).lastIndexOf(key) : -1;
+  if (at < 0) return [...messages, line];
+  const old = messages[at];
+  return [...messages.slice(0, at), ...messages.slice(at + 1), { ...line, alias: [...new Set([...ids(old).filter((v) => v !== line.id), ...(line.alias || [])])] }];
+}
+export function oneCopy(messages = []) {
+  const keys = messages.map(itemKey), all = keys.filter(Boolean);
+  if (new Set(all).size === all.length) return messages;
+  const ms = [...messages];
+  ms.forEach((m, i) => { const last = keys[i] ? keys.lastIndexOf(keys[i]) : i; if (last !== i) ms[last] = { ...ms[last], alias: [...new Set([...(ms[last].alias || []), ...ids(m)])] }; });
+  return ms.filter((m, i) => !keys[i] || keys.lastIndexOf(keys[i]) === i);
 }

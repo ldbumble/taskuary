@@ -101,9 +101,10 @@ test("the editor shows steps in place of What it does, and keeps the old field w
   assert.ok(read("TaskPage.jsx").includes("<RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}"));
 });
 
-test("a self-repair reads back with what broke and Take it back, in the shared button words", () => {
+// a self-repair is a record - what broke, why, what changed - with no Take it back (the owner, 2026-10-19); the step editor changes it back
+test("a self-repair reads back with what broke and what changed, in the shared button words", () => {
   const rs = read("RunSteps.jsx");
-  assert.ok(rs.includes('btnLabel("take_back")') && rs.includes('btnLabel("fix")') && rs.includes("/undo-repair"));
+  assert.ok(rs.includes('btnLabel("fix")') && rs.includes("Repaired itself") && !rs.includes("take_back") && !rs.includes("/undo-repair"));
   assert.doesNotMatch(rs, />Fix with AI</);
   assert.equal(tally([{ kind: "source", status: "repaired", ms: 300 }, { kind: "source", status: "ok", ms: 700 }]), "Ran 1 step in 1.0s, AI only for the repair");
   assert.ok(read("WorkflowEditor.jsx").includes('cfg.repair || "auto"'));                 // repair is on unless the owner says otherwise

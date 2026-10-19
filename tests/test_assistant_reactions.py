@@ -33,6 +33,18 @@ from taskuary import buttons, concierge, funnel, general, ingest, operations, se
 from taskuary.store import MemoryStore
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
+# (test_assistant_router); a phone chat has no buttons, so a tool the model names still becomes a proposal answered yes or no -
+# the proposals, their targets and their handlers are held here, on that road
+def setUpModule():
+    global _ROAD
+    from taskuary import concierge
+    _ROAD = concierge.DELIVERY.set(concierge.PHONE)
+def tearDownModule():
+    from taskuary import concierge
+    concierge.DELIVERY.reset(_ROAD)
+
+
 def ago(hours=0, minutes=0, days=0):
     return (datetime.now() - timedelta(hours=hours, minutes=minutes, days=days)).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -1426,15 +1438,15 @@ class SettingProposalTests(unittest.TestCase):
         the setting.set tool, and a DECIDE line naming the old verb is no decision."""
         self.assertIsNone(concierge.parse_decision('Sure.' + chr(10) + 'CALL: {"kind": "setting", "params": {}}')[1])
 
-    def test_a_number_the_owner_says_out_loud_is_the_value_and_the_receipt_carries_the_undo(self):
+    def test_a_number_the_owner_says_out_loud_is_the_value_and_waits_for_the_yes(self):
         s = store()
         with mock.patch.object(server, 'store', s):
             out = self._call(s, 'setting.set', setting='poll_minutes', value='5')
             self.assertEqual(out['proposal']['params'], {'setting': 'poll_minutes', 'value': '5'})
-            self.assertTrue(out['proposal'].get('auto'), 'an undoable write runs at once')
+            self.assertFalse(out['proposal'].get('auto'), 'nothing runs on the words - and nothing carries an undo (2026-10-19)')
             done = concierge.run_proposal(s, out['proposal'])
         self.assertEqual(s.get_settings().get('poll_minutes'), '5')
-        self.assertIn('Undo: Put', concierge.receipt(s, done))
+        self.assertNotIn('Undo', concierge.receipt(s, done))
 
     def test_the_assistant_writes_a_setting_only_through_the_registry_with_an_audit_row(self):
         s = store()

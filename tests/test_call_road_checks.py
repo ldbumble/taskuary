@@ -7,6 +7,18 @@ from taskuary import buttons, concierge, remind, toolcatalog
 from tests.test_task_tools import table
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
+# (test_assistant_router); a phone chat has no buttons, so a tool the model names still becomes a proposal answered yes or no -
+# the proposals, their targets and their handlers are held here, on that road
+def setUpModule():
+    global _ROAD
+    from taskuary import concierge
+    _ROAD = concierge.DELIVERY.set(concierge.PHONE)
+def tearDownModule():
+    from taskuary import concierge
+    concierge.DELIVERY.reset(_ROAD)
+
+
 def miss(s, item, kind, **params):
     dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
     with _Raises() as r:

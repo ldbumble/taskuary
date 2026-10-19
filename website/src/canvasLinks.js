@@ -36,7 +36,9 @@ export function canvasRequestFromHash(hash, n = 0) {
     if (["profiles", "playbooks"].includes(page)) return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
-    return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page }, n };
+    // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view
+    const knob = page === "config" && group && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
+    return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page, ...(knob ? { knob } : {}) }, n };
   }
   // a playbook: the words live in Settings -> Playbooks, edited in the Docs page (DocsView reads the hash itself and opens it)
   if (/^#playbook=/.test(h)) return { kind: "browse", area: "settings", state: { section: "playbooks", open: "docs" }, n };

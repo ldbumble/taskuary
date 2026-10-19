@@ -46,7 +46,7 @@ test("a greyed verb is never the advised one", () => {
 
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\}/);
-  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice \|\| noneSaid( \|\| setupLit)?\}/);
+  assert.match(src, /<ActionRow [^>]*advised=\{litNow \|\| shownAdvice \|\| noneSaid( \|\| setupLit)?\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
   assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing

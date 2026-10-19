@@ -46,24 +46,15 @@ def test_today_is_said_with_its_time():
     assert remind.when('2026-09-26 07:00:00', NOW) == 'Sat 26 Sep'
 
 
-def test_a_reminder_for_later_today_puts_the_task_away_and_its_undo_keeps_the_hour(s):
+def test_a_reminder_for_later_today_puts_the_task_away_at_that_hour(s):
     tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
     later = (datetime.now() + timedelta(hours=1)).replace(second=0, microsecond=0)
     if later.date() != datetime.now().date(): pytest.skip('too close to midnight for a later-today reminder')
     out = remind.set_reminder(s, tid, f'today {later:%H:%M}')
     assert out['remindAt'] == f'{later:%Y-%m-%d %H:%M:00}' and remind.waiting(s.get_task(tid))
-    again = remind.set_reminder(s, tid, '2 weeks')
-    assert again['undo']['params'] == {'until': f'{later:%Y-%m-%d %H:%M}'}
+    assert 'undo' not in remind.set_reminder(s, tid, '2 weeks')          # a day picked wrong is picked again (the owner, 2026-10-19)
 
 
-
-def test_a_seven_oclock_today_is_undone_to_its_hour_not_its_morning(s):
-    """7:00 is also the hour a bare date comes back at; for today the date alone is refused, so the undo keeps the hour."""
-    tid = s.create_task({'Title': 'Call the vendor back', 'Kind': 'task', 'Status': 'open'}, 'owner')
-    with mock.patch('taskuary.remind.datetime', wraps=datetime) as d:
-        d.now.return_value = NOW.replace(hour=6)
-        remind.set_reminder(s, tid, 'today 7am')
-        assert remind.set_reminder(s, tid, '2 weeks')['undo']['params'] == {'until': '2026-09-25 07:00'}
 
 def test_the_five_minute_sweep_brings_it_back_without_waiting_for_a_sync(s):
     from taskuary import asks

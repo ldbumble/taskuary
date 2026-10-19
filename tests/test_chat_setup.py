@@ -16,6 +16,18 @@ from fastapi.testclient import TestClient
 from taskuary import concierge, funnel, general, operations, scopes, server, terminal
 from taskuary.store import MemoryStore
 
+
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
+# (test_assistant_router); a phone chat has no buttons, so a tool the model names still becomes a proposal answered yes or no -
+# the proposals, their targets and their handlers are held here, on that road
+def setUpModule():
+    global _ROAD
+    from taskuary import concierge
+    _ROAD = concierge.DELIVERY.set(concierge.PHONE)
+def tearDownModule():
+    from taskuary import concierge
+    concierge.DELIVERY.reset(_ROAD)
+
 REPORT = {'type': 'sqlite', 'title': 'Open tasks by kind', 'db': 'C:/data/taskuary.db', 'query': 'SELECT Kind, count(*) n FROM task GROUP BY Kind', 'cron': '0 8 * * 1'}
 
 
@@ -251,7 +263,9 @@ class AppPagesTests(unittest.TestCase):
     needs to see or set, it brings up - by the links the canvas opens."""
     def test_the_desk_assistant_knows_the_pages_and_the_phone_does_not(self):
         s = store()
-        desk = concierge._system(s)
+        with concierge.delivering(concierge.DESK): desk = concierge._system(s)
         self.assertIn('DO FIRST, SHOW SECOND', desk)
-        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles', '#setup'): self.assertIn(link, desk)
+        for link in ('#connector=intacct', '#cli-agents', '#report=new-agent', '#settings=policies', '#profiles'): self.assertIn(link, desk)
+        # setup is the Setup button at the top, never a link the chat opens (the owner, 2026-10-19)
+        self.assertNotIn('#setup', desk); self.assertIn('the Setup button at the top', desk)
         with concierge.delivering(concierge.PHONE): self.assertNotIn('APP PAGES', concierge._system(s))   # no canvas to open it on

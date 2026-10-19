@@ -296,12 +296,9 @@ def test_a_site_that_changed_its_layout_is_repaired_by_itself_and_the_run_comple
     assert rp['error'].startswith('404') and rp['why'] == 'the page moved' and rp['was'] == page_flow()
     assert any(c['Body'].startswith('Fixed itself: 404') and c['Actor'] == 'taskuary' for c in s.list_comments(tid))
     assert s._rows("SELECT * FROM review WHERE TaskId=?", (tid,)) == []
-    # Take it back: the steps before the repair come back, once, and only while nothing else changed them
+    # no Take it back (the owner, 2026-10-19): the repair is a record, and its steps are changed back in the editor like any step
     with mock.patch.object(server, 'store', s):
-        c = TestClient(server.app)
-        assert c.post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': out['run_id']}).status_code == 200
-        assert workflows.cfg_of(s.get_source(src['SourceId']))['flow'] == page_flow()
-        assert c.post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': out['run_id']}).status_code == 409
+        assert TestClient(server.app).post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': out['run_id']}).status_code in (404, 405)
 
 
 def test_a_repair_that_adds_a_recipient_waits_for_the_owner(site):

@@ -107,8 +107,8 @@
     <article>
 <!-- Written by `python -m taskuary.toolcatalog` from taskuary/toolcatalog.py - edit the catalogue, not this page. --><p>What the Assistant is told about its tools. It gets the <strong>summary</strong> on every turn: the buckets, and
 each tool&#39;s name and what it needs. It asks for the <strong>detail</strong> of a bucket (<code>tools.list</code>) or a tool
-(<code>tools.describe</code>) only when a turn needs it. Everything it can change becomes a card you confirm,
-except the few that can be undone, which run at once with an undo on the receipt.</p>
+(<code>tools.describe</code>) only when a turn needs it. Everything it can change, it brings up for you to press:
+the button that does it, lit, or the page that holds it. On a phone it asks yes or no.</p>
 <h2 id="the-summary-sent-every-turn">The summary, sent every turn<a class="anchor" href="#the-summary-sent-every-turn" aria-label="Link to this section">#</a></h2>
 <table>
 <thead>
@@ -170,72 +170,72 @@ except the few that can be undone, which run at once with an undo on the receipt
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="approve"><code>approve</code><a class="anchor" href="#approve" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Send&quot; button (&quot;Approve&quot; on an agent&#39;s proposal or a task&#39;s close-out): the owner&#39;s yes to what is drafted on the item: sends the reply as it stands - on a task&#39;s close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent&#39;s proposal it runs that action and only that. It never closes the task - that is close, the owner&#39;s own Mark done, a separate step - and never continues an agent&#39;s session - that is agent.continue.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="redraft"><code>redraft</code><a class="anchor" href="#redraft" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="redraft"><code>redraft</code><a class="anchor" href="#redraft" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Redraft&quot; button (&quot;Draft with AI&quot; when nothing is drafted yet): write the draft again.</p>
 <ul>
 <li><code>text</code> - the change</li>
 </ul>
 <p class="runs">At once - a draft, nothing sent.</p><h3 id="mine"><code>mine</code><a class="anchor" href="#mine" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Put it on my list&quot; button: make it a task on the owner&#39;s own list - no agent.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="regular-agent"><code>regular_agent</code><a class="anchor" href="#regular-agent" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Send to agent&quot; button: send it to an agent that does not write code - it becomes a task of its own.</p>
 <ul>
 <li><code>text</code> - the job</li>
 <li><code>as</code> (optional) - a profile from agents.list, only when one fits</li>
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="coding-agent"><code>coding_agent</code><a class="anchor" href="#coding-agent" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="coding-agent"><code>coding_agent</code><a class="anchor" href="#coding-agent" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Send to coding agent&quot; button: send it to a coding agent. Not sure which repository is no reason to ask - CALL it, and its card offers every repository to pick.</p>
 <ul>
 <li><code>text</code> - what is wanted</li>
 <li><code>as</code> (optional) - the repository (repos.list), only when sure</li>
 <li><code>new</code> (optional) - true when the job is NOT about the item on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours"><code>not_ours</code><a class="anchor" href="#not-ours" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="not-ours"><code>not_ours</code><a class="anchor" href="#not-ours" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Not ours&quot; button: file it, just this once - its card asks whether from now on, or as a rule.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-sender"><code>not_ours_sender</code><a class="anchor" href="#not-ours-sender" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="not-ours-sender"><code>not_ours_sender</code><a class="anchor" href="#not-ours-sender" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Ignore this sender&quot; button: file everything from this sender from now on - their mail still arrives and stays readable.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="block-sender"><code>block_sender</code><a class="anchor" href="#block-sender" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Block this sender&quot; button: an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="not-ours-kind"><code>not_ours_kind</code><a class="anchor" href="#not-ours-kind" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="not-ours-kind"><code>not_ours_kind</code><a class="anchor" href="#not-ours-kind" aria-label="Link to this section">#</a></h3>
 <p>The &quot;No more ideas like this&quot; button: an Advisor idea only: put it down AND no more ideas like it - the Advisor&#39;s next run reads that.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="close"><code>close</code><a class="anchor" href="#close" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="close"><code>close</code><a class="anchor" href="#close" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Mark done&quot; button: the task behind the item is finished.</p>
-<p class="runs">At once.</p><h3 id="next"><code>next</code><a class="anchor" href="#next" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="next"><code>next</code><a class="anchor" href="#next" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Next&quot; button: move on to the next thing.</p>
 <p class="runs">At once.</p><h3 id="answer-agent"><code>answer_agent</code><a class="anchor" href="#answer-agent" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Answer it&quot; button: answer the agent waiting on the owner.</p>
 <ul>
 <li><code>text</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="stop-agent"><code>stop_agent</code><a class="anchor" href="#stop-agent" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="stop-agent"><code>stop_agent</code><a class="anchor" href="#stop-agent" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Stop and save&quot; button: save and end the agent&#39;s session on the item.</p>
-<p class="runs">At once.</p><h3 id="rerun"><code>rerun</code><a class="anchor" href="#rerun" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="rerun"><code>rerun</code><a class="anchor" href="#rerun" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Run it again&quot; button: run the report on the table again.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="remember"><code>remember</code><a class="anchor" href="#remember" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="remember"><code>remember</code><a class="anchor" href="#remember" aria-label="Link to this section">#</a></h3>
 <p>Keep a fact.</p>
 <ul>
 <li><code>text</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="setup"><code>setup</code><a class="anchor" href="#setup" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="setup"><code>setup</code><a class="anchor" href="#setup" aria-label="Link to this section">#</a></h3>
 <p>Build a report, a connection to another system or an automation. Never a to-do.</p>
 <ul>
 <li><code>text</code> - the request</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="confirm"><code>confirm</code><a class="anchor" href="#confirm" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="confirm"><code>confirm</code><a class="anchor" href="#confirm" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s yes to the card already waiting - only when one is.</p>
 <p class="runs">At once.</p><h3 id="cancel"><code>cancel</code><a class="anchor" href="#cancel" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s no to it.</p>
 <p class="runs">At once.</p><h3 id="chase"><code>chase</code><a class="anchor" href="#chase" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Chase them&quot; button: chase the person who has gone quiet on the item - a short nudge in the owner&#39;s voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="let-go"><code>let_go</code><a class="anchor" href="#let-go" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="let-go"><code>let_go</code><a class="anchor" href="#let-go" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Let it go&quot; button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
 <p>The &quot;They answered elsewhere&quot; button: they answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
 <ul>
 <li><code>text</code> - where (a call, a meeting)</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
 <p>Change any task - the table&#39;s, or one named by ref.</p>
 <h3 id="task-update"><code>task.update</code><a class="anchor" href="#task-update" aria-label="Link to this section">#</a></h3>
 <p>Change a task&#39;s priority, title, owner or due day. Any other value is refused with the allowed ones.</p>
@@ -246,26 +246,26 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>due</code> - the day the work is due (2026-10-30, &quot;friday&quot;, &quot;2 weeks&quot;, or &quot;none&quot; to clear it)</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-set-kind"><code>task.set_kind</code><a class="anchor" href="#task-set-kind" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-set-kind"><code>task.set_kind</code><a class="anchor" href="#task-set-kind" aria-label="Link to this section">#</a></h3>
 <p>Say what kind of work a task is.</p>
 <ul>
 <li><code>kind</code> - task (the owner does it) | general (a non-coding agent) | coding</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-set-repo"><code>task.set_repo</code><a class="anchor" href="#task-set-repo" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-set-repo"><code>task.set_repo</code><a class="anchor" href="#task-set-repo" aria-label="Link to this section">#</a></h3>
 <p>Put a coding task in the repository it belongs in.</p>
 <ul>
 <li><code>repo</code> - its name, as the repositories list says it</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-check"><code>task.check</code><a class="anchor" href="#task-check" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-check"><code>task.check</code><a class="anchor" href="#task-check" aria-label="Link to this section">#</a></h3>
 <p>Tick a checklist item on a task.</p>
 <ul>
 <li><code>item</code> - its NUMBER (1 is the first; the facts list them numbered)</li>
 <li><code>done</code> (optional) - false un-ticks</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-checklist"><code>task.checklist</code><a class="anchor" href="#task-checklist" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-checklist"><code>task.checklist</code><a class="anchor" href="#task-checklist" aria-label="Link to this section">#</a></h3>
 <p>Change what a task&#39;s checklist asks for.</p>
 <ul>
 <li><code>items</code> (optional) - the full list of item words in order (one left out is removed, emails untouched)</li>
@@ -273,78 +273,78 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>drop</code> (optional) - recipients whose email is no longer owed</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-watch"><code>task.watch</code><a class="anchor" href="#task-watch" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-watch"><code>task.watch</code><a class="anchor" href="#task-watch" aria-label="Link to this section">#</a></h3>
 <p>Tell the owner here when something happens on a task nobody needs to start.</p>
 <ul>
 <li><code>what</code> (optional) - done (when it is finished) | reply (when someone writes on it) | any (the default) | off</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="task-comment"><code>task.comment</code><a class="anchor" href="#task-comment" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-comment"><code>task.comment</code><a class="anchor" href="#task-comment" aria-label="Link to this section">#</a></h3>
 <p>File a note on a task.</p>
 <ul>
 <li><code>text</code></li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-split"><code>task.split</code><a class="anchor" href="#task-split" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-split"><code>task.split</code><a class="anchor" href="#task-split" aria-label="Link to this section">#</a></h3>
 <p>Split one arrival into two jobs.</p>
 <ul>
 <li><code>text</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-merge"><code>task.merge</code><a class="anchor" href="#task-merge" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-merge"><code>task.merge</code><a class="anchor" href="#task-merge" aria-label="Link to this section">#</a></h3>
 <p>Fold a task into the one it duplicates.</p>
 <ul>
 <li><code>into</code> - the survivor&#39;s ref (TQ-0123)</li>
 <li><code>ref</code> (optional) - the task that is the one folded away</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-reopen"><code>task.reopen</code><a class="anchor" href="#task-reopen" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-reopen"><code>task.reopen</code><a class="anchor" href="#task-reopen" aria-label="Link to this section">#</a></h3>
 <p>Reopen a task that was marked done.</p>
 <ul>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-not-a-task"><code>task.not_a_task</code><a class="anchor" href="#task-not-a-task" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-not-a-task"><code>task.not_a_task</code><a class="anchor" href="#task-not-a-task" aria-label="Link to this section">#</a></h3>
 <p>Delete a task and teach triage it was never work.</p>
 <ul>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-complete"><code>task.complete</code><a class="anchor" href="#task-complete" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-complete"><code>task.complete</code><a class="anchor" href="#task-complete" aria-label="Link to this section">#</a></h3>
 <p>Mark done - the task is finished - kept on the task.</p>
 <ul>
 <li><code>note</code> (optional) - (optional): what came of it, in the owner&#39;s words when they said it (&quot;the GL export reconciled fine&quot;)</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-defer"><code>task.defer</code><a class="anchor" href="#task-defer" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-defer"><code>task.defer</code><a class="anchor" href="#task-defer" aria-label="Link to this section">#</a></h3>
 <p>Remind me: put an open task away until a day and bring it back then - calendar or not: the app picks the time, or says there is none to pick from - never a day guessed instead, or &quot;none&quot; to bring it back now. &quot;Remind me about <a task that exists>&quot; - named by ref, sender or subject - is this, never a new to-do.</p>
 <ul>
 <li><code>until</code> - a date (2026-10-09), &quot;2 weeks&quot;, &quot;3 days&quot;, &quot;monday&quot;, with the time they said kept (&quot;tomorrow 9am&quot;, &quot;friday 2pm&quot;), &quot;after_meetings&quot; whenever they mean once the day&#39;s meetings or calls are over</li>
 <li><code>ref</code> (optional) - the task (TQ-0123) when it is not the one on the table</li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="task-handoff"><code>task.handoff</code><a class="anchor" href="#task-handoff" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-handoff"><code>task.handoff</code><a class="anchor" href="#task-handoff" aria-label="Link to this section">#</a></h3>
 <p>Hand a task to a PERSON.</p>
 <ul>
 <li><code>who</code> - a name or address that has written here</li>
 <li><code>note</code> (optional) - writes the forward for the owner&#39;s yes, nothing is sent from this card</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-clarify"><code>task.clarify</code><a class="anchor" href="#task-clarify" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-clarify"><code>task.clarify</code><a class="anchor" href="#task-clarify" aria-label="Link to this section">#</a></h3>
 <p>Prepare a question for the task&#39;s sender; it waits for the owner&#39;s yes, never sent from here.</p>
 <ul>
 <li><code>text</code> - the question</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-share"><code>task.share</code><a class="anchor" href="#task-share" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-share"><code>task.share</code><a class="anchor" href="#task-share" aria-label="Link to this section">#</a></h3>
 <p>Email what a task&#39;s work found; a draft for the owner&#39;s yes, never sent.</p>
 <ul>
 <li><code>who</code> - an address</li>
 <li><code>about</code> (optional)</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="review-approve"><code>review.approve</code><a class="anchor" href="#review-approve" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="review-approve"><code>review.approve</code><a class="anchor" href="#review-approve" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s yes to what is drafted: sends the reply as it stands - and on a task&#39;s close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="review-reject"><code>review.reject</code><a class="anchor" href="#review-reject" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="review-reject"><code>review.reject</code><a class="anchor" href="#review-reject" aria-label="Link to this section">#</a></h3>
 <p>Reject the draft reply waiting on a task - nothing is sent, the task stays open.</p>
 <ul>
 <li><code>ref</code> (optional) - the task</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
 <p>Start, continue, answer or stop a task&#39;s agent, and teach where work belongs.</p>
 <h3 id="dispatch-prepare"><code>dispatch.prepare</code><a class="anchor" href="#dispatch-prepare" aria-label="Link to this section">#</a></h3>
 <p>Start an agent on an EXISTING task; a coding task asks which repository when it is not clear.</p>
@@ -353,30 +353,30 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>instructions</code> (optional)</li>
 <li><code>ref</code> - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="agent-continue"><code>agent.continue</code><a class="anchor" href="#agent-continue" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="agent-continue"><code>agent.continue</code><a class="anchor" href="#agent-continue" aria-label="Link to this section">#</a></h3>
 <p>Pick up the agent&#39;s own last session on a task where it left off, coding or not.</p>
 <ul>
 <li><code>ref</code> - the task (TQ-0123) - the one on the table when it has a saved session to reopen</li>
 <li><code>note</code> - when the owner said what to tell it as it picks up</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>
 <p>Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is the owner&#39;s call, never this.</p>
 <ul>
 <li><code>text</code></li>
 <li><code>ref</code> (optional) - its task when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="agent-stop"><code>agent.stop</code><a class="anchor" href="#agent-stop" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="agent-stop"><code>agent.stop</code><a class="anchor" href="#agent-stop" aria-label="Link to this section">#</a></h3>
 <p>Save and end an agent&#39;s session - the one on the table, or the task <code>ref</code> names; never a guess at which.</p>
 <ul>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="routing-remember"><code>routing.remember</code><a class="anchor" href="#routing-remember" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="routing-remember"><code>routing.remember</code><a class="anchor" href="#routing-remember" aria-label="Link to this section">#</a></h3>
 <p>Remember how work like this should be ROUTED next time. kind: coding (an agent in a checkout) | general (the assistant) | task (the owner, no agent). system: where the work actually lives when no repository here can touch it, named plainly (&quot;ADP&quot;). It teaches triage and moves nothing - say it when the owner tells you a verdict was wrong, or where a kind of job really belongs.</p>
 <ul>
 <li><code>field</code> - kind | profile | system</li>
 <li><code>value</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="new">New<a class="anchor" href="#new" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="new">New<a class="anchor" href="#new" aria-label="Link to this section">#</a></h2>
 <p>New work with no task yet.</p>
 <h3 id="task-create-from-text"><code>task.create_from_text</code><a class="anchor" href="#task-create-from-text" aria-label="Link to this section">#</a></h3>
 <p>A new job with no message behind it. Never for a task that already exists (a TQ ref, or a row on THE RAIL BY NAME): starting an agent on one is dispatch.prepare, its own last session is agent.continue, and &quot;remind me about it&quot; is task.defer on it.</p>
@@ -384,67 +384,67 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>kind</code> - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding</li>
 <li><code>text</code> - , and a short <code>title</code> in your own words for the job (never &quot;send it to the agent&quot;)</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-create-from-message"><code>task.create_from_message</code><a class="anchor" href="#task-create-from-message" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-create-from-message"><code>task.create_from_message</code><a class="anchor" href="#task-create-from-message" aria-label="Link to this section">#</a></h3>
 <p>Hand this message to an agent or put it on the list.</p>
 <ul>
 <li><code>kind</code> - coding | general | task</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-setup"><code>task.setup</code><a class="anchor" href="#task-setup" aria-label="Link to this section">#</a></h3>
 <p>Open a walk-through with the assistant, for a set-up that needs digging first.</p>
 <ul>
 <li><code>text</code></li>
 <li><code>title</code> - a few words naming the job for the task list</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
 <p>The walk and sets of items, and filing mail.</p>
 <h3 id="pipe-clear"><code>pipe.clear</code><a class="anchor" href="#pipe-clear" aria-label="Link to this section">#</a></h3>
 <p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted. It only clears: when the owner says &quot;from now on&quot; too, also CALL preference.exclude_sender or preference.sender_rule.</p>
 <ul>
 <li><code>select</code> - below</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
 <p>Put the item down, read and settled.</p>
 <ul>
 <li><code>verb</code> - done (the item on the table is the target)</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="message-file"><code>message.file</code><a class="anchor" href="#message-file" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="message-file"><code>message.file</code><a class="anchor" href="#message-file" aria-label="Link to this section">#</a></h3>
 <p>File it - not ours, just this one.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="message-archive"><code>message.archive</code><a class="anchor" href="#message-archive" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="message-archive"><code>message.archive</code><a class="anchor" href="#message-archive" aria-label="Link to this section">#</a></h3>
 <p>Archive it: off the pipe and closed, nothing deleted.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="preference-exclude-sender"><code>preference.exclude_sender</code><a class="anchor" href="#preference-exclude-sender" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="preference-exclude-sender"><code>preference.exclude_sender</code><a class="anchor" href="#preference-exclude-sender" aria-label="Link to this section">#</a></h3>
 <p>Teach triage to file this sender or subject from now on - their mail still arrives (<code>scope</code>: sender | subject)</p>
 <ul>
 <li><code>scope</code> - sender | subject</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="preference-sender-rule"><code>preference.sender_rule</code><a class="anchor" href="#preference-sender-rule" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="preference-sender-rule"><code>preference.sender_rule</code><a class="anchor" href="#preference-sender-rule" aria-label="Link to this section">#</a></h3>
 <p>An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="message-retriage"><code>message.retriage</code><a class="anchor" href="#message-retriage" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="message-retriage"><code>message.retriage</code><a class="anchor" href="#message-retriage" aria-label="Link to this section">#</a></h3>
 <p>Triage reads the message on the table again - one it could not sort.</p>
-<p class="runs">Waits for your yes on a card.</p><h2 id="reports">Reports<a class="anchor" href="#reports" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="reports">Reports<a class="anchor" href="#reports" aria-label="Link to this section">#</a></h2>
 <p>Reports and workflows.</p>
 <h3 id="report-create"><code>report.create</code><a class="anchor" href="#report-create" aria-label="Link to this section">#</a></h3>
 <p>Create a scheduled report or workflow; the composer builds it from what the owner asked for.</p>
 <ul>
 <li><code>config</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="report-run"><code>report.run</code><a class="anchor" href="#report-run" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-run"><code>report.run</code><a class="anchor" href="#report-run" aria-label="Link to this section">#</a></h3>
 <p>Run a report or workflow now; a report lands in the pipe when done, a workflow starts as its task at once (the ref comes back)</p>
 <ul>
 <li><code>title</code> - or <code>source_id</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-rerun"><code>report.rerun</code><a class="anchor" href="#report-rerun" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-rerun"><code>report.rerun</code><a class="anchor" href="#report-rerun" aria-label="Link to this section">#</a></h3>
 <p>Run that report again.</p>
-<p class="runs">Waits for your yes on a card.</p><h3 id="report-pause"><code>report.pause</code><a class="anchor" href="#report-pause" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-pause"><code>report.pause</code><a class="anchor" href="#report-pause" aria-label="Link to this section">#</a></h3>
 <p>Stop a report or workflow running on its clock.</p>
 <ul>
 <li><code>title</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-resume"><code>report.resume</code><a class="anchor" href="#report-resume" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-resume"><code>report.resume</code><a class="anchor" href="#report-resume" aria-label="Link to this section">#</a></h3>
 <p>Put a paused report or workflow back on its clock.</p>
 <ul>
 <li><code>title</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-route"><code>report.route</code><a class="anchor" href="#report-route" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-route"><code>report.route</code><a class="anchor" href="#report-route" aria-label="Link to this section">#</a></h3>
 <p>Change where one line of a report&#39;s route card goes.</p>
 <ul>
 <li><code>line</code> - timeline | alert | send</li>
@@ -453,18 +453,18 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>when</code> - for ai: what to look for</li>
 <li><code>rule</code> - /<code>count</code>/<code>text</code> (for rule)</li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-edit"><code>report.edit</code><a class="anchor" href="#report-edit" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-edit"><code>report.edit</code><a class="anchor" href="#report-edit" aria-label="Link to this section">#</a></h3>
 <p>Change a report&#39;s configuration.</p>
 <ul>
 <li><code>config</code> - only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)</li>
 <li><code>title</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="report-delete"><code>report.delete</code><a class="anchor" href="#report-delete" aria-label="Link to this section">#</a></h3>
-<p>Delete a report or workflow for good; asks first.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="report-delete"><code>report.delete</code><a class="anchor" href="#report-delete" aria-label="Link to this section">#</a></h3>
+<p>Delete a report or workflow for good.</p>
 <ul>
 <li><code>title</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="app">App<a class="anchor" href="#app" aria-label="Link to this section">#</a></h2>
 <p>Settings, connections, roles, scripts and kept facts.</p>
 <h3 id="setting-set"><code>setting.set</code><a class="anchor" href="#setting-set" aria-label="Link to this section">#</a></h3>
 <p>Change one setting; the schema says what it takes.</p>
@@ -472,45 +472,45 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>setting</code> - its key, or <code>label</code>: part of its name</li>
 <li><code>value</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-create"><code>connection.create</code><a class="anchor" href="#connection-create" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="connection-create"><code>connection.create</code><a class="anchor" href="#connection-create" aria-label="Link to this section">#</a></h3>
 <p>Add a system Taskuary talks to; created OFF and never carrying a secret, which the owner gives on the card.</p>
 <ul>
 <li><code>type</code></li>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="role-apply"><code>role.apply</code><a class="anchor" href="#role-apply" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="role-apply"><code>role.apply</code><a class="anchor" href="#role-apply" aria-label="Link to this section">#</a></h3>
 <p>Set Taskuary up for the owner&#39;s job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner, one question at a time: the address of their bill-approval portal (<code>portal</code>; fine to leave out), and whether their own non-coding mail should go to that worker (<code>route_mail</code>: true or false - when they are only trying it out, false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.</p>
 <ul>
 <li><code>role</code> - ap (accounts payable)</li>
 <li><code>portal</code> (optional)</li>
 <li><code>route_mail</code> (optional) - true or false - when they are only trying it out</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="connection-test"><code>connection.test</code><a class="anchor" href="#connection-test" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="connection-test"><code>connection.test</code><a class="anchor" href="#connection-test" aria-label="Link to this section">#</a></h3>
 <p>Test a connection now and say what it answered.</p>
 <ul>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-pause"><code>connection.pause</code><a class="anchor" href="#connection-pause" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="connection-pause"><code>connection.pause</code><a class="anchor" href="#connection-pause" aria-label="Link to this section">#</a></h3>
 <p>Switch a connection off; nothing is deleted.</p>
 <ul>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="connection-resume"><code>connection.resume</code><a class="anchor" href="#connection-resume" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="connection-resume"><code>connection.resume</code><a class="anchor" href="#connection-resume" aria-label="Link to this section">#</a></h3>
 <p>Switch a connection back on.</p>
 <ul>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
-<p>Start a script by its name: walk me through my tasks | set up Taskuary | set up a report.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="script-start"><code>script.start</code><a class="anchor" href="#script-start" aria-label="Link to this section">#</a></h3>
+<p>Start a script by its name: walk me through my tasks | set up a report.</p>
 <ul>
 <li><code>name</code></li>
 </ul>
-<p class="runs">Runs at once, with an undo on the receipt.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="memory-remember"><code>memory.remember</code><a class="anchor" href="#memory-remember" aria-label="Link to this section">#</a></h3>
 <p>Keep a fact.</p>
 <ul>
 <li><code>note</code></li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
+<p class="runs">Brings up its button for you to press.</p><h3 id="hub-publish"><code>hub.publish</code><a class="anchor" href="#hub-publish" aria-label="Link to this section">#</a></h3>
 <p>Save to the company Hub. Only a reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it.</p>
 <ul>
 <li><code>title</code> - one durable claim</li>
@@ -519,7 +519,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>kind</code> (optional) - new_idea | technical_solve | howto | gotcha | decision | system | people</li>
 <li><code>why_earned</code> (optional)</li>
 </ul>
-<p class="runs">Waits for your yes on a card.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
+<p class="runs">Brings up its button for you to press.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
 <p>Look-ups - they run at once and change nothing.</p>
 <h3 id="task-read"><code>task.read</code><a class="anchor" href="#task-read" aria-label="Link to this section">#</a></h3>
 <p>Everything on one task - its summary, status, the messages on it, what agents said and did.</p>

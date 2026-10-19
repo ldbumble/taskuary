@@ -1,7 +1,9 @@
-"""The assistant runs the app by name (the acts pack, 2026-09-18): a report run, paused, resumed, re-aimed,
-edited or deleted; a setting set; a connection tested, paused, resumed; a script started - each proposed
-from a CALL the model names, resolved through appfacts, run at once when the tiers say so, and put back
-by the undo the receipt carries."""
+"""The assistant reaches the app by name (the acts pack, 2026-09-18): a report run, paused, resumed, re-aimed, edited or deleted; a
+setting set; a connection tested, paused, resumed; a script started - each named by a CALL and resolved through appfacts.
+
+On the desk each one opens the page that holds it, its knob or button to press (the owner, 2026-10-19: "the assistant again should just
+be a router ... like the assistant surfaces a settings ui"); a phone chat, which has no page, answers a proposal yes or no - and the
+handlers it runs are the same ones the pages' buttons run. Nothing carries an undo any more ("no take it back button. hate that")."""
 import json, unittest
 from unittest import mock
 
@@ -15,7 +17,37 @@ def call(kind, **params):
     return lambda system, user, max_tokens=None: f'On it.\n{line}'
 
 
+class DeskTests(unittest.TestCase):
+    """The desk: the page, opened beside the answer - nothing changed on the words."""
+    def setUp(self):
+        self.s = A.store(); self.sid = A.AR['sid']
+
+    def _turn(self, kind, **params): return concierge.say(self.s, 'do it', llm=call(kind, **params))
+
+    def test_a_report_act_opens_the_report(self):
+        for kind in ('report.run', 'report.pause', 'report.delete'):
+            out = self._turn(kind, title='ar report')
+            self.assertNotIn('proposal', out); self.assertEqual(out['open'], f'#report={self.sid}', kind)
+            self.assertIn('Monthly AR Report', out['say'])
+        self.assertTrue(self.s.get_source(self.sid)['Active'])                         # paused by nobody
+
+    def test_a_setting_opens_its_group_with_the_knob_named(self):
+        out = self._turn('setting.set', label='intent triage', value='off')
+        self.assertTrue(out['open'].startswith('#settings=config&group=How%20mail%20is%20sorted&key=intent_classify_enabled'), out['open'])
+        self.assertIn('Intent triage', out['say']); self.assertNotEqual(self.s.get_settings()['intent_classify_enabled'], '0')
+
+    def test_a_connection_opens_its_card(self):
+        out = self._turn('connection.pause', name='alex mailbox')
+        self.assertEqual(out['open'], '#connector=outlook'); self.assertIn('switch it off', out['say'])
+
+    def test_a_script_is_a_road_not_a_proposal(self):
+        out = self._turn('script.start', name='set up a report')
+        self.assertEqual(out['new']['kind'], 'report')
+        self.assertIsNone(self._turn('script.start', name='set up taskuary').get('proposal'))   # setup is the Setup button, no script
+
+
 class ActsTests(unittest.TestCase):
+    """The phone's road: the proposal and the handler it runs on the yes."""
     def setUp(self):
         self.s = A.store()
         self.patch = mock.patch.object(server, 'store', self.s); self.patch.start()
@@ -23,21 +55,19 @@ class ActsTests(unittest.TestCase):
     def tearDown(self): self.patch.stop()
 
     def _turn(self, kind, **params):
-        return concierge.say(self.s, 'do it', llm=call(kind, **params))
+        with concierge.delivering(concierge.PHONE): return concierge.say(self.s, 'do it', llm=call(kind, **params))
 
-    def test_the_kinds_are_in_the_registry_and_the_catalogue_with_their_tiers(self):
+    def test_the_kinds_are_in_the_registry_and_the_catalogue(self):
         b = toolcatalog.block()
         for k in ('report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'report.delete',
                   'setting.set', 'connection.test', 'connection.pause', 'connection.resume', 'script.start'):
             self.assertIn(k, operations.KINDS); self.assertIn(k, b)
-        for k in ('report.run', 'setting.set', 'connection.pause', 'script.start'): self.assertTrue(toolcatalog.is_instant(k), k)
-        self.assertFalse(toolcatalog.is_instant('report.delete'))                     # deleting asks first
         self.assertEqual(toolcatalog.valid('setting.set', {'setting': 'poll_minutes'}), 'setting.set needs value')
 
-    def test_a_report_named_by_part_of_its_title_is_proposed_on_its_own_id_and_runs_at_once(self):
+    def test_a_report_named_by_part_of_its_title_is_proposed_on_its_own_id_and_waits_for_the_yes(self):
         out = self._turn('report.run', title='ar report')
         prop = out['proposal']
-        self.assertEqual((prop['kind'], prop['target'], prop.get('auto')), ('report.run', self.sid, True))
+        self.assertEqual((prop['kind'], prop['target'], prop.get('auto')), ('report.run', self.sid, None))
         self.assertIn('Monthly AR Report', out['say'])
         lands = 'Its result shows under Reports when it is done. If it fails, the bell says why.'
         with mock.patch.object(server, '_rerun_report', return_value={'queued': True, 'lands': lands}) as rr:
@@ -61,46 +91,39 @@ class ActsTests(unittest.TestCase):
                             'CALL: ' + json.dumps({'kind': 'reports.list', 'params': {}}),
                             'Pausing it.\nCALL: ' + json.dumps({'kind': 'report.pause', 'params': {'title': 'Monthly AR Report'}})]), []
         def brain(system, user, max_tokens=None): seen.append(user); return next(turns)
-        out = concierge.say(self.s, 'stop the morning money report', llm=brain)
+        with concierge.delivering(concierge.PHONE): out = concierge.say(self.s, 'stop the morning money report', llm=brain)
         self.assertEqual(out['proposal']['kind'], 'report.pause')
         self.assertIn('No report by that name', seen[1])                   # the model was told...
         self.assertNotIn('No report by that name', out['say'])             # ...the owner was not
 
-    def test_pause_and_resume_flip_the_clock_and_the_receipt_carries_the_undo(self):
+    def test_pause_and_resume_flip_the_clock_and_the_receipt_says_so_with_no_undo(self):
         done = concierge.run_proposal(self.s, self._turn('report.pause', title='ar report')['proposal'])
         self.assertFalse(self.s.get_source(self.sid)['Active'])
-        self.assertEqual(done['outcome']['undo']['kind'], 'report.resume')
         line = concierge.receipt(self.s, done)
-        self.assertIn('off its clock', line); self.assertIn('Undo: Resume Monthly AR Report', line)
-        # ...and "undo" from a phone puts it back, once
-        self.assertIn('back on its clock', concierge.undo_last(self.s))
+        self.assertIn('off its clock', line); self.assertNotIn('Undo', line); self.assertNotIn('undo', done['outcome'])
+        concierge.run_proposal(self.s, self._turn('report.resume', title='ar report')['proposal'])
         self.assertTrue(self.s.get_source(self.sid)['Active'])
-        self.assertIn('Nothing to undo', concierge.undo_last(self.s))
+        self.assertFalse(hasattr(concierge, 'undo_last'))
 
-    def test_route_and_edit_change_the_config_and_can_be_put_back(self):
+    def test_route_and_edit_change_the_config(self):
         """The Assistant edits the same route card the Reports page does - one line at a time (2026-09-27)."""
-        done = concierge.run_proposal(self.s, self._turn('report.route', title='ar report', line='timeline', how='ai',
-                                                         when='an invoice is over 90 days')['proposal'])
+        concierge.run_proposal(self.s, self._turn('report.route', title='ar report', line='timeline', how='ai', when='an invoice is over 90 days')['proposal'])
         cfg = json.loads(self.s.get_source(self.sid)['ConfigJson'])
         self.assertEqual(cfg['route']['timeline'], {'how': 'ai', 'when': 'an invoice is over 90 days'})
-        self.assertEqual(done['outcome']['undo']['params'], {'line': 'timeline', 'how': 'always'})
         self.assertIsNone(self._turn('report.route', title='ar report', line='timeline', how='sometimes').get('proposal'))   # not a way a line goes
-        done = concierge.run_proposal(self.s, self._turn('report.edit', title='ar report', config={'daily_at': '08:30'})['proposal'])
+        concierge.run_proposal(self.s, self._turn('report.edit', title='ar report', config={'daily_at': '08:30'})['proposal'])
         self.assertEqual(json.loads(self.s.get_source(self.sid)['ConfigJson'])['daily_at'], '08:30')
-        self.assertEqual(done['outcome']['undo']['params'], {'config': {'daily_at': '07:00'}})
 
-    def test_delete_asks_first_and_then_deletes(self):
+    def test_delete_waits_for_the_yes_and_then_deletes(self):
         out = self._turn('report.delete', title='ar report')
-        self.assertFalse(out['proposal'].get('auto')); self.assertIn('confirm below', out['say'])
+        self.assertFalse(out['proposal'].get('auto')); self.assertIn(concierge.WAITS, out['say'])
         concierge.run_proposal(self.s, out['proposal'])
         self.assertIsNone(self.s.get_source(self.sid))
 
-    def test_a_setting_by_label_is_validated_against_the_schema_and_undone_to_its_old_value(self):
+    def test_a_setting_by_label_is_validated_against_the_schema(self):
         done = concierge.run_proposal(self.s, self._turn('setting.set', label='intent triage', value='off')['proposal'])
         self.assertEqual(self.s.get_settings()['intent_classify_enabled'], '0')
-        self.assertEqual(done['outcome']['undo']['params'], {'setting': 'intent_classify_enabled', 'value': '1'})
-        line = concierge.receipt(self.s, done)
-        self.assertIn('Intent triage (How mail is sorted): off', line); self.assertIn('Undo: Put Intent triage back to on', line)
+        self.assertIn('Intent triage (How mail is sorted): off', concierge.receipt(self.s, done))
         bad = concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='often')['proposal'])
         self.assertEqual(bad['status'], 'error'); self.assertIn('takes a number', bad['error'])
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
@@ -112,8 +135,8 @@ class ActsTests(unittest.TestCase):
 
     def test_connections_pause_resume_and_test(self):
         cid = next(c['connector_id'] for c in __import__('taskuary.appfacts', fromlist=['x']).connections(self.s) if c['name'] == 'Alex mailbox')
-        done = concierge.run_proposal(self.s, self._turn('connection.pause', name='alex mailbox')['proposal'])
-        self.assertFalse(self.s.get_connector(cid)['Active']); self.assertEqual(done['outcome']['undo']['kind'], 'connection.resume')
+        concierge.run_proposal(self.s, self._turn('connection.pause', name='alex mailbox')['proposal'])
+        self.assertFalse(self.s.get_connector(cid)['Active'])
         concierge.run_proposal(self.s, self._turn('connection.resume', name='alex mailbox')['proposal'])
         self.assertTrue(self.s.get_connector(cid)['Active'])
         with mock.patch('taskuary.channels.test_connector', return_value={'ok': True, 'detail': 'signed in as Alex'}):
@@ -121,9 +144,10 @@ class ActsTests(unittest.TestCase):
         self.assertIn('answered: signed in as Alex', concierge.receipt(self.s, done))
 
     def test_a_script_is_named_and_the_outcome_says_which(self):
-        done = concierge.run_proposal(self.s, self._turn('script.start', name='set up taskuary')['proposal'])
-        self.assertEqual(done['outcome']['script'], 'set up Taskuary')
+        done = concierge.run_proposal(self.s, self._turn('script.start', name='set up a report')['proposal'])
+        self.assertEqual(done['outcome']['script'], 'set up a report')
         self.assertIsNone(self._turn('script.start', name='dance').get('proposal'))
+        self.assertIsNone(self._turn('script.start', name='set up taskuary').get('proposal'))     # setup is the Setup button now
 
     def test_a_run_asked_from_a_chat_reports_back_to_that_chat(self):
         from taskuary import remote_assistant
@@ -142,30 +166,26 @@ class ActsTests(unittest.TestCase):
         self.assertFalse(hasattr(concierge, 'SWITCH_ASKS')); self.assertFalse(hasattr(concierge, 'switch_ask'))
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class AuditAndPhoneTests(unittest.TestCase):
     def setUp(self):
         self.s = A.store()
         self.patch = mock.patch.object(server, 'store', self.s); self.patch.start()
     def tearDown(self): self.patch.stop()
 
-    def test_what_the_assistant_changed_is_listed_with_the_undo_still_on_offer(self):
+    def test_what_the_assistant_changed_is_listed_as_a_record(self):
         from fastapi.testclient import TestClient
-        done = concierge.run_proposal(self.s, concierge.say(self.s, 'x', llm=call('setting.set', label='intent triage', value='off'))['proposal'])
-        concierge.receipt(self.s, done)
-        c = TestClient(server.app)
-        j = c.get('/api/audit/assistant').json()
+        with concierge.delivering(concierge.PHONE):
+            prop = concierge.say(self.s, 'x', llm=call('setting.set', label='intent triage', value='off'))['proposal']
+        concierge.receipt(self.s, concierge.run_proposal(self.s, prop))
+        j = TestClient(server.app).get('/api/audit/assistant').json()
         self.assertEqual(j['data'][0]['entity'], 'setting'); self.assertEqual(j['data'][0]['detail']['to'], '0')
-        self.assertTrue(j['undo'] and j['undo']['id'])
-        r = c.post(f"/api/operations/{j['undo']['id']}/execute", json={'version': j['undo']['version']}).json()
-        self.assertEqual(r['status'], 'done'); self.assertEqual(self.s.get_settings()['intent_classify_enabled'], '1')
-        self.assertIsNone(c.get('/api/audit/assistant').json()['undo'])            # once
+        self.assertNotIn('undo', j)
 
-    def test_set_up_from_a_phone_opens_on_the_connections(self):
+    def test_setting_taskuary_up_from_a_phone_names_the_setup_button(self):
         from taskuary import remote_assistant
-        words = remote_assistant.script_words(self.s, 'set up Taskuary')
-        self.assertIn('what is connected', words); self.assertIn('Alex mailbox (outlook)', words); self.assertIn('catalogue, off', words)
+        self.assertIn('Setup button', remote_assistant.script_words(self.s, 'set up Taskuary'))
         self.assertIn('sentence', remote_assistant.script_words(self.s, 'set up a report'))
+
+
+if __name__ == '__main__':
+    unittest.main()

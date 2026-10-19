@@ -225,7 +225,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   useEffect(() => { load(); }, [load, task.UpdatedAt]);
   const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
   // EVERY PRESS LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the step doors are the task tools' own road (taskOps.runOperation) -
-  // recorded, said in the chat when this goal is on the Assistant's table, and each with its Take it back
+  // recorded, and said in the chat when this goal is on the Assistant's table
   const [stepErr, setStepErr] = useState("");
   const op = async (kind, params, fallback) => {
     setStepErr("");
@@ -454,8 +454,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
-  // who holds it run down the operations road, so each is recorded, said in the chat when the task is on the Assistant's table, and
-  // offered back there (server._task_undo)
+  // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table
   const change = async (kind, params) => {
     try { await runOperation(api, kind, selected, params); } catch (e) { setErr(opError(e, "That change didn't go through - pick it again.")); }
     loadDetail(selected); loadTasks(); onChanged?.();
@@ -1591,7 +1590,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             {fromWorkflow.link && <Link href={fromWorkflow.link} underline="hover" sx={{ fontSize: 12, flexShrink: 0 }}>Open the workflow</Link>}
                             {fromWorkflow.steps && <Box data-tq-workflow-steps="" sx={{ flexBasis: "100%", borderTop: `1px solid ${BORDER}`, pt: 0.75, mt: 0.25, minWidth: 0 }}>
                               {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
-                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs} sourceId={fromWorkflow.sourceId} runId={fromWorkflow.runId}
+                              <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
                                 onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
                                   ? () => { window.location.hash = `report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`; } : null} /></Box>}
                           </Box>

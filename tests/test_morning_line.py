@@ -1,6 +1,6 @@
 """The doorway opens itself once a day (the assistant-runs-the-app design, 2026-09-18): one line to the
-assistant's own chat with what is waiting and the three scripts as numbered options - and a script named
-in so many words runs with no model at all."""
+assistant's own chat with what is waiting and the two scripts as numbered options - and a script named
+in so many words runs with no model at all. Setting Taskuary up is no script: it is the desk's Setup button (the owner, 2026-10-19)."""
 import json, unittest
 from datetime import datetime
 from unittest import mock
@@ -31,7 +31,7 @@ class MorningLineTests(unittest.TestCase):
         with self._pile(7): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
         self.assertEqual(self.sent, [])
 
-    def test_one_line_a_day_with_the_three_scripts_numbered_and_set_up_always_there(self):
+    def test_one_line_a_day_with_the_two_scripts_numbered(self):
         with self._pile(7):
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 1)
             self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 12, 0)), 0)      # never twice in a day
@@ -39,9 +39,9 @@ class MorningLineTests(unittest.TestCase):
         # the desktop's opener, in words: the count, then who wants what (2026-09-23)
         self.assertIn('7 things: 1 on you, 6 FYI.', text)     # the rail's own bands (2026-10-02)
         self.assertIn('ON YOU · 1', text); self.assertIn('FYI · 6', text)
-        self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Set up Taskuary', text); self.assertIn('3 · Set up a report', text)
+        self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Set up a report', text); self.assertNotIn('Set up Taskuary', text)
         # the numbers are remembered against the chat, so "2" is the words
-        self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Set up Taskuary', True))
+        self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Set up a report', True))
 
     def test_quiet_when_the_pipe_is_empty_before_six_or_switched_off(self):
         with self._pile(0): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)
@@ -54,10 +54,10 @@ class MorningLineTests(unittest.TestCase):
         """A number (or a poll tap) runs the script with no model; typed, "set up" is words like any other (2026-09-25:
         "No hard coded anything... Only if you type 1 or hit poll that's clicking a pill")."""
         self.assertFalse(hasattr(ra, 'script_direct'))
-        self.assertIn('what is connected', ra.run_act(self.s, {'t': 'script', 'script': 'set up Taskuary'}, None))
+        self.assertIn('Setup button', ra.run_act(self.s, {'t': 'script', 'script': 'set up Taskuary'}, None))      # an old pick says where it is
         self.assertIn('sentence', ra.run_act(self.s, {'t': 'script', 'script': 'set up a report'}, None))
         # ...and the sidebar's browse picks after them (the canvas redesign, 2026-09-29; Reports and Hub 2026-09-30)
-        self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up Taskuary', 'Set up a report', 'Connections', 'Reports', 'Hub', 'Settings'])
+        self.assertEqual([t for t, _ in ra.SCRIPT_LINES], ['Walk me through my tasks', 'Set up a report', 'Connections', 'Reports', 'Hub', 'Settings'])
 
 
 class NeverIntoAConversationTests(unittest.TestCase):

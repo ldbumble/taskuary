@@ -33,7 +33,7 @@ test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, 
   assert.match(av, /\{!firstRun && shown\.map/);
   assert.match(av, /className="tq-compose-box" style=\{firstRun \? \{ display: "none" \} : undefined\}/);
   assert.match(av, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current \}\)/);
-  assert.match(av, /const shownAdvice = table\.speaks \? adviceShown/);
+  assert.match(av, /const shownAdvice = table\.speaks && !litNow \? adviceShown/);
   assert.match(read("FeedView.jsx"), /display: setupMode \? "none" : "flex"/);
 });
 

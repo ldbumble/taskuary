@@ -13,10 +13,8 @@ from . import settings_schema
 
 # the deterministic roads, by the names the owner says (spec: "Scripts"). Static on purpose: a script
 # is the same every time and needs no model, so its name and its promise are shipped, not computed.
+# (setting Taskuary up is the Setup button at the top, never a script the chat starts - the owner, 2026-10-19)
 SCRIPTS = [('walk me through my tasks', 'Next through the pile, one item at a time - the core'),
-           # setup mode, not a tour: read as "opens on your connections" the chat answered it by opening Connections (2026-10-16)
-           ('set up Taskuary', 'setup mode - your AI, your email, a few questions about your work, more connections; '
-                               'in the app it opens setup itself, from a phone chat it lists what is connected'),
            ('set up a report', 'describe a check or a workflow in your words and the composer builds it')]
 
 

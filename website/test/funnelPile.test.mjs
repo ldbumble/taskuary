@@ -221,7 +221,7 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply
   // draft) run on the decision; everything else arrives as a proposal card whose button submits the
   // structured proposal by id and version to the shared execute road
-  assert.match(view, /if \(!prop && data\.decision\) await decide\(data\.decision, data\)/);
+  assert.match(view, /if \(data\.decision\) await decide\(data\.decision, data\)/);
   assert.match(view, /\/api\/operations\/\$\{p\.id\}\/execute`, \{ version: p\.version \}/);
   assert.doesNotMatch(view, /dispatch`, \{ kind: "coding"/);                       // no verb is carried out from the chat itself
   assert.doesNotMatch(view, /tq-quick/);                  // nothing sits over the composer any more

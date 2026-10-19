@@ -744,14 +744,14 @@ def _repair_now(store, src, cfg, tid, rid, stop, recs, llm, repairs):
         try: d = apply(store, sid, out['flow'], 'workflow', out['why'])
         except Exception as e:
             store.add_comment(tid, 'workflow', 'agent', f'The repair could not be kept: {e}'); return False
-        # THE RECEIPT CARRIES ITS UNDO, the shape every instant change hands back (remind.set_reminder): the steps it replaced
-        undo = {'kind': 'report.edit', 'target': sid, 'params': {'config': {'flow': was}}, 'label': buttons.label('take_back')}
+        # THE RECEIPT SAYS WHAT IT CHANGED - the steps it replaced are kept on the run; no Take it back (the owner, 2026-10-19: "no take it back
+        # button. hate that"): a repair the owner does not want is changed back in the step editor, like any step
         repairs.append({'at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'step': bad.get('id'), 'label': bad.get('label'),
-                        'error': bad.get('error'), 'why': out['why'], 'diff': d, 'was': was, 'now': out['flow'], 'undone': False, 'undo': undo})
+                        'error': bad.get('error'), 'why': out['why'], 'diff': d, 'was': was, 'now': out['flow']})
         store.set_report_run_repairs(rid, repairs)
         store.add_comment(tid, 'taskuary', 'agent', f"Fixed itself: {bad.get('error')} - {out['why']}\n"
                                                      f"Step {stop + 1} ({bad.get('label')}), the goal unchanged:\n{diff_text(d)}\n"
-                                                     f"Running it again. {undo['label']} on the run puts the previous steps back.")
+                                                     "Running it again.")
         return True
     from . import proposals
     reason = ('it would change the goal' if not out['same_goal']
@@ -760,22 +760,3 @@ def _repair_now(store, src, cfg, tid, rid, stop, recs, llm, repairs):
     p = proposals.queue(store, tid, {'action': 'repair_workflow', 'source_id': sid, 'flow': out['flow'], 'why': f"{out['why']} (Asking first: {reason}.)",
                                      'changes': diff_text(out['diff']), 'was': steps_of(cfg), 'flow_run': {'source_id': sid, 'run_id': rid, 'step': bad.get('id')}}, 'workflow')
     return 'proposed' if p else False
-
-
-def undo(store, sid: int, run_id: int, actor: str) -> dict:
-    """Put back the steps a self-repair replaced - only while the workflow still has the repaired steps, so an undo never throws
-    away a change made after it."""
-    from . import workflows
-    run = store.get_report_run(int(run_id))
-    if not run or run.get('sourceId') != int(sid): raise LookupError('that run is not one of this workflow\'s')
-    reps = run.get('repairs') or []
-    i = next((n for n in range(len(reps) - 1, -1, -1) if not reps[n].get('undone')), None)
-    if i is None: raise ValueError('there is no repair on that run to undo')
-    src = store.get_source(int(sid))
-    if not src: raise LookupError('that workflow is gone')
-    if steps_of(workflows.cfg_of(src)) != reps[i]['now']: raise ValueError('the steps have changed since that repair - undo it by hand')
-    d = apply(store, sid, reps[i]['was'], actor, f"undo the repair of {reps[i].get('label')}")
-    reps[i]['undone'] = True
-    store.set_report_run_repairs(run['runId'], reps)
-    if run.get('taskId'): store.add_comment(run['taskId'], actor, 'human', f"Undid the repair of {reps[i].get('label')} - the previous steps are back.")
-    return {'flow': reps[i]['was'], 'diff': d, 'repairs': reps}

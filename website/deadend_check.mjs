@@ -26,7 +26,9 @@
 //   WAYOUT    a forced failure whose screen has no button from the list that gets past it, or whose way out does nothing
 //   LIVE      a cancelled or failed proposal card that still offers its buttons
 //   FOLD      a task folded by its X that its folded line or its rail row cannot open again
-//   UNDO      a receipt that says it can be undone ("Undo: ...") with no Take it back to press under it
+//   UNDO      a Take it back or Undo anywhere - the row, the chat, the card - or a line saying "Undo:" or "confirm below" (the owner,
+//             2026-10-19: "no take it back button. hate that" - a wrong Mark done is put right with Reopen task)
+//   ONCE      one act, two receipt lines: Remind me's receipt printed by the page and again by the server (2026-10-19 UI walk)
 //   STILL     the Advisor's line landing moved a button on the row - the advice only tints (2026-10-19: Send pushed in, Attach into ▾)
 //   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
@@ -80,7 +82,7 @@ const WALK_SKIP = {
   "retriage": "asks the AI to sort it again - no AI in either world",
   "share": "opens Send out results - mailing someone is refused in the demo",
   "try_again": "repeats a failed press - pressed in the faults pass only where the failure says a retry could work",
-  "take_back": "a receipt's undo - pressed in the faults pass on a Remind me receipt",
+  "walk_here": "brings the walk back from a phone chat - neither world hands the walk to one",
   "new_task": "the idle chips' New task opens the New sheet - walked by the browser New tests",
   "new_task:fix": "offered by the Advisor on a failure nothing fixes - the walk has no AI to offer it",
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
@@ -227,7 +229,9 @@ const look = (page) => page.evaluate(() => {
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
   return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
-    undoSaid: tail.some((m) => /Undo: /.test(m.innerText || "")),
+    undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
+    undoBtns: [...document.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim()).filter((w) => /^(take it back|undo\b)/i.test(w)),
+    away: tail.filter((m) => /Away until /.test(m.innerText || "")).length,
     chatBtns: tail.flatMap((m) => [...m.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim())),
     nmsg: msgs.length, last: (msgs[msgs.length - 1]?.innerText || "").slice(0, 200), url: location.href, focus: document.activeElement?.tagName || "",
     folded: [...document.querySelectorAll("[data-tq-folded]")].filter(vis).map((e) => e.getAttribute("data-tq-folded")),
@@ -249,7 +253,8 @@ const judge = (s, at) => {
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))
     note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);
   for (const w of JARGON) { const m = s.read.match(w); if (m) note("WORDS", at, `"${m[0]}" in "${s.read.slice(Math.max(0, m.index - 40), m.index + 60).replace(/\s+/g, " ")}"`); }
-  if (s.undoSaid && !s.chatBtns.includes(label("take_back"))) note("UNDO", at, `a receipt offers an undo and no "${label("take_back")}" is drawn under it`);
+  if (s.undoBtns.length) note("UNDO", at, `"${s.undoBtns[0]}" is on the screen - nothing offers to take an act back`);
+  if (s.undoSaid) note("UNDO", at, "a line says an act can be undone, or to confirm below");
   const odd = [...new Set(s.verbs.filter((v) => !named(v.word, v.id)).map((v) => v.word))];
   if (odd.length) note("NAMES", at, `on the row but on no list of buttons: ${JSON.stringify(odd)}`);
 };
@@ -514,23 +519,18 @@ async function faults() {
     } else note("WAYOUT", page.step, `the closed task's card shows no ${label("defer")}`);
     page.expect.delete("/remind"); page.expect.delete("/execute");
   }
-  // an act that can be undone: Remind me on an open task - its receipt must carry Take it back, and pressing it must put it back
-  page.step = "faults undo"; await fresh();
+  // one act, one receipt: Remind me on an open task leaves ONE line saying where it went - after the chat's own read too - and no Take it
+  // back anywhere (judge's UNDO); a day picked wrong is picked again
+  page.step = "faults once"; await fresh();
   if (await openItem(page, (x) => /📋/.test(x.text)) && (await pressVerb(page, "defer"))) {
     await wait(1500);
     const day = (await page.$$(".MuiPopover-paper button"))[0];
     if (day) {
       await day.click(); await wait(4500);
+      judge(await look(page), page.step);
+      await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await wait(3000);     // the chat reads the server's lines again
       const s = await look(page); judge(s, page.step);
-      const tb = label("take_back");
-      if (!s.verbs.some((v) => v.word === tb) && !s.chatBtns.includes(tb)) note("UNDO", page.step, `${label("defer")}'s receipt offers no "${tb}" on the bar or under it`);
-      else {
-        const before = sig(s);
-        if ((await pressVerb(page, "take_back")) || (await clickText(page, tb, ".tq-chat-body") && (mark("take_back", page.step), true))) {
-          await wait(4000);
-          if (sig(await look(page)) === before) note("WAYOUT", page.step, `"${tb}" changed nothing`);
-        }
-      }
+      if (s.away !== 1) note("ONCE", page.step, `${label("defer")} left ${s.away} receipt lines in the chat, not one`);
     }
   }
   await page.close(); srv.stop();

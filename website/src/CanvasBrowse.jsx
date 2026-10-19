@@ -119,7 +119,9 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
   // NEW is the one area that starts something: the card is the sheet's own form, in the conversation, and closing it
   // takes the line away (an earlier browse card folds to its title; this one has nothing left to read once it is closed)
   if (area === "new") return (
-    <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet inline open onClose={onClose} onOpenTask={onOpenTask} /></Box>
+    // ...written up by the Assistant when a typed ask was new work (concierge._new): its tab and its words, its own button to press
+    <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet key={`${state?.kind || ""}|${state?.text || ""}`} inline open onClose={onClose}
+      onOpenTask={onOpenTask} initialKind={state?.kind || "send"} initialHow={state?.how || ""} initialText={state?.text || ""} /></Box>
   );
   return (
     <Box data-tq-browse={area}>

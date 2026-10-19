@@ -1,6 +1,7 @@
 """Typed words in the Assistant, after the owner's rulings on the 2026-10-01 press audit:
 
-1. typed words never start an agent without the owner's yes - the assistant proposes, he presses;
+1. typed words never start an agent without the owner's press - the assistant lights the button, or writes the job up in New,
+   and he presses it (the owner, 2026-10-19: "for hand this to coding agent match buttons");
 2. the assistant only offers or runs actions that are real buttons for the item on the table - "what is this about?"
    over a report came back as a "File it" card, and File it is not a button a report has;
 3. a typed question reads the item on the table first, another task when the words name one, and a search when they
@@ -35,26 +36,26 @@ def tasks(s): return len(s.list_tasks())
 
 
 class TypedWordsNeverStartAnAgent(unittest.TestCase):
-    def test_an_agent_asked_for_over_an_idea_is_a_card_the_owner_presses(self):
+    def test_an_agent_asked_for_over_an_idea_is_new_work_the_owner_starts(self):
         s = T.store()
         s.upsert_agent('researcher', 'research', 'cli', json.dumps({'cmd': 'claude'}))
         item, before = an_idea(s), tasks(s)
         llm, _ = scripted('I would have it researched.\n' + call('regular_agent', text='review the Payworth seat count', **{'as': 'researcher'}))
-        p = ask(s, 'what should I do next?', item['key'], llm).get('proposal')
-        self.assertIsNotNone(p)
-        self.assertFalse(p.get('auto'), 'typed words started an agent with no yes')
+        out = ask(s, 'what should I do next?', item['key'], llm)
+        self.assertNotIn('proposal', out)
+        self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'general'))      # New, written up: its Send to agent starts it
         self.assertEqual(tasks(s), before)
 
-    def test_a_new_hand_off_with_a_named_checkout_still_waits_for_the_yes(self):
+    def test_a_new_hand_off_with_a_named_checkout_still_waits_for_the_press(self):
         s = T.store()
         s.save_doc('soul', '# SOUL.md\n## Repository map\n- **northwind/ledger**: the ledger app\n', 'owner')
         s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd_map': {'northwind/ledger': 'C:/x/ledger'}}))
         llm, _ = scripted('CALL: ' + json.dumps({'kind': 'task.create_from_text', 'params': {'kind': 'coding', 'text': 'fix the login crash', 'repo': 'ledger'}}))
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            p = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm).get('proposal')
-        self.assertIsNotNone(p)
-        self.assertFalse(p.get('auto'))
-        self.assertNotIn('Starting', p['say'])
+            out = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm)
+        self.assertNotIn('proposal', out)
+        self.assertEqual(out['new'], {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash'})
+        self.assertNotIn('Starting', out['say'])
 
     def test_continue_session_in_words_is_a_card_but_the_button_still_runs_at_once(self):
         self.assertIn('continue', concierge.AGENT_STARTS)
@@ -82,8 +83,8 @@ class OnlyRealButtons(unittest.TestCase):
         s, a, b, item = two_tasks()
         item = dict(item)
         llm, _ = scripted(call('not_ours'))
-        p = ask(s, 'not ours', item['key'], llm).get('proposal')
-        self.assertIsNotNone(p, 'Not ours is a button on a mail that asks for something')
+        out = ask(s, 'not ours', item['key'], llm)
+        self.assertEqual(out['light']['verb'], 'not_ours', 'Not ours is a button on a mail that asks for something - lit, not run')
 
 
 class ANamedTaskIsFound(unittest.TestCase):

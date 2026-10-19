@@ -5,29 +5,29 @@ import { fileURLToPath } from "node:url";
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-// The acts pack (2026-09-18): the chat assistant runs the app by name, and what it changed is on the
-// Settings page with an undo beside it; a script started by name opens its road on the desktop.
-test("the Settings page lists what the assistant changed and offers the undo", () => {
+// The acts pack (2026-09-18) made the chat run the app by name, with an undo on Settings. The owner, 2026-10-19: "no take it back button.
+// hate that. the assistant again should just be a router" - what the assistant changed is still listed there, as a record, and a typed
+// act brings up its page or its button (concierge._route); setting Taskuary up is the Setup button, never a script.
+test("the Settings page lists what the assistant changed, with no undo", () => {
   const view = read("../src/SettingsView.jsx");
   assert.match(view, /api\.get\("\/api\/audit\/assistant"/);
   assert.match(view, /<AssistantChanges \/>/);
   assert.match(view, /What the assistant changed/);
-  assert.match(view, /api\.post\(`\/api\/operations\/\$\{undo\.id\}\/execute`, \{ version: undo\.version \}\)/, "the undo is the same execute road as any proposal");
+  assert.doesNotMatch(view, /Undo the last change|\/api\/operations\/\$\{undo\.id\}/);
   const server = read("../../taskuary/server.py");
   assert.match(server, /@app\.get\('\/api\/audit\/assistant'\)/);
+  assert.doesNotMatch(server, /assistant_last_undo/);
 });
 
-test("a script started by name opens its road: the walk's Next, the set-up tour, or the composer", () => {
-  const view = read("../src/AssistantView.jsx");
-  const at = view.indexOf("const script = res?.outcome?.script;");
-  assert.notEqual(at, -1);
-  const block = view.slice(at, at + 400);
-  assert.match(block, /advance\(\)/); assert.match(block, /await setup\(\)/); assert.match(block, /askSetup\(\)/);
+test("no script sets Taskuary up from the chat: setup is the Setup button at the top", () => {
+  assert.doesNotMatch(read("../src/AssistantView.jsx"), /set up taskuary\/i\.test/);
+  assert.doesNotMatch(read("../../taskuary/appfacts.py"), /'set up Taskuary'/);
+  assert.match(read("../../taskuary/toolcatalog.py"), /'script\.start': +'start a script by its name: walk me through my tasks \| set up a report'/);
 });
 
-test("the instant tiers are one set the catalogue and the receipts both read", () => {
+test("nothing the chat names runs at once: each tool is the button the owner presses", () => {
   const cat = read("../../taskuary/toolcatalog.py");
-  assert.match(cat, /INSTANT = frozenset\(\{/);
-  for (const k of ["report.run", "setting.set", "connection.pause", "script.start"]) assert.ok(cat.includes(`'${k}'`), k);
-  assert.doesNotMatch(cat.slice(cat.indexOf("INSTANT = frozenset"), cat.indexOf("def is_instant")), /report\.delete/, "deleting asks first");
+  assert.doesNotMatch(cat, /def is_instant|with an undo/);
+  assert.match(read("../../taskuary/concierge.py"), /def _route\(store/);
 });
+

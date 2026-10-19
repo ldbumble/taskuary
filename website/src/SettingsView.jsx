@@ -3,7 +3,7 @@
 // swap the page out, so a knob two sections down is one scroll away rather than a tab hunt.
 // Search reaches EVERYTHING (knobs, rules, memory, help text, the section names themselves)
 // and lands you on the same anchor, under the same path the rail shows.
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import {
@@ -392,6 +392,14 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
+  // ...the asked knob in view once the rows are in, once per knob - never again while the owner works on the page
+  const knobShown = useRef("");
+  useEffect(() => {
+    const k = only?.knob || "";
+    if (!k || knobShown.current === k || !settings.some((x) => x.Name === k)) return;
+    knobShown.current = k;
+    setTimeout(() => document.querySelector(`[data-tq-knob="${k}"]`)?.scrollIntoView?.({ block: "center" }), 0);
+  }, [only?.knob, settings]);
   const [memory, setMemory] = useState([]);
   const [newNote, setNewNote] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -706,9 +714,13 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
       // so React would remount every row and the box you are typing in would lose the caret.
       const knobRow = (s) => {
         const m = meta(s.Name);
+        // THE KNOB THE ASSISTANT BROUGHT THE PAGE UP FOR (#settings=config&group=..&key=..): outlined and scrolled into view - the setting's
+        // own control is the button to press (the owner, 2026-10-19: "like the assistant surfaces a settings ui")
+        const asked = only?.knob === s.Name;
         return (
-          <Box key={s.Name} sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
-            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}` }}>
+          <Box key={s.Name} data-tq-knob={s.Name} {...(asked ? { "data-tq-asked": "" } : {})}
+            sx={{ display: "flex", alignItems: { xs: "stretch", sm: "center" }, flexDirection: { xs: "column", sm: "row" },
+            gap: { xs: 1, sm: 3 }, py: 2.5, borderBottom: `1px solid ${BORDER}`, ...(asked ? { outline: "2px solid #6f8a6e", outlineOffset: 4, borderRadius: 1 } : {}) }}>
             <Box sx={{ flex: 1, minWidth: 0, cursor: m.help ? "pointer" : "default" }}
               onClick={() => m.help && setHelp({ title: m.label, body: m.help })}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5, display: "flex", alignItems: "center", gap: 0.75 }}>
@@ -1190,14 +1202,14 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 17, color: FAINT }} /></InputAdornment> }}
           sx={{ mt: 1.5, bgcolor: "#fff", borderRadius: 2 }} />
       ),
-      // what the assistant changed here, and the way to undo it - the tab drew it over Configuration
+      // what the assistant changed here - the tab drew it over Configuration
       tools: section === "config" && !open && !needle ? <Box sx={{ mt: 1.5 }}><AssistantChanges /></Box>
         // the shelf's profiles and playbooks come from DocsView's own reads - mounted unseen, as the tab's rail had it
         : SHELF[section] && !open ? <>
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
           {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
           <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null,
-      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null }} q="" setQ={() => {}} onNavigate={onNavigate}
+      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: section === "config" ? browseState.knob || "" : "" }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || "Docs"}" (Settings - ${section === "docs" ? "Docs" : section === "profiles" ? "Profiles" : "Playbooks"})`
@@ -1291,15 +1303,12 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
 // The log itself, newest first - the page used to be one button and a sentence, and nobody could
 // tell what it was a log OF. Who is said in words: you, the router, an agent, a scheduled report.
 const ACTOR_LABEL = { owner: "you", router: "the router", triage: "triage", report: "a report", system: "the app", startup: "startup", "connector-test": "a Test", msauth: "sign-in" };
-// WHAT THE ASSISTANT CHANGED. An instant write from the chat (a setting, a report's clock, a
-// connection switched off) is always visible here and, while it still applies, reversible with one
-// click - the tiers' promise, kept on the page that owns the knobs (2026-09-18). Hidden when empty.
+// WHAT THE ASSISTANT CHANGED - a setting, a report's clock, a connection switched off - kept visible on the page that owns the knobs
+// (2026-09-18). A record, with no undo (the owner, 2026-10-19: "no take it back button"): a knob set wrong is set again here. Hidden when empty.
 const AssistantChanges = () => {
   const [rows, setRows] = useState([]);
-  const [undo, setUndo] = useState(null);
-  const [busy, setBusy] = useState(false);
   const load = useCallback(async () => {
-    try { const { data } = await api.get("/api/audit/assistant", { params: { limit: 8 } }); setRows(data.data || []); setUndo(data.undo || null); }
+    try { const { data } = await api.get("/api/audit/assistant", { params: { limit: 8 } }); setRows(data.data || []); }
     catch { /* the list is a nicety */ }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1311,16 +1320,10 @@ const AssistantChanges = () => {
     if (r.entity === "connector") return `${r.action.replace("_", " ")} · ${d.name || `connection ${r.id}`}`;
     return `${r.entity} ${r.action}`;
   };
-  const revert = async () => {
-    setBusy(true);
-    try { await api.post(`/api/operations/${undo.id}/execute`, { version: undo.version }); await load(); }
-    catch { /* the receipt in the chat says why */ } finally { setBusy(false); }
-  };
   return (
     <Box sx={{ ...card, mb: 2, px: 1.5, py: 1.1, borderLeft: "4px solid #6f8a6e" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <Typography sx={{ ...mono, fontSize: 10, fontWeight: 600, letterSpacing: 1.2, color: ACCENT2, flex: 1, textTransform: "uppercase" }}>What the assistant changed</Typography>
-        {undo && <Button size="small" variant="outlined" disabled={busy} onClick={revert} sx={{ fontSize: 11, minHeight: 26, py: 0 }}>{busy ? "Undoing…" : "Undo the last change"}</Button>}
       </Box>
       {rows.map((r, i) => (
         <Typography key={i} variant="body2" sx={{ fontSize: 12, color: INK, mt: 0.4 }}>

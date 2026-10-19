@@ -211,16 +211,15 @@ class PickJumpsTheQueueTests(unittest.TestCase):
         self.assertFalse(any('the late answer' in b or "couldn't answer" in b for b in sent), 'the cancelled turn says nothing')
 
 
-class UndoTests(unittest.TestCase):
-    def test_a_receipt_with_an_undo_offers_it_as_a_choice(self):
+class NoUndoTests(unittest.TestCase):
+    """No Take it back anywhere, the phone's Undo pill with it (the owner, 2026-10-19: "no take it back button. hate that")."""
+    def test_a_receipt_offers_no_undo(self):
         s, _ = armed()
         prop = {'id': 'op5', 'status': 'proposed', 'settles': False, 'key': 'msg:7', 'alts': []}
-        with mock.patch.object(concierge, 'receipt', return_value='Done - Remind me. Undo: clear the reminder.'):
+        with mock.patch.object(concierge, 'receipt', return_value='Done - Remind me.'):
             text = ra._ran(s, prop, {**prop, 'status': 'done'}, ITEM, 'owner')
-        self.assertIn('1 · Undo', text)
-        with mock.patch.object(concierge, 'undo_last', return_value='Done - put back.') as undo:
-            self.assertEqual(ra.run_act(s, {'t': 'undo'}, None), 'Done - put back.')
-        undo.assert_called_once()
+        self.assertNotIn('Undo', text)
+        self.assertFalse(hasattr(concierge, 'undo_last'))
 
 
 if __name__ == '__main__': unittest.main()

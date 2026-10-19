@@ -33,13 +33,13 @@ class ChooseAiTests(unittest.TestCase):
         with detect(installed=False):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'install'))
-        self.assertIn("Codex isn't on this computer yet", out['why']); self.assertIn('Press Install', out['why'])
+        self.assertIn("Codex isn't on this computer yet", out['why']); self.assertIn('Press Install Codex', out['why'], 'the button by the label the setup screen draws')
 
     def test_installed_but_silent_asks_for_the_sign_in_never_a_dead_end(self):
         with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'signin'))
-        self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in', out['why'])
+        self.assertIn('needs you to sign in once', out['why']); self.assertIn('Press Sign in to Codex', out['why'], 'the button by the label the setup screen draws')
         self.assertNotIn('below', out['why'], 'the cards are above the line that names them')
         self.assertEqual(self.s.get_setting('triage_ai') or '', '', 'a brain that does not answer is never made the brain')
 
@@ -51,6 +51,7 @@ class ChooseAiTests(unittest.TestCase):
             out = firstrun.choose_cli(self.s, self.cfg, 'codex')
         self.assertEqual((out['ok'], out['fix']), (False, 'update'))
         self.assertIn('signed in', out['why']); self.assertNotIn('sign in once', out['why'])
+        self.assertIn('press Update Codex, or Try again', out['why'], 'both buttons by the labels the setup screen draws')
         fix = firstrun.state(self.s)['fix']
         self.assertEqual((fix['fix'], fix['install']), ('update', 'codex')); self.assertIn("unexpected argument '--flag'", fix['detail'])
 
@@ -347,7 +348,7 @@ class ChatGptPlanTests(unittest.TestCase):
         self.assertFalse(out['ok']); self.assertEqual(self.s.get_setting('triage_ai') or '', '')
         fix = firstrun.state(self.s)['fix']
         self.assertEqual((fix['key'], fix['fix'], fix['title']), (f'c{self.cid}', 'retry', 'ChatGPT'))
-        self.assertIn('weekly cap reached', fix['detail']); self.assertIn('sign in again', fix['why']); self.assertNotIn("You're signed in", fix['why'])
+        self.assertIn('weekly cap reached', fix['detail']); self.assertIn('press Sign in again or Try again', fix['why']); self.assertNotIn("You're signed in", fix['why'])
 
     def test_codex_is_its_own_card_named_codex(self):
         self.assertEqual(firstrun.PLAIN['codex'][0], 'Codex')

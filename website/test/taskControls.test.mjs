@@ -106,9 +106,9 @@ test("a live session still lets you act on the TASK", () => {
   const at = tasks.indexOf("{headControls && (");
   assert.notEqual(at, -1, "the header must carry the task controls while a session fills the page");
   const bar = tasks.slice(at, at + 2200);
-  // Mark done goes through askFinish, which asks first while an agent session is live (2026-09-25)
-  assert.match(tasks, /const askFinish = \(\) => \(liveSession \? setConfirmDone\(true\) : finish\("done"\)\)/);
-  for (const [what, hook] of [["Mark task done", "onClick={askFinish}"], ["Not a task", "setConfirmNAT(true)"],
+  // Mark done goes through askFinish; on a live session it stops the agent with no box first (the owner, 2026-10-19)
+  assert.match(tasks, /const askFinish = \(\) => \(liveSession \? stopAndFinish\(\) : finish\("done"\)\)/);
+  for (const [what, hook] of [["Mark task done", "onClick={askFinish}"], ["Not a task", "onClick={notATask}"],
                               ["Hand it to a person", "setHandoff(true)"], ["Split or merge", "setReshape(true)"]]) {
     assert.ok(bar.includes(hook), `${what} must be reachable during a live session`);
   }
@@ -193,7 +193,7 @@ test("a draft that cannot be sent says why on the card, not in a tooltip", () =>
 test("Mark done on a live session ends it the way Stop and save does", () => {
   // the owner, 2026-09-29: the confirm killed the pty with no write-up, and the terminal stayed on screen for the whole
   // close - Stop and save swaps it for the write-up's progress line at once, files the result, then this closes
-  assert.ok(tasks.includes("onConfirm={stopAndFinish}"), "the confirm takes the write-up road");
+  assert.ok(tasks.includes("liveSession ? stopAndFinish()"), "the press takes the write-up road");
   const at = tasks.indexOf("const stopAndFinish = async");
   const body = tasks.slice(at, tasks.indexOf("\n  };", at));
   assert.ok(body.indexOf('setWrapping("done")') < body.indexOf("writeUpSession("), "the terminal gives way before the request");

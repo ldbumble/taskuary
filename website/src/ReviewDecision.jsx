@@ -4,14 +4,14 @@
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
 import React, { useEffect, useState } from "react";
-import { Alert, Box, Button, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
 import { promisesFiles } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
-import { CcRow, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
+import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
 import { useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
@@ -346,8 +346,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           No reply can be sent from here — {r.SendBlock || "this channel cannot be replied to"}. The draft stays for you to use.
         </Typography>
       )}
-      <TextField fullWidth multiline minRows={2} maxRows={r.Kind === "action" ? 24 : 8}
-        value={value} onChange={(e) => setText(e.target.value)}
+      <DraftField value={value} onChange={(e) => setText(e.target.value)}
         placeholder={proposal?.kind === "closeout" ? proposal.placeholder : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: busy || delivery.frozen, style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (

@@ -18,7 +18,7 @@ import OutlinedFlagIcon from "@mui/icons-material/OutlinedFlag";
 import api from "./api.js";
 import { gistFor } from "./fyiRow.js";
 import { runOperation } from "./taskOps.js";
-import { ChannelIcon, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
+import { ChannelIcon, DraftField, TaskuaryMark, channelColor, cleanText, fmtDateTime, fmtTime12 } from "./ui.jsx";
 import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
 import { place } from "./words.js";
@@ -725,7 +725,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         {/* WHAT THE BOX IS (the owner, 2026-09-28: "what does the words mean?"): the reply, to whom, and when it goes */}
         {rv && (!action || mate) && <div className="tq-move-to">{`Your reply to ${replyTo} ${via} - it goes when you press ${btn("approve", action ? "action" : undefined)}${stopped ? ", once it can merge" : ""}. Edit it here first if you like.`}</div>}
         {rv && (
-          <TextField fullWidth multiline minRows={2} maxRows={9} value={value} onChange={(e) => setText(e.target.value)}
+          <DraftField value={value} onChange={(e) => setText(e.target.value)}
             placeholder={drafting ? "Drafting…" : action && !mate ? "" : "Write your answer here"}
             sx={{ mt: 0.75, "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13.5, lineHeight: 1.55 } }} />
         )}

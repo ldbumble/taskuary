@@ -4,7 +4,7 @@ import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from "@mui/material";
@@ -1975,4 +1975,30 @@ export const CcRow = ({ cc, setCc, channel }) => {
       )}
     </Box>
   );
+};
+
+// THE REPLY DRAFT BOX, one for every surface that shows a draft (task Close out, the walk's reply card) - a long email
+// read through an 8-line slot with its own scrollbar (the owner, 2026-10-19). It grows with the text up to 60% of the
+// window, and the corner handle drags it taller or shorter. The drag is fed back as autosize's own floor (minRows) rather
+// than a height autosize would overwrite on the next keystroke, so the two never fight: the box keeps the size you gave it
+// and still grows past it with the text.
+export const DraftField = ({ value, onChange, sx, inputProps, ...rest }) => {
+  const ref = useRef(null), drag = useRef(null);
+  const [rows, setRows] = useState(0), [cap, setCap] = useState(24);
+  const line = (el) => parseFloat(getComputedStyle(el).lineHeight) || 18;
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const fit = () => setCap(Math.max(8, Math.floor(window.innerHeight * 0.6 / line(el))));
+    fit(); window.addEventListener("resize", fit);
+    // a resize while the pointer is down on the box is the handle being dragged; settle it once the drag goes quiet
+    const ro = new ResizeObserver(() => { if (!drag.current) return;
+      clearTimeout(drag.current.t); drag.current.t = setTimeout(() => setRows(Math.max(2, Math.round(el.clientHeight / line(el)))), 250); });
+    ro.observe(el);
+    const up = () => { drag.current = null; };   // the settle already queued still lands
+    window.addEventListener("pointerup", up);
+    return () => { ro.disconnect(); window.removeEventListener("resize", fit); window.removeEventListener("pointerup", up); };
+  }, []);
+  return <TextField fullWidth multiline minRows={Math.max(2, rows)} maxRows={Math.max(cap, rows)} value={value} onChange={onChange} {...rest}
+    inputRef={ref} inputProps={{ ...inputProps, "data-tq-draft": "", onPointerDown: () => { drag.current = { t: 0 }; } }}
+    sx={{ ...sx, "& textarea": { ...(sx?.["& textarea"] || {}), resize: "vertical" } }} />;
 };

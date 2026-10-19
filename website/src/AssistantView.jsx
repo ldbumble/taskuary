@@ -67,7 +67,7 @@ import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
-import { age, ago, band, bandUntil } from "./timeWords.js";
+import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
@@ -200,7 +200,7 @@ function SinceBlock({ onOpen, onReading }) {
       </div>}
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
         {/* queued by Finish setup (firstrun.first_digest): not written until the mail it reads is sorted - said so, with how many are left */}
-        <span className="tag">MORNING DIGEST</span>{spin(dg.waiting ? `Not written yet - ${dg.waiting} email${dg.waiting === 1 ? "" : "s"} still being sorted first`
+        <span className="tag">MORNING DIGEST</span>{spin(dg.waiting ? `Not written yet - ${plural(dg.waiting, "email")} still being sorted first`
           : "Writing today's digest…")}
       </div>}
       {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
@@ -602,7 +602,7 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
     try {
       if (all) {
         const { data } = await api.post("/api/messages/retriage-failed");
-        onSaid(data?.count ? `Sorting ${data.count} message${data.count === 1 ? "" : "s"} again - each moves to its place as it is read.` : "Nothing is waiting to be sorted any more.");
+        onSaid(data?.count ? `Sorting ${plural(data.count, "message")} again - each moves to its place as it is read.` : "Nothing is waiting to be sorted any more.");
       } else {
         await api.post(`/api/messages/${item.mid}/retriage`);
         onSaid("Sorted again.");

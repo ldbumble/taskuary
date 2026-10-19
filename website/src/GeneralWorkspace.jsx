@@ -33,6 +33,7 @@ import { dropEcho, forScreen } from "./agentMarkers.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
+import { plural } from "./timeWords.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -144,7 +145,7 @@ const AgentBand = ({ name, provider, work, since }) => {
       {!!work.sources.length && (
         <div className="tq-aui-band-so">
           <span>what it has so far</span>
-          <div>{work.sources.length} source{work.sources.length === 1 ? "" : "s"} —{" "}
+          <div>{plural(work.sources.length, "source")} —{" "}
             {work.sources.map((src) => <em key={src}>{src}</em>)}</div>
         </div>
       )}

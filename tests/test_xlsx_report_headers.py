@@ -7,6 +7,7 @@ import requests
 from openpyxl import Workbook
 
 from taskuary import reports, sharepoint
+from taskuary.timewords import plural
 
 
 @pytest.mark.parametrize('source', ['local', 'sharepoint'])
@@ -46,4 +47,4 @@ def test_xlsx_report_keeps_every_column(tmp_path, source, headers, values, expec
                 'site': 'northwind.example/sites/Reports', 'path': 'Shared Documents/report.xlsx'})
 
     assert [json.loads(row) for row in body.splitlines()] == expected
-    assert f'{len(expected)} rows from report.xlsx' in headline
+    assert f"{plural(len(expected), 'row')} from report.xlsx" in headline

@@ -14,7 +14,7 @@ import GridViewIcon from "@mui/icons-material/GridView";
 import ForumIcon from "@mui/icons-material/Forum";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
-import { durSince } from "./timeWords.js";
+import { durSince, plural } from "./timeWords.js";
 import AgentWall from "./AgentWall.jsx";
 import NewSheet from "./NewSheet.jsx";
 import { agentName, saidFromTail } from "./agentWork.js";
@@ -469,7 +469,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                         to this agent, and the card is where they look for it */}
                     {t.Waiting > 0 && (
                       <Chip size="small" onClick={(e) => { e.stopPropagation(); setFeedTask(t.TaskId); setFeedOpen(true); }}
-                        label={`✎ ${t.Waiting} queued prompt${t.Waiting === 1 ? "" : "s"}`}
+                        label={`✎ ${plural(t.Waiting, "queued prompt")}`}
                         title="waiting in the funnel - lands at the agent's next stop; click to add more"
                         sx={{ height: 15, fontSize: 8.5, bgcolor: "#f1ead9", border: "1px solid #d8cfbe", color: "#6b5f45", fontWeight: 600,
                           cursor: "pointer", "& .MuiChip-label": { px: 0.7 } }} />

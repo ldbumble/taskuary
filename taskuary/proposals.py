@@ -18,6 +18,7 @@ proposal is never a partially-executed one.
 """
 import json, re
 from loguru import logger
+from .timewords import plural
 from . import buttons
 
 MARK = 'TASKUARY-PROPOSE'
@@ -239,7 +240,7 @@ def closed_out(store, tid: int, actor: str, said: str) -> bool:
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
     n = len(slots.open_(store, tid))
     store.audit('task', tid, 'closed_out', actor)
-    rest = (f" {n} email{'s' if n != 1 else ''} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if playbook_pending(store, tid)
+    rest = (f" {plural(n, 'email')} still to go." if n else ' Its playbook still waits on your approve or dismiss.' if playbook_pending(store, tid)
             else f" {buttons.label('close')} when the task is finished.")
     store.add_comment(tid, actor, 'human', f'{said}{rest}')
     return False

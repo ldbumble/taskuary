@@ -49,3 +49,21 @@ def test_no_module_writes_its_own_ago():
     hits = [f'{p.relative_to(ROOT)}:{n}: {s[:80]}' for p in sorted((ROOT / 'taskuary').rglob('*.py')) if p.name != 'timewords.py'
             for n, s in strings(p) if AGE.search(s) or s.strip('\'"') == 'just now']
     assert not hits, 'say a time with taskuary.timewords (ago / ago_m / until_m / back_in):\n' + '\n'.join(hits)
+
+
+# a count and its noun pluralised by hand - "{n} task{'s' if n != 1 else ''}" - the shape that wrote "1 tasks" wherever one was missed
+_E = r"[^{}\n]+?"
+COUNTED = [re.compile(r"\{(" + _E + r")\} [\w/ -]{0,40}?\w\{(['\"])s\2 if (" + _E + r") ?!= ?1 else \2\2\}"),
+           re.compile(r"\{(" + _E + r")\} [\w/ -]{0,40}?\w\{(['\"])\2 if (" + _E + r") ?== ?1 else \2s\2\}")]
+def counted_by_hand(s: str) -> bool: return any(m.group(1).strip() == m.group(3).strip() for p in COUNTED for m in p.finditer(s))
+
+
+def test_plural_says_one_and_many():
+    assert [tw.plural(1, 'task'), tw.plural(0, 'task'), tw.plural(3, 'reply', 'replies')] == ['1 task', '0 tasks', '3 replies']
+
+
+def test_no_module_pluralises_a_count_by_hand():
+    assert counted_by_hand("f\"{n} task{'s' if n != 1 else ''}\"") and counted_by_hand("f\"{n} task{'' if n == 1 else 's'}\"")
+    hits = [f'{p.relative_to(ROOT)}:{n}: {s[:80]}' for p in sorted((ROOT / 'taskuary').rglob('*.py')) if p.name != 'timewords.py'
+            for n, s in strings(p) if counted_by_hand(s)]
+    assert not hits, 'say a count with taskuary.timewords.plural:\n' + '\n'.join(hits)

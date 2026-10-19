@@ -20,7 +20,7 @@ class AlchemyReports(unittest.TestCase):
             {'currency': 'USD', 'value': '3000.00', 'lastUpdatedAt': '2026-09-18T10:00:00Z'}], 'error': None}]}
         with mock.patch.object(alchemy.requests, 'request', return_value=response(payload)) as send:
             head, body = alchemy.run_alchemy_prices({'api_key': 'private-key', 'symbols': 'ETH'})
-        self.assertEqual(head, '1 prices')
+        self.assertEqual(head, '1 price')
         self.assertEqual(json.loads(body), {'symbol': 'ETH', 'currency': 'USD', 'price': 3000.0,
                                             'updated': '2026-09-18T10:00:00Z', 'error': None})
         self.assertEqual(send.call_args.kwargs['params'], {'symbols': 'ETH'})
@@ -36,7 +36,7 @@ class AlchemyReports(unittest.TestCase):
         with mock.patch.object(alchemy.requests, 'request', side_effect=pages) as send:
             head, body = alchemy.run_alchemy_wallet({'api_key': 'private-key', 'address': '0xabc',
                                                     'networks': 'eth-mainnet,base-mainnet'})
-        self.assertEqual(head, '1 tokens')
+        self.assertEqual(head, '1 token')
         row = json.loads(body)
         self.assertEqual(row['balance'], '1')
         self.assertEqual(row['value_usd'], 3000.0)

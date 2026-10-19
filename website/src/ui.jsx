@@ -2,7 +2,7 @@
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT } from "./taskLifecycle.js";
-import { ago, agoMins, dur, durSince } from "./timeWords.js";
+import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -249,7 +249,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
     <Box sx={{ bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, px: 1.25, py: 1 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 0.5 }}>
         <Pill tone={ds.files ? "ok" : "none"}>
-          {ds.files ? `${ds.files} file${ds.files === 1 ? "" : "s"} · +${ds.added} −${ds.removed}` : "no file changes"}
+          {ds.files ? `${plural(ds.files, "file")} · +${ds.added} −${ds.removed}` : "no file changes"}
         </Pill>
         <Pill tone={!t.ran ? "none" : t.failed ? "bad" : "ok"}>
           {!t.ran ? "no tests detected" : t.failed ? `${t.failed} failing / ${t.passed} passed` : `${t.passed} tests passed`}
@@ -796,7 +796,7 @@ export const NotMine = ({ messageId, onDone, onLock, row, first, compact = false
           saying nothing about them is how a fix reads as "still not learning" */}
       {!!saved.alsoCovered?.length && (
         <Typography variant="caption" sx={{ color: "#55697a", display: "block", mt: 0.25 }}>
-          {saved.alsoCovered.length} open task{saved.alsoCovered.length === 1 ? "" : "s"} already match it
+          {plural(saved.alsoCovered.length, "open task")} already match it
           ({saved.alsoCovered.slice(0, 4).map((t) => `TQ-${String(t.taskId).padStart(4, "0")}`).join(", ")}
           {saved.alsoCovered.length > 4 ? ", …" : ""}) — close them the same way if they are not yours either.
         </Typography>
@@ -1433,7 +1433,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
         <Box sx={{ height: 40, boxSizing: "border-box", overflow: "hidden", bgcolor: "#f1ead9",
           border: "1px solid #ddd2b9", borderRadius: 1.5, px: 0.75, py: 0.45 }}>
           <Box sx={{ height: "100%", display: "flex", alignItems: "center", gap: 0.5 }}>
-          <Box title={pending.length ? `${pending.length} prompt${pending.length === 1 ? "" : "s"} waiting to go in — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
+          <Box title={pending.length ? `${plural(pending.length, "prompt")} waiting to go in — click to peek for 3 seconds; open the full task to withdraw them` : stateLine}
             onClick={peekQueue}
             sx={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
               width: 20, height: 24, color: "#6b5f45", flexShrink: 0, userSelect: "none",
@@ -1450,7 +1450,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
           </Box>
           {input}
           {imgs.length > 0 && (
-            <Tooltip title={`${imgs.length} image${imgs.length === 1 ? "" : "s"} attached — click to remove`}>
+            <Tooltip title={`${plural(imgs.length, "image")} attached — click to remove`}>
               <Box component="button" onClick={dropImgs}
                 sx={{ ...mono, height: 24, px: 0.6, borderRadius: 1, border: "1px solid #ddd2b9",
                   bgcolor: "#fffdfb", color: "#6b5f45", cursor: "pointer", fontSize: 9.5, whiteSpace: "nowrap" }}>
@@ -1492,7 +1492,7 @@ export const TellAgent = ({ taskId, taskRef, compact = false, onQueued }) => {
       {queued}
       {wait.data.some((w) => w.DeliveredAt) && (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-          {wait.data.filter((w) => w.DeliveredAt).length} earlier note{wait.data.filter((w) => w.DeliveredAt).length === 1 ? "" : "s"} already typed in.
+          {plural(wait.data.filter((w) => w.DeliveredAt).length, "earlier note")} already typed in.
         </Typography>
       )}
     </Box>
@@ -1742,7 +1742,7 @@ export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed 
         <Box sx={{ px: 1.5, py: 1 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mb: 0.5 }}>
             <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: ".08em", textTransform: "uppercase", color: FAINT, fontWeight: 600 }}>touched</Typography>
-            <Typography variant="caption" sx={{ color: DIM }}>{files.length} file{files.length === 1 ? "" : "s"}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
+            <Typography variant="caption" sx={{ color: DIM }}>{plural(files.length, "file")}{d.diffstat?.added != null ? ` · +${d.diffstat.added} −${d.diffstat.removed}` : ""}</Typography>
           </Box>
           {files.map((f) => {
             const top = Math.max(1, ...files.map((x) => x.n || 1));

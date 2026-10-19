@@ -42,7 +42,7 @@ class BraveTests(unittest.TestCase):
         self.assertEqual(get.call_args.kwargs['headers']['X-Subscription-Token'], 'k')
         self.assertEqual(get.call_args[0][0], 'https://api.search.brave.com/res/v1/web/search')
         self.assertEqual(get.call_args.kwargs['params']['q'], 'local-first ai')
-        self.assertIn('1 results', head)
+        self.assertIn('1 result', head)
         self.assertIn('what the page says', body)
 
     def test_the_age_is_kept_so_a_summary_can_say_how_old_a_claim_is(self):
@@ -74,7 +74,7 @@ class SerpApiTests(unittest.TestCase):
         self.assertEqual(get.call_args[0][0], 'https://serpapi.com/search.json')
         self.assertIn('position', body)
         self.assertIn('https://a.com', body)
-        self.assertIn('1 results', head)
+        self.assertIn('1 result', head)
 
     def test_another_engine_and_a_location_are_passed_through(self):
         with mock.patch.object(research.requests, 'get', return_value=_Resp(self.HIT)) as get:
@@ -102,7 +102,7 @@ class SerperTests(unittest.TestCase):
         self.assertEqual(post.call_args.kwargs['headers']['X-API-KEY'], 'k')
         self.assertEqual(post.call_args[0][0], 'https://google.serper.dev/search')
         self.assertEqual(post.call_args.kwargs['json'], {'q': 'q', 'num': 5, 'gl': 'us'})
-        self.assertIn('1 results', head)
+        self.assertIn('1 result', head)
 
     def test_an_answer_box_leads_because_it_is_usually_the_whole_answer(self):
         hit = dict(self.HIT, answerBox={'answer': '42', 'link': 'https://a.com/x'})
@@ -143,7 +143,7 @@ class ApifyTests(unittest.TestCase):
                                           'input': {'startUrls': [{'url': 'https://e.com'}]}})
         self.assertIn('apify~website-content-crawler/run-sync-get-dataset-items', post.call_args[0][0])
         self.assertEqual(post.call_args.kwargs['params']['token'], 'k')
-        self.assertIn('1 items', head)
+        self.assertIn('1 item', head)
 
     def test_the_input_may_arrive_as_json_text(self):
         """A report field is a string. An actor input is an object. One of them has to give."""
@@ -160,7 +160,7 @@ class ApifyTests(unittest.TestCase):
     def test_one_object_back_is_still_one_row(self):
         with mock.patch.object(research.requests, 'post', return_value=_Resp({'a': 1})):
             head, _ = research.run_apify({'api_key': 'k', 'actor': 'apify~x'})
-        self.assertIn('1 items', head)
+        self.assertIn('1 item', head)
 
     def test_a_missing_actor_names_one_so_the_error_teaches(self):
         with self.assertRaises(RuntimeError) as e: research.run_apify({'api_key': 'k'})

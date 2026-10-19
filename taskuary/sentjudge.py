@@ -14,6 +14,7 @@ No brain is not a verdict: nothing is guessed, and the summaries say promises an
 import threading
 from datetime import datetime, timedelta
 from loguru import logger
+from .timewords import plural
 
 DAYS = 30                  # the Advisor's window (assistant.DAYS): how far back sent words are read
 BATCH = 40                 # messages per call - a first run on a full Sent folder catches up over a few runs
@@ -146,5 +147,5 @@ def blind(store, days: float = DAYS) -> str:
     # said in the calm voice (welcome.py's word rule): a chat line, not a settings page
     if not ready(store): return "Nothing reads your sent mail for me yet, so I can't keep track of what you promised or asked people for."
     n = len(store.sent_unjudged(_since(days), 500))
-    return (f"I haven't read {n} of your sent message{'s' if n != 1 else ''} yet, so I can't vouch for any promise or ask in "
+    return (f"I haven't read {plural(n, 'of your sent message')} yet, so I can't vouch for any promise or ask in "
             f"{'them' if n != 1 else 'it'}.") if n else ''

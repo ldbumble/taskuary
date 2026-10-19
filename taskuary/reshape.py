@@ -13,6 +13,7 @@ wrong place - and neither was fixable without deleting work and retyping it.
 was routed onto the wrong task. This module splits by the ASK, inside a single message.
 """
 import json, re
+from .timewords import plural
 from .routing import WEIGHTS, score_candidate
 from .store import task_ref
 
@@ -102,7 +103,7 @@ def split_task(store, tid: int, second: dict, first: dict = None, move_message_i
         store.add_route(mid, new, 'split', None, f'{task_ref(tid)} was two jobs - this one is {task_ref(new)}', [], actor)
     store.add_comment(tid, actor, 'human',
                       f'Broke this in two: "{title[:120]}" is now {task_ref(new)}'
-                      + (f' ({len(moved)} message{"" if len(moved) == 1 else "s"} moved with it).' if moved else '.'))
+                      + (f' ({plural(len(moved), "message")} moved with it).' if moved else '.'))
     store.add_comment(new, actor, 'human', f'Broken out of {task_ref(tid)} - triage filed two jobs as one.')
     store.audit('task', new, 'split_from_task', actor, detail={'from_task': tid, 'messages': moved})
     store.audit('task', tid, 'split_into_task', actor, detail={'new_task': new, 'title': title[:120]})
@@ -169,8 +170,8 @@ def merge_tasks(store, src: int, dst: int, actor: str = 'owner') -> dict:
     notes = [c for c in store.list_comments(src) if c['ActorType'] == 'human']
     store.add_comment(dst, actor, 'human',
                       f'Folded {task_ref(src)} in: "{str(a.get("Title") or "")[:120]}" - the same job, filed twice. '
-                      f'{len(msgs)} message{"" if len(msgs) == 1 else "s"} moved over'
-                      + (f'; {len(notes)} note{"" if len(notes) == 1 else "s"} stayed on {task_ref(src)}.' if notes else '.'))
+                      f'{plural(len(msgs), "message")} moved over'
+                      + (f'; {plural(len(notes), "note")} stayed on {task_ref(src)}.' if notes else '.'))
     store.add_comment(src, actor, 'human', f'Folded into {task_ref(dst)} - same job as that one. Nothing to do here.')
     store.update_task(src, {'Status': 'dropped'}, actor)
     store.audit('task', src, 'merged_into_task', actor, detail={'into': dst, 'messages': [m['MessageId'] for m in msgs]})

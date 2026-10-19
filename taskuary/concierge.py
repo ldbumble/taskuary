@@ -25,6 +25,7 @@ from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from loguru import logger
 
+from .timewords import plural
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
@@ -1472,7 +1473,7 @@ def open_day(store, llm=None, actor: str = 'owner', trace=None, cancel=None) -> 
         except Exception as e: logger.warning(f'concierge: the opening failed - {e}')
     if not say:
         n = len(p['items'])
-        say = ("Let's go through what we have today. " + (f"{n} thing{'s' if n != 1 else ''} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
+        say = ("Let's go through what we have today. " + (f"{plural(n, 'thing')} waiting - {funnel.summary(p['items']).split(' - ', 1)[-1].split('.')[0]}." if n else 'Nothing is waiting on you yet.'))
     chips = walk_chips(len(p['items']))
     card = {'key': 'brief', 'kind': 'brief', 'lane': 'report', 'title': 'Today', 'n': len(p['items']),
             'mail': sum(map(lanes.is_mail, p['items'])), 'chips': chips}
@@ -1927,7 +1928,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         label = f"Clear {len(hits)} from the pipe"
         # ...WHICH ones, on the card, before the yes: a count and a selector were all it said
         shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
-        summary = f"{len(hits)} item{'s' if len(hits) != 1 else ''} - {where}: {shown}{' and more' if len(hits) > 4 else ''}"
+        summary = f"{plural(len(hits), 'item')} - {where}: {shown}{' and more' if len(hits) > 4 else ''}"
         tail = ('They are marked read and search still finds them; nothing is deleted. '
                 'Nothing has been started - confirm below, or tell me what to change.')
         prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
@@ -2387,7 +2388,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # ...and only what Next or Remind me put there is "under For later": one you looked at and left is still On you
             aside = all(i.get('put_down') or i.get('deferred') for i in waiting)
             # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
-            say = (f"That's everything for now. {n} thing{'s' if n != 1 else ''} "
+            say = (f"That's everything for now. {plural(n, 'thing')} "
                    + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
                    + f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
@@ -2398,7 +2399,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
                      for i in waiting[:3]]
         elif only and left:
             # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
-            say = f"That's all of those. {len(left)} other thing{'s' if len(left) != 1 else ''} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
+            say = f"That's all of those. {plural(len(left), 'other thing')} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."
         elif selection is not None and any(selection.pending.values()):
             pending = selection.pending
             parts = ([f"{pending['working']} in progress"] if pending['working'] else [])
@@ -2439,7 +2440,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # present next ones"). The sentence below was already the fallback for a failed call; it is
         # the whole of it now, and each entry keeps its own gist (fyiRow.gistFor).
         gists, remember_llm = {}, False
-        say = (f"{len(batch)} thing{'s' if len(batch) != 1 else ''} people told you, nothing to do: "
+        say = (f"{plural(len(batch), 'thing')} people told you, nothing to do: "
                + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
         batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
         card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
@@ -3281,7 +3282,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
                 'then Test; it stays off until you turn it on.')
     if kind == 'role.apply' and o.get('role'):
         bits = [f"the {o['profile'].upper()} agent is {'added' if o.get('profile_added') else 'already here'}"]
-        if o.get('playbooks_added'): bits.append(f"{len(o['playbooks_added'])} playbook{'s' if len(o['playbooks_added']) != 1 else ''} added")
+        if o.get('playbooks_added'): bits.append(f"{plural(len(o['playbooks_added']), 'playbook')} added")
         bits.append('your non-coding mail goes to it' if o.get('mail_routed') else
                     "nothing is sent to it by default, though it is on the list new mail is sorted to, so mail that reads as its work can still "
                     'reach it - turn off "Can be given new work from your mail" on its profile to stop that' if o.get('on_roster') else

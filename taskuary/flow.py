@@ -26,6 +26,7 @@ import json, re, time
 from datetime import datetime
 from loguru import logger
 
+from .timewords import plural
 from . import redact
 from .store import task_ref
 
@@ -477,7 +478,7 @@ def said(rec: dict) -> str:
     s = rec.get('status')
     if s == 'failed': return f"failed: {rec.get('error')}"
     if s == 'waiting': return f"waiting for your yes - {rec.get('why') or ''}".strip(' -')
-    return (rec.get('head') or s or '') + (f", {rec['rows']} rows" if rec.get('rows') and 'row' not in str(rec.get('head') or '') else '')
+    return (rec.get('head') or s or '') + (f", {plural(rec['rows'], 'row')}" if rec.get('rows') and 'row' not in str(rec.get('head') or '') else '')
 
 
 def tally(recs: list) -> str:
@@ -486,7 +487,7 @@ def tally(recs: list) -> str:
     ai = sum(1 for r in ran if r.get('kind') in USES_AI or r.get('type') in AI_TYPES)
     secs = sum(r.get('ms') or 0 for r in recs) / 1000
     fixed = any(r.get('status') == 'repaired' for r in recs)         # a repair is a model call too: "no AI used" would be untrue
-    return f"Ran {len(ran)} step{'s' if len(ran) != 1 else ''} in {secs:.1f}s, " + (f"{ai} with AI" if ai else 'AI only for the repair' if fixed else 'no AI used')
+    return f"Ran {plural(len(ran), 'step')} in {secs:.1f}s, " + (f"{ai} with AI" if ai else 'AI only for the repair' if fixed else 'no AI used')
 
 
 def header(defn: dict, steps: list, trigger: str, when: str) -> str:

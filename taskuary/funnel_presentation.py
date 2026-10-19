@@ -15,7 +15,7 @@ import threading
 import weakref
 from pathlib import Path
 
-from .timewords import back_in   # when a For later row comes back - the phone and lookups read it from here
+from .timewords import back_in   # noqa: F401 - when a For later row comes back - the phone and lookups read it from here
 
 
 _ITEM_SCHEMA = "taskuary.funnel.presentation.v1"

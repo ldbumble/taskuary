@@ -6,6 +6,7 @@ read policy, history windows, or an independent size limit after activation.
 import copy
 import json
 import re
+from .timewords import plural
 from .categories import agent_word
 from datetime import date, datetime, timedelta
 
@@ -328,7 +329,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                                    + (f": {ev['summary']}" if (ev or {}).get('summary') else ''))
     if review and review.get('Kind') == 'slot':     # the task's emails (slots.py), counted - never called its reply
         n = len([r for r in pending if r.get('Kind') == 'slot'])
-        card.update(lane='approve', why=f"{n} email{'s' if n != 1 else ''} drafted for you to send")
+        card.update(lane='approve', why=f"{plural(n, 'email')} drafted for you to send")
     # ONE "AGENT FINISHED" (A17, 2026-09-25): a finish that drafted a reply left the task waiting on it, and the owner saw
     # only "reply ready" - never that the agent had finished. The reply is the move, so the card stays the reply to
     # send, and says who finished it.

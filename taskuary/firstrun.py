@@ -13,6 +13,7 @@ connections but just show them/tell what to do next") - this file says which ste
 """
 import json, re, threading
 from loguru import logger
+from .timewords import plural
 
 # the CLIs most people already pay for, always offered; any OTHER installed CLI joins them
 OFFERED = ('claude', 'codex', 'gemini')
@@ -152,7 +153,7 @@ def state(store) -> dict:
                     else f"{name or 'Your AI'} is ready. What email do you have? Pick it - Microsoft 365 is one sign-in.",
            'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI picks one that does." if ai_error
                        else "Connected - nothing new to sort yet. Any other connection you'd like to set up?" if empty
-                       else f"Sorting {sorting} email{'s' if sorting != 1 else ''} now. Any other connection you'd like to set up while it reads?"
+                       else f"Sorting {plural(sorting, 'email')} now. Any other connection you'd like to set up while it reads?"
                        if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
            'done': "You're set up. Anything else you connect is optional."}[step]
     # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15); the mail read and

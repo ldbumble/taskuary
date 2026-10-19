@@ -8,6 +8,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from .timewords import plural
 
 TOTAL_QUESTIONS = 7
 SKILL_FILE = Path(__file__).parent / 'skills' / 'soul-interview' / 'SKILL.md'
@@ -38,7 +39,7 @@ def context(store) -> dict:
     conns = [c for c in store.list_connectors() if c['Active']]
     repos = [s['Address'] for s in store.list_sources() if s.get('Channel') == 'github']
     who = store.get_setting('owner') or ''
-    people = [f"{p['Name'] or p['Email']} ({p['N']} messages)" for p in store.people(8)]
+    people = [f"{p['Name'] or p['Email']} ({plural(p['N'], 'message')})" for p in store.people(8)]
     return {'owner': who, 'channels': sorted({c['Type'] for c in conns}), 'repos': repos[:12],
             'writes_most': people, 'roles': sorted({r for c in conns for r in roles_of(c)})}
 

@@ -120,7 +120,7 @@ class ReindexTests(unittest.TestCase):
         kb.reindex(self.s, self.cid)
         cfg = reports.resolve_cfg(self.s, {'type': 'kb_search', 'query': 'when are residents refunded?'})
         head, body = reports.REGISTRY['kb_search'](cfg)
-        self.assertIn('1 passages for', head)
+        self.assertIn('1 passage for', head)
         row = json.loads(body.splitlines()[0])
         self.assertEqual(row['name'], 'policy.docx'); self.assertIn('refund', row['passage'].lower())
         head, _ = reports.REGISTRY['kb_search'](reports.resolve_cfg(self.s, {'type': 'kb_search', 'query': 'zebra giraffe'}))

@@ -98,7 +98,7 @@ class BlueskyReadsAndPosts(unittest.TestCase):
              mock.patch.object(social.requests, 'request', return_value=_Resp(self.FEED)) as req:
             head, body = social.run_bluesky_timeline(_bsky_cfg())
         self.assertIn('app.bsky.feed.getTimeline', req.call_args[0][1])
-        self.assertIn('1 posts', head)
+        self.assertIn('1 post', head)
         self.assertIn('shipping today', body)
         self.assertIn('erin.bsky.social', body)
 
@@ -157,7 +157,7 @@ class MastodonIsOneStepButEveryInstanceIsItsOwnServer(unittest.TestCase):
         self.assertIn('first line', body)
         self.assertNotIn('<p>', body)
         self.assertNotIn('<b>', body)
-        self.assertIn('1 posts', head)
+        self.assertIn('1 post', head)
 
     def test_the_three_timelines_map_to_the_right_endpoints(self):
         for which, path, local in (('home', '/timelines/home', None),

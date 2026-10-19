@@ -15,7 +15,7 @@ test("the Hub opens on its most valuable entries", () => {
 
 test("every post names its vote score and exact comment count", () => {
   assert.match(hub, /const voteLabel =/);
-  assert.match(hub, /\{commentCount\} comment\{commentCount === 1 \? "" : "s"\}/);
+  assert.match(hub, /\{plural\(commentCount, "comment"\)\}/);
 });
 
 test("the demo uses discussion as the tie-breaker too", () => {

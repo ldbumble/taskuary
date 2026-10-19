@@ -16,6 +16,7 @@ chats and groups continue through the normal funnel.
 import collections, json, re, threading, time
 
 from loguru import logger
+from .timewords import plural
 from . import buttons
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
 from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
@@ -596,7 +597,7 @@ def who_wants_what(items: list) -> str:
     if not live: return 'Nothing is waiting on you.'
     have = [(k, w, [i for i in live if group_of(i) == k]) for k, w in groups()]
     have = [(k, w, rows) for k, w, rows in have if rows]
-    lines = [f"{len(live)} thing{'' if len(live) == 1 else 's'}: "
+    lines = [f"{plural(len(live), 'thing')}: "
              + ', '.join(f"{len(rows)} {w if k == 'fyi' else w.lower()}" for k, w, rows in have) + '.']
     for key, word_, rows in have:
         # For later is sorted soonest-back first, as the rail draws it (funnelPile.bandsOf)

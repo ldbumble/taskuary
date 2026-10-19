@@ -21,7 +21,7 @@ def _clock(d: datetime) -> str: return f"{d.strftime('%a')} {d.hour % 12 or 12}:
 def _n(store, q, p): return int((store._one(q, p) or {}).get('n') or 0)
 
 
-def _plural(n, one, many=None): return f"{n} {one if n == 1 else (many or one + 's')}"
+from .timewords import plural as _plural
 
 
 def overnight(store, now: datetime = None) -> dict:

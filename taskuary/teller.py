@@ -30,6 +30,7 @@ from datetime import date, timedelta
 
 import requests
 from loguru import logger
+from .timewords import plural
 
 API = 'https://api.teller.io'
 CONNECT_JS = 'https://cdn.teller.io/connect/connect.js'
@@ -162,7 +163,7 @@ def probe(cfg) -> str:
     rows = accounts(cfg)
     if not rows: return 'connected, but the login shows no accounts'
     inst = rows[0].get('institution') or 'the bank'
-    return f"connected to {inst} ({cfg.get('environment') or 'sandbox'}) - {len(rows)} account{'s' if len(rows) != 1 else ''}: " + \
+    return f"connected to {inst} ({cfg.get('environment') or 'sandbox'}) - {plural(len(rows), 'account')}: " + \
            ', '.join(f"{a['name']} ...{a['last_four']}" for a in rows[:6])
 
 
@@ -204,5 +205,5 @@ def run_teller_spend(cfg):
     days = max(0, int(cfg.get('days') or 0))
     rows = spend(cfg, cfg.get('account') or '', days)
     n = len(rows) - 1
-    head = f"{rows[-1]['spend']:,.2f} spent {_window(days)} across {n} account{'' if n == 1 else 's'}"
+    head = f"{rows[-1]['spend']:,.2f} spent {_window(days)} across {plural(n, 'account')}"
     return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]

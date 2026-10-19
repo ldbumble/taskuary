@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from .routing import tokens
 from .store import task_ref
+from .timewords import plural
 
 NL = chr(10)
 ACTIVE = ('open', 'in_progress', 'waiting')
@@ -74,7 +75,7 @@ def sender_read(store, p: dict) -> str:
         return f'Nobody by "{who}" has written in, and you have not written to anyone by that name.'
     s = next((h for h in hits if h['Email'] == who.lower()), hits[0])
     em, since = s['Email'], (datetime.now() - timedelta(days=3650)).isoformat(' ', 'seconds')
-    out = [f"{s['Name'] or em} <{em}> - {s['N']} messages, first {_day(s['First'])}, last {_day(s['Last'])}"]
+    out = [f"{s['Name'] or em} <{em}> - {plural(s['N'], 'message')}, first {_day(s['First'])}, last {_day(s['Last'])}"]
     recent = store.messages_from(em, since, 8)
     if recent: out += ['recent:'] + [f"  m{r['MessageId']} {_day(r.get('SentAt'))} {task_ref(r['TaskId']) if r.get('TaskId') else '-'} "
                                      f"[{r.get('Status')}] {_cut(r.get('Subject'), 110)}" for r in recent]

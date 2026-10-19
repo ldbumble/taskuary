@@ -46,7 +46,7 @@ test("the opening card loads in place: counts and the digest say they are coming
   const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx"), turns = read("assistantTurns.js");
   assert.match(view, /spin\("Reading what came in…"\)/);
   assert.match(view, /: "Writing today's digest…"\)\}/);
-  assert.match(view, /dg\.waiting \? `Not written yet - \$\{dg\.waiting\} email/, "queued by Finish, it says it waits on the mail");
+  assert.match(view, /dg\.waiting \? `Not written yet - \$\{plural\(dg\.waiting, "email"\)\}/, "queued by Finish, it says it waits on the mail");
   assert.doesNotMatch(view, /shownFor\.current !== dg\.at/, "the digest opens folded - See the full digest opens it");
   assert.match(view, /data\?\.said \|\| data\?\.drawn/, "an opener drawn mid catch-up is read at once");
   assert.match(cards, /loading \? "Counting…" : onYou \? `\$\{onYou\} on you` : "Nothing on you"/);

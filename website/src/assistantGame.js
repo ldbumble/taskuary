@@ -6,6 +6,7 @@
 // Nothing here reads words. A zone comes from the lane triage already judged, a match from the
 // kind it already chose (no-hardcoded-words: the model reads intent, code only routes on it).
 import { isAgentKind, isMail, onYou } from "./lanes.js";
+import { plural } from "./timeWords.js";
 
 export const ZONES = [
   { key: "floor", name: "Agent Floor", hotkey: "1", blurb: "agents at their desks - jump into a code space" },
@@ -152,7 +153,6 @@ export function award(state, move, now = Date.now(), world = null) {
 }
 
 // daily quests read the day's tally - they reset with it
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export const QUESTS = [
   { key: "q-reply", says: (n) => `Send ${plural(n, "reply", "replies")}`, move: "approve", n: 3, xp: 50 },
   { key: "q-hand", says: (n) => `Hand ${plural(n, "thing", "things")} to agents`, move: "dispatch", n: 2, xp: 50 },

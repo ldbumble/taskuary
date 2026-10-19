@@ -41,6 +41,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import spawn
+from .timewords import plural
 
 STAGE = 'sftp'                 # ~/.taskuary/sftp/<host>/ - where sftp_get lands, and the only place it can
 MAX_WRITE = 200 * 1024 * 1024  # a document, not a disk image: a runaway copy onto a company share is the failure
@@ -502,7 +503,7 @@ def test_smb(store, c) -> str:
     if not p.is_dir(): raise RuntimeError(f'{root} is not reachable as a folder from this machine')
     n = sum(1 for _ in p.iterdir())
     who = f"as {cfg['username']}" if cfg.get('username') and cfg.get('password') else 'with your own Windows session'
-    return f'{root} reachable {who} - {n} items in the root'
+    return f'{root} reachable {who} - {plural(n, "item")} in the root'
 
 
 def test_sftp(store, c) -> str:
@@ -514,4 +515,4 @@ def test_sftp(store, c) -> str:
     with _client(cfg) as (sftp, base):
         files = [a for a in sftp.listdir_attr(base) if not statmod.S_ISDIR(a.st_mode or 0)]
         how = 'private key' if str(cfg.get('password') or '').lstrip().startswith('-----BEGIN') else 'password'
-    return f"{cfg.get('username')}@{cfg.get('host')} OK ({how}, host key verified) - {base}, {len(files)} files"
+    return f"{cfg.get('username')}@{cfg.get('host')} OK ({how}, host key verified) - {base}, {plural(len(files), 'file')}"

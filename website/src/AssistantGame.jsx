@@ -22,6 +22,7 @@ import {
   channelKind, ZONES, zoneMeta, zoneItems, needsYou, bossHp, matchFor, award, levelOf, loadGame, saveGame, shareCard,
   MOVE_WORDS, ACHIEVEMENTS, questsFor, questProgress, COMBO_WINDOW, comboMult,
 } from "./assistantGame.js";
+import { plural } from "./timeWords.js";
 
 const GameScene = React.lazy(() => import("./GameScene.jsx"));
 
@@ -581,7 +582,7 @@ function FloorSpace({ seated, queue, live, agents, clock, pick, setPick, items, 
             <Typography noWrap sx={{ fontSize: 11, fontWeight: 600, color: state.tone === "waiting" ? G.red : G.green }}>{state.agent}</Typography>
             <Typography sx={{ ...mono, fontSize: 10, color: G.faint, ml: "auto" }}>{task.ref}</Typography>
             {task.Waiting > 0 && <Typography sx={{ ...mono, fontSize: 10, color: G.gold, fontWeight: 600 }}
-              title={`${task.Waiting} queued prompt${task.Waiting === 1 ? "" : "s"} waiting in the funnel`}>✎ {task.Waiting}</Typography>}
+              title={`${plural(task.Waiting, "queued prompt")} waiting in the funnel`}>✎ {task.Waiting}</Typography>}
           </Box>
           <Typography noWrap sx={{ fontSize: 13, fontWeight: 600, pt: 0.3 }}>{task.Title}</Typography>
           <Typography sx={{ fontSize: 11, color: G.dim, pt: 0.2 }}>{state.label}</Typography>

@@ -5,6 +5,7 @@ it. Only an owner's explicit repository choice teaches an identity link. Automat
 are read-only consumers of that evidence, never new evidence themselves.
 """
 import re
+from .timewords import plural
 
 ROUTE_CONFIDENCE = .80       # two different owner-routed tasks (.72, then .86)
 CONTEXT_CONFIDENCE = .70     # one choice may inform triage, clearly labelled tentative
@@ -187,5 +188,5 @@ def soul_rows(store) -> list:
         repo_text = ', '.join(f'`{r}`' for r in repos) or '(repository not linked)'
         domain_text = f"; company domains: {', '.join(sorted(domains))}" if domains else ''
         out.append(f"- **{project['Name']}** — repositories: {repo_text}; people: {drivers}{domain_text}; "
-                   f'{maturity} from {evidence} owner-routed task{"s" if evidence != 1 else ""}')
+                   f'{maturity} from {plural(evidence, "owner-routed task")}')
     return out

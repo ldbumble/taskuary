@@ -7,6 +7,7 @@ import { ALERT, ALERT_INK, BORDER, DIM, FAINT, INK, PANEL2, ROLES, mono } from "
 import api from "./api";
 import { label as btnLabel } from "./buttons.js";
 import { STATUS, recHead, runWords, secs } from "./workflowFlow.js";
+import { plural } from "./timeWords.js";
 
 const DOT = { repaired: "#a58bb5", ok: ROLES.done.solid, failed: ALERT, waiting: ROLES.working.solid, dry: "#8a9bab", skipped: "#cfc9bf" };
 export const Dot = ({ status }) => <Box component="span" title={STATUS[status] || status}
@@ -20,7 +21,7 @@ export function StepResult({ rec, compact }) {
       <Typography variant="caption" sx={{ display: "flex", alignItems: "center", gap: 0.75, color: rec.status === "failed" ? ALERT_INK : DIM, flexWrap: "wrap" }}>
         <Dot status={rec.status} /><Box component="span" sx={{ fontWeight: 600 }}>{STATUS[rec.status] || rec.status}</Box>
         {rec.ms != null && <span>· {secs(rec.ms)}</span>}
-        {rec.rows != null && !/\brows?\b/.test(rec.head || "") && <span>· {rec.rows} row{rec.rows === 1 ? "" : "s"}</span>}
+        {rec.rows != null && !/\brows?\b/.test(rec.head || "") && <span>· {plural(rec.rows, "row")}</span>}
         {rec.head && rec.status !== "failed" && <span>· {rec.head}</span>}
       </Typography>
       {rec.error && <Typography variant="caption" sx={{ display: "block", color: ALERT_INK, mt: 0.25, whiteSpace: "pre-wrap" }}>{rec.error}</Typography>}

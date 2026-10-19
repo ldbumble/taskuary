@@ -26,6 +26,7 @@ import re, threading
 from loguru import logger
 
 from .store import task_ref
+from .timewords import plural
 
 # Inputs whose arrivals are items of somebody's backlog. Mail and chat are conversations with people, and are not batched.
 CHANNELS = frozenset({'github', 'gitlab', 'azdo', 'linear', 'trello', 'jira', 'sentry', 'pagerduty'})
@@ -95,7 +96,7 @@ def _title(r, source) -> str:
     return (s[len(source):].strip() if source and s.startswith(source) else s)[:200]
 
 
-def title_for(n: int, noun: str, source: str) -> str: return f"{n} {noun}{'' if n == 1 else 's'} on {source}"
+def title_for(n: int, noun: str, source: str) -> str: return f"{plural(n, noun)} on {source}"
 def summary_for(n: int, noun: str, source: str) -> str:
     return f"The {n} most valuable {noun}s waiting on {source}, in ranked order. Each one is reviewed in turn; nothing is merged, closed or answered without you."
 

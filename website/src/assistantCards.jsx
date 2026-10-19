@@ -29,7 +29,7 @@ import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta } from "./funnelPile.js";
-import { age, ago } from "./timeWords.js";
+import { age, ago, plural } from "./timeWords.js";
 import { SECTION, ideaWord } from "./lanes.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
@@ -1143,7 +1143,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
       )}
       {!!all.length && (
         <div className="tq-day-agenda">
-          <div className="tq-day-h">Your day · {evs.length} meeting{evs.length === 1 ? "" : "s"}</div>
+          <div className="tq-day-h">Your day · {plural(evs.length, "meeting")}</div>
           {allDay.map((e) => <div key={e.subject} className="ev allday"><span className="t">all day</span><span className="s"><b>{e.subject}</b></span></div>)}
           {evs.map((e, i) => (
             <React.Fragment key={`${e.start}-${i}`}>
@@ -1173,7 +1173,7 @@ export function BriefCard({ card, onStart }) {
   const n = sum ? sum.n : card.n;
   return (
     <CardShell card={{ ...card, lane: "report", when: null }} kicker="start of the walk"
-      lead={<Lead text={sum ? sum.lead : n ? `${n} thing${n === 1 ? "" : "s"} waiting on you.` : "Nothing waiting on you."} />}
+      lead={<Lead text={sum ? sum.lead : n ? `${plural(n, "thing")} waiting on you.` : "Nothing waiting on you."} />}
       sub={n ? null : "Ask me anything, or set something up."}>
       {sum && <WhoWantsWhat groups={sum.groups} onRow={nav.surface} />}
       {/* "Start at the top" IS the walk's Next here - one button, not two for the same step */}
@@ -1215,7 +1215,7 @@ export function FyisCard({ card, onDone, onSurface, onTimeline, onPropose }) {
   };
   return (
     <CardShell card={card} kicker={`${items.length} fyi · nothing to decide`}
-      lead={<Lead text={`${items.length} message${items.length === 1 ? "" : "s"} just want${items.length === 1 ? "s" : ""} you to know something.`} />} err={err}>
+      lead={<Lead text={`${plural(items.length, "message")} just want${items.length === 1 ? "s" : ""} you to know something.`} />} err={err}>
       {/* THE BOX, like every card's: one line per message - who, what, and its first line - and nothing
           else. The two doors each line wore ("Full message", "Talk about it") made four fyi a card of
           eight buttons (the owner, 2026-09-23: "you never redesigned the fyi cards"). A line is the

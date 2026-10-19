@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Box, Button, Chip, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, ROLES, mono } from "./theme.jsx";
+import { plural } from "./timeWords.js";
 
 const STATUS = {
   live:       { label: "LIVE · rides into every prompt", color: ROLES.handled.solid, tint: ROLES.handled.tint, bd: ROLES.handled.bd },
@@ -84,7 +85,7 @@ const Fan = ({ line, promoteAt }) => {
       <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mb: 0.5 }}>THE LEDGER · every point gained or lost</Typography>
       <Ledger line={line} promoteAt={promoteAt} />
       <Typography sx={{ ...mono, fontSize: 9.5, letterSpacing: 1, color: FAINT, fontWeight: 600, mt: 1.25, mb: 0.75 }}>
-        WHAT FED IT · {evs.length} verdict{evs.length === 1 ? "" : "s"}, oldest first{contraIds.size ? ` · ${contraIds.size} against` : ""}
+        WHAT FED IT · {plural(evs.length, "verdict")}, oldest first{contraIds.size ? ` · ${contraIds.size} against` : ""}
       </Typography>
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 0.75 }}>
         {evs.map((e) => <Evidence key={e.id} e={e} contra={contraIds.has(e.id)} innerRef={() => {}} />)}
@@ -127,7 +128,7 @@ export default function LearnedView({ onChanged }) {
             <Typography variant="caption" sx={{ color: FAINT, fontSize: 10 }}
               title={l.effective !== l.score ? `Nothing has confirmed this since ${l.seen}, so it counts as s:${l.effective}` : ""}>seen {l.seen}</Typography>
             <Typography variant="caption" sx={{ ...mono, color: st.color, fontSize: 10, fontWeight: 600 }}>
-              {isOpen ? "▾" : "▸"} {l.evidence.length} verdict{l.evidence.length === 1 ? "" : "s"}{isPinned ? " · pinned" : ""}
+              {isOpen ? "▾" : "▸"} {plural(l.evidence.length, "verdict")}{isPinned ? " · pinned" : ""}
             </Typography>
             <Box sx={{ flex: 1 }} />
             {l.eligible && l.status === "hypothesis" && <Chip size="small" label="earned it" sx={{ height: 16, fontSize: 9.5, bgcolor: ROLES.handled.tint, color: ROLES.handled.ink }} />}
@@ -172,7 +173,7 @@ export default function LearnedView({ onChanged }) {
               {g.deleted.map((l) => (
                 <Box key={l.key} sx={{ p: 1.1, borderRadius: 2, bgcolor: RED_TINT, border: `1px dashed ${RED_BD}`, color: RED_INK, opacity: .85 }}>
                   <Typography variant="caption" sx={{ ...mono, fontSize: 10 }}>
-                    deleted {day(l.deleted_at)} · {l.contradictions.length} contradiction{l.contradictions.length === 1 ? "" : "s"}
+                    deleted {day(l.deleted_at)} · {plural(l.contradictions.length, "contradiction")}
                     {l.contradictions.length ? " · " + l.contradictions.map((c) => `${day(c.date)}${c.ev ? " (" + c.ev + ")" : ""}`).join(", ") : ""}
                   </Typography>
                   <Typography variant="body2" sx={{ fontSize: 12.5, textDecoration: "line-through" }}>{l.text}</Typography>

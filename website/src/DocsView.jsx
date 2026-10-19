@@ -22,6 +22,7 @@ import SkillImport from "./SkillImport.jsx";
 import RoleStart from "./RoleStart.jsx";
 import { FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
+import { plural } from "./timeWords.js";
 
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -600,7 +601,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
               <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: "#55697a" }}>New playbook</Typography>
             </Box>
             {books.length > 0 && <TextField size="small" fullWidth value={pbFilter} onChange={(e) => setPbFilter(e.target.value)}
-              placeholder={`Search ${books.length} playbook${books.length === 1 ? "" : "s"}`}
+              placeholder={`Search ${plural(books.length, "playbook")}`}
               sx={{ mb: 1, bgcolor: "#fff", "& input": { fontSize: 12 } }} />}
             <Box sx={{ maxHeight: { xs: "min(52vh, 520px)", md: "calc(100vh - 260px)" }, overflowY: "auto", pr: { md: 0.5 } }}>
               {visibleBooks.map((b) => {

@@ -19,6 +19,7 @@ TWO KINDS OF TEXT live in a stop, and the difference is the whole design:
 from loguru import logger
 
 from . import setup
+from .timewords import plural
 
 AT = 'setup_walk_at'                 # where the owner stopped; a setting, so a reload resumes
 
@@ -211,8 +212,8 @@ def _fact_reports(s) -> str:
         (flows if cfg.get('is_workflow') else reports).append(cfg.get('title') or row['Address'] or '')
     if not reports and not flows: return 'none yet'
     said = []
-    if reports: said.append(f"{len(reports)} reports: {', '.join(x for x in reports[:3] if x)}")
-    if flows: said.append(f"{len(flows)} workflows: {', '.join(x for x in flows[:3] if x)}")
+    if reports: said.append(f"{plural(len(reports), 'report')}: {', '.join(x for x in reports[:3] if x)}")
+    if flows: said.append(f"{plural(len(flows), 'workflow')}: {', '.join(x for x in flows[:3] if x)}")
     return ' · '.join(said)
 
 

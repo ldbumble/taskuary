@@ -162,16 +162,12 @@ def test_a_page_that_moved_is_repaired_by_itself_the_step_rerun_and_the_run_fini
     assert saved(s, src) == steps(f'{VENDOR}/catalog', '.catalog .price') and asks(s, tid) == []
     asked = json.loads(m.users[0])
     assert asked['goal'] == GOAL and 'untrusted_data' in asked
-    # recorded on the run's task: what broke, the step diff, why - and its undo is the shared take_back
+    # recorded on the run's task: what broke, the step diff, why - a record, with no Take it back (the owner, 2026-10-19)
     note = next(c['Body'] for c in s.list_comments(tid) if c['Actor'] == 'taskuary')
     assert note.startswith('Fixed itself: no element matches .price') and 'moved the price table' in note and 'url:' in note
     [rp] = run['repairs']
-    assert rp['undo'] == {'kind': 'report.edit', 'target': src['SourceId'], 'params': {'config': {'flow': steps()}}, 'label': buttons.label('take_back')}
+    assert rp['was'] == steps() and 'undo' not in rp
     assert workflows.of_task(s, s.get_task(tid))['repairs'][0]['diff'][0]['keys'][0]['key'] in ('url', 'selector')
-    # Take it back puts the previous steps on the workflow
-    with mock.patch.object(server, 'store', s):
-        assert TestClient(server.app).post(f"/api/workflows/{src['SourceId']}/undo-repair", json={'run_id': run['runId']}).status_code == 200
-    assert saved(s, src) == steps()
 
 
 @pytest.mark.parametrize('why, change', [

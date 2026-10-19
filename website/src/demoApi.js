@@ -16,7 +16,7 @@ import { track } from "./demoTrack";
 import { demoTerminalRecording } from "./demoTerminal.js";
 import { DEMO_ASSISTANT_TIMELINE, createDemoAssistantState, installDemoAssistantTimeline } from "./demoAssistantData.js";
 import { fmtStamp, rebase } from "./demoClock.js";
-import { demoRepair, demoUndo, demoSaveSource, demoStepTest, installDemoWorkflows } from "./demoWorkflows.js";
+import { demoRepair, demoSaveSource, demoStepTest, installDemoWorkflows } from "./demoWorkflows.js";
 import { installNumbersWorkflow, finishNumbersWorkflow, isGuidedDemo, NUMBERS_TASK, NUMBERS_MESSAGE, NUMBERS_REVIEW, NUMBERS_REQUEST, NUMBERS_RESULT } from "./demoNumbers.js";
 
 const demoRecord = (detail) => {
@@ -749,7 +749,6 @@ const write = (method, url, body) => {
   // a workflow's steps: tested, repaired and saved in memory, like every other change a visitor makes (demoWorkflows.js)
   if (method === "post" && p === "/api/workflows/step-test") return demoStepTest(body);
   if (method === "post" && (m = p.match(/^\/api\/workflows\/(\d+)\/repair$/))) return demoRepair(state, m[1]);
-  if (method === "post" && (m = p.match(/^\/api\/workflows\/(\d+)\/undo-repair$/))) return demoUndo(state, m[1]);
   if (method === "post" && p === "/api/sources" && (body?.Channel === "report"
     || (state["/api/sources"]?.data || []).some((s) => s.SourceId === body?.SourceId && s.Channel === "report"))) return demoSaveSource(state, body);
   if (p === "/api/settings" || p.startsWith("/api/setup")) return { ok: true };

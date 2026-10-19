@@ -23,6 +23,7 @@ import contextvars, json, re, threading
 from collections import Counter
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
+from urllib.parse import quote
 from loguru import logger
 
 from . import kinds as task_kinds
@@ -113,8 +114,9 @@ CONTRACT = (
     "You are speaking to {owner} in the chat on the Assistant tab. The action words under your line are the owner's "
     "buttons and they are already chosen for this item - never list them, and never end a line with an offer to do "
     "something. When you cannot tell which of two things the owner's words mean, say which two and ask - one short "
-    "question, and OPTIONS instead of a CALL. When the words say what they want, act on them: a card is their "
-    "confirmation, so acting on a clear ask is not a guess.\n" + IN_PART)
+    "question, and OPTIONS instead of a CALL. When the words say what they want, CALL it: Taskuary brings up the "
+    "button that does it, lit, or the page that holds it, and nothing happens until the owner presses it - so acting on a clear "
+    "ask is not a guess. Never say it is done: say what to press.\n" + IN_PART)
 SYSTEM = CONTRACT      # the old name, for one release
 
 # The same walk, read in a phone chat. There are no cards there and no action words under the line, so
@@ -904,6 +906,63 @@ def table_op_verb(call: dict | None) -> str | None:
     return None
 
 
+# THE ASSISTANT IS A ROUTER ON THE DESK (the owner, 2026-10-19: "no take it back button. hate that. the assistant again should just be a
+# router to actions or answer quick questions about things ... all work goes to agents, it brings up tasks/settings/action buttons" and "it
+# should just surface the correct button"): a typed ask that means an act brings its item up and LIGHTS the row's own button for it - the
+# Advisor's tint on a real verb, never a button of its own - with one line. It runs nothing and draws no card to confirm: the press is the
+# confirmation. An act whose button lives on a page opens that page beside the answer. A phone chat has no buttons, so it keeps its text
+# yes/no (DELIVERY == PHONE). The model still picks the act; code only finds its button, or tells the model there is none.
+def routes() -> bool: return DELIVERY.get() != PHONE
+
+# the operation a tool names -> the row's own button for it (buttons.json)
+KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.reopen': 'reopen', 'review.approve': 'approve',
+               'agent.continue': 'continue', 'agent.stop': 'stop_agent', 'agent.answer': 'answer_agent', 'task.split': 'split', 'task.merge': 'split',
+               'task.handoff': 'forward', 'task.clarify': 'ask_sender', 'task.share': 'share', 'task.not_a_task': 'remove',
+               'message.retriage': 'retriage', 'task.set_kind': 'change_kind', 'task.set_repo': 'pick_repo', 'dispatch.prepare': 'regular_agent',
+               'report.rerun': 'rerun', 'connection.test': 'test_connection', **{k: 'not_ours' for k in OP_BUTTON}}
+# ...a task's fields: each one its own picker on the row; a title or a due day is written on the task itself
+FIELD_BUTTON = {'priority': 'priority', 'assignee': 'assign'}
+WAITS = 'Nothing happens until you say yes.'
+
+
+def _lit(store, tid: int, table: dict | None, it: dict, verb: str) -> dict:
+    """The item's own button for `verb`, lit, and the one line that says to press it - the item brought up first when it is not the one on
+    the table (the page pulls `light.key`, the rail's road). Nothing runs."""
+    b = BUTTON_OF.get(verb, verb)
+    label = next((c['label'] for c in chips_for(store, it) if c.get('verb') == b), '') or (closeout_label(it) if b == 'approve' else '') or buttons.label(b)
+    up = not _same(it, table) and not (table and it.get('tid') and table.get('tid') == it.get('tid'))
+    said = (f"{_cap(_where(it))} is up - press {label} when you're sure." if up and _where(it) else f"Press {label} when you're sure.")
+    record(store, tid, 'assistant', said)          # the chat's line; the task's notes keep no "press it"
+    return {'say': said, 'options': [], 'chips': [], 'decision': None,
+            'light': {'verb': b, 'label': label, 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or ''}}
+
+
+def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
+    """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it."""
+    record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': chips_for(store, table), 'decision': None, 'open': href}
+
+
+# a new job's words go into New, on the tab that starts it, its own filled button the one to press: an agent for work, a note to self for
+# a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons" - typed words never start an agent)
+NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent', 'terminal', 'coding_agent'), 'task': ('note', '', ''),
+           'report': ('report', '', ''), 'workflow': ('workflow', '', '')}
+
+def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
+    kind, how, verb = NEW_TAB[want]
+    press = buttons.label(verb) if verb else {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it'}[kind]
+    said = f"It is written up in New below - press {press} when you're sure."
+    record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000]}}
+
+
+def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str) -> dict:
+    """Words to the agent that asked ARE its answer - the box's own purpose, as Answer it says (2026-10-02): they go in, with a receipt."""
+    op = operations.propose(store, 'agent.answer', int(target), {'text': said}, actor)
+    turn = receipt_turn(store, run_proposal(store, op, actor), actor, table=True)
+    return {'say': turn['say'], 'options': [], 'chips': turn['chips'] or chips_for(store, table), 'decision': None}
+
+
 def _in_words(llm, system: str, table: str, text: str, verb: str) -> tuple[str, list]:
     """The model chose an action the item has no button for: one more round, for the answer in words."""
     label = CHIP_WORDS.get(BUTTON_OF.get(verb, verb)) or PROPOSALS.get(verb, ('', verb))[1]
@@ -1194,7 +1253,9 @@ def pages_block(store) -> str:
             # or location of that setting")
             '- the brains - which CLI tool or AI connection, at which model, runs triage, this Assistant, general agents and coding, '
             'and where report runs go: #settings=config&group=How%20mail%20is%20sorted\n'
-            '- setup itself - their AI, their email, the questions about their work, more connections ("set up Taskuary"): #setup\n'
+            # SETUP IS THE BUTTON AT THE TOP, never a link or a script here (the owner, 2026-10-19): it replaces the whole page
+            '- setup itself - their AI, their email, the questions about their work - has no link: it is the Setup button at the top of '
+            'the page; say so\n'
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
             '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '
@@ -1805,15 +1866,13 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
     special-cased, and a checklist item was "the first one containing the words" (the owner, 2026-10-11: no word lists - the
     model reads intent, code validates). A date is data, so remind's date PARSER still reads "friday" or "2 weeks"."""
     from . import remind
-    # A PUT-BACK RESTORES WHAT WAS THERE (Stream B, 2026-10-18): a receipt's Take it back after the task page changed the owner or
-    # the due day puts back the old value - a person's step, a day already gone - which no fresh choice may name
-    out, back = {}, bool(p.get('_undo'))
+    out = {}
     if kind == 'task.update':
         who = str(p.get('assignee') or '').strip()
         if who:
             # `none` is the page's "unassigned" - nobody holds it
             allowed = ['owner', 'none'] + [f"agent:{a['Name']}" for a in store.list_agents()]
-            if who not in allowed and not back: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
+            if who not in allowed: raise ValueError(f"task.update assignee is one of {', '.join(allowed)} - not {who!r}. Nothing was changed.")
             out['assignee'] = '' if who == 'none' else who
         due = str(p.get('due') or '').strip()
         if due:
@@ -1824,7 +1883,7 @@ def task_contract(store, kind: str, tid: int, p: dict) -> dict:
             elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', due):
                 try: day = datetime.strptime(due, '%Y-%m-%d').strftime('%Y-%m-%d')
                 except ValueError: raise ValueError(bad)
-                if day < today and not back: raise ValueError(f'{bad} That day has gone.')
+                if day < today: raise ValueError(f'{bad} That day has gone.')
                 out['due'] = day
             else:
                 try: day = (remind.parse(due) or '')[:10]
@@ -1886,6 +1945,15 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
+    # ON THE DESK A NEW JOB IS NEW, FILLED IN (routes): the words on the tab that starts it, its own button the one to press
+    if routes() and kind in ('task.create_from_text', 'task.setup'):
+        return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
+                    str(params.get('text') or text or '').strip())
+    if routes() and kind == 'role.apply':
+        return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles, beside this - press Set up beside the one you do.")
+    if routes() and kind == 'pipe.clear':
+        raise CallMiss("Clearing a set of items has no button on the desk - the owner puts each one down with Next or Mark done, and a run of "
+                       f"notices with {buttons.label('next', 'batch')}. Say so in plain words. Nothing was touched.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
@@ -1931,7 +1999,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
         summary = f"{plural(len(hits), 'item')} - {where}: {shown}{' and more' if len(hits) > 4 else ''}"
         tail = ('They are marked read and search still finds them; nothing is deleted. '
-                'Nothing has been started - confirm below, or tell me what to change.')
+                + WAITS)
         prop = _propose_raw(store, tid, 'pipe.clear', 0, {'select': sel, 'text': text}, label, summary, tail, actor, item)
         # A sweep that takes the table with it has settled the table: the walk moves to the next thing
         # instead of sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
@@ -2045,18 +2113,70 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
     # ...and a fact is what it says: "Remember it: memory.remember" put the tool's name on the card (real-AI check, 2026-10-18)
     if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120].rstrip('.')    # the line adds its own stop
-    # an instant kind (the tiers) runs as soon as it is proposed - the desktop and the phone both carry
-    # out an `auto` proposal at once - and its receipt carries the undo; the rest wait for the click
-    instant = toolcatalog.is_instant(kind)
+    if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
+    # the phone's words: one yes-or-no, whatever the kind
+    instant = False
     # ...and the ANSWER to the agent asking on the table, whichever road the model took to it (the tool, or the answer_agent verb in
     # AUTO): it goes straight in, as the agent's Answer pill does - a real-brain check found the tool road waiting for a confirm the
     # verb road skips (2026-10-08; the owner's 2026-10-02 rule: an answer to an asking agent goes directly to it)
     if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and it.get('tid') and int(target or 0) == int(it['tid']):
         instant = True
-    tail = 'Doing it now.' if instant else 'Nothing has been started - confirm below, or tell me what to change.'
+    tail = 'Doing it now.' if instant else WAITS
     prop = _propose_raw(store, tid, kind, int(target or 0), params, label, named or _where(it) or label, tail, actor, item)
     if instant: prop = {**prop, 'auto': True}
     return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+
+
+# where a report's or a connection's act is pressed, on its own page
+REPORT_SAYS = {'report.run': 'run it', 'report.rerun': 'run it again', 'report.pause': 'pause it', 'report.resume': 'switch it back on',
+               'report.route': 'change where it goes', 'report.edit': 'change it', 'report.delete': 'delete it'}
+CONN_SAYS = {'connection.pause': 'switch it off', 'connection.resume': 'switch it on', 'connection.test': f"press {buttons.label('test_connection')}",
+             'connection.create': 'fill it in and test it'}
+# a task's own part that has no button of its own - the task is brought up and the line says where on it
+ON_TASK = {'task.check': 'tick it on its checklist', 'task.checklist': 'its checklist is on it'}
+
+
+def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it: dict, table: dict | None, text: str, actor: str) -> dict:
+    """call_turn on the desk (routes): the tool the model picked, as the button that does it - lit on its item, brought up first - or the page
+    that holds it, opened beside the answer. A tool with neither goes back to the model as a miss it can fix by answering in words."""
+    from . import appfacts
+    tk = operations.KINDS[kind][0]
+    if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
+        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
+    if kind == 'script.start':
+        return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
+    if kind == 'memory.remember':
+        return _page(store, tid, table, '#settings=memory', 'Add it as a note under Verdicts & notes, beside this - it is used from then on.')
+    if tk == 'setting':
+        r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
+        return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
+                     f"{r.get('label') or named} is on the settings page beside this - change it there.")
+    if tk == 'connector':
+        typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
+        if typ: return _page(store, tid, table, f'#connector={typ}', f"{named or typ}'s card is open beside this - {CONN_SAYS.get(kind, 'change it')} there.")
+    on = None
+    if tk == 'item' or (tk == 'message' and table and int(table.get('mid') or 0) == target): on = table
+    elif tk == 'message' and target: on = funnel.item_for_key(store, f'msg:{target}')
+    elif tk in ('task', 'review') and target:
+        t = target if tk == 'task' else int((store.get_review(target) or {}).get('TaskId') or 0)
+        on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
+    elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
+    if tk == 'source' and not on and target:
+        return _page(store, tid, table, f'#report={target}', f"{named or 'The report'} is open beside this - {REPORT_SAYS.get(kind, 'change it')} there.")
+    b = (next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '') if kind == 'task.update'
+         else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
+         else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
+    if on and b:
+        why = cannot(on, b, store)
+        if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
+        return _lit(store, tid, table, on, b)
+    if on and kind in ON_TASK:
+        said = f"{_cap(_where(on))} is up - {ON_TASK[kind]}."
+        record(store, tid, 'assistant', said)
+        return {'say': said, 'options': [], 'chips': [], 'decision': None,
+                'light': {'verb': '', 'label': '', 'key': on.get('key') or '', 'tid': on.get('tid'), 'ref': on.get('ref') or ''}}
+    raise CallMiss(f"{kind} has no button the owner presses here, so it is not yours to run from the chat - say in plain words where they "
+                   "do it, or that it is not something done from here. Nothing was changed.")
 
 
 def _carry_out(store, tid: int, text: str, words: dict, item0: dict | None, actor: str) -> dict:
@@ -2786,10 +2906,6 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     # as its brief, and stays the item's.
     if kind == 'task.create_from_text' and (d_text or text or '').strip(): it, settles = {}, False
     prev = open_proposal(store, dock_tid)
-    # an undo still on offer is NOT a proposal to revise into the next ask: a second setting change
-    # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
-    if prev and (prev.get('params') or {}).get('_undo'):
-        operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
     same = _same_proposal(prev, kind, target, params)
     # THE SAME ASK AGAIN is not a change: a "yes" read as the decision once more re-proposed it as "Changed to: <the same
     # thing>", a new version that changed nothing (2026-09-22 audit). It stays the one proposal and says it still waits.
@@ -2810,11 +2926,11 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     said = summary if it else _title_cut(params.get('text') or params.get('note') or where, 400).rstrip('.')
     head = (f"Still waiting for your yes: {label} - {said}" if unchanged else f"Changed to: {label} - {said}" if same
             else f"{label}: {said}")
-    say_ = lead + f"{head}.{note} Nothing has been started - confirm below, or tell me what to change."
+    say_ = lead + f"{head}.{note} {WAITS}"
     # OVER THE CARD, only what the card does not say: its heading IS "<label>" and its line IS the summary, so the
     # sentence above it said them first (the owner, 2026-09-24: "the assistant saying words above the box and then
     # the box saying the same thing"). `say` keeps the whole sentence for a doorway with no card - a phone chat.
-    say_card = (lead + note.strip() + ' Nothing has been started - confirm below, or tell me what to change.').strip()
+    say_card = (lead + note.strip() + ' ' + WAITS).strip()
     return {**op, 'verb': verb, 'label': label, 'summary': summary, 'settles': bool(settles and not elsewhere),
             'key': it.get('key'), 'ref': it.get('ref'), 'tid': it.get('tid'), 'say': say_, 'say_card': say_card, 'note': note.strip(),
             # a hand-off with no doubt left in it - one worker, one checkout - has nothing to pick; it still waits for the press
@@ -2943,10 +3059,6 @@ def _propose_raw(store, dock_tid: int, kind: str, target: int, params: dict, lab
                  item: dict | None = None) -> dict:
     """A proposal that is not about the item on the table: the same revise-or-replace rule as propose_for, recorded as a card."""
     prev = open_proposal(store, dock_tid)
-    # an undo still on offer is NOT a proposal to revise into the next ask: a second setting change
-    # would have rewritten the undo of the first. The next act closes the old undo (it no longer applies).
-    if prev and (prev.get('params') or {}).get('_undo'):
-        operations.cancel(store, prev['id'], actor); store.set_setting(LAST_UNDO, '', actor); prev = None
     same = _same_proposal(prev, kind, target, params)
     # the same words again are the card still waiting, as on propose_for - not a version 2 said "Changed to:"
     unchanged = same and {k: v for k, v in (prev.get('params') or {}).items() if k != 'processing_context'} == params
@@ -3034,10 +3146,22 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     if pending:
         ask, answers = pending['ask'], {'questions': pending.get('questions') or [], 'reply': text}
         # a role's questions were asked about THAT role: the answer is to them, not a new request to sort
-        if pending.get('role'): return _propose_role(store, tid, ask, pending['role'], item, actor, cllm, answers)
+        if pending.get('role') and not routes(): return _propose_role(store, tid, ask, pending['role'], item, actor, cllm, answers)
         sort = sort_setup(store, f"{ask}. The owner answered: {text}", cllm)
     elif sorted_as: sort = {'kind': sorted_as, 'provider': None, 'why': ''}      # the chat model already named it
     else: sort = sort_setup(store, ask, cllm)
+    # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Profiles, and
+    # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
+    if routes():
+        if sort['kind'] == 'report': return _new(store, tid, item, 'report', ask)
+        if sort['kind'] == 'role':
+            return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles, beside this - press Set up beside the one you do.")
+        if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
+        if sort.get('provider'):
+            prov = sort['provider']
+            name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
+            return _page(store, tid, item, f'#connector={prov}', f"{name}'s card is open beside this - fill it in and test it there. "
+                                                                 'A key or password goes on the card, never in this chat.')
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",
                             title=sort.get('title') or '')
@@ -3062,7 +3186,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     looked = ', '.join(str(x) for x in (out.get('looked_at') or [])[:4])
     # over the card only what the card does not say: why it is built this way, and that nothing is saved yet
     why = ' '.join(x for x in (str(out.get('explain') or '').strip(), f'I read {looked} to build it.' if looked else '') if x)
-    after = 'Nothing is saved - confirm below, tell me what to change, or preview a dry run first.'
+    after = 'Nothing is saved until you say yes. Preview a dry run first if you like.'
     prop = _propose_raw(store, tid, 'report.create', 0, params, 'Create the report', facts['title'],
                         '\n' + report_lines(facts) + '\n\n' + ' '.join(x for x in (why, after) if x), actor, item)
     prop['say_card'] = ' '.join(x for x in (why, after) if x)
@@ -3112,7 +3236,7 @@ def role_card(store, tid: int, role: str, portal, route: bool, item: dict | None
              *([f"Ledger: {(store.get_connector_by_type(r['ledger']) or {}).get('Name') or r['ledger']} set to read if nobody chose its "
                 'authority, so nothing reaches it without your click'] if r.get('ledger') else []),
              *([f"Workflow: \"{wf['title']}\", daily at {wf.get('daily_at', '')}, created switched off" + (f" - {portal}" if portal else '')] if wf else [])]
-    tail = '\n' + '\n'.join(lines) + '\n\nNothing is set up yet - confirm below, or tell me what to change.'
+    tail = '\n' + '\n'.join(lines) + '\n\n' + WAITS
     prop = _propose_raw(store, tid, 'role.apply', 0, params, 'Set it up', r['title'], tail, actor, item)
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
@@ -3146,7 +3270,7 @@ def _propose_connection(store, tid: int, ask: str, provider: str | None, item: d
               'secret': 'never here - the card asks for it securely', 'starts': 'stays off until you turn it on after authorizing'}
     tail = (f"A {provider} connection with {scope} authority ({params['permissions']}). I never take a password or key in this chat: "
             'once the card exists, sign in or paste the secret there and run its Test. It stays off - nothing polls, nothing starts - '
-            'until you turn it on. Nothing is created - confirm below, or tell me what to change.')
+            'until you turn it on. ' + WAITS)
     prop = _propose_raw(store, tid, 'connection.create', cid, params, 'Create the connection', f"{name} ({provider})", tail, actor, item)
     return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}
 
@@ -3224,7 +3348,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     # Later says WHEN it comes back (funnel.later_until). A sent reply's watch is decided by the model after the send
     # (asks.watch_reply, in the background), so the approve receipt no longer claims one
     if kind == 'item.settle' and o.get('says') and not o.get('closed'): return f" {o['says']}"
-    # the app itself, by name (server._run_operation's handlers): the fact, then the undo rides on the receipt
+    # the app itself, by name (server._run_operation's handlers): the fact of what it did
     if kind in ('report.run', 'report.rerun') and o.get('ref'):
         # one run of a workflow at a time (workflows.running): a second ask is taken to the run that is still working
         return (f" {o.get('title') or 'It'} {'is still running as' if o.get('busy') else 'started as'} {o['ref']} - open it to watch the agent, "
@@ -3435,38 +3559,12 @@ def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = 
     if (chips := sent_chips(store, op)):
         record(store, dock_tid, 'assistant', line, {'kind': 'words', 'key': None, 'title': label, 'chips': chips, 'tid': None, 'ref': ref or None})
         return {'say': line, 'chips': chips}
-    # THE UNDO RIDES THE RECEIPT (the tiers): an instant write says what it did AND how to put it back -
-    # a one-click card on the desktop, an Undo pill on the phone (remote_assistant). The undo is a
-    # proposal of its own, never auto, so the click is the only thing that reverts.
-    undo = (op.get('outcome') or {}).get('undo') if st == 'done' and not op.get('duplicate') else None
-    # ...and an undo that ran offers no undo of its own: put back is put back, not a see-saw
-    if undo and undo.get('kind') in operations.KINDS and not (op.get('params') or {}).get('_undo'):
-        try:
-            u = operations.propose(store, undo['kind'], int(undo.get('target') or 0), {**dict(undo.get('params') or {}), '_undo': True}, actor)
-            store.set_setting(LAST_UNDO, u['id'], actor)
-            line += f" Undo: {undo.get('label') or 'put it back'}."
-            # A PRESS ON THE TABLE'S TASK VIEW (Stream B, 2026-10-18): its receipt is a notice beside the view, never a card that takes the
-            # table from it - the view folded under its own receipt. Its Take it back rides the bar by the prompt (AssistantView freshUndo).
-            record(store, dock_tid, 'assistant', line, {'kind': 'proposal', 'key': None, 'title': undo.get('label') or 'Undo', 'op': u['id'],
-                                                       'tid': None, 'ref': None, 'undo': True, **({} if proposed else {'background_event': True})})
-            return {'say': line, 'chips': []}
-        except Exception as e: logger.debug(f'no undo offered for {op.get("id")}: {e}')
-    # ...and with nothing to put back, the same notice: a bare line let go of the task view the owner was pressing on
+    # A PRESS ON THE TABLE'S TASK VIEW (Stream B, 2026-10-18): its receipt is a notice beside the view, never a card that takes the table
+    # from it. ONE LINE PER ACT and no Take it back (the owner, 2026-10-19: "no take it back button. hate that") - a wrong Mark done is
+    # put right with Reopen task, the row's own button
     record(store, dock_tid, 'assistant', line, None if proposed else {'kind': 'words', 'key': None, 'title': label, 'chips': [], 'tid': None,
                                                                      'ref': ref or None, 'background_event': True})
     return {'say': line, 'chips': []}
-
-
-LAST_UNDO = 'assistant_last_undo'           # the newest undo proposal's id: what the phone's Undo pill runs
-
-
-def undo_last(store, actor: str = 'owner') -> str:
-    """"undo", alone, from a chat: run the newest undo the receipts offered, once."""
-    oid = str(store.get_setting(LAST_UNDO) or '').strip()
-    op = operations.get(store, oid) if oid else None
-    if not op or op.get('status') != 'proposed': return 'Nothing to undo - the last change has no undo left, or it was already put back.'
-    store.set_setting(LAST_UNDO, '', actor)
-    return receipt(store, run_proposal(store, op, actor), actor)
 
 
 def _chat_proposed(store, dock_tid: int, oid: str) -> bool:
@@ -3524,9 +3622,10 @@ def say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace
 def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trace=None, cancel=None, item: dict | None = None,
          open_card: str | None = None, images: list | None = None) -> dict:
     """The owner's words, answered briefly - about the item on the table when there is one. The MODEL interprets
-    them (PW-121): a question is answered, a subject named is pulled in, and a decision becomes a PROPOSAL the
-    owner confirms (PW-123/124) - except Next, which moves the walk and marks nothing, and a reply request, which
-    drafts at once and sends nothing (PW-126/128). No phrase table decides anything."""
+    them (PW-121): a question is answered, a subject named is pulled in, and a decision brings its item up with the
+    row's own button for it lit (routes, 2026-10-19) - on a phone, a proposal answered yes or no - except Next, which
+    moves the walk and marks nothing, and a reply request, which drafts at once and sends nothing (PW-126/128). No
+    phrase table decides anything."""
     text = str(text or '').strip()
     if not text: raise ValueError('say something')
     task, _ = general.dock_task(store, actor)
@@ -3585,7 +3684,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
                       + ('If their words mean one of the actions for the item on the table, CALL it.' if item else
-                         'If they ask for something to be done, CALL it now - the card is their confirmation.'))
+                         'If they ask for something to be done, CALL it now - its button is their confirmation.'))
         raw = str(llm(system, asked, max_tokens=MAX_TOKENS, **({'images': general._images(images)} if images else {})) or '').strip()
         raw, call = parse_call(raw)
         # A LOOK-UP runs at once and comes straight back, because it changes nothing and waits for
@@ -3780,6 +3879,18 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         return {'say': said, 'options': [], 'chips': [], 'decision': d}
     if decision and verb == 'setup':                                     # a report, a connection: gathered, then confirmed (PW-194)
         return setup_turn(store, tid, text, decision.get('text') or text, item, actor, trace=trace, cancel=cancel)
+    # ON THE DESK THE WORDS LIGHT THE BUTTON (routes): the item comes up with its own button for the act lit, and nothing runs - except
+    # words to an agent that asked, which are its answer; a new job is New, filled in; a fact to keep goes in under Verdicts & notes
+    if decision and verb in PROPOSALS and routes():
+        if verb == 'answer_agent' and target_item and target_item.get('tid'):
+            return _answer_now(store, tid, item, int(target_item['tid']), decision.get('text') or text, actor)
+        if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
+        if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
+            return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
+        if target_item: return _lit(store, tid, item, target_item, verb)
+        say_ = 'Nothing is on the table. Name the one you mean - the sender or its TQ ref - and I will bring it up.'
+        rec('assistant', say_)
+        return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     if decision and verb in PROPOSALS:
         try: prop = propose_for(store, tid, decision, target_item, text, actor, elsewhere=elsewhere, table=item)
         except ValueError as e:

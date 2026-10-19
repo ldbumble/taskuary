@@ -905,57 +905,12 @@ class OperationEdit(BaseModel): params: dict
 class OperationConfirm(BaseModel): version: int
 class DiscussBody(BaseModel): body: str; actor: str = 'owner'
 
-# EVERY ACT LEAVES A RECEIPT, AND A PUT-BACK WHERE ONE IS POSSIBLE (Stream B, the owner 2026-10-18): the task page's presses run
-# down this road now, so what a press changed on a task is read BEFORE it runs and its receipt offers the way back (concierge.receipt_turn)
-REVERSIBLE = frozenset({'task.complete', 'task.reopen', 'task.update', 'task.check', 'task.checklist', 'task.set_kind', 'task.set_repo'})
-KIND_WORDS = {'task': 'your task', 'general': 'a general agent', 'coding': 'a coding agent', 'reply': 'a reply', 'goal': 'a goal'}
+# EVERY ACT LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the task page's presses run down this road, and the receipt says what was
+# done (concierge.receipt_turn) - never a Take it back (the owner, 2026-10-19): a wrong Mark done is put right with Reopen task
 
 def _run_operation(op: dict, background: BackgroundTasks):
-    """The shared handler for each kind, and on a task the undo of what it changed when its handler names none."""
-    before = store.get_task(op['target']) if op['kind'] in REVERSIBLE else None
-    out = _run_kind(op, background)
-    if before and isinstance(out, dict) and 'undo' not in out:
-        try: out = {**out, 'undo': _task_undo(op['kind'], int(op['target']), op['params'] or {}, before, out)}
-        except Exception as e: logger.debug(f"no undo for {op['kind']} on {op['target']}: {e}")
-    return out
-
-def _boxes(t: dict) -> list:
-    try: items = json.loads(t.get('Checklist') or '[]')
-    except (TypeError, ValueError): items = []
-    return [i for i in items if isinstance(i, dict) and i.get('text')] if isinstance(items, list) else []
-
-def _task_undo(kind: str, tid: int, p: dict, t: dict, out: dict) -> dict | None:
-    """The put-back of a task act, from the task as it stood before it: None when nothing changed or nothing can be put back
-    (a dropped email is gone, a task deleted is gone). Labels name the button where one exists (buttons.json)."""
-    L, ref = buttons.label, task_ref(tid)
-    def u(k, params, label): return {'kind': k, 'target': tid, 'params': params, 'label': label}
-    if kind == 'task.complete': return None if out.get('already') else u('task.reopen', {}, f"{L('reopen')} {ref}")
-    if kind == 'task.reopen': return u('task.complete', {}, f"{L('close')} {ref}") if t.get('Status') == 'done' else None
-    if kind == 'task.update':
-        was = {'Priority': ('priority', t.get('Priority') or 'normal'), 'Title': ('title', t.get('Title') or ''),
-               'Assignee': ('assignee', t.get('Assignee') or 'none'), 'DueAt': ('due', str(t.get('DueAt') or '')[:10] or 'none')}
-        back = {was[k][0]: was[k][1] for k in out.get('changed') or {} if k in was and was[k][1]}
-        if not back: return None
-        said = {'priority': f"priority back to {back.get('priority')}", 'title': 'the title back', 'assignee': 'who holds it back', 'due': 'the due day back'}
-        return u('task.update', back, f"Put {said[next(iter(back))]}" if len(back) == 1 else 'Put it back as it was')
-    if kind == 'task.check':
-        old = next((i for i in _boxes(t) if i['text'] == out.get('item')), None)
-        on = out.get('done', True)
-        # an email ticked off is let go - its draft is never sent - and nothing brings that back
-        if not old or old.get('out') or bool(old.get('done')) == on: return None
-        n = [i['id'] for i in _boxes(t)].index(old['id']) + 1
-        return u('task.check', {'item': str(n), 'id': old['id'], 'done': not on}, f"{'Untick' if on else 'Tick'} {old['text'][:60]}")
-    if kind == 'task.checklist':
-        if not isinstance(p.get('items'), list) or p.get('emails') or p.get('drop'): return None
-        prev = [i['text'] for i in _boxes(t) if not i.get('out')]
-        return None if prev == [str(x) for x in p['items']] else u('task.checklist', {'items': prev}, 'Put the checklist back')
-    if kind == 'task.set_kind':
-        prev, now = ('goal' if is_goal(t) else str(t.get('Kind') or 'task')), str(out.get('kind') or p.get('kind'))
-        return None if prev == now else u('task.set_kind', {'kind': prev, 'learn': False}, f"Make it {KIND_WORDS.get(prev, prev)} again")
-    if kind == 'task.set_repo':
-        prev = next((x[5:] for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x.startswith('repo:')), '')
-        return u('task.set_repo', {'repo': prev}, f"Put it back in {prev}") if prev and prev != str(p.get('repo') or '').strip() else None
-    return None
+    """The shared handler for each kind."""
+    return _run_kind(op, background)
 
 def _run_kind(op: dict, background: BackgroundTasks):
     """The shared handler for each kind - the same code the task page and the timeline run."""
@@ -1022,7 +977,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         store.add_comment(tid, ACTOR, 'human', f'You told the assistant: work like this is {field} {value}. Triage learns from it.')
         return {'field': field, 'value': value, **taught}
     # THE APP ITSELF, BY NAME (the assistant-runs-the-app design, 2026-09-18). Each handler runs the road
-    # the tab's own button runs, audits as the assistant, and hands back an `undo` the receipt can offer.
+    # the tab's own button runs and audits as the assistant; the receipt says what it did (no undo - the owner, 2026-10-19).
     if kind in ('report.run', 'report.pause', 'report.resume', 'report.route', 'report.edit', 'report.delete'):
         src = store.get_source(tid)
         if not src or src.get('Channel') != 'report': raise HTTPException(404, 'no such report')
@@ -1031,13 +986,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         if kind == 'report.run':
             from . import remote_assistant
             out = _rerun_report(tid, asked=remote_assistant.asking(), by='assistant')
-            return {**out, 'title': title, 'undo': None}
+            return {**out, 'title': title}
         if kind in ('report.pause', 'report.resume'):
             on = kind == 'report.resume'
             store.save_source({'SourceId': tid, 'Active': int(on)}, ACTOR)
             store.audit('source', tid, 'resume' if on else 'pause', 'assistant', detail={'title': title})
-            return {'title': title, 'active': on,
-                    'undo': {'kind': 'report.pause' if on else 'report.resume', 'target': tid, 'params': {}, 'label': f"{'Pause' if on else 'Resume'} {title}"}}
+            return {'title': title, 'active': on}
         if kind == 'report.route':
             # one line of the route card - the same card the Reports page edits (the owner, 2026-09-27)
             from .reports import full_route, route_words, set_line
@@ -1048,8 +1002,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
             prev = full_route(cfg)[line]
             store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
             store.audit('source', tid, 'route', 'assistant', detail={'title': title, 'line': line, 'from': prev, 'to': new['route'][line]})
-            return {'title': title, 'route': route_words(new),
-                    'undo': {'kind': 'report.route', 'target': tid, 'params': {'line': line, **prev}, 'label': f'Put {title} back: {route_words(cfg)}'}}
+            return {'title': title, 'route': route_words(new)}
         if kind == 'report.edit':
             patch = p.get('config') if isinstance(p.get('config'), dict) else {}
             if not patch: raise HTTPException(422, 'say what to change - config is the keys to change')
@@ -1057,11 +1010,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
             new = {**cfg, **patch}
             store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
             store.audit('source', tid, 'edit', 'assistant', detail={'title': title, 'changed': sorted(patch)})
-            return {'title': new.get('title') or title, 'changed': sorted(patch),
-                    'undo': {'kind': 'report.edit', 'target': tid, 'params': {'config': {k: cfg.get(k) for k in patch}}, 'label': f'Put {title} back as it was'}}
+            return {'title': new.get('title') or title, 'changed': sorted(patch)}
         delete_source(tid)
         store.audit('source', tid, 'delete', 'assistant', detail={'title': title})
-        return {'title': title, 'deleted': True, 'undo': None}
+        return {'title': title, 'deleted': True}
     if kind == 'setting.set':
         from . import settings_schema
         key, meta = str(p.get('setting') or '').strip(), settings_schema.knobs().get(str(p.get('setting') or '').strip())
@@ -1071,16 +1023,14 @@ def _run_kind(op: dict, background: BackgroundTasks):
         if t == 'switch': v = '1' if v.lower() in ('1', 'true', 'on', 'yes') else '0' if v.lower() in ('0', 'false', 'off', 'no') else None
         elif t == 'number':
             if settings_schema.refuse(key, v): v = None         # '--5', 'nan', 'inf', -5 get the same sentence as 'often'
-            elif v: v = str(int(float(v)))                      # ...and blank is the default, which an undo puts back
+            elif v: v = str(int(float(v)))                      # ...and blank is the default
         elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
         if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number, 0 or more' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
         prev = store.get_setting(key)
         store.set_setting(key, v, ACTOR)
         store.audit('setting', 0, 'set', 'assistant', detail={'key': key, 'from': prev, 'to': v})
         said = settings_schema.describe(key, v)
-        return {'key': key, 'label': meta['label'], 'value': v, 'said': said,
-                'undo': {'kind': 'setting.set', 'target': 0, 'params': {'setting': key, 'value': prev if prev is not None else ''},
-                         'label': f"Put {meta['label']} back to {settings_schema.describe(key, prev).split(': ', 1)[-1]}"}}
+        return {'key': key, 'label': meta['label'], 'value': v, 'said': said}
     if kind in ('connection.test', 'connection.pause', 'connection.resume'):
         c = store.get_connector(tid)
         if not c: raise HTTPException(404, 'connector not found')
@@ -1092,14 +1042,13 @@ def _run_kind(op: dict, background: BackgroundTasks):
             if not out.get('ok'): _failed_test(tid, name, out)
             # `answered`, not `ok`: a test that heard nothing still RAN - ok=False made it a failed act, and the owner was
             # told "the action did not complete" instead of what the connection said (2026-09-29 audit)
-            return {'name': name, 'answered': bool(out.get('ok')), 'detail': out.get('detail'), 'undo': None}
+            return {'name': name, 'answered': bool(out.get('ok')), 'detail': out.get('detail')}
         on = kind == 'connection.resume'
         store.save_connector({'ConnectorId': tid, 'Active': int(on)}, ACTOR)
         store.audit('connector', tid, 'resume' if on else 'pause', 'assistant', detail={'name': name})
-        return {'name': name, 'active': on,
-                'undo': {'kind': 'connection.pause' if on else 'connection.resume', 'target': tid, 'params': {}, 'label': f"{'Switch off' if on else 'Switch on'} {name}"}}
+        return {'name': name, 'active': on}
     if kind == 'script.start':
-        return {'script': str(p.get('name') or ''), 'undo': None}
+        return {'script': str(p.get('name') or '')}
     if kind == 'task.complete':
         # the same close the PATCH road does: the pending draft is dismissed and the agent on it is stopped
         from . import concierge
@@ -1839,10 +1788,19 @@ class RemindBody(BaseModel): until: str | None = None
 @app.post('/api/tasks/{task_id}/remind')
 def remind_task(task_id: int, body: RemindBody):
     """Remind me (the task page's picker): off the rail until that morning, Upcoming meanwhile. None brings it back."""
-    from . import remind
+    from . import concierge, remind
+    # ONE WRITER FOR ITS RECEIPT (the 2026-10-19 UI walk: a reminder's receipt printed twice, and the page's own copy was gone on reload):
+    # put away from the Assistant's table, the server records the one line and hands its words back, and the page draws those same
+    # words - the chat's read then takes them for the same turn (assistantTurns.sameTurn). Read before it runs: it leaves the table.
+    try: table = concierge.on_table(store, {'kind': 'task.defer', 'target': task_id})
+    except Exception as e:
+        logger.debug(f'on_table failed for a reminder on {task_id}: {e}'); table = False
     try: out = remind.set_reminder(store, task_id, body.until, ACTOR)
     except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 404 if 'not found' in str(e) else 422, str(e))
-    operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
+    op = operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
+    if op and table:
+        try: out = {**out, 'receipt': concierge.receipt_turn(store, op, ACTOR, table=True)['say']}; live_bus.emit(live_bus.CHAT)
+        except Exception as e: logger.debug(f'no receipt recorded for the reminder on {task_id}: {e}')
     return out
 
 @app.patch('/api/tasks/{task_id}')
@@ -5807,16 +5765,6 @@ def workflow_repair(sid: int, body: dict = None):
     if out.get('flow'): store.audit('workflow', sid, 'repair_drafted', ACTOR, detail={'run': run['runId'], 'explain': out.get('explain')})
     return out
 
-@app.post('/api/workflows/{sid}/undo-repair')
-def workflow_undo_repair(sid: int, body: dict = None):
-    """Undo the newest self-repair a run made (flow.undo): the steps it replaced come back, while nothing has changed them since."""
-    from . import flow
-    b = body or {}
-    if not str(b.get('run_id') or '').isdigit(): raise HTTPException(422, 'say which run')
-    try: return flow.undo(store, sid, int(b['run_id']), ACTOR)
-    except LookupError as e: raise HTTPException(404, str(e))
-    except (ValueError, RuntimeError) as e: raise HTTPException(409, str(e))
-
 # ── QuickBooks Online (quickbooks.py): OAuth against Intuit, with a redirect back to this server ──
 @app.get('/api/connectors/{cid}/quickbooks/status')
 def quickbooks_status(cid: int):
@@ -8602,8 +8550,7 @@ def assistant_blocks(source_id: int = None, blocks: str = None, taskuary: str = 
 @app.get('/api/audit/assistant')
 def audit_assistant(limit: int = 60):
     """What the assistant changed, newest first - the rows its handlers audit as `assistant` (settings,
-    reports, connections). Settings -> Configuration shows them, with the undo beside the newest while
-    it still applies (the tiers: an instant write is always visible and always reversible)."""
+    reports, connections). Settings -> Configuration shows them - a record, with no undo (the owner, 2026-10-19)."""
     limit = max(1, min(limit, 200))      # SQLite reads LIMIT -1 as no limit at all
     rows = [r for r in store.list_audit(limit=max(limit * 5, 200)) if r.get('Actor') == 'assistant'][:limit]
     out = []
@@ -8611,9 +8558,7 @@ def audit_assistant(limit: int = 60):
         try: d = json.loads(r.get('Detail') or '{}') if str(r.get('Detail') or '').startswith('{') else {'detail': r.get('Detail')}
         except ValueError: d = {'detail': r.get('Detail')}
         out.append({'when': r.get('CreatedAt'), 'entity': r.get('EntityType'), 'id': r.get('EntityId'), 'action': r.get('Action'), 'detail': d})
-    undo = str(store.get_setting('assistant_last_undo') or '')
-    op = operations.get(store, undo) if undo else None
-    return {'data': out, 'undo': ({'id': op['id'], 'version': op['version'], 'label': 'Undo the last change'} if op and op.get('status') == 'proposed' else None)}
+    return {'data': out}
 
 
 @app.get('/api/settings')

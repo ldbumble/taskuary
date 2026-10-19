@@ -115,17 +115,6 @@ export function demoStepTest(body) {
   return { ...base, status: "dry", head: "would hand the run to the agent with this brief", body: `WORKFLOW RUN: (step ${i + 1})\nOBJECTIVE: ${step.prompt || ""}` };
 }
 
-// Take it back, in the demo: the steps before the repair come back, until the page reloads
-export function demoUndo(state, sid) {
-  const run = state["/api/reports/last-runs"]?.data?.[sid], rp = (run?.repairs || []).find((x) => !x.undone);
-  if (!rp) { const e = new Error("there is no repair on that run to undo"); e.response = { status: 409, data: { detail: e.message } }; throw e; }
-  const src = state["/api/sources"].data.find((x) => x.SourceId === Number(sid)), cfg = JSON.parse(src.ConfigJson);
-  cfg.flow = cfg.flow.map((x) => (x.id === rp.step ? { ...x, query: rp.diff[0].keys[0].was } : x));
-  src.ConfigJson = JSON.stringify(cfg); rp.undone = true;
-  for (const r of state[`/api/reports/${sid}/runs`]?.data || []) if (r.runId === run.run_id) r.repairs = run.repairs;
-  return { flow: cfg.flow, repairs: run.repairs };
-}
-
 export function demoRepair(state, sid) {
   if (Number(sid) !== PAYROLL) return { error: "That run did not fail - there is nothing to fix." };
   const src = state["/api/sources"].data.find((s) => s.SourceId === PAYROLL);

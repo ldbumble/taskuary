@@ -100,8 +100,10 @@ class AMissSaysWhatIsThereTests(unittest.TestCase):
     def test_the_clear_turn_tells_the_owner_what_is_there_on_a_miss(self):
         s = store()
         for n in range(2): fyi(s, f'newsletter {n}')
-        out = concierge.call_turn(s, 1, {'kind': 'pipe.clear', 'params': {'select': {'category': 'assistant'}}},
-                                  None, 'clear the assistant fyi')
+        # a set cleared at once is the phone's yes-or-no; the desk has no button for it, so the model says so (concierge.call_turn)
+        with concierge.delivering(concierge.PHONE):
+            out = concierge.call_turn(s, 1, {'kind': 'pipe.clear', 'params': {'select': {'category': 'assistant'}}},
+                                      None, 'clear the assistant fyi')
         self.assertIn('Nothing waiting matches', out['say'])
         self.assertIn('2 waiting', out['say'])          # ...and what IS there
         self.assertIn('nothing has been touched', out['say'])

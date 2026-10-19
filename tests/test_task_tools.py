@@ -8,6 +8,18 @@ from taskuary import concierge, ingest, toolcatalog
 import tests.test_assistant_reactions as T
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
+# (test_assistant_router); a phone chat has no buttons, so a tool the model names still becomes a proposal answered yes or no -
+# the proposals, their targets and their handlers are held here, on that road
+def setUpModule():
+    global _ROAD
+    from taskuary import concierge
+    _ROAD = concierge.DELIVERY.set(concierge.PHONE)
+def tearDownModule():
+    from taskuary import concierge
+    concierge.DELIVERY.reset(_ROAD)
+
+
 def call(s, tool, key=None, **params):
     """The model names a tool - the CALL line, scripted - and the card it becomes."""
     out = T.say(s, 'do it', key=key, model='On it.' + chr(10) + 'CALL: ' + json.dumps({'kind': tool, 'params': params}))

@@ -73,17 +73,19 @@ add a picture, or continue as is. Moving on with **Next** puts the card away wit
 Every open task has **Remind me** on its page: tomorrow, next week, in 2 weeks, in a month, or any day
 from the calendar. Until that day the task waits under **For later** on your rail, saying when it comes back. That
 morning a note goes on the task and it is back under **On you**, however long ago it arrived. Ask the
-Assistant the same thing — "bring TQ-0123 back in two weeks" — and it does it at once, with an undo.
+Assistant the same thing — "bring TQ-0123 back in two weeks" — and it brings TQ-0123 up with **Remind me** lit; you pick the day.
 
 ## Everything the task page can do
 
-Anything you can do on a task's page, you can ask the Assistant to do — about the task in front of you, or any
-task you name (TQ-0123). It shows you a card first, like every other action. It never guesses which task you
-mean.
+Anything you can do on a task's page, you can ask the Assistant for — about the task in front of you, or any
+task you name (TQ-0123). It brings that task up with the button for it lit, and says to press it: nothing changes
+on your words alone, and there is no card to confirm and nothing to take back - a wrong Mark done is put right with
+**Reopen task**. Work - research, writing, code - goes to an agent: the Assistant lights **Send to agent**, or writes
+the job up in **New** for you to start. It never guesses which task you mean.
 
 ![What you can ask about a task, and what each does](img/assistant-task-tools.svg "One tool per action on the task page.")
 
-| Say, about a task | What happens |
+| Say, about a task | The button it lights does |
 |---|---|
 | "make this urgent", "rename it", "I'll take it" | Priority, title or owner changed |
 | "this is a general job, not coding" | What kind of work it is changes, and a live session is closed if it no longer fits |
@@ -107,14 +109,13 @@ These have no button. Say them, in the app or on your phone.
 
 | Say | What happens | Runs |
 |---|---|---|
-| "reply and tell them…" | A draft with that gist, for your yes | at once |
-| "redraft it shorter" | The draft written again with the change | at once |
-| "yes, go ahead" to a waiting agent | Your answer goes to the agent | you confirm |
-| "run it again" on a report | The report runs again | at once |
-| "remember that…" | A fact kept in Settings → Verdicts & notes, used by triage and the Assistant | you confirm |
-| "clear all the fyi" | Clears that set from the walk, with the count on the card | you confirm |
-| "set up a report that…" | A walk-through for a report, connection or workflow | you confirm |
-| "stop hiding auto-replies" | The setting is changed, with an undo | at once |
+| "reply and tell them…" | A draft with that gist in the item's reply box, and **Send** lit | at once - nothing is sent |
+| "redraft it shorter" | The draft written again with the change | at once - nothing is sent |
+| "yes, go ahead" to a waiting agent | Your answer goes to the agent | at once |
+| "run it again" on a report | **Run it again** lit on the report | you press it |
+| "remember that…" | Settings → Verdicts & notes opens beside the answer, to add it | you add it |
+| "set up a report that…" | **New** opens on Report with your words in it | you press Build it |
+| "stop hiding auto-replies" | The setting opens beside the answer, its knob outlined | you change it |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
 | "what's in For later?" | The rail read by its own sections - On you, Agents working, For later (with when each comes back), Reports, FYI | at once |
 

@@ -140,7 +140,7 @@ def agent_open(tid: int) -> bool:
 
 
 def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
-    """Put the task away until `until` (or bring it back now with none). The receipt carries the undo."""
+    """Put the task away until `until` (or bring it back now with none). The receipt says when it comes back."""
     t = store.get_task(tid)
     if not t: raise ValueError('task not found')
     if t.get('Status') in ('done', 'dropped'):
@@ -164,17 +164,12 @@ def set_reminder(store, tid: int, until, actor: str = 'owner') -> dict:
         from . import asks
         asks.reminder_set(store, tid)       # said at the door it was set from when it comes due
     store.audit('task', tid, 'remind', actor, detail={'from': prev, 'to': at})
-    # the undo keeps the hour too: a reminder for later today, put back as its date alone, was "today" with no time
-    # - and a 7:00 today is an hour, not a morning: put back as its date alone it is refused ("say a time later today")
-    back = (prev[:10] if prev[11:19] in ('', MORNING) and prev[:10] != f'{datetime.now():%Y-%m-%d}' else prev[:16]) if prev else 'none'
     # a day after it is due is set - she may mean it - but said: the due day brings it back first anyway (B2, 2026-10-11)
     due_at = str(t.get('DueAt') or '')[:10]
     ahead = due_at > f"{datetime.now() + timedelta(days=1):%Y-%m-%d}"       # its "due tomorrow" step is still to come
     warn = (f"That is after it is due ({when(due_at)})" + (' - it comes back the day before it is due.' if ahead else '.')
             if at and due_at and at[:10] > due_at else '')
-    return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '', 'warn': warn,
-            'undo': {'kind': 'task.defer', 'target': tid, 'params': {'until': back},
-                     'label': f"Put the reminder back to {when(prev)}" if prev else 'Bring it back now'}}
+    return {'taskId': tid, 'remindAt': at, 'when': when(at) if at else '', 'warn': warn}
 
 
 DUE_NOTE = 'You asked to be reminded about this today.'

@@ -2,8 +2,8 @@
 
 What the Assistant is told about its tools. It gets the **summary** on every turn: the buckets, and
 each tool's name and what it needs. It asks for the **detail** of a bucket (`tools.list`) or a tool
-(`tools.describe`) only when a turn needs it. Everything it can change becomes a card you confirm,
-except the few that can be undone, which run at once with an undo on the receipt.
+(`tools.describe`) only when a turn needs it. Everything it can change, it brings up for you to press:
+the button that does it, lit, or the page that holds it. On a phone it asks yes or no.
 
 ## The summary, sent every turn
 
@@ -37,7 +37,7 @@ The "Reply" button: write a reply to the sender. Nothing is sent.
 
 The "Send" button ("Approve" on an agent's proposal or a task's close-out): the owner's yes to what is drafted on the item: sends the reply as it stands - on a task's close-out it merges the pull request or closes the issue FIRST, then sends the reply; on an agent's proposal it runs that action and only that. It never closes the task - that is close, the owner's own Mark done, a separate step - and never continues an agent's session - that is agent.continue.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `redraft`
 
@@ -51,7 +51,7 @@ The "Redraft" button ("Draft with AI" when nothing is drafted yet): write the dr
 
 The "Put it on my list" button: make it a task on the owner's own list - no agent.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `regular_agent`
 
@@ -61,7 +61,7 @@ The "Send to agent" button: send it to an agent that does not write code - it be
 - `as` (optional) - a profile from agents.list, only when one fits
 - `new` (optional) - true when the job is NOT about the item on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `coding_agent`
 
@@ -71,37 +71,37 @@ The "Send to coding agent" button: send it to a coding agent. Not sure which rep
 - `as` (optional) - the repository (repos.list), only when sure
 - `new` (optional) - true when the job is NOT about the item on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `not_ours`
 
 The "Not ours" button: file it, just this once - its card asks whether from now on, or as a rule.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `not_ours_sender`
 
 The "Ignore this sender" button: file everything from this sender from now on - their mail still arrives and stays readable.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `block_sender`
 
 The "Block this sender" button: an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `not_ours_kind`
 
 The "No more ideas like this" button: an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `close`
 
 The "Mark done" button: the task behind the item is finished.
 
-<p class="runs">At once.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `next`
 
@@ -115,19 +115,19 @@ The "Answer it" button: answer the agent waiting on the owner.
 
 - `text`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `stop_agent`
 
 The "Stop and save" button: save and end the agent's session on the item.
 
-<p class="runs">At once.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `rerun`
 
 The "Run it again" button: run the report on the table again.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `remember`
 
@@ -135,7 +135,7 @@ Keep a fact.
 
 - `text`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `setup`
 
@@ -143,7 +143,7 @@ Build a report, a connection to another system or an automation. Never a to-do.
 
 - `text` - the request
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `confirm`
 
@@ -161,13 +161,13 @@ The owner's no to it.
 
 The "Chase them" button: chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `let_go`
 
 The "Let it go" button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `elsewhere`
 
@@ -175,7 +175,7 @@ The "They answered elsewhere" button: they answered elsewhere; the step somebody
 
 - `text` - where (a call, a meeting)
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## Task
 
@@ -191,7 +191,7 @@ Change a task's priority, title, owner or due day. Any other value is refused wi
 - `due` - the day the work is due (2026-10-30, "friday", "2 weeks", or "none" to clear it)
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.set_kind`
 
@@ -200,7 +200,7 @@ Say what kind of work a task is.
 - `kind` - task (the owner does it) | general (a non-coding agent) | coding
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.set_repo`
 
@@ -209,7 +209,7 @@ Put a coding task in the repository it belongs in.
 - `repo` - its name, as the repositories list says it
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.check`
 
@@ -219,7 +219,7 @@ Tick a checklist item on a task.
 - `done` (optional) - false un-ticks
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.checklist`
 
@@ -230,7 +230,7 @@ Change what a task's checklist asks for.
 - `drop` (optional) - recipients whose email is no longer owed
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.watch`
 
@@ -239,7 +239,7 @@ Tell the owner here when something happens on a task nobody needs to start.
 - `what` (optional) - done (when it is finished) | reply (when someone writes on it) | any (the default) | off
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.comment`
 
@@ -248,7 +248,7 @@ File a note on a task.
 - `text`
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.split`
 
@@ -256,7 +256,7 @@ Split one arrival into two jobs.
 
 - `text`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.merge`
 
@@ -265,7 +265,7 @@ Fold a task into the one it duplicates.
 - `into` - the survivor's ref (TQ-0123)
 - `ref` (optional) - the task that is the one folded away
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.reopen`
 
@@ -273,7 +273,7 @@ Reopen a task that was marked done.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.not_a_task`
 
@@ -281,7 +281,7 @@ Delete a task and teach triage it was never work.
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.complete`
 
@@ -289,7 +289,7 @@ Mark done - the task is finished - kept on the task.
 
 - `note` (optional) - (optional): what came of it, in the owner's words when they said it ("the GL export reconciled fine")
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.defer`
 
@@ -298,7 +298,7 @@ Remind me: put an open task away until a day and bring it back then - calendar o
 - `until` - a date (2026-10-09), "2 weeks", "3 days", "monday", with the time they said kept ("tomorrow 9am", "friday 2pm"), "after_meetings" whenever they mean once the day's meetings or calls are over
 - `ref` (optional) - the task (TQ-0123) when it is not the one on the table
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.handoff`
 
@@ -308,7 +308,7 @@ Hand a task to a PERSON.
 - `note` (optional) - writes the forward for the owner's yes, nothing is sent from this card
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.clarify`
 
@@ -317,7 +317,7 @@ Prepare a question for the task's sender; it waits for the owner's yes, never se
 - `text` - the question
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.share`
 
@@ -327,13 +327,13 @@ Email what a task's work found; a draft for the owner's yes, never sent.
 - `about` (optional)
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `review.approve`
 
 The owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `review.reject`
 
@@ -341,7 +341,7 @@ Reject the draft reply waiting on a task - nothing is sent, the task stays open.
 
 - `ref` (optional) - the task
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## Agents
 
@@ -355,7 +355,7 @@ Start an agent on an EXISTING task; a coding task asks which repository when it 
 - `instructions` (optional)
 - `ref` - the task (TQ-0123) - always named, the one on the table included; a new job is task.create_from_text
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `agent.continue`
 
@@ -364,7 +364,7 @@ Pick up the agent's own last session on a task where it left off, coding or not.
 - `ref` - the task (TQ-0123) - the one on the table when it has a saved session to reopen
 - `note` - when the owner said what to tell it as it picks up
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `agent.answer`
 
@@ -373,7 +373,7 @@ Answer the agent that is waiting. With no agent on the task (TASK NOW says so) n
 - `text`
 - `ref` (optional) - its task when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `agent.stop`
 
@@ -381,7 +381,7 @@ Save and end an agent's session - the one on the table, or the task `ref` names;
 
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `routing.remember`
 
@@ -390,7 +390,7 @@ Remember how work like this should be ROUTED next time. kind: coding (an agent i
 - `field` - kind | profile | system
 - `value`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## New
 
@@ -403,7 +403,7 @@ A new job with no message behind it. Never for a task that already exists (a TQ 
 - `kind` - task (a to-do or reminder the owner does themselves, no agent) | general (a regular agent) | coding
 - `text` - , and a short `title` in your own words for the job (never "send it to the agent")
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.create_from_message`
 
@@ -411,7 +411,7 @@ Hand this message to an agent or put it on the list.
 
 - `kind` - coding | general | task
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `task.setup`
 
@@ -420,7 +420,7 @@ Open a walk-through with the assistant, for a set-up that needs digging first.
 - `text`
 - `title` - a few words naming the job for the task list
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## Pipe
 
@@ -432,7 +432,7 @@ Clear a SET of items from the pipe at once - takes `select` (below); read, never
 
 - `select` - below
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `item.settle`
 
@@ -440,19 +440,19 @@ Put the item down, read and settled.
 
 - `verb` - done (the item on the table is the target)
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `message.file`
 
 File it - not ours, just this one.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `message.archive`
 
 Archive it: off the pipe and closed, nothing deleted.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `preference.exclude_sender`
 
@@ -460,19 +460,19 @@ Teach triage to file this sender or subject from now on - their mail still arriv
 
 - `scope` - sender | subject
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `preference.sender_rule`
 
 An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `message.retriage`
 
 Triage reads the message on the table again - one it could not sort.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## Reports
 
@@ -484,7 +484,7 @@ Create a scheduled report or workflow; the composer builds it from what the owne
 
 - `config`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.run`
 
@@ -492,13 +492,13 @@ Run a report or workflow now; a report lands in the pipe when done, a workflow s
 
 - `title` - or `source_id`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.rerun`
 
 Run that report again.
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.pause`
 
@@ -506,7 +506,7 @@ Stop a report or workflow running on its clock.
 
 - `title`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.resume`
 
@@ -514,7 +514,7 @@ Put a paused report or workflow back on its clock.
 
 - `title`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.route`
 
@@ -526,7 +526,7 @@ Change where one line of a report's route card goes.
 - `when` - for ai: what to look for
 - `rule` - /`count`/`text` (for rule)
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.edit`
 
@@ -535,15 +535,15 @@ Change a report's configuration.
 - `config` - only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)
 - `title`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `report.delete`
 
-Delete a report or workflow for good; asks first.
+Delete a report or workflow for good.
 
 - `title`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## App
 
@@ -556,7 +556,7 @@ Change one setting; the schema says what it takes.
 - `setting` - its key, or `label`: part of its name
 - `value`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `connection.create`
 
@@ -565,7 +565,7 @@ Add a system Taskuary talks to; created OFF and never carrying a secret, which t
 - `type`
 - `name`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `role.apply`
 
@@ -575,7 +575,7 @@ Set Taskuary up for the owner's job in one go - its worker, playbooks and daily 
 - `portal` (optional)
 - `route_mail` (optional) - true or false - when they are only trying it out
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `connection.test`
 
@@ -583,7 +583,7 @@ Test a connection now and say what it answered.
 
 - `name`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `connection.pause`
 
@@ -591,7 +591,7 @@ Switch a connection off; nothing is deleted.
 
 - `name`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `connection.resume`
 
@@ -599,15 +599,15 @@ Switch a connection back on.
 
 - `name`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `script.start`
 
-Start a script by its name: walk me through my tasks | set up Taskuary | set up a report.
+Start a script by its name: walk me through my tasks | set up a report.
 
 - `name`
 
-<p class="runs">Runs at once, with an undo on the receipt.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `memory.remember`
 
@@ -615,7 +615,7 @@ Keep a fact.
 
 - `note`
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ### `hub.publish`
 
@@ -627,7 +627,7 @@ Save to the company Hub. Only a reusable discovery reached through real work, or
 - `kind` (optional) - new_idea | technical_solve | howto | gotcha | decision | system | people
 - `why_earned` (optional)
 
-<p class="runs">Waits for your yes on a card.</p>
+<p class="runs">Brings up its button for you to press.</p>
 
 ## Look
 

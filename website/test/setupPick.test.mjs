@@ -38,5 +38,5 @@ test("setup's filled move is the lit one on the row: the dock passes it as the a
   assert.deepEqual([...r.decide, ...r.agent].filter((x) => x.tone === "p").map((x) => x.id), ["setup:pick"]);
   assert.deepEqual([...rowOf({ ref: "", list }).decide].filter((x) => x.tone === "p"), [], "nothing named: nothing lit");
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
-  assert.match(view, /<ActionRow advised=\{shownAdvice \|\| noneSaid \|\| setupLit\} \/>/);
+  assert.match(view, /<ActionRow advised=\{litNow \|\| shownAdvice \|\| noneSaid \|\| setupLit\} \/>/);
 });

@@ -43,7 +43,7 @@ test("New is a card in the conversation, not a popup: the button posts it, a lin
   assert.match(view, /request\.kind === "new"\) browseRef\.current\?\.\("new", \{\}\)/);
   assert.match(view, /browseClose: \(id\) => setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== id\)\)/);
   assert.match(browse, /area === "new"\) return \(/);
-  assert.match(browse, /<NewSheet inline open onClose=\{onClose\}/);
+  assert.match(browse, /<NewSheet key=\{.+?\} inline open onClose=\{onClose\}/);
   assert.match(sheet, /if \(e\.key === "Escape"\) close\(\)/);                               // Esc closes the card
   assert.match(sheet, /<NewRepo agent=\{agent\}/);                                            // the checkout is chosen here
   assert.match(sheet, /api\.put\(`\/api\/tasks\/\$\{data\.taskId\}\/repo`, \{ repo: pickd\.repo, path: pickd\.path, \.\.\.\(agent \? \{ agent \} : \{\}\) \}\)/);

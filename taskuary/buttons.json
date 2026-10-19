@@ -38,7 +38,7 @@
     "retriage":        {"label": "Sort it again", "hint": "Ask the AI to read this one again and decide where it goes", "row": ["retriage"]},
     "fix":             {"label": "Fix it", "hint": "Opens where what failed is fixed - the button shows the fix's own words, this name only where it has none", "row": ["fix"]},
     "try_again":       {"label": "Try again", "hint": "Do the same thing once more", "row": []},
-    "take_back":       {"label": "Take it back", "hint": "Undo what was just done", "row": []},
+    "walk_here":       {"label": "Walk it here", "hint": "Brings the walk back from the phone chat to this screen", "row": []},
     "change_kind":     {"label": "Change who does it", "hint": "You, an assistant, or a drafted reply for you to approve", "row": ["kind"]},
     "priority":        {"label": "Change priority", "hint": "Low, normal, high or urgent", "row": ["priority"]},
     "assign":          {"label": "Assign it", "hint": "You, an agent's profile, or nobody", "row": ["assign"]},

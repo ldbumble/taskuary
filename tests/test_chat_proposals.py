@@ -57,8 +57,10 @@ def asked(s=None):
     return s, out['task_id'], out['message_id'], pile(s)[0]
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button and nothing is proposed (test_assistant_router);
+# a phone chat has no buttons, so its words still become the proposal it answers yes or no - the semantics held here
 def say(s, text, key=None, model='never asked'):
-    with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+    with mock.patch.object(terminal, 'live_sessions', return_value=[]), concierge.delivering(concierge.PHONE):
         return concierge.say(s, text, key=key, llm=lambda *a, **k: model)
 
 
@@ -77,7 +79,7 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(p['label'], buttons.label('coding_agent')); self.assertIn(f'TQ-{tid:04d}', p['summary'])
         spawn.assert_not_called()                                                   # nothing ran on the words
         self.assertEqual(s.get_task(tid)['Status'], 'open')
-        self.assertIn('nothing has been started', out['say'].lower())
+        self.assertIn('nothing happens until you say yes', out['say'].lower())
         self.assertFalse(hasattr(concierge, 'decide_words'))                        # the phrase table is gone
 
     def test_confirming_runs_it_once_and_a_second_click_is_the_same_receipt(self):

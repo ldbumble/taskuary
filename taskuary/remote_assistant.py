@@ -625,8 +625,8 @@ def meetings_line(store) -> str:
 
 
 MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
-SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up Taskuary', {'t': 'script', 'script': 'set up Taskuary'}),
-                ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
+# (no "Set up Taskuary": setup is the desk's Setup button, never a chat script - the owner, 2026-10-19)
+SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
                 # the sidebar's browse buttons, as picks (doorway_browse): sections, then the list, then one
                 ('Connections', {'t': 'browse', 'area': 'connections'}), ('Reports', {'t': 'browse', 'area': 'reports'}),
                 ('Hub', {'t': 'browse', 'area': 'hub'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
@@ -657,8 +657,7 @@ def morning_line(store, now=None, force: bool = False) -> int:
     options, so one reply starts the walk there. The chat used to speak first only for a hand-off, a
     review ping or a report aimed at it - a doorway nobody opens stays shut (the owner, 2026-09-18:
     "does WhatsApp surface the option to click to get started once a day so you will interact with
-    it"). Quiet when the pipe is empty; never twice in a day; the three options are always the same -
-    set-up never drops off, "there always is more to set up"."""
+    it"). Quiet when the pipe is empty; never twice in a day; the two options are always the same."""
     from datetime import datetime as _dt
     from . import funnel
     now = now or _dt.now()
@@ -678,8 +677,8 @@ def morning_line(store, now=None, force: bool = False) -> int:
     # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
     head = day_opener(store, items, now)
     from . import doorway_browse
-    # the three scripts keep the numbers the owner knows; then each section the rail holds; then the browse picks
-    lines = SCRIPT_LINES[:3] + doorway_browse.section_rows(items) + SCRIPT_LINES[3:]
+    # the two scripts keep the numbers the owner knows; then each section the rail holds; then the browse picks
+    lines = SCRIPT_LINES[:2] + doorway_browse.section_rows(items) + SCRIPT_LINES[2:]
     text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(lines, 1))
     # ...never into a conversation: a walk handed to a chat is its own opener, and a door with a turn in flight or a word in
     # the last minutes is left for the next pass (this runs after every report pass)
@@ -1061,17 +1060,15 @@ def _on(store, actor: str, said: list, extra=None, **kw) -> str:
 
 
 def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
-    """After the run: the receipt, an Undo when it offered one, and the next item when the table was settled."""
+    """After the run: the receipt, and the next item when the table was settled."""
     from . import concierge
     if done.get('draft_changed') and prop.get('key'):           # operations.execute refused it: show what waits now
         return turn_text(concierge.surface(store, prop['key'], actor=actor), concierge.receipt_turn(store, done, actor)['say'], store=store)
     if done.get('status') != 'done': return receipt_text(store, done, actor)
     said = concierge.receipt(store, done, actor)
-    undo = [('Undo', {'t': 'undo'})] if ' Undo: ' in said else []
     if done.get('status') == 'done' and _settled_the_table(prop, item):
-        return _on(store, actor, [said], extra=undo, done_with=prop.get('key') or (item or {}).get('key'))
+        return _on(store, actor, [said], done_with=prop.get('key') or (item or {}).get('key'))
     if (sent := sent_rows(store, done)): return turn_text({'say': said, 'item': None}, store=store, extra=sent)
-    if undo: return '\n\n'.join([said, turn_text({}, store=store, extra=undo)])
     return said
 
 
@@ -1138,7 +1135,6 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
         if t == 'walk': return walk(store, actor)
         if t == 'script': return script_words(store, act.get('script') or '')
-        if t == 'undo': return concierge.undo_last(store, actor)
         if t == 'remind': return _remind(store, act, actor)
         if t == 'continue': return _continue(store, act.get('tid'), act.get('note') or '')
         if t == 'retry':
@@ -1788,23 +1784,11 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
 
 
 def script_words(store, script: str) -> str:
-    """A script, as a chat can hold it. Set-up from a phone opens on what is connected - each live
-    connection with its state, then the stops still to do (the owner, 2026-09-18: "or at least see my
-    connectors"); the composer asks for the sentence it builds from."""
-    from . import appfacts, walk
-    if 'report' in script.lower():
+    """A script, as a chat can hold it: the composer asks for the sentence it builds from. Setting Taskuary up is the desk's Setup
+    button, never a script here (the owner, 2026-10-19) - an old pick of it says where it is."""
+    if 'report' in str(script or '').lower():
         return 'Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together.'
-    conns = appfacts.connections(store); live = [c for c in conns if c['active']]
-    lines = ['SET UP TASKUARY - what is connected:']
-    lines += [f"· {c['name']} ({c['type']}{', no key yet' if not c['has_secret'] else ''}{' - ERROR ' + c['last_error'] if c['last_error'] else ''})" for c in live] or ['· nothing yet']
-    lines.append(f"{len(conns) - len(live)} more in the catalogue, off - say \"connect <name>\" and I open the card.")
-    try:
-        stops = walk.state(store)['stops']
-        todo = [s for s in stops[:5] if 'done' in s and not s.get('done')]
-        if todo: lines.append('Still to do: ' + '; '.join(s.get('title') or s['key'] for s in todo) + ' - the desktop walk does each in a click.')
-        else: lines.append('The five set-up steps are done; the desktop walk shows the rest of the app.')
-    except Exception as e: logger.debug(f'the phone set-up walk could not read the stops: {e}')
-    return '\n'.join(lines)
+    return 'Setting Taskuary up is the Setup button at the top of Taskuary on your computer.'
 
 
 def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: bool = False) -> str:

@@ -11,6 +11,18 @@ from taskuary import buttons, concierge, funnel, ingest, operations, server, ter
 import tests.test_assistant_reactions as T
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button or opens its page and proposes nothing
+# (test_assistant_router); a phone chat has no buttons, so a tool the model names still becomes a proposal answered yes or no -
+# the proposals, their targets and their handlers are held here, on that road
+def setUpModule():
+    global _ROAD
+    from taskuary import concierge
+    _ROAD = concierge.DELIVERY.set(concierge.PHONE)
+def tearDownModule():
+    from taskuary import concierge
+    concierge.DELIVERY.reset(_ROAD)
+
+
 class CatalogueTests(unittest.TestCase):
     def test_the_catalogue_is_generated_from_the_registry_that_runs_them(self):
         block = toolcatalog.block()

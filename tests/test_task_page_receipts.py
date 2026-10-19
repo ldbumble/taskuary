@@ -1,6 +1,7 @@
-"""Every press on the task page leaves a receipt, and a put-back where one is possible (Stream B, the owner 2026-10-18: "every act
-leaves a receipt"). The page's presses run down the operations road (taskOps.runOperation), so each is recorded once, and when the task
-is the one on the Assistant's table its receipt is a line in the chat with Take it back under it. An undo that ran offers no undo."""
+"""Every press on the task page leaves a receipt (Stream B, the owner 2026-10-18: "every act leaves a receipt"). The page's presses run
+down the operations road (taskOps.runOperation), so each is recorded once, and when the task is the one on the Assistant's table its
+receipt is a line in the chat. Nothing offers to take it back (the owner, 2026-10-19: "no take it back button. hate that"): a wrong Mark
+done is put right with Reopen task, a priority with the priority picker."""
 import json, re
 from unittest import mock
 
@@ -45,65 +46,37 @@ def cards(s, dock):
     return out
 
 
-def undo_of(s, dock):
-    """The newest Take it back the chat holds: (its line, the proposal it runs)."""
-    for row in reversed(cards(s, dock)):
-        if isinstance(row, tuple) and row[1].get('undo'): return row[0], operations.get(s, row[1]['op'])
-    return None, None
+def undos(s, dock):
+    """Any line of the chat that offers to take an act back - there are none now."""
+    return [r for r in cards(s, dock) if (isinstance(r, tuple) and (r[1].get('undo') or 'Undo:' in r[0])) or (isinstance(r, str) and 'Undo:' in r)]
 
 
-def take_back(c, op): return c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']}).json()
-
-
-# ── the undo each reversible task act names ─────────────────────────────────────────────────
-def test_mark_done_offers_reopen_and_reopen_offers_mark_done(s, c):
+# ── each act does what it says, and hands back nothing to undo ───────────────────────────────
+def test_mark_done_and_reopen_are_two_acts_and_neither_carries_an_undo(s, c):
     tid = task(s)
     out = run(c, 'task.complete', tid)
-    assert out['status'] == 'done' and s.get_task(tid)['Status'] == 'done'
-    assert out['outcome']['undo'] == {'kind': 'task.reopen', 'target': tid, 'params': {}, 'label': f'Reopen task TQ-{tid:04d}'}
+    assert out['status'] == 'done' and s.get_task(tid)['Status'] == 'done' and 'undo' not in out['outcome']
     back = run(c, 'task.reopen', tid)
-    assert s.get_task(tid)['Status'] == 'open' and back['outcome']['undo']['kind'] == 'task.complete'
-    # ...and a close of a task already closed has nothing to put back
-    run(c, 'task.complete', tid)
-    assert run(c, 'task.complete', tid)['outcome']['undo'] is None
+    assert s.get_task(tid)['Status'] == 'open' and 'undo' not in (back['outcome'] or {})
 
 
-def test_a_priority_change_puts_the_old_priority_back(s, c):
-    tid = task(s)
-    out = run(c, 'task.update', tid, {'priority': 'urgent'})
-    assert s.get_task(tid)['Priority'] == 'urgent'
-    assert out['outcome']['undo'] == {'kind': 'task.update', 'target': tid, 'params': {'priority': 'normal'}, 'label': 'Put priority back to normal'}
-
-
-def test_unassigned_is_a_change_and_the_old_holder_comes_back_even_a_person(s, c):
-    tid = task(s, Assignee='person:gail@northwind.example')
-    out = run(c, 'task.update', tid, {'assignee': 'none'})
-    assert out['status'] == 'done' and not s.get_task(tid)['Assignee']
-    u = out['outcome']['undo']
-    assert u['params'] == {'assignee': 'person:gail@northwind.example'}
-    # a fresh choice may name only the owner or a worker - the put-back restores what was there
+def test_a_fresh_choice_of_holder_or_day_is_held_to_the_contract(s, c):
+    tid = task(s, Assignee='person:gail@northwind.example', DueAt='2026-01-05')
+    assert run(c, 'task.update', tid, {'assignee': 'none'})['status'] == 'done' and not s.get_task(tid)['Assignee']
+    # a fresh choice may name only the owner or a worker, and never a day already gone - there is no put-back to slip one past
     assert run(c, 'task.update', tid, {'assignee': 'person:gail@northwind.example'})['status'] == 'error'
-    assert run(c, 'task.update', tid, {**u['params'], '_undo': True})['status'] == 'done'
-    assert s.get_task(tid)['Assignee'] == 'person:gail@northwind.example'
+    assert run(c, 'task.update', tid, {'assignee': 'person:gail@northwind.example', '_undo': True})['status'] == 'error'
+    assert run(c, 'task.update', tid, {'due': '2026-01-05', '_undo': True})['status'] == 'error'
 
 
-def test_a_due_day_moved_puts_the_old_day_back_even_one_gone(s, c):
-    tid = task(s, DueAt='2026-01-05')
-    out = run(c, 'task.update', tid, {'due': 'none'})
-    assert out['outcome']['undo']['params'] == {'due': '2026-01-05'}
-    assert run(c, 'task.update', tid, {'due': '2026-01-05', '_undo': True})['status'] == 'done'
-    assert str(s.get_task(tid)['DueAt'])[:10] == '2026-01-05'
-
-
-def test_a_tick_is_put_back_by_its_own_box_and_an_untick_too(s, c):
+def test_a_tick_and_an_untick_each_name_their_own_box(s, c):
     tid = task(s)
     s.set_task_checklist(tid, ['Print the form', 'Sign it'], 'owner')
     box = s.task_checklist(tid)[1]
-    out = run(c, 'task.check', tid, {'item': '2', 'id': box['id'], 'done': True})
+    run(c, 'task.check', tid, {'item': '2', 'id': box['id'], 'done': True})
     assert s.task_checklist(tid)[1]['done']
-    assert out['outcome']['undo'] == {'kind': 'task.check', 'target': tid, 'params': {'item': '2', 'id': box['id'], 'done': False}, 'label': 'Untick Sign it'}
-    back = run(c, 'task.check', tid, out['outcome']['undo']['params'])
-    assert not s.task_checklist(tid)[1]['done'] and back['outcome']['undo']['params']['done'] is True
+    run(c, 'task.check', tid, {'item': '2', 'id': box['id'], 'done': False})
+    assert not s.task_checklist(tid)[1]['done']
 
 
 def test_the_box_named_by_id_wins_over_a_number_read_off_a_moved_list(s, c):
@@ -115,22 +88,16 @@ def test_the_box_named_by_id_wins_over_a_number_read_off_a_moved_list(s, c):
     assert run(c, 'task.check', tid, {'item': '1', 'id': 'gone', 'done': True})['status'] == 'error'
 
 
-def test_a_reworded_list_puts_the_old_words_back(s, c):
-    tid = task(s)
-    s.set_task_checklist(tid, ['Print the form'], 'owner')
-    out = run(c, 'task.checklist', tid, {'items': ['Print the form', 'Post it']})
-    assert [i['text'] for i in s.task_checklist(tid)] == ['Print the form', 'Post it']
-    assert out['outcome']['undo']['params'] == {'items': ['Print the form']}
-
-
-def test_a_kind_change_puts_the_old_kind_back_without_teaching(s, c):
+def test_a_reworded_list_and_a_kind_change_run_as_asked(s, c):
     tid = task(s, Kind='general')
-    out = run(c, 'task.set_kind', tid, {'kind': 'coding'})
+    s.set_task_checklist(tid, ['Print the form'], 'owner')
+    run(c, 'task.checklist', tid, {'items': ['Print the form', 'Post it']})
+    assert [i['text'] for i in s.task_checklist(tid)] == ['Print the form', 'Post it']
+    run(c, 'task.set_kind', tid, {'kind': 'coding'})
     assert s.get_task(tid)['Kind'] == 'coding'
-    assert out['outcome']['undo']['params'] == {'kind': 'general', 'learn': False}
 
 
-def test_not_a_task_deletes_so_nothing_is_offered_back(s, c):
+def test_not_a_task_deletes(s, c):
     tid = task(s)
     out = run(c, 'task.not_a_task', tid)
     assert out['status'] == 'done' and s.get_task(tid) is None and not (out['outcome'] or {}).get('undo')
@@ -163,13 +130,9 @@ def test_the_trust_link_is_never_a_chat_tool():
     assert 'task.trust' in operations.KINDS and 'task.trust' not in toolcatalog.PURPOSE
 
 
-# ── on the table: the receipt is a chat line, with Take it back under it ───────────────────────
-@pytest.mark.parametrize('kind,params,undo', [
-    ('task.complete', {}, 'Reopen task'),
-    ('task.update', {'priority': 'high'}, 'Put priority back to normal'),
-    ('task.check', {'item': '1'}, 'Untick Print the form'),
-])
-def test_a_press_on_the_tables_task_says_so_in_the_chat_with_its_undo(s, c, kind, params, undo):
+# ── on the table: the receipt is one chat line, and nothing to take back ─────────────────────
+@pytest.mark.parametrize('kind,params', [('task.complete', {}), ('task.update', {'priority': 'high'}), ('task.check', {'item': '1'})])
+def test_a_press_on_the_tables_task_says_so_in_the_chat_once(s, c, kind, params):
     tid = task(s)
     s.set_task_checklist(tid, ['Print the form'], 'owner')
     dock = on_table(s, tid)
@@ -177,13 +140,18 @@ def test_a_press_on_the_tables_task_says_so_in_the_chat_with_its_undo(s, c, kind
         out = run(c, kind, tid, params)
     assert out['status'] == 'done' and out['receipt'].startswith('Done - ')
     emit.assert_any_call(server.live_bus.CHAT)                  # the chat reads it now, not on its next tick
-    line, op = undo_of(s, dock)
-    assert undo in line and op['status'] == 'proposed' and op['params']['_undo'] is True
-    # ...a notice beside the task view, never a card that takes the table from it - its Take it back rides the bar
-    assert [r[1] for r in cards(s, dock) if isinstance(r, tuple) and r[1].get('undo')][-1]['background_event'] is True
-    # Take it back runs once, and its own receipt offers no undo of itself
-    back = take_back(c, op)
-    assert back['status'] == 'done' and undo_of(s, dock)[1]['id'] == op['id']
+    lines = [r for r in cards(s, dock) if isinstance(r, tuple) and r[0] == out['receipt']]
+    assert len(lines) == 1 and lines[0][1]['background_event'] is True     # a notice beside the task view, once
+    assert undos(s, dock) == [] and 'Undo' not in out['receipt']
+    assert [o for o in operations.history(s, task_id=tid) if o.get('status') == 'proposed'] == []
+
+
+def test_a_reminder_from_the_table_is_one_line_in_the_servers_words(s, c):
+    tid = task(s)
+    dock = on_table(s, tid)
+    out = c.post(f'/api/tasks/{tid}/remind', json={'until': '2 weeks'}).json()
+    assert out['receipt'].startswith('Done - ') and 'Away until' in out['receipt'] and 'undo' not in out
+    assert [r[0] for r in cards(s, dock) if isinstance(r, tuple)] == [out['receipt']]     # the page draws these words: one turn
 
 
 def test_not_a_task_on_the_table_is_a_line_with_nothing_to_take_back(s, c):
@@ -193,7 +161,7 @@ def test_not_a_task_on_the_table_is_a_line_with_nothing_to_take_back(s, c):
     assert out['status'] == 'done' and s.get_task(tid) is None
     # a notice beside the view, as every press on it is: a bare line let go of the task view being pressed on
     assert any(isinstance(r, tuple) and r[0].startswith('Done - ') and r[1]['background_event'] for r in cards(s, dock))
-    assert undo_of(s, dock) == (None, None)
+    assert undos(s, dock) == []
 
 
 def test_the_same_press_off_the_table_records_the_operation_and_says_nothing_in_the_chat(s, c):

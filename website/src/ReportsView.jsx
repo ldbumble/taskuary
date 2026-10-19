@@ -2140,7 +2140,7 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
       {/* a workflow run as steps: the same top-to-bottom list as its editor, each step's status, time and output */}
       {open && !!r.steps?.length && <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5, mb: flush ? 1.5 : 0, p: 1.25, borderRadius: 1.5, border: `1px solid ${BORDER}`, bgcolor: "#fff" }}>
         <RunSteps steps={r.steps} fixing={fixing} onFix={onFix && r.failed && (r.run_id || r.runId) ? () => onFix(r.run_id || r.runId) : null}
-          repairs={r.repairs} sourceId={sid ?? r.sourceId} runId={r.run_id || r.runId} onChanged={onChanged} />
+          repairs={r.repairs} />
       </Box>}
       {open && !!r.lines?.length && (
         <Box onClick={(e) => e.stopPropagation()} sx={{ mt: 0.5 }}>

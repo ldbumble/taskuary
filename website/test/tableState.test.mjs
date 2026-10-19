@@ -38,7 +38,7 @@ test("a task opened by name hears the Advisor's event, which names it by the rai
 
 test("the page wires the record: the strip, the box's subject, the folded line and the ring", () => {
   assert.match(src, /const table = tableOf\(/);
-  assert.match(src, /const shownAdvice = table\.speaks \?/);
+  assert.match(src, /const shownAdvice = table\.speaks && !litNow \?/);
   assert.match(src, /if \(card\) openCardRef\.current = null;/, "a task put on the table ends the page the chat was answering about");
   assert.match(src, /live && foldedNow \? \{ role: "button"/, "the folded item on the table is its own door back");
   assert.match(src, /onCurrent=\{\(\) => \{ setRailOpen\(false\); if \(table\.folded \|\| table\.place\)/, "the ringed rail row reopens it");

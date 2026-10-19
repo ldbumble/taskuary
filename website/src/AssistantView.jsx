@@ -50,11 +50,12 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
-import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
-import { freshUndo, mergeDurableTurns } from "./assistantTurns.js";
+import { mergeDurableTurns, placeLine } from "./assistantTurns.js";
+import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink } from "./appLinks.js";
 import { useCapabilities } from "./capabilities.js";
@@ -583,13 +584,6 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 // THE WORDS LIVE IN THE ROW BY THE PROMPT, never as buttons under a chat line (the owner, 2026-10-06: "no button in line ever
 // anyway. it should on bottom by the prompt"). A line hands its words to the same row the task view fills (actionRow.js).
-// THE LAST UNDO STAYS ON THE BAR (2026-10-18): a receipt's buttons sit on the bar only while it is the newest line, and Remind me moves the
-// walk on at once - its Take it back was gone before it could be pressed. It stays, quiet (never dark), until the next press or a minute
-function UndoVerb({ offer, busy, onRun }) {
-  useVerbs("undo", offer ? [{ id: "chat:undo:take_back", label: offer.label, group: "decide", tone: "s", title: btnHint("take_back"), disabled: busy, run: onRun }] : [], !!offer);
-  return null;
-}
-
 function BarVerbs({ owner, chips, busy, onChip }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
@@ -753,7 +747,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           {/* AN EARLIER ITEM FOLDS TO ITS TITLE LINE - a record of the walk, not a door. "Open again" brought it to the bottom as the
               current item, and reopening it in place would leave two current items when the assistant, the bar and Next all work
               the last one (the owner, 2026-10-16: "maybe just remove the open again button"); asking for it brings it back */}
-          {/* ...and a task view's receipt is a sentence, its Take it back on the bar: no title line of an undo under it (Stream B) */}
+          {/* ...and a task view's receipt is a sentence: no title line under it (Stream B) */}
           {!passed && (!live || foldedNow) && m.card && kind && kind !== "setup" && kind !== "brief" && !(kind === "proposal" && m.card.background_event) && (
             // ...except the item ON THE TABLE, folded by its X or a page opened over it: that line is its door back - nothing reopened
             // it, while the rail kept ringing it and the Advisor kept talking about it (re-audit item 4, 2026-10-18)
@@ -769,7 +763,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           {/* WHY ITS BUTTONS ARE DEAD, on the card itself: the walk is in a chat, and the one explanation was a banner
               at the foot of the page (2026-09-29: "Next" greyed out on the card with nothing saying why) */}
           {last && card && actions.handedTo && (
-            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press {btn("take_back")} below to use these buttons here.</div>
+            <div className="tq-card-excerpt">The walk is in {actions.handedTo} - answer it there, or press {btn("walk_here")} below to use these buttons here.</div>
           )}
           {/* The action words, in the assistant's own line - one place to look, chosen by the server from
               the item's kind and already filtered to what this one can carry (concierge.chips_for). A
@@ -828,7 +822,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // outlive it either way, so nothing is lost by leaving and nothing is resumed by accident.
   const [walk, setWalk] = useState(null);
   const [msgs, setMsgs] = useState([]);
-  const msgsRef = useRef(msgs); msgsRef.current = msgs;      // what is on screen, for a read to tell what it ADDED (freshUndo)
+  const msgsRef = useRef(msgs); msgsRef.current = msgs;      // what is on screen, for a read to tell what it ADDED
   const caps = useCapabilities(), canCode = caps.coding;   // coding is mentioned only where a coding tool is connected
   const [pile, setPile] = useState(null);
   useEffect(() => { pileRef.current = pile; }, [pile]);   // the section walk reads the rail as drawn
@@ -882,8 +876,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
-  const [undoOffer, setUndoOffer] = useState(null);   // the last undoable act's Take it back (UndoVerb)
-  useEffect(() => { if (!undoOffer) return; const t = setTimeout(() => setUndoOffer(null), 60000); return () => clearTimeout(t); }, [undoOffer]);
+  // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
+  const [lit, setLit] = useState(null);
+  useEffect(() => onPressed(() => setLit(null)), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
@@ -1090,9 +1085,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
-    // ...and a press on the table's task view brought its Take it back with it: onto the bar, where the walk moving on cannot take it
-    const undo = freshUndo(msgsRef.current, mergeDurableTurns(msgsRef.current, st.messages || []).added);
-    if (undo) setUndoOffer({ ...undo, label: btn("take_back") });
     // WHERE THE WALK IS, from the same answer: a hand-off started or ended somewhere else (a second tab, the phone's own
     // "take it back") left this tab unlocked or locked until a reload (2026-09-29 audit)
     setState((s) => (s && (s.handoff?.at || null) !== (st.handoff?.at || null) ? { ...s, handoff: st.handoff || null } : s));
@@ -1392,7 +1384,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const extra = openExtra.current; openExtra.current = null;
     const card = data.item ? { ...data.item, ...(extra && extra.tid === data.item.tid ? { autostart: extra.autostart, act: extra.act } : {}) } : null;
     // the end of the walk's "Open TQ-12" words come as `chips`: dropped here, its only button was a Next that said it again
-    setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }]);
+    // ONE COPY PER ITEM (2026-10-19 UI walk): an item opened again - from search, the Board, the rail - moves its line to the end, never a second
+    setMsgs((m) => placeLine(m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     putOnTable(card);
     say(data.say);
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
@@ -1536,7 +1529,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const t = String(line ?? text).trim() || (images.length ? "What is this?" : "");
     if (!t || busy || resetting || handoff || turnFlight.current || pics.busy) return;
     turnFlight.current = answering.current = true;
-    setText(""); setBusy(true); setErr("");
+    setText(""); setBusy(true); setErr(""); setLit(null);
     const shots = line == null ? pics.imgs : [];
     if (images.length) pics.clear();
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: "user", text: t, shots }]);
@@ -1558,17 +1551,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       noticedRef.current = null;
       if (data.item) landed(data);                       // the words pointed at something: it is on the table now
       else {
-        const prop = proposalOf(data);      // a consequential decision arrives as a proposal to confirm (PW-123)
-        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [],
-                                ...(prop ? { proposal: prop, card: { kind: "proposal", key: prop.key, title: prop.label, op: prop.id, tid: prop.tid, ref: prop.ref } } : {}) }]);
+        // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
+        // to light (`light`), the page that holds it (`open`) or a new job written into New (`new`) - never a card to confirm, and nothing runs
+        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
         say(data.say);
         // THE PAGE IT NAMED, OPENED (appLinks.js): "set up Intacct" puts the Sage Intacct card beside the answer, not a sentence
         // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.
         // ...a reply that carries `open` has decided for itself: "" is the app's own words (no AI), whose links are to press
         const page = "open" in data ? data.open : firstAppLink(data.say);
         if (page) openAppLink(page);
-        if (prop?.auto) await runProposal(prop);                   // a plain verb on the item on the table: no button to press
-        else if (!prop && data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
+        if (data.new) browseRef.current?.("new", data.new);
+        const l = lightOf(data.light);
+        if (l) {
+          setLit(l);
+          // ...its item brought up the rail's road when it is not the one on the table, so the rail rings it
+          const key = litPull(l, { key: tableKey || current, tid: currentItem?.tid });
+          if (key) deferInChat(() => { browseDown(); surfaceRef.current?.(key); }, 300);
+        }
+        if (data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
     } catch (e) {
       // a typed line that got no answer ended on a red "Assistant request failed (500)" and an empty composer: the line is
@@ -1621,7 +1621,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           text: `I have no address for ${data.cc_unknown.join(", ")} - add them in the reply's CC.` }]);
         // ...wherever it was asked about: "send Omar the answer" with nothing on the table was told "it lands below for your
         // yes", and the draft went onto his task with nothing landing here (2026-10-06)
-        if (data.reviewId) { if (!elsewhere) putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return; }
+        // ...and its Send is lit: drafting is not sending, the owner's press is (the owner, 2026-10-19)
+        if (data.reviewId) {
+          setLit({ verb: "approve", label: btn("approve"), key: `review:${data.reviewId}`, tid: cur?.tid ? Number(cur.tid) : null, landed: false });
+          if (!elsewhere) putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return;
+        }
         loadPile(); return;
       }
       if (verb === "redraft" && cur?.rid && mid) {
@@ -1668,15 +1672,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       setMsgs((m) => [...m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
-      // A SCRIPT, started by name (script.start): the deterministic road the words asked for opens here -
-      // the walk's Next, the set-up tour, or the composer - and nothing on the table moves for it.
-      const script = res?.outcome?.script;
-      if (script) {
-        if (/tasks/i.test(script)) advance();
-        else if (/set up taskuary/i.test(script)) await setup();
-        else if (/report/i.test(script)) askSetup();
-        return;
-      }
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
       // once the same way (PW-135): the delegated task stays in Unread as Working, nothing is settled; a
@@ -1749,7 +1744,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // and puts down what it left. An OPTIONS choice is not a verb at all: it goes back as the owner's words.
   const runChip = async (c, anchor) => {
     if (busy || resetting || handoff || !c) return;
-    if (c.verb !== "undo") setUndoOffer(null);                  // another press: the old undo no longer applies
     if (c.ask) { send(c.ask); return; }
     if (c.verb === "newtask") { browseRef.current?.("new", {}); return; }
     // THE PLACE THAT FIXES IT (concierge.recover, outbound.Fixable): an app link, opened on the canvas like any other
@@ -1785,23 +1779,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref, live: agentOpen(item) }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
-    // TAKE IT BACK (a receipt's undo): the undo is a proposal of its own, run down the same road as any press - flagged so the put-back
-    // offers no undo of itself (concierge's receipt)
-    // ...or the one the server already proposed on a task view's receipt (freshUndo): run once, while it still stands
-    if (c.verb === "undo" && c.op) {
-      try {
-        const { data: op } = await api.get(`/api/operations/${c.op}`);
-        if (op?.status === "proposed") await runProposal({ id: op.id, version: op.version, kind: op.kind, label: c.title || btn("take_back"), tid: item?.tid, ref: item?.ref });
-      } catch (e) { setErr(errText(e)); }
-      return;
-    }
-    if (c.verb === "undo" && c.undo?.kind) {
-      try {
-        const { data: op } = await api.post("/api/operations", { kind: c.undo.kind, target: Number(c.undo.target) || 0, params: { ...(c.undo.params || {}), _undo: true } });
-        await runProposal({ id: op.id, version: op.version, kind: op.kind, label: c.undo.label || btn("take_back"), key: item?.key, tid: item?.tid, ref: item?.ref });
-      } catch (e) { setErr(errText(e)); }
-      return;
-    }
     if (c.verb === "retry" && c.op) {
       await runProposal({ id: c.op, version: c.version, kind: c.kind, label: btn("try_again"), key: item?.key, tid: item?.tid, ref: item?.ref,
                           settles: !!c.settles });
@@ -2249,14 +2226,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...but the browser demo has no setup to run - it cannot connect an inbox - so its door is the install note (setup() above), never
   // a setup that waits on "Getting set up…" for good (the browser CI, 2026-10-15)
   setupRef.current = () => (DEMO ? setup() : setFirstRun(true));
-  // A REMINDER'S RECEIPT, from the walk's picker or the task view's: where it went, and its undo under it (remind.set_reminder returns
-  // one) - Take it back puts the old day back. The task view's Remind me left no line at all, and neither offered the undo (2026-10-18)
+  // A REMINDER'S RECEIPT, from the walk's picker or the task view's: where it went - one line, and no Take it back (the owner, 2026-10-19:
+  // "no take it back button. hate that"): a day picked wrong is picked again with Remind me
   const remindReceipt = (out, tid, ref) => {
-    const undo = out?.undo?.kind ? { verb: "undo", label: btn("take_back"), undo: out.undo } : null;
     setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid, ref,
-      text: out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now.",
-      chips: undo ? [undo] : [] }]);
-    setUndoOffer(undo);
+      // ...in the server's own words when it recorded the line (server.remind_task), so its read finds the same turn and draws it once
+      text: out?.receipt || (out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now.") }]);
   };
   const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref),
@@ -2289,11 +2264,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
   const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current });
-  const shownAdvice = table.speaks ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
+  // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
+  // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
+  const litTable = { key: table.key, tid: currentItem?.tid ?? Number(/^task:(\d+)$/.exec(table.key || "")?.[1] || 0) };
+  const litNow = litPick(lit, litTable);
+  useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
-  const noAi = table.speaks && !busy && !shownAdvice && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
+  const noAi = table.speaks && !busy && !shownAdvice && !litNow && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden
-  const noneSaid = !table.speaks || busy || shownAdvice || noAi ? null
+  const noneSaid = !table.speaks || busy || shownAdvice || noAi || litNow ? null
     : advice?.none && advice.for === table.key ? advice : currentItem?.lane === "working" ? { none: "working", for: table.key } : null;
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
@@ -2378,7 +2358,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         <Tooltip title="Past chats"><IconButton size="small" onClick={openChats}><HistoryIcon sx={{ fontSize: 18, color: DIM }} /></IconButton></Tooltip>
         <Tooltip title="New chat — archives this one"><IconButton size="small" onClick={newChat} disabled={busy || resetting}><EditNoteIcon sx={{ fontSize: 19, color: DIM }} /></IconButton></Tooltip>
       </div>
-      <UndoVerb offer={undoOffer} busy={busy} onRun={() => { const c = undoOffer; setUndoOffer(null); runChip(c); }} />
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
         onDone={(out) => { remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref); if (out?.remindAt) advance(); }} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
@@ -2503,7 +2482,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           <ChannelIcon channel={handoff.channel} sx={{ fontSize: 17 }} />
           <div className="txt"><b>The walk is in {handedTo?.label || handoff.channel}</b>
             <span>Answer me there and I keep going. This chat waits so the same thing is not answered twice.</span></div>
-          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack}>{btn("take_back")}</button>
+          <button type="button" className="tq-chip primary" disabled={busy} onClick={takeBack} title={btnHint("walk_here")}>{btn("walk_here")}</button>
         </div>
       )}
       {!old && !handoff && !walk && (
@@ -2535,7 +2514,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           </>}
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={shownAdvice || noneSaid || setupLit} />
+          <ActionRow advised={litNow || shownAdvice || noneSaid || setupLit} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />

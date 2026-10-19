@@ -209,8 +209,11 @@ class RolesApiTests(unittest.TestCase):
 
 class TheAssistantSetsARoleUpTests(unittest.TestCase):
     """The owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work". The chat
-    asks its questions, then puts the whole set-up on ONE card; the yes runs the Profiles page's own road."""
+    asks its questions, then puts the whole set-up on ONE card; the yes runs the Profiles page's own road. That is the phone's road
+    now: on the desk the words open Profiles, where its own Set up is pressed (the owner, 2026-10-19 - test_the_desk_opens_profiles)."""
     def setUp(self):
+        from taskuary import concierge
+        tok = concierge.DELIVERY.set(concierge.PHONE); self.addCleanup(concierge.DELIVERY.reset, tok)
         self.dir = tempfile.TemporaryDirectory(); self.addCleanup(self.dir.cleanup)
         for p in (mock.patch.object(playbooks, 'folder', return_value=Path(self.dir.name)), mock.patch.object(config, 'save')):
             p.start(); self.addCleanup(p.stop)
@@ -226,6 +229,12 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         from taskuary import server, terminal
         with mock.patch.object(server, 'store', s), mock.patch.object(server, 'cfg', {**server.cfg, **cfg}),              mock.patch.object(terminal, 'live_sessions', return_value=[]):
             return TestClient(server.app).post(f"/api/operations/{p['id']}/execute", json={'version': p['version']}).json()
+
+    def test_the_desk_opens_profiles_and_sets_nothing_up(self):
+        from taskuary import concierge
+        s, _ = setup()
+        with concierge.delivering(concierge.DESK): out = self.card(s, {'role': 'ap', 'route_mail': True})
+        self.assertNotIn('proposal', out); self.assertEqual(out['open'], '#profiles'); self.assertIsNone(s.get_agent('ap'))
 
     def test_a_trial_sets_up_the_worker_and_the_job_and_leaves_the_mail_alone(self):
         s, cfg = setup()
@@ -287,7 +296,7 @@ class TheAssistantSetsARoleUpTests(unittest.TestCase):
         from taskuary import toolcatalog
         self.assertIn('role.apply', toolcatalog.bucket_list('app'))
         d = toolcatalog.describe('role.apply')
-        self.assertIn('ap (accounts payable)', d); self.assertIn('route_mail', d); self.assertIn('a card the owner confirms', d)
+        self.assertIn('ap (accounts payable)', d); self.assertIn('route_mail', d); self.assertIn('the owner presses its button', d)
 
 
 class RunNowOpensTheWorkflowsTaskTests(unittest.TestCase):

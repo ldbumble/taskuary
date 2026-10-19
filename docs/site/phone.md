@@ -61,10 +61,9 @@ and no model reads it. Only words you type go to the model.
 | **Not ours** | "How far?" — just this once, from now on, or a rule in Settings; the answer you pick runs |
 | **Send to agent** | "Which agent?" — triage's pick first, the other one next; the answer you pick runs |
 | a coding job with no clear checkout | "Which repository?" — the best guess first; the one you pick starts |
-| **Undo** (offered under a receipt that can be undone) | puts the last change back, once |
 | **More** | the rest of a long message - or, on a finished agent, its report - then the same choices |
 | an old number, after you have already replied | nothing — a list answers one reply, then its numbers are gone |
-| anything typed - "next", "undo" and "set up" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
+| anything typed - "next" and "set up a report" too | the model reads it, with the same tools as the desktop. No typed word is a shortcut; only a number or a poll tap is a pill |
 
 Typed words are answered by the **Assistant's** brain - the same one, and the same model, as the Assistant in the app
 (Settings → How mail is sorted → Assistant). A Claude Assistant runs at **low effort** unless its model names one
@@ -99,7 +98,7 @@ walk's position belongs to the conversation rather than to the surface you start
 
 - It will not speak in a group chat, or in a chat you did not choose.
 - It will not send anything a human has not approved, on any channel.
-- It will not change a setting behind your back. A change you ask for comes back with an undo, or as a card for your yes.
+- It will not change a setting behind your back. A change you ask for comes back as a question for your yes.
 - It will not answer someone else in your chat — only the linked owner account is heard.
 
 :::warn WhatsApp is an unofficial bridge

@@ -344,7 +344,8 @@ def test_active_concierge_done_accepts_its_own_discussion_without_expanding_memb
     members = list(db.cx.execute('SELECT * FROM processing_member'))
     funnel.invalidate()
     try:
-        response = concierge.say(db, 'done', key=key, actor='fixture',
+        with concierge.delivering(concierge.PHONE):      # the phone's road: on the desk the words light the button (2026-10-19)
+          response = concierge.say(db, 'done', key=key, actor='fixture',
                                  # Handled is no button any more (buttons.json `removed`); putting the item down is still a tool
                                  llm=lambda *args, **kwargs: 'I can put it down.\nCALL: {"kind": "item.settle", "params": {"key": "%s", "verb": "done", "tid": %d}}' % (key, tid))
         proposal = response['proposal']

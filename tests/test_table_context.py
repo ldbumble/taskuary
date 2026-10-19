@@ -81,15 +81,16 @@ class NoTargetMeansTheTable(unittest.TestCase):
     def test_rerun_it_with_no_report_named_reruns_the_report_on_the_table(self):
         s, sid, item = self._report()
         llm, _ = scripted('Running it again.\n' + call('report.rerun'))
-        p = ask(s, 'rerun it', item['key'], llm).get('proposal')
-        self.assertIsNotNone(p, 'the report on the table is what "it" means')
-        self.assertEqual((p['kind'], p['target']), ('report.rerun', sid))
+        out = ask(s, 'rerun it', item['key'], llm)
+        # the report on the table is what "it" means: its own Run it again is lit (the owner, 2026-10-19 - the press runs it)
+        self.assertEqual((out['light']['verb'], out['light']['key']), ('rerun', item['key']))
+        self.assertNotIn('proposal', out)
 
     def test_a_named_report_still_wins_over_the_table(self):
         s, sid, item = self._report()
         llm, _ = scripted(call('report.rerun', title='Advisor'))
-        p = ask(s, 'rerun the advisor', item['key'], llm)['proposal']
-        self.assertNotEqual(p['target'], sid)
+        out = ask(s, 'rerun the advisor', item['key'], llm)
+        self.assertTrue(out['open'].startswith('#report=') and out['open'] != f'#report={sid}', out.get('open'))     # its own page, not the table's
 
 
 class AnAnswerAboutAnotherTaskStaysOffThisOne(unittest.TestCase):

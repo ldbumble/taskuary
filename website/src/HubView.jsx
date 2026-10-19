@@ -83,7 +83,7 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
     catch (e) { setErr(`${failed} — ${plainError(e, "try again.")}`); }
   };
   const vote = (up) => act(`vote?up=${up}`, "Your vote didn't count");
-  // removing takes the post out of this list at once, so the notice (and its Undo) lives on the page
+  // removing takes the post out of this list at once, so the notice lives on the page
   const retire = () => act("retire", "Couldn't remove it", () => onRemoved?.(p));
   const restore = () => act("restore", "Couldn't put it back");
   const comments = full?.comments || [];
@@ -283,10 +283,8 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
     } catch (e) { setLoadErr(plainError(e, "The Hub didn't load just now.")); }
   }, [topic, q, kind, sort, removed]);
   const { say, note } = useSaveNote();
-  const onRemoved = (p) => say(`Removed “${p.Title}” — kept under Removed`, { undo: async () => {
-    try { await api.post(`/api/hub/${p.LoreId}/restore`); load(); }
-    catch (e) { say(`Couldn't put it back — ${plainError(e, "try again from Removed.")}`, { bad: true }); }
-  } });
+  // a receipt, never an Undo (the owner, 2026-10-19: "no take it back button"): Removed keeps it, and its own button puts it back
+  const onRemoved = (p) => say(`Removed “${p.Title}” — kept under Removed`);
   const failed = loadErr && (
     <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}
       action={<Button size="small" color="inherit" onClick={load}>{btnLabel("try_again")}</Button>}>{loadErr}</Alert>

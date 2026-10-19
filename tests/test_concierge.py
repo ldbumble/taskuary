@@ -29,16 +29,21 @@ def _verb(d):
     return (None if d is None else (d.get('verb'), d.get('text')))
 
 
+# THE PHONE'S ROAD (the owner, 2026-10-19): on the desk a typed act lights its button and proposes nothing (test_assistant_router); a phone
+# chat has no buttons, so its words still become the proposal answered yes or no - the proposal semantics are held here, on that road
+def phone(): return concierge.delivering(concierge.PHONE)
+
+
 def decided(s, text, verb, key=None, arg=None, on=None):
     """The model named the decision: its CALL line is the contract, the words are the owner's (PW-121)."""
     line = 'Ok.\n' + 'CALL: ' + json.dumps({'kind': verb, 'params': {k: v for k, v in (('text', arg), ('on', on)) if v}})
-    return concierge.say(s, text, key=key, llm=lambda *a, **k: line)
+    with phone(): return concierge.say(s, text, key=key, llm=lambda *a, **k: line)
 
 
 def cleared_by(s, text, select):
     """The model named the SET to clear - pipe.clear `select` - the only road to a clear (2026-10-08: no word list sweeps)."""
     line = 'Ok.\n' + 'CALL: ' + json.dumps({'kind': 'pipe.clear', 'params': {'select': select}})
-    return concierge.say(s, text, llm=lambda *a, **k: line)
+    with phone(): return concierge.say(s, text, llm=lambda *a, **k: line)
 
 
 def run(s, p, version=None):
@@ -168,7 +173,7 @@ class TurnTests(unittest.TestCase):
         def model(system, user, **kw):
             seen['user'] = user
             return 'A regular agent, then.\nCALL: {"kind": "regular_agent", "params": {"text": "do a deep dive on the ECC harness"}}'
-        out = concierge.say(s, 'okay send it', llm=model)
+        with phone(): out = concierge.say(s, 'okay send it', llm=model)
         self.assertIn('CONVERSATION SO FAR', seen['user']); self.assertIn('ECC harness', seen['user'])   # the model has what was offered
         p = out['proposal']
         self.assertIn('ECC harness', p['params']['text']); self.assertIn('ECC harness', p['params']['title'])
@@ -259,7 +264,7 @@ class TurnTests(unittest.TestCase):
         def fake(system, user, **kw):
             seen['system'] = system
             return 'Saving that to the Hub.\n' + 'CALL: ' + json.dumps({'kind': 'hub.publish', 'params': params})
-        out = concierge.say(s, 'Put that launch idea in the Hub', llm=fake)
+        with phone(): out = concierge.say(s, 'Put that launch idea in the Hub', llm=fake)
         self.assertIn('hub.publish', seen['system']); self.assertNotIn('TASKUARY-HUB', seen['system'])
         self.assertEqual(out['proposal']['kind'], 'hub.publish')
         self.assertEqual(s.lore_posts(), [])                                   # nothing until the click
@@ -286,11 +291,11 @@ class DecisionTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         concierge.surface(s, llm=lambda *a, **k: 'Dana wants the file.')
-        out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nCALL: {\"kind\": \"not_ours\", \"params\": {}}")
+        with phone(): out = concierge.say(s, "it's not my issue, let them sort it out", key=f'review:{r}', llm=lambda sy, u, **k: "Not ours, then.\nCALL: {\"kind\": \"not_ours\", \"params\": {}}")
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, buttons.label('not_ours')))
         self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
-        self.assertIn('confirm below', out['say'])
+        self.assertIn(concierge.WAITS, out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
         out = concierge.say(s, 'tell her the file is with the developer, Friday', key=f'review:{r}',
                             llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the developer, Friday\"}}")
@@ -311,8 +316,8 @@ class DecisionTests(unittest.TestCase):
         """"remind me to renew the contract" came back as DECIDE: mine - theirs to do - and was answered
         "Nothing is on the table" (2026-09-23). With no item, theirs to do is a new task on their list."""
         s = store()
-        out = concierge.say(s, 'remind me to renew the Cardinal contract next week', key=None,
-                            llm=lambda *a, **k: 'Noted.\nCALL: {"kind": "mine", "params": {"text": "renew the Cardinal contract next week"}}')
+        with phone(): out = concierge.say(s, 'remind me to renew the Cardinal contract next week', key=None,
+                                          llm=lambda *a, **k: 'Noted.\nCALL: {"kind": "mine", "params": {"text": "renew the Cardinal contract next week"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['label'], p['params']['kind']), ('task.create_from_text', 'Put it on my list', 'task'))
         self.assertIn('renew the Cardinal contract', p['params']['text']); self.assertNotIn('Nothing is on the table', out['say'])
@@ -585,8 +590,8 @@ class ThreadTests(unittest.TestCase):
     def test_a_polite_request_is_a_hand_off_proposal_not_answered_with_the_mail_it_names(self):
         s = store()
         t, m, r = drafted(s)
-        out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?', key=f'review:{r}',
-                            llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coding_agent", "params": {"text": "look into that server and what the file looks like"}}')
+        with phone(): out = concierge.say(s, 'can you ask assistant to look into that server and what the file looks like?', key=f'review:{r}',
+                                          llm=lambda *a, **k: 'On it.\nCALL: {"kind": "coding_agent", "params": {"text": "look into that server and what the file looks like"}}')
         p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['params']['kind']), ('task.create_from_message', m, 'coding'))
         self.assertIn('server', p['params']['instructions'])

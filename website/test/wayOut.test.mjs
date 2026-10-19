@@ -1,5 +1,5 @@
-// The ways past a failure the rebuilt walk found missing (2026-10-18): an undo confirms as Take it back, a send nobody can confirm
-// offers Send anyway and Mark done on the card, a failed start on the task page draws its fix - every word read from the list.
+// The ways past a failure the rebuilt walk found missing (2026-10-18): a send nobody can confirm offers Send anyway and Mark done on
+// the card, a failed start on the task page draws its fix - every word read from the list. No way back is a Take it back (2026-10-19).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,11 +9,10 @@ import { label } from "../src/buttons.js";
 
 const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 
-test("a receipt's undo card confirms with Take it back and never shows its _undo flag", () => {
-  const d = describe({ kind: "task.defer", label: "Remind me", params: { until: "2026-10-20", _undo: true } });
-  assert.equal(d.confirm, label("take_back"));
-  assert.ok(!d.params.some(([k]) => k.includes("undo")), JSON.stringify(d.params));
-  assert.notEqual(describe({ kind: "task.defer", label: "Remind me", params: { until: "2026-10-20" } }).confirm, label("take_back"));
+// the owner, 2026-10-19: "no take it back button. hate that" - a card confirms with the act's own name, and no button is called Take it back
+test("a card confirms with its act's own name, and nothing is called Take it back", () => {
+  assert.equal(describe({ kind: "task.defer", label: "Remind me", params: { until: "2026-10-20" } }).confirm, "Remind me");
+  assert.equal(label("take_back"), "", "no button by that name");
 });
 
 test("the card's unconfirmed send offers Send anyway and Mark done, by their names on the list", () => {

@@ -96,9 +96,9 @@ DENIED = (
     (r'POST', r'^/api/(mcp|mssql)/', 'runs a command, or sends saved credentials to a host of the caller\'s choosing'),
     (r'POST', r'^/api/(reports/(preview|compose|compose-sources)|workflows/compose)$',
      'the report/workflow composer may read a connected system with the card\'s credentials'),
-    # testing a step reads a connected system with the card's credentials; a repair rewrites and an undo restores a saved workflow
-    (r'POST', r'^/api/workflows/(step-test|\d+/repair|\d+/undo-repair)$',
-     "a workflow's steps - testing one reads with the card's credentials, a repair or an undo changes what runs on its schedule"),
+    # testing a step reads a connected system with the card's credentials; a repair rewrites a saved workflow
+    (r'POST', r'^/api/workflows/(step-test|\d+/repair)$',
+     "a workflow's steps - testing one reads with the card's credentials, a repair changes what runs on its schedule"),
     (r'POST|PUT|PATCH|DELETE', r'^/api/semantic(/|$)', 'a metric spec is SQL run against a database of its choosing'),
     # a live pty is a shell as the owner. Agents already dispatch through terminal.start_on_task;
     # this HTTP door is the one the owner sits in (server.open_terminal). GET listing/screen stay.

@@ -81,19 +81,18 @@ class ResearchIsAWalkThroughTests(unittest.TestCase):
 
     def test_research_routes_to_the_regular_agent_not_the_coding_agent(self):
         """Research is work to hand off, but it has no repository or system to change. The brain names
-        the regular agent (the road the contract gives it) and the proposal is a general task - never a
-        coding checkout (the owner, 2026-09-04)."""
+        the regular agent (the road the contract gives it) and New is written up for a general agent - never a
+        coding checkout (the owner, 2026-09-04); nothing starts until the owner presses its button (2026-10-19)."""
         for said in ('can you research teh factor elara gravel bike', 'research the best gravel bike for me', 'can you research the Factor Elara'):
             s, out = self._proposed(said, 'regular_agent')
-            p = out['proposal']
-            self.assertEqual((p['kind'], p['params']['kind']), ('task.create_from_text', 'general'), said)
-            self.assertEqual(s.list_tasks(active_only=True), [], said)      # a proposal, not a task
+            self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'general'), said)
+            self.assertEqual(s.list_tasks(active_only=True), [], said)      # written up, not a task
 
     def test_diagnosing_a_system_is_still_a_hand_off(self):
         for said in ('look into that server and tell me what the file looks like', 'find out why the export drops rows',
                      'send it to the coding agent and figure out why this was not updated'):
             s, out = self._proposed(said, 'coding_agent')
-            self.assertEqual((out['proposal']['kind'], out['proposal']['params']['kind']), ('task.create_from_text', 'coding'), said)
+            self.assertEqual((out['new']['kind'], out['new']['how']), ('agent', 'terminal'), said)
 
     def test_the_brain_is_given_the_walk_through_road_and_the_test_for_it(self):
         """It had `coding agent` and no way to say "let's talk this through", so reading work had nowhere

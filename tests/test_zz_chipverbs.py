@@ -77,10 +77,10 @@ class ChipVerbsTests(unittest.TestCase):
                 concierge.surface(s, item['key'], llm=None)
             t0 = time.perf_counter()
             try:
+                # a fact to keep opens Verdicts & notes beside the answer, where the owner adds it (the owner, 2026-10-19: a router)
                 out = T.decide(s, f'{verb} it', verb, key=item['key'], text_arg=text_arg)
-                p = out.get('proposal')
-                note = f"proposed {p['kind']}" if p else f"say: {out['say'][:50]}"
-                ok = bool(p)
+                note = f"opens {out.get('open')}" if out.get('open') else f"say: {out['say'][:50]}"
+                ok = out.get('open') == '#settings=memory' and not out.get('proposal')
             except Exception as e:
                 ok, note = False, f'FAILED: {e}'
             rows.append((verb, ms(t0), ok, note))

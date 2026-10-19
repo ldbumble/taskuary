@@ -423,7 +423,8 @@ async function faults() {
     }
     if (!started) { note("WAYOUT", page.step, "no task with Send to agent to start"); page.expect.delete("/dispatch"); await fault(""); continue; }
     await wait(3000);
-    if (started !== "coding") await clickText(page, choice("agent", "coding_agent"));   // the card's question, when it asks which agent
+    // the card's question, when it asks which agent - in its answer's words, or with the coding agent's own button (CI, 2026-10-19)
+    if (started !== "coding" && !(await clickText(page, choice("agent", "coding_agent")))) await clickText(page, label("coding_agent"));
     await wait(5000);
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : label("pick_repo"), (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");

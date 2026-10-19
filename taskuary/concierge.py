@@ -25,6 +25,7 @@ from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from loguru import logger
 
+from . import kinds as task_kinds
 from .timewords import plural
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
@@ -1864,7 +1865,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # else the model must fix itself, never a silent regular agent.
         k = str(params.get('kind') or '').strip().lower()
         params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general'}.get(k, k)
-        if params['kind'] not in ('task', 'coding', 'general'):
+        if params['kind'] not in task_kinds.TRIAGE:
             raise CallMiss(f"task.create_from_text kind is task, coding or general - not {k or 'nothing'}. Nothing was started.")
     # ...and a new to-do never names a task that is already open: "Remind me about the Payworth invoice (TQ-0005) tomorrow at
     # 9am" was proposed as a NEW task about TQ-0005 instead of putting TQ-0005 away until then (2026-10-06)
@@ -1879,13 +1880,13 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'dispatch.prepare' and params.get('kind') is not None:
         k = str(params.get('kind') or '').strip().lower()
         params['kind'] = {'coding_agent': 'coding', 'coder': 'coding', 'regular_agent': 'general', 'regular': 'general'}.get(k, k)
-        if params['kind'] not in ('general', 'coding'):
+        if params['kind'] not in task_kinds.AGENT:
             raise CallMiss(f"dispatch.prepare kind is coding or general - not {k or 'nothing'}. Nothing was started.")
     # ...and a watch's `what` is one of four words: "a new reply from Gail Moreno" was proposed, said "Doing it now", and then
     # failed at the run with "what: done | reply | any | off" (2026-10-06). The model fixes it before anything is proposed.
     if kind == 'task.watch' and str(params.get('what') or 'any').strip().lower() not in asks.WATCHES:
         raise CallMiss(f"task.watch what is one of done, reply, any, off - not {str(params.get('what'))[:60]!r}. Nothing was set.")
-    if kind == 'task.create_from_text' and str(params.get('kind') or '') in ('coding', 'general'):
+    if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
                'as': str(params.get('profile') or params.get('repo') or params.get('agent') or params.get('as') or '').strip()}
@@ -3269,7 +3270,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.setup' and o.get('ref'):
         return (f" {o['ref']} - \"{o.get('title') or ''}\" is ready as a walk-through - one step at a time, nothing built and nothing "
                 "changed until you say so. Open it when you want to start.")
-    if kind == 'task.create_from_message' and p.get('kind') in ('coding', 'general'):
+    if kind == 'task.create_from_message' and p.get('kind') in task_kinds.AGENT:
         if o.get('existing'): return " It was already being worked on."
         if o.get('started') or o.get('chat'): return " It's being worked on now - moving on."
     if kind == 'item.settle' and o.get('closed'): return f" {task_ref(int(o['closed']))} closed."

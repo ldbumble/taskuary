@@ -26,18 +26,20 @@ a mailing list, and they must not wear the same tag.
 # as one is never looked at again.
 import re
 
+from . import kinds
+
 SENDER_CLASSES = ('person', 'automated', 'bulk')
 
 # THE ROUTE RECORD LEADS WITH WHOSE IT IS. It led with the classifier's label - "triage: task - ..." - and "task" reads
 # as "on you" on work triage had handed to the assistant or the coding agent (the owner, 2026-10-16). Rows written
 # before keep the old label, so every reader goes through route_intent, which knows both.
-def agent_word(kind) -> str: return 'the coding agent' if str(kind or '') == 'coding' else 'the assistant'
+from .kinds import worker as agent_word   # kinds.json's `worker`: 'the coding agent', or 'the assistant'
 
 def route_head(intent, kind='', repo='') -> str:
     "'nothing to do' | 'needs a reply' | 'work for the coding agent in org/app' | 'work for the assistant' | 'yours to do'."
     if intent == 'fyi': return 'nothing to do'
     if intent == 'reply_only': return 'needs a reply'
-    if kind in ('coding', 'general'): return f'work for {agent_word(kind)}' + (f' in {repo}' if repo and kind == 'coding' else '')
+    if kind in kinds.AGENT: return f'work for {agent_word(kind)}' + (f' in {repo}' if repo and kind == 'coding' else '')
     return 'yours to do'
 
 _HEAD = re.compile(r'triage: (task|reply_only|fyi|yours to do|work for |needs a reply|nothing to do)')

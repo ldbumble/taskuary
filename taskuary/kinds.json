@@ -1,0 +1,9 @@
+{
+  "_": "WHO DOES A TASK, once - read by the server (taskuary/kinds.py) and the page (website/src/kinds.js). A task's Kind decides which machinery works it: `task` is the owner's own list (nothing starts on it), `general` and `coding` are the two an agent works (the two that reach the Board), `reply` is a drafted answer approved before it goes. `label` is the kind's name on the task list and the task page's picker, `hint` what the picker says under it in plain words (the audit, 2026-10-17: no repositories, CLIs or models), `verdict` what triage's panel calls the destination, `worker` who works it in a sentence (\"Start the coding agent\"), `made` whether the new-task dialog offers it (a reply is never made by hand), `triage` whether triage may name it. A brain is a tool and a profile is instructions (the owner, 2026-10-15) - a kind names neither.",
+  "kinds": [
+    {"key": "task", "label": "your task", "hint": "Yours to do - no assistant works on it", "verdict": "My task list", "worker": "", "agent": false, "made": true, "triage": true},
+    {"key": "general", "label": "agent · general", "hint": "An AI assistant works on it - research, writing, analysis, planning", "verdict": "Assistant", "worker": "the assistant", "agent": true, "made": true, "triage": true},
+    {"key": "coding", "label": "agent · coding", "hint": "Your coding tool works on it, in your code", "verdict": "Coding agent", "worker": "the coding agent", "agent": true, "made": true, "triage": true},
+    {"key": "reply", "label": "reply", "hint": "You approve a drafted reply - nothing else runs", "verdict": "Reply review", "worker": "", "agent": false, "made": false, "triage": false}
+  ]
+}

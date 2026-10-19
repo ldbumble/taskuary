@@ -11,6 +11,8 @@ The decision keeps every candidate's per-signal scores so the "why" is fully rep
 import re, math
 from collections import Counter
 
+from . import kinds as task_kinds
+
 # Common reply/forward prefixes stripped before subject comparison (incl. localized ones).
 _SUBJ_PREFIX = re.compile(r'^\s*((re|fw|fwd|aw|sv|vs)\s*(\[\d+\])?\s*:\s*)+', re.I)
 _TOKEN = re.compile(r'[a-z0-9]{2,}')
@@ -130,7 +132,7 @@ def draft_task_fields(msg, urgent: bool = False, kind: str = None):
     # ...and never a guess from punctuation (the owner, 2026-09-25: "? never decides anything"): a question mark
     # used to turn a task triage named without a kind into a reply with a drafted answer. Triage's reply_only is
     # the only road to a reply.
-    kind = kind if kind in ('coding', 'general', 'task') else 'task'
+    kind = task_kinds.triage_kind(kind)
     # THE ASK, NOT THE EMAIL. This stored body[:1000], so a task's own summary was the greeting, the
     # signature, the legal footer and the quoted thread underneath - 5,998 characters of Paula's
     # reply, of which the ask was the first sentence (the owner, 2026-09-14: "why is the whole email

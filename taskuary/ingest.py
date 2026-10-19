@@ -8,6 +8,7 @@ answering is the responder's job (reply_only), doing is the coding agent's.
 import contextlib, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
+from . import kinds as task_kinds
 from .timewords import plural
 from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
@@ -1008,7 +1009,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # restated 2026-08-29): it does what it is supposed to, or says "nothing to do here" and
         # stops, and a job left on a list does not. Coding and general both self-dispatch when the Settings allow
         # it (auto_start_ok); `task` is the owner's by definition, and a reply is drafted for their yes.
-        elif f['kind'] in ('coding', 'general') and not msg.get('no_auto'):
+        elif f['kind'] in task_kinds.AGENT and not msg.get('no_auto'):
             # no_auto = the channel opted out of self-dispatch (github items always do: an
             # open repo would start an agent per drive-by PR) - the task queues as needs-you.
             # The rest of the gate is auto_start_ok: what may start a worker on this machine, for

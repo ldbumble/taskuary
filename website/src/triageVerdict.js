@@ -62,12 +62,8 @@ export const intentLabel = (intent) => ({
   fyi: "FYI",
 }[intent] || String(intent || "Unspecified"));
 
-export const kindLabel = (kind) => ({
-  coding: "Coding agent",
-  general: "Assistant",
-  task: "My task list",
-  reply: "Reply review",
-}[kind] || String(kind || ""));
+// what the panel calls each destination - kinds.json's `verdict`, the one table of task kinds
+export { verdictLabel as kindLabel } from "./kinds.js";
 
 export const relationshipLabel = (relationship) => ({
   new: "New item",

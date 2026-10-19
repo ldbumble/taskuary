@@ -10,6 +10,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket,
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from . import kinds as task_kinds
 from . import buttons, config, failures, words
 from . import store as store_mod
 from .store import SQLiteStore, is_goal, task_ref
@@ -1891,7 +1892,7 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     # mine, not the agent's" that taught nothing - the tray button beside it reached the identical
     # end state and wrote the lesson - so the owner's correction was given and dropped on the floor
     # (TQ-0501, 2026-09-11). Same judgement, same learning, whichever control they reach for.
-    if next_kind and next_kind != t.get('Kind') and next_kind in ('task', 'general', 'coding'):
+    if next_kind and next_kind != t.get('Kind') and next_kind in task_kinds.TRIAGE:
         # moving it OFF the agent entirely is the button's judgement, so it writes the button's
         # four records. general/coding are still agent work - a weaker signal, the routing fact only.
         if next_kind == 'task': _teach_not_coding(task_id, t, was_verdict, None, True, background)
@@ -3015,7 +3016,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
         raise HTTPException(422, f'unknown agent: {body.agent}')
     task_kind = str(task.get('Kind') or '').lower()
     requested = str(body.kind or '').lower()
-    if requested and requested not in ('general', 'coding'):
+    if requested and requested not in task_kinds.AGENT:
         raise HTTPException(422, 'kind must be general or coding')
 
     # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Keep going
@@ -3087,10 +3088,10 @@ def dispatch_message(mid: int, body: DispatchBody, background: BackgroundTasks):
     _learn_promotion(m, background, body.standing)
     verdict, route_id = operations.verdict_of_message(store, m)
     tid = m.get('TaskId') or task_from_message(
-        store, mid, ACTOR, requested if requested in ('general', 'coding') else 'coding')
+        store, mid, ACTOR, requested if requested in task_kinds.AGENT else 'coding')
     try:
         out = _dispatch_task_to_its_agent(tid, body, background)
-        operations.record_direct(store, 'task.create_from_message', mid, {'kind': requested if requested in ('general', 'coding') else 'coding'}, ACTOR,
+        operations.record_direct(store, 'task.create_from_message', mid, {'kind': requested if requested in task_kinds.AGENT else 'coding'}, ACTOR,
                                  {'taskId': tid, 'dispatch': out.get('dispatch')}, verdict=verdict, route_id=route_id)
         return out
     except HTTPException as e:

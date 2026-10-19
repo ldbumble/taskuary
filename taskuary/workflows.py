@@ -19,6 +19,7 @@ import json, threading
 from datetime import datetime
 from loguru import logger
 
+from . import kinds as task_kinds
 from .store import task_ref
 
 WORKFLOW_TYPES = ('agent', 'zoho_monthly_invoices')
@@ -48,7 +49,7 @@ def is_workflow(src_or_cfg) -> bool:
 def runs_on(cfg: dict) -> str:
     """Which worker: coding only for actual code work - a checkout to work in, or said outright."""
     want = str(cfg.get('runs_on') or '').lower()
-    if want in ('general', 'coding'): return want
+    if want in task_kinds.AGENT: return want
     return 'coding' if cfg.get('cwd') else 'general'
 
 

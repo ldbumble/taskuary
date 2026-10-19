@@ -2,6 +2,8 @@
 // before it went. The step showed a Start button and nothing else (the owner, 2026-10-11: "it should say what the
 // agent did so far and was interrupted or it never started").
 
+import { agentWord } from "./kinds.js";
+
 // the chip beside "Agent work" - only the two that wait on the owner wear oxblood
 export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started", news: "earlier session" };
 export const storyAlarm = (kind) => kind === "held" || kind === "interrupted";
@@ -12,7 +14,7 @@ export const storyShown = (story, { alive, liveRun, queued, closed } = {}) =>
 
 // "Start the coding agent" for a step that never ran: "Start an agent" read as if nobody had been chosen, and "Start coder"
 // named a profile as if it were a worker (the owner, 2026-10-16) - the button says what the agent IS, by the task's kind
-export const agentWord = (kind) => (kind === "coding" ? "the coding agent" : "the assistant");
+export { agentWord };
 export const startLabel = (story, kind, ran) => !ran && story && ["held", "idle"].includes(story.kind) ? `Start ${agentWord(kind)}` : null;
 
 export const hhmm = (ts) => String(ts || "").slice(11, 16);

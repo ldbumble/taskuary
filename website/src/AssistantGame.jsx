@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import { Box, CircularProgress, Slider, Typography, useMediaQuery } from "@mui/material";
 
 import api from "./api";
+import { kindLabel } from "./kinds.js";
 import { pollWhileVisible } from "./visible.js";
 import { onLive } from "./live.js";
 import { isAgentKind } from "./autostart.js";
@@ -159,7 +160,7 @@ export default function AssistantGame({ onOpenTask, onExit, onNavigate, active =
       key: i.key, zone, sub: channelKind(i), who: i.who || laneMeta(i.lane).word, title: i.title, mark: markOf(i) }))),
     ...gym.map((g) => {
       const list = rowChecklist(g.task), done = list.filter((c) => c.done).length;
-      return { key: g.key, zone: "gym", who: g.task?.ref || g.item?.ref || "your task", title: g.task?.Title || g.item?.title,
+      return { key: g.key, zone: "gym", who: g.task?.ref || g.item?.ref || kindLabel("task"), title: g.task?.Title || g.item?.title,
         mark: g.item && needsYou(g.item) ? { glyph: "!", tone: "need" } : list.length ? { glyph: `${done}/${list.length}`, tone: "send" } : null };
     }),
   ], [zones, gym]);

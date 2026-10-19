@@ -22,6 +22,7 @@ import TaskPage from "./TaskPage.jsx";
 import { isGeneralKind } from "./autostart.js";
 import { ASK_TAG } from "./newTask.js";
 import { isWorkflowRun, startedBy } from "./taskSources.js";
+import { KIND_OPTIONS, kindLabel, shortKind } from "./kinds.js";
 
 // three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
 // "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
@@ -54,19 +55,6 @@ const bucketOf = (t) => (remindWaiting(t) ? "upcoming" : stateOf(t).key);
 const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key) && !remindWaiting(t)
                                              : bucketOf(t) === key);
 const PRIORITIES = ["low", "normal", "high", "urgent"];
-// what a task IS decides which machinery works it: coding gets a repo session, a reply
-// gets the responder and the review queue, general gets the visual conversation. Keep the
-// explicit non-coding label: calling this only "assistant" hid the option the owner asked for.
-// WHO works it, then what it is - the owner's own words (2026-09-10: "tag tasks as reply/your
-// task/agent (maybe coding vs general)"). "your task" is deliberately the same phrase the work
-// rail's own heading uses for band 2 (funnelPile.LEVEL_META), so one thing has one name in both
-// places. The two `agent` kinds are the two that reach the Board; reply and your task do not.
-const KIND_OPTIONS = [
-  { key: "task", label: "your task", hint: "yours to do - nothing works it, and it is not on the Board" },
-  { key: "general", label: "agent · general", hint: "research, writing, analysis, planning - an agent runs it without a repository" },
-  { key: "coding", label: "agent · coding", hint: "an agent works it in one of your code repositories" },
-  { key: "reply", label: "reply", hint: "a draft answer you approve on the task before it goes", made: false },
-];
 // what Create leads to, said for the kind picked - the caption promised a terminal and a draft that Create never made.
 // A reply is not offered here: a task you type yourself has nobody to answer, so its draft step was a dead end.
 const NEXT_STEP = {
@@ -74,7 +62,6 @@ const NEXT_STEP = {
   general: "Create opens it with your summary already asked. Press Start an agent on it to have one work it.",
   coding: "Create opens it. Press Start an agent on it to choose the agent and start it in the repository.",
 };
-const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
 // The task's settings read as FACTS you can change, not as a form: pill-shaped, label-less,
 // sitting on the card's bottom edge. Stacked "Type / Task status / Priority" labels over boxed
@@ -92,9 +79,8 @@ const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || k
 // the same pill as chipBtn, for a fact you read rather than a control you press
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
-// One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·
+// One word for the kind (kinds.shortKind): the agent's own name follows it on the same line, so "agent · coding ·
 // coding" spent three words saying an agent has it.
-const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent · /, "");
 // The checklist is already on every list row - store.list_tasks selects t.* and the Checklist
 // column rides along - so the rail draws progress without a request per task.
 const rowChecklist = (t) => {

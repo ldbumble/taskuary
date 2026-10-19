@@ -255,6 +255,10 @@ class ArrivalsTests(unittest.TestCase):
 
     def test_a_chat_burst_is_one_thought_and_a_new_ask_is_its_own_task(self):
         s = store()
+        # one calendar day for the whole burst (chat_candidates joins same-day lines only): run in the first minutes after
+        # midnight, "40 minutes ago" was yesterday and the second line could not join the first (CI, 2026-10-19 00:40 UTC)
+        now = datetime.now(); base = now - timedelta(hours=2) if now.hour < 2 else now
+        def ago(minutes=0): return (base - timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
 
         def line(body, mins, same=True):
             def llm(system, user, **kw):

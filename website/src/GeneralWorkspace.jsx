@@ -476,13 +476,29 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   // ONE PLACE says what it is doing. Once its steps stream into the thread above, the band repeated the newest of them word for word
   // beneath (the owner, 2026-10-14: "no need while it's working to tell you what it's doing in 2 places") - so it keeps only the
   // dots that say it is alive. The band is for the wait with nothing on screen yet, where an API brain looked frozen (2026-09-07).
+  /* OPENED, it shows the newest answer from its first line. Pinned to the bottom, the cards under the answer (its question, the
+     report offer) and the input took the room, and a short view showed the answer's last paragraph only: "I can't see any of the
+     agent output without scrolling" (the owner, 2026-10-18). Only at rest and only once - a run that is writing keeps following. */
+  const viewport = useRef(null), placed = useRef(false);
+  useEffect(() => {
+    if (dock || placed.current || !messages?.length || serverBusy) return;
+    // after the library's own pin to the bottom, which lands once the answer has laid out
+    const id = setTimeout(() => {
+      const v = viewport.current, last = [...(v?.querySelectorAll(".tq-aui-agent") || [])].pop();
+      if (!v || !last || runtime.thread.getState().isRunning) return;
+      placed.current = true;
+      const off = last.getBoundingClientRect().top - v.getBoundingClientRect().top - 8;
+      if (off < 0) v.scrollTop += off;
+    }, 350);
+    return () => clearTimeout(id);
+  }, [dock, messages, serverBusy, runtime]);
   const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
   const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
     : <AgentBand name={name} provider={provider} work={work} since={since} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="tq-aui-thread">
-        <ThreadPrimitive.Viewport className="tq-aui-viewport">
+        <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
           {!messages?.length && (
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
@@ -521,7 +537,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             </div>
           )}
           {!dock && <PublishedPages pages={published} />}
-          {!dock && !serverBusy && messages?.some((m) => m.role === "assistant") && (
+          {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
+              the answer needed */}
+          {!dock && !serverBusy && !asking && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
               <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}

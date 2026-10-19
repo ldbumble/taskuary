@@ -58,9 +58,9 @@ test("the picker names the brain that is actually answering, not the one it open
   assert.doesNotMatch(accept, /setConnectorId\(\(old\) => old \|\| String\(provider\.id\)\);\s*$/m);
 });
 
-test("the offer to schedule the workflow waits for the answer it is offering to repeat", () => {
+test("the offer to schedule the workflow waits for the answer it is offering to repeat, and for any question it asked", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /!dock && !serverBusy && messages\?\.some/);
+  assert.match(view, /!dock && !serverBusy && !asking && messages\?\.some/);
 });
 
 test("the working dots animate from the general workspace's own stylesheet", () => {

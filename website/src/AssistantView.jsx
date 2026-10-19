@@ -54,7 +54,7 @@ import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, p
 import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns, placeLine } from "./assistantTurns.js";
+import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
 import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink } from "./appLinks.js";
@@ -708,7 +708,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
-        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} />
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} lit={canvas.lit} />
     </div>
   );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its
@@ -1451,7 +1451,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       return;
     }
     const optimisticId = asUser ? `u${Date.now()}` : null;
-    if (optimisticId) setMsgs((m) => [...m, { id: optimisticId, role: "user", text: asUser }]);
+    if (optimisticId) setMsgs((m) => pickLine(m, { id: optimisticId, role: "user", text: asUser, pick: key || undefined }));
     // NEXT PUTS THE TABLE DOWN AT ONCE, the way "All read, next" does (the owner, 2026-09-30: "when you hit next on a task it
     // does not close the current task instantly ... the close of past one should be instant"): the task folds to its title
     // line now and the "…" shows while the next one loads; a Next that fails opens it again
@@ -1544,8 +1544,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // question about it went out about the walk's old item, or about nothing. The newest live card that is not folded leads.
       const table = msgs[interactiveCardIndex(msgs)]?.card;
       const tableKey = table?.key && table.key !== foldedKey && !browsing ? table.key : null;
-      const subject = openCardRef.current ? null : (tableKey || current);
-      const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current && !openCardRef.current ? currentItem.mid : null,
+      // ...and a page open beside it does not take it off the table: the Assistant's own "turn off background sync" opened Settings, and the
+      // next "mark this done" went out about nothing while the rail still said ON THE TABLE (verify, 2026-10-19). Both go; the words say which
+      const subject = tableKey || current || cardRef.current;
+      const ask = () => turn({ mode: "say", text: t, key: subject, context_mid: currentItem?.mid && subject === current ? currentItem.mid : null,
                                open_card: openCardRef.current, images });
       const data = await ask().catch(async (e) => { if (!isCoveragePending(e)) throw e; await new Promise((r) => setTimeout(r, 1200)); return ask(); });
       if (data.context_update && noticedRef.current !== data.context_update) {   // not already said by the stream event
@@ -1571,6 +1573,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           // ...its item brought up the rail's road when it is not the one on the table, so the rail rings it
           const key = litPull(l, { key: tableKey || current, tid: currentItem?.tid });
           if (key) deferInChat(() => { browseDown(); surfaceRef.current?.(key); }, 300);
+          // ...and on the table already, a page open over it is put down: the lit button and its line stood hidden under Settings (verify,
+          // 2026-10-19 - "mark this done" asked beside the page the Assistant had opened)
+          else browseDown();
         }
         if (data.decision) await decide(data.decision, data);  // the two immediate exceptions: a reply drafts, Next moves (PW-126/128)
       }
@@ -1627,7 +1632,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         // yes", and the draft went onto his task with nothing landing here (2026-10-06)
         // ...and its Send is lit: drafting is not sending, the owner's press is (the owner, 2026-10-19)
         if (data.reviewId) {
-          setLit({ verb: "approve", label: btn("approve"), key: `review:${data.reviewId}`, tid: cur?.tid ? Number(cur.tid) : null, landed: false });
+          setLit({ verb: "approve", label: btn("approve"), line: `Read the draft, then press ${btn("approve")} when you're sure.`, key: `review:${data.reviewId}`,
+                   tid: cur?.tid ? Number(cur.tid) : null, landed: false });
           if (!elsewhere) putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300); return;
         }
         loadPile(); return;
@@ -2204,12 +2210,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       <div className="tq-modes">
         <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
           title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
-        {/* the same walk the header chip opens. It lives here as well because the header
-            hides its chip on a phone, and this block is what a phone shows - without it the
-            one door to the set-up guidance was absent on the device it is most needed on. */}
-        <button type="button" className="tq-chip" disabled={busy || resetting || walking} onClick={() => setupRef.current?.()}
-          title="Setup - your AI, your email, a few questions about your work, and more connections. The same as Setup on the top bar">Set up Taskuary</button>
-        {/* RUN, not set up: setting things up is Set up Taskuary's job; this door goes where the reports and workflows ARE
+        {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}
+        {/* RUN, not set up: setting things up is the top bar's Setup; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}
         <button type="button" className="tq-chip" disabled={resetting} onClick={() => onNavigate?.("Reports")}
           title="Your reports and workflows - run one now, or see what each found">Run a report or workflow</button>
@@ -2217,7 +2219,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             names an Assistant chat, because this talks to the assistant, it does not set one up */}
         {(state?.doorways || []).map((d) => (
           <button key={d.channel} type="button" className="tq-chip tq-chip-chat" disabled={busy || resetting || !canAdvance}
-            onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you take it back`}>
+            onClick={() => handOver(d)} title={`I say hello in ${d.name} and take you through the same items there; this tab locks until you press ${btn("walk_here")}`}>
             <ChannelIcon channel={d.channel} sx={{ fontSize: 14 }} />
             Walk me through them in {d.label}
           </button>
@@ -2327,12 +2329,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const t = setTimeout(() => setContinuingTid((x) => (x === continuingTid ? null : x)), 20000);
     return () => clearTimeout(t);
   }, [continuingTid]);
-  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone,
+  // ...and the Assistant's lit button with its line, for the phone's row at the view's foot (CanvasItem)
+  const canvasState = useMemo(() => ({ height: CANVAS_ITEM_HEIGHT, expanded, folded: foldedKey, browsing, phone, lit: litNow,
     toggle: () => setExpanded((x) => !x), fold: (key) => { setExpanded(false); setFoldedKey(key); },
     // the task leaves the table the moment it is put down, the "…" under its title line while the server closes it
     putDown: (key, tid = null) => { setExpanded(false); setFoldedKey(key); setNextComing(true); setLeavingTid(tid); },
     pickUp: (key, why) => { setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
-    [bodyH, expanded, foldedKey, browsing, phone]);
+    [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
   const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
   const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
@@ -2508,13 +2511,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
                 ONE STRIP, ONE HEIGHT from Thinking to its answer: it came and went under the row, which jumped (2026-10-19) */}
             {table.speaks && !hostedRow && <div className="tq-strip" data-tq-strip={busy ? "busy" : ""}>
-            {table.speaks && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
+            {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
+                was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
+            {table.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}
+            {table.speaks && !litNow && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
               <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
-            {table.speaks && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
+            {table.speaks && !litNow && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
                 : "This changed - nothing to suggest on it now."}</div></div>}
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
-            {!changed && <AdviceNone advice={noneSaid} />}
+            {!changed && !litNow && <AdviceNone advice={noneSaid} />}
             </div>}
           </>}
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing

@@ -8,7 +8,7 @@ as words in the message - the choices are appended here, from the item, never in
 
 A HANDOFF is the explicit version, and the reason the button exists: the tab hands its walk to the chat
 and LOCKS itself, because two screens answering the same item is how the same mail gets replied to twice.
-Take it back on the desktop and the chat is told the walk is over.
+Walk it here on the desktop and the chat is told the walk is over.
 
 Only messages the owner themself sent in that named, private chat are accepted. Other people, other
 chats and groups continue through the normal funnel.
@@ -31,9 +31,10 @@ _TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
 _locks, _locks_guard = {}, threading.Lock()
 _turns: dict = {}                            # chat -> the Event that cancels its turn in flight
 
+# the desk's button that brings the walk back is Walk it here (buttons.json walk_here) - "Take it back" named a button that is gone (verify, 2026-10-19)
 OPENED = ('Walking you through it here. Reply in this chat and I keep going; '
-          'take it back on the desktop when you want the buttons again.')
-CLOSED = 'Taken back on the desktop - this walk is over here. Message me any time and I will pick it up again.'
+          f"press {buttons.label('walk_here')} on the desktop when you want the buttons again.")
+CLOSED = 'Walked back to the desktop - this walk is over here. Message me any time and I will pick it up again.'
 HAND_BACK = 'Hand back to the desktop'
 MORE_CHOICES, POLL_MAX = 'More choices', 12      # WhatsApp's poll and Telegram's buttons both stop at twelve
 HANDED_BACK = 'Handed back - the walk is on the desktop again. Message me any time and I will pick it up again.'
@@ -273,7 +274,7 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
     store.audit('task', task['TaskId'], 'assistant_handoff_start', actor, detail={'channel': channel, 'chat': chat})
     concierge.record(store, task['TaskId'], 'assistant',
                      f"Taking this to {LABELS[channel]} - I have said hello there. "
-                     f'Answer me in the chat; press Take it back here when you want the desk again.')
+                     f"Answer me in the chat; press {buttons.label('walk_here')} here when you want the desk again.")
     return {**live, 'label': LABELS[channel], 'say': out.get('say') or ''}
 
 

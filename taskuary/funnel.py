@@ -16,6 +16,7 @@ from .store import task_ref, auto_code_enabled
 from . import buttons, lanes
 from .lanes import level_of, on_you, waits_on_you, SECTION_WORDS, MAIL_KINDS   # the rail's rules, where their readers find them
 from .categories import agent_word
+from .timewords import until_m
 from .wrapup import REPORTS
 from .assistant import _ts, _dt, _short, _cut, _gist, _agenda
 from .autoreply import is_auto
@@ -896,7 +897,7 @@ def from_calendar(store, now: datetime) -> list:
         key = f"meeting:{str(e.get('start') or '')[:16]}:{_short(e.get('subject'), 40)}"
         out.append(_item(key, 'meeting', 'time', e.get('subject') or 'the meeting', who=', '.join(who[:3]), when=e.get('start'),
                          mins=mins, calendar_ready=(st - now).total_seconds() <= ALERT_MIN * 60, event={k: e.get(k) for k in ('start', 'end', 'subject', 'who', 'where', 'about', 'join', 'organizer')},
-                         why=('starting now' if mins <= 0 else f'in {mins} min') + (f" with {', '.join(w.split()[0] for w in who[:3])}" if who else '')))
+                         why=('starting now' if mins <= 0 else until_m(mins)) + (f" with {', '.join(w.split()[0] for w in who[:3])}" if who else '')))
     return out
 
 
@@ -1844,7 +1845,7 @@ def alerts(store, items: list = None) -> list:
     for i in items:
         if i.get('surfaced'): continue                                 # already on, or past, the table
         if i['kind'] == 'meeting' and not _not_yet(i):
-            when = 'is starting now' if i['mins'] <= 0 else f"starts in {i['mins']} min"
+            when = 'is starting now' if i['mins'] <= 0 else f"starts {until_m(i['mins'])}"
             out.append({'key': f"alert:{i['key']}", 'item': i['key'], 'kind': 'meeting', 'lane': i['lane'],
                         'text': f"{i['title']} {when}" + (f" with {i['who']}" if i.get('who') else '')})
         # ...an agent WAITING ON YOU. One merely working was pushed too - "is working on it, nothing for you there now", twice

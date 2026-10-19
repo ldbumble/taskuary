@@ -12,7 +12,7 @@ import api from "./api";
 import { completionTransition, cutAway, filterForSelectedState, remindWaiting, remindDay } from "./taskFilter.js";
 import { onLive } from "./live.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, card, ACCENT, PILL_COLORS, ALERT } from "./theme.jsx";
-import { StateChip, stateOf, TASK_STATES, asUtc, timeAgo, Empty, FilterPills, isWaiting, assignedAgent } from "./ui.jsx";
+import { StateChip, stateOf, TASK_STATES, asUtc, timeAgo, askedAgo, Empty, FilterPills, isWaiting, assignedAgent } from "./ui.jsx";
 import { ListItemText } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
 
@@ -96,16 +96,6 @@ const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent ·
 const rowChecklist = (t) => {
   try { const a = JSON.parse(t?.Checklist || "[]"); return Array.isArray(a) ? a.filter((i) => i && i.text) : []; }
   catch { return []; }
-};
-// How long a parked agent has been holding its question. The row already carries the session that
-// stateOf() reads, so this costs nothing - and a question you have left for an hour should say so
-// on the rail rather than only inside the task.
-const askedAgo = (t) => {
-  const s = t?.Session;
-  if (!s || !isWaiting(s)) return "";
-  const mins = Math.round((Number(s.idle) || 0) / 60);
-  if (mins < 1) return "asked you just now";
-  return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
 };
 
 export default function TasksView({ selected, onSelect, onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened }) {

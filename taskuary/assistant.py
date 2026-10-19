@@ -40,6 +40,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .store import is_model_idea, task_ref, auto_code_enabled
+from .timewords import ago_m, plural, span
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
 
 CHANNEL = 'assistant'
@@ -260,8 +261,8 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
             late = f" - it was due {due}" if due and due < datetime.now().strftime('%Y-%m-%d') else f" - due {due}" if due else ''
             out.append({'key': f"promise:{cid}", 'kind': 'promise', 'sig': _ts(r['SentAt']) + step,
                         'facts': f"You told {who} on {_ts(r['SentAt'])[:10]}" + (f" re \"{_short(r.get('Subject'), 70)}\"" if subj else '') + f": \"{_short(body, 160)}\" - "
-                                 f"the promise: {what}{late}; made {days} day(s) ago, and nothing you have sent since delivers it.",
-                        'text': f"You told {who} you would {what}{late} - {days} day{'s' if days != 1 else ''} ago" + (f" on \"{subj}\"" if subj else '') + ". Done?",
+                                 f"the promise: {what}{late}; made {ago_m(days * 1440, long=True)}, and nothing you have sent since delivers it.",
+                        'text': f"You told {who} you would {what}{late} - {ago_m(days * 1440, long=True)}" + (f" on \"{subj}\"" if subj else '') + ". Done?",
                         'action': {'type': 'message', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId')},
                         'who': who, 'what': what, 'due': due})
         else:
@@ -269,8 +270,8 @@ def followups(store, hours: int, want=('followup', 'promise')) -> list:
             late_day = outcomes.late_after(store, (inbound.get('FromEmail') or '').lower(), int(store.get_setting('slipped_default_days', 5) or 5))
             out.append({'key': f"followup:{cid}", 'kind': 'followup', 'sig': _ts(r['SentAt']) + (':away' if gone else '') + step,
                         'facts': (f"You wrote {who} on {_ts(r['SentAt'])[:10]} re \"{_short(r.get('Subject'), 70)}\": \"{_short(body, 160)}\" "
-                                  f"- nothing has come back in {days} day(s); late for them after {late_day} days." + (f" BUT {who} is {gone}." if gone else '')),
-                        'text': (f"No answer from {who} in {days} day{'s' if days != 1 else ''} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
+                                  f"- nothing has come back in {plural(days, 'day')}; late for them after {late_day} days." + (f" BUT {who} is {gone}." if gone else '')),
+                        'text': (f"No answer from {who} in {plural(days, 'day')} on \"{subj}\" - " + (f"they are {gone}; I'd wait." if gone else 'follow up?')),
                         # the person key, the day asked and whether they are away: what the slipped lane reads (funnel.slipped_followup)
                         'action': {'type': 'followup', 'mid': inbound['MessageId'], 'tid': inbound.get('TaskId'),
                                    'who_email': (inbound.get('FromEmail') or '').lower(), 'asked_at': _ts(r['SentAt']), 'away': bool(gone)},
@@ -337,15 +338,15 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
         # a task closed AFTER the ask is what answered it; an ask that came after the close is new work
         if t and t.get('Status') in ('done', 'dropped') and _ts(t.get('ClosedAt')) >= _ts(last.get('SentAt')): continue
         who = last.get('FromName') or last.get('FromEmail') or 'someone'
-        age = datetime.now() - (_dt(last['SentAt']) or datetime.now())
-        ago = f"{age.days} day{'s' if age.days != 1 else ''}" if age.days else f"{int(age.total_seconds() // 3600)}h"
+        m = (datetime.now() - (_dt(last['SentAt']) or datetime.now())).total_seconds() / 60
+        ago, said_ago = span(m, long=True), ago_m(m, long=True)
         if v is None:
             why = 'triage failed on it' if last.get('Status') == 'error' else 'triage has not judged it'
             blank.append({'key': f'unjudged:{cid}', 'kind': 'unjudged', 'sig': _ts(last['SentAt']),
                           'facts': f"{who} wrote {_when(last['SentAt'])} re \"{_short(last.get('Subject'), 70)}\": \"{_gist(body, 160)}\" - {why}, "
                                    f"so whether it asks you anything is NOT KNOWN; nothing of yours came after it in {ago}",
                           'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid},
-                          'who': who, 'gist': _gist(body, 60), 'ago': ago, 'why': why})
+                          'who': who, 'gist': _gist(body, 60), 'ago': said_ago, 'why': why})
             continue
         cover = ('a draft waits for you on the task' if tid in pend else
                  f"{task_ref(tid)} is {t.get('Status')}" + (', an agent is on it' if t.get('RunStatus') == 'running' else '') if t else 'no task, no draft')
@@ -354,9 +355,9 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
         out.append({'key': f'asked:{cid}', 'kind': 'asked', 'sig': _ts(last['SentAt']),
                     'facts': f"{who} asked {_when(last['SentAt'])} re \"{_short(last.get('Subject'), 70)}\": \"{_gist(body, 160)}\" - no answer from you in {ago}; {cover}"
                              + (f"; {who} is {gone}" if gone else ''),
-                    'text': f"{who} asked \"{_gist(body, 60)}\" {ago} ago - no answer yet ({cover})",
+                    'text': f"{who} asked \"{_gist(body, 60)}\" {said_ago} - no answer yet ({cover})",
                     'action': {'type': 'message', 'mid': last['MessageId'], 'tid': tid},
-                    'who': who, 'gist': _gist(body, 60), 'ago': ago})
+                    'who': who, 'gist': _gist(body, 60), 'ago': said_ago})
     return out, blank
 
 

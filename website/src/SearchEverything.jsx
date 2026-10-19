@@ -15,7 +15,7 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import api from "./api";
-import { agoText } from "./funnelPile.js";
+import { ago } from "./timeWords.js";
 import { arrange, filters, kindOf, marks, meta, terms } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 
@@ -87,7 +87,7 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
         </Box>
         {(m.length > 0 || hit.when) && (
           <Box sx={{ fontSize: 11.5, color: FAINT, mt: 0.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {[...m, hit.when ? agoText(hit.when) : ""].filter(Boolean).join(" · ")}</Box>
+            {[...m, hit.when ? ago(hit.when) : ""].filter(Boolean).join(" · ")}</Box>
         )}
         {hit.snippet && (
           <Box sx={{ fontSize: 11.5, color: DIM, mt: 0.35, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2,

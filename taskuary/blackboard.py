@@ -256,14 +256,7 @@ def roll_daily(store, llm=None) -> int:
     return roll_up(store, today, llm)
 
 
-def _ago(stamp) -> str:
-    from datetime import datetime
-    try: mins = (datetime.now() - datetime.fromisoformat(str(stamp)[:19].replace(' ', 'T'))).total_seconds() / 60
-    except (TypeError, ValueError): return ''
-    if mins < 1: return 'just now'
-    if mins < 60: return f'{int(mins)}m ago'
-    if mins < 48 * 60: return f'{int(mins // 60)}h ago'
-    return f'{int(mins // 1440)}d ago'
+from .timewords import ago as _ago      # the "5m ago" beside a note on the wall: the one rule every surface says
 
 
 HOW_TO_POST = ('Post your own with `taskuary --note "..."` (--kind working|note|blocked|ready|done): '

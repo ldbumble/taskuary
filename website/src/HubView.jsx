@@ -22,6 +22,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { ago } from "./timeWords.js";
 import { Md } from "./md.jsx";
 import { looksMd } from "./mdText.js";
 import { pollWhileVisible } from "./visible.js";
@@ -45,12 +46,6 @@ const KINDS = {
   people:   { mark: "👤", label: "who to ask",   role: "muted" },
 };
 const kindOf = (k) => KINDS[k] || KINDS.howto;
-const ago = (s) => {
-  const t = Date.parse(String(s || "").replace(" ", "T"));
-  if (!t) return "";
-  const m = Math.max(0, (Date.now() - t) / 60000);
-  return m < 1 ? "just now" : m < 60 ? `${Math.round(m)}m ago` : m < 2880 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
-};
 
 const Label = ({ children }) => (
   <Typography sx={{ ...mono, fontSize: 9.5, fontWeight: 600, letterSpacing: ".11em",

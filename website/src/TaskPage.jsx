@@ -241,16 +241,6 @@ const rowChecklist = (t) => {
   try { const a = JSON.parse(t?.Checklist || "[]"); return Array.isArray(a) ? a.filter((i) => i && i.text) : []; }
   catch { return []; }
 };
-// How long a parked agent has been holding its question. The row already carries the session that
-// stateOf() reads, so this costs nothing - and a question you have left for an hour should say so
-// on the rail rather than only inside the task.
-const askedAgo = (t) => {
-  const s = t?.Session;
-  if (!s || !isWaiting(s)) return "";
-  const mins = Math.round((Number(s.idle) || 0) / 60);
-  if (mins < 1) return "asked you just now";
-  return `asked you ${mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`} ago`;
-};
 
 // A GOAL'S STEPS (spec 2026-10-12): the checklist, each box with the task behind it. Start makes a box a task of its own;
 // a box with a task shows its ref and state and opens it. The parent's box ticks itself when the child closes (store).

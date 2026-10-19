@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { LANES, LANE_META, attentionBand, levelOf, ageText, agoText, arrivals, chipsOf, lastSaidIndex, lastActIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, railAge, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
+import { LANES, LANE_META, attentionBand, levelOf, arrivals, chipsOf, lastSaidIndex, lastActIndex, cardFor, currentItemFromPile, currentPresentationChanged, departures, displayRevision, drawOrder, followsItem, keysOf, laneMeta, refreshCurrentPresentation, refreshPilePresentation, rowMeta, statusLine } from "../src/funnelPile.js";
+import * as tw from "../src/timeWords.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 const cardsSrc = () => read("assistantCards.jsx");
@@ -124,14 +125,14 @@ test("an explicitly missing scoped Current cannot resurrect from a stale queue r
 
 test("ages read as a person says them", () => {
   const now = new Date("2026-09-03T12:00:00").getTime();
-  assert.strictEqual(ageText("2026-09-03 12:12:00", now), "in 12 min");
-  assert.strictEqual(ageText("2026-09-03 14:30:00", now), "in 2h");
-  assert.strictEqual(ageText("2026-09-03 11:59:30", now), "now");
-  assert.strictEqual(ageText("2026-09-03 11:20:00", now), "40 min");
-  assert.strictEqual(ageText("2026-09-03 08:00:00", now), "4h");
-  assert.strictEqual(ageText("2026-08-30 08:00:00", now), "4d");
-  assert.strictEqual(ageText("", now), "");
-  assert.strictEqual(ageText("garbage", now), "");
+  assert.strictEqual(tw.age("2026-09-03 12:12:00", now), "in 12m");
+  assert.strictEqual(tw.age("2026-09-03 14:30:00", now), "in 2h");
+  assert.strictEqual(tw.age("2026-09-03 11:59:30", now), "now");
+  assert.strictEqual(tw.age("2026-09-03 11:20:00", now), "40m");
+  assert.strictEqual(tw.age("2026-09-03 08:00:00", now), "4h");
+  assert.strictEqual(tw.age("2026-08-30 08:00:00", now), "4d");
+  assert.strictEqual(tw.age("", now), "");
+  assert.strictEqual(tw.age("garbage", now), "");
 });
 
 test("the header line counts the pipe and what is on you", () => {
@@ -342,13 +343,13 @@ test("the action words hang on the last thing Taskuary SAID about the item, not 
 test("an age said as a sentence never reads 'now ago' or 'in 3 min ago'", () => {
   const now = Date.parse("2026-09-10T12:00:00Z");
   const at = (min) => new Date(now - min * 60000).toISOString();
-  assert.equal(agoText(at(0), now), "just now");
-  assert.equal(agoText(at(1), now), "just now");
-  assert.equal(agoText(at(7), now), "7 min ago");
-  assert.equal(agoText(at(150), now), "2h ago");
-  assert.equal(agoText(at(-3), now), "in 3 min");     // a stamp in the future is not an age at all
-  assert.equal(agoText(null, now), "");
-  assert.equal(agoText("not a date", now), "");
+  assert.equal(tw.ago(at(0), now), "just now");
+  assert.equal(tw.ago(at(1), now), "1m ago");
+  assert.equal(tw.ago(at(7), now), "7m ago");
+  assert.equal(tw.ago(at(150), now), "2h ago");
+  assert.equal(tw.ago(at(-3), now), "in 3m");     // a stamp in the future is not an age at all
+  assert.equal(tw.ago(null, now), "");
+  assert.equal(tw.ago("not a date", now), "");
 });
 
 test("the waving agent is the one lane sized to be seen", () => {
@@ -389,31 +390,31 @@ test("every lane the Tasks rail can land on has a word and a role", async () => 
   }
 });
 
-test('railAge: empty or unreadable is blank, the past buckets into < 30m / < 1h / Nh / Nd', () => {
+test('timeWords.band: empty or unreadable is blank, the past buckets into < 30m / < 1h / Nh / Nd', () => {
   const now = new Date('2026-09-28T12:00:00').getTime();
   const ago = (min) => new Date(now - min * 60000).toISOString();
-  assert.strictEqual(railAge('', now), '');
-  assert.strictEqual(railAge(null, now), '');
-  assert.strictEqual(railAge('not a date', now), '');
-  assert.strictEqual(railAge(ago(0), now), '< 30m');
-  assert.strictEqual(railAge(ago(29), now), '< 30m');
-  assert.strictEqual(railAge(ago(30), now), '< 1h');
-  assert.strictEqual(railAge(ago(59), now), '< 1h');
-  assert.strictEqual(railAge(ago(60), now), '1h');
-  assert.strictEqual(railAge(ago(1439), now), '23h');
-  assert.strictEqual(railAge(ago(1440), now), '1d');
-  assert.strictEqual(railAge(ago(3 * 1440 + 600), now), '3d');
+  assert.strictEqual(tw.band('', now), '');
+  assert.strictEqual(tw.band(null, now), '');
+  assert.strictEqual(tw.band('not a date', now), '');
+  assert.strictEqual(tw.band(ago(0), now), '< 30m');
+  assert.strictEqual(tw.band(ago(29), now), '< 30m');
+  assert.strictEqual(tw.band(ago(30), now), '< 1h');
+  assert.strictEqual(tw.band(ago(59), now), '< 1h');
+  assert.strictEqual(tw.band(ago(60), now), '1h');
+  assert.strictEqual(tw.band(ago(1439), now), '23h');
+  assert.strictEqual(tw.band(ago(1440), now), '1d');
+  assert.strictEqual(tw.band(ago(3 * 1440 + 600), now), '3d');
 });
 
-test('railAge: the future reads "in ..." and a server stamp with a space parses as local time', () => {
+test('timeWords.band: the future reads "in ..." and a server stamp with a space parses as local time', () => {
   const now = new Date('2026-09-28T12:00:00').getTime();
   const ahead = (min) => new Date(now + min * 60000).toISOString();
-  assert.strictEqual(railAge(ahead(5), now), 'in 5m');
-  assert.strictEqual(railAge(ahead(59), now), 'in 59m');
-  assert.strictEqual(railAge(ahead(60), now), 'in 1h');
-  assert.strictEqual(railAge(ahead(1439), now), 'in 23h');
-  assert.strictEqual(railAge(ahead(1440), now), 'in 1d');
-  assert.strictEqual(railAge('2026-09-28 10:00:00', now), '2h');
+  assert.strictEqual(tw.band(ahead(5), now), 'in 5m');
+  assert.strictEqual(tw.band(ahead(59), now), 'in 59m');
+  assert.strictEqual(tw.band(ahead(60), now), 'in 1h');
+  assert.strictEqual(tw.band(ahead(1439), now), 'in 23h');
+  assert.strictEqual(tw.band(ahead(1440), now), 'in 1d');
+  assert.strictEqual(tw.band('2026-09-28 10:00:00', now), '2h');
 });
 
 test('a task pulled onto the table from outside the pile sits under On you, not where its last message would', async () => {

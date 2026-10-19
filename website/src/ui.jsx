@@ -2,6 +2,7 @@
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
 import { AGENT } from "./taskLifecycle.js";
+import { ago, agoMins, dur, durSince } from "./timeWords.js";
 import React, { useEffect, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
@@ -227,7 +228,6 @@ const Pill = ({ tone = "none", children }) => (
     {children}
   </Box>
 );
-const mins = (s) => (s == null ? null : s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`);
 
 export const ProofCard = ({ taskId, onOpenTask }) => {
   const [p, setP] = useState(null);
@@ -260,7 +260,7 @@ export const ProofCard = ({ taskId, onOpenTask }) => {
             {`${ci.kind === "pr" ? `PR #${ci.number}` : `${ci.branch} @ ${ci.sha}`} · CI ${ci.checks?.state || "unchecked"}`}
           </Pill>
         )}
-        {p.seconds != null && <Pill>{mins(p.seconds)} elapsed</Pill>}
+        {p.seconds != null && <Pill>{dur(p.seconds)} elapsed</Pill>}
         {p.attempts?.length > 1 && <Pill tone="wait">{p.attempts.length} attempts</Pill>}
       </Box>
       {t.ran && t.line && (
@@ -999,6 +999,10 @@ export const IDLE_WAITING = 45;
 // `waiting` is the server's verdict (the CLI's own screen, silence as fallback); older rows
 // without it fall back to the clock here
 export const isWaiting = (s) => (s?.waiting ?? (s?.idle >= IDLE_WAITING));
+// How long a parked agent has been holding its question - "asked you 5m ago". The row already carries the session that stateOf()
+// reads, so this costs nothing, and a question left for an hour should say so on the rail rather than only inside the task. The task
+// list and the task page each typed this once (2026-10-18).
+export const askedAgo = (t) => (t?.Session && isWaiting(t.Session) ? `asked you ${agoMins((Number(t.Session.idle) || 0) / 60)}` : "");
 // A LIVE SESSION SPEAKS FOR ITSELF. The run row says `running` for as long as the pty is up,
 // including while the CLI sits at its prompt waiting for an answer - so the rail read "agent
 // working" on TQ-0004 while the page header, the Wall and the toast all said the agent had
@@ -1088,14 +1092,8 @@ export const LifecycleChip = ({ kind, phase, compact = false, sx = {} }) => {
       fontSize: compact ? 11 : 11.5, fontWeight: 500, "& .MuiChip-label": { px: compact ? 0.7 : 0.9 }, ...sx }} />;
 };
 
-export const timeAgo = (s) => {
-  if (!s) return "";
-  const mins = Math.max(0, (Date.now() - asUtc(String(s))) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${Math.round(mins)}m ago`;
-  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-};
+// a stamp's age read in the server's zone (asUtc), said by the one rule (timeWords.ago)
+export const timeAgo = (s) => (s ? ago(asUtc(String(s))) : "");
 
 // Bodies arrive as HTML (email) or oddly-spaced stripped text - make them readable.
 // A MAIL SYSTEM'S EXTERNAL-SENDER BANNER is not something anybody said: it led every card, every task's
@@ -1536,11 +1534,7 @@ export const TellAgentButton = ({ taskId, taskRef, count = 0, small = false }) =
 // "the agent is working this now" is a thing you can SEE moving, not a sentence. Last lines of the
 // terminal, the files it has modified, a blinking cursor while it works and a pause mark when
 // it has stopped and is waiting on you. Click opens the task's real terminal.
-const _elapsed = (since) => {
-  if (!since) return "";
-  const sec = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
-  return sec < 90 ? `${Math.round(sec)}s` : sec < 5400 ? `${Math.round(sec / 60)}m` : `${(sec / 3600).toFixed(1)}h`;
-};
+const _elapsed = (since) => (since ? durSince(since) : "");
 /* ── Said and did: what the agent HOLDS, in the terminal's own colours ─────────────────────
    The Board pane used to show two raw trace lines - nobody read them. This is the same dark pane
    with lines a person checks: the tool in hand (agent · tool · file · seconds), the agent's own
@@ -1549,7 +1543,7 @@ const _elapsed = (since) => {
    which rung it stands on: tool line -> last screen line -> files only. Red is spent on exactly
    one thing: a file written after the agent said done. ── */
 const fileName = (p) => String(p || "").split(/[\\/]/).pop();
-const secsAgo = (at) => { if (!at) return ""; const s = Math.max(0, (Date.now() - new Date(String(at).replace(" ", "T"))) / 1000); return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`; };
+const secsAgo = (at) => (at ? durSince(at) : "");
 const isHot = (at) => at && Date.now() - new Date(String(at).replace(" ", "T")) < 20000;
 // up to `max` list lines: everything when it fits; otherwise the current item with what is around it
 const todoWindow = (todos, max = 4) => {

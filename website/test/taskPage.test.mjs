@@ -79,8 +79,9 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
   assert.match(page, /data-tq-task-advice=""/);
   // ...with its line docked to it: the line and the button it lights are one unit at the view's foot (2026-10-19)
-  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip=""><AdvisorNext advice=\{advised\} \/><AdviceNone advice=\{none\} \/><\/div>\s*<ActionRow inline advised=\{advised \|\| none\} \/><\/div>\}/);
-  assert.match(item, /adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
+  // ...and the Assistant's lit button, when it lit one, with its line (verify, 2026-10-19: the strip stood empty over it)
+  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">\s*\{lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{lit\.line\}<\/div><\/div>\}\s*<AdvisorNext advice=\{advised\} \/><AdviceNone advice=\{none\} \/><\/div>\s*<ActionRow inline advised=\{lit \|\| advised \|\| none\} \/><\/div>\}/);
+  assert.match(item, /const advised = lit \? null : adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
 });
 
 test("a chat reply that promises a file leads with replying by email, and sending the words alone says so (U17)", () => {

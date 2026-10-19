@@ -17,7 +17,7 @@ import collections, json, re, threading, time
 
 from loguru import logger
 from .timewords import plural
-from . import buttons
+from . import buttons, lanes
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
 from .funnel_presentation import back_in as _back_in, is_own, move_of as move_title, shows, story_who
 
@@ -1654,7 +1654,7 @@ def agent_state(item: dict | None) -> str:
         return ('working' if lane == 'working' else 'stopped - its work is saved' if it.get('paused')
                 else 'asks you' if it.get('asking') else 'is waiting on you')
     if kind == 'agentdone': return 'finished'
-    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': 'stopped and saved'}.get(lane) or ('finished' if it.get('summary') else '')
+    return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': lanes.word('saved')}.get(lane) or ('finished' if it.get('summary') else '')
 
 
 def subject_of(store, item: dict | None) -> str:
@@ -1696,7 +1696,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     from . import concierge, funnel
     it = item or {}
     kind, ch = it.get('kind'), str(it.get('channel') or '')
-    word = ({'agentdone': 'agent finished', 'wrapup': 'reply sent · task still open'}.get(kind)
+    word = ({'agentdone': lanes.word('agentdone'), 'wrapup': 'reply sent · task still open'}.get(kind)
             or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '')
             or (funnel.LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0])
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)

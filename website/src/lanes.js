@@ -6,6 +6,9 @@ import vocab from "../../taskuary/lanes.json" with { type: "json" };
 import { label } from "./buttons.js";
 
 export const LANE = Object.fromEntries(vocab.lanes.map((l) => [l.key, l]));
+// EVERY STATE'S WORD, once - a lane's, a kind's that overrides it, or a closed row's (lanes.json `states`): the task list's chips, the
+// agent card's phase and the reply's "ready to send" read it here, never a typed copy (the cleanup round, 2026-10-18)
+export const WORD = Object.fromEntries([...vocab.lanes, ...vocab.kinds, ...vocab.states].map((r) => [r.key, r.word]));
 export const SECTIONS = vocab.sections;
 export const SECTION = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 export const LEVEL_ORDER = SECTIONS.map((s) => s.key);

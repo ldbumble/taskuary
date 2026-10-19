@@ -67,5 +67,25 @@ class KindTests(unittest.TestCase):
         self.assertNotIn("OWNER_LANES = ('", read('processing_unread.py'))
 
 
+class StateWordsAreWrittenOnce(unittest.TestCase):
+    """A state's word lives in lanes.json and nowhere else (the cleanup round, 2026-10-18): the phone typed "stopped and saved" and
+    "agent finished" beside the json that already said them. Multi-word ones only - "done" and "report" are ordinary English too."""
+    def test_word_reads_the_json(self):
+        for g in ('lanes', 'kinds', 'states'):
+            for r in VOCAB[g]: self.assertEqual(lanes.word(r['key']), r['word'], r['key'])
+        self.assertEqual(lanes.word('no-such-state'), '')
+
+    def test_no_module_retypes_one(self):
+        import ast, io, tokenize
+        words, hits = {w for w in lanes.WORD.values() if ' ' in w}, []
+        for p in sorted((ROOT / 'taskuary').rglob('*.py')):
+            for t in tokenize.generate_tokens(io.StringIO(p.read_text(encoding='utf-8')).readline):
+                if t.type != tokenize.STRING: continue
+                try: v = ast.literal_eval(t.string)
+                except (ValueError, SyntaxError): continue
+                if v in words: hits.append(f'{p.relative_to(ROOT)}:{t.start[0]}: {v}')
+        self.assertEqual(hits, [])
+
+
 if __name__ == '__main__':
     unittest.main()

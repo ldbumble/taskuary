@@ -2,6 +2,7 @@
 // loud colour reserved for the only thing that ever needs you. Hairline borders, small quiet
 // type, no decoration that carries meaning.
 import { createTheme } from "@mui/material/styles";
+import { WORD } from "./lanes.js";
 
 // Contrast is the design: near-black ink, secondary text you can actually read, and the
 // gray reserved for what is truly tertiary. The old DIM/FAINT washed the review panel's
@@ -75,7 +76,7 @@ export const ROLES = {
 const role = (r, label) => ({ bg: ROLES[r].tint, fg: ROLES[r].ink, label });
 export const ACTION_COLORS = {
   auto: role("handled", "auto-answered"),
-  draft: role("you", "ready to send"),          // drafted, still yours to send - lanes.json's word (T4)
+  draft: role("you", WORD.approve),             // drafted, still yours to send - lanes.json's word (T4)
   ignore: role("muted", "ignored"),
   report: role("info", "report"),
   feed: role("info", "info"),

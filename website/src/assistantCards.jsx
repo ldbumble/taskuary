@@ -30,7 +30,7 @@ import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta } from "./funnelPile.js";
 import { age, ago, plural } from "./timeWords.js";
-import { SECTION, ideaWord } from "./lanes.js";
+import { SECTION, WORD, ideaWord } from "./lanes.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
@@ -1008,7 +1008,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const words = card.channel === "assistant" && card.mid ? <div className="tq-thr-words"><AdvisorWhy mid={card.mid} /></div>
     : card.mid && !mineAlone ? <div className="tq-thr-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? "your task" : "asked you"}
+    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? "your task" : WORD.asked}
       lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
         fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
       {reported ? (

@@ -81,3 +81,21 @@ test("no copy of a lanes.json table is left in the page", () => {
   assert.doesNotMatch(src("walkSummary.js"), /\["agent", "agentdone", "action"\]/);
   assert.doesNotMatch(src("demoAssistantData.js"), /\["blocked", "approve", "asked"\]/);
 });
+
+// A STATE'S WORD IS WRITTEN ONCE (the cleanup round, 2026-10-18): "agent working", "ready to send", "waiting to start" lived in
+// lanes.json, in taskLifecycle's AGENT, in ui.jsx's TASK_STATES, in theme.jsx and in the demo's pile - and the demo still said
+// "reply pending" for the lane the live app calls "ready to send". The page reads them from lanes.js WORD; no page file types one.
+test("every state word the page says is read from lanes.json, never typed in a page file", async () => {
+  const { WORD } = await import("../src/lanes.js");
+  const { AGENT, READY } = await import("../src/taskLifecycle.js");
+  for (const g of ["lanes", "kinds", "states"]) for (const r of vocab[g]) assert.equal(WORD[r.key], r.word, r.key);
+  assert.deepEqual(AGENT, { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone, idle: WORD.queued });
+  assert.equal(READY, WORD.approve);
+  // the words a sentence could not say by accident: two words or more ("done", "report" and "fyi" are ordinary English too)
+  const words = new Set(Object.values(WORD).filter((w) => /\s/.test(w)));
+  const fs = await import("node:fs");
+  const files = fs.readdirSync(new URL("../src/", import.meta.url)).filter((f) => /\.(jsx?|mjs)$/.test(f));
+  const literals = (code) => [...code.replace(/(^|\s)\/\/[^\n]*/g, "$1").matchAll(/"((?:[^"\\n]|\.)*)"|'((?:[^'\\n]|\.)*)'/g)].map((m) => m[1] ?? m[2]);
+  const hits = files.flatMap((f) => literals(src(f)).filter((s) => words.has(s)).map((s) => `${f}: "${s}"`));
+  assert.deepEqual(hits, []);
+});

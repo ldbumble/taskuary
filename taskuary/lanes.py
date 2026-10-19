@@ -28,6 +28,10 @@ KIND = VOCAB['item_kinds']
 MAIL_KINDS = tuple(k for k, v in KIND.items() if v.get('mail'))
 AGENT_KINDS = tuple(k for k, v in KIND.items() if v.get('agent'))
 IDEA = VOCAB['idea_kinds']
+# EVERY STATE'S WORD, once - a lane's, a kind's that overrides it, or a closed row's (lanes.json `states`): "agent finished" or "ready
+# to send" is read here, never retyped where a sentence needs it (the cleanup round, 2026-10-18)
+WORD = {r['key']: r['word'] for g in ('lanes', 'kinds', 'states') for r in VOCAB[g]}
+def word(key: str) -> str: return WORD.get(key, '')
 
 
 def lane_section(lane) -> str: return (LANE.get(lane) or {}).get('section') or 'task'   # a lane this build does not know is work, never buried

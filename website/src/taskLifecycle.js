@@ -1,4 +1,5 @@
 import { closeoutOf } from "./reviewProposal.js";
+import { WORD } from "./lanes.js";
 // Task, agent and reply are deliberately separate state machines. Keep these labels pure so
 // Tasks, Timeline and tests cannot quietly invent different meanings for the same record.
 export const STAY_OPEN_TAG = "stay:open";
@@ -16,8 +17,8 @@ export const taskPhase = (status) => {
 
 // ONE WORD PER AGENT STATE, the words lanes.json gives the rail (the owner, 2026-09-25: "let's unify
 // the vocab for agent status ... show it everywhere").
-export const AGENT = { waiting: "agent waiting on you", working: "agent working", saved: "stopped and saved",
-  stopped: "agent stopped", finished: "agent finished", idle: "waiting to start" };
+export const AGENT = { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone,
+  idle: WORD.queued };
 
 // `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
 // "stopped and saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
@@ -124,7 +125,7 @@ export const replySource = (messages = []) => {
 
 // lanes.json's word for the approve lane - ONE word for a reply and a close-out alike (the owner, 2026-09-27: "it should
 // the same everywhere"), because both are the step that closes the task
-export const READY = "ready to send";
+export const READY = WORD.approve;
 
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");

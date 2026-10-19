@@ -1,7 +1,8 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
-import { AGENT } from "./taskLifecycle.js";
+import { AGENT, READY } from "./taskLifecycle.js";
+import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
@@ -986,11 +987,11 @@ export const SendToAgent = ({ messageId, subject, taskKind, onOpenTask, dense, r
 // table handed it the same beige as `queued`, so the single row in the rail that had stopped and
 // was waiting on the owner looked exactly like the rows that were merely parked (2026-09-16).
 export const TASK_STATES = [
-  { key: "needs_you", label: "agent waiting on you", solid: ALERT, c: { bg: ALERT, fg: "#fffdfb", bd: ALERT } },
-  { key: "working", label: "agent working", solid: "#6f8a6e", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
-  { key: "queued", label: "waiting to start", solid: "#a09787", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
-  { key: "done", label: "done", solid: "#47654a", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
-  { key: "dropped", label: "dropped", solid: "#a09787", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
+  { key: "needs_you", label: WORD.blocked, solid: ALERT, c: { bg: ALERT, fg: "#fffdfb", bd: ALERT } },
+  { key: "working", label: WORD.working, solid: "#6f8a6e", c: { bg: "#e3e6e1", fg: "#6f8a6e", bd: "#d2d6cf" } },
+  { key: "queued", label: WORD.queued, solid: "#a09787", c: { bg: "#eae4d8", fg: "#55697a", bd: "#d8cfbe" } },
+  { key: "done", label: WORD.closed, solid: "#47654a", c: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" } },
+  { key: "dropped", label: WORD.dropped, solid: "#a09787", c: { bg: "#e9e3d8", fg: "#867f74", bd: "#e1dcd5" } },
 ];
 const ST = Object.fromEntries(TASK_STATES.map((x) => [x.key, x]));
 // A CLI that has printed nothing for this long is parked at its own prompt - the next move
@@ -1075,7 +1076,7 @@ const LC = {
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
   if (value === AGENT.waiting) return LC.needsYou;        // an agent blocked on you, and only that
-  if (value === "ready to send" || value === "approval needed" || value === "ready") return LC.you;
+  if (value === READY || value === "approval needed" || value === "ready") return LC.you;
   if (value === AGENT.working || value === "in progress") return LC.working;
   if (value === "done" || value === "sent" || value === AGENT.saved || value === AGENT.finished) return LC.done;
   if (kind === "reply") return LC.reply;

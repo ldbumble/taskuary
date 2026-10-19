@@ -2,7 +2,7 @@
 // invented conversations and Timeline posts: enough real-shaped data to demonstrate the
 // product without implying that an AI, mailbox, or agent is running in the visitor's browser.
 import { hint, label } from "./buttons.js";
-import { onYou } from "./lanes.js";
+import { onYou, WORD } from "./lanes.js";
 
 export const DEMO_ASSISTANT_TIMELINE = [
   {
@@ -202,12 +202,12 @@ export function createDemoAssistantState(fx = {}) {
         { key: `alert:${census?.key}`, item: census?.key, kind: "agent", lane: "blocked", text: `An agent asked you something on ${census?.ref}` },
       ],
       lanes: [
-        { lane: "blocked", word: "agent waiting on you", role: "you", n: 1 },
-        { lane: "approve", word: "reply pending", role: "you", n: 1 },
-        { lane: "asked", word: "asked you", role: "working", n: 1 },
-        { lane: "forgotten", word: "slipped", role: "info", n: 1 },
-        { lane: "report", word: "report", role: "info", n: 1 },
-        { lane: "fyi", word: "fyi", role: null, n: 1 },
+        { lane: "blocked", word: WORD.blocked, role: "you", n: 1 },
+        { lane: "approve", word: WORD.approve, role: "you", n: 1 },
+        { lane: "asked", word: WORD.asked, role: "working", n: 1 },
+        { lane: "forgotten", word: WORD.forgotten, role: "info", n: 1 },
+        { lane: "report", word: WORD.report, role: "info", n: 1 },
+        { lane: "fyi", word: WORD.fyi, role: null, n: 1 },
         { lane: "working", word: "agent working", role: "working", n: 1 },
       ],
     },

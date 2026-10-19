@@ -139,7 +139,7 @@ test("needs you is the one phase that wears the loud colour", () => {
   assert.match(ui, /needsYou: \{ bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" \}/);
   assert.match(ui, /if \(value === AGENT\.waiting\) return LC\.needsYou;/);
   // ...and only that one: a draft waiting for a yes is not an agent blocked on you
-  assert.match(ui, /if \(value === "ready to send" \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
+  assert.match(ui, /if \(value === READY \|\| value === "approval needed" \|\| value === "ready"\) return LC\.you;/);
 });
 
 // A PROPOSAL IS A DECISION TOO. A playbook drafted after a coding job, or a setting proposed in

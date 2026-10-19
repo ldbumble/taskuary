@@ -13,8 +13,8 @@ import json
 import re
 import threading
 import weakref
-from pathlib import Path
 
+from . import lanes
 from .timewords import back_in   # noqa: F401 - when a For later row comes back - the phone and lookups read it from here
 
 
@@ -390,7 +390,7 @@ def present(store, payload: dict) -> dict:
 # phone and the lane's word on the desk. Each card now carries `shows` - {who, state, move} - and both surfaces read it.
 # Every word is a pure function of the card, so its stamp (item_revision) stays one too: no clock in it. When a row
 # comes back (back_in) is the exception - it counts down, so it is worked out where it is drawn.
-_LANE_WORDS = {l['key']: l['word'] for l in json.loads((Path(__file__).parent / 'lanes.json').read_text(encoding='utf-8'))['lanes']}
+_LANE_WORDS = {k: l['word'] for k, l in lanes.LANE.items()}
 _AGENT_LANES = {'blocked', 'stopped', 'saved', 'queued', 'working', 'broken', 'unjudged'}
 # A SERVICE'S MAIL names the service, not the display name it borrowed: GitHub sends a failed run from notifications@github.com
 # under the name of whoever pushed - the owner - so the FYI band read the owner's own first name (2026-10-13)

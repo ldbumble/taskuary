@@ -99,30 +99,6 @@ export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt |
 
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
-// CATEGORY is where a task is; the chip on the row says what it needs. Filtering by "needs
-// you" and "working" separately made those two look like opposites, so a task whose agent
-// picked it up vanished out of the bucket you were watching - and a task sitting in "needs
-// you" WITH an agent thinking on it read as a contradiction, because it was one. One
-// in-progress bucket holds everything still open; the label inside it is what changes.
-// the pills wear the same colours as the chips on the rows they hold: "in progress" in the
-// slate-blue brand chrome next to a sage "agent working" chip read as two different states
-const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
-// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
-// "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
-// all if it's another group"); every task now has one pill. Dropped has none - search finds it.
-const STATE_FILTERS = [
-  { key: "live", label: "in progress", c: ST_C.working },
-  { key: "upcoming", label: "upcoming", c: ST_C.queued },
-  { key: "done", label: "done", c: ST_C.done },
-];
-// "today" as the person reading the list means it - the server's clock, in local terms
-const isToday = (s) => !!s && asUtc(String(s)).toDateString() === new Date().toDateString();
-const touchedToday = (t) => isToday(t.ClosedAt) || isToday(t.UpdatedAt) || isToday(t.CreatedAt);
-// everything still on somebody's plate - yours or an agent's. Dropped is neither, and
-// has no pill - search finds it.
-const bucketOf = (t) => (remindWaiting(t) ? "upcoming" : stateOf(t).key);
-const inBucket = (t, key) => (key === "live" ? !["done", "dropped"].includes(stateOf(t).key) && !remindWaiting(t)
-                                             : bucketOf(t) === key);
 const PRIORITIES = ["low", "normal", "high", "urgent"];
 // what a task IS decides which machinery works it: coding gets a repo session, a reply
 // gets the responder and the review queue, general gets the visual conversation. Keep the

@@ -49,7 +49,7 @@ facts, the verbs the item carries, the promoted lines of `LEARNED.md` and the le
 on it, and answers with one verb from the actions the app already has and one line, or nothing.
 Code checks the verb is one the item offers; a verb it does not is dropped and noted. Those
 findings are never rows. They attach to the item at its revision and show when the walk reaches
-it, as ghost text in the prompt box with one pill where the send arrow sits: "Keep going ·
+it, as ghost text in the prompt box with one pill where the send arrow sits: "Continue ·
 8 of 8 times". The number is read from the outcome ledger, never written by the model. The pill is
 the card's own button through the same proposal and the same receipt; typing anything brings the
 arrow back. A changed item drops its old line by one comparison. The item on the table earns one

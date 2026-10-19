@@ -81,6 +81,8 @@ const NOT_BUTTONS = {
   // other sends that are not a draft's Send (2026-10-18, when approve's label became "Send"): the bug report's own, the chat
   // composer's arrow, and the answer box's Send/Queue to a waiting agent
   "BugReportDialog.jsx": ["Send"], "GeneralWorkspace.jsx": ["Send"], "ui.jsx": ["Send"],
+  // a report's setup wizard steps forward with its own Continue - not the agent's (2026-10-18, when continue's label became "Continue")
+  "ReportsView.jsx": ["Continue"],
 };
 test("no page file types a button's label: every one is read from buttons.js", () => {
   const hits = [];

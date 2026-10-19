@@ -61,11 +61,11 @@ Send to agent starts on the agent triage would pick; the other is one click away
 
 ## Pictures, and your voice
 
-Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Keep going**. It
+Paste a screenshot, drop an image, or use the paperclip - in the chat line, in **New**, and in **Continue**. It
 goes with your words: the Assistant looks at the picture itself, and a coding agent is handed the file to open. PNG,
 JPEG, GIF and WebP, up to eight at a time. The microphone beside each box dictates into it.
 
-**Keep going** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
+**Continue** opens as a card under the item, not a popup: type or say what to tell the agent as it picks up,
 add a picture, or continue as is. Moving on with **Next** puts the card away with the item.
 
 ## Remind me

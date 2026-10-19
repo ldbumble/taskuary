@@ -215,7 +215,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         at = continuity.last_agent_turn(store, int(target_id))
         mail = continuity.mail_since(store, int(target_id), at) if at else []
         if mail:
-            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; Keep going hands "
+            lines.append(f"NEW SINCE THE AGENT'S LAST TURN ({at}) - its saved conversation is from BEFORE these; {buttons.label('continue')} hands "
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}

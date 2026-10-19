@@ -1,5 +1,6 @@
 import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime,
 } from "@assistant-ui/react";
@@ -480,19 +481,24 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   /* OPENED, it shows the newest answer from its first line. Pinned to the bottom, the cards under the answer (its question, the
      report offer) and the input took the room, and a short view showed the answer's last paragraph only: "I can't see any of the
      agent output without scrolling" (the owner, 2026-10-18). Only at rest and only once - a run that is writing keeps following. */
-  const viewport = useRef(null), placed = useRef(false);
+  const viewport = useRef(null), placed = useRef(false), said = !!messages?.length;
   useEffect(() => {
-    if (dock || placed.current || !messages?.length || serverBusy) return;
-    // after the library's own pin to the bottom, which lands once the answer has laid out
-    const id = setTimeout(() => {
-      const v = viewport.current, last = [...(v?.querySelectorAll(".tq-aui-agent") || [])].pop();
-      if (!v || !last || runtime.thread.getState().isRunning) return;
-      placed.current = true;
+    if (dock || placed.current || !said || serverBusy) return;
+    // the library pins to the bottom again whenever the answer lays out, and on a busy machine that lands after any one try - so it is
+    // placed a few times over the first seconds, and never again once the owner scrolls or types themselves
+    const v = viewport.current, mine = () => { placed.current = true; };
+    const place = (final) => {
+      const last = [...(v?.querySelectorAll(".tq-aui-agent") || [])].pop();
+      if (placed.current || !v || !last || runtime.thread.getState().isRunning) return;
       const off = last.getBoundingClientRect().top - v.getBoundingClientRect().top - 8;
       if (off < 0) v.scrollTop += off;
-    }, 350);
-    return () => clearTimeout(id);
-  }, [dock, messages, serverBusy, runtime]);
+      if (final) placed.current = true;
+    };
+    const ids = [350, 900, 1800].map((ms, i, all) => setTimeout(() => place(i === all.length - 1), ms));
+    const own = ["wheel", "touchstart", "keydown"];
+    own.forEach((e) => v?.addEventListener(e, mine, { passive: true }));
+    return () => { ids.forEach(clearTimeout); own.forEach((e) => v?.removeEventListener(e, mine)); };
+  }, [dock, said, serverBusy, runtime]);
   const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
   const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
     : <AgentBand name={name} provider={provider} work={work} since={since} />;
@@ -590,7 +596,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false,
+export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat }) {
   const [data, setData] = useState(null);
@@ -767,33 +773,39 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
+  const tools = (<>
+    <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
+      const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
+      updateProvider(e.target.value, provider?.model || "");
+    }}
+      sx={{ height: 27, fontSize: 11.5, minWidth: 130, bgcolor: PANEL2, flexShrink: 0 }}>
+      {!data?.providers?.length && <MenuItem value="">No agent connected</MenuItem>}
+      {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>{p.label}</MenuItem>)}
+    </Select>
+    <TextField size="small" value={model} placeholder="provider default" onChange={(e) => setModel(e.target.value)}
+      onBlur={() => connectorId && updateProvider(connectorId, model)} sx={{ width: 150, flexShrink: 0, "& input": { py: 0.55, fontSize: 11.5 } }} />
+    <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
+      title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
+      startIcon={full ? <CloseFullscreenIcon sx={{ fontSize: 13 }} /> : <OpenInFullIcon sx={{ fontSize: 13 }} />}>
+      {full ? "Exit full screen" : "Full screen"}
+    </Button>
+  </>);
   return (
     <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
       ...(compact ? { height: "100%" } : { flex: "1 1 auto" }),
       ...(full && !dock ? FULL_SX : null) }}>
-      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely */}
-      {!dock && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
+      {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely.
+          On the canvas the task's own step heading holds it (toolsAt) and the answer gets the line - until Full screen, which
+          leaves that heading behind */}
+      {!dock && toolsAt && !full && createPortal(tools, toolsAt)}
+      {!dock && !(toolsAt && !full) && <Box sx={{ minHeight: 39, px: 1.25, py: { xs: 0.5, md: 0 }, display: "flex", alignItems: "center", gap: 0.8, borderBottom: `1px solid ${BORDER}`, bgcolor: PANEL,
         flexWrap: "wrap", flexShrink: 0 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: 99, bgcolor: session?.alive ? "#78a17b" : "#c7a258" }} />
         {/* the strip named the window after the concierge; it belongs to the agent working in it */}
         <Typography noWrap sx={{ ...mono, fontSize: 10.5, letterSpacing: ".13em", textTransform: "uppercase", color: DIM, flexShrink: 0 }}>{name}</Typography>
         <Box sx={{ flex: 1, minWidth: 8 }} />
-        <Select size="small" value={connectorId} displayEmpty onChange={(e) => {
-          const provider = data?.providers?.find((p) => String(p.id) === String(e.target.value));
-          updateProvider(e.target.value, provider?.model || "");
-        }}
-          sx={{ height: 27, fontSize: 11.5, minWidth: 130, bgcolor: PANEL2, flexShrink: 0 }}>
-          {!data?.providers?.length && <MenuItem value="">No agent connected</MenuItem>}
-          {(data?.providers || []).map((p) => <MenuItem key={p.id} value={String(p.id)}>{p.label}</MenuItem>)}
-        </Select>
-        <TextField size="small" value={model} placeholder="provider default" onChange={(e) => setModel(e.target.value)}
-          onBlur={() => connectorId && updateProvider(connectorId, model)} sx={{ width: 150, flexShrink: 0, "& input": { py: 0.55, fontSize: 11.5 } }} />
-        <Button size="small" onClick={toggleFull} sx={{ minWidth: 0, fontSize: 11, flexShrink: 0 }}
-          title={full ? "Back to the page (Esc)" : "Give this conversation and its browser the whole window"}
-          startIcon={full ? <CloseFullscreenIcon sx={{ fontSize: 13 }} /> : <OpenInFullIcon sx={{ fontSize: 13 }} />}>
-          {full ? "Exit full screen" : "Full screen"}
-        </Button>
+        {tools}
       </Box>}
       {dock && <Box sx={{ px: 1, py: 0.55, display: "flex", alignItems: "center", gap: 0.65,
         flexWrap: "wrap", bgcolor: PANEL, borderBottom: `1px solid ${BORDER}` }}>

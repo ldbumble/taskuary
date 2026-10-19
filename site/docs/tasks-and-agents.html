@@ -347,13 +347,13 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <td>💾</td>
 <td><strong>session saved</strong></td>
 <td>You ended it with <strong>Stop and save</strong>; its report is written</td>
-<td><strong>Keep going</strong>, or <strong>Mark done</strong></td>
+<td><strong>Continue</strong>, or <strong>Mark done</strong></td>
 </tr>
 <tr>
 <td>⏹</td>
 <td><strong>agent stopped</strong></td>
 <td>It ended without finishing: a crash, a closed pane, Taskuary closing</td>
-<td><strong>Keep going</strong>, or hand it on</td>
+<td><strong>Continue</strong>, or hand it on</td>
 </tr>
 <tr>
 <td>✅</td>
@@ -364,7 +364,7 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 </tbody></table>
 <p><figure><img src="img/agent-start.svg" alt="How an agent starts: handed off, auto-start allowed or not, a free slot or next in line" loading="lazy"><figcaption>Waiting to start always says why.</figcaption></figure></p>
 <p><figure><img src="img/agent-run.svg" alt="While it runs: working, or waiting on you - a question, an approval, stuck on a limit, quiet at its prompt" loading="lazy"><figcaption>Your answer puts it back to work.</figcaption></figure></p>
-<p><figure><img src="img/agent-end.svg" alt="How it ends: agent finished, session saved, the task closed, or agent stopped - and Keep going" loading="lazy"><figcaption>Only a session that ended by itself reads as stopped.</figcaption></figure></p>
+<p><figure><img src="img/agent-end.svg" alt="How it ends: agent finished, session saved, the task closed, or agent stopped - and Continue" loading="lazy"><figcaption>Only a session that ended by itself reads as stopped.</figcaption></figure></p>
 <table>
 <thead>
 <tr>
@@ -381,7 +381,7 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <tr>
 <td>You pressed <strong>Stop and save</strong></td>
 <td>💾 <strong>session saved</strong> - the report is written, the task stays open</td>
-<td><strong>Keep going</strong></td>
+<td><strong>Continue</strong></td>
 </tr>
 <tr>
 <td>You pressed <strong>Mark done</strong></td>
@@ -391,12 +391,12 @@ Timeline, the task page, the Board, the assistant&#39;s cards and the phone all 
 <tr>
 <td>The session crashed or was closed, or Taskuary closed</td>
 <td>⏹ <strong>agent stopped</strong> - a reply it had held is back for your yes</td>
-<td><strong>Keep going</strong>, or <strong>Run another agent</strong></td>
+<td><strong>Continue</strong>, or <strong>Run another agent</strong></td>
 </tr>
 </tbody></table>
-<p><strong>Keep going</strong> works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
+<p><strong>Continue</strong> works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
 handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
-phone the next thing you type is the note, or tap <strong>Continue as is</strong>.</p>
+phone the next thing you type is the note, or tap <strong>Continue</strong>.</p>
 <p>The saved result is deliberately short. The complete transcript is on the task page: open the
 session on the <strong>Agent work</strong> step and choose <strong>More → Every step</strong>. A finished coding session also
 files a Markdown record of what it did under <code>~/.taskuary/artifacts/</code> — the outcome, not a copy of
@@ -499,7 +499,7 @@ state for a task, in the work rail&#39;s words — the server decides it once an
 <tr>
 <td>you ended its session / it ended by itself</td>
 <td>💾 session saved / ⏹ agent stopped</td>
-<td>saved or stopped — with <strong>Keep going</strong></td>
+<td>saved or stopped — with <strong>Continue</strong></td>
 </tr>
 <tr>
 <td>a reply or a close-out waits for your yes</td>

@@ -293,7 +293,7 @@ def stop_watching(store, t: dict, quiet: bool = False) -> str | None:
     """A watch at its 30 days ends, and says so with the way back (watch_task again). One with no start of its own -
     from before watches kept one - ends quietly."""
     from .store import task_ref
-    line = None if quiet else f"I've stopped watching for {_who(_waiting_on(store, t))}'s answer on {task_ref(t['TaskId'])} {_title(t)}. Should I watch for it again?"   # "Keep going?" read as the Keep going button
+    line = None if quiet else f"I've stopped watching for {_who(_waiting_on(store, t))}'s answer on {task_ref(t['TaskId'])} {_title(t)}. Should I watch for it again?"   # "Keep going?" read as the Continue button
     if line and not _say(store, t, line, desktop=True): return None
     store._exec('UPDATE task SET AskedWatch=NULL WHERE TaskId=?', (t['TaskId'],))
     return line

@@ -89,16 +89,17 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text[:300])
         return r.json()
 
-    def test_a_finished_agents_card_tells_the_model_its_session_is_there_and_offers_continue(self):
+    def test_a_finished_agents_card_tells_the_model_its_session_is_there_and_offers_no_continue_pill(self):
         # "can you do that? just null those two" on a finished agent's card was read as a new job and opened a second task:
-        # the model had only the summary. It is told the session exists - it decides (2026-10-08: never code in front of it)
+        # the model had only the summary. It is told the session exists - it decides (2026-10-08: never code in front of it).
+        # Its ROW draws no Continue (the owner, 2026-10-18: "no keep going if finished") - what is typed still reaches the session
         s, tid, mid, item = table()
         s.add_transcript(tid, 'sid-1', 'found the two accounts', agent='coding', ext_id='abc-123', brain='claude')
         done = {**item, 'kind': 'agentdone', 'lane': 'agent', 'summary': 'found the two accounts', 'tid': tid, 'ref': f'TQ-{tid:04d}'}
         said = concierge.facts(s, done)
         self.assertIn('AGENT SESSION', said)
         self.assertIn('agent.continue', said)
-        self.assertIn('continue', [c['verb'] for c in concierge.chips_for(s, done)])
+        self.assertNotIn('continue', [c['verb'] for c in concierge.chips_for(s, done)])
 
     def test_a_card_with_no_saved_session_says_nothing_about_one(self):
         s, tid, mid, item = table()

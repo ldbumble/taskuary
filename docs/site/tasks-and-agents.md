@@ -102,26 +102,26 @@ Timeline, the task page, the Board, the assistant's cards and the phone all use 
 | ⏳ | **waiting to start** | Handed to an agent, not running yet | **Start now** |
 | ⚙️ | **agent working** | Running, and needs nothing from you | **Leave a note** for when it stops |
 | 👋 | **agent waiting on you** | Running, and it asked you something, needs your approval, or is stuck | Answer it |
-| 💾 | **session saved** | You ended it with **Stop and save**; its report is written | **Keep going**, or **Mark done** |
-| ⏹ | **agent stopped** | It ended without finishing: a crash, a closed pane, Taskuary closing | **Keep going**, or hand it on |
+| 💾 | **session saved** | You ended it with **Stop and save**; its report is written | **Continue**, or **Mark done** |
+| ⏹ | **agent stopped** | It ended without finishing: a crash, a closed pane, Taskuary closing | **Continue**, or hand it on |
 | ✅ | **agent finished** | The agent closed the task, or the item it came from was merged or closed | Read the result |
 
 ![How an agent starts: handed off, auto-start allowed or not, a free slot or next in line](img/agent-start.svg "Waiting to start always says why.")
 
 ![While it runs: working, or waiting on you - a question, an approval, stuck on a limit, quiet at its prompt](img/agent-run.svg "Your answer puts it back to work.")
 
-![How it ends: agent finished, session saved, the task closed, or agent stopped - and Keep going](img/agent-end.svg "Only a session that ended by itself reads as stopped.")
+![How it ends: agent finished, session saved, the task closed, or agent stopped - and Continue](img/agent-end.svg "Only a session that ended by itself reads as stopped.")
 
 | It ended because | What you see | What brings it back |
 |---|---|---|
 | The agent said it was done | its **Close out** card if its work lives on GitHub, then ✅ **agent finished** - ready to send if a reply is owed | a new message on it |
-| You pressed **Stop and save** | 💾 **session saved** - the report is written, the task stays open | **Keep going** |
+| You pressed **Stop and save** | 💾 **session saved** - the report is written, the task stays open | **Continue** |
 | You pressed **Mark done** | the task is closed and the agent stopped | they write again |
-| The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Keep going**, or **Run another agent** |
+| The session crashed or was closed, or Taskuary closed | ⏹ **agent stopped** - a reply it had held is back for your yes | **Continue**, or **Run another agent** |
 
-**Keep going** works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
+**Continue** works for a coding agent (it reopens its own CLI session, or a fresh one seeded with the
 handover) and a regular agent (its saved conversation). It asks what to tell it as it picks up - optional; on the
-phone the next thing you type is the note, or tap **Continue as is**.
+phone the next thing you type is the note, or tap **Continue**.
 
 The saved result is deliberately short. The complete transcript is on the task page: open the
 session on the **Agent work** step and choose **More → Every step**. A finished coding session also
@@ -227,7 +227,7 @@ state for a task, in the work rail's words — the server decides it once and bo
 | handed to an agent, nothing started | ⏳ waiting to start | waiting to start — with what it waits for, or why it could not start, and **Start now** / **Cancel** |
 | its agent is running | ⚙️ agent working | agent working |
 | its agent asked, needs approval, or is stuck | 👋 agent waiting on you | agent waiting on you |
-| you ended its session / it ended by itself | 💾 session saved / ⏹ agent stopped | saved or stopped — with **Keep going** |
+| you ended its session / it ended by itself | 💾 session saved / ⏹ agent stopped | saved or stopped — with **Continue** |
 | a reply or a close-out waits for your yes | ✉️ ready to send | agent finished, when an agent drafted it |
 | its agent closed it | ✅ agent finished | agent finished (today) |
 | you closed it | ✅ done | — |

@@ -58,11 +58,11 @@ export const completionLine = (manual, owesEmails, noSender = false) => !manual
   ? "Automatic task. When its work is done, Taskuary may close it and prepare the reply."
   : owesEmails ? "You control completion. Ending an agent run leaves this task open; it closes when its emails are sent or dropped."
   : noSender ? "You control completion. Ending an agent run leaves this task open; press Mark done when it's finished."
-  : "You control completion. Ending an agent run leaves this task open; sending the reply closes it.";
+  : "You control completion. Ending an agent run leaves this task open, and so does sending the reply - Mark done closes it.";
 // ...and the same answer as a FACT on the settings row, beside the pills it belongs with: the sentence above sat
 // right-aligned across two lines and explained ("Hate the why. Just tell me what." - the owner); it is the tooltip now.
 export const completionFact = (manual, owesEmails, noSender = false) => !manual ? "closes itself when the work is done"
-  : owesEmails ? "closes when its emails are sent" : noSender ? "closes when you mark it done" : "closes when the reply is sent";
+  : owesEmails ? "closes when its emails are sent" : "closes when you mark it done";
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
 // what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
 export const bulkSendable = (items = [], reviews = []) => {
@@ -152,7 +152,12 @@ export const waitingEmails = (checklist = [], reviews = []) => {
   return (checklist || []).filter((i) => i.out && !i.done && pending.has(i.rid)).length;
 };
 
-export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false, record = false } = {}) => {
+// SOMETHING WENT OUT on the task's close-out: a reply sent, a pull request merged or an issue closed (an approved action), an email
+// the task owed - each approved, edited or sent. focusStage keeps the page on Close out after any of them (the owner, 2026-10-19:
+// "when you hit send email or close any other task by merging PR it keeps the close out section of the app open")
+export const wentOut = (reviews = []) => (reviews || []).some((r) => ["approved", "edited", "sent"].includes(r.Status));
+
+export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false, record = false, out = false } = {}) => {
   if (reply === READY) return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
@@ -170,14 +175,18 @@ export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agen
   // A FINISHED TASK OPENS ON THE LAST THING DONE (the owner, 2026-10-15: "if finished show the last thing done so either
   // agent work, or message sent"): the reply that went out, else what the agent did, else the task itself. It opened on the
   // Task step for every closed task, so a task the agent finished and closed showed its checklist, not what it found.
-  if (["done", "dropped"].includes(task)) return reply === "sent" ? "reply" : record || (agent && agent !== AGENT.idle) ? "agent" : "task";
+  // ...and a task YOU closed opens on Close out, where Mark done was pressed, showing the close (the owner, 2026-10-19: "i hit mark
+  // done on close out but agent work tab opened up again"); a task the agent finished and closed itself still opens on its work
+  if (task === "done") return reply === "sent" || out || agent !== AGENT.finished ? "reply" : "agent";
+  if (task === "dropped") return record || (agent && agent !== AGENT.idle) ? "agent" : "task";
   // a sender wrote AFTER the agent's last session: the message is the news, the session's record is history (2026-10-12)
   if (news) return "task";
-  // A SENT REPLY STAYS ON ITS RECEIPT (the owner, 2026-10-19: "you hit send ... it goes back to the general agent?? The agent was
-  // already closed"): Send keeps the task open now (2026-10-18), and an open task with an agent's record fell to the agent stage below -
+  // WHAT WENT OUT STAYS ON SCREEN (the owner, 2026-10-19: "you hit send ... it goes back to the general agent?? The agent was
+  // already closed"): Send - and a merge, a closed issue, an owed email (wentOut) - keeps the task open now (2026-10-18), and an open
+  // task with an agent's record fell to the agent stage below -
   // the page jumped back to a finished agent's conversation. Close out holds what went out and the Mark done that is the move now;
   // only an agent working again (or one queued to start, shown on the task) takes the page.
-  if (reply === "sent" && ![AGENT.working, AGENT.idle].includes(agent)) return "reply";
+  if ((reply === "sent" || out) && ![AGENT.working, AGENT.idle].includes(agent)) return "reply";
   if (agent && agent !== AGENT.idle) return "agent";
   return "task";
 };

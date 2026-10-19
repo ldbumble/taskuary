@@ -77,7 +77,7 @@ import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
-import { completionFact, completionLine, waitingEmails,
+import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
@@ -86,7 +86,7 @@ import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
-import { plural } from "./timeWords.js";
+import { ago, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -933,8 +933,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
     proposal: proposals.length > 0, agentSub: term ? subState(term) : null, news: !!news,
-    emails: emailsWaiting, record: hasRecord,
+    emails: emailsWaiting, record: hasRecord, out: wentOut(detail?.reviews),
   })));
+  // the note a close was written with (server task.complete: "Closed out: ...") - Close out shows it under the close
+  const closedNote = String([...(detail?.comments || [])].reverse().find((c) => /^Closed out: /.test(String(c.Body || "")))?.Body || "").replace(/^Closed out: /, "");
   // the news line is said once, at the top of the task stage; open, the agent step is just its record
   const storyAt = storyPlace(news ? null : story, { open: stage === "agent" && !sessionView, hasRecord });
   // A START THAT STOPPED ON "WHICH REPOSITORY?" (funnel.HELD_REPO): the chip says so and the pick resumes the start, whichever
@@ -1890,6 +1892,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Tooltip>
                         </Box>
                       : null} />
+                  {/* WHAT CLOSED IT, where it was closed (the owner, 2026-10-19: "i hit mark done on close out but agent work tab opened up
+                      again - why is it not just staying in close out showing what closed out"): the close, when, and the note it was closed with */}
+                  {stage === "reply" && t.Status === "done" && <Box data-tq-closed="" sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
+                      ✓ {btn("close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
+                    {closedNote && <Typography variant="body2" sx={{ color: DIM, mt: 0.25, whiteSpace: "pre-wrap" }}>{closedNote}</Typography>}
+                  </Box>}
                   {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"), CONDENSED: the latest lines of the

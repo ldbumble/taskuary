@@ -439,9 +439,7 @@
 .tq-move-then { font-size: 11.5px; color: #6e685f; }
 /* ...a rule under the move: Next / More are the CARD's, not a second row of the move's buttons */
 .tq-card .tq-move ~ .tq-card-actions { border-top: 1px solid #ebe6de; margin-top: 12px; padding-top: 10px; }
-/* THE QUESTION AND ITS ANSWERS. Same amber family as the general workspace's own raised hand
-   (generalWorkspace.css .tq-aui-asking), because it is the same event: an agent has stopped and
-   named what it needs. The options stack rather than truncate - a chooser's options are sentences,
+/* THE QUESTION AND ITS ANSWERS, in amber: an agent has stopped and named what it needs. The options stack rather than truncate - a chooser's options are sentences,
    and half of one is not a thing anybody can pick. */
 .tq-card-ask { margin-top: 8px; padding: 8px 10px; border: 1px solid #d8c9a8;
   border-radius: 9px; background: #fbf7ee; }

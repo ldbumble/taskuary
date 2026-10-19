@@ -63,6 +63,13 @@ test("the offer to schedule the workflow waits for the answer it is offering to 
   assert.match(view, /!dock && !serverBusy && !asking && messages\?\.some/);
 });
 
+// the owner, 2026-10-19: "inline we have the agent to talk to, no need to intermediate" - its question is in its own answer,
+// and the reply goes in the composer; only the WhatsApp doorway relays a question with its choices
+test("the general agent's question is not repeated as a card with answer buttons", () => {
+  const view = read("GeneralWorkspace.jsx");
+  assert.doesNotMatch(view, /tq-aui-asking|onAnswer|answerAsk/);
+});
+
 test("the working dots animate from the general workspace's own stylesheet", () => {
   const css = read("generalWorkspace.css");
   assert.match(css, /\.tq-aui-thinking i \{[^}]*animation: tqAuiThinking/);

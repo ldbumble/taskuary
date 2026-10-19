@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  AGENT, agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -188,4 +188,13 @@ test("a message after the agent's last session opens the task, not the old sessi
   assert.equal(focusStage({ task: "open", agent: AGENT.saved, news: true }), "task");
   assert.equal(focusStage({ task: "open", agent: AGENT.saved }), "agent", "with no news the record still leads");
   assert.equal(focusStage({ task: "open", agent: AGENT.waiting, news: true }), "agent", "an agent asking now still wins");
+});
+
+// SEND KEEPS THE TASK, AND THE PAGE KEEPS CLOSE OUT (the owner, 2026-10-19): a reply sent on an open task whose agent finished or
+// stopped opened the Agent work stage - the page went back to a finished agent's conversation after Send
+test("a sent reply on an open task stays on Close out; only an agent working again takes the page", () => {
+  for (const agent of [AGENT.finished, AGENT.saved, AGENT.stopped, null])
+    assert.equal(focusStage({ kind: "general", task: "open", agent, reply: "sent", hasSender: true, record: true }), "reply", `agent ${agent}`);
+  assert.equal(focusStage({ kind: "general", task: "open", agent: AGENT.working, reply: "sent", hasSender: true }), "agent");
+  assert.equal(focusStage({ kind: "general", task: "open", agent: AGENT.waiting, reply: "sent", hasSender: true }), "agent");
 });

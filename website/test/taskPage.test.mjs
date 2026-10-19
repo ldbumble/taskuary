@@ -65,12 +65,12 @@ test("the header says what triage made of it in one plain line, and the kind hin
   assert.equal(sortedLine({ triaged: false, pills: pills({ priority: "normal" }) }, "task"), "A task for you · normal priority");
 });
 
-test("an agent waiting on you leads with what it asked, over a pane that keeps its size, and Answer it is the row's move (U20)", () => {
+// the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone
+test("an agent waiting on you keeps its terminal in view, and Answer it puts the cursor there", () => {
   const page = src("TaskPage.jsx");
   assert.match(page, /\{ id: "answer_agent", group: "agent", lead: true, label: labelOfRow\("answer_agent"\), run: answerAgent/);
-  assert.match(page, /<Box ref=\{termBox\} sx=\{\{ flex: "1 1 0", minHeight: \{ xs: 360, md: 0 \}, position: "relative"/);
-  assert.match(page, /asking && <Box data-tq-agent-asks="" role="status" sx=\{\{ position: "absolute", inset: 0/);
-  assert.match(page, />Show details<\/Link>/);
+  assert.match(page, /const answerAgent = \(\) => setTimeout\(\(\) => termBox\.current\?\.querySelector\("textarea"\)\?\.focus\(\), 0\);/);
+  assert.doesNotMatch(page, /data-tq-agent-asks|seenAsk|>Show details</);
   assert.match(page, /subState\(term\) !== "stalled"/, "a stuck agent asks nothing - it keeps its screen and Run another agent");
 });
 

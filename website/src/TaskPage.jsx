@@ -1082,15 +1082,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
   // (canvas=false) keeps its bars.
   const inRow = !!canvas;
-  // AN AGENT WAITING ON YOU LEADS WITH WHAT IT ASKED (U20): its own sentence over the terminal, one button to answer it, the screen
-  // behind "Show details". The pane stays mounted at its size underneath - folding it away would resize the pty (CanvasItem) - and
-  // a stuck agent is not asking anything, so it keeps its screen and its Run another agent.
+  // AN AGENT WAITING ON YOU: Answer it puts the cursor in its terminal - the owner talks to the coding CLI directly. Its question is
+  // never drawn OVER the screen (the owner, 2026-10-19: "never get between a coder and their coding cli ... you have to click show
+  // details anyway to move on"); the Advisor line says what it asked. A stuck agent is not asking anything.
   const termBox = useRef(null);
-  const [seenAsk, setSeenAsk] = useState("");
   const askKey = term?.alive && !isGeneral && agentState === AGENT.waiting && subState(term) !== "stalled" ? `${term.sid}:${term.line || subState(term)}` : "";
-  const asking = !!askKey && seenAsk !== askKey && workspaceMode === "live" && !peek;
-  const askLine = askKey ? term.line || says(subState(term), agentName(t), term.request?.text) : "";
-  const answerAgent = () => { setSeenAsk(askKey); setTimeout(() => termBox.current?.querySelector("textarea")?.focus(), 0); };
+  const answerAgent = () => setTimeout(() => termBox.current?.querySelector("textarea")?.focus(), 0);
   // THE AGENT'S CHAT OPENS PUSHED UP (the owner, 2026-10-18: "you can almost never see the full output text ... push it up higher
   // on screen"): on the canvas the folded Task strip scrolls above the view, so "2 Agent work" sits under the title and the chat
   // fills the rest (its box is sized for exactly that, below). Task is one scroll up, Close out one scroll down.
@@ -1837,14 +1834,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box ref={termBox} sx={{ flex: "1 1 0", minHeight: { xs: 360, md: 0 }, position: "relative",
                       display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                       <TerminalPane sid={term.sid} height="100%" onExit={() => findTerm(selected)} />
-                      {/* what it asked, OVER the pane (U20): absolutely placed, so the pane under it keeps its size; on the canvas the
-                          row holds Answer it, here the card does */}
-                      {asking && <Box data-tq-agent-asks="" role="status" sx={{ position: "absolute", inset: 0, zIndex: 2, bgcolor: "rgba(255,253,251,.97)",
-                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1.25, p: 3, textAlign: "center" }}>
-                        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.5, maxWidth: 560, overflowWrap: "anywhere" }}>{askLine}</Typography>
-                        {!inRow && <Button size="small" variant="contained" disableElevation sx={primaryBtn} onClick={answerAgent}>{labelOfRow("answer_agent")}</Button>}
-                        <Link component="button" type="button" underline="hover" onClick={() => setSeenAsk(askKey)} sx={{ fontSize: 12, color: DIM }}>Show details</Link>
-                      </Box>}
                     </Box>
                     {/* pages the session published with Claude's Artifact tool, under the session that made them */}
                     <Box sx={{ mt: 0.75, flexShrink: 0, "&:empty": { display: "none" } }}>

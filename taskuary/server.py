@@ -291,7 +291,11 @@ async def token_gate(request: Request, call_next):
     # over the method and the path, before a handler exists to be trusted (demo.py)
     if demo.enabled():
         why = demo.refuse(request.method, request.url.path)
-        if why: return JSONResponse({'detail': why, 'demo': True}, status_code=403)
+        if why:
+            # ...and the refused press is an act on its item, so the Advisor reads it again as refused (demo.refused)
+            try: demo.refused(store, request.url.path, why)
+            except Exception as e: logger.debug(f'demo: refusal of {request.url.path} not kept - {e}')
+            return JSONResponse({'detail': why, 'demo': True}, status_code=403)
     elif not guard.host_ok(request.headers.get('host'), cfg['server']):
         # EVERY path, not just /api: the page itself carries the owner token, so a name we do not
         # answer to must not be able to load it either (guard.host_ok on DNS rebinding)

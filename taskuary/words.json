@@ -27,8 +27,8 @@
     "search":            {"name": "Search", "href": ""}
   },
   "advice_none": {
-    "_": "WHEN THE ADVISOR HAS NO LINE, IT SAYS SO (2026-10-19): each reason advisor.status answers {none: why} with is one plain sentence and one move the row lights - `next` is the row's Next, `ai` the place that connects one. \"Thinking about this one...\" then nothing read as broken.",
-    "nothing":    {"line": "Nothing here needs a move from you.", "move": "next"},
+    "_": "WHEN THE ADVISOR HAS NO LINE, IT SAYS SO (2026-10-19): each reason advisor.status answers {none: why} with is one plain sentence and one move the row lights - `next` is the row's Next, `ai` the place that connects one. \"Thinking about this one...\" then nothing read as broken. `nothing` says only that there is no suggestion - \"Nothing here needs a move from you\" told the owner to skip a chat question nobody had answered.",
+    "nothing":    {"line": "No suggestion on this one - the choice is yours.", "move": "next"},
     "quiet":      {"line": "Nothing to decide on this one - it is here to read.", "move": "next"},
     "no_actions": {"line": "There is nothing to do on this one from here.", "move": "next"},
     "working":    {"line": "An agent is working on this - it says when it needs you.", "move": "next"},

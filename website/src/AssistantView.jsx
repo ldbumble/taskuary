@@ -2305,6 +2305,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...and only when the ROW IS EMPTY without it: a task card on the table already registers its own Next and verbs, and the floor's
   // "Press Next below" over them read as a bug (README capture, 2026-10-08). What the owner can press is the test, not which card is up
   const rowVerbs = useRowVerbs();
+  const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => String(x.id).startsWith("setup:") && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)
@@ -2532,7 +2533,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {!changed && <AdviceNone advice={noneSaid} />}
             </div>}
           </>}
-          <ActionRow advised={shownAdvice || noneSaid} />
+          {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
+              was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
+          <ActionRow advised={shownAdvice || noneSaid || setupLit} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />

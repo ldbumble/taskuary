@@ -17,7 +17,7 @@ import { PANEL, BORDER, DIM, FAINT, INK, ACCENT, ROLES, mono } from "./theme.jsx
 import { TerminalPane } from "./TerminalView.jsx";
 
 const GeneralWorkspace = React.lazy(() => import("./GeneralWorkspace.jsx"));
-import { Confirm, TellAgent, WorkLine, isWaiting } from "./ui.jsx";
+import { TellAgent, WorkLine, isWaiting } from "./ui.jsx";
 import { agentName } from "./agentWork.js";
 import { cliName } from "./BoardView.jsx";
 import { defaultPaneHeight, holdWrappingSessions, movePane, resizedPaneHeight, wallPaneAtPoint, withoutWallSession } from "./wallLayout.js";
@@ -50,7 +50,6 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
   const [order, setOrder] = useState(savedOrder);
   useEffect(() => { if (order.length) { try { localStorage.setItem(ORDER_KEY, JSON.stringify(order)); } catch { /* private */ } } }, [order]);
   const [dragging, setDragging] = useState(null);   // rendered too: the pane visibly lifts while moving
-  const [closing, setClosing] = useState(null);     // session awaiting an explicit stop confirmation
   const [wrapping, setWrapping] = useState({});     // sid -> true; several panes can finish independently
   const wrappingRef = useRef({});                   // load() must see this inside its stable callback
   const [wrapErrors, setWrapErrors] = useState({}); // sid -> visible reason the checkmark did not finish
@@ -129,10 +128,8 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
   // CLOSE AGENT (the owner, 2026-10-15: "add a close agent button on top which should do the same exact thing and save down the
   // agent's last work"). It is the task page's Mark done on a live session, run through the same code (closeAgent.jsx): the
   // session's write-up is saved with the task, then the task closes. The pane is held, covered, until that is done.
-  const [ending, setEnding] = useState(null);       // the pane whose Close agent waits for its confirmation
-  const closeAgent = async () => {
-    const s = ending; setEnding(null);
-    if (!s) return;
+  // No confirm box on either close (the owner, 2026-10-19): the press is the decision; the hover says what it does.
+  const closeAgent = async (s) => {
     const mark = (on) => { const w = { ...wrappingRef.current }; if (on) w[s.sid] = true; else delete w[s.sid]; wrappingRef.current = w; setWrapping(w); };
     mark(true); setWrapErrors((e) => { const n = { ...e }; delete n[s.sid]; return n; }); setWrapNotice("");
     try {
@@ -147,11 +144,10 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       setWrapErrors((w) => ({ ...w, [s.sid]: e?.response?.data?.detail || e?.message || "the task did not close" }));
     } finally { mark(false); load(); }
   };
-  const closeSession = async () => {
-    if (!closing?.sid) return;
-    await api.delete(`/api/terminals/${closing.sid}`);
-    setSessions((ss) => (ss || []).filter((s) => s.sid !== closing.sid));
-    setOrder((o) => o.filter((sid) => sid !== closing.sid));
+  const closeSession = async (c) => {
+    await api.delete(`/api/terminals/${c.sid}`);
+    setSessions((ss) => (ss || []).filter((s) => s.sid !== c.sid));
+    setOrder((o) => o.filter((sid) => sid !== c.sid));
   };
 
   // The bar under a pane: drag it and every pane follows, live - the terminal inside refits
@@ -239,11 +235,11 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                     <Typography sx={{ ...mono, fontSize: 11, fontWeight: 600, color: ACCENT, flexShrink: 0 }}>{t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`}</Typography>
                     <Typography noWrap title={t.Title || s.cwd}
                       sx={{ fontSize: 12, fontWeight: 600, color: INK, minWidth: 0, flex: 1 }}>{t.Title || s.cwd}</Typography>
-                    <Button size="small" variant="outlined" disabled={wrapBusy} onClick={() => setEnding(s)}
-                      startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />} title="Save what the agent did with the task, then close the task - the task page's Mark done"
+                    <Button size="small" variant="outlined" disabled={wrapBusy} onClick={() => closeAgent(s)}
+                      startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />} title="Stops the agent, saves what it did with the task, then closes the task - the task page's Mark done"
                       sx={{ height: 24, fontSize: 11.5, px: 1, flexShrink: 0, whiteSpace: "nowrap" }}>Close agent</Button>
                     <Tooltip title="Open the full task page"><IconButton aria-label="Open full task" size="small" onClick={() => onOpenTask?.(s.taskId)}><OpenInFullIcon sx={{ fontSize: 14, color: DIM }} /></IconButton></Tooltip>
-                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => setClosing(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
+                    <Tooltip title="Close session — stop the agent; keep the task and transcript"><span><IconButton aria-label="Close session" size="small" disabled={wrapBusy} onClick={() => closeSession(s)}><CloseIcon sx={{ fontSize: 16, color: DIM }} /></IconButton></span></Tooltip>
                   </Box>
                   {/* Always reserve the status row. A tool starting/stopping used to add/remove
                       this row, resize xterm, and make full-screen CLIs repaint in a visible jump. */}
@@ -294,12 +290,6 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
           })}
         </Box>
       )}
-      <Confirm open={!!ending} title="Stop the agent and mark done?"
-        text="Close agent ends the session - what it did so far is written up and saved with the task, then the task closes."
-        confirmLabel="Stop it and mark done" onClose={() => setEnding(null)} onConfirm={closeAgent} />
-      <Confirm open={!!closing} title="Close this session?" confirmLabel="Close session"
-        text={`This stops ${closing?.agent || cliName(closing?.cli || "the agent")} now and removes its pane from the wall. The task stays open, and the session transcript stays with it.`}
-        onClose={() => setClosing(null)} onConfirm={closeSession} />
     </Box>
   );
 }

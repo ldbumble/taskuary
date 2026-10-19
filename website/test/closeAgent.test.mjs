@@ -15,10 +15,13 @@ test("both closes run the shared write-up and the shared task.complete", () => {
   assert.match(wall, /const wrote = await closeAgentWork\(api, s\.taskId\);/);
 });
 
-test("the Wall pane has Close agent, confirms like the task page, and is covered while it closes", () => {
+test("the Wall pane has Close agent, asks nothing first, and is covered while it closes", () => {
   const wall = read("WallView.jsx");
   assert.match(wall, />Close agent<\/Button>/);
-  assert.match(wall, /title="Stop the agent and mark done\?"/);
+  assert.match(wall, /onClick=\{\(\) => closeAgent\(s\)\}/);
+  assert.match(wall, /onClick=\{\(\) => closeSession\(s\)\}/);
+  for (const f of [wall, read("TaskPage.jsx")]) assert.doesNotMatch(f, /<Confirm /);     // the owner, 2026-10-19: a hover, not a box
+  assert.match(read("TaskPage.jsx"), /const askFinish = \(\) => \(liveSession \? stopAndFinish\(\) : finish\("done"\)\);/);
   assert.match(wall, /\{wrapBusy && <ClosingCover mode="done" \/>\}/);
   assert.match(read("closeAgent.jsx"), /position: "absolute", inset: 0, zIndex: 5/);       // nothing under it takes a key or a click
   assert.match(read("TaskPage.jsx"), /<ClosingCard mode=\{wrapping\} \/>/);                 // the same card on the task page

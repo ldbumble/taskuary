@@ -53,7 +53,7 @@ import { Reshape } from "./Reshape.jsx";
 import { RepoPicker, RepoSelect } from "./RepoPicker.jsx";
 import { Attachments, mentionsPicture } from "./Attachments.jsx";
 import ChatThread from "./ChatThread.jsx";
-import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, ConfirmDelete, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
+import { ChannelIcon, MicButton, LifecycleChip, StateChip, stateOf, TASK_STATES, asUtc, tsMs, AgentPicker, useAgents, codingProfile, RunTrace, DiffBlock, DiffFiles, timeAgo, fmtDateTime, cleanText, Empty, FilterPills, Confirm, WorkStrip, isWaiting, TaskuaryMark, agentAssignee, assignedAgent, assigneeLabel } from "./ui.jsx";
 import { Md, looksMd } from "./md.jsx";
 import TerminalIcon from "@mui/icons-material/Terminal";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -547,20 +547,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     setReshape(false);
     canvas && onFinish ? onFinish("dropped", async () => {}).catch(() => {}) : onSelect(r.merged);
   };
-  // one click, inside a MENU, where the pointer is already moving - and it deletes the task and
-  // writes a standing verdict triage reads. The two sharpest things in the app were the two
-  // easiest to hit by accident.
-  const [confirmNAT, setConfirmNAT] = useState(false);
-  // a card asked for one of this page's dialogs (assistantCards Foot TASK_ACTS): open it once the task is the one shown
+  // a card asked for one of this page's dialogs (assistantCards Foot TASK_ACTS): open it once the task is the one shown. Remove
+  // has no dialog any more (the owner, 2026-10-19: a hover, not a box) - its press removes, from the card as from the row.
   useEffect(() => {
     if (!openAct || openAct.taskId !== selected) return;
-    ({ not_a_task: setConfirmNAT, handoff: setHandoff, reshape: setReshape })[openAct.act]?.(true);
+    if (openAct.act === "not_a_task") notATask();
+    else ({ handoff: setHandoff, reshape: setReshape })[openAct.act]?.(true);
     onActOpened?.();
   }, [openAct, selected, onActOpened]);
   // MARK DONE SAYS IT IS WORKING (the owner, 2026-09-25): the close takes seconds with agents busy, and a button that
-  // did nothing visible read as broken; with a live session it also stops an agent, so it asks first
+  // did nothing visible read as broken; with a live session it also stops an agent, which its hover says
   const [finishing, setFinishing] = useState(false);
-  const [confirmDone, setConfirmDone] = useState(false);
   // ...put down AT THE PRESS, as Mark done is: cleared only once the delete returned, the task sat on the rail as an
   // open one already seen - under For later - then left, then its mail came back as the FYI it now is (press audit,
   // 2026-10-01). The FYI is right; the steps between were the flicker. A delete that fails puts it back with the reason.
@@ -692,13 +689,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the page where space is the whole point (the owner, 2026-09-16: "why is it so tall... you
   // are taking away precious agent space"). Live is live, whoever is working.
   const liveSession = !!term?.alive;
-  const askFinish = () => (liveSession ? setConfirmDone(true) : finish("done"));
+  // No "are you sure" box on a live session (the owner, 2026-10-19: "this should be a hover over the buttons"): the press
+  // is the decision, and what it does to the agent is said on the button's hover (markDoneHint).
+  const askFinish = () => (liveSession ? stopAndFinish() : finish("done"));
   // MARK DONE ON A LIVE SESSION ends it the way Stop and save does (the owner, 2026-09-29: "make it the same like
   // when you hit stop session"): the terminal goes at once for the write-up's progress line, the result is filed, and
   // only then is the task closed. The close used to kill the pty with no write-up while the terminal stayed on screen
   // for the whole request. No reply is drafted - the close dismisses drafts - and a write-up that fails still closes.
   const stopAndFinish = async () => {
-    setConfirmDone(false);
     const id = selected;
     // ...and it is put down at the press like any close: the write-up below takes as long as the AI does (18 s on
     // 2026-10-01), and the task sat open on the page and the rail all that time - under For later, already seen
@@ -714,7 +712,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   };
   // what Mark done does HERE - it said "ends the live agent session" with no session in sight (T11), and a waiting
   // draft is kept on the task, never thrown away: it can be brought back and sent later
-  const markDoneHint = ["Closes the task", liveSession ? "and ends the live agent session" : "",
+  const markDoneHint = ["Closes the task", liveSession ? "and stops the agent - what it did so far is written up and saved with the task first" : "",
     pendingReplyReview(detail?.reviews || []) ? "- your draft stays on it, to send later if you want" : ""].filter(Boolean).join(" ") + ".";
   // what fills the page: the session, unless the owner stepped back to the task behind it (peek)
   const sessionView = liveSession && !peek;
@@ -1183,7 +1181,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -
       // and so do Start an agent and Next (`onCard`): a second filled button on the bar pulled the eye off the draft
       // ONE VERB FOR IT, button and dialog (U13): "Dismiss" on the bar deleted the task behind a dialog that said Delete
-      { id: "nat", group: "more", label: labelOfRow("nat"), run: () => setConfirmNAT(true), title: NAT_TITLE },
+      { id: "nat", group: "more", label: labelOfRow("nat"), run: notATask, title: NAT_TITLE },
       { id: "remind", group: "more", label: remindWaiting(t) ? `Back ${remindDay(t.RemindAt)}` : labelOfRow("remind"), run: (e, a) => setRemindAt(a || e?.currentTarget),
         title: hintOfRow("remind") },
       { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand") },
@@ -1346,7 +1344,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         title={markDoneHint}
                         disabled={finishing} onClick={askFinish}>{finishing ? "Marking done…" : labelOfRow("done")}</Button>
                       <Tooltip title={`${labelOfRow("nat")}. ${NAT_TITLE}`}>
-                        <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={() => setConfirmNAT(true)}>
+                        <IconButton size="small" sx={{ color: "#7a2f3c" }} onClick={notATask}>
                           <BlockIcon sx={{ fontSize: 15 }} /></IconButton>
                       </Tooltip>
                       <RemindMe task={t} compact onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
@@ -2151,7 +2149,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Button size="small" variant="outlined" startIcon={<BlockIcon sx={{ fontSize: 15 }} />}
                       sx={{ ...barBtn, color: "#7a2f3c", borderColor: "#e0c6cb" }}
                       title={NAT_TITLE}
-                      onClick={() => setConfirmNAT(true)}>{labelOfRow("nat")}</Button>
+                      onClick={notATask}>{labelOfRow("nat")}</Button>
                     <RemindMe task={t} sx={barBtn} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />
                     <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />
                     <Button size="small" variant="outlined" sx={barBtn}
@@ -2309,15 +2307,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
-      <Confirm open={confirmDone} title="Stop the agent and mark done?"
-        text="An agent session is still open on this task. Mark done ends it - what it did so far is written up and saved with the task, then the task closes."
-        confirmLabel="Stop it and mark done" onClose={() => setConfirmDone(false)}
-        onConfirm={stopAndFinish} />
-      {/* the dialog says the button's verb (U13), and what happens in words - no "triage", no Timeline (it is gone) */}
-      <ConfirmDelete open={confirmNAT} what="this task" title="Remove this task?" confirmLabel="Remove"
-        consequence={"Taskuary will stop making tasks from messages like this. The email itself is kept (search finds it), "
-          + "and the sender is not muted."}
-        onClose={() => setConfirmNAT(false)} onConfirm={notATask} />
     </>
   );
 }

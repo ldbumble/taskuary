@@ -43,11 +43,11 @@ test("with no coding tool connected, Start is the general agent and nothing asks
   assert.match(page, /\.\.\.\(!isGeneral && canCode \? \[<MenuItem key="repo"/);
 });
 
-test("one verb for removing a task: the button, its tooltip and its dialog all say Remove (U13)", () => {
+test("one verb for removing a task: the button and its hover say Remove (U13); the press removes, no dialog", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /\{ id: "nat", group: "more", label: labelOfRow\("nat"\)/);
-  assert.match(page, /title="Remove this task\?" confirmLabel="Remove"/);
-  assert.match(page, /Taskuary will stop making tasks from messages like this\. The email itself is kept \(search finds it\)/);
+  assert.match(page, /\{ id: "nat", group: "more", label: labelOfRow\("nat"\), run: notATask, title: NAT_TITLE/);
+  assert.match(page, /Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it\./);
+  assert.doesNotMatch(page, /confirmNAT|<ConfirmDelete /);      // the owner, 2026-10-19: a hover over the button, not a box
   assert.doesNotMatch(page, /triage is taught|stay on the Timeline/);
 });
 

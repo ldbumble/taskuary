@@ -510,6 +510,9 @@
 .tq-dock { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d5d0c7; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px #39352d0d; }
 .tq-dock .tq-next { margin: 0; min-height: 40px; padding: 0 16px; justify-content: flex-start; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-next .tq-next-why { margin-left: auto; }
+/* one strip, one height from "Thinking" to its answer: the row under it never jumps when the advice lands (2026-10-19) */
+.tq-dock .tq-strip { min-height: 40px; display: flex; flex-direction: column; background: #f6f5f1; border-bottom: 1px solid #ece7de; }
+.tq-dock .tq-strip > .tq-next:last-child { border-bottom: 0; }
 .tq-dock .tq-arow { width: 100%; margin: 0; min-height: 44px; justify-content: center; padding: 4px 12px; box-sizing: border-box; border-bottom: 1px solid #ece7de; }
 .tq-dock .tq-compose-box { width: 100%; min-height: 46px; align-items: center; border: 0; border-radius: 0; box-shadow: none; padding: 6px 8px; }
 .tq-compose-box { width: min(980px, 100%); margin: 0 auto; display: flex; align-items: flex-end; gap: 5px; padding: 6px 7px; border: 1px solid #d5d0c7; background: #fff; border-radius: 13px; box-shadow: 0 2px 8px #39352d0b; }
@@ -647,7 +650,11 @@
 /* setup's Back takes the same slot and points the way it goes (FirstRun: setup:back) */
 .tq-ab.next[data-tq-back]::after { content: none; }
 .tq-ab.next[data-tq-back]::before { content: "\2190"; margin-right: 6px; }
-.tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }   /* a phone's task view carries its own row: the dock is behind the pinned view */
+.tq-arow.inline { width: 100%; margin: 0; padding: 6px 4px 2px; }
+/* a phone's line and the row it lights, one unit at the view's foot; the strip holds its height from Thinking to the answer */
+.tq-docked { flex: 0 0 auto; display: flex; flex-direction: column; position: sticky; bottom: 0; z-index: 2; background: #f6f4f1; }
+.tq-docked .tq-strip { min-height: 32px; display: flex; flex-direction: column; justify-content: center; }
+.tq-docked .tq-next { margin: 0; padding: 4px 8px; justify-content: flex-start; }   /* a phone's task view carries its own row: the dock is behind the pinned view */
 @media (min-width: 1100px) { .tq-arow { width: 100%; } }
 
 /* the impeccable audit, 2026-10-06: small text held to 4.5:1 (#746e64 above), a finger-sized target on a touch

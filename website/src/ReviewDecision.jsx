@@ -13,7 +13,7 @@ import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { PANEL2, BORDER, DIM, FAINT, INK, label } from "./theme.jsx";
 import { CcRow, DraftField, ToRow, timeAgo, cleanText, splitQuoted } from "./ui.jsx";
 import { deliveryCc, deliveryFiles, deliveryMeta, replyContext } from "./replyDelivery.js";
-import { useVerbs } from "./actionRow.js";
+import { acted, useLit, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn } from "./buttons.js";   // theme.jsx owns `label`
 import { useDraftJob } from "./replyDraft.js";
 import ApprovalInterrupt from "./ApprovalInterrupt.jsx";
@@ -136,6 +136,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       else if (data.ok && verb !== "reject" && onSent) { await onSent(); setBusy(false); return; }
       reloadGh(); onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
+    finally { acted(no(verb)); }          // the Advisor reads the item again: what it advised has been done, or failed
     setBusy(false);
   };
 
@@ -160,6 +161,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       else if (data.ok && verb === "approve" && onSent) { await onSent(); setBusy(false); return; }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
+    finally { acted(no(verb)); }
     setBusy(false);
   };
 
@@ -178,13 +180,16 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     setBusy(true);
     try { await api.post(`/api/reviews/${r.ReviewId}/draft`); setText(null); onChanged?.(); }
     catch (e) { setErr(e?.response?.data?.detail || "Redraft failed"); }
+    finally { acted(no("redraft")); }
     setBusy(false);
   };
 
   // THE DECISION'S VERBS, one list for the card's buttons and the action row: what presses, what it says, when it is off
   const no = (id) => `${r.ReviewId}:${id}`;
   // with the row carrying the item, the dark button is the Advisor's pick on the bar (actionRow.rowOf): the draft's own stay outlined
-  const solid = toRow ? "outlined" : "contained";
+  // ...and the Advisor's pick of this card's own move is lit HERE, where the button stands (rowOf's `lit`) - never a second one on the bar
+  const lit = useLit();
+  const solid = toRow && lit !== no("approve") ? "outlined" : "contained";
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
@@ -434,7 +439,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Button>
         )}
         {/* Redraft beside the send, under the draft it rewrites - not at the far end of the row, and not on the task's bar */}
-        {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant="outlined" disabled={busy || drafting} onClick={redraft}
+        {canRedraft && !r.Stale && !delivery.frozen && <Button size="small" variant={lit === no("redraft") ? "contained" : "outlined"} disableElevation disabled={busy || drafting} onClick={redraft}
           title={btnHint("redraft")}>
           {drafting ? "Drafting…" : redraftWord}</Button>}
         {/* ...and one email of several can be let go: it drops that slot and closes nothing (slots.settled) */}

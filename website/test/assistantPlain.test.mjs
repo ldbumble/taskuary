@@ -8,7 +8,7 @@ const read = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "ut
 const view = read("AssistantView.jsx"), cards = read("assistantCards.jsx");
 
 test("no AI connected: the strip says it once and its one button opens Connections, AI (U3)", () => {
-  assert.match(read("tableState.js"), /data\.verb \|\| data\.none === "no_ai"/, "the no-AI answer is kept, not dropped as nothing");
+  assert.match(read("tableState.js"), /if \(data\.verb \|\| data\.none\)/, "the no-AI answer is kept, not dropped as nothing");
   assert.match(view, /Connect an AI to get a suggestion on each item/);
   assert.match(view, /openAppLink\(place\("ai"\)\.href\)\}>Connect an AI<\/button>/);
   // ...and the capability says so too: one answer for "is an AI connected" (capabilities.js)

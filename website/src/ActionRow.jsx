@@ -5,7 +5,8 @@ import React, { useEffect, useState } from "react";
 import { Menu, MenuItem, Popover } from "@mui/material";
 import api from "./api.js";
 import { suggestion } from "./advice.js";
-import { advisedAny, advisedIn, clustersOf, press, rowOf, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedAny, advisedIn, clustersOf, press, rowOf, lightOnCard, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { adviceNone } from "./words.js";
 
 // what a refused proposal says on the line: the item moved under the Advisor (409) is not the owner's mistake - the page reads
 // the advice again, and the line says the suggestion is the new one
@@ -30,7 +31,8 @@ export function AdvisorNext({ advice, onPropose }) {
     try { await onPropose(advice, anchor || e?.currentTarget || null); setGoing(""); } catch (err) { setGoing(proposeFailed(err)); }
   };
   // ...it IS the advice, so it is the dark one (rowOf fills it like any advised verb)
-  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "decide", tone: "p", disabled: going === "…",
+  // ...at the END of its type (group "more"): in front, it pushed the type's own second button into ▾ when the advice landed (2026-10-19)
+  useVerbs("advice", lacks ? [{ id: `advice:${advice.verb}`, label: advice.label, group: "more", tone: "p", disabled: going === "…",
     title: "What the Advisor suggests", run }] : [], lacks);
   if (!advice?.verb || !advice.line) return null;
   // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
@@ -51,7 +53,7 @@ export function AdvisorNext({ advice, onPropose }) {
       <Popover open={!!at} anchorEl={at} onClose={() => setAt(null)} anchorOrigin={{ vertical: "top", horizontal: "right" }}
         transformOrigin={{ vertical: "bottom", horizontal: "right" }} slotProps={{ paper: { sx: { borderRadius: 2.5, maxWidth: 420 } } }}>
         <div className="tq-next-pop" role="dialog" aria-label="Why the Advisor suggests this">
-          <div className="pick">Suggested: <b>{word}</b> - the dark button below</div>
+          <div className="pick">Suggested: <b>{word}</b> - the dark button</div>
           <div className="said">{advice.line}</div>
           {/* each count in words of what it measures (advisor.says) - a close that held is not an answer to a chase */}
           {!!advice.says && <div className="fact">{advice.says}</div>}
@@ -62,6 +64,18 @@ export function AdvisorNext({ advice, onPropose }) {
           {note?.at && <div className="when">Judged {String(note.at).slice(0, 16)}</div>}
         </div>
       </Popover>
+    </div>
+  );
+}
+
+// NO LINE IS STILL AN ANSWER (2026-10-19): "Thinking about this one…" then nothing read as broken. Each reason the Advisor gives for
+// having no line (advisor.status {none}) is one plain sentence from words.json, and the row lights its one move (rowOf: Next)
+export function AdviceNone({ advice }) {
+  if (!advice?.none || advice.verb) return null;
+  const said = adviceNone(advice.none);
+  return (
+    <div className="tq-next" role="status" data-tq-advice="none" data-tq-none={advice.none}>
+      <div className="tq-next-txt">{said.line}</div>
     </div>
   );
 }
@@ -91,9 +105,15 @@ function Cluster({ g, btn }) {
 
 // the row says what to do, by type - not which task or how long it waited: the card above says both (the owner, 2026-10-13)
 export default function ActionRow({ inline = false, advised = null }) {
-  const row = rowOf(useRowVerbs(), advised);
+  // a "none" answer lights its one move - Next - the way a line lights its verb (words.json advice_none)
+  const pick = advised?.none ? { verb: adviceNone(advised.none).move } : advised;
+  const row = rowOf(useRowVerbs(), pick);
   const { ref, decide, agent, more, next, why } = row;
   const hosted = useHosted();
+  // the card's own move, advised, is lit on the card (rowOf's `lit`); only the row that is drawn says which
+  const drawn = inline || !hosted;
+  useEffect(() => { if (drawn) lightOnCard(row.lit); }, [drawn, row.lit]);
+  useEffect(() => () => { if (drawn) lightOnCard(""); }, [drawn]);
   if (!inline && hosted) return null;                  // a phone's task view carries its own row
   if (!decide.length && !agent.length && !more.length && !next) return null;
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -

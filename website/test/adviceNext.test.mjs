@@ -21,10 +21,14 @@ test("the advised verb is the one filled button, whatever the row would have fil
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "close", label: "Mark done" })), ["done"]);   // Mark done is the advisor's close
 });
 
-test("a pick waiting behind More comes onto the bar, filled; nothing advised leaves the row as it was", () => {
+// THE ADVICE ONLY TINTS (2026-10-19): a pick behind More is filled where it stands - the row's layout is the same with and without
+// advice (moved onto the bar, it reshuffled the row seconds after the item opened); clustersOf keeps the filled one in view
+test("a pick waiting behind More is filled where it stands; nothing advised leaves the row as it was", () => {
   const list = [v("continue", "agent", { lead: true, label: "Continue" }), v("rerun", "more", { label: "Run it again" }), v("next", "next")];
-  const r = rowOf({ ref: "", list }, { verb: "rerun", label: "Run it again" });
-  assert.deepEqual(filled(r), ["rerun"]); assert.ok(!r.more.some((x) => x.id === "rerun"));
+  const r = rowOf({ ref: "", list }, { verb: "rerun", label: "Run it again" }), plain = rowOf({ ref: "", list });
+  assert.deepEqual(r.more.filter((x) => x.tone === "p").map((x) => x.id), ["rerun"]);
+  const ids = (x) => [...x.decide, ...x.agent, ...x.more].map((y) => y.id);
+  assert.deepEqual(ids(r), ids(plain), "the same buttons in the same places");
   assert.deepEqual(filled(rowOf({ ref: "", list }, null)), filled(rowOf({ ref: "", list })));
   assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "chase", label: "Chase them" })), []);   // not on the row: nothing dark (AdvisorNext adds it)
 });
@@ -42,7 +46,7 @@ test("a greyed verb is never the advised one", () => {
 
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\}/);
-  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice\}/);
+  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice \|\| noneSaid\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
   assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing

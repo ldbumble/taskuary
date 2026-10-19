@@ -17,3 +17,8 @@ export const localName = (tool) => `${tool} (${LOCAL})`;
 const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const JARGON_RES = JARGON.map((w) => new RegExp(`\\b${esc(w)}${/-$/.test(w) ? "" : "\\b"}`, w === w.toUpperCase() ? "" : "i"));
 export const jargonIn = (text) => { const s = String(text || ""); for (const re of JARGON_RES) { const m = s.match(re); if (m) return m; } return null; };
+// WHEN THE ADVISOR HAS NO LINE (advisor.status {none: why}): the sentence the strip says and the one move the row lights. An unknown
+// reason is said as "nothing" - a strip that goes blank is the thing this exists to stop
+const NONE = Object.fromEntries(Object.entries(words.advice_none).filter(([k]) => !k.startsWith("_")));
+export const adviceNone = (why) => NONE[why] || NONE.nothing;
+export const ADVICE_NONE = NONE;

@@ -53,18 +53,22 @@ def revision(store, target_kind: str, target_id) -> str:
         t = store.get_task(target_id) or {}
         ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
         base += f"|{t.get('Status')}|{t.get('Assignee')}|{t.get('DueAt')}|{ev.get('Id')}"
-    # ...and a failure: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18)
-    base += f"|{_failed_at(store, target_kind, target_id)}"
+    # ...and every act on it: a line judged "Send" before the send failed stood over the failure, advising the same Send (2026-10-18);
+    # one judged "Reply" before the reply WENT stood over "Sent" on the close-out, still saying the sender was waiting (2026-10-19)
+    base += f"|{_acted(store, target_kind, target_id)}"
     return hashlib.sha1(base.encode()).hexdigest()[:16]
 
 
-def _failed_at(store, target_kind, target_id) -> str:
-    """The newest failed act and each draft's delivery on the target - '' when nothing ever failed on it."""
+def _acted(store, target_kind, target_id) -> str:
+    """What the owner's acts left on the target: each draft - there or not, how it was decided, whether it went - and the newest
+    operation that ran on it, done, failed or declined (a proposal still waiting for its yes is no act yet). DeliveryState alone
+    skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState NULL) changed nothing it saw."""
     col = 'TaskId' if target_kind == 'task' else 'MessageId'
-    op = store._one("SELECT OpId FROM operation WHERE TargetKind=? AND TargetId=? AND Status='error' ORDER BY rowid DESC LIMIT 1",
+    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,''), ',') AS d FROM "
+                    f"(SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
+    op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind=? AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1",
                     (target_kind, int(target_id))) or {}
-    rv = store._one(f"SELECT GROUP_CONCAT(DeliveryState) AS d FROM review WHERE {col}=?", (int(target_id),)) or {}
-    return f"{op.get('OpId') or ''}/{rv.get('d') or ''}" if op.get('OpId') or rv.get('d') else ''
+    return f"{rv.get('d') or ''}/{op.get('OpId') or ''}:{op.get('Status') or ''}"
 
 
 def _write(store, *, target_kind, target_id, key, event, revision, tier=1, line='', verb=None, label=None, count=(0, 0),
@@ -119,7 +123,8 @@ SYSTEM = (
     "EXCEPT when the EVENT is item.shown: the owner is looking at this item right now and is owed a next step, so pick the verb the "
     f"item's own facts make right (a person waiting on them: {L('reply')}; an agent asking them something: {L('answer_agent')}; nothing "
     f"for them to do: {L('close')} or {L('let_go')}; work an agent left: {L('continue')} or {L('approve')}; a draft waiting: {L('approve')}; "
-    f"a reply already sent - sending never closes the task - and nothing left to do: {L('close')}; a reply that failed to "
+    f"a reply already sent (an A REPLY WAS ALREADY SENT line) - sending never closes the task - and nothing left to do: {L('close')}, "
+    "never an answer the sent reply already gave - someone is waiting only when they wrote again after it; a reply that failed to "
     "send: the fix offered with it) - whichever of those is "
     "OFFERED - and say why in plain words - say nothing only when no verb offered fits at all. "
     "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
@@ -199,6 +204,9 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"
                        + (' (nobody knows whether it went: check before sending again)' if f.get('unknown') else '')
                        + (f". The fix offered: {f['fix']['label']}" if f.get('fix') else ''))
+    try: sent = sent_line(store, target_kind, target_id)
+    except Exception as e: logger.debug(f'advisor: no sent reply read for {item.get("key")} - {e}'); sent = ''
+    if sent: lines.append(sent)
     if target_kind == 'task':
         # what the agent itself last said and is asking: the card's preview is the sender's mail, so five stops in a row were
         # judged "stop the agent" over an agent whose last words were "the reply above is ready for you to review and send"
@@ -236,6 +244,24 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         more = outcomes.evidence(store, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'), limit=15)
         if more: lines.append('RECENT OUTCOMES:\n' + '\n'.join(more))
     return '\n\n'.join(lines)
+
+
+def sent_line(store, target_kind, target_id) -> str:
+    """WHAT WAS SENT, as evidence: the newest reply that went on the item, when, to whom, its words, and what came in since. The
+    preview is the sender's ask, so with no word of the reply the line still said "Marcus is waiting for your clarifications"
+    over a close-out reading Sent (2026-10-19) - the model reads whether anything is still owed; code only says what went."""
+    r = store.sent_reply(task_id=int(target_id)) if target_kind == 'task' else store.sent_reply(message_id=int(target_id))
+    if not r: return ''
+    at = r.get('DecidedAt') or r.get('CreatedAt') or ''
+    m = store.get_message(r['MessageId']) if r.get('MessageId') else None
+    to = (m or {}).get('FromName') or (m or {}).get('FromEmail') or 'the sender'
+    body = ' '.join(str(r.get('FinalText') or r.get('DraftText') or '').split())[:400]
+    out = f'A REPLY WAS ALREADY SENT ({at}) to {to}: "{body}"'
+    msgs = store.list_messages(int(target_id)) if target_kind == 'task' else [m] if m else []
+    later = [x for x in msgs if x and str(x.get('Direction') or 'in') != 'out' and str(x.get('SentAt') or x.get('CreatedAt') or '') > str(at)]
+    return out + ('\nWRITTEN TO THE OWNER SINCE: ' + ' | '.join(f"{x.get('FromName') or x.get('FromEmail')} ({x.get('SentAt') or x.get('CreatedAt')}): "
+                                                            f"{' '.join(str(x.get('BodyText') or '').split())[:240]}" for x in later[-3:])
+                  if later else '\nNOTHING HAS COME IN SINCE IT WENT.')
 
 
 _ID = r'\b(?:out|mem|rv|task)\d+\b'
@@ -493,6 +519,8 @@ def for_key(store, key: str) -> dict:
 # WHY THE STRIP IS EMPTY, in one word the page reads: "Thinking about this one..." ran 20 s and then showed nothing, over an item the
 # Advisor keeps out of (unsorted mail, a report that ran fine) as much as over one it was judging (error sweep, 2026-10-18)
 QUIET = {'left to the item': 'quiet', 'no actions': 'no_actions', 'cap': 'cap', 'no brain': 'no_ai'}
+# ...and each reason is said on the strip as one sentence with one lit move (words.json advice_none): every one must have it
+REASONS = (*QUIET.values(), 'nothing', 'working', 'off')
 def status(store, key: str) -> dict:
     """for_key, and when it has no line: {'pending': True} while a judgement of this item is in flight, else {'none': why}."""
     out = for_key(store, key)

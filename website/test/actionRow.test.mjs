@@ -295,29 +295,32 @@ test("one border around the three layers: the suggestion, the row and the box si
   assert.match(css, /\.tq-dock \.tq-compose-box \{[^}]*border: 0;/);
 });
 
-// The draft's own Send is a card verb: off the bar until the Advisor picks it, then on the bar filled - running the card's own
-// handler, so the press sends the box as edited (the proposal road that dropped the edit, B4 2026-10-17, is never taken for it)
-test("the draft's own Send is a card verb: the Advisor finds it, and advised it is the bar's one dark button", async () => {
+// The draft's own Send is a card verb with its slot on the bar from the first render: pushed on only when advised, it reshuffled the
+// row when the advice landed (2026-10-19). Advised, it is filled where it stands; the press runs the card's own handler.
+test("the draft's own Send leads the bar from the first render, outlined; advised it is filled in place, the bar unchanged", async () => {
   const { advisedAny, holdsMove } = await import("../src/actionRow.js");
   const list = [v("12:approve", "decide", { tone: "p", label: "Send", card: true }), v("12:redraft", "decide", { label: "Redraft", card: true }),
     v("remind", "more", { label: "Remind me" }), v("done", "more", { promote: false, onCard: true, label: "Mark done" }), v("next", "next")];
   assert.ok(holdsMove(list));
   assert.equal(advisedAny(list, { verb: "approve", label: "Send" })?.id, "12:approve", "found, so no advice:approve is drawn");
   const quiet = rowOf({ ref: "", list });
-  assert.ok(![...quiet.decide, ...quiet.agent, ...quiet.more].some((x) => x.card), "unadvised, the card's buttons stay off the bar");
+  assert.deepEqual([...quiet.decide, ...quiet.agent, ...quiet.more].filter((x) => x.card).map((x) => x.id), ["12:approve"], "only its main move, never Redraft");
+  assert.equal(quiet.decide[0].id, "12:approve");
   assert.deepEqual(filled(quiet), []);
-  const sent = rowOf({ ref: "", list }, { verb: "approve", label: "Send" });
-  assert.deepEqual(filled(sent), ["12:approve"]); assert.equal(sent.next.tone, "s");
-  assert.equal([...sent.decide, ...sent.agent, ...sent.more].filter((x) => x.card).length, 1, "only the advised one comes onto the bar");
+  const sent = rowOf({ ref: "", list }, { verb: "approve", label: "Send" }), ids = (r) => [...r.decide, ...r.agent, ...r.more].map((x) => x.id);
+  assert.deepEqual(filled(sent), ["12:approve"]); assert.equal(sent.lit, ""); assert.equal(sent.next.tone, "s");
+  assert.equal(rowOf({ ref: "", list }, { verb: "redraft", label: "Redraft" }).lit, "12:redraft", "a card verb with no slot is lit on the card");
+  assert.deepEqual(ids(sent), ids(quiet), "the bar is the same with and without the advice");
   const later = rowOf({ ref: "", list }, { verb: "defer", label: "Remind me" });
-  assert.deepEqual(filled(later), ["remind"], "an advised Remind me is the dark one, off More and onto the bar");
-  // ...and the draft's own buttons under it are outlined while the row carries the item: one dark button on the screen
-  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /const solid = toRow \? "outlined" : "contained";/);
+  assert.deepEqual(later.more.filter((x) => x.tone === "p").map((x) => x.id), ["remind"], "an advised Remind me is filled where it stands");
+  assert.deepEqual(ids(later), ids(quiet)); assert.equal(later.lit, "");
+  // ...and the draft's own buttons under it are outlined while the row carries the item, but the one the Advisor lit
+  assert.match(fs.readFileSync(path.join(process.cwd(), "src", "ReviewDecision.jsx"), "utf8"), /const solid = toRow && lit !== no\("approve"\) \? "outlined" : "contained";/);
 });
 
 test("the Advisor's own button for a move the row lacks is the dark one; a 409 says the suggestion changed", async () => {
   const strip = fs.readFileSync(path.join(process.cwd(), "src", "ActionRow.jsx"), "utf8");
-  assert.match(strip, /group: "decide", tone: "p", disabled: going === "…"/);
+  assert.match(strip, /group: "more", tone: "p", disabled: going === "…"/);
   assert.match(strip, /status === 409 \? "This changed - here's the updated suggestion\."/);
   assert.doesNotMatch(strip, /note\.model/, "no model names in the Why? box");
   assert.doesNotMatch(strip, /e\.label \|\| e\.id/, "no evidence ids in the Why? box");

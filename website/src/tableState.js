@@ -10,11 +10,12 @@ export function tableOf({ current = null, cardKey = null, foldedKey = null, brow
 }
 
 // What an /api/advice answer (advisor.status) means for the strip: a line, "Thinking..." only while a judgement is really in
-// flight, or nothing. It spun 20 s and then showed nothing over items the Advisor never judges (error sweep, 2026-10-18).
-// `cap` is the one reason said aloud; the rest are the item's own business (an agent at work, a report that ran fine).
+// flight, or the reason there is none. It spun 20 s and then showed nothing over items the Advisor never judges (error sweep,
+// 2026-10-18) - and then showed nothing at all for every reason but two, so the strip came and went under the row (2026-10-19).
+// Every reason is kept now: the strip says it as a sentence (words.json advice_none) and lights its one move.
 export function adviceRead(data, key) {
   if (!data || !key) return { advice: null, asking: null };
-  if (data.verb || data.none === "no_ai" || data.none === "cap") return { advice: { ...data, for: key }, asking: null };
+  if (data.verb || data.none) return { advice: { ...data, for: key }, asking: null };
   return { advice: null, asking: data.pending ? key : null };
 }
 export const CAP_LINE = "No suggestion for a while - the Advisor has read as many items as it may this hour.";

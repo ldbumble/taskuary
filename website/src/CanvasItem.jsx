@@ -8,11 +8,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import TaskPage from "./TaskPage.jsx";
-import ActionRow from "./ActionRow.jsx";
+import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
 import { adviceKeyFor, adviceShown } from "./advice.js";
-import { useHost, useVerbs } from "./actionRow.js";
+import { onPressed, useHost, useVerbs } from "./actionRow.js";
+import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
 
 // THE ADVISOR'S PICK ON A PHONE'S ROW (U12): the dock's row is filled by the canvas's advice, but a phone draws its own row at the
@@ -25,10 +26,11 @@ function useItemAdvice(card, on) {
     if (!on || !key) { setAdvice(null); return undefined; }
     let live = true;
     const read = () => api.get("/api/advice", { params: { key } })
-      .then(({ data }) => { if (live) setAdvice(data?.verb ? { ...data, for: key } : null); }).catch(() => { if (live) setAdvice(null); });
+      .then(({ data }) => { if (live) setAdvice(adviceRead(data, key).advice); }).catch(() => { if (live) setAdvice(null); });
     setAdvice(null); read();
     const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
-    return () => { live = false; off?.(); };
+    const after = onPressed(() => read());          // an act on the item moves its revision: read the line again (2026-10-19)
+    return () => { live = false; off?.(); after(); };
   }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
   return advice;
 }
@@ -71,7 +73,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
-  const advised = adviceShown(useItemAdvice(card, phone), { key: card.key, lane: card.lane }, busy);
+  const read = useItemAdvice(card, phone);
+  const advised = adviceShown(read, { key: card.key, lane: card.lane }, busy);
+  const none = !advised && !busy && read?.none && read.none !== "no_ai" ? read : null;
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -102,7 +106,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       {/* THE BUTTONS ARE NOT HERE (layout B, 2026-09-30): the view registers its verbs and Next, and the ONE row above the chat line
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
-      {phone && <ActionRow inline advised={advised} />}
+      {/* ...and the Advisor's line rides WITH the row it lights: pinned over the composer, it stood a screen away (2026-10-19) */}
+      {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip=""><AdvisorNext advice={advised} /><AdviceNone advice={none} /></div>
+        <ActionRow inline advised={advised || none} /></div>}
     </Box>
     </>
   );

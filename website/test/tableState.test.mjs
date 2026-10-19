@@ -18,11 +18,12 @@ test("folded by its X or under a page, the item stays on the table and the Advis
 
 test("Thinking shows only while the server says a judgement is in flight", () => {
   assert.deepEqual(adviceRead({ pending: true }, "task:7"), { advice: null, asking: "task:7" });
+  // EVERY REASON IS KEPT (2026-10-19): dropped, the strip went blank under the row; each is said as a sentence (words.json)
   for (const why of ["quiet", "working", "no_actions", "nothing", "off"])
-    assert.deepEqual(adviceRead({ none: why }, "task:7"), { advice: null, asking: null }, why);
+    assert.deepEqual(adviceRead({ none: why }, "task:7"), { advice: { none: why, for: "task:7" }, asking: null }, why);
   assert.equal(adviceRead({ verb: "reply", line: "Erin asked." }, "task:7").advice.for, "task:7");
   assert.equal(adviceRead({ none: "no_ai" }, "task:7").advice.none, "no_ai");
-  assert.equal(adviceRead({ none: "cap" }, "task:7").advice.none, "cap", "the one reason said aloud");
+  assert.equal(adviceRead({ none: "cap" }, "task:7").advice.none, "cap");
   assert.deepEqual(adviceRead({}, "task:7"), { advice: null, asking: null }, "an old server's bare {} is no spinner");
 });
 

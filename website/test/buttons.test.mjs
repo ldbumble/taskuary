@@ -52,7 +52,7 @@ test("the Advisor's verb finds the task page's own button for the same act, by b
     const pick = { verb, label: label(verb) };
     assert.equal(advisedIn(list, pick)?.id, id, `${verb} -> ${id}`);
     assert.equal(advisedAny(list, pick)?.id, id, `${verb}: found, so the Advisor adds no button of its own`);
-    const r = rowOf({ ref: "", list }, pick), all = [...r.decide, ...r.agent];
+    const r = rowOf({ ref: "", list }, pick), all = [...r.decide, ...r.agent, ...r.more];   // filled where it stands, More included
     assert.equal(all.filter((x) => x.tone === "p").map((x) => x.id).join(), id, `${verb}: the real button is the filled one`);
     assert.ok(!all.some((x) => String(x.id).startsWith("advice:")));
   }

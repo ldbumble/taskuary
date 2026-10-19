@@ -18,7 +18,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
-import { useVerbs } from "./actionRow.js";
+import { onPressed, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow } from "./buttons.js";   // theme.jsx owns `label`
 import BlockIcon from "@mui/icons-material/Block";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
@@ -1120,6 +1120,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => { if (!canvas && active && t?.UpdatedAt) readTaskAdvice(selected); }, [t?.UpdatedAt]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => (canvas || !active ? undefined
     : onLive("advice", (ev) => { if (adviceKeyFor(ev, `task:${selRef.current}`)) readTaskAdvice(selRef.current); })), [canvas, active, readTaskAdvice]);
+  // ...and after every press on it: an act moves the item's revision, and the line judged before it must not stand (2026-10-19)
+  useEffect(() => (canvas || !active ? undefined : onPressed(() => readTaskAdvice(selRef.current))), [canvas, active, readTaskAdvice]);
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
   // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,

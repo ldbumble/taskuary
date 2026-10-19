@@ -27,6 +27,10 @@
 //   LIVE      a cancelled or failed proposal card that still offers its buttons
 //   FOLD      a task folded by its X that its folded line or its rail row cannot open again
 //   UNDO      a receipt that says it can be undone ("Undo: ...") with no Take it back to press under it
+//   STILL     the Advisor's line landing moved a button on the row - the advice only tints (2026-10-19: Send pushed in, Attach into ▾)
+//   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
+//   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
+//   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards]
 //
@@ -80,6 +84,7 @@ const WALK_SKIP = {
   "new_task:fix": "offered by the Advisor on a failure nothing fixes - the walk has no AI to offer it",
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
+  "approve:check": "Check delivery on a send nobody can confirm - the faults pass checks it is offered",
   "pick_repo:set": "shows once a task has a repository - neither world has one chosen",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
@@ -172,6 +177,8 @@ async function pageOn(srv, phase) {
   page.step = phase;
   page.on("pageerror", (e) => note("CRASH", page.step, e.message));
   page.expect = new Set();                                           // an /api path whose failure the step forced on purpose
+  page.adviceReads = [];                                             // when each read of the Advisor's line went out (REREAD)
+  page.on("request", (r) => { if (new URL(r.url()).pathname === "/api/advice") page.adviceReads.push(Date.now()); });
   page.on("response", async (r) => {
     const u = new URL(r.url());
     if (!u.pathname.startsWith("/api/") || r.status() < 400 || u.pathname === "/api/test/fault") return;
@@ -205,11 +212,19 @@ const look = (page) => page.evaluate(() => {
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const adviceEl = document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])');
+  // THE ADVISOR'S STRIP AND ITS LIT BUTTON: the strip is empty only if nothing in it speaks; the lit button must be on the screen
+  // and the thing under its own centre
+  const strip = [...document.querySelectorAll("[data-tq-strip]")].find(vis);
+  const litEl = row && [...row.querySelectorAll(".tq-ab.p")].find(vis);
+  const lr = litEl?.getBoundingClientRect(), hit = lr && document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
+  const lit = litEl ? { word: litEl.innerText.trim(), inView: lr.top >= 0 && lr.left >= 0 && lr.bottom <= innerHeight && lr.right <= innerWidth,
+    covered: !(hit && (hit === litEl || litEl.contains(hit))) } : null;
   const read = [card?.innerText || "", row?.innerText || "", adviceEl?.innerText || "", ...errs].join("\n");
   const pops = [...document.querySelectorAll('.MuiPopover-paper, [role="dialog"], .MuiDrawer-paper')].filter(vis).map((p) => p.innerText.replace(/\s+/g, " ").slice(0, 80));
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
-  return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops,
+  return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+    strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
     undoSaid: tail.some((m) => /Undo: /.test(m.innerText || "")),
     chatBtns: tail.flatMap((m) => [...m.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim())),
     nmsg: msgs.length, last: (msgs[msgs.length - 1]?.innerText || "").slice(0, 200), url: location.href, focus: document.activeElement?.tagName || "",
@@ -226,6 +241,8 @@ const judge = (s, at) => {
     if (!s.advice && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor line over it`);
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);
   }
+  if (s.strip?.empty && !s.strip.busy) note("STRIP", at, "the Advisor's strip under the item says nothing - no line, no reason, no Thinking");
+  if (s.advice && s.lit && !s.pops.length && (!s.lit.inView || s.lit.covered)) note("LIT", at, `the Advisor's lit "${s.lit.word}" is ${s.lit.inView ? "covered" : "off the screen"}`);
   if (s.card && s.card.shown < 120) note("SEEN", at, `only ${Math.round(s.card.shown)}px of the card on the table is in view`);
   if (s.errs.length && !s.verbs.some((v) => !v.next && !v.off) && !s.cardBtns.some((b) => !b.off && NAMED.has(b.word)))
     note("FIX", at, `"${s.errs[0].slice(0, 90)}" and nothing on the row but Next`);
@@ -242,10 +259,14 @@ const receipts = (before, after, at) => {
       note("RECEIPT", at, `${name} left the rail with no line saying where it went`);
   }
 };
-const rowHandle = (page, verb) => page.evaluateHandle((verb, ids) => {
+// ...and a draft's `approve` only by a Send word: the draft's main move holds the bar's first slot from the first render, and on a
+// channel that cannot send it reads Mark done (copy and close) - pressed as "Send", it closed the task (2026-10-19)
+const sendWords = [label("approve"), ...Object.values(VERBS.approve?.states || {})];
+const rowHandle = (page, verb) => page.evaluateHandle((verb, ids, words) => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())) || null;
-}, verb, [verb, ...(VERBS[verb]?.row || [])]);
+  return [...document.querySelectorAll("[data-tq-row] button[data-tq-verb]")].filter(vis).find((b) => ids.includes(b.getAttribute("data-tq-verb").split(":").pop())
+    && (!words.length || words.some((w) => b.innerText.trim().startsWith(w)))) || null;
+}, verb, [verb, ...(VERBS[verb]?.row || [])], verb === "approve" ? sendWords : []);
 const pressVerb = async (page, verb) => { const h = (await rowHandle(page, verb)).asElement(); if (!h) return false; await h.click(); mark(verb, page.step); return true; };
 const pressNext = async (page) => { const h = await page.$("[data-tq-row] [data-tq-next]"); if (!h) return false; await h.click(); mark("next", page.step); return true; };
 const openItem = async (page, pick) => {                        // a rail row by its key, or the first whose words match
@@ -257,6 +278,32 @@ const openItem = async (page, pick) => {                        // a rail row by
 };
 const closePops = async (page) => { for (let i = 0; i < 2; i++) { await page.keyboard.press("Escape"); await wait(300); } };
 
+// STILL: the row sampled while the item settles - every button's place by its id, and whether the Advisor's line is up. A button that
+// moved when the line landed is a row reshuffled under the owner's hand; the advice only tints (2026-10-19)
+const rowAt = (page) => page.evaluate(() => {
+  const row = document.querySelector("[data-tq-row]");
+  const at = row ? Object.fromEntries([...row.querySelectorAll("button[data-tq-verb], button[data-tq-next]")].filter((b) => b.getBoundingClientRect().width > 0)
+    .map((b) => [b.getAttribute("data-tq-verb") || "next", Math.round(b.getBoundingClientRect().left)])) : {};
+  return { item: document.querySelector("[data-tq-canvas-item]")?.getAttribute("data-tq-canvas-item") || "", advice: !!document.querySelector('[data-tq-advice=""]'), at };
+});
+async function settle(page, at, ms = 5000) {
+  let quiet = null;
+  for (let t = 0; t < ms; t += 250) {
+    const r = await rowAt(page);
+    if (!r.advice) quiet = Object.keys(r.at).length > 1 ? r : null;    // a row still loading (only Next) is not one the advice moved
+    else if (quiet && quiet.item === r.item) {
+      const moved = Object.keys(r.at).filter((id) => id in quiet.at && Math.abs(r.at[id] - quiet.at[id]) > 2);
+      const came = Object.keys(r.at).filter((id) => !(id in quiet.at)), went = Object.keys(quiet.at).filter((id) => !(id in r.at));
+      if (moved.length || came.length || went.length)
+        note("STILL", at, `the Advisor's line landed and the row changed - moved ${JSON.stringify(moved)}, came ${JSON.stringify(came)}, went ${JSON.stringify(went)}`);
+      quiet = null;
+    }
+    await wait(250);
+  }
+}
+// REREAD: after a press on the row the advice is read again for the item as the act left it - a GET /api/advice within 2.5 s
+const reread = (page, t0, at) => { if (!page.adviceReads.some((t) => t > t0 && t - t0 < 2500)) note("REREAD", at, "a press on the row and no fresh read of the Advisor's line after it"); };
+
 // ── WALK: Next through the day, doing what each card's first button invites, so the paths behind it run too ─────────────────
 async function walk() {
   const srv = await serve(0), page = await pageOn(srv, "walk");
@@ -266,8 +313,8 @@ async function walk() {
     const at = page.step = `walk ${n} ${s.ref || "(no item)"}`;
     judge(s, at);
     if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) break;
-    const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb);
-    if (!did.has("approve") && has("approve")) { did.add("approve"); await pressVerb(page, "approve"); }
+    const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
+    if (!did.has("approve") && has("approve") && (await pressVerb(page, "approve"))) { did.add("approve"); await wait(2600); reread(page, t0, at); }
     else if (!did.has("close") && has("close")) {
       did.add("close"); await pressVerb(page, "close"); await wait(1200);
       await clickText(page, label("close"), '[role="dialog"]');
@@ -280,7 +327,7 @@ async function walk() {
       note("INLINE", at, `the way on is in the chat, not on the row: ${JSON.stringify(words.filter(Boolean))}`);
       await inline[0].click();
     }
-    await wait(5000);
+    await settle(page, at);
     s = await look(page);
     judge(s, `${at} after`);
     receipts(before, s, at);

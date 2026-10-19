@@ -1,4 +1,5 @@
 import { assignedAgent } from "./agentIdentity.js";
+import { durSince } from "./timeWords.js";
 
 export const studioTaskIsLive = (task) => !!(task && (task.Session || task.RunStatus === "running"));
 // WAITING IS THE BOARD'S RULE (B20): the game said "working · 21m" over agents the Board listed as waiting on you - a running session
@@ -32,10 +33,7 @@ export function studioSeats(tasks = [], capacity = 4) {
 export function studioElapsed(task, liveRow, now = Date.now()) {
   const at = liveRow?.StartedAt || task?.Session?.started || task?.RunStartedAt;
   if (!at) return "";
-  const seconds = Math.max(0, (now - new Date(String(at).replace(" ", "T"))) / 1000);
-  return seconds < 90 ? `${Math.round(seconds)}s`
-    : seconds < 5400 ? `${Math.round(seconds / 60)}m`
-      : `${(seconds / 3600).toFixed(1)}h`;
+  return durSince(at, now);
 }
 
 export function studioTaskState(task, liveRow, configuredAgents = [], now = Date.now()) {

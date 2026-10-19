@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 
 from loguru import logger
 
+from .timewords import ago
+
 
 def door() -> str:
     """Where the owner is asking from right now: the phone chat speaking this turn, else the desktop."""
@@ -395,20 +397,13 @@ def watch(store):
 BLOCK_CAP, TITLE, SAYS = 6, 50, 60
 
 
-def _ago(stamp) -> str:
-    try: d = datetime.now() - datetime.fromisoformat(str(stamp)[:19])
-    except (TypeError, ValueError): return ''
-    h = int(d.total_seconds() // 3600)
-    return 'just now' if h < 1 else f'{h}h ago' if h < 24 else 'yesterday' if h < 48 else f'{h // 24}d ago'
-
-
 def _where(via) -> str:
     return '' if not via or via == 'desktop' else via.split(':', 1)[0].capitalize().replace('Whatsapp', 'WhatsApp')
 
 
 def _line(store, t: dict, says: str) -> str:
     from .store import task_ref
-    when = ', '.join(x for x in (_ago(t.get('CreatedAt')), _where(of(t))) if x)
+    when = ', '.join(x for x in (ago(t.get('CreatedAt')), _where(of(t))) if x)
     return (f"- {task_ref(t['TaskId'])} {str(t.get('Title') or '').strip()[:TITLE]}" + (f' ({when})' if when else '')
             + (f' - {says[:SAYS]}' if says else ''))
 
@@ -490,6 +485,6 @@ def told_lines(store, days: float = 7) -> str:
                        f"({','.join('?' * len(SAID))}) ORDER BY AskedToldAt DESC LIMIT 20", (_since(days * 24), *SAID))
     def line(r):
         found = funnel.agent_found(store, r['TaskId']) if r['AskedTold'] in ('finished', 'saved') else ''
-        return (f"- {task_ref(r['TaskId'])} {str(r.get('Title') or '')[:70]} - {r['AskedTold']} ({_ago(r['AskedToldAt'])})"
+        return (f"- {task_ref(r['TaskId'])} {str(r.get('Title') or '')[:70]} - {r['AskedTold']} ({ago(r['AskedToldAt'])})"
                 + (f': {found}' if found else ''))
     return '\n'.join(line(r) for r in rows)

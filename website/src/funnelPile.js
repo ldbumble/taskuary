@@ -1,6 +1,7 @@
 import vocab from "../../taskuary/lanes.json" with { type: "json" };
 import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
+import { band } from "./timeWords.js";
 import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou } from "./lanes.js";
 export { says, subState };
 // the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
@@ -324,53 +325,14 @@ const cardKind = (item) => {
 
 export const cardFor = (item) => (item ? assistantFocus(item).card : null);
 
-// "in 12 min" / "now" / "2h ago" - how long an item has waited, or until a meeting starts
-export const ageText = (iso, now = Date.now()) => {
-  if (!iso) return "";
-  const t = new Date(String(iso).replace(" ", "T")).getTime();
-  if (Number.isNaN(t)) return "";
-  const m = Math.round((t - now) / 60000);
-  if (m > 0) return m < 60 ? `in ${m} min` : m < 1440 ? `in ${Math.floor(m / 60)}h` : `in ${Math.round(m / 1440)}d`;
-  const a = -m;
-  if (a < 2) return "now";
-  if (a < 60) return `${a} min`;
-  if (a < 1440) return `${Math.floor(a / 60)}h`;
-  return `${Math.round(a / 1440)}d`;
-};
-
-// ...and the age as the WORK RAIL's gutter reads it. The rail is ranked, not dated, so the column's
-// only job is "which of these has been sitting too long" - and an exact "22 min" invites arithmetic
-// instead of an answer. Anything inside the first half hour is simply new, then hour by hour, then
-// days (the owner, 2026-09-16: "within a half an hour say 30 min <, then per hour bands of time").
-export const railAge = (iso, now = Date.now()) => {
-  if (!iso) return "";
-  const t = new Date(String(iso).replace(" ", "T")).getTime();
-  if (Number.isNaN(t)) return "";
-  const m = Math.round((t - now) / 60000);
-  if (m > 0) return m < 60 ? `in ${m}m` : m < 1440 ? `in ${Math.floor(m / 60)}h` : `in ${Math.round(m / 1440)}d`;
-  const a = -m;
-  if (a < 30) return "< 30m";
-  if (a < 60) return "< 1h";
-  if (a < 1440) return `${Math.floor(a / 60)}h`;
-  return `${Math.floor(a / 1440)}d`;
-};
-
 // HOW LONG IT HAS WAITED ON YOU, beside the item's ref on the action row: the rail's gutter says it per row, but the eye is on the
 // buttons when deciding, and an old ask looked the same there as a new one (the row-bot comparison, 2026-10-07). Only what is on
 // you (lanes.onYou - a stopped agent and a failed check waited as long as an ask did), and only once it is an hour old - under
 // that it is simply new, and saying so is noise.
 export const waitedText = (item, now = Date.now()) => {
   if (!item || !onYou(item)) return "";
-  const a = railAge(item.since || item.when, now);
+  const a = band(item.since || item.when, now);
   return !a || a.startsWith("<") || a.startsWith("in ") ? "" : `waiting ${a}`;
-};
-
-// ...and the same age as a SENTENCE. `ageText` answers "how far", which is why four cards appended
-// " ago" to it and read "now ago" on anything under two minutes - and "in 3 min ago" on a stamp the
-// server clocked a moment ahead of the browser (2026-09-10 audit).
-export const agoText = (iso, now = Date.now()) => {
-  const a = ageText(iso, now);
-  return !a ? "" : a === "now" ? "just now" : a.startsWith("in ") ? a : `${a} ago`;
 };
 
 // the header's one line under "Taskuary" - its "on you" is the opener's and the greeting's (lanes.onYou). It counted only an
@@ -407,27 +369,12 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
       ? { ...i, lane: "working", order_band: 5, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 // when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
-// ...said in the age gutter's own short form, counting DOWN and reading forward: "in 30m", "in 1h", "in 3h", "in 2d" - "< 30m"
-// read as an age, as if it had come in (the owner, 2026-09-30), so it says "in" the way a meeting's does. A time already past says
-// nothing - the row is on its way back to On you, and a negative age would be a lie about which way time runs.
+// ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads
 // a GOAL's gutter is its date, not its age: for a goal the date is the clock (spec 2026-10-12)
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const dueWord = (iso) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
   return m ? `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}` : "";
-};
-// It counts down while the page sits, so it is worked out here, live; funnel_presentation.back_in is its server twin (the
-// phone, the assistant's list) and a test holds the two to the same words.
-export const railBack = (iso, now = Date.now()) => {
-  if (!iso) return "";
-  const t = new Date(String(iso).replace(" ", "T")).getTime();
-  if (Number.isNaN(t)) return "";
-  const m = Math.round((t - now) / 60000);
-  if (m <= 0) return "";
-  if (m < 30) return "in 30m";
-  if (m < 60) return "in 1h";
-  if (m < 1440) return `in ${Math.floor(m / 60)}h`;
-  return `in ${Math.floor(m / 1440)}d`;
 };
 export const levelLabel = (level) => LEVEL_META[level]?.word || "";
 // the levels actually present, in the order the rail draws them - the jump menu's entries

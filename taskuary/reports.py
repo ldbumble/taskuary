@@ -11,6 +11,7 @@ import io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
+from .timewords import ago_m, span
 
 PLANNED = ['graphql',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
@@ -1362,9 +1363,7 @@ def cron_prev(expr: str, now: datetime):
 APP_SESSIONS, KEEP_SESSIONS = 'app_sessions', 10   # when Taskuary was actually RUNNING
 
 
-def _span(d: timedelta) -> str:
-    m = max(0, int(d.total_seconds() // 60))
-    return f'{m // 60}h{m % 60:02d}m' if m >= 60 else f'{m}m'
+def _span(d: timedelta) -> str: return span(d.total_seconds() / 60, exact=True)
 
 
 def note_app_up(store, start: bool = False) -> None:
@@ -1406,7 +1405,7 @@ def uptime_words(store, days: int = 2, gap_minutes: int = 20) -> str:
         lines.append(f'- closed {shut:%a %d %b %H:%M} -> {back:%a %d %b %H:%M} ({_span(back - shut)}): '
                      'no report could fire and no mail could arrive')
     up = _stamp(ss[-1]['start'])
-    lines.append(f'- running since {up:%a %d %b %H:%M} ({_span(now - up)} ago)')
+    lines.append(f'- running since {up:%a %d %b %H:%M} ({ago_m((now - up).total_seconds() / 60, exact=True)})')
     return '\n'.join(lines)
 
 

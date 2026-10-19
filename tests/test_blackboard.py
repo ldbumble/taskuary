@@ -193,16 +193,17 @@ class AgoTests(unittest.TestCase):
 
     def test_boundaries(self):
         for kw,want in [(dict(seconds=20),'just now'), (dict(minutes=59),'59m ago'), (dict(minutes=60),'1h ago'),
-                        (dict(hours=47),'47h ago'), (dict(hours=48),'2d ago')]:
+                        (dict(hours=47),'1d ago'), (dict(hours=48),'2d ago')]:
             with self.subTest(**kw): self.assertEqual(self.ago(**kw), want)
 
     def test_a_stored_string_stamp_reads_the_same(self):
         self.assertEqual(bb._ago(str(datetime.now() - timedelta(minutes=5))), '5m ago')
 
-    def test_a_future_stamp_reads_just_now(self):
-        # a clock-skewed stamp has a negative age, which falls under the one-minute branch: pinned, not endorsed
-        self.assertEqual(self.ago(minutes=-5), 'just now')
-        self.assertEqual(self.ago(days=-3), 'just now')
+    def test_a_future_stamp_reads_forward(self):
+        # timewords.ago, the one rule (2026-10-18): a minute's skew either way is now, anything further ahead reads forward
+        self.assertEqual(self.ago(seconds=-20), 'just now')
+        self.assertEqual(self.ago(minutes=-5), 'in 5m')
+        self.assertEqual(self.ago(days=-3), 'in 3d')
 
     def test_bad_input_is_blank(self):
         for o in (None, '', 'not a date'):

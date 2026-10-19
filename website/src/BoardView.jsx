@@ -14,6 +14,7 @@ import GridViewIcon from "@mui/icons-material/GridView";
 import ForumIcon from "@mui/icons-material/Forum";
 import AddIcon from "@mui/icons-material/Add";
 import api from "./api";
+import { durSince } from "./timeWords.js";
 import AgentWall from "./AgentWall.jsx";
 import NewSheet from "./NewSheet.jsx";
 import { agentName, saidFromTail } from "./agentWork.js";
@@ -34,11 +35,7 @@ import { remindWaiting } from "./taskFilter.js";
 
 // "coding · running" says nothing you can act on. How long it has been going, and what it is
 // touching right now, is what tells you whether to leave it alone or go look.
-const elapsed = (since) => {
-  if (!since) return "";
-  const s = Math.max(0, (Date.now() - new Date(String(since).replace(" ", "T"))) / 1000);
-  return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`;
-};
+const elapsed = (since) => (since ? durSince(since) : "");
 
 const repoOf = (t) => (String(t?.Tags || "").match(/repo:([^\s,]+)/) || [])[1] || null;
 

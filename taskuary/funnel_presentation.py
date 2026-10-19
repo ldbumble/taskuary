@@ -13,8 +13,9 @@ import json
 import re
 import threading
 import weakref
-from datetime import datetime
 from pathlib import Path
+
+from .timewords import back_in   # when a For later row comes back - the phone and lookups read it from here
 
 
 _ITEM_SCHEMA = "taskuary.funnel.presentation.v1"
@@ -430,15 +431,6 @@ def state_of(i: dict) -> str:
     close-out say the lane's word (the desktop's rule; the phone's own "draft ready" is gone)."""
     word = _LANE_WORDS.get(str(i.get('lane') or '')) or _LANE_WORDS['fyi']
     return 'wants a yes' if i.get('lane') == 'approve' and i.get('kind') == 'action' and not i.get('closeout') else word
-
-
-def back_in(iso, now: datetime = None) -> str:
-    """'in 30m', 'in 1h', 'in 3h', 'in 2d' until a For later row comes back - "< 30m" read as an age (the owner, 2026-09-30),
-    so it reads forward as a meeting's does. '' once due. funnelPile.railBack is the rail's live copy of this rule."""
-    try: at = datetime.strptime(str(iso or '')[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
-    except ValueError: return ''
-    m = round((at - (now or datetime.now())).total_seconds() / 60)
-    return '' if m <= 0 else 'in 30m' if m < 30 else 'in 1h' if m < 60 else f'in {m // 60}h' if m < 1440 else f'in {m // 1440}d'
 
 
 def is_own(item: dict | None) -> bool:

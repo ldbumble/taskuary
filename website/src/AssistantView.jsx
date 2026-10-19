@@ -51,7 +51,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalOf, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, ageText, agoText, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, railAge, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { freshUndo, mergeDurableTurns } from "./assistantTurns.js";
@@ -66,7 +66,8 @@ import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, Message
 import { summarize } from "./walkSummary.js";
 import { refreshToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
-import { MORE_PX, backAt, dueWord, placed, pulledRow, railBack, sectionDone, sectionNext } from "./funnelPile.js";
+import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
+import { age, ago, band, bandUntil } from "./timeWords.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
@@ -204,7 +205,7 @@ function SinceBlock({ onOpen, onReading }) {
       </div>}
       {dg.source_id && !(dg.writing && !writing) && <div className="tq-since-digest" data-tq-digest="">
         <span className="tag">MORNING DIGEST</span>
-        {dg.at ? <span>written {agoText(dg.at)}</span> : <span>not written yet today</span>}
+        {dg.at ? <span>written {ago(dg.at)}</span> : <span>not written yet today</span>}
         {dg.at && <button type="button" className="tq-linkish" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Fold it ▴" : "See the full digest ▾"}</button>}
         <span className="sep">|</span>
         {/* while it writes, the button IS the status - a spinner, not the button beside a second line saying the same (2026-10-13) */}
@@ -487,9 +488,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
-                    <span className="when" title={level === "later" && backAt(i) ? `back ${agoText(backAt(i))}` : undefined}>
+                    <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
-                        : level === "later" ? railBack(backAt(i)) : railAge(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
@@ -515,7 +516,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
                             <i>{meta.mark}</i><span className="w">{word}</span></span>
                         )}
                       </div>
-                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? ageText(i.when) : agoText(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
+                      {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
                     </div>
                     {/* THE SAME WORD ON THE SAME BORDER. A handful on the table says so on its
                         bracket ("on the table · 4 fyi"); one item on the table wore the identical
@@ -802,7 +803,7 @@ function AdvisorNotes({ keyOnTable }) {
       {rows && !rows.length && <Typography sx={{ color: FAINT, fontSize: 12, px: 1.5, py: 0.75 }}>Nothing judged on it yet.</Typography>}
       {(rows || []).map((r, i) => (
         <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
-          <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[ageText(r.at), r.tier > 1 ? "a closer look" : ""].filter(Boolean).join(" · ")}</Typography>
+          <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[age(r.at), r.tier > 1 ? "a closer look" : ""].filter(Boolean).join(" · ")}</Typography>
           <Typography sx={{ fontSize: 12.5, color: INK }}>{r.verb ? `${r.pill} - ${r.line}` : quietWhy(r.dropped)}</Typography>
           {!!(r.evidence || []).some((e) => e.label) && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Looked at: {r.evidence.map((e) => e.label).filter(Boolean).join(" · ")}</Typography>}
         </div>
@@ -2371,7 +2372,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               <div key={c.taskId} className="c" onClick={() => openOld(c)} title={c.started ? `started ${c.started.slice(0, 16)}` : ""}>
                 {c.open ? <i /> : <span style={{ width: 7 }} />}<b>{c.title}</b>
                 {/* what the walk actually got through, so one transcript can be told from another */}
-                <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", ageText(c.at)].filter(Boolean).join(" · ")}</span>
+                <span>{[c.mail ? `${c.mail} mail` : "", c.seen ? `${c.seen} looked at` : "", c.minutes ? `${c.minutes} min` : "", age(c.at)].filter(Boolean).join(" · ")}</span>
               </div>
             ))}
             {chatsNext && !chatsLoading && <button type="button" className="tq-chip" style={{ margin: 8 }} onClick={moreChats}>Earlier chats</button>}

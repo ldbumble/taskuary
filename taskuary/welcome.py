@@ -358,7 +358,7 @@ def missed_says(d: dict, now: datetime = None) -> str:
     if asked:
         people = len({a.get('who') for a in asked})
         out.append(f"{_cap(num(people))} {'person is' if people == 1 else 'people are'} still waiting on an answer from you: "
-                   + '; '.join(f"{first_name(a.get('who'))} - \"{a.get('gist') or ''}\" ({a.get('ago')} ago)" for a in asked[:4])
+                   + '; '.join(f"{first_name(a.get('who'))} - \"{a.get('gist') or ''}\" ({a.get('ago')})" for a in asked[:4])
                    + (f"; and {len(asked) - 4} more" if len(asked) > 4 else '') + '.')
     unjudged, untracked = d.get('unjudged') or [], d.get('untracked') or ''
     if unjudged:

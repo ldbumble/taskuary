@@ -100,15 +100,15 @@ test("for later and advisor ideas are their own levels", () => {
 });
 
 test("For later's gutter says how long until it comes back, soonest first", async () => {
-  const { railBack, backAt, bandsOf } = await import("../src/funnelPile.js");
+  const { backAt, bandsOf } = await import("../src/funnelPile.js"), { bandUntil } = await import("../src/timeWords.js");
   const now = Date.parse("2026-09-29T12:00:00");
   const at = (m) => new Date(now + m * 60000).toISOString();
-  assert.equal(railBack(at(10), now), "in 30m");
-  assert.equal(railBack(at(45), now), "in 1h");
-  assert.equal(railBack(at(185), now), "in 3h");
-  assert.equal(railBack(at(60 * 50), now), "in 2d");
-  assert.equal(railBack(at(-5), now), "", "a return time already past is no age at all");
-  assert.equal(railBack(null, now), "");
+  assert.equal(bandUntil(at(10), now), "in 30m");
+  assert.equal(bandUntil(at(45), now), "in 1h");
+  assert.equal(bandUntil(at(185), now), "in 3h");
+  assert.equal(bandUntil(at(60 * 50), now), "in 2d");
+  assert.equal(bandUntil(at(-5), now), "", "a return time already past is no age at all");
+  assert.equal(bandUntil(null, now), "");
   assert.equal(backAt({ back_at: "2026-09-29 15:00:00" }), "2026-09-29 15:00:00");
   assert.equal(backAt({ defer_until: "2026-10-02 08:00" }), "2026-10-02 08:00");
   assert.equal(backAt({}), null);

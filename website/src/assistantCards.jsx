@@ -28,7 +28,8 @@ import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
 import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
-import { laneMeta, ageText, agoText } from "./funnelPile.js";
+import { laneMeta } from "./funnelPile.js";
+import { age, ago } from "./timeWords.js";
 import { SECTION, ideaWord } from "./lanes.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
@@ -216,7 +217,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   const rest = restOf(doc?.task?.Summary);
   const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : personName(by || card?.who || "Someone") || "Someone";
   const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
-    card?.when ? agoText(card.when) : ""].filter(Boolean).join(" · ");
+    card?.when ? ago(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
   const found = r?.summary || String(did ?? card?.summary ?? "").trim();
   const drawAgent = agent === true || (agent === "auto" && (found || state || extra));
@@ -550,7 +551,7 @@ function CombinedTaskText({ card, list = true }) {
 // The lane colours the DOT only - never an edge or a wash (the owner's taste: colour identifies).
 export function CardShell({ card, kicker, title, lead, sub, children, err }) {
   const meta = laneMeta(card?.lane);
-  const when = card?.when ? agoText(card.when) : "";
+  const when = card?.when ? ago(card.when) : "";
   return (
     <div className="tq-card">
       <div className="tq-card-kicker"><span className="src"><SourceMark item={card} /></span><span className="dot" style={{ background: edge(card?.lane) }} />{kicker || meta.word}
@@ -776,7 +777,7 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
 export function MeetingCard({ card }) {
   const e = card.event || {};
   return (
-    <CardShell card={card} kicker={`coming up · ${ageText(e.start)}`} title={e.subject || card.title}
+    <CardShell card={card} kicker={`coming up · ${age(e.start)}`} title={e.subject || card.title}
       sub={[e.who?.length ? `with ${e.who.slice(0, 6).join(", ")}` : "", e.where].filter(Boolean).join(" · ")}>
       {e.about && <div className="tq-card-excerpt">{e.about}</div>}
       <Foot verb={e.join ? <Button size="small" variant="contained" disableElevation component="a" href={e.join} target="_blank" rel="noreferrer" sx={primary}>Join</Button> : null}
@@ -951,7 +952,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
           <SourceMark item={card} size={15} />
           <b>{card.title}</b>
           <span className="tq-conn-pill">{signin ? "signed out" : "not answering"}</span>
-          {card.when && <em>{agoText(card.when)}</em>}
+          {card.when && <em>{ago(card.when)}</em>}
         </div>
         <div className="tq-conn-body">
           {said && <><div className="tq-conn-label">What it said</div><div className="tq-conn-said">{said}</div></>}

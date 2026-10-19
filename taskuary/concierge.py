@@ -28,7 +28,7 @@ from loguru import logger
 from . import funnel, general, llm as llm_mod, store as store_mod, toolcatalog
 from .redact import scrub as _scrub
 from .assistant import _ts
-from . import asks, buttons, lanes, operations, workerstate as ws, words as places
+from . import asks, buttons, lanes, operations, timewords, workerstate as ws, words as places
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
@@ -1098,18 +1098,14 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
 
 def funnel_age(item: dict) -> str:
     d = funnel._dt(item.get('since') or item.get('when'))
-    if not d: return ''
-    m = int((datetime.now() - d).total_seconds() // 60)
-    return f'{m} min ago' if m < 60 else f'{m // 60}h ago' if m < 1440 else f'{m // 1440}d ago'
+    return timewords.ago(d) if d else ''
 
 
 
 def _back_words(at) -> str:
     """'back in 2h' - the rail's own countdown for a row put away (funnelPile.railBack), so the line and the rail agree."""
-    try: m = (datetime.fromisoformat(str(at).replace('T', ' ')[:19]) - datetime.now()).total_seconds() / 60
-    except ValueError: return 'back in a while'
-    if m <= 0: return 'back now'
-    return 'back in ' + ('30m' if m < 30 else '1h' if m < 60 else f'{int(m // 60)}h' if m < 1440 else f'{int(m // 1440)}d')
+    if timewords.mins(at) is None: return 'back in a while'
+    return f'back {timewords.back_in(at) or "now"}'
 
 
 def _title_cut(s: str, n: int = 120) -> str:

@@ -51,8 +51,8 @@ flowchart LR
   X -->|you: Stop and save| D2["💾 session saved -<br/>report written, the task open"]
   X -->|you: Mark done| D3["The task closed,<br/>the agent stopped"]
   X -->|the session crashed or closed,<br/>Taskuary closed| D4["⏹ agent stopped -<br/>a held reply is back"]
-  D2 -->|Keep going| R
-  D4 -->|Keep going| R
+  D2 -->|Continue| R
+  D4 -->|Continue| R
 ```
 
 ## The rules
@@ -70,7 +70,7 @@ flowchart LR
 | A16 | The Timeline's All and the work rail read one lane rule from the same facts | built |
 | A17 | Agent finished is kept by why the task closed; a finish with a reply is one card, the reply to send | built |
 | A18 | An accepted Advisor idea starts its agent through the same queue and slot limit as any task | built |
-| A19 | **Keep going** on a stopped, saved or paused agent - coding or regular - with what to tell it as it picks up | built |
+| A19 | **Continue** on a stopped, saved or paused agent - coding or regular - with what to tell it as it picks up | built |
 | A20 | Stop and save only where a live session exists | built |
 | A21 | A merged or closed pull request owes nobody a reply | built |
 | A22 | Every start clears the interrupted mark, the saved mark and the queued start | built |

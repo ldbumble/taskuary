@@ -818,10 +818,10 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
     # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
-    # CONTINUE SESSION leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
+    # CONTINUE leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
-    # ...and on FINISHED work it is offered after the card's own close: the session is still there to be asked for more
-    elif item.get('kind') == 'agentdone' and item.get('tid') and store is not None and store.resumable_session(item['tid'])             and 'continue' not in verbs: verbs = [v for v in verbs if v != 'next'] + ['continue'] + (['next'] if 'next' in verbs else [])
+    # ...and never on FINISHED work: an agent that is done is closed or opened, not sent on (the owner, 2026-10-18: "no keep going
+    # if finished") - more for it is said in the task's own box
     # ...but never on a general agent: its card's own chat box is the way on, so the row draws no Continue (the owner,
     # 2026-09-29) - and the Advisor, offered one, picked it and its line was hidden as a move the row could not make (2026-10-15)
     if 'continue' in verbs and _general(store, item): verbs = [v for v in verbs if v != 'continue']

@@ -901,7 +901,6 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // hooks first - the connection card below returns early, and a hook after it would change the order per kind
   const doc = useFetched(card.tid ? `/api/tasks/${card.tid}` : null, card.presentation_revision);
   const shut = useClose(card, onDone);
-  const [back, setBack] = useState(null);
   const [said, setSaid] = useState(card.why || "");     // a broken connection's error, as its last check said it
   const [note, setNote] = useState("");
   const [stuck, setStuck] = useState(false);          // Check again, or the restart, did not fix it
@@ -997,14 +996,9 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     : card.mid && <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={draftReply} sx={moveSx}>{busy === "reply" ? "Drafting…" : btn("reply")}</Button>;
   const asker = String(card.who || "them").replace(/\s*<[^>]*>/g, "");
   // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
-  // the agent that took it): once a report is filed the move is to close the task, or send it back with what to change
+  // the agent that took it): once a report is filed the move is to close the task. It offered Continue beside it too, and finished
+  // work is not sent on from its card (the owner, 2026-10-18: "no keep going if finished") - more is said in the task's own box
   const reported = !!reportOf(doc) && (own || mineAlone);
-  const sendBack = async () => {
-    setBusy("back"); setErr("");
-    try { await api.post(`/api/tasks/${card.tid}/continue-work`, { note: (back || "").trim() || null }); onDone?.(`Sent back to the agent on ${card.ref || "it"}. It comes back here when it stops.`); }
-    catch (e) { setErr(failOf(e)); }
-    setBusy("");
-  };
   // what they wrote, in their words, inside the ask - never for your own task, whose words the story already said
   const words = card.channel === "assistant" && card.mid ? <div className="tq-thr-words"><AdvisorWhy mid={card.mid} /></div>
     : card.mid && !mineAlone ? <div className="tq-thr-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;
@@ -1013,17 +1007,8 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
       lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
         fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
       {reported ? (
-        <YourMove title={`${btn("close")}, or ${btn("continue")}`}
-          go={<><Button size="small" variant="contained" disableElevation disabled={shut.busy || !!busy} onClick={shut.run} sx={moveSx} title={btnHint("close")}>{shut.busy ? "Closing…" : btn("close")}</Button>
-            <Button size="small" variant="outlined" disabled={!!busy} onClick={() => setBack((b) => (b === null ? "" : null))} sx={quiet} title={btnHint("continue")}>{btn("continue")}</Button></>}
-          then={back === null ? `if it is not finished, ${btn("continue")} says what is left.` : null}>
-          {back !== null && (
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 8 }}>
-              <TextField fullWidth multiline minRows={1} maxRows={4} autoFocus value={back} onChange={(e) => setBack(e.target.value)}
-                placeholder="What is left for it to do?" sx={{ "& .MuiOutlinedInput-root": { background: "#fffdf9" }, "& textarea": { fontSize: 13 } }} />
-              <Button size="small" variant="contained" disableElevation disabled={!!busy} onClick={sendBack} sx={moveSx}>{busy === "back" ? "Sending…" : "Send back"}</Button>
-            </div>
-          )}
+        <YourMove title={btn("close")}
+          go={<Button size="small" variant="contained" disableElevation disabled={shut.busy || !!busy} onClick={shut.run} sx={moveSx} title={btnHint("close")}>{shut.busy ? "Closing…" : btn("close")}</Button>}>
           <CardErr err={shut.err} />
         </YourMove>
       ) : verb ? (

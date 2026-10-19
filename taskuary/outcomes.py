@@ -1,7 +1,7 @@
 """The outcome ledger (spec 2026-10-12, build step 2).
 
 Every store that remembers is written from the owner's click at the moment of the click. Nothing recorded what the
-owner did NEXT (Keep going, "merge it") or what the world did AFTER (the thread died, the task reopened, the PR
+owner did NEXT (Continue, "merge it") or what the world did AFTER (the thread died, the task reopened, the PR
 held, Ray delivered on day 9). This table does: one row per action, filled in two halves - the action when it happens
 (record), the outcome days later by a sweep that reads facts already in the store (resolve). No model runs here:
 what the facts MEAN is reflection's (learn.gather reads evidence()), and the Advisor's (build step 3).

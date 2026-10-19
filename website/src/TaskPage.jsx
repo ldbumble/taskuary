@@ -1093,6 +1093,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // on screen"): on the canvas the folded Task strip scrolls above the view, so "2 Agent work" sits under the title and the chat
   // fills the rest (its box is sized for exactly that, below). Task is one scroll up, Close out one scroll down.
   const stepsBox = useRef(null), agentHead = useRef(null);
+  // ON THE CANVAS THE CHAT'S OWN STRIP RIDES IN THIS STEP'S HEADING: a row for "Agent work" and a second for the agent's name, its
+  // brain and Full screen took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
+  const [chatTools, setChatTools] = useState(null);
   const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;
   useEffect(() => {
     // ...and back down when another step opens: Task opened from there kept the scroll, its own heading out of sight
@@ -1630,6 +1633,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         : `${agentName(t)} is working`}
                     chip={story && STORY_CHIP[story.kind] ? <StoryChip kind={story.kind} text={STORY_CHIP[story.kind]} />
                       : agentState ? <LifecycleChip kind="agent" phase={agentState} compact /> : null} tone={PALETTE.sage} {...stageProps("agent")}
+                    tools={inRow && workspaceMode === "general" && (liveSession || stage === "agent")
+                      ? <Box ref={setChatTools} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }} /> : null}
                     /* folded, this heading carried NOTHING - it passed no action at all, so the one
                        card that can actually be picked back up was the one row you could not act on.
                        It gets the move that matches its state, the way the Task strip does. */
@@ -1790,7 +1795,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 78px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
-                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports} />
+                      <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports}
+                        toolsAt={canvas ? chatTools : null} />
                     </React.Suspense>
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
@@ -2368,7 +2374,7 @@ const Fold = ({ title, children }) => (
 // ONE ROW ON A DESKTOP, TWO ON A PHONE. The bar is flexShrink: 0 so it never loses a button, which
 // at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
 // the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
-const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action }) => (
+const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools }) => (
   <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
@@ -2382,6 +2388,7 @@ const WorkflowHeading = ({ number, title, description, chip, tone, folded, onTog
     </Box>
     {/* the one action a stage cannot afford to hide when it folds. Its click is its own, not the fold's. */}
     {action && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 0, flexBasis: { xs: "100%", sm: "auto" }, order: { xs: 9, sm: 0 } }}>{action}</Box>}
+    {tools && <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", flexShrink: 1, minWidth: 0 }}>{tools}</Box>}
     {chip}
     {onToggle && <ExpandMoreIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0,
       transform: folded ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />}

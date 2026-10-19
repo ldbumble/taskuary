@@ -877,7 +877,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
   const [undoOffer, setUndoOffer] = useState(null);   // the last undoable act's Take it back (UndoVerb)
   useEffect(() => { if (!undoOffer) return; const t = setTimeout(() => setUndoOffer(null), 60000); return () => clearTimeout(t); }, [undoOffer]);
-  const [continueOn, setContinueOn] = useState(null);  // the walk's Keep going: { task, anchor, ref }
+  const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
   useEffect(() => {
@@ -1354,7 +1354,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     return () => { ro.disconnect(); el.removeEventListener("wheel", own); el.removeEventListener("touchmove", own); };
   }, [walk, keepTable]);
   useEffect(() => { keepTable(); }, [msgs, keepTable]);
-  // a box opened under the card (Keep going's note, Close with a note) is where the owner is now: the pin lets go before the
+  // a box opened under the card (Continue's note, Close with a note) is where the owner is now: the pin lets go before the
   // thread's resize would scroll the card back over it (a layout effect - it must land before the observer runs)
   useLayoutEffect(() => { if (continueOn || noteOn) pin.current = false; }, [continueOn, noteOn]);
 

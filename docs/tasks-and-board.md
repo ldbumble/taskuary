@@ -37,8 +37,8 @@ flowchart LR
 | T11 | Mark done keeps a waiting draft; "Bring it back to send" sends it later | `/api/reviews/{id}/reopen` |
 | T12 | No status box - status follows Start, Mark done, Remind me and Reopen | `TasksView` |
 | T13 | Reopen clears an old Remind me date | `task.reopen` |
-| T14 | Keep going opens the rail's box, with a note for the agent | `ContinueBox.jsx` |
-| T15 | "Save result" once the session has ended; "Keep going" on a regular agent's conversation | `TasksView` |
+| T14 | Continue opens the rail's box, with a note for the agent | `ContinueBox.jsx` |
+| T15 | "Save result" once the session has ended; "Continue" on a regular agent's conversation | `TasksView` |
 | T16 | Ticking the last box does not close the task - Mark done does | `tick_checklist` |
 | T17 | Done is by task number, highest first | `TasksView` |
 | T18 | The unreachable "yours, not the agent's" dialog and the Board's drag leftovers are gone | |

@@ -357,7 +357,7 @@ def push_alerts(store, force: bool = False) -> int:
     lead = 'By the way — '            # the same words the desktop strip uses, in the place he is reading
     say = lead + named[0].rstrip('.') + '.' if len(named) == 1 else lead.rstrip() + '\n' + '\n'.join('· ' + n for n in named)
     handle = next((refs[a['item']] for a in fresh if refs.get(a['item'])), '')
-    # "or keep going" read as the Keep going button, which this line does not offer
+    # "or keep going" read as the Continue button, which this line does not offer
     tail = (f'Say {handle} to take it now, or carry on with this one.' if handle
             else 'Name it and I will take you to it, or carry on with this one.')
     send(store, h['channel'], h['chat'], f'{say}\n\n{tail}', h.get('connector_id'))
@@ -749,7 +749,7 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
-                # the line typed after "Keep going" is what to tell the agent - a text field, not a word to read
+                # the line typed after "Continue" is what to tell the agent - a text field, not a word to read
                 forget_offered(store, channel, chat)
                 send(store, channel, chat, _continue(store, pending, question), connector_id)
                 return
@@ -1181,7 +1181,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if verb == 'continue':
             here = asking() or {}
             if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", str(on.get('tid') or ''), 'assistant')
-            # the desktop's box says the same one word (buttons.json) - "Continue as is" was a second name for Keep going
+            # the desktop's box says the same one word (buttons.json) - "Continue as is" was a second name for Continue
             go = buttons.label('continue')
             rows = [(go, {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay'})]
             return turn_text({'say': f"{go} on {on.get('ref') or 'it'}? Type what to tell it as it picks up, or tap {go}.",
@@ -1215,7 +1215,7 @@ NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note
 
 
 def _continue(store, tid, note: str) -> str:
-    """Keep going, from the phone: the same road as the desktop's pill (server.continue_work)."""
+    """Continue, from the phone: the same road as the desktop's pill (server.continue_work)."""
     from .server import ContinueBody, continue_work
     from fastapi import HTTPException
     try: continue_work(int(tid), ContinueBody(note=note or None))

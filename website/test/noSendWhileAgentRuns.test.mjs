@@ -1,5 +1,5 @@
 // NO "SEND TO AGENT" WHILE AN AGENT RUNS (the owner, 2026-10-01): a task with a live agent session is not offered to another
-// agent - its own session is the way in (Keep going / the session's card). The server's dispatch door refuses it too.
+// agent - its own session is the way in (Continue / the session's card). The server's dispatch door refuses it too.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

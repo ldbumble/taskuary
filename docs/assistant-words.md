@@ -54,7 +54,7 @@ flowchart LR
   sentence (`proposals.CLOSEOUT`), never a word. **Decline** (close without doing it) is a card button only, never a
   chat or poll word; **Not yet** in the walk is **Next**. Full rules: `docs/how-a-task-ends.md`, The close-out.
 - **Send back to the agent** (the owner, 2026-09-28: "don't see button to send back to agent?") resumes the task's
-  own agent with your note as the first thing it hears (`/continue-work`, the task page's Keep going). It is
+  own agent with your note as the first thing it hears (`/continue-work`, the task page's Continue). It is
   under More actions on a reply card, and it is the main button when GitHub refuses a close-out for merge conflicts -
   the refusal is the note. It is not **Send to agent**, which starts a task for an agent that was never on it.
 - **A close-out card has no Reject.** Close out / Decline / Not yet and nothing else; the reply on it is edited or

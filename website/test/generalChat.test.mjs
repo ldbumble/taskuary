@@ -13,7 +13,7 @@ const tasks = taskSource();
 // staircased every multi-line reply), a browser button and a numbers panel - four things to
 // choose between before reading what the agent said (the owner, 2026-09-22).
 test("the general workspace has no view switcher - the conversation is the only body", () => {
-  const strip = workspace.slice(workspace.indexOf("{!dock && <Box"), workspace.indexOf("{dock && <Box"));
+  const strip = workspace.slice(workspace.indexOf("const tools = (<>"), workspace.indexOf("{dock && <Box"));
   for (const word of [">Terminal<", ">Numbers<", ">Assistant<", '"Browser"']) assert.doesNotMatch(strip, new RegExp(word));
   assert.match(strip, /Full screen/, "the whole-window toggle stays, like a coding agent's");
   assert.doesNotMatch(workspace, /paneFor|taskuary_general_view|SemanticPanel|TerminalPane/);
@@ -46,4 +46,13 @@ test("on the canvas the agent step scrolls the Task strip away, and another step
 test("an ended general session's chat gives the page back to the stage that is focused", () => {
   const src = read("../src/TaskPage.jsx");
   assert.match(src, /\{workspaceMode === "general" && \(liveSession \|\| stage === "agent"\) \? \(/);
+});
+
+// THE CHAT'S STRIP RIDES IN THE STEP'S HEADING ON THE CANVAS: "Agent work" on one row and the agent's name, brain and Full screen on
+// a second took two lines off the answer (the owner, 2026-10-18: "make the agent space take up more space")
+test("on the canvas the chat's brain and Full screen sit in the agent step's heading, and come home in full screen", () => {
+  assert.match(tasks, /tools=\{inRow && workspaceMode === "general" && \(liveSession \|\| stage === "agent"\)\s*\? <Box ref=\{setChatTools\}/);
+  assert.match(tasks, /toolsAt=\{canvas \? chatTools : null\}/);
+  assert.match(workspace, /\{!dock && toolsAt && !full && createPortal\(tools, toolsAt\)\}/);
+  assert.match(workspace, /\{!dock && !\(toolsAt && !full\) && <Box sx=\{\{ minHeight: 39,/);
 });

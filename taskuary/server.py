@@ -1656,7 +1656,7 @@ CLOSED_CHAT = (f"This task is closed. Press {buttons.label('reopen')}, then {but
 def _refuse_closed_chat(task_id: int):
     """A CLOSED task's conversation is read-only. Typing into it started a live session on a done task: the pane said
     "assistant is waiting on you" over a task that read done, and the bar offered only Reopen (the owner, 2026-10-14: "we need
-    to have general agent closed until i reopen and then continue session"). Reopen, then Keep going, picks it up. The
+    to have general agent closed until i reopen and then continue session"). Reopen, then Continue, picks it up. The
     dock - the assistant that runs Taskuary - is never a task you close, so it is never refused."""
     from . import general
     t = store.get_task(task_id) or {}
@@ -3019,7 +3019,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
     if requested and requested not in task_kinds.AGENT:
         raise HTTPException(422, 'kind must be general or coding')
 
-    # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Keep going
+    # NO SECOND HAND-OFF WHILE AN AGENT RUNS (the owner, 2026-10-01: Send to agent is not offered then - Continue
     # instead). Another dispatch on a live session either started a second worker or typed into the first unasked; every
     # door - button, chip, chat word, operation - comes through here, so the refusal is said here.
     live = hub_term.session_for(tid)

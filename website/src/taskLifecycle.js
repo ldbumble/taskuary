@@ -173,6 +173,11 @@ export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agen
   if (["done", "dropped"].includes(task)) return reply === "sent" ? "reply" : record || (agent && agent !== AGENT.idle) ? "agent" : "task";
   // a sender wrote AFTER the agent's last session: the message is the news, the session's record is history (2026-10-12)
   if (news) return "task";
+  // A SENT REPLY STAYS ON ITS RECEIPT (the owner, 2026-10-19: "you hit send ... it goes back to the general agent?? The agent was
+  // already closed"): Send keeps the task open now (2026-10-18), and an open task with an agent's record fell to the agent stage below -
+  // the page jumped back to a finished agent's conversation. Close out holds what went out and the Mark done that is the move now;
+  // only an agent working again (or one queued to start, shown on the task) takes the page.
+  if (reply === "sent" && ![AGENT.working, AGENT.idle].includes(agent)) return "reply";
   if (agent && agent !== AGENT.idle) return "agent";
   return "task";
 };

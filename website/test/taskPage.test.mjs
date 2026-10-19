@@ -78,8 +78,9 @@ test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)
   const page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
   assert.match(page, /api\.get\("\/api\/advice", \{ params: \{ key: `task:\$\{id\}` \} \}\)/);
   assert.match(page, /data-tq-task-advice=""/);
-  assert.match(item, /\{phone && <ActionRow inline advised=\{advised\} \/>\}/);
-  assert.match(item, /adviceShown\(useItemAdvice\(card, phone\)/);
+  // ...with its line docked to it: the line and the button it lights are one unit at the view's foot (2026-10-19)
+  assert.match(item, /\{phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip=""><AdvisorNext advice=\{advised\} \/><AdviceNone advice=\{none\} \/><\/div>\s*<ActionRow inline advised=\{advised \|\| none\} \/><\/div>\}/);
+  assert.match(item, /adviceShown\(read, \{ key: card\.key, lane: card\.lane \}, busy\)/);
 });
 
 test("a chat reply that promises a file leads with replying by email, and sending the words alone says so (U17)", () => {

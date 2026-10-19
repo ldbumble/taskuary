@@ -25,7 +25,7 @@ import { runOperation } from "./taskOps.js";
 import { openReply } from "./replyDraft.js";
 import { DEMO } from "./demoApi.js";
 import DemoJourney from "./DemoJourney.jsx";
-import { advisedIn, press as pressRow, rowNow, useRowVerbs, useVerbs } from "./actionRow.js";
+import { advisedIn, onPressed, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { hint as btnHint, label as btn, liveVerb } from "./buttons.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
@@ -42,7 +42,7 @@ const AssistantMark = () => <TaskuaryMark size={24} />;
 import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
-import { adviceRead, CAP_LINE, tableOf } from "./tableState.js";
+import { adviceRead, tableOf } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -70,7 +70,7 @@ import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext }
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
-import ActionRow, { AdvisorNext } from "./ActionRow.jsx";
+import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -1244,6 +1244,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const key = adviceKeyFor(ev, currentRef.current || (cardRef.current ? { key: cardRef.current } : null));
     if (key) readAdvice(key, true);
   }), [readAdvice]);
+  // ...and after EVERY press on the item, once it settles: the revision covers what an act leaves (advisor.revision - a draft sent,
+  // an act refused), so a line judged before the Send is never read back over its "Sent" (2026-10-19)
+  const onTableRef = useRef(null);
+  useEffect(() => { onTableRef.current = onTable; }, [onTable]);
+  useEffect(() => onPressed(() => { if (onTableRef.current) readAdvice(onTableRef.current, true); }), [readAdvice]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -2287,7 +2292,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const shownAdvice = table.speaks ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
   const noAi = table.speaks && !busy && !shownAdvice && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
-  const capped = table.speaks && !busy && !shownAdvice && advice?.none === "cap" && advice.for === table.key;
+  // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden
+  const noneSaid = !table.speaks || busy || shownAdvice || noAi ? null
+    : advice?.none && advice.for === table.key ? advice : currentItem?.lane === "working" ? { none: "working", for: table.key } : null;
+  // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
+  // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
+  const hostedRow = useHosted();
   // NEVER LEFT HANGING (the owner, 2026-10-08: "assistant is leaving user hanging. We need Next button on bottom at least and say hit
   // next to continue"): a Next the server refused because the list moved under it said so in red and left nothing to press - every
   // card above folded, so no card had a row to register. With nothing on the table and the walk able to go on (or a press just
@@ -2510,16 +2520,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
               <button type="button" className="tq-chip" onClick={() => openAppLink(place("ai").href)}>Connect an AI</button>
             </div>
           ) : <>
-            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button */}
-            {capped && <div className="tq-next" role="status" data-tq-advice="cap"><div className="tq-next-txt">{CAP_LINE}</div></div>}
-            {table.speaks && !shownAdvice && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
+            {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
+                ONE STRIP, ONE HEIGHT from Thinking to its answer: it came and went under the row, which jumped (2026-10-19) */}
+            {table.speaks && !hostedRow && <div className="tq-strip" data-tq-strip={busy ? "busy" : ""}>
+            {table.speaks && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable && currentItem?.lane !== "working" && (
               <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
             {table.speaks && changed && changed.for === onTable && <div className="tq-next" role="status" data-tq-advice-changed="">
               <div className="tq-next-txt">{changed.reading ? "This changed - reading it again…" : shownAdvice ? "This changed - here's the updated suggestion."
                 : "This changed - nothing to suggest on it now."}</div></div>}
             <AdvisorNext advice={shownAdvice} onPropose={pressAdvice} />
+            {!changed && <AdviceNone advice={noneSaid} />}
+            </div>}
           </>}
-          <ActionRow advised={shownAdvice} />
+          <ActionRow advised={shownAdvice || noneSaid} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />

@@ -1,0 +1,60 @@
+// THE ADVISOR'S STRIP AFTER AN ACT (2026-10-19): after Send the line still said the sender was waiting, with Reply lit; the row
+// reshuffled when the advice landed; "Thinking about this one…" went to nothing. These pin the contract: every press re-reads the
+// advice, the advice only tints the row, and every reason for no line is a sentence that lights one move.
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { acted, clustersOf, onPressed, press, put, rowOf } from "../src/actionRow.js";
+import { ADVICE_NONE, adviceNone } from "../src/words.js";
+
+const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
+const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
+const layout = (r) => clustersOf(r).map((g) => [g.type, g.shown.map((x) => x.id), g.rest.map((x) => x.id)]);
+
+test("a press is heard once it settles, so the advice is read again for the item as the act left it", async () => {
+  const heard = [];
+  const off = onPressed((id) => heard.push(id));
+  let done;
+  put("t", [{ ...v("send", "decide"), run: () => new Promise((r) => { done = r; }) }]);
+  press("send");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(heard, [], "not before the act has finished");
+  done(); await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(heard, ["send"]);
+  acted("12:approve"); assert.deepEqual(heard, ["send", "12:approve"], "a card's own button says so the same way");
+  off(); put("t", null);
+  // ...and the page and a phone's row both listen, as does the draft's own Send under the card
+  assert.match(read("AssistantView.jsx"), /onPressed\(\(\) => \{ if \(onTableRef\.current\) readAdvice\(onTableRef\.current, true\); \}\)/);
+  assert.match(read("CanvasItem.jsx"), /onPressed\(\(\) => read\(\)\)/);
+  assert.equal((read("ReviewDecision.jsx").match(/finally \{ acted\(no\(/g) || []).length, 3, "decide, decideBoth and redraft");
+});
+
+test("the advice only tints: the same buttons in the same places with and without it, whatever it picks", () => {
+  const list = [v("reply", "decide", { label: "Reply" }), v("share", "decide", { label: "Send out results" }), v("attach", "more", { label: "Attach a file" }),
+    v("12:approve", "decide", { label: "Send", card: true, tone: "p" }), v("start-agent", "agent"), v("done", "more", { label: "Mark done" }),
+    v("close-note", "more"), v("nat", "more"), v("remind", "more", { label: "Remind me" }), v("next", "next")];
+  const plain = layout(rowOf({ ref: "", list }));
+  for (const pick of [{ verb: "approve", label: "Send" }, { verb: "reply", label: "Reply" }, { verb: "close", label: "Mark done" }, { verb: "next" }])
+    assert.deepEqual(layout(rowOf({ ref: "", list }, pick)), plain, pick.verb);
+  assert.equal(layout(rowOf({ ref: "", list })).find(([t]) => t === "reply")[1][0], "12:approve", "the card's own Send holds its slot from the first render");
+});
+
+test("no line is still an answer: every reason is a sentence and lights one move - Next, never nothing", () => {
+  for (const why of ["nothing", "quiet", "no_actions", "working", "off", "cap"]) {
+    assert.ok(ADVICE_NONE[why]?.line, why);
+    assert.equal(ADVICE_NONE[why].move, "next", why);
+  }
+  assert.equal(adviceNone("some-new-reason").line, ADVICE_NONE.nothing.line, "an unknown reason is said, not dropped");
+  const r = rowOf({ ref: "", list: [v("done", "more"), v("next", "next")] }, { verb: adviceNone("nothing").move });
+  assert.equal(r.next.tone, "p");
+  assert.equal(rowOf({ ref: "", list: [v("next", "next", { disabled: true })] }, { verb: "next" }).next.tone, "s", "a greyed Next is never lit");
+  const view = read("AssistantView.jsx");
+  assert.match(view, /<AdviceNone advice=\{noneSaid\} \/>/);
+  // ...in one strip that holds its height from Thinking to the answer, so the row under it never jumps
+  assert.match(view, /<div className="tq-strip" data-tq-strip=\{busy \? "busy" : ""\}>/);
+  // ...and the dead-end walk holds the page to all of it (STILL, STRIP, REREAD, LIT)
+  const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
+  for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
+  assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 40px;/);
+});

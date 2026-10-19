@@ -49,7 +49,7 @@ export function reviewDeliveryState(review) {
   return { state, active, frozen, canCheck: state === "unknown" && !active,
     body: frozen ? saved?.body ?? review?.FinalText ?? review?.DraftText ?? "" : null,
     envelope: frozen ? saved?.envelope || envelope || {} : null,
-    label: active ? state === "unknown" ? "Checking delivery…" : "Sending…" : "Check delivery",
+    label: active ? state === "unknown" ? "Checking delivery…" : "Sending…" : label("approve", "check"),
     line: active ? "Delivery is in progress. The attempted text, recipients and attachments are kept unchanged while the provider responds."
       : state === "unknown" ? "The provider has not confirmed this attempt. Check delivery to look for the original reply. A missing receipt will not send it again. The attempted text, recipients and attachments stay unchanged." : "" };
 }

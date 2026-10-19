@@ -3,7 +3,7 @@
   "verbs": {
     "reply":           {"label": "Reply", "hint": "Write back to whoever asked - you see the draft before anything is sent", "row": ["reply"]},
     "approve":         {"label": "Send", "hint": "Sends the reply - the task stays open until you Mark done", "row": ["approve"],
-                        "states": {"action": "Approve", "unknown": "Send anyway"}, "state_hints": {"action": "Runs only what the agent proposes - nothing happens before you press it, and the task stays open until you Mark done", "unknown": "Nobody can say whether the first send went - this sends it again without asking the provider first, so they may get it twice"}},
+                        "states": {"action": "Approve", "unknown": "Send anyway", "check": "Check delivery"}, "state_hints": {"action": "Runs only what the agent proposes - nothing happens before you press it, and the task stays open until you Mark done", "unknown": "Nobody can say whether the first send went - this sends it again without asking the provider first, so they may get it twice", "check": "Asks the provider whether the first send went - it never sends a second copy"}},
     "redraft":         {"label": "Redraft", "hint": "Has the AI write the draft again", "row": ["redraft"], "states": {"none": "Draft with AI"}},
     "close":           {"label": "Mark done", "hint": "Closes the task - it stops coming back", "row": ["done"]},
     "defer":           {"label": "Remind me", "hint": "Put the task away until a day - it waits under For later on your rail and is back in front of you that morning", "row": ["remind"]},

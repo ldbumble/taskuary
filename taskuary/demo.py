@@ -168,11 +168,16 @@ def _list_line(store) -> str:
 _VERBS = re.compile(r'^VERBS OFFERED: (.*)$', re.M)
 ADVICE = {'answer_agent': 'The agent is waiting on your answer.', 'approve': 'The draft is ready - read it, then send it.',
           'reply': 'Someone is waiting on an answer from you.', 'continue': 'The agent stopped partway - pick it up where it left off.'}
+# ...and like the real one it reads what was already done: a reply that went, with nothing written since, is closed, not answered
+# again - the scripted "Someone is waiting on an answer" stood over a close-out reading Sent (2026-10-19)
+SENT = {'close': 'Your reply went and nothing has come back since - mark it done.',
+        'defer': 'Your reply went - set a day to look again if nothing comes back.'}
 
 def _advice(text: str) -> str:
     offered = dict(re.findall(r'([a-z_]+) \(([^)]*)\)', _VERBS.search(text).group(1)))
-    verb = next((v for v in ADVICE if v in offered), None)
-    return json.dumps({'verb': verb, 'line': ADVICE[verb] if verb else '', 'evidence': []})
+    said = SENT if 'A REPLY WAS ALREADY SENT' in text and 'NOTHING HAS COME IN SINCE IT WENT' in text else ADVICE
+    verb = next((v for v in said if v in offered), None)
+    return json.dumps({'verb': verb, 'line': said[verb] if verb else '', 'evidence': []})
 
 
 def brain(seed: int = 0, store=None):

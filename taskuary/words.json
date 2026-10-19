@@ -26,6 +26,16 @@
     "board":             {"name": "the Board", "href": ""},
     "search":            {"name": "Search", "href": ""}
   },
+  "advice_none": {
+    "_": "WHEN THE ADVISOR HAS NO LINE, IT SAYS SO (2026-10-19): each reason advisor.status answers {none: why} with is one plain sentence and one move the row lights - `next` is the row's Next, `ai` the place that connects one. \"Thinking about this one...\" then nothing read as broken.",
+    "nothing":    {"line": "Nothing here needs a move from you.", "move": "next"},
+    "quiet":      {"line": "Nothing to decide on this one - it is here to read.", "move": "next"},
+    "no_actions": {"line": "There is nothing to do on this one from here.", "move": "next"},
+    "working":    {"line": "An agent is working on this - it says when it needs you.", "move": "next"},
+    "off":        {"line": "Suggestions are switched off in Settings.", "move": "next"},
+    "cap":        {"line": "No suggestion for a while - the Advisor has read as many items as it may this hour.", "move": "next"},
+    "no_ai":      {"line": "Connect an AI to get a suggestion on each item", "move": "ai"}
+  },
   "local": "on this computer",
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]

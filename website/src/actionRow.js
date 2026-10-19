@@ -22,7 +22,23 @@ export function put(owner, verbs, ref = "") {
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
-export const press = (id, e, anchor) => live.get(id)?.run?.(e, anchor);
+// EVERY PRESS IS AN ACT THE ADVISOR MUST SEE (2026-10-19): its line was read when the item opened and never again, so after Send it
+// still said the sender was waiting. Whoever shows advice hears each press once it settles (onPressed) and reads it again.
+// A card's own button that acts without the row (the draft's Send under it) says so the same way: acted(id).
+const pressed = new Set();
+export const onPressed = (f) => { pressed.add(f); return () => pressed.delete(f); };
+export const acted = (id) => pressed.forEach((f) => f(id));
+export const press = (id, e, anchor) => {
+  const out = live.get(id)?.run?.(e, anchor);
+  Promise.resolve(out).catch(() => {}).then(() => acted(id));
+  return out;
+};
+// THE CARD'S OWN MOVE, LIT WHERE IT STANDS: the Advisor's pick of a verb the card draws itself (a draft's Send) fills that button on
+// the card - rowOf's `lit` - instead of a second Send pushed onto the bar (the row reshuffled when the advice landed, 2026-10-19)
+let lit = "";
+const litSubs = new Set();
+export const lightOnCard = (id) => { if ((id || "") === lit) return; lit = id || ""; litSubs.forEach((f) => f()); };
+export const useLit = () => useSyncExternalStore((f) => { litSubs.add(f); return () => litSubs.delete(f); }, () => lit);
 export const rowNow = () => snap;          // what the row carries this moment - an Advisor press looks for its real button here
 const subscribe = (f) => { subs.add(f); return () => subs.delete(f); };
 export const useRowVerbs = () => useSyncExternalStore(subscribe, () => snap);
@@ -95,25 +111,27 @@ export function rowOf({ list, ref }, pick = null) {
   // the card's own idea of its move (its filled tone) only says which greyed button the row explains - it never fills one
   const head = by("decide").find((v) => v.tone === "p") || null;
   const plain = (xs) => xs.map((v) => (v.tone === "p" ? { ...v, tone: "s" } : v));
-  let decide = plain(by("decide")), more = plain(by("more")), agent = plain(by("agent"));
-  // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice"):
-  // the verb it advises is the one filled - off More and onto the bar if it waited there. A card's own verb advised (a draft's Send)
-  // comes onto the bar too, filled, running the card's own handler: the press sends what is in the box, exactly as the button under
-  // the draft does - the second Send that dropped the edit was the proposal road, which an advised press no longer takes (2026-10-18)
+  // THE CARD'S MAIN MOVE HAS ITS SLOT FROM THE FIRST RENDER: the draft's own Send (the card verb it fills) leads the bar, outlined,
+  // whether or not the Advisor has answered - it came onto the bar only when advised, pushed the row along and "Attach a file" into
+  // ▾ seconds after the item opened, under the owner's hand (2026-10-19). Its press runs the card's own handler, the box as edited.
+  const main = list.find((v) => v.card && v.group === "decide" && v.tone === "p") || null;
+  let decide = plain([...(main ? [main] : []), ...by("decide")]), more = plain(by("more")), agent = plain(by("agent"));
+  // THE ADVISOR PICKS THE FILLED BUTTON (the owner, 2026-10-13: "the advisor should pick which button is dark based off its advice")
+  // - AND ONLY TINTS IT, IN PLACE: the layout is the same with and without advice. A verb in More is filled where it stands
+  // (clustersOf keeps the filled one in view); a card's other verb advised (its Redraft) is lit on the card (`lit`, useLit); Next is
+  // filled when the Advisor's answer is that nothing here needs a move (words.json advice_none)
   const advised = advisedIn(list, pick), primary = advised ? { ...advised, tone: "p" } : null;
-  if (advised?.card) decide = [primary, ...decide];
-  else if (advised) {
+  if (advised && (!advised.card || advised === main)) {
     const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));
-    decide = fill(decide); agent = fill(agent);
-    if (advised.group === "more") { more = more.filter((v) => v.id !== advised.id); agent = [primary, ...agent]; }
+    decide = fill(decide); agent = fill(agent); more = fill(more);
   }
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
   // single task not inside the more button"). With no decision waiting it leads the bar; dark only when it is the advice.
   const done = more.find((v) => v.id === "done");
   if (done) {
     more = more.filter((v) => v !== done);
-    if (done.promote && !head && !agent.some((v) => v.lead)) decide = [{ ...done, tone: "s" }, ...decide];
-    else agent = [...agent, { ...done, tone: "s" }];
+    if (done.promote && !head && !agent.some((v) => v.lead)) decide = [done, ...decide];
+    else agent = [...agent, done];
   }
   // a decision that carries its own close (a reply draft's Mark done, 2026-10-01) is the task's Mark done - never twice in one row
   if (decide.some((v) => v.closes)) { more = more.filter((v) => v.id !== "done"); agent = agent.filter((v) => v.id !== "done"); }
@@ -124,7 +142,7 @@ export function rowOf({ list, ref }, pick = null) {
     more = more.filter((v) => v !== note);
     // ...ANY Mark done: a reply draft's own registers as `<rid>:done`, and the task's then steps aside (above) - matching only
     // "done" left Close with a note at the top of More while Mark done stood on the bar (the row inventory, 2026-10-05)
-    const after = (xs) => { const i = xs.findIndex(isDone); return i < 0 ? null : [...xs.slice(0, i + 1), { ...note, tone: "s" }, ...xs.slice(i + 1)]; };
+    const after = (xs) => { const i = xs.findIndex(isDone); return i < 0 ? null : [...xs.slice(0, i + 1), note, ...xs.slice(i + 1)]; };
     const d = after(decide), a = !d && after(agent);
     if (d) decide = d; else if (a) agent = a; else more = after(more) || [note, ...more];
   }
@@ -136,7 +154,7 @@ export function rowOf({ list, ref }, pick = null) {
   const next = by("next")[0] || null;
   if (decide.length > ROOM) { more = [...decide.slice(ROOM), ...more]; decide = decide.slice(0, ROOM); }   // the row stays a short line of chips; the rest wait behind More
   // a greyed decision says why it is greyed - the advised one never is (advisedIn skips greyed verbs), so the card's own move speaks
-  return { ref, decide, agent, more, primary, next: next && { ...next, tone: "s" },
+  return { ref, decide, agent, more, primary, lit: advised?.card && advised !== main ? advised.id : "", next: next && { ...next, tone: pick?.verb === "next" && !next.disabled ? "p" : "s" },
     why: head?.disabled && head.why ? `${head.label} is off - ${head.why}` : "" };
 }
 

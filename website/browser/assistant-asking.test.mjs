@@ -3,14 +3,13 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* THE HAND IT RAISED, WHERE THE OWNER IS STANDING. An agent that cannot go on says so with a marker
-   and Taskuary records the question and the answers it offered (selfclose.ASK_LINE, PW-225). Both
-   were recorded and neither was ever shown: the workspace got the prose ("tell me when you're
-   signed in"), the chip said "needs you", and the two choices the agent named were not clickable
-   anywhere in the app (2026-09-15, driving a real sign-in through the browser pane).
+/* THE HAND IT RAISED IS THE AGENT'S OWN WORDS. The question and its choices used to be repeated in a card with answer
+   buttons under the answer (2026-09-15); the owner removed it (2026-10-19: "inline we have the agent to talk to, no need
+   to intermediate"). Only the WhatsApp doorway relays a question with its choices. Here the answer reads as the agent
+   wrote it, nothing is drawn over or under it, and the owner's reply goes in the composer.
 
-   The fixture is the raised hand: /assistant answers with `asking`, exactly as the server now does. */
-test("the agent's question and its answers are in the pane, and a choice is the next thing said", { timeout: 180000 }, async (t) => {
+   The fixture is the raised hand: /assistant answers with `asking`, exactly as the server does. */
+test("the agent's question is its own answer - no card with answer buttons in the pane", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
 
@@ -27,40 +26,24 @@ test("the agent's question and its answers are in the pane, and a choice is the 
   });
   assert.ok(made.taskId, `task not created: ${JSON.stringify(made)}`);
 
-  const sent = [];
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (req) => {
-    const path = new URL(req.url()).pathname;
-    if (path === `/api/tasks/${made.taskId}/assistant`) {
+    if (new URL(req.url()).pathname === `/api/tasks/${made.taskId}/assistant`) {
       return void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({
-        messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "The login page is open with the username field focused." }] }],
+        messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "The login page is open. Have you signed in successfully?" }] }],
         asking: { request_id: "r1", kind: "input_needed", text: "Have you signed in successfully?", choices: ["Signed in", "Login failed"] },
         session: null, starting: false, providers: [{ id: 1, label: "Test CLI", model: "" }] }) });
-    }
-    if (path.endsWith("/assistant/stream")) {
-      sent.push(JSON.parse(req.postData() || "{}"));
-      return void req.respond({ status: 200, contentType: "application/x-ndjson",
-        body: `${JSON.stringify({ type: "done", reply: "Reading the secure area now." })}\n` });
     }
     page.fixtureRequestGuard(req);
   });
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForSelector(".tq-aui-asking", { timeout: 20000 });
-
-  const card = await page.$eval(".tq-aui-asking", (el) => el.innerText);
-  assert.match(card, /asked you/, "the card must say who is waiting");
-  assert.match(card, /Have you signed in successfully\?/, "the question itself is missing");
-
-  const labels = await page.$$eval(".tq-aui-asking-choices button", (bs) => bs.map((b) => b.textContent.trim()));
-  assert.deepEqual(labels, ["Signed in", "Login failed"], "the answers it offered must be clickable");
-
-  await page.evaluate(() => [...document.querySelectorAll(".tq-aui-asking-choices button")]
-    .find((b) => b.textContent.trim() === "Signed in").click());
-  await page.waitForFunction(() => !document.querySelector(".tq-aui-asking"), { timeout: 10000 });
-
-  assert.equal(sent.length, 1, `the choice was not sent: ${JSON.stringify(sent)}`);
-  assert.equal(sent[0].text, "Signed in", "the choice goes in as the owner's own next message");
+  await page.waitForFunction(() => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes("Have you signed in")),
+    { timeout: 20000 });
+  await new Promise((r) => setTimeout(r, 800));
+  const shown = await page.evaluate(() => ({ card: !!document.querySelector(".tq-aui-asking"),
+    choices: [...document.querySelectorAll("button")].filter((b) => ["Signed in", "Login failed"].includes(b.textContent.trim())).length }));
+  assert.deepEqual(shown, { card: false, choices: 0 }, "the question is not repeated as a card with answer buttons");
   assert.deepEqual(errors, []);
 });
 
@@ -100,7 +83,7 @@ test("a long answer opens at its first line, and nothing offers to schedule a ru
   });
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForSelector(".tq-aui-asking", { timeout: 20000 });
+  await page.waitForSelector(".tq-aui-agent", { timeout: 20000 });
   await new Promise((r) => setTimeout(r, 1200));
 
   const seen = await page.evaluate(() => {

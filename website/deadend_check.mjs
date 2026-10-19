@@ -31,6 +31,7 @@
 //   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
 //   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
+//   AGAIN     a lit press refused or failed, and the line read again still lights it (2026-10-19: Send lit over "Not sent" and the demo's no)
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards]
 //
@@ -182,6 +183,7 @@ async function pageOn(srv, phase) {
   page.on("response", async (r) => {
     const u = new URL(r.url());
     if (!u.pathname.startsWith("/api/") || r.status() < 400 || u.pathname === "/api/test/fault") return;
+    if (r.request().method() !== "GET") page.failedAt = Date.now();     // an act refused or failed, the demo's no included (AGAIN)
     const body = await r.json().catch(() => ({}));
     if (r.status() === 403 && body?.demo) return;                    // the demo saying no, as the demo: an ordinary line
     if ([...page.expect].some((x) => u.pathname.includes(x))) return;
@@ -304,6 +306,16 @@ async function settle(page, at, ms = 5000) {
 // REREAD: after a press on the row the advice is read again for the item as the act left it - a GET /api/advice within 2.5 s
 const reread = (page, t0, at) => { if (!page.adviceReads.some((t) => t > t0 && t - t0 < 2500)) note("REREAD", at, "a press on the row and no fresh read of the Advisor's line after it"); };
 
+// AGAIN: a press of the lit button that was refused or failed - the advice is read again, and its new line must light the way past it,
+// never the press that just failed. Up to 8 s for the line to change; whatever it lights then is what the owner is sent to.
+const again = async (page, before, t0, words, at) => {
+  if (!before?.lit || !words.includes(before.lit.word)) return;
+  let s = null;
+  for (let t = 0; t < 8000; t += 500) { await wait(500); s = await look(page); if (s.advice && s.adv !== before.adv) break; }
+  if ((page.failedAt > t0 || s?.errs.length) && s?.advice && s.lit?.word === before.lit.word)
+    note("AGAIN", at, `"${before.lit.word}" was pressed and refused, and the Advisor's line still lights it: "${s.adv.slice(0, 80)}"`);
+};
+
 // ── WALK: Next through the day, doing what each card's first button invites, so the paths behind it run too ─────────────────
 async function walk() {
   const srv = await serve(0), page = await pageOn(srv, "walk");
@@ -314,7 +326,9 @@ async function walk() {
     judge(s, at);
     if (s.verbs.some((v) => v.word.startsWith("Open TQ"))) break;
     const before = s, has = (verb) => s.verbs.some((v) => verbOfId(v.id) === verb), t0 = Date.now();
-    if (!did.has("approve") && has("approve") && (await pressVerb(page, "approve"))) { did.add("approve"); await wait(2600); reread(page, t0, at); }
+    if (!did.has("approve") && has("approve") && (await pressVerb(page, "approve"))) {
+      did.add("approve"); await wait(2600); reread(page, t0, at); await again(page, before, t0, sendWords, at);
+    }
     else if (!did.has("close") && has("close")) {
       did.add("close"); await pressVerb(page, "close"); await wait(1200);
       await clickText(page, label("close"), '[role="dialog"]');
@@ -440,12 +454,14 @@ async function faults() {
   for (const [f, want] of plan) {
     await fault(f); page.step = `faults ${f}`; await fresh();
     // a draft that can send (a chat's draft is answered where it came from, and shows no Send) and has not failed yet
-    let sent = false;
+    let sent = false, before = null, t0 = 0;
     for (const r of (await look(page)).rail.filter((x) => /🏁/.test(x.text))) {
       if (!(await openItem(page, r.key))) continue;
+      before = await look(page); t0 = Date.now();
       if (await send()) { sent = true; break; }
     }
     if (!sent) { note("WAYOUT", page.step, "no draft in the seeded world shows a Send to press"); await fault(""); continue; }
+    await again(page, before, t0, sendWords, page.step);
     await wait(6000);
     await wayOut(page.step, want, { press: !["unknown", "reject"].includes(f) });
     if (f === "unknown") {

@@ -357,7 +357,8 @@ def failure(store, item: dict) -> dict | None:
     try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
     except Exception: ops = []
     last = ops[-1] if ops else {}
-    if last.get('Status') != 'error': return None
+    # ...and an act the demo refused (demo.refused): it went nowhere, so the Send just refused is not advised again (2026-10-19)
+    if last.get('Status') not in ('error', 'refused'): return None
     try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
     except (TypeError, ValueError): out = {}
     out = out if isinstance(out, dict) else {}
@@ -418,7 +419,9 @@ def offered(store, item: dict) -> list:
     if fix and f and f.get('cause') != 'step' and f.get('source') != 'workflow': f = None      # a fix is the way on; no task besides it
     # ...except a workflow run, which already IS a task: a second one to fix it would be the same work twice - it carries Report
     # this bug instead (agreed with the workflow runner, taskhub-ca, 2026-10-18)
-    if f and (f.get('cause') == 'step' or f.get('source') == 'workflow'): lead.append(buttons.chip('report_bug'))
+    # ...and nothing for what the demo refused: no task or bug report makes the demo send
+    if f and f.get('cause') == 'demo': pass
+    elif f and (f.get('cause') == 'step' or f.get('source') == 'workflow'): lead.append(buttons.chip('report_bug'))
     elif f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
     return lead + verbs
 

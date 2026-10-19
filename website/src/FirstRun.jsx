@@ -19,7 +19,7 @@ import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
-import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
+import { doneOf, frontierOf, navMoves, nextOf, openAt, pickOf, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
@@ -75,6 +75,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
   const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
+  // the step's pick (pickOf): its title as state, so the row has it in the pass the shelf is drawn; its press, the card's own
+  const [pickTitle, setPickTitle] = useState(""), pickRef = useRef(null);
   // ONE STEP ON THE CANVAS (setupSteps.ORDER: ai, mail, about, other), Back and Next in the row, and A STEP THAT COMPLETES MOVES ON
   // (the owner, 2026-10-15: "always have next/back button if possible and move to next step once one is complete"). Going back to
   // change the AI used to leave no way forward but the rail.
@@ -161,13 +163,16 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     ...(view !== "ai" && view !== "done" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
       title: "Back to Your AI, to pick one that sorts your mail", run: () => go("ai") }] : []),
   ];
+  // ...and THE STEP'S PICK, lit, when nothing else is (setupSteps.pickOf - the shelf's first card, by its own title; drawn below)
+  const pickRow = pickTitle && !fixRow.length ? [{ id: "setup:pick", group: "decide", tone: "p",
+    label: `Connect ${pickTitle}`, title: "Opens its setup here - the same as pressing its card", run: () => pickRef.current?.run?.() }] : [];
   // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
   const toneOf = (m) => (fixRow.length && m.id !== "back" ? "s" : m.id === "finish" && view !== "other" ? "s" : VERB[m.id].tone);
   // ABOUT YOUR WORK MOVES ITS OWN QUESTIONS (FirstRunAbout's Back and Next, one question a screen): only the way back to the day stays
   // ...and SETUP COMPLETE has its one big button on the canvas (SetupDone), nothing in the row
   const navShown = view === "done" ? [] : view === "about" ? nav.filter((m) => m.id === "finish") : nav;
   useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id], tone: toneOf(m) })), ...fixRow], navShown.length + fixRow.length > 0);
+    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...pickRow], navShown.length + fixRow.length + pickRow.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
@@ -336,6 +341,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const ai = inUse ? [...all.filter(using), ...lead.filter((c) => !using(c))] : lead;
   const coding = cliCards.filter((c) => !(inUse && using(c)));
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
+  pickRef.current = pickOf(st, view || frontierOf(st), (view || frontierOf(st)) === "mail" ? mail : ai, !!busy || !!signing || !!open || !!fix);
+  if ((pickRef.current?.title || "") !== pickTitle) setPickTitle(pickRef.current?.title || "");
   const conn = open && conns.find((c) => c.ConnectorId === open.id);
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
@@ -359,7 +366,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
       // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
       : st.mail_error ? `${st.mail_error} Fix it in the card and press Connect again - or pick a different email.`
-      : "What email do you have? Pick it - Microsoft 365 is one sign-in.",
+      : `What email do you have? Pick it - ${mail[0]?.title || "Outlook mail"} is one sign-in.`,
     about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
     done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."

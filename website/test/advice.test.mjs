@@ -34,7 +34,7 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} \/>/);
   assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);
-  assert.match(src, /advised=\{shownAdvice \|\| noneSaid\}/);
+  assert.match(src, /advised=\{shownAdvice \|\| noneSaid( \|\| setupLit)?\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);
   assert.match(src, /if \(n !== adviceAsk\.current\) return;[\s\S]{0,400}?setAdvice\(got\);/);

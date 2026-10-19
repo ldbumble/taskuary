@@ -46,7 +46,7 @@ test("a greyed verb is never the advised one", () => {
 
 test("the next step sits over the row and the box is plain: no ghost text, no pill", () => {
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\}/);
-  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice \|\| noneSaid\}/);
+  assert.match(src, /<ActionRow [^>]*advised=\{shownAdvice \|\| noneSaid( \|\| setupLit)?\}/);
   assert.doesNotMatch(src, /ghostText|tq-pill|tq-advised/);
   assert.doesNotMatch(css, /\.tq-pill|tq-advised/);
   assert.match(row, /if \(!advice\?\.verb \|\| !advice\.line\) return null;/);                // nothing to say draws nothing
@@ -100,4 +100,18 @@ test("advised Send fills only a button that sends, and the card's other words fo
   assert.equal(advisedIn(list, { verb: "approve", label: "Send" }), null, "Refresh the draft is not Send");
   assert.equal(advisedIn([v("approve", "decide", { label: "Send" })], { verb: "approve", label: "Send" })?.label, "Send");
   assert.equal(advisedIn(list, { verb: "defer", label: "Remind me later" })?.label, "Remind me", "defer is the row's Remind me");
+});
+
+// THE LIT BUTTON IS THE ONE ON THE BAR (2026-10-19): a draft registers its own Mark done (`<rid>:done`, a card verb) beside the task's;
+// found first, it was lit on the card a screen down while the bar's Mark done stood dark under "mark it done to move on"
+test("an act the bar and the card both carry is lit on the bar", () => {
+  const list = [v("7:approve", "decide", { card: true, tone: "p", label: "Send" }), v("7:done", "decide", { card: true, closes: true, label: "Mark done" }),
+    v("done", "more", { label: "Mark done" }), v("next", "next")];
+  assert.equal(advisedIn(list, { verb: "close", label: "Mark done" })?.id, "done");
+  const r = rowOf({ ref: "", list }, { verb: "close", label: "Mark done" });
+  assert.deepEqual(filled(r), ["done"]); assert.equal(r.lit, "");
+  assert.equal(advisedIn([v("7:redraft", "decide", { card: true, label: "Redraft" })], { verb: "redraft", label: "Redraft" })?.id, "7:redraft", "no bar button: the card's");
+  // ...and a chat draft's main move IS its Mark done (copy and close): that one, in the bar's first slot, not the task's it stands for
+  const chat = [v("7:approve", "decide", { card: true, tone: "p", closes: true, label: "Mark done", verb: "close" }), v("done", "more", { label: "Mark done" })];
+  assert.equal(advisedIn(chat, { verb: "close", label: "Mark done" })?.id, "7:approve");
 });

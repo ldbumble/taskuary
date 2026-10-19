@@ -150,7 +150,9 @@ def state(store) -> dict:
     empty = step == 'reading' and not sorting and _read_once(store)
     nxt = {'ai': fix['why'] if fix else ask,
            'email': f"{mail_err} Fix it in the card and press Connect again - or pick a different email." if mail_err
-                    else f"{name or 'Your AI'} is ready. What email do you have? Pick it - Microsoft 365 is one sign-in.",
+                    # the card by the title it wears on the shelf: "Microsoft 365" named a card that read "Outlook mail" (2026-10-19)
+                    else f"{name or 'Your AI'} is ready. What email do you have? Pick it - "
+                         f"{(store.get_connector_by_type('outlook') or {}).get('Name') or 'Outlook mail'} is one sign-in.",
            'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI picks one that does." if ai_error
                        else "Connected - nothing new to sort yet. Any other connection you'd like to set up?" if empty
                        else f"Sorting {plural(sorting, 'email')} now. Any other connection you'd like to set up while it reads?"

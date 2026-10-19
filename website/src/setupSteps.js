@@ -47,3 +47,12 @@ export const navMoves = (st, view, reopened = false) => {
   }
   return out;
 };
+// THE STEP'S PICK IS A LIT MOVE (2026-10-19): on Your AI and Your email with nothing picked, Back was plain, Next was off and the line
+// named a card the shelf did not show ("Microsoft 365" over "Outlook mail") - nothing on the row said what to press. The shelf's first
+// card is the pick most people have (it leads the shelf for that reason); it is offered on the row by its own title, and the line
+// names it the same way. null once the step is done, a card is open, or a pick is under way - the card's own setup is the move then.
+export const pickOf = (st, view, cards, busy = false) => {
+  if (busy || !["ai", "mail"].includes(view) || doneOf(st, view)) return null;
+  const c = (cards || []).find((x) => x.go);
+  return c ? { title: c.title, run: c.go } : null;
+};

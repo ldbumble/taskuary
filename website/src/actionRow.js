@@ -98,7 +98,14 @@ const sameAct = (v, pick) => {
   if (verb === "approve" && ![label("approve"), label("approve", "action")].some((w) => l === w.toLowerCase()) && !l.startsWith("send")) return false;
   return id === verb || id.endsWith(`:${verb}`) || verbOfRow(id) === verb || (!!want && l === want);
 };
-export const advisedIn = (list, pick) => (pick?.verb ? list.find((v) => !v.disabled && v.group !== "next" && sameAct(v, pick)) || null : null);
+// ...the one on the bar before the card's own of the same act - the card's main move (it holds the bar's first slot, rowOf), then the
+// row's own, then one only the card draws: the draft's Mark done (`<rid>:done`) was found first and lit on the card, a screen down,
+// while the task's Mark done stood dark on the bar under a line saying "mark it done" (2026-10-19)
+export const advisedIn = (list, pick) => {
+  if (pick?.id) return list.find((v) => v.id === pick.id && !v.disabled) || null;     // a move named by its id (setup's own)
+  const ok = (v) => !v.disabled && v.group !== "next" && sameAct(v, pick), main = (v) => v.card && v.group === "decide" && v.tone === "p";
+  return pick?.verb ? list.find((v) => ok(v) && main(v)) || list.find((v) => ok(v) && !v.card) || list.find(ok) || null : null;
+};
 // the row's button for the advised act, greyed or not - a greyed one hides the line; none at all gives the line its own button
 export const advisedAny = (list, pick) => (pick?.verb ? list.find((v) => v.group !== "next" && sameAct(v, pick)) || null : null);
 

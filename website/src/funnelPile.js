@@ -401,9 +401,10 @@ export const CAPPED = ["reports", "ideas", "fyi"];
 export const FLOOR = 2;
 // For later is sorted by when each comes back, soonest first (no time known sorts last); every other band keeps the server's order
 const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
-export const bandsOf = (items) => LEVEL_ORDER
+// `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile)
+export const bandsOf = (items, pin = null) => LEVEL_ORDER
   .map((level) => {
-    const rows = (items || []).filter((i) => levelOf(i) === level);
+    const rows = (items || []).filter((i) => (pin?.level && i.key === pin.key ? pin.level : levelOf(i)) === level);
     return { level, items: level === "later" ? [...rows].sort(soonest) : rows };
   })
   .filter((b) => b.items.length);

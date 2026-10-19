@@ -19,10 +19,13 @@ export const appLink = (href) => {
 
 // the page a reply names, as written: [Open the Sage Intacct connection](#connector=intacct) - else the ONE task it points at
 // ([TQ-0123](#task=123)); a reply that mentions several tasks in passing opens none of them
+// ...and the same for pages (2026-10-19 UI walk): the model is asked for ONE link, and a reply with two opened the first. Setup is
+// never opened from a reply: it is a mode that replaces the whole page, so "open my email settings" answered with a #setup link
+// swapped the chat - the answer and the composer with it - for the setup screen. Its link stays in the words, to be pressed.
 export const firstAppLink = (text) => {
-  const links = [...String(text || "").matchAll(/\]\((#[^)\s]+)\)/g)].map((m) => m[1]);
-  const page = links.map(appLink).find(Boolean);
-  if (page) return page;
+  const links = [...new Set([...String(text || "").matchAll(/\]\((#[^)\s]+)\)/g)].map((m) => m[1]))];
+  const pages = links.map(appLink).filter(Boolean);
+  if (pages.length) return pages.length === 1 && pages[0] !== SETUP ? pages[0] : null;
   const tasks = [...new Set(links.filter((h) => /^#task=\d+$/.test(h)))];
   return tasks.length === 1 ? tasks[0] : null;
 };

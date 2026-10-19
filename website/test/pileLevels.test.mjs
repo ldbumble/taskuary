@@ -67,7 +67,18 @@ test("the menu offers only the runs the pile holds, in the order the rail draws 
 
 test("the card on the table keeps its band - it is passed only once Next moves you on", () => {
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /bandsOf\(drawn\.map\(\(i\) => \(i\.surfaced && atTable\(i\) \? \{ \.\.\.i, surfaced: false \} : i\)\)\)/);
+  assert.match(view, /bandsOf\(drawn\.map\(\(i\) => \(i\.surfaced && atTable\(i\) \? \{ \.\.\.i, surfaced: false \} : i\)\), pin\.current\)/);
+});
+
+// 2026-10-19 UI walk: a For later row clicked was taken up by the server and jumped to On you under the pointer
+test("the row on the table stays in the band it was opened from", async () => {
+  const { bandsOf } = await import("../src/funnelPile.js");
+  const rows = [{ key: "a", lane: "asked", surfaced: true }, { key: "b", lane: "asked" }];
+  const where = (pin) => Object.fromEntries(bandsOf(rows, pin).flatMap((b) => b.items.map((i) => [i.key, b.level])));
+  assert.equal(where({ key: "a", level: "later" }).a, "later");
+  assert.equal(where({ key: "a", level: "later" }).b, levelOf(rows[1]), "only the pinned row");
+  assert.equal(where({ key: "a", level: null }).a, levelOf(rows[0]), "no level known: the row's own");
+  assert.equal(where(null).a, levelOf(rows[0]));
 });
 
 // the owner, 2026-09-28: "the work rail still read agents working for a split second into your task, then goes back"

@@ -818,7 +818,7 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
-  const go = (tab, hash) => { if (hash) window.location.hash = hash; onNavigate?.(tab); };
+  const go = (tab, hash) => { if (hash) openAppLink(hash); onNavigate?.(tab); };
   // THE FINDING, THEN WHOSE MOVE, THEN ANY SUGGESTION, apart (the owner, 2026-10-10): the chip is triage's verdict, the rows are
   // the Advisor's own parts, and the evidence links to the mail it came from instead of sitting in a raw box
   const mid = a.mid || card.mid, why = a.why || card.why;
@@ -909,7 +909,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     // THE FIX ON THE CARD, not a trip to Connections (the row-bot comparison, 2026-10-07): most of these are a server that was down
     // for a while, and Check again is the whole repair. A Microsoft sign-out is not - that one needs the sign-in, so it leads.
     const cid = String(card.key || "").split(":")[1], signin = /signed you out/i.test(card.title || "");
-    const openIt = () => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); };
+    const openIt = () => { openAppLink(`connector=${card.channel}`); onNavigate?.("Connections"); };
     const at = () => fmtTime(new Date(), [], { hour: "numeric", minute: "2-digit" });
     // THE ERROR IS SAID ONCE (the owner, 2026-10-15): a failed check said it again under the card, word for word. A check that
     // gets the same answer says when it looked; a different answer takes the error's place
@@ -1258,7 +1258,7 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation disabled={!text.trim()} onClick={() => { onHandOff?.(text); setText(""); }} sx={primary}>Open walkthrough</Button>
         <span className="sp" />
-        <Button size="small" onClick={() => { window.location.hash = "report=new"; onNavigate?.("Reports"); }} sx={faint}>Reports tab</Button>
+        <Button size="small" onClick={() => { openAppLink("report=new"); onNavigate?.("Reports"); }} sx={faint}>Reports tab</Button>
         <Button size="small" onClick={() => onNavigate?.("Connections")} sx={faint}>Connections tab</Button>
       </div>
     </CardShell>
@@ -1325,7 +1325,7 @@ export function WalkCard({ card, at, total, onNavigate, onNext, onBack, onRestar
   }, [card?.key]);
   const go = (goto) => {
     if (!goto) return;
-    if (goto.hash) window.location.hash = goto.hash;
+    if (goto.hash) openAppLink(goto.hash);
     onNavigate?.(goto.tab);
   };
   const last = at >= total - 1, first = at <= 0;

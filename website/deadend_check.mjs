@@ -11,6 +11,7 @@
 //   sweep     the demo, refusals ON: every button every row shows, in its row and its More menus, pressed once
 //   faults    a seeded world with a mocked mailbox: each failure failures.classify knows, forced, then its way out pressed
 //   cards     a proposal card cancelled, then pressed; a task folded by its X, then opened again from its line and the rail
+//   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
 //
 // The rules, checked at every step:
 //   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
@@ -35,8 +36,12 @@
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
 //   LIT       the Advisor's lit button is off the screen or covered, a screen away from the line that names it
 //   AGAIN     a lit press refused or failed, and the line read again still lights it (2026-10-19: Send lit over "Not sent" and the demo's no)
+//   PLACE     a link's card or setting is not on the screen - followed on a fresh page, and again with its page already open (the
+//             2026-10-19 UI walk: #connector= did nothing over an open Connections, a search hit opened its group at the top)
+//   BACK      the browser's Back after two opens is not the first, or leaves the app (it left it: no step was ever written)
+//   ADDRESS   the address names a task the table has moved past - a reload would open it again
 //
-//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards]
+//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
@@ -54,7 +59,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
 // on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
-const only = new Set(String(arg("--only", "walk,sweep,faults,cards")).split(","));
+const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -615,8 +620,86 @@ async function cards() {
   await page.close(); srv.stop();
 }
 
+// ── LINKS: one router (the 2026-10-19 UI walk, G2) - a link lands on the thing it names wherever the owner is, every place the canvas
+// shows is an address Back can return to, and the address follows the walk ─────────────────────────────────────────────────────────
+async function links() {
+  const srv = await serve(0), page = await pageOn(srv, "links");
+  const open = (h) => page.evaluate((h) => { window.location.hash = h; }, h);
+  // the open card of a page, and whether it is on the screen, with its words
+  const one = () => page.evaluate(() => {
+    const e = [...document.querySelectorAll("[data-tq-browse-one]")].find((x) => x.getBoundingClientRect().height > 0);
+    const r = e?.getBoundingClientRect();
+    return e ? { text: e.innerText.replace(/\s+/g, " ").slice(0, 400), inView: r.top < innerHeight - 40 && r.bottom > 40 } : null;
+  });
+  const knobAt = (k) => page.evaluate((k) => {
+    const e = document.querySelector(`[data-tq-knob="${k}"]`), r = e?.getBoundingClientRect();
+    return e ? { inView: r.top >= 0 && r.bottom <= innerHeight } : null;
+  }, k);
+  // two connections the catalogue draws as cards
+  const conns = ((await srv.api("GET", "/api/connectors")).data || []).filter((c) => ["gmail", "outlook", "imap", "github", "slack", "teams", "jira", "linear"].includes(c.Type));
+  if (conns.length < 2) note("PLACE", page.step, `the demo has ${conns.length} connection cards to link to - the link paths were not walked`);
+  else {
+    const [a, b] = conns;
+    page.step = "links fresh";
+    await page.goto(`${srv.base}/#connector=${a.ConnectorId}`, { waitUntil: "load" }); await wait(7000);
+    let o = await one();
+    if (!o?.inView || !o.text.includes(a.Name)) note("PLACE", page.step, `#connector=${a.ConnectorId} opened ${o ? `"${o.text.slice(0, 60)}"${o.inView ? "" : " off the screen"}` : "no card"}, not ${a.Name}`);
+    page.step = "links over Connections";
+    await open(`#connector=${b.ConnectorId}`); await wait(3500);
+    o = await one();
+    if (!o?.inView || !o.text.includes(b.Name)) note("PLACE", page.step, `with Connections open, #connector=${b.ConnectorId} left ${o ? `"${o.text.slice(0, 60)}"` : "no card"}, not ${b.Name}`);
+    walked.push("links: a connector from a fresh page and over its open page");
+    page.step = "links back";
+    await page.goBack(); await wait(3500);
+    o = await one();
+    const url = await page.evaluate(() => location.href);
+    if (!url.startsWith(srv.base)) note("BACK", page.step, `Back left the app for ${url}`);
+    else if (!o?.text.includes(a.Name)) note("BACK", page.step, `Back after two opens shows ${o ? `"${o.text.slice(0, 60)}"` : "no card"}, not the first (${a.Name}) - ${url}`);
+    walked.push("links: Back after two opens");
+  }
+  // a setting by its key: the group opened over the owner's page, the knob two screens down in view - then the same from a fresh page
+  page.step = "links knob";
+  await open("#settings=config&group=Assistant"); await wait(4000);
+  const knobs = await page.evaluate(() => [...document.querySelectorAll("[data-tq-knob]")].map((e) => e.getAttribute("data-tq-knob")));
+  const k = knobs[knobs.length - 1];
+  if (!k) note("PLACE", page.step, "Settings' Assistant group drew no settings to link to");
+  else {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await open(`#settings=config&group=Assistant&key=${k}`); await wait(3000);
+    if (!(await knobAt(k))?.inView) note("PLACE", page.step, `with Settings open, a link to ${k} left it off the screen`);
+    await page.goto(`${srv.base}/#settings=config&group=Assistant&key=${k}`, { waitUntil: "load" }); await wait(7000);
+    if (!(await knobAt(k))?.inView) note("PLACE", `${page.step} fresh`, `a link to ${k} on a fresh page left it off the screen`);
+    // ...and found by Settings' own search: the hit opens its group AT the setting
+    page.step = "links search";
+    const label = await page.evaluate((k) => document.querySelector(`[data-tq-knob="${k}"] p`)?.innerText || "", k);
+    await page.click("[data-tq-browse='settings'] [data-tq-browse-back]").catch(() => {}); await wait(1000);
+    const box = await page.$("[data-tq-browse='settings'] [data-tq-browse-search]");
+    if (!box || !label.trim()) note("PLACE", page.step, `Settings' search was not reached (box: ${!!box}, label of ${k}: "${label}")`);
+    else {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await box.type(label.trim()); await wait(1200);
+      const hit = await page.$("[data-tq-browse='settings'] [data-tq-browse-card]");
+      if (!hit) note("PLACE", page.step, `searching "${label.trim()}" found nothing`);
+      else { await hit.click(); await wait(3000); if (!(await knobAt(k))?.inView) note("PLACE", page.step, `the search hit for "${label.trim()}" opened its group with ${k} off the screen`); }
+      walked.push("links: a setting by link, fresh and over Settings, and by search");
+    }
+  }
+  // ADDRESS: Next moves the table on, and the address goes with it
+  page.step = "links address";
+  await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(5000);
+  for (let n = 0; n < 4; n++) {
+    const s = await look(page), hash = await page.evaluate(() => location.hash);
+    const named = (/^#task=(\d+)$/.exec(hash) || [])[1], shown = (/TQ-0*(\d+)/.exec(s.ref || "") || [])[1];
+    if (named && shown && named !== shown) note("ADDRESS", page.step, `the table shows TQ-${shown} and the address still names task ${named}`);
+    if (!(await pressNext(page))) break;
+    await wait(4500);
+  }
+  walked.push("links: the address through four Nexts");
+  await page.close(); srv.stop();
+}
+
 browser = await launch();
-const phases = { walk, sweep, faults, cards };
+const phases = { walk, sweep, faults, cards, links };
 for (const [name, run] of Object.entries(phases)) {
   if (!only.has(name)) continue;
   try { await run(); } catch (e) { note("CRASH", name, `the ${name} pass did not finish: ${e.message.split("\n")[0]}`); }
@@ -624,7 +707,7 @@ for (const [name, run] of Object.entries(phases)) {
 await browser.close();
 
 // COVER: every button on the list, and each of its states, pressed - or skipped for a reason written above
-if (only.size === 4) for (const [v, d] of Object.entries(VERBS)) for (const k of [v, ...Object.keys(d.states || {}).map((s) => `${v}:${s}`)])
+if (["walk", "sweep", "faults", "cards"].every((p) => only.has(p))) for (const [v, d] of Object.entries(VERBS)) for (const k of [v, ...Object.keys(d.states || {}).map((s) => `${v}:${s}`)])
   if (!pressed.has(k) && !WALK_SKIP[k]) note("COVER", k, `"${label(...k.split(":"))}" was never pressed, and WALK_SKIP gives no reason`);
 
 if (process.argv.includes("--json")) {

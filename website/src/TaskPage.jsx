@@ -89,6 +89,7 @@ import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { ago, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
+import { openAppLink } from "./appLinks.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -1591,7 +1592,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               {/* a failed run's fix is one press from its task: the workflow opens with Fix with AI already asked */}
                               <RunSteps steps={fromWorkflow.steps} dense repairs={fromWorkflow.repairs}
                                 onFix={fromWorkflow.sourceId != null && fromWorkflow.runId != null
-                                  ? () => { window.location.hash = `report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`; } : null} /></Box>}
+                                  ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
                         {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see

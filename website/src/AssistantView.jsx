@@ -57,7 +57,8 @@ import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
 import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
-import { firstAppLink, openAppLink } from "./appLinks.js";
+import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
+import { hashFor } from "./canvasLinks.js";
 import { useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
 import FirstRun from "./FirstRun.jsx";
@@ -190,7 +191,7 @@ function SinceBlock({ onOpen, onReading }) {
       {!!cards.length && <div className="tq-since-cards">
         {cards.map((c, i) => (
           <button key={c.key || c.link || i} type="button" className={`tq-since-card ${c.kind}`} data-tq-since-card={c.key || c.link}
-            onClick={() => { if (c.key) onOpen?.(c.key); else if (c.link) window.location.hash = c.link; }} title={c.key ? "Open it" : "See what changed"}>
+            onClick={() => { if (c.key) onOpen?.(c.key); else if (c.link) openAppLink(c.link); }} title={c.key ? "Open it" : "See what changed"}>
             <span className="lbl"><i />{c.label}</span><span className="txt">{c.text}</span>
           </button>
         ))}
@@ -199,7 +200,7 @@ function SinceBlock({ onOpen, onReading }) {
       {d?.learned?.line && <div className="tq-since-digest" data-tq-learned="">
         <span className="tag" style={{ color: "#6e685f" }}>MEMORY</span>
         <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
-        <button type="button" className="tq-linkish" onClick={() => { window.location.hash = "settings=docs&doc=learned&view=changes"; }}>See what changed</button>
+        <button type="button" className="tq-linkish" onClick={() => { openAppLink("settings=docs&doc=learned&view=changes"); }}>See what changed</button>
       </div>}
       {dg.source_id && dg.writing && !writing && <div className="tq-since-digest" data-tq-digest="" data-tq-digest-writing="">
         {/* queued by Finish setup (firstrun.first_digest): not written until the mail it reads is sorted - said so, with how many are left */}
@@ -947,7 +948,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
-  const browseRef = useRef(null), openTaskRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null), browseDownRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded - a NEW item only. advance() empties the table on the way to
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
@@ -969,6 +970,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   //        "sync"   the server's word re-read (a reload, another tab, a refresh): the table follows, the view does not jump
   // a new key re-reads the advice and clears the strip's "this changed" (the effect on onTable below); the same key only refreshes
   const pin = useRef(false);            // the card on the table is held at the top of the view (keepTable below)
+  // how the next address is written (recordPlace): "push" once the owner goes somewhere, "replace" for the walk and the server
+  const navHow = useRef("replace");
   const cardRef = useRef(null);
   const putOnTable = useCallback((card, how = "pile") => {
     if (how !== "view") {
@@ -980,6 +983,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       if (card) openCardRef.current = null;
     }
     if (how !== "sync") pin.current = true;
+    else navHow.current = "replace";
   }, []);
   // the chat body's height is the task view's (CanvasItem): measured, never guessed, and re-measured with the window
   useEffect(() => {
@@ -1428,6 +1432,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     turnFlight.current = true;
     setBusy(true); setErr("");
+    if (!key) navHow.current = "replace";            // the walk's Next is a stream, not a stack: the address follows, Back does not
     const epoch = chatEpoch.current;
     const scope = nextSelectionScope(key ? null : only.current, key ? null : currentRef.current?.key || null);
     const capture = key ? null : await ensureNextSelection(scope);
@@ -2073,7 +2078,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const toggleSpeak = () => { const v = !speakOnState; setSpeak(v); try { localStorage.setItem("taskuary_speak", v ? "1" : "0"); } catch { /* private mode */ } if (!v) window.speechSynthesis?.cancel(); };
   // a card's link to its message: it opens on the stage, over the chat, right here - the rail reads the
   // hash and pins it (FeedView.openHash); its close comes back to the conversation
-  const timeline = (mid) => { window.location.hash = `msg=${mid}`; };
+  const timeline = (mid) => { openAppLink(`msg=${mid}`); };
   // The walk, taken to a chat you already have connected (WhatsApp, Telegram). This is not a way to
   // CONNECT one - a chat with no Assistant card offers nothing here (the owner, 2026-09-07: "point is
   // to talk to assistant through it not connect it"). While it is there the tab locks itself: two
@@ -2110,6 +2115,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // A SIDEBAR BUTTON POSTS ITS BROWSE CARD into the conversation - no AI, no tab: the newest one is the live one, and an
   // earlier one folds to its line, so only one detail is ever mounted (the canvas redesign, 2026-09-29)
   const browse = (area, state = {}) => {
+    navHow.current = "push";
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false);
     const id = `b${Date.now()}`;
     // THE SAME AREA MOVES ITS CARD: a link or a button for the area already open re-places that card, never posts a second
@@ -2147,9 +2153,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setMsgs((m) => [...m, { id: `t${Date.now()}`, role: "assistant", text: "", card }]);
     putOnTable(card, "card");
   };
-  browseRef.current = browse; openTaskRef.current = openTaskCard;
+  browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
   // a pull lands through surface() -> landed() -> putOnTable; one refused as busy lands nothing, so nothing waits for it
   const pull = (key, asUser) => {
+    navHow.current = "push";
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown(); surface(key, asUser || null);
   };
 
@@ -2246,7 +2253,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
     reopen: (key, onTable) => { if (onTable) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } else pull(key); },
-    browseState: (id, state) => { holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
+    browseState: (id, state) => { navHow.current = "push"; holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
     browse: (area, state) => browse(area, state),
     browseClose: (id) => setMsgs((m) => m.filter((x) => x.id !== id)),    // the New card, closed: its line goes
     openCard,
@@ -2309,10 +2316,27 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   useEffect(() => {
     if (!request?.n || request.n === doneReq.current || !state) return;
     doneReq.current = request.n;
-    if (request.kind === "browse") browseRef.current?.(request.area, request.state || {});
+    // ...`at` numbers the ask, so a view already open on the page opens the card a second link names (ConnectorsView, SettingsView)
+    if (request.kind === "browse") browseRef.current?.(request.area, { ...(request.state || {}), at: request.n });
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
-  }, [request, state]);
+    // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
+    else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
+    if (request.fromUrl) navHow.current = "replace";
+  }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // THE ADDRESS SAYS WHERE THE OWNER IS (the 2026-10-19 UI walk, G2): the page open on the canvas, else the task on the table, else
+  // nothing - a reload lands on the server's own table. Never while a turn is landing (the table is about to move) or a link is still
+  // on its way (the address is the link's), nor over setup or an old conversation, which are not places
+  const liveBrowse = shown.find((x) => x.id === browsing) || null;
+  const placeHash = liveBrowse ? hashFor(liveBrowse.area, liveBrowse.state) : litTable.tid ? `#task=${litTable.tid}` : "";
+  // ...and not in the commit that serves one: its page is drawn on the next, and this one still showed the table - written then, the
+  // address became the table's before the link's own hashchange was heard, and the link opened the task instead (found by PLACE)
+  const reqSeen = useRef(0);
+  useEffect(() => {
+    if (request?.n && request.n !== reqSeen.current) { if (request.n === doneReq.current) reqSeen.current = request.n; return; }
+    if (!active || !state || old || firstRun || busy) return;
+    recordPlace(placeHash, navHow.current); navHow.current = "replace";
+  }, [placeHash, active, state, old, firstRun, busy, request]);   // eslint-disable-line react-hooks/exhaustive-deps
   const railPile = useMemo(() => ((leavingTid || continuingTid) && pile?.items
     ? { ...pile, items: asPressed(pile.items, { leaving: leavingTid, continuing: continuingTid }) } : pile),
     [pile, leavingTid, continuingTid]);

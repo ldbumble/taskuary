@@ -18,7 +18,7 @@ const A = ({ href, children }) => {
   const page = m ? null : appLink(href);
   return (
     <a href={href} target={m || page ? undefined : "_blank"} rel="noreferrer" style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
-      onClick={(e) => { if (m) { e.preventDefault(); window.location.hash = `task=${m[1]}`; } else if (page) { e.preventDefault(); openAppLink(page); } }}>
+      onClick={(e) => { if (m) { e.preventDefault(); openAppLink(`task=${m[1]}`); } else if (page) { e.preventDefault(); openAppLink(page); } }}>
       {m ? `open TQ-${String(m[1]).padStart(4, "0")} →` : children}
     </a>
   );

@@ -62,7 +62,7 @@ test("the task view's loads do not depend on the callbacks its page passes", () 
 });
 
 test("a new line always shows; only a browse card's own steps hold the bottom", () => {
-  assert.match(view, /browseState: \(id, state\) => \{ holdBottom\.current = true; setMsgs/);
+  assert.match(view, /browseState: \(id, state\) => \{ navHow\.current = "push"; holdBottom\.current = true; setMsgs/);
   assert.match(view, /if \(keepTable\(\)\) return;\n\s+holdBottom\.current = false; const el = bodyRef\.current;/);
   assert.doesNotMatch(view, /holdBottom\.current = !!browsing/);
 });

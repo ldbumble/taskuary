@@ -69,6 +69,7 @@ import {
   processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
 import { plural } from "./timeWords.js";
+import { openAppLink } from "./appLinks.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
 
@@ -2396,7 +2397,7 @@ const Linkify = ({ text }) => {
   const parts = String(text).split(URL_RE);
   return parts.map((p, i) => (URL_RE.test(p) && (URL_RE.lastIndex = 0, true)
     ? <a key={i} href={p} style={{ color: "#55697a", fontWeight: 600, textDecoration: "none" }}
-        onClick={(e) => { const m = /#task=(\d+)/.exec(p); if (m) { e.preventDefault(); window.location.hash = `task=${m[1]}`; } }}>
+        onClick={(e) => { const m = /#task=(\d+)/.exec(p); if (m) { e.preventDefault(); openAppLink(`task=${m[1]}`); } }}>
         {/#task=(\d+)/.test(p) ? `open TQ-${String(/#task=(\d+)/.exec(p)[1]).padStart(4, "0")} →` : p}</a>
     : <React.Fragment key={i}>{p}</React.Fragment>));
 };

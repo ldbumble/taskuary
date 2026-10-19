@@ -36,6 +36,7 @@ import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
+import { openAppLink } from "./appLinks.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1624,29 +1625,34 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   // active instance first, then the original catalog row for backward compatibility.
   const byType = Object.fromEntries([...new Set((connectors || []).map((c) => c.Type))]
     .map((type) => [type, allOf(type).find((c) => c.Active) || allOf(type)[0]]));
-  // #connector=<type> opens that card on arrival - the bell's Fix button lands here, and so can any
-  // link. #cli-agents opens the AI CLI agents page, which is where the checklist's "Set up an AI"
-  // row goes: the agents page had no door of its own, only a button on this one.
-  // Consumed once, so Back does not reopen it.
+  // #connector=<type> opens that card - the bell's Fix button lands here, and so can any link. #cli-agents opens the AI CLI agents
+  // page, which is where the checklist's "Set up an AI" row goes: the agents page had no door of its own, only a button on this one.
+  // THE CARD IS ASKED IN THE BROWSE STATE, not read from the address (the 2026-10-19 UI walk): this read the hash once, when the list
+  // loaded, so a link followed with Connections already open opened nothing. `at` numbers the ask - the same link twice opens twice -
+  // and the card opens in its section, so its Back returns to that section's list rather than to the bare landing.
+  const want = browse ? String(browseState?.connector || "") : "", at = browseState?.at || 0;
+  const groupsRef = useRef([]), took = useRef("");
+  // a page or a section asked from outside puts the open card down - the list it named is what was asked for
+  useEffect(() => { if (browse && browseState?.open == null && !browseState?.connector) setOpen(null); }, [browseState?.open, browseState?.section, at]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const hash = window.location.hash || "";
-    const m = /connector=([\w-]+)/.exec(hash);
-    if (!m && !/cli-agents/.test(hash)) return;
-    if (!connectors) return;
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    if (!m) { setOpen({ kind: "agents" }); return; }
-    const t = m[1];
-    const direct = /^\d+$/.test(t) ? connectors.find((c) => c.ConnectorId === Number(t)) : byType[t];
-    if (direct) setOpen({ kind: "connector", id: direct.ConnectorId });
+    const ask = `${want}|${at}`;
+    if (!want || !connectors || took.current === ask) return;
+    took.current = ask;
+    const agents = want === "cli-agents";
+    const direct = agents ? null : /^\d+$/.test(want) ? connectors.find((c) => c.ConnectorId === Number(want)) : byType[want];
     // ...and a link to one that has since been removed says so, rather than landing on the catalogue unexplained
-    if (!direct) setErr(`That connection (${t}) is not here any more - pick another, or add it again from its section.`);
+    if (!agents && !direct) { setErr(`That connection (${want}) is not here any more - pick another, or add it again from its section.`); return; }
+    const keys = agents ? ["agents"] : ["c", "d", "s"].map((p) => `${p}${direct.ConnectorId}`);
+    const g = groupsRef.current.find((x) => x.cards.some((c) => keys.includes(c.key)));
+    setErr(""); setOpen(agents ? { kind: "agents" } : { kind: "connector", id: direct.ConnectorId });
+    onBrowseState?.({ ...browseState, section: g?.title ?? browseState.section ?? null, open: g?.cards.find((c) => keys.includes(c.key))?.key ?? null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectors]);
+  }, [connectors, want, at]);
 
   if (!connectors) return <CircularProgress size={22} sx={{ m: 4 }} />;
 
   // back to the list: the tab's own state, and the canvas's line when it is browsing
-  const back = () => { setOpen(null); onBrowseState?.({ ...browseState, open: null }); };
+  const back = () => { setOpen(null); onBrowseState?.({ ...browseState, open: null, connector: "" }); };
   const conn = open?.kind === "connector" ? connectors.find((c) => c.ConnectorId === open.id) : null;
   const shared = conn ? { conn, reload: load, onBack: back, onCreated: (id) => setOpen({ kind: "connector", id }) } : null;
   const page = open?.kind === "agents" ? <CliConnectionsPage onBack={back} />
@@ -1786,6 +1792,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const hits = terms.length ? groups.flatMap((g) => g.cards.filter((c) => terms.some((x) => c.haystack.toLowerCase().includes(x)))
     .map((c) => ({ ...c, crumb: g.title }))) : [];
 
+  groupsRef.current = groups;
   const shown = groups.find((g) => g.title === group) || groups[0];
 
   if (browse) {
@@ -1800,7 +1807,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       section: q ? "" : browseState.section ?? null,
       onSection: (key) => { setQ(""); setOpen(null); onBrowseState?.({ section: key, open: null }); },
       note: err || (q ? "" : groups.find((g) => g.title === browseState.section)?.note || ""),
-      cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go(); onBrowseState?.({ ...browseState, open: c.key }); }) }} /> })),
+      // ...the card opened names its connector, so the address can (canvasLinks.hashFor) - a guide card has none and is its section's
+      cards: inSection.map((c) => ({ key: c.key, node: <ConnCard c={{ ...c, go: c.go && (() => { c.go();
+        onBrowseState?.({ ...browseState, section: q ? c.crumb || browseState.section : browseState.section, open: c.key,
+          connector: c.key === "agents" ? "cli-agents" : /^[cds](\d+)$/.exec(c.key)?.[1] || "" }); }) }} /> })),
       detail, onBack: back,
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
@@ -1916,7 +1926,7 @@ function CardPlaybooks({ type }) {
     return () => { live = false; };
   }, [type]);
   if (!books) return null;
-  const go = (slug) => { window.location.hash = `playbook=${slug}`; };
+  const go = (slug) => { openAppLink(`playbook=${slug}`); };
   return (
     <Box sx={{ mt: 3, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL }}>
       <Typography variant="caption" sx={{ color: "#6f8a6e", fontWeight: 600, letterSpacing: 1, display: "block", mb: 0.75 }}>
@@ -3423,7 +3433,7 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
           {guideJid || "not connected"}
         </Typography>
         <Button size="small" sx={{ fontSize: 11 }} onClick={() => {
-          window.location.hash = `settings=config&group=${encodeURIComponent("Assistant on your phone")}`;
+          openAppLink(`settings=config&group=${encodeURIComponent("Assistant on your phone")}`);
           onNavigate?.("Settings");
         }}>Settings → Assistant on your phone</Button>
       </Box>

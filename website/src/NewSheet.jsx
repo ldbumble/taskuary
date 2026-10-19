@@ -395,7 +395,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         )}
 
         {REPEATS.includes(kind) && (
-          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); window.location.hash = DRAFT_HASH[k]; }} />
+          <Composer kind={kind} initial={kind === initialKind ? initialText : ""} onDraft={(config, meta) => { const k = meta?.verdict === "report" ? "report" : kind; handDraft(k, config, meta); onClose?.(); openAppLink(DRAFT_HASH[k]); }} />
         )}
 
         {!REPEATS.includes(kind) && <Box>

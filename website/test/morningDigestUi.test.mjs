@@ -27,7 +27,8 @@ test("Settings has no empty Agents destination and profile links go straight to 
   const settings = read("SettingsView.jsx");
   assert.doesNotMatch(settings, /agents: \{ title: "Agents"/);
   assert.doesNotMatch(settings, /"memory", "agents", "audit"/);
-  assert.match(settings, /where === "agents"[\s\S]*window\.location\.hash = "profiles";[\s\S]*onNavigate\?\.\("Docs"\)/);
+  // ...and where a model is saved opens THAT card: "the claude connection - open" landed on the Profiles shelf (2026-10-19 UI walk)
+  assert.match(settings, /const goFromPanel = \(where\) => openAppLink\(ownerHref\(where\)\);/);
 });
 
 // "A +" (the owner, 2026-10-08): what changed while you were away rides on top of the opening card, with the Morning digest folded

@@ -674,3 +674,7 @@
 /* the Advisor's own button, when the move it names has none on the row (ActionRow.AdvisorNext `own`) - beside its line, Why? after */
 .tq-next .tq-next-go { flex: 0 0 auto; min-height: 30px; padding: 0 14px; font-size: 12.5px; }
 .tq-next-err { color: #8a3646; font-weight: 400; }
+/* the thing a link named, shown for a moment where it landed (appLinks.focusPlace) - an outline that fades, nothing moves */
+.tq-flash { animation: tq-flash 1.8s ease-out; border-radius: 6px; }
+@keyframes tq-flash { 0%, 35% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } 100% { box-shadow: 0 0 0 3px rgba(85, 105, 122, 0); } }
+@media (prefers-reduced-motion: reduce) { .tq-flash { animation: none; box-shadow: 0 0 0 3px rgba(85, 105, 122, 0.38); } }

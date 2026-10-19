@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
+import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogTitle, IconButton, InputAdornment, MenuItem, Select, Switch, TextField, Typography,
@@ -144,7 +145,7 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
   const [looking, setLooking] = useState(false);
   const lookAgain = async () => { setLooking(true); await load(); setLooking(false); };
   // a button, not a sentence that names a tab: the card opens with the chat already in front of you
-  const toCard = (channel) => { window.location.hash = `connector=${channel || ""}`; onNavigate?.("Connections"); };
+  const toCard = (channel) => openAppLink(`connector=${channel || ""}`);
   const choose = async (channel, chat) => {
     setBusy(channel); setWErr("");
     try { await api.post("/api/assistant/doorways", { channel, chat }); await load(); }
@@ -393,13 +394,14 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [policies, setPolicies] = useState(null);
   const [settings, setSettings] = useState([]);
   // ...the asked knob in view once the rows are in, once per knob - never again while the owner works on the page
+  // ...and again when a link names it again (`at`, the request's number): the same knob asked twice was in view only the first time
   const knobShown = useRef("");
   useEffect(() => {
-    const k = only?.knob || "";
-    if (!k || knobShown.current === k || !settings.some((x) => x.Name === k)) return;
-    knobShown.current = k;
-    setTimeout(() => document.querySelector(`[data-tq-knob="${k}"]`)?.scrollIntoView?.({ block: "center" }), 0);
-  }, [only?.knob, settings]);
+    const k = only?.knob || "", once = `${k}|${only?.at || ""}`;
+    if (!k || knobShown.current === once || !settings.some((x) => x.Name === k)) return;
+    knobShown.current = once;
+    setTimeout(() => focusPlace(document.querySelector(`[data-tq-knob="${k}"]`)), 0);
+  }, [only?.knob, only?.at, settings]);
   const [memory, setMemory] = useState([]);
   const [newNote, setNewNote] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -472,18 +474,9 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     setVerifying(false);
   };
 
-  // Where a model is really saved. The AI defaults panel names the owning screen and this
-  // opens it: the CLI roster is a Settings page, a connector card lives on Connections (whose
-  // own hash router picks up connector=<id>), so the tab has to move for the second kind.
-  const goFromPanel = (where) => {
-    if (where === "agents") {
-      window.location.hash = "profiles";
-      onNavigate?.("Docs");
-      return;
-    }
-    if (where && where.startsWith("connector:")) window.location.hash = `connector=${where.slice(10)}`;
-    onNavigate?.("Connections");
-  };
+  // Where a model is really saved. The AI defaults panel names the owning screen and this opens it, the road every link takes:
+  // its own map sent "the claude connection" to the Profiles shelf (the 2026-10-19 UI walk)
+  const goFromPanel = (where) => openAppLink(ownerHref(where));
 
   // Deep search: every hit knows the page and the section it lives in, and scrolls there.
   // Sections lead - they are the rail's own entries, and a search for a place should offer the place.
@@ -1129,6 +1122,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
   // used to be two effects in two components, and React runs the child's first, so the child
   // blanked the hash before the parent ever read it.
   useEffect(() => {
+    // ...the canvas's card is handed its page in `browseState` (canvasLinks.js), and the address is the router's (appLinks.js)
+    if (browse) return;
     const hash = window.location.hash || "";
     // #playbook=<slug> / #profiles come from a connector card and name no settings page. They are
     // left in place for DocsView to read; this only has to open the page that renders it.
@@ -1178,7 +1173,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
       if (e.head && e.key !== "g:how") return [];
       return [{ key: e.key, shelf, title: e.label, sub: String(what[e.key] || "").split(/(?<=\.)\s/)[0], sel: e.sel }];
     }).filter((c) => (SHELF[section] || []).includes(c.shelf));
-    const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config" }))
+    // ...a hit keeps the knob it found: it opened its group at the top, the setting itself somewhere below (the 2026-10-19 UI walk)
+    const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))
       : section === "config" ? GROUPS.filter((g) => g !== "Coding agent" || canCode).map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
       : SHELF[section] ? docCards
       : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
@@ -1194,7 +1190,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           setQ("");
           // a document is picked the way the rail picked it; an action entry (New playbook) is a one-shot, so it carries a nonce
           if (c.sel) { const e = c; setDocSel(e.sel.action ? { ...e.sel, n: Date.now() } : e.sel); }
-          onBrowseState?.({ ...browseState, section: c.section || section, open: c.key });
+          onBrowseState?.({ ...browseState, section: c.section || section, open: c.key, knob: c.knob || "", at: c.knob ? Date.now() : browseState.at });
         } })),
       search: (
         <TextField fullWidth size="small" placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)}
@@ -1209,7 +1205,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           {/* the one-click road to a whole role - worker, playbooks, where the mail goes (roles.py) - offered beside the workers */}
           {section === "profiles" && !needle && <Box sx={{ mt: 1.5 }}><RoleStart onApplied={() => setCatN((n) => n + 1)} /></Box>}
           <Box key={catN} sx={{ display: "none" }}><DocsView onCatalog={onCatalog} catalogOnly /></Box></> : null,
-      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: section === "config" ? browseState.knob || "" : "" }} q="" setQ={() => {}} onNavigate={onNavigate}
+      detail: open ? <SettingsPages only={{ page, group: section === "config" ? open : null, knob: section === "config" ? browseState.knob || "" : "", at: browseState.at }} q="" setQ={() => {}} onNavigate={onNavigate}
         onJump={() => {}} onSections={setCfgSecs} docSel={docSel} setDocSel={setDocSel} onCatalog={onCatalog} /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: !open ? "" : SHELF[section] ? `the document "${docCards.find((c) => c.key === open)?.title || "Docs"}" (Settings - ${section === "docs" ? "Docs" : section === "profiles" ? "Profiles" : "Playbooks"})`

@@ -34,6 +34,7 @@ import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
+import { openAppLink } from "./appLinks.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -253,7 +254,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 
   const openTask = (tid) => {
     if (!tid) return;
-    window.location.hash = `task=${tid}`;
+    openAppLink(`task=${tid}`);
     onNavigate?.("Tasks");
   };
   const refresh = async (message) => {

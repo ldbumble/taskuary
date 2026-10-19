@@ -3,6 +3,8 @@ import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api.js";
 import { parseDigest } from "./digestText.js";
 import { label as btnLabel } from "./buttons.js";
+import { openAppLink } from "./appLinks.js";
+import { placeHref } from "./words.js";
 
 // A failed digest names its way on: the connection that would fix it, and the digest written again. `sourceId` is
 // the Morning digest report when the caller knows it; else it is looked up by name, the way the cards spot one.
@@ -24,7 +26,8 @@ function DigestWayOn({ sourceId }) {
   return <Box sx={{ mt: 0.75 }}>
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? "Starting…" : btnLabel("try_again")}</Button>
-      <Button size="small" component="a" href="#connector=">Check the AI connection</Button>
+      {/* the AI section, by its place (words.json): "#connector=" named no card, and the bare Connections landing opened (2026-10-19) */}
+      <Button size="small" component="a" href={placeHref("ai")} onClick={(e) => { e.preventDefault(); openAppLink(placeHref("ai")); }}>Check the AI connection</Button>
     </Box>
     {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "#55697a" }}>{said}</Typography>}
   </Box>;
@@ -32,7 +35,7 @@ function DigestWayOn({ sourceId }) {
 
 const URL = /(https?:\/\/[^\s<>"')\]]+)/g;
 const REF = /\b(TQ-\d{3,})\b/g;
-const goTask = (e, id) => { e.preventDefault(); window.location.hash = `task=${id}`; };
+const goTask = (e, id) => { e.preventDefault(); openAppLink(`task=${id}`); };
 // a ref the model wrote WITHOUT the link the data gave it is still a door into the task, unless the item links it already
 const Refs = ({ text, linked }) => text.split(REF).map((part, i) => {
   const id = /^TQ-(\d+)$/.exec(part)?.[1];
@@ -45,7 +48,7 @@ const Linked = ({ children }) => {
   return text.split(URL).map((part, i) => /^https?:\/\//.test(part)
     ? <a key={i} href={part} target={/#task=\d+/.test(part) ? undefined : "_blank"} rel="noreferrer"
         style={{ color: "#526978", fontWeight: 600, textDecoration: "none" }}
-        onClick={(e) => { const hit = /#task=(\d+)/.exec(part); if (hit) { e.preventDefault(); window.location.hash = `task=${hit[1]}`; } }}>
+        onClick={(e) => { const hit = /#task=(\d+)/.exec(part); if (hit) { e.preventDefault(); openAppLink(`task=${hit[1]}`); } }}>
         {/#task=(\d+)/.test(part) ? `open TQ-${String(/#task=(\d+)/.exec(part)[1]).padStart(4, "0")} →` : part}
       </a>
     : <Refs key={i} text={part} linked={linked} />);

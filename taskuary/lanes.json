@@ -220,6 +220,13 @@
       "role": "muted",
       "mark": "📤",
       "hint": "the last word is yours — a reply went out and nothing has come back. The ball is in their court, not yours"
+    },
+    {
+      "key": "dropped",
+      "word": "dropped",
+      "role": "muted",
+      "mark": "🗑️",
+      "hint": "the task was dropped - nobody works it any more, and search still finds it"
     }
   ],
   "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: Goals by a goal's news, For later by Next or Remind me, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. `minutes` on Urgent is how close a meeting comes before it moves there (funnel.ALERT_MIN).",

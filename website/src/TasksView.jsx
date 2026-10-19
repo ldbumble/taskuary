@@ -36,6 +36,10 @@ import { isWorkflowRun, startedBy } from "./taskSources.js";
 // the pills wear the same colours as the chips on the rows they hold: "in progress" in the
 // slate-blue brand chrome next to a sage "agent working" chip read as two different states
 const ST_C = Object.fromEntries(TASK_STATES.map((s) => [s.key, s.c]));
+// three pills (the owner, 2026-09-25): what is on a plate, what is put away until a day, and what is done.
+// "all" held the other two over again, so a live task sat in two pills at once ("we don't want one for
+// all if it's another group"); every task now has one pill. Dropped has none - search finds it.
+// (The task page kept a second, unused copy of these pills and buckets until 2026-10-18.)
 const STATE_FILTERS = [
   { key: "live", label: "in progress", c: ST_C.working },
   { key: "upcoming", label: "upcoming", c: ST_C.queued },

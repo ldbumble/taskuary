@@ -87,6 +87,7 @@ import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js"
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
 import { plural } from "./timeWords.js";
+import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -100,24 +101,7 @@ export const newestFirst = (ms = []) => [...ms].sort((a, b) => String(b.SentAt |
 // `assistant` is a legacy alias from Timeline discussions. New discussions use `general`, but
 // old ones must still open here instead of falling through to the coding terminal.
 const PRIORITIES = ["low", "normal", "high", "urgent"];
-// what a task IS decides which machinery works it: coding gets a repo session, a reply
-// gets the responder and the review queue, general gets the visual conversation. Keep the
-// explicit non-coding label: calling this only "assistant" hid the option the owner asked for.
-// WHO works it, then what it is - the owner's own words (2026-09-10: "tag tasks as reply/your
-// task/agent (maybe coding vs general)"). "your task" is deliberately the same phrase the work
-// rail's own heading uses for band 2 (funnelPile.LEVEL_META), so one thing has one name in both
-// places. The two `agent` kinds are the two that reach the Board; reply and your task do not.
-// ...and the hints in plain words (the audit, 2026-10-17): they named repositories, CLIs and triage's model - a coder's notes to
-// someone choosing who does a finance task
-const KIND_OPTIONS = [
-  { key: "task", label: "your task", hint: "Yours to do - no assistant works on it" },
-  { key: "general", label: "agent · general", hint: "An AI assistant works on it - research, writing, analysis, planning" },
-  { key: "coding", label: "agent · coding", hint: "Your coding tool works on it, in your code" },
-  { key: "reply", label: "reply", hint: "You approve a drafted reply - nothing else runs" },
-];
-const KINDS = KIND_OPTIONS.map((o) => o.key);
 const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
-const kindLabel = (kind) => KIND_OPTIONS.find((o) => o.key === kind)?.label || kind;
 
 // WHAT TRIAGE DECIDED READS AS FACTS, NOT CONTROLS (the owner, 2026-10-16: "why are there dropdowns by the triage results? you
 // can't change it"). The pills sit under the title, read-only; changing who does it, the priority, the assignee or the repository is
@@ -209,9 +193,8 @@ const chipBtnStatic = { display: "inline-flex", alignItems: "center", height: 26
   fontSize: 11.5, fontWeight: 600 };
 
 // ── the list rail's row ──────────────────────────────────────────────────────────────────
-// One word for the kind: the agent's own name follows it on the same line, so "agent · coding ·
+// One word for the kind (kinds.shortKind): the agent's own name follows it on the same line, so "agent · coding ·
 // coding" spent three words saying an agent has it.
-const shortKind = (kind) => String(kindLabel(kind || "task")).replace(/^agent · /, "");
 // The checklist is already on every list row - store.list_tasks selects t.* and the Checklist
 // column rides along - so the rail draws progress without a request per task.
 const rowChecklist = (t) => {

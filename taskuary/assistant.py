@@ -39,6 +39,7 @@ import json, math, re, threading
 from datetime import datetime, timedelta
 from loguru import logger
 
+from . import kinds as task_kinds
 from .store import is_model_idea, task_ref, auto_code_enabled
 from .timewords import ago_m, plural, span
 from .assistantblocks import said_number   # the payload's own English for a window: 'the last two days'
@@ -1022,7 +1023,7 @@ def parse(store, text: str, cands: list, max_lines: int = MAX_LINES, report_id=N
             mid = s.get('mid') if isinstance(s.get('mid'), int) else None
             title = _short(s.get('task'), 120) or None
             act = {'type': 'task', 'mid': mid, 'title': title} if title and mid else {'type': 'message', 'mid': mid} if mid else {'type': 'note'}
-            if act['type'] == 'task' and str(s.get('kind') or '').lower() in ('coding', 'general'):
+            if act['type'] == 'task' and str(s.get('kind') or '').lower() in task_kinds.AGENT:
                 act['kind'] = str(s['kind']).lower()
             # a line that NAMES a task belongs to it, whatever else it carries: without the tid the
             # pipe could not tell that an agent had the work, so "TQ-0329 July financials hasn't moved"
@@ -1911,13 +1912,13 @@ def _make_task(store, i: dict, a: dict, agent: bool, actor: str) -> dict:
     prior = store.get_task(m['TaskId']) if m.get('TaskId') else None
     t = linked_task(store, i['IdeaId'], a) or (prior if prior and prior.get('Status') not in ('done', 'dropped') else None)
     kind = str(a.get('kind') or (a.get('triage') or {}).get('kind') or (t or {}).get('Kind') or 'general').lower()
-    kind = kind if kind in ('coding', 'general') else 'general'
+    kind = kind if kind in task_kinds.AGENT else 'general'
     # an idea that would be coding, on an install with no coding tool, is the general agent's (agents.coding_ready, 2026-10-16)
     from . import capabilities
     if kind == 'coding' and not capabilities.can_code(store): kind = 'general'
     if t:
         tid = t['TaskId']
-        if agent and t.get('Kind') not in ('coding', 'general'): store.update_task(tid, {'Kind': kind}, actor)
+        if agent and t.get('Kind') not in task_kinds.AGENT: store.update_task(tid, {'Kind': kind}, actor)
     elif m and not prior: tid = ingest.task_from_message(store, a['mid'], actor, kind if agent else 'task', None if agent else actor)
     else:
         # no message, or its task is CLOSED: new work noticed after the old was done. A message points at one task,

@@ -2079,7 +2079,7 @@ const TriageVerdictCard = ({ verdict, exact = true }) => {
     ? verdict.checklist.filter((x) => typeof x === "string" && x.trim()) : [];
   const isFyi = verdict.intent === "fyi";
   const isReply = verdict.intent === "reply_only";
-  const destination = kindLabel(verdict.kind) || (isFyi ? "Filed" : isReply ? "Reply review" : "");
+  const destination = kindLabel(verdict.kind) || (isFyi ? "Filed" : isReply ? kindLabel("reply") : "");
   const worker = verdict.profile || (isFyi || isReply ? "No agent" : "");
   const repo = verdict.repository || (verdict.needs_repo_choice ? "Repository choice needed"
     : isFyi || isReply || (verdict.kind && verdict.kind !== "coding") ? "Not applicable"

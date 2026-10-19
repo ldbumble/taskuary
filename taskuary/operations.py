@@ -15,6 +15,7 @@ onto the task it later becomes, per item, never onto its batch siblings.
 import contextlib, hashlib, json, re, threading, uuid
 from datetime import datetime
 from loguru import logger
+from . import kinds as task_kinds
 from . import failures
 
 # kind -> (target kind, required parameters, how to read "what the owner made of it" for the correction
@@ -111,7 +112,7 @@ def _change(kind: str, params: dict) -> str | None:
     if how is None: return None
     if how != 'kind': return how
     k = str((params or {}).get('kind') or '').lower()
-    return k if k in ('coding', 'general') else 'task'
+    return k if k in task_kinds.AGENT else 'task'
 
 
 def verdict_of_message(store, m: dict) -> tuple:
@@ -126,7 +127,7 @@ def verdict_of_message(store, m: dict) -> tuple:
     if said == 'reply_only': return 'reply', last.get('RouteId')
     if m.get('TaskId'):
         kind = str((store.get_task(m['TaskId']) or {}).get('Kind') or '').lower()
-        return (kind if kind in ('coding', 'general', 'task') else 'task'), last.get('RouteId')
+        return (kind if kind in task_kinds.TRIAGE else 'task'), last.get('RouteId')
     return '', last.get('RouteId')
 
 
@@ -135,7 +136,7 @@ def verdict_of_task(store, tid: int) -> tuple:
     kind = str(t.get('Kind') or '').lower()
     msgs = store.list_messages(tid)
     routes = store.message_routes(msgs[0]['MessageId']) if msgs else []
-    return (kind if kind in ('coding', 'general', 'task') else ('task' if t else '')), (routes[-1].get('RouteId') if routes else None)
+    return (kind if kind in task_kinds.TRIAGE else ('task' if t else '')), (routes[-1].get('RouteId') if routes else None)
 
 
 def _verdict(store, target_kind: str, target_id: int) -> tuple:

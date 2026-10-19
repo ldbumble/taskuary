@@ -16,6 +16,7 @@ chats and groups continue through the normal funnel.
 import collections, json, re, threading, time
 
 from loguru import logger
+from . import kinds as task_kinds
 from .timewords import plural
 from . import buttons, lanes
 # the row's words (who, state, your move) and when a For later row comes back are worked out ONCE, in funnel_presentation
@@ -398,7 +399,7 @@ def _starts_agent(op: dict) -> bool:
     """An act that sets an agent working: a hand-off, a continue, an answer to one that asked."""
     k = op.get('kind')
     return k in ('agent.continue', 'agent.answer', 'dispatch.prepare') or \
-        (k == 'task.create_from_text' and str((op.get('params') or {}).get('kind')) in ('coding', 'general'))
+        (k == 'task.create_from_text' and str((op.get('params') or {}).get('kind')) in task_kinds.AGENT)
 
 
 def promise(store, tid) -> bool:

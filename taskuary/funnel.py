@@ -12,6 +12,7 @@ import contextlib, contextvars, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 
+from . import kinds as task_kinds
 from .timewords import plural
 from .store import task_ref, auto_code_enabled
 from . import buttons, lanes
@@ -384,7 +385,7 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # fyi behind seventy rows (the owner, 2026-09-16: "2 tasks on in progress ... only showing
         # one"). Real work standing open is its own reason to be on the rail.
         open_work = (r.get('TaskStatus') not in ('done', 'dropped')
-                     and str(r.get('TaskKind') or '') in ('coding', 'general', 'task'))
+                     and str(r.get('TaskKind') or '') in task_kinds.TRIAGE)
         # WHOSE it is decides the word. Work triage handed to an agent that has not run is QUEUED -
         # waiting to start; work with nobody on it is the owner's own, and its kind ('todo') carries
         # the word for that. Both used to say "asked you", which claimed a person had asked for

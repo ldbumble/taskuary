@@ -5,6 +5,8 @@ upgrade (provider-agnostic - wire your own OpenAI/Anthropic/local call in config
 import json, re
 import re as _re
 
+from . import kinds as task_kinds
+
 # What each verdict COSTS is part of the judgement, so it is in the prompt: a task starts a
 # real agent in a real repo; a reply is one cheap draft the owner approves. Defaulting to
 # "task" turned questions into background work nobody asked for.
@@ -677,7 +679,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # opened a coding session; the model has read the whole message and TRIAGE.md's
                 # definition, so its word wins when given, and the regex is only the fallback.
                 out = {'intent': j['intent'], 'why': str(j.get('why') or '')[:240]}
-                if j['intent'] == 'task' and j.get('kind') in ('coding', 'general', 'task'): out['kind'] = j['kind']
+                if j['intent'] == 'task' and j.get('kind') in task_kinds.TRIAGE: out['kind'] = j['kind']
                 # ...and a coding verdict on an install with no coding tool is the general agent's: it tried to start a CLI that
                 # was not there and said "couldn't start" until someone noticed (2026-10-16)
                 if out.get('kind') == 'coding' and not coding: out['kind'] = 'general'

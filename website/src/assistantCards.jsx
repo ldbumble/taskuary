@@ -31,6 +31,7 @@ import { ROLES, ASSISTANT, ALERT, ALERT_INK } from "./theme.jsx";
 import { laneMeta } from "./funnelPile.js";
 import { age, ago, plural } from "./timeWords.js";
 import { SECTION, WORD, ideaWord } from "./lanes.js";
+import { kindLabel } from "./kinds.js";
 import { sendBlockLine, draftState } from "./sendState.js";
 import { openReply, useDraftJob } from "./replyDraft.js";
 import { agentRuns } from "./taskFilter.js";
@@ -216,7 +217,7 @@ export function Story({ card, asker = true, agent = "auto", state, did, name, ex
   const showSubject = subject && !said.toLowerCase().includes(subject.replace(/^(PR |Issue )?#\d+(\s·)?\s*/, "").toLowerCase());
   const rest = restOf(doc?.task?.Summary);
   const who = advisor ? "Advisor" : own ? "You" : by === null ? "The task" : personName(by || card?.who || "Someone") || "Someone";
-  const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : "your task") : channelWord(card?.channel),
+  const from = [advisor ? "an idea" : own ? (card?.mid && card?.channel !== "own" ? channelWord(card.channel) : kindLabel("task")) : channelWord(card?.channel),
     card?.when ? ago(card.when) : ""].filter(Boolean).join(" · ");
   const rep = reportOf(doc), r = rep ? readReport(rep.Body) : null;
   const found = r?.summary || String(did ?? card?.summary ?? "").trim();
@@ -1008,7 +1009,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   const words = card.channel === "assistant" && card.mid ? <div className="tq-thr-words"><AdvisorWhy mid={card.mid} /></div>
     : card.mid && !mineAlone ? <div className="tq-thr-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;
   return (
-    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? "your task" : WORD.asked}
+    <CardShell card={card} kicker={card.kind === "fyi" ? "fyi" : reported ? "agent reported" : suggestedKind === "coding" ? "coding · nobody on it" : own || mineAlone ? kindLabel("task") : WORD.asked}
       lead={<Story card={card} agent={own || mineAlone ? true : false} words={words} tail={!!verb || reported}
         fallback={card.channel === "own" ? card.preview : card.title} />} err={err}>
       {reported ? (

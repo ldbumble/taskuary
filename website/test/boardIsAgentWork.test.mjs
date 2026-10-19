@@ -1,4 +1,5 @@
 import { taskSource } from "./taskSource.mjs";
+import { KIND_OPTIONS } from "../src/kinds.js";
 import { LANE_META, LEVEL_META } from "../src/funnelPile.js";
 /* The Board is the agent floor.
  *
@@ -55,10 +56,12 @@ test("the wall is deliberately NOT filtered", () => {
 });
 
 test("every task row says who works it, in the owner's words", () => {
+  // ...read from kinds.json through kinds.js by both halves of the tab (the cleanup round, 2026-10-18)
   const text = taskSource();
   for (const label of ["your task", "agent · general", "agent · coding", "reply"]) {
-    assert.ok(text.includes(label), `the kind vocabulary is missing ${label}`);
+    assert.ok(KIND_OPTIONS.some((o) => o.label === label), `the kind vocabulary is missing ${label}`);
   }
+  assert.equal(text.match(/from "\.\/kinds\.js"/g)?.length, 2, "the list and the task page both read kinds.js");
   // the work rail's heading for band 2 is "on you" since the canvas redesign (2026-09-29) - the same words the
   // lane itself says on a row (lanes.json `yours`), so the heading and the row cannot disagree
   assert.equal(LEVEL_META.task.word, "on you", "the rail's band-2 heading is not 'on you'");

@@ -8,6 +8,7 @@ import api from "./api.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { TaskuaryMark } from "./ui.jsx";
 import { ASSISTANT, BORDER, DIM, GRADIENT, INK, PANEL, PANEL2 } from "./theme.jsx";
+import { openAppLink } from "./appLinks.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));
 const DockActions = React.lazy(lazyGeneral("DockActions"));
@@ -85,8 +86,8 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
     setPrompt({ id: `${Date.now()}-${Math.random()}`, text });
   };
   const go = (tab) => { setPicker(""); onNavigate(tab); if (window.innerWidth < 700) setOpen(false); };
-  const addTask = () => { window.location.hash = "new-task"; go("Tasks"); };
-  const addReport = () => { window.location.hash = "report=new"; go("Reports"); };
+  const addTask = () => { openAppLink("new-task"); go("Tasks"); };
+  const addReport = () => { openAppLink("report=new"); go("Reports"); };
   const chooseStarter = (kind) => {
     if (kind === "report") { addReport(); return; }
     setPicker((old) => old === kind ? "" : kind);

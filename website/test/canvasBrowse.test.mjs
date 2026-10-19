@@ -68,7 +68,7 @@ test("a link to a report or a connection that is gone says so, and opens nothing
   const reports = src("ReportsView.jsx"), conns = src("ConnectorsView.jsx");
   assert.match(reports, /const missing = typeof browseState\.open === "number" && !sources\.some\(\(x\) => x\.SourceId === browseState\.open\);/);
   assert.match(reports, /detail: browseState\.open != null && !missing \?/);
-  assert.match(conns, /if \(!direct\) setErr\(`That connection \(\$\{t\}\) is not here any more/);
+  assert.match(conns, /if \(!agents && !direct\) \{ setErr\(`That connection \(\$\{want\}\) is not here any more/);
   assert.match(conns, /note: err \|\| \(q \?/);
 });
 

@@ -20,6 +20,7 @@ import { afterExecute, proposalOf } from "./proposalCard.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { needsYou, matchFor, CHIP_MOVE } from "./assistantGame.js";
 import { label as btn } from "./buttons.js";
+import { openAppLink } from "./appLinks.js";
 
 export const G = { bg: "rgba(20,24,30,.9)", line: "rgba(255,255,255,.1)", ink: "#f3f1ec", dim: "#aeb6bf", faint: "#7c8590",
   gold: "#f0c05a", mint: "#7fd1c6", red: "#e0697d", green: "#8fcf8f", card: "rgba(255,255,255,.05)" };
@@ -273,7 +274,7 @@ export function ItemInspector({ item, agents, busy, play, onOpenTask, onNavigate
   if (item.kind === "connection") {
     body = <>
       {item.why && <Reading text={item.why} cap={80} />}
-      <Row><Btn kind="gold" onClick={() => { window.location.hash = `connector=${item.channel}`; onNavigate?.("Connections"); }}>🔌 Open the connection</Btn></Row>
+      <Row><Btn kind="gold" onClick={() => { openAppLink(`connector=${item.channel}`); onNavigate?.("Connections"); }}>🔌 Open the connection</Btn></Row>
       <Typography sx={{ fontSize: 11, color: G.faint, mt: 0.5 }}>Once it answers again this clears by itself.</Typography>
     </>;
   } else if (card === "reply") {

@@ -84,7 +84,11 @@ class ResolveTests(unittest.TestCase):
         s.set_setting('default_brain', 'claude', 'o')
         r = aidefaults.resolve(s, cfg, 'default_brain')
         self.assertEqual(r['model'], 'opus')                # not haiku
-        self.assertEqual(r['owner_link'], 'agents')
+        # where it is saved is a PLACE the page can open (words.json): "agents" opened the Profiles shelf, where no
+        # connection is (the 2026-10-19 UI walk) - the claude connection is on Connections' AI CLI agents page
+        self.assertEqual(r['owner_link'], 'ai_apps')
+        from taskuary.words import PLACES
+        self.assertTrue(PLACES['ai_apps']['href'])
 
     def test_state_offers_cli_tools_never_profiles(self):
         """A profile is instructions on whichever brain runs it, so the coding picker lists the TOOLS - one per connection."""

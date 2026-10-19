@@ -22,6 +22,7 @@ import api from "./api";
 import OwnerForm from "./OwnerForm.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL2, ROLES } from "./theme.jsx";
 import { firstSyncProgress, startFirstSync } from "./setupSync.js";
+import { openAppLink } from "./appLinks.js";
 
 const COUNT = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
 const spell = (n) => COUNT[n] || String(n);
@@ -110,7 +111,7 @@ export const FirstSync = ({ enabled, ready, firstItems = [], onSaved, onNavigate
   };
   const items = (result?.state?.first_items || firstItems).slice(0, 5);
   const openItem = (item) => {
-    window.location.hash = item.TaskId ? `task=${item.TaskId}` : `msg=${item.MessageId}`;
+    openAppLink(item.TaskId ? `task=${item.TaskId}` : `msg=${item.MessageId}`);
     onNavigate?.("Assistant");
   };
   return <Box sx={{ mt: 1 }}>
@@ -214,7 +215,7 @@ export const SetupPanel = ({ open, state, onClose, onGo, onDismiss, onRefresh })
   const left = state.total - state.done;
   // one road for every row: the tab, then the position inside it
   const go = (goto) => {
-    if (goto?.hash) window.location.hash = goto.hash;
+    if (goto?.hash) openAppLink(goto.hash);
     onGo(goto?.tab);
     onClose();
   };

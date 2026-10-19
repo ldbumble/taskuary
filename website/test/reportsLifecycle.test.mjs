@@ -51,7 +51,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   // read as a per-report judge that the setting quietly overrode (the owner, 2026-09-17).
   assert.doesNotMatch(card, /ai_brain: e\.target\.value/);
   assert.match(card, /decides where each run goes/);
-  assert.match(card, /window\.location\.hash = JUDGE_HASH/);
+  assert.match(card, /openAppLink\(JUDGE_HASH\)/);
   assert.match(source, /const WHERE_RUNS_GO = "Settings › How mail is sorted › Where runs go"/);
   assert.match(source, /if \(judge\?\.kind === "decision"\) return \[judge\.display/);
   assert.match(source, /return \["The brain that writes this report"/);
@@ -60,7 +60,7 @@ test("where a run goes is one prompt, and the card says the AI is answering it",
   const links = await readFile(new URL("../src/canvasLinks.js", import.meta.url), "utf8");
   assert.match(links, /#settings=/);
   const hub = await readFile(new URL("../src/TaskHubPage.jsx", import.meta.url), "utf8");
-  assert.match(hub, /window\.addEventListener\("hashchange", fromHash\)/);
+  assert.match(hub, /useEffect\(\(\) => onPlace\(/);   // followed links and Back come one road (appLinks.onPlace)
 });
 
 test("a line the AI is not asked about is not the AI's to answer", () => {

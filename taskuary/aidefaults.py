@@ -120,7 +120,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         cat = climodels.catalog(cli)
         model, effort = climodels.split_pick(str(_conn(cfg, key).get('model') or ''))
         out.update(value=key, model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, model), resolved=_resolved(cat, model),
-                   owner=f'the {key} connection' if key else '', owner_link='agents', cli=cli, display=key, default=not value,
+                   owner=f'the {key} connection' if key else '', owner_link='ai_apps', cli=cli, display=key, default=not value,
                    ready=bool(key))
         if not key: out['note'] = 'no CLI connected yet'
         return out
@@ -176,7 +176,7 @@ def resolve(store, cfg, slot_key: str) -> dict:
         seen = model or ('' if dflt.startswith('effort:') else dflt)
         out.update(model=model, effort=effort, choices=cat['choices'], efforts=_efforts(cat, seen), resolved=_resolved(cat, seen),
                    default_hint=f"{said} - the {'Assistant' if slot_key == 'concierge_ai' else 'light'} default",
-                   owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'agents', cli=cli)
+                   owner=owner, owner_link='' if slot_key == 'concierge_ai' else 'ai_apps', cli=cli)
         if not light and not dflt: out['note'] = f'no light model set - this runs on the {cli} coding model, which is the expensive gear'
         from .agents import runs_here
         # a brain that does not start is not "what will run": the card said claude while triage failed on it

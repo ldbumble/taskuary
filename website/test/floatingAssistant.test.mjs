@@ -24,8 +24,8 @@ test("the assistant header stays small and opens app-level walkthrough and add c
 
 test("add shortcuts open the native new-task and new-report surfaces", () => {
   const shell = read("FloatingAssistant.jsx");
-  assert.match(shell, /window\.location\.hash = "new-task"/);
-  assert.match(shell, /window\.location\.hash = "report=new"/);
+  assert.match(shell, /openAppLink\("new-task"\)/);
+  assert.match(shell, /openAppLink\("report=new"\)/);
   assert.match(taskSource(), /window\.location\.hash === "#new-task"/);
   assert.match(read("ReportsView.jsx"), /value === "new"/);
 });
@@ -34,7 +34,7 @@ test("add shortcuts open the native new-task and new-report surfaces", () => {
 // on the very first render, so the requested card opens without a detour through another page
 test("deep links open their card in the canvas from the first render", () => {
   const page = read("TaskHubPage.jsx");
-  assert.match(page, /useState\(\(\) => canvasRequestFromHash\(window\.location\.hash \|\| "", 1\)\)/);
+  assert.match(page, /useState\(\(\) => \{ const r = canvasRequestFromHash\(window\.location\.hash \|\| "", 1\); return r && \{ \.\.\.r, fromUrl: true \}; \}\)/);
   assert.match(page, /request=\{canvasReq\}/);
   assert.match(page, /useState\(tab === "Assistant"\)/);
   assert.match(page, /\{everAssistant && \(/);

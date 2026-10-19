@@ -10,6 +10,7 @@ import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import SkillImport from "./SkillImport.jsx";
+import { openAppLink } from "./appLinks.js";
 
 const lines = (v) => String(v || "").split("\n").map((x) => x.trim()).filter(Boolean);
 const failure = (e) => e?.response?.data?.detail || e?.message || "Could not save changes";
@@ -79,7 +80,7 @@ export const CliConnectionsPage = ({ onBack }) => {
       <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every profile that chooses it.</Typography>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>Add CLI connection</Button>
     </Box>
-    <Button size="small" onClick={() => { window.location.hash = "profiles"; }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
+    <Button size="small" onClick={() => { openAppLink("profiles"); }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
     {!clis && !err && <CircularProgress size={22} />}
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>

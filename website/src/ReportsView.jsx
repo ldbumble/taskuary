@@ -33,6 +33,7 @@ import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
+import { openAppLink } from "./appLinks.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -402,7 +403,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
       // a workflow run IS a task: open it where the agent and its browser can be watched (the owner, 2026-10-08)
-      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Workflow"} started as ${data.ref} — opening it.` }); window.location.hash = `task=${data.task_id}`; }
+      if (data.task_id) { setNote({ ok: true, detail: `${data.title || "Workflow"} started as ${data.ref} — opening it.` }); openAppLink(`task=${data.task_id}`); }
       // where a report lands is its own routing, and a failure is the bell's alone (reports.run_lands)
       else setNote({ ok: true, detail: `${data.title || "Report"} is running in the background — you can leave this tab. ${data.lands || "If it fails, the bell says why."}` });
     } catch (e) { setNote({ ok: false, detail: e?.response?.data?.detail || "report could not be queued" }); }
@@ -1046,7 +1047,7 @@ function RoutingCard({ cfg, setCfg, targets, inboxes, brains, firstDest, sourceI
             <Typography variant="body2" sx={{ fontSize: 12.5 }}>
               <b>{judgeWords(judge, cfg, brains)[0]}</b> decides where each run goes
             </Typography>
-            <Button size="small" onClick={() => { window.location.hash = JUDGE_HASH; }} sx={{ fontSize: 12, color: INK }}>
+            <Button size="small" onClick={() => { openAppLink(JUDGE_HASH); }} sx={{ fontSize: 12, color: INK }}>
               {judge?.value ? "change the judge" : "pick one judge for every report"}</Button>
             <Button size="small" onClick={() => setShowPrompt(!showPrompt)} sx={{ fontSize: 12, color: INK }}>
               {showPrompt ? "hide the prompt ⌃" : "see the prompt ⌄"}</Button>

@@ -18,6 +18,7 @@ import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import BoardView from "./BoardView.jsx";
 import { canvasRequestFromHash } from "./canvasLinks.js";
+import { onPlace, openAppLink } from "./appLinks.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { loadedAsset, staleWhat } from "./staleBuild.js";
@@ -249,7 +250,7 @@ export default function TaskHubPage() {
   // On a busy live session that left the requested page looking completely blank for many seconds.
   const [tab, setTab] = useState("Assistant");
   // what the canvas is asked to open - a task, or a browse card - numbered so the same one asked twice opens twice
-  const [canvasReq, setCanvasReq] = useState(() => canvasRequestFromHash(window.location.hash || "", 1));
+  const [canvasReq, setCanvasReq] = useState(() => { const r = canvasRequestFromHash(window.location.hash || "", 1); return r && { ...r, fromUrl: true }; });
   const ask = useCallback((req) => setCanvasReq((cur) => ({ ...req, n: (cur?.n || 0) + 1 })), []);
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
@@ -369,16 +370,15 @@ export default function TaskHubPage() {
 
   // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
   // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= the rail's own row
-  useEffect(() => {
-    const fromHash = () => {
-      const req = canvasRequestFromHash(window.location.hash || "", 0);
-      if (req) { ask(req); setTab("Assistant"); tabRef.current = "Assistant"; }
-      else if (/^#msg=\d+/.test(window.location.hash || "")) go("Assistant");
-    };
-    window.addEventListener("hashchange", fromHash);
-    return () => window.removeEventListener("hashchange", fromHash);
+  // ...and the browser's Back and Forward come the same road (appLinks.onPlace): a step back to the address with no place is the walk's
+  // own table, the page put down (the 2026-10-19 UI walk: Back left the app). `fromUrl`: the address already says it - the canvas
+  // writes it more exactly, never as a new step
+  useEffect(() => onPlace((h, back) => {
+    const req = canvasRequestFromHash(h, 0);
+    if (req || (back && !h)) { ask({ ...(req || { kind: "home" }), fromUrl: true }); setTab("Assistant"); tabRef.current = "Assistant"; }
+    else if (/^#msg=\d+/.test(h)) go("Assistant");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }), []);
   // A terminal belongs to the task it is working. Opening a task with start=true means "and put your CLI on it now";
   // `act` opens it with one of its dialogs up (a card's "Not a task…")
   const openTask = (taskId, opts) => {
@@ -445,8 +445,8 @@ export default function TaskHubPage() {
           </Tooltip>
           {/* the Fix button lands on the card itself: Connectors reads #connector=<type> on the way in */}
           <Bell onGo={(p) => {
-            if (p.connector) { window.location.hash = `connector=${p.connector}`; return; }   // the hash opens its card in the canvas
-            if (p.report) { window.location.hash = `report=${p.report}`; return; }
+            if (p.connector) { openAppLink(`connector=${p.connector}`); return; }   // the link opens its card in the canvas
+            if (p.report) { openAppLink(`report=${p.report}`); return; }
             go(p.where || "Connections");
           }} />
           <Tooltip title="Refresh">

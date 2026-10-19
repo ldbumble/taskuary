@@ -14,6 +14,7 @@ import { ConfirmDelete, useAgents } from "./ui.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
+import { openAppLink } from "./appLinks.js";
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -153,7 +154,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
     setBusy("run");
     try {
       const { data } = await api.post(`/api/reports/${sid}/rerun`);
-      if (data.task_id) { window.location.hash = `task=${data.task_id}`; return; }
+      if (data.task_id) { openAppLink(`task=${data.task_id}`); return; }
       setMsg({ ok: true, text: `${data.title || "It"} is running.` });
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be started." }); }
     finally { setBusy(""); }

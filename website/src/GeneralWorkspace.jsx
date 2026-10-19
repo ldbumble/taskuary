@@ -1,4 +1,3 @@
-import { says, subState } from "./laneSays.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -363,7 +362,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -529,20 +528,9 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {serverBusy && atWork}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
-          {/* THE HAND IT RAISED, and the answers it offered. The agent stops on a real blocker with the
-              question and its choices (selfclose.ASK_LINE); both were recorded and neither was shown, so
-              the owner read a paragraph and typed their answer back by hand (2026-09-15). A choice goes in
-              as their next message - the same road the composer uses, so the turn streams as it always did. */}
-          {!dock && asking && (
-            <div className="tq-aui-asking">
-              <div><b>{says(subState({ request: asking }), name)}</b><span>{asking.text}</span></div>
-              <div className="tq-aui-asking-choices">
-                {(asking.choices || []).map((c) => (
-                  <Button key={c} size="small" variant="outlined" onClick={() => onAnswer?.(c)}>{c}</Button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* No question card with answer buttons here (the owner, 2026-10-19: "inline we have the agent to talk to, no need to
+              intermediate"): the agent's question is in its own answer above, and the reply goes in the composer. The
+              WhatsApp doorway is where a question is relayed with its choices. */}
           {!dock && <PublishedPages pages={published} />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
               the answer needed */}
@@ -607,9 +595,6 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  // the raised hand this pane has answered: the poll still carries it until the agent's next turn
-  // records `working`, and an answered question must stop offering its buttons at once
-  const [answered, setAnswered] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
   const [reportBusy, setReportBusy] = useState(false);
   // the whole window, where it stands - the dock is exempt, it has its own expand
@@ -757,8 +742,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
   // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding
   // agent is a terminal, so there is nothing to switch (the owner, 2026-09-22).
-  const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
-  const answerAsk = (text) => { setAnswered(asking.request_id); setOwnPrompt({ id: `ask:${asking.request_id}`, text }); };
+  const asking = data?.asking || null;
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   const thread = (
@@ -768,7 +752,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={asking} onAnswer={answerAsk}
+        asking={asking}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
     </ShownCtx.Provider></AgentNameCtx.Provider>

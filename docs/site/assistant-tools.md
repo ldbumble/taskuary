@@ -10,10 +10,10 @@ except the few that can be undone, which run at once with an undo on the receipt
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere |
-| **task** | change any task - the one on the table or one named with ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject |
-| **agents** | start, continue, answer or stop the agent on a task, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
+| **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
+| **agents** | start, continue, answer or stop a task's agent, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
-| **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule |
+| **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
@@ -179,7 +179,7 @@ The "They answered elsewhere" button: they answered elsewhere; the step somebody
 
 ## Task
 
-Change any task - the one on the table or one named with ref.
+Change any task - the table's, or one named by ref.
 
 ### `task.update`
 
@@ -319,6 +319,16 @@ Prepare a question for the task's sender; it waits for the owner's yes, never se
 
 <p class="runs">Waits for your yes on a card.</p>
 
+### `task.share`
+
+Email what a task's work found; a draft for the owner's yes, never sent.
+
+- `who` - an address
+- `about` (optional)
+- `ref` (optional) - the task (TQ-0123), when it is not the one on the table
+
+<p class="runs">Waits for your yes on a card.</p>
+
 ### `review.approve`
 
 The owner's yes to what is drafted: sends the reply as it stands - and on a task's close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.
@@ -335,7 +345,7 @@ Reject the draft reply waiting on a task - nothing is sent, the task stays open.
 
 ## Agents
 
-Start, continue, answer or stop the agent on a task, and teach where work belongs.
+Start, continue, answer or stop a task's agent, and teach where work belongs.
 
 ### `dispatch.prepare`
 
@@ -455,6 +465,12 @@ Teach triage to file this sender or subject from now on - their mail still arriv
 ### `preference.sender_rule`
 
 An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.
+
+<p class="runs">Waits for your yes on a card.</p>
+
+### `message.retriage`
+
+Triage reads the message on the table again - one it could not sort.
 
 <p class="runs">Waits for your yes on a card.</p>
 

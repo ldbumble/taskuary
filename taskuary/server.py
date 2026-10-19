@@ -1301,6 +1301,14 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import concierge, funnel
         item = (funnel.next_item(store, p['key']) if p.get('key') else None) or {'tid': tid, 'key': p.get('key')}
         return concierge.split_item(store, item, str(p.get('text') or ''), ACTOR)
+    # SORT IT AGAIN and SEND OUT RESULTS as tools (2026-10-18): each runs the page's own handler - the row's retriage, the task
+    # bar's Email someone - so a card and a click agree. The second only drafts: it waits in Close out for the owner's yes
+    if kind == 'message.retriage': return retriage_message(mid)
+    if kind == 'task.share':
+        from . import concierge
+        who = (concierge.person(store, str(p.get('who') or '')) or {}).get('Email')
+        if not who: raise HTTPException(422, f"no address for {p.get('who') or 'nobody'} - say their email address")
+        return task_email(tid, TaskEmailBody(to=who, about=str(p.get('about') or '')))
     if kind == 'report.create':
         # the same road the Reports tab takes (validate, then save_source) - never an assistant-only path (PW-194)
         from . import compose

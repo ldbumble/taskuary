@@ -91,6 +91,10 @@ KINDS = {
     'connection.pause':         ('connector', (), None),
     'connection.resume':        ('connector', (), None),
     'script.start':             ('script', ('name',), None),
+    # ...and the two buttons that were the page's alone (2026-10-18): Sort it again, and Send out results - a summary drafted for
+    # the owner's yes, never sent from the card
+    'message.retriage':         ('message', (), None),
+    'task.share':               ('task', ('who',), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coding agent); `coding` is another
 SAME = {frozenset(('task', 'general'))}

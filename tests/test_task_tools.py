@@ -191,6 +191,22 @@ class ToolTests(unittest.TestCase):
         self.run_card(s2, call(s2, 'task.clarify', key=i2['key'], text='Which date range do you need?')[0])
         self.assertTrue(any('Which date range' in (r.get('DraftText') or '') for r in s2.list_reviews('pending')))
 
+    def test_send_out_results_is_a_card_that_drafts_and_sort_it_again_runs_the_rows_retriage(self):
+        """Both were the page's alone (2026-10-18): each is a tool now, down the page's own handler - and a send still waits for a yes."""
+        from taskuary import server
+        s, tid, mid, item = table()
+        p, _ = call(s, 'task.share', key=item['key'], who='Erin', about='the export is fixed')
+        self.assertEqual((p['kind'], p.get('auto')), ('task.share', None))
+        with mock.patch('taskuary.outbox.task_email', return_value={'ok': True}) as te:
+            self.run_card(s, p)
+        self.assertEqual(te.call_args.args[1:4], (tid, 'erin@northwind.example', 'the export is fixed'))
+        with mock.patch.object(server, 'store', s), mock.patch.object(server, 'retriage_message', return_value={'task_id': None}) as rt:
+            server._run_operation({'kind': 'message.retriage', 'target': mid, 'params': {}}, None)
+        rt.assert_called_once_with(mid)
+        dock = concierge.general.dock_task(s, 'owner')[0]['TaskId']
+        with self.assertRaises(concierge.CallMiss):
+            concierge.call_turn(s, dock, {'kind': 'task.share', 'params': {'who': 'Omar Keller', 'ref': f'TQ-{tid}'}}, item, 'send it to Omar')
+
     def test_reject_the_draft_leaves_the_task_open(self):
         s, tid, rid, item = T.ResponseTests()._drafted()
         p, _ = call(s, 'review.reject', key=item['key'])

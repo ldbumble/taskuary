@@ -1981,11 +1981,12 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # THE CALL ROAD CHECKS WHAT THE BUTTONS CHECK (real-AI check, 2026-10-18): a hand-off to someone who never wrote here and a
         # stop with nothing running were offered as cards that failed only at the press, in jargon. The fact goes back to the model,
         # which asks or says so - never a card nobody can run
-        if kind == 'task.handoff':
+        # ...and so does a summary sent out: a name nobody by it wrote as has no address to draft it to
+        if kind in ('task.handoff', 'task.share'):
             who = str(params.get('who') or '').strip()
             if who and not person(store, who):
                 raise CallMiss(f"Nobody called {who} has written here, so there is no address to hand {named} to - ask the owner for "
-                               f"their email address (task.handoff takes an address as `who`). Nothing was written.")
+                               f"their email address ({kind} takes an address as `who`). Nothing was written.")
         if kind == 'agent.stop' and not _agent_running(t) and (store.get_task(t) or {}).get('RunStatus') != 'running':
             raise CallMiss(f"No agent is running on {named} - there is nothing to stop. Say so in plain words. Nothing was changed.")
         # ...and an ANSWER with nobody to hear it (real-AI walk, 2026-10-18): "tell the agent on TQ-n ..." with no session on TQ-n
@@ -3181,6 +3182,7 @@ def op_label(kind: str, p: dict) -> str:
              'task.trust': 'Trust what is on it',
              'task.not_a_task': L('remove'), 'dispatch.prepare': L('regular_agent'), 'agent.continue': L('continue'),
              'review.reject': 'Reject the draft', 'task.split': L('split', 'split'), 'report.rerun': L('rerun'), 'connection.test': L('test_connection'),
+             'message.retriage': L('retriage'), 'task.share': L('share'),
              # PURPOSE is written for the model: read as a label it put "how work like this should be ROUTED" on the button (2026-10-18)
              'memory.remember': 'Remember it', 'routing.remember': 'Remember where work like this goes'}.get(kind, label)
     if kind == 'dispatch.prepare' and str(p.get('kind')) == 'coding': label = L('coding_agent')
@@ -3246,6 +3248,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'task.checklist': return f" The list has {len(o.get('checklist') or [])} item(s)" + (f", {o['added']} email(s) added." if o.get('added') else '.')
     if kind == 'task.handoff' and o.get('to'): return f" The hand-off to {o['to']} is below for your yes - nothing has gone."
     if kind == 'task.clarify': return ' The question is below for your yes - nothing has gone.'
+    if kind == 'task.share': return f" The summary for {o.get('to') or 'them'} waits in Close out for your yes - nothing has gone."
     if kind == 'review.reject': return ' The draft is rejected; the task stays open.'
     if kind == 'task.defer': return ' ' + away_line(o)
     if kind == 'connection.test': return f" {o.get('name') or 'It'} {'answered' if o.get('answered', o.get('ok')) else 'did not answer'}: {str(o.get('detail') or '')[:300]}"

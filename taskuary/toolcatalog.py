@@ -76,6 +76,8 @@ PURPOSE = {
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
     'task.merge':               "fold a task into the one it duplicates - `into`: the survivor's ref (TQ-0123); `ref` is the one folded away",
+    'task.share':               "email what a task's work found - `who`: an address, `about` optional; a draft for the owner's yes, never sent; `ref`",
+    'message.retriage':         'triage reads the message on the table again - one it could not sort',
     'task.clarify':             "prepare a question for the task's sender - `text`: the question; it waits for the owner's yes, never sent from here; `ref`",
     'task.reopen':              'reopen a task that was marked done - `ref`',
     'task.not_a_task':          'delete a task and teach triage it was never work - `ref`',
@@ -167,17 +169,16 @@ def vocabularies(store=None) -> dict:
 
 def selector(store=None) -> str:
     v = vocabularies(store)
-    lines = ['SELECT (for pipe.clear, and anywhere a set is meant) - every field is optional and they AND together:',
+    lines = ['SELECT (pipe.clear, or wherever a set is meant) - every field optional, ANDed together:',
              '  category   one of these, exactly: ' + ', '.join(v['category'])]
     if v['kind']: lines.append('  kind       ' + ' | '.join(v['kind']))
     lines.append('  lane       ' + ' | '.join(v['lane']))
     lines += ['  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
-              '  everything true - every item in the pipe except an agent waiting or working; only when the owner means all of it',
+              '  everything true - every item in the pipe except an agent waiting or working; only when the owner means all',
               'Use SELECT when the owner describes a SET ("all the reports", "everything from Marketing").',
-              'Naming a category is not the same as the word appearing in a subject - say category: report,',
-              'never contains: report.']
+              'A category is not a word in the subject: say category: report, never contains: report.']
     return '\n'.join(lines)
 
 
@@ -190,22 +191,22 @@ def block(store=None) -> str:
         'HOW YOU ACT (code reads your last line)',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
-        'A look-up runs at once and its answer comes back to you. Anything that changes something becomes a card the',
+        'A look-up runs at once and answers you. Anything that changes something becomes a card the',
         'owner confirms - a few that can be undone run at once, with the undo on the receipt. When two different',
         'things fit and you cannot tell which, ask one short question and end with OPTIONS: first | second instead.',
         'Never both, never a tool that is not listed. A task the owner names goes in params.ref ("TQ-0123"); otherwise',
-        'the item on the table is the target. A decision about a DIFFERENT item than the one on the table puts the',
+        "the item on the table is the target. A decision about a DIFFERENT item than the table's puts the",
         'words that name it in params.on. A SET of items goes in params.select (SELECT below).',
         '',
-        'WHERE THINGS ARE - look before you guess, and before you say you do not know or offer to look:',
+        'WHERE THINGS ARE - look before you guess, say you do not know, or offer to look:',
     ]
     for said, kind, params in WHERE:
         lines.append(f'  {said} -> CALL: {{"kind": "{kind}", "params": {json.dumps(params)}}}')
-    lines += ['', 'TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} to see each tool in a bucket and what it needs,',
+    lines += ['', """TOOLS, IN BUCKETS. CALL tools.list with {"bucket": "<name>"} to see a bucket's tools and what each needs,""",
               'or tools.describe with {"kind": "<tool>"}. When you already know a tool and what it needs, CALL it directly.']
     for name, what, kinds in BUCKETS:
         lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
-    lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - name a button only by its name here:',
+    lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - use only these names:',
               '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),
               '', selector(store), '',
@@ -270,12 +271,11 @@ def _names(v: str) -> str: return '/'.join(f'"{w}"' for w in [L(v)] + list((butt
 # the buttons whose verb is not itself a decision, and the tool each one is
 CHIP_TOOL = {'defer': 'task.defer', 'continue': 'agent.continue', 'test_connection': 'connection.test', 'split': 'task.split',
              'reopen': 'task.reopen', 'close_note': 'task.complete', 'forward': 'task.handoff', 'ask_sender': 'task.clarify',
-             'remove': 'task.not_a_task'}
+             'remove': 'task.not_a_task', 'retriage': 'message.retriage', 'share': 'task.share'}
 # ...and the buttons that are the page's alone: each answers the screen it is on, never a sentence (a test holds every
 # button in buttons.json to one of the three)
 PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with task.create_from_text", 'fix': "wears the failure's own fix", 'try_again': 'repeats the press it stands under', 'take_back': "a receipt's undo",
              'review_changes': "opens the agent's diff", 'run_another': 'a second agent from the task page',
-             'retriage': 'no tool sorts an item again yet', 'share': 'no tool mails results yet',
              'new_task': 'the model makes one with task.create_from_text; naming the button too pushed the index over its cap',
              'report_bug': 'a failure the app cannot fix opens the bug report, which the owner reads before it goes',
              'attach': "opens the file picker on the draft - a file is the owner's to choose",
@@ -291,12 +291,12 @@ def _has(store, v: str) -> bool:
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
 WHERE = (
     ('what is waiting on the owner', 'pipe.list', {}),
-    ("a task's story - its messages, notes, agent and draft", 'task.read', {'ref': 'TQ-0123'}),
+    ("a task's story - messages, notes, agent and draft", 'task.read', {'ref': 'TQ-0123'}),
     ('mail or chat about something, however old', 'timeline.search', {'contains': 'invoice', 'days': 60}),
     ('one message in full', 'message.read', {'mid': 4321}),
     ('a person - how often they write, their open tasks', 'sender.read', {'who': 'Erin'}),
     ('open work', 'tasks.list', {'contains': 'export'}),
-    ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO approval limit'}),
+    ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO limit'}),
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),
     ('a setting', 'setting.read', {'label': 'auto-drafts'}),
@@ -313,14 +313,14 @@ WHERE = (
 # detail rides the turn.
 BUCKETS = (
     ('table', 'decide about the item on the table', tuple(DECISIONS)),
-    ('task', 'change any task - the one on the table or one named with ref',
+    ('task', "change any task - the table's, or one named by ref",
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
-      'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'review.approve', 'review.reject')),
-    ('agents', 'start, continue, answer or stop the agent on a task, and teach where work belongs',
+      'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
+    ('agents', "start, continue, answer or stop a task's agent, and teach where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'item.settle', 'message.file', 'message.archive',
-                                                            'preference.exclude_sender', 'preference.sender_rule')),
+                                                            'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
     ('app', 'settings, connections, roles, scripts and kept facts', ('setting.set', 'connection.create', 'role.apply', 'connection.test', 'connection.pause',
@@ -330,7 +330,7 @@ BUCKETS = (
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
-         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.complete': 'note?',
+         'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 

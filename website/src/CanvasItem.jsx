@@ -53,7 +53,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, onReminded, phone = false }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, onReminded, phone = false, lit = null }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -74,8 +74,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   useHost(phone);
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
   const read = useItemAdvice(card, phone);
-  const advised = adviceShown(read, { key: card.key, lane: card.lane }, busy);
-  const none = !advised && !busy && read?.none && read.none !== "no_ai" ? read : null;
+  // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
+  const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
+  const none = !lit && !advised && !busy && read?.none && read.none !== "no_ai" ? read : null;
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -107,8 +108,10 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
           draws them. On a phone the same row rides at the view's foot instead, in both states - the pinned full-screen view covers
           the dock, and the box is sized once, so Expand must not add or take away a row. */}
       {/* ...and the Advisor's line rides WITH the row it lights: pinned over the composer, it stood a screen away (2026-10-19) */}
-      {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip=""><AdvisorNext advice={advised} /><AdviceNone advice={none} /></div>
-        <ActionRow inline advised={advised || none} /></div>}
+      {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">
+        {lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{lit.line}</div></div>}
+        <AdvisorNext advice={advised} /><AdviceNone advice={none} /></div>
+        <ActionRow inline advised={lit || advised || none} /></div>}
     </Box>
     </>
   );

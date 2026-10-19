@@ -28,7 +28,8 @@
 //   FOLD      a task folded by its X that its folded line or its rail row cannot open again
 //   UNDO      a Take it back or Undo anywhere - the row, the chat, the card - or a line saying "Undo:" or "confirm below" (the owner,
 //             2026-10-19: "no take it back button. hate that" - a wrong Mark done is put right with Reopen task)
-//   ONCE      one act, two receipt lines: Remind me's receipt printed by the page and again by the server (2026-10-19 UI walk)
+//   ONCE      one act, two receipt lines: Remind me's receipt printed by the page and again by the server (2026-10-19 UI walk) - and two
+//             rail rows picked in turn leave every line once, not a "Show me" line per pick (verify, 2026-10-19)
 //   STILL     the Advisor's line landing moved a button on the row - the advice only tints (2026-10-19: Send pushed in, Attach into ▾)
 //   STRIP     the Advisor's strip under the item on the table says nothing - no line, no reason, no Thinking
 //   REREAD    a press on the row and no fresh read of the advice after it (2026-10-19: "waiting on you" stood over a sent reply)
@@ -596,6 +597,20 @@ async function cards() {
       const cur = await page.$("[data-tq-rail] [data-tq-key].current");
       if (cur) { await cur.click(); await wait(3000); walked.push("fold: reopened from its rail row"); if (!(await look(page)).card) note("FOLD", page.step, "its rail row, ringed as on the table, did not open it again"); }
     }
+  }
+  // ONE COPY: two rail rows picked in turn, twice - every line in the chat once; picking between them added another "Show me" line per
+  // pick, the same title twice and more (verify, 2026-10-19)
+  page.step = "cards picks";
+  await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(5000);
+  const two = (await look(page)).rail.filter((r) => !r.current).slice(0, 2);
+  if (two.length < 2) note("ONCE", page.step, "fewer than two rows on the rail to pick between - the one-copy path was not walked");
+  else {
+    for (const r of [...two, ...two]) await openItem(page, r.key);
+    walked.push("picks: two rail rows, twice each");
+    const said = await page.evaluate(() => [...document.querySelectorAll(".tq-chat-body .tq-msg")].map((m) => m.innerText.replace(/\s+/g, " ").trim()).filter(Boolean));
+    const twice = said.filter((t, i) => said.indexOf(t) !== i);
+    if (twice.length) note("ONCE", page.step, `picked again, a line stands twice: "${twice[0].slice(0, 80)}"`);
+    judge(await look(page), page.step);
   }
   await page.close(); srv.stop();
 }

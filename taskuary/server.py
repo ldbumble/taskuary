@@ -4283,7 +4283,7 @@ def _hands_off():
     the same mail gets replied to twice - the tab locks itself, and this is the same rule in the API."""
     from . import remote_assistant
     h = remote_assistant.handoff(store)
-    if h: raise HTTPException(409, f"the walk is in {remote_assistant.LABELS[h['channel']]} - take it back here first")
+    if h: raise HTTPException(409, f"the walk is in {remote_assistant.LABELS[h['channel']]} - press {buttons.label('walk_here')} here first")
 
 @app.post('/api/concierge/handoff')
 def concierge_handoff(body: HandoffBody):

@@ -49,7 +49,7 @@ test("both surfaces that can approve a reply show what rides with it", () => {
   assert.match(feed, /<ReplyFiles reviewId=\{reviewId\} files=\{envelope\?\.attachments \|\| \[\]\}/);
   assert.match(review, /<ReplyFiles reviewId=\{r\.ReviewId\} files=\{deliveryFiles\(filedDelivery\)\}/);
   // ...and the button counts them, so the send is never a surprise
-  assert.match(feed, /files\.length \? `\$\{files\.length\} file\$\{files\.length === 1 \? "" : "s"\}` : ""/);
+  assert.match(feed, /files\.length \? plural\(files\.length, "file"\) : ""/);
 });
 
 test("a chat says it cannot carry a file instead of offering a picker that lies", () => {

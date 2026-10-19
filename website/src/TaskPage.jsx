@@ -86,6 +86,7 @@ import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
+import { plural } from "./timeWords.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -1550,7 +1551,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
                           {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                            label={`${detail.attachments.length} attachment${detail.attachments.length === 1 ? "" : "s"}`}
+                            label={plural(detail.attachments.length, "attachment")}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
                           {expands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
@@ -1608,7 +1609,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   ? <><Box component="span" sx={{ color: INK, fontWeight: 600 }}>Sorted{triaged.at ? ` · ${whenShort(triaged.at)}` : ""}</Box>{" "}
                                       {triaged.head}{triaged.why ? `: "${triaged.why}"` : ""}</>
                                   : <span>{detail.ref} · {made}</span>}
-                                {triaged.later > 0 && ` · ${triaged.later} later message${triaged.later === 1 ? "" : "s"} joined it`}
+                                {triaged.later > 0 && ` · ${plural(triaged.later, "later message")} joined it`}
                               </Typography>
                             </Box>
                           </Box>
@@ -2089,7 +2090,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   ))}
                 </Box>}
 
-                {!sessionView && <Fold title={`Context & history · ${taskMessages.length} message${taskMessages.length === 1 ? "" : "s"} · ${detail.comments.length} note${detail.comments.length === 1 ? "" : "s"}`}>
+                {!sessionView && <Fold title={`Context & history · ${plural(taskMessages.length, "message")} · ${plural(detail.comments.length, "note")}`}>
                   <Typography sx={{ ...label, display: "block", mb: 0.65 }}>Messages</Typography>
                   {taskMessages.map((m) => {
                     const route = detail.routes.find((r) => r.MessageId === m.MessageId);
@@ -2249,7 +2250,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14.5, flex: 1 }}>What has it changed?</Typography>
           {diff && !!diff.files?.length && (
             <Typography sx={{ ...mono, fontSize: 11.5, color: DIM }}>
-              {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
+              {plural(diff.files.length, "file")}
               <Box component="span" sx={{ color: "#47654a", ml: 1 }}>+{diff.added}</Box>
               <Box component="span" sx={{ color: "#6b2733", ml: 0.75 }}>−{diff.removed}</Box>
             </Typography>
@@ -2264,8 +2265,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             : diffScope === "task" ? "what this task's agent changed" : "everything a push would carry, whoever wrote it"}
           {/* an agent told to "commit locally and stop" leaves a CLEAN tree - saying only
               "uncommitted work" over a finished job read as "it did nothing" */}
-          {diffScope === "task" && diff?.commits?.length ? ` — ${diff.commits.length} commit${diff.commits.length === 1 ? "" : "s"} of its own, unpushed` : ""}
-          {diffScope === "checkout" && diff?.ahead ? ` — ${diff.ahead} commit${diff.ahead === 1 ? "" : "s"} ahead of ${diff.upstream}, plus anything uncommitted`
+          {diffScope === "task" && diff?.commits?.length ? ` — ${plural(diff.commits.length, "commit")} of its own, unpushed` : ""}
+          {diffScope === "checkout" && diff?.ahead ? ` — ${plural(diff.ahead, "commit")} ahead of ${diff.upstream}, plus anything uncommitted`
                        : diffScope === "checkout" && diff?.upstream ? ` — measured against ${diff.upstream}` : ""}
           {/* a shared checkout carries other tasks' work; the old drawer showed all of it as this
               task's - a database-only task wore two other agents' commits. The whole view is one
@@ -2273,7 +2274,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <Box component="button" type="button" onClick={() => { const next = diffScope === "task" ? "checkout" : "task"; setDiffScope(next);
               api.get(`/api/tasks/${selected}/diff`, { params: { scope: next } }).then((r) => setDiff(r.data)).catch(() => {}); }}
             sx={{ ml: 1, color: "#55697a", cursor: "pointer", background: "none", border: 0, p: 0, font: "inherit", textAlign: "left", "&:hover": { textDecoration: "underline" } }}>
-            {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${diff.checkout_files} file${diff.checkout_files === 1 ? "" : "s"})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
+            {diff?.scope === "pr" ? "show the agent's checkout instead" : diffScope === "task" ? `show the whole checkout${diff?.checkout_files ? ` (${plural(diff.checkout_files, "file")})` : ""}` : (diff?.pr ? "back to the pull request's diff" : "back to this task's changes")}
           </Box>
         </Typography>
         {!diff ? <CircularProgress size={20} sx={{ m: 2 }} />

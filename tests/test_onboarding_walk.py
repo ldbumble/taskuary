@@ -254,7 +254,7 @@ class EveryStopSaysWhatYouAlreadyHaveTests(unittest.TestCase):
         # both halves counted and named separately; only the first few names are listed, because a
         # card is not a directory - the count is the answer and the names are the sanity check
         self.assertIn('3 reports:', said)                   # the two shipped + one of theirs
-        self.assertIn('1 workflows: Chase overdue invoices', said)
+        self.assertIn('1 workflow: Chase overdue invoices', said)
 
     def test_a_stop_with_nothing_to_count_says_none_yet_rather_than_nothing(self):
         """A blank where a number belongs reads as a failed read, not as an empty shelf."""

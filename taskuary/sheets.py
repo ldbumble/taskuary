@@ -11,6 +11,7 @@ as headers.
 """
 import json, re, time
 import requests
+from .timewords import plural
 
 SHEETS = 'https://sheets.googleapis.com/v4/spreadsheets'
 _TOK = {}   # refresh token -> (access token, expiry)
@@ -105,7 +106,7 @@ def test(store, c) -> str:
     if 'drive' in scopes:
         j = _get(tok, 'https://www.googleapis.com/drive/v3/files', q="mimeType='application/vnd.google-apps.spreadsheet' and trashed=false", pageSize=10, fields='files(name)')
         names = [f['name'] for f in j.get('files', [])]
-        out += f"; {len(names)} spreadsheet{'s' if len(names) != 1 else ''} visible" + (f" ({', '.join(names[:5])}{'…' if len(names) > 5 else ''})" if names else '')
+        out += f"; {plural(len(names), 'spreadsheet')} visible" + (f" ({', '.join(names[:5])}{'…' if len(names) > 5 else ''})" if names else '')
     sheet = json.loads(c.get('ConfigJson') or '{}').get('spreadsheet')
     if sheet:
         meta = _get(tok, f'{SHEETS}/{spreadsheet_id(sheet)}', fields='properties.title,sheets.properties.title')

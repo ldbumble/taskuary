@@ -60,7 +60,7 @@ class LookupTests(unittest.TestCase):
         s = world()
         s.add_memory({'Scope': 'sender', 'ScopeKey': 'gail@northwind.example', 'Note': 'She owns the freight budget.', 'Active': 1})
         out = read(s, 'sender.read', who='gail')
-        for want in ('Gail Moreno', '1 messages', 'Quarterly numbers', 'TQ-0002', 'freight budget'):
+        for want in ('Gail Moreno', '1 message', 'Quarterly numbers', 'TQ-0002', 'freight budget'):
             self.assertIn(want, out)
         self.assertIn('Nobody by', read(s, 'sender.read', who='nobody-at-all'))
 

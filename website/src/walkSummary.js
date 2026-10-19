@@ -4,6 +4,7 @@
 // waiting" while the rail had it On you, and no agent was working on it.
 import { LEVEL_ORDER, SECTION_WORDS, bandsOf, levelOf } from "./funnelPile.js";
 import { isAgentKind, onYou } from "./lanes.js";
+import { plural } from "./timeWords.js";
 
 export const GROUPS = LEVEL_ORDER.map((key) => ({ key, word: SECTION_WORDS[key] }));
 export const groupOf = (i) => levelOf(i);
@@ -50,7 +51,7 @@ export function summarize(items) {
     you: b.items.filter((i) => onYou(i, b.level)).length }));
   const n = groups.reduce((t, g) => t + g.n, 0);
   const lead = n
-    ? `${n} thing${n === 1 ? "" : "s"}: ${groups.map((g) => `${g.n} ${g.key === "fyi" ? g.word : g.word.toLowerCase()}`).join(", ")}.`
+    ? `${plural(n, "thing")}: ${groups.map((g) => `${g.n} ${g.key === "fyi" ? g.word : g.word.toLowerCase()}`).join(", ")}.`
     : "Nothing is waiting on you.";
   return { n, groups, lead };
 }

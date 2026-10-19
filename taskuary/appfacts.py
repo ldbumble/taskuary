@@ -8,6 +8,7 @@ nothing and asks no model anything - and it rides in none of the scripts (walk.p
 which reach no model to begin with.
 """
 import json
+from .timewords import plural
 from . import settings_schema
 
 # the deterministic roads, by the names the owner says (spec: "Scripts"). Static on purpose: a script
@@ -121,8 +122,8 @@ def state_block(store, cap: int = 2500) -> str:
     def rep_line(r): return r['title'] + ('' if r['active'] else ' (off)') + (' - last run failed' if r['last_ok'] is False else '')
     def con_line(c): return c['name'] + (' - erroring' if c['last_error'] else '') + ('' if c['has_secret'] or c['type'] in ('imap', 'ollama') else ' (no key yet)')
     lines = ['THE APP RIGHT NOW (read from its own tables; look things up by name for detail)',
-             f"  {len(plain)} report{'s' if len(plain) != 1 else ''}: {named(plain, rep_line)}",
-             f"  {len(wfs)} workflow{'s' if len(wfs) != 1 else ''}: {named(wfs, rep_line)}",
+             f"  {plural(len(plain), 'report')}: {named(plain, rep_line)}",
+             f"  {plural(len(wfs), 'workflow')}: {named(wfs, rep_line)}",
              f"  {len(live)} connected: {named(live, con_line, more='connections.list')}" + (f"; {off} catalogue cards off" if off else ''),
              f"  agents: {', '.join(a['name'] for a in agents(store)) or 'none'} | brains: {'; '.join(brains(store))}",
              f"  settings: {len(settings_schema.knobs())} knobs in groups {', '.join(settings_schema.GROUPS)} - "

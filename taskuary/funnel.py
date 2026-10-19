@@ -12,6 +12,7 @@ import contextlib, contextvars, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 
+from .timewords import plural
 from .store import task_ref, auto_code_enabled
 from . import buttons, lanes
 from .lanes import level_of, on_you, waits_on_you, SECTION_WORDS, MAIL_KINDS   # the rail's rules, where their readers find them
@@ -673,7 +674,7 @@ def agent_story(store, tid) -> dict | None:
     if interrupted and cut:
         t0, t1 = _dt(run[0]['CreatedAt']), _dt(cut['CreatedAt'])
         mins = int((t1 - t0).total_seconds() // 60) if t0 and t1 else None
-        into = f', {mins} minute{"" if mins == 1 else "s"} in,' if mins else ','
+        into = f', {plural(mins, "minute")} in,' if mins else ','
         line = f'Taskuary {how} at {str(cut["CreatedAt"])[11:16]} while {who} had this{into} so its work stopped there. Nothing restarts by itself.'
     steps = []
     for e in run:
@@ -876,7 +877,7 @@ def from_proposals(store, used_rids: set, used_tids: set = frozenset()) -> list:
         first, n = max(rvs, key=lambda r: r['ReviewId']), len(rvs)
         out.append(_item(f"review:{first['ReviewId']}", 'review', 'approve', (store.get_task(tid) or {}).get('Title') or first.get('Reason') or 'emails wait for your yes',
                          tid=tid, when=first.get('CreatedAt'), rid=first['ReviewId'], draft=True,
-                         why=f"{n} email{'s' if n != 1 else ''} drafted for you to send"))
+                         why=f"{plural(n, 'email')} drafted for you to send"))
     return out
 
 

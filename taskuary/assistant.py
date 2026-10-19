@@ -521,7 +521,7 @@ def health_ideas(store, now: datetime = None) -> list:
         brain = str(store.get_setting('triage_ai') or '').strip()
         if waiting and not brain and not any(x['active'] and x['has_secret'] for x in appfacts.connections(store) if x['type'] in llm.AI_TYPES):
             out.append({'key': 'health:brain', 'kind': 'health', 'sig': 'no-brain',
-                        'text': f'{waiting} messages wait for triage and no brain is set to read them.',
+                        'text': f'{plural(waiting, "message")} wait{"s" if waiting == 1 else ""} for triage and no brain is set to read {"it" if waiting == 1 else "them"}.',
                         'action': {'type': 'health', 'tab': 'Settings', 'hash': 'settings=config&group=How%20mail%20is%20sorted',
                                    'why': 'nothing is judged until a brain is chosen'}})
     except Exception as e: logger.debug(f'health: the brain check was skipped - {e}')
@@ -603,7 +603,7 @@ def connect_line(store, ev: dict, s: dict, key: str, why: str) -> dict | None:
         logger.info(f"assistant: dropped {key} - it cited {n} thread(s), under the floor of {ev['floor']}, and nothing of yours names it")
         return None
     subjects = '; '.join(f'"{_short(ev["threads"][i - 1].split(" | ", 1)[-1], 90)}"' for i in cited[:6])
-    lead = f"{n} thread{'s' if n != 1 else ''} this month {'were' if n != 1 else 'was'} about {title}" if n else f"Your own setup names {title}"
+    lead = f"{plural(n, 'thread')} this month {'were' if n != 1 else 'was'} about {title}" if n else f"Your own setup names {title}"
     return {'key': key, 'kind': 'connect', 'sig': t,
             'facts': f"{title} is not connected; the threads about it: {subjects or '(none)'}" + (f"; named in {', '.join(named)}" if named else '') + '.',
             'text': f"{lead} and nothing here reads it. " + ('It is on the roadmap - say so and it moves up.' if card.get('planned') else f"Connect {title}?"),
@@ -1597,7 +1597,7 @@ def read_blocks(chosen: dict) -> list:
 def _footer(r: dict) -> str:
     if r.get('scope') == 'sources':
         n = int(r.get('systems') or 0)
-        return f"Reviewed: {n} configured data source{'s' if n != 1 else ''} only"
+        return f"Reviewed: {plural(n, 'configured data source')} only"
     from .lanes import idea_counted   # the words the Reports tab counts the same candidates in, never the internal kind
     kinds = ', '.join(f"{v} {idea_counted(k)}" for k, v in r['candidates'].items()) or 'no candidates'
     skip = f"; let go: {len(r['skipped'])}" if r['skipped'] else ''

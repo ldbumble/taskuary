@@ -2,6 +2,7 @@
 // and where the task came from, as conversations - pure, so node --test reads them without React or MUI.
 import { assignedAgent } from "./agentIdentity.js";
 import { routeIntent, routeWhy } from "./triageVerdict.js";
+import { plural } from "./timeWords.js";
 
 const CHANNEL_NAMES = { email: "Email", whatsapp: "WhatsApp", telegram: "Telegram", slack: "Slack", teams: "Teams", github: "GitHub",
   monday: "Monday", jira: "Jira", linear: "Linear", imessage: "iMessage", discord: "Discord", report: "Report", assistant: "Assistant",
@@ -67,9 +68,9 @@ export const expands = (groups, keep = 2) => hidden(groups, keep) > 0 || groups.
 export function cameFromLabel(groups) {
   const n = groups.reduce((s, g) => s + g.count, 0);
   if (!n) return "";
-  return `Came from · ${n} message${n === 1 ? "" : "s"}${groups.length > 1 ? ` in ${groups.length} conversations` : ""}`;
+  return `Came from · ${plural(n, "message")}${groups.length > 1 ? ` in ${groups.length} conversations` : ""}`;
 }
-export const groupMeta = (g) => [channelName(g.channel), `${g.count} message${g.count === 1 ? "" : "s"}`,
+export const groupMeta = (g) => [channelName(g.channel), plural(g.count, "message"),
   g.people > 1 ? `${g.people} people` : ""].filter(Boolean).join(" · ");
 
 // THE ASK IN ONE LINE: its first sentence, the whole text kept for the tooltip when that cut anything

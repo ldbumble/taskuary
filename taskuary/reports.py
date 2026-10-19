@@ -11,7 +11,7 @@ import io, json, os, re, sqlite3, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
 from . import spawn
-from .timewords import ago_m, span
+from .timewords import ago_m, plural, span
 
 PLANNED = ['graphql',
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
@@ -47,8 +47,11 @@ def rows_out(rows, limit, unit='rows', mine=True):
     more = len(rows) > limit
     rows = rows[:limit]
     why = (f'capped at {limit}' if mine else f'capped at the default {limit}') + ' — set "max rows" on this source to see more'
-    head = f'{len(rows)} rows' + (f' ({why})' if more else '')
-    return head.replace('rows', unit, 1), '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
+    # one row is "1 row", one sign-in "1 sign-in": the unit's first word loses its plural s ("1 rows" was every one-row report)
+    w, _, rest = unit.partition(' ')
+    one = (w[:-1] if len(rows) == 1 and w.endswith('s') and not w.endswith(('ss', 'ings', 'ies')) else w) + (f' {rest}' if rest else '')
+    head = f'{len(rows)} {one}' + (f' ({why})' if more else '')
+    return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]
 
 
 def ro_sqlite(path: str):
@@ -328,7 +331,7 @@ def run_rest(cfg):
     data = r.json()
     for k in (cfg.get('path') or '').split('.'):
         if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
-    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+    return (plural(len(data), 'item') if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
 
 
 def run_rss(cfg):

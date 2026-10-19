@@ -2,6 +2,8 @@
 // one rule that matters is testable: the result is said ONCE (the owner, 2026-10-10: "make sure it's full and complete
 // record but don't duplicate sections").
 
+import { plural } from "./timeWords.js";
+
 const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
 // markdown's marks off a line shown as plain text (a folded summary, an earlier session's one line)
 export const plain = (s) => String(s || "").replace(/^\s*(#+|>)\s*/gm, "").replace(/[*\x60]/g, "").trim();
@@ -41,8 +43,6 @@ export const splitFiles = (files, cwd) => {
   }
   return { mine, other };
 };
-
-const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 // one line of facts: who, when, and how much it did - each only when there is some (its files are under What it made)
 export const recordFacts = (s) => {

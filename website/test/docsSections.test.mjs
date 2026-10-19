@@ -8,7 +8,7 @@ const source = readFileSync(fileURLToPath(new URL("../src/DocsView.jsx", import.
 test("playbooks have a separate Docs section from operator identity", () => {
   assert.match(source, /\["documents", "Operator documents"\]/);
   assert.match(source, /\["playbooks", `Playbooks/);
-  assert.match(source, /section === "documents"[\s\S]+<OwnerCard \/>[\s\S]+\) : \([\s\S]+Search \$\{books\.length\} playbook/);
+  assert.match(source, /section === "documents"[\s\S]+<OwnerCard \/>[\s\S]+\) : \([\s\S]+Search \$\{plural\(books\.length, "playbook"\)\}/);
 });
 
 test("a large playbook library is searchable and scrolls inside its own shelf", () => {

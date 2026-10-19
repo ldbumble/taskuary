@@ -43,7 +43,7 @@ class TheCrypto(unittest.TestCase):
             head, body = markets.run_coingecko_prices({'ids': 'bitcoin', 'vs': 'usd'})
         rows = [json.loads(l) for l in body.splitlines() if l.strip()]
         self.assertEqual(rows, [{'id': 'bitcoin', 'currency': 'usd', 'price': 78624, 'change_pct': -0.61}])
-        self.assertEqual(head, '1 prices')   # rows_out substitutes the unit word; it does not singularise
+        self.assertEqual(head, '1 price')   # rows_out substitutes the unit word; it does not singularise
         self.assertNotIn('x-cg-demo-api-key', g.call_args.kwargs.get('headers') or {})
 
     def test_a_demo_key_rides_as_a_header_when_one_is_saved(self):

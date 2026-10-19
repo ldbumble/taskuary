@@ -12,6 +12,7 @@ failed retrieval is said in the context the model gets, never presented as the w
 import json
 import email, email.utils
 from loguru import logger
+from .timewords import plural
 from . import channels as _ch
 
 GRAPH_LIST_SELECT = 'id,receivedDateTime,from,conversationId'
@@ -180,7 +181,7 @@ def refresh_imap(store, M, user: str, root: str, restore: str = 'INBOX', readonl
                 added += _keep(store, root, ext, {'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_name': name or addr,
                                                   'from_email': addr, 'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'), 'sent_at': when}, user, before, atts)
         cov = {'complete': failed == 0, 'listed': seen, 'added': added,
-               'error': None if not failed else f'{failed} message{"s" if failed != 1 else ""} of the thread could not be fetched'}
+               'error': None if not failed else f'{plural(failed, "message")} of the thread could not be fetched'}
     except IMAPIdentityError as e:
         fatal = e
         cov = {'complete': False, 'listed': seen, 'added': added, 'error': str(e)[:200]}

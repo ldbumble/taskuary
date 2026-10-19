@@ -52,3 +52,12 @@ test("no page file writes its own time formatter: every age is read from timeWor
   const hits = files.flatMap((f) => { const code = strip(fs.readFileSync(path.join(SRC, f), "utf8")); return OWN.filter((re) => re.test(code)).map((re) => `${f}: ${re}`); });
   assert.deepEqual(hits, []);
 });
+
+// ...and a count with its noun pluralised by hand - `${n} task${n === 1 ? "" : "s"}` - the shape that writes "1 tasks" wherever one is
+// missed. Only where the count and the condition are the same expression: "Queue prompts" with no count is a different sentence.
+const COUNTED = [/\$\{([^{}\n]+?)\} [\w/ -]{0,40}?\w\$\{([^{}\n]+?) === 1 \? "" : "s"\}/g, /\{([^{}\n]+?)\} [\w/ -]{0,40}?\w\{([^{}\n]+?) === 1 \? "" : "s"\}/g];
+const byHand = (code) => COUNTED.some((re) => [...code.matchAll(re)].some((m) => m[1].trim() === m[2].trim()));
+test("no page file pluralises a count by hand: plural() from timeWords.js says it", () => {
+  assert.ok(byHand('`${n} task${n === 1 ? "" : "s"}`') && byHand('{n} file{n === 1 ? "" : "s"}'));
+  assert.deepEqual(files.filter((f) => byHand(strip(fs.readFileSync(path.join(SRC, f), "utf8")))), []);
+});

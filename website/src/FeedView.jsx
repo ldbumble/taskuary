@@ -67,6 +67,7 @@ import {
   fullProcessingRow, processingDetailPath, processingErrorCode, processingErrorMessage, processingMessageDetail, processingRefreshCandidate,
   processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
+import { plural } from "./timeWords.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
 
@@ -2585,7 +2586,7 @@ const MessageBlock = ({ messages, focusId, fallback, threadTotal, askIds }) => {
     // has already answered that is the reply that came back AFTER it - which then arrives at the
     // bottom of the list while the pill that promised it sits at the top (2026-09-15: "the rest of
     // the convo is nothing more when you click on it??").
-    : `↑ the rest of this conversation — ${rest} more line${rest === 1 ? "" : "s"} in the same chat`;
+    : `↑ the rest of this conversation — ${plural(rest, "more line")} in the same chat`;
   return (
     <>
       {!!(earlier || rest || loading) && (
@@ -2759,7 +2760,7 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
             {a.source && (
               <Typography variant="caption" sx={{ ...mono, display: "block", color: FAINT, mt: 0.35, fontSize: 10.5 }}>
                 from: {a.source.label || a.source.block}{a.source.window ? ` (${a.source.window})` : ""}
-                {a.source.rows?.length ? ` · ${a.source.rows.length} message${a.source.rows.length === 1 ? "" : "s"}` : ""}
+                {a.source.rows?.length ? ` · ${plural(a.source.rows.length, "message")}` : ""}
               </Typography>
             )}
             {open ? (
@@ -2845,12 +2846,12 @@ const AssistantPost = ({ sel, onOpenTask, onChanged }) => {
         <Box sx={{ mt: 1.5, px: 1.25, py: 0.7, borderRadius: 1.5, border: `1px dashed ${BORDER}`, bgcolor: "#faf8f4" }}>
           <Typography variant="caption" sx={{ display: "block", color: DIM, lineHeight: 1.45 }}>
             <Box component="span" sx={{ fontWeight: 600, color: "#6b5f45" }}>what it reviewed · </Box>
-            {rv.scope === "sources" ? `${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only` : <>
+            {rv.scope === "sources" ? `${plural(rv.systems ?? 0, "configured data source")} only` : <>
               {Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${ideaCounted(k)}`).join(", ") || "no candidates"}
-              {rv.people != null ? ` · ${rv.people} thread${rv.people === 1 ? "" : "s"} of what people said` : ""}
-              {rv.recent != null ? ` · ${rv.recent} sender/subject line${rv.recent === 1 ? "" : "s"} from the last two days · ${rv.week} task${rv.week === 1 ? "" : "s"} closed this week`
-                : ` · ${rv.today} message${rv.today === 1 ? "" : "s"} from today`}
-              {` · ${rv.open} open task${rv.open === 1 ? "" : "s"} · ${rv.said} line${rv.said === 1 ? "" : "s"} already said`}
+              {rv.people != null ? ` · ${plural(rv.people, "thread")} of what people said` : ""}
+              {rv.recent != null ? ` · ${plural(rv.recent, "sender/subject line")} from the last two days · ${plural(rv.week, "task")} closed this week`
+                : ` · ${plural(rv.today, "message")} from today`}
+              {` · ${plural(rv.open, "open task")} · ${plural(rv.said, "line")} already said`}
             </>}
             {rv.model ? " · the model chose the lines" : " · no model — the hub's facts in its own words"}
           </Typography>
@@ -2979,7 +2980,7 @@ const ReviewActions = ({ reviewId, draft, editText, setEditText, decide, sendErr
             onClick={() => decide(reviewId, "approve", text, cc)}
             title="Sends the text above on the channel it arrived on">
             {deliveryUnknown ? "Check delivery and retry"
-              : [bLabel("approve"), files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "",
+              : [bLabel("approve"), files.length ? plural(files.length, "file") : "",
                  cc.length ? `copying ${cc.length}` : ""].filter(Boolean).join(" · ")}</Button>
           {/* Mark done, not "No reply needed": one word for the one close (the owner, 2026-09-24) */}
           <Button size="small" sx={{ color: "#867f74" }} onClick={() => decide(reviewId, "no_reply")}

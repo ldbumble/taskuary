@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+from .timewords import plural
 
 
 def context_key(store, pick, model):
@@ -113,6 +114,6 @@ def news_block(store, tid) -> str:
     def one(m):
         body = ' '.join(str(m.get('BodyText') or '').split())[:1500]
         return f"- {m.get('FromName') or ''} <{m.get('FromEmail') or ''}> at {m.get('SentAt') or m.get('CreatedAt')}: {m.get('Subject') or ''}\n  {body}"
-    return (f"NEW SINCE YOUR LAST TURN ({at}): {len(mail)} message{'s' if len(mail) != 1 else ''} came in on this task's thread after "
+    return (f"NEW SINCE YOUR LAST TURN ({at}): {plural(len(mail), 'message')} came in on this task's thread after "
             "the conversation you remember - it is from BEFORE them, and the task was reopened because of them. Read them first; "
             "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-5:]))

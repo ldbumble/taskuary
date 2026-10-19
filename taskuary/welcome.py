@@ -15,6 +15,7 @@ import threading
 from datetime import datetime, timedelta
 from loguru import logger
 
+from .timewords import plural
 from .general import DOCK_TAG
 from . import lanes
 
@@ -366,7 +367,7 @@ def missed_says(d: dict, now: datetime = None) -> str:
         out.append(f"I couldn't judge {num(len(unjudged))} message{'s' if len(unjudged) != 1 else ''} - from {', '.join(names[:3])}"
                    + (f" and {len(names) - 3} more" if len(names) > 3 else '') + f" - so I can't say whether {'they ask' if len(unjudged) != 1 else 'it asks'} you anything.")
     for w in waiting[:3]:
-        out.append(f"{first_name(w.get('who'))} still hasn't answered you about \"{w.get('subject') or ''}\" ({w.get('days')} day{'s' if w.get('days') != 1 else ''}).")
+        out.append(f"{first_name(w.get('who'))} still hasn't answered you about \"{w.get('subject') or ''}\" ({plural(w.get('days'), 'day')}).")
     if len(waiting) > 3: out.append(f"{_cap(num(len(waiting) - 3))} more {'is' if len(waiting) == 4 else 'are'} quiet on you too.")
     # "nobody" only where it was checked: a message triage never read, or sent words no model read, is not a nobody (2026-10-11)
     if not asked and not unjudged and not waiting:

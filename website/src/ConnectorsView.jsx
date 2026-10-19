@@ -35,6 +35,7 @@ import { AI_SHELF } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
 import { placeName } from "./words.js";
+import { plural } from "./timeWords.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1234,7 +1235,7 @@ const DATA_META = {
     agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
       "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
     actions: [{ label: "Reindex now", post: "/api/knowledge/reindex", body: (c) => ({ connector_id: c.ConnectorId }),
-      say: (r) => `${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed · ${r.docs} documents / ${r.chunks} passages` + (r.errors?.length ? ` · ${r.errors.length} problems: ${r.errors.slice(0, 3).join("; ")}` : "") }] },
+      say: (r) => `${r.indexed} indexed, ${r.unchanged} unchanged, ${r.removed} removed · ${plural(r.docs, "document")} / ${plural(r.chunks, "passage")}` + (r.errors?.length ? ` · ${plural(r.errors.length, "problem")}: ${r.errors.slice(0, 3).join("; ")}` : "") }] },
   // The handbook (handbook.py) had every control except the card they hang on: `enabled()` looked
   // for a connector of this type, scopes.py classified handbook_write as a WRITE action, and
   // /api/tools/run enforces Active + role + Authority - but only `if conn`, and no card meant no
@@ -1462,7 +1463,7 @@ const VoiceVocabulary = ({ onBack }) => {
     setBusy(true); setErr(""); setSaved("");
     try {
       const { data } = await api.put("/api/voice/vocabulary", { terms });
-      show(data); setSaved(`${(data.terms || []).length} shared term${data.terms?.length === 1 ? "" : "s"} saved`);
+      show(data); setSaved(`${plural((data.terms || []).length, "shared term")} saved`);
     } catch (e) { setErr(e?.response?.data?.detail || "Could not save voice vocabulary"); }
     setBusy(false);
   };
@@ -1667,12 +1668,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const chanCard = (c) => connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId }));
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
-    + ` · ${reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length} reports (built on the Reports tab)`;
+    + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built on the Reports tab)`;
   const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
       desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
-        + ` · ${reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length} reports (built on the Reports tab)`,
+        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built on the Reports tab)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
   }));
@@ -2599,7 +2600,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
           </Box>
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mb: 0.5 }}>
             <Typography variant="caption" sx={{ color: FAINT }}>
-              {shown.length === objects.length ? `${objects.length} objects`
+              {shown.length === objects.length ? plural(objects.length, "object")
                 : `${shown.length} of ${objects.length} shown`}
             </Typography>
             {shown.length > 0 && shown.length < objects.length && (
@@ -3197,7 +3198,7 @@ const MailFolders = ({ conn, s, reload }) => {
     if (!next.size) return;                                       // a mailbox that reads nothing is a switched-off mailbox
     await saveSrc({ SourceId: s.SourceId, ConfigJson: JSON.stringify({ ...cfg, folders: [...next] }) });
   };
-  const label = chosen.size === 1 && chosen.has("inbox") ? "Inbox only" : `${chosen.size} folder${chosen.size === 1 ? "" : "s"}`;
+  const label = chosen.size === 1 && chosen.has("inbox") ? "Inbox only" : plural(chosen.size, "folder");
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
       <Button size="small" onClick={() => (open ? setOpen(false) : load())} sx={{ fontSize: 11, textTransform: "none", color: DIM, py: 0, minWidth: 0 }}>

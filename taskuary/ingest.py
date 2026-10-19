@@ -8,6 +8,7 @@ answering is the responder's job (reply_only), doing is the coding agent's.
 import contextlib, hashlib, json, re, threading, time
 from datetime import datetime, timedelta
 from loguru import logger
+from .timewords import plural
 from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent
@@ -1556,7 +1557,7 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen:
     # what the caller may leave out elsewhere is what SURVIVED - a message the budget dropped is not
     # in the prompt, and deduping a quoted copy of it against the chain would take it out of both
     if seen is not None: seen |= known_lines(kept)
-    if dropped: out.insert(0, f'… {dropped} earlier message{"s" if dropped != 1 else ""} not shown (context budget) - the thread is longer than what follows')
+    if dropped: out.insert(0, f'… {plural(dropped, "earlier message")} not shown (context budget) - the thread is longer than what follows')
     # a conversation whose history could not be completed says so (PW-013): the model sees what is stored and
     # is told it is not the whole thread. Said AFTER the budget trim - the trim drops the oldest lines first,
     # and this warning sat at index 0, so exactly the long threads that mattered lost it.

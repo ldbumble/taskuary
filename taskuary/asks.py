@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from loguru import logger
 
-from .timewords import ago
+from .timewords import ago, plural
 
 
 def door() -> str:
@@ -71,7 +71,7 @@ def state(store, tid: int, rail: list = None) -> tuple:
     owed = slots.all_(store, tid)
     if owed and lane == 'approve':
         drafted = sum(1 for i in owed if i.get('rid'))
-        says = f"{drafted} of {len(owed)} emails drafted, waiting on your yes"
+        says = f"{drafted} of {plural(len(owed), 'email')} drafted, waiting on your yes"
     return lane, says
 
 

@@ -53,12 +53,12 @@ class AwsTests(unittest.TestCase):
         with mock.patch.object(aws, 'client', return_value=FakeAws()):
             self.assertIn('account 123', aws.test({})['detail'])
             head, body = aws.run_s3_object({'bucket': 'b', 'prefix': 'r/'})
-            self.assertEqual(head, '1 objects'); self.assertIn('a.csv', body)
+            self.assertEqual(head, '1 object'); self.assertIn('a.csv', body)
             head, body = aws.run_s3_object({'bucket': 'b', 'key': 'a.csv'})
             self.assertIn('10 bytes', head); self.assertIn('hello rows', body)
             head, body = aws.run_cloudwatch_logs({'log_group': '/aws/x', 'pattern': '?ERROR'})
             # the headline names the WINDOW now, which is what answers "only 1 event?"
-            self.assertEqual(head, '1 events in the last 24h'); self.assertIn('ERROR boom', body)
+            self.assertEqual(head, '1 event in the last 24h'); self.assertIn('ERROR boom', body)
 
     def test_generic_call_unwraps_the_one_list(self):
         with mock.patch.object(aws, 'client', return_value=FakeAws()):
@@ -85,7 +85,7 @@ class AzureTests(unittest.TestCase):
         with mock.patch.object(azure, 'token', return_value='tok'), \
              mock.patch.object(azure, '_get', return_value=FakeResp(j={'value': [{'name': 'sub1'}]})):
             head, body = azure.run_azure(cfg)
-        self.assertEqual(head, '1 items'); self.assertIn('sub1', body)
+        self.assertEqual(head, '1 item'); self.assertIn('sub1', body)
         with mock.patch.object(azure, 'token', return_value='tok'), \
              mock.patch.object(azure, '_get', return_value=FakeResp(j={'name': 'one-app'})):
             head, body = azure.run_azure(cfg)
@@ -97,7 +97,7 @@ class AzureTests(unittest.TestCase):
         with mock.patch.object(azure, 'token', return_value='tok'), \
              mock.patch.object(azure, '_get', return_value=FakeResp(text=xml)):
             head, body = azure.run_azure_blob({'account': 'acct', 'container': 'c'})
-        self.assertEqual(head, '1 blobs'); self.assertIn('r/a.csv', body); self.assertIn('42', body)
+        self.assertEqual(head, '1 blob'); self.assertIn('r/a.csv', body); self.assertIn('42', body)
 
 
 class WiringTests(unittest.TestCase):

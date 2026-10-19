@@ -13,6 +13,7 @@ from pathlib import Path
 import requests
 from loguru import logger
 
+from .timewords import plural
 from . import redact, words
 
 GRAPH = 'https://graph.microsoft.com/v1.0'
@@ -542,7 +543,7 @@ def send_targets(store) -> list:
                     for chat in messengers.wa_chats(c):
                         last = chat.get('last') or ''
                         n = int(chat.get('n') or 0)
-                        hint = (f"{n} recent message{'' if n == 1 else 's'}"
+                        hint = (f"{plural(n, 'recent message')}"
                                 + (f", last {last}" if last else '')) if n else \
                                ('available in your paired WhatsApp account'
                                 + (f", last {last}" if last else ''))
@@ -554,11 +555,11 @@ def send_targets(store) -> list:
     for r in store.chats(None):
         ch = (r['Channel'] or '').lower()
         add(ch, _chat_id(ch, r['Cid']), r['Name'],
-            f"{r['N']} message{'' if r['N'] == 1 else 's'}, last {(r['Last'] or '')[:16]}", r['Last'])
+            f"{plural(r['N'], 'message')}, last {(r['Last'] or '')[:16]}", r['Last'])
     if 'email' in seen:
         for p in store.people(None):
             add('email', p['Email'], p['Name'],
-                f"{p['N']} message{'' if p['N'] == 1 else 's'}, last {(p['Last'] or '')[:16]}", p['Last'])
+                f"{plural(p['N'], 'message')}, last {(p['Last'] or '')[:16]}", p['Last'])
     for tos in seen.values():
         for r in tos.values():
             if not r['name']: r['name'] = r['to']

@@ -11,6 +11,7 @@
 // the name is already on the task, so an agent that reads as working needs no new endpoint.
 import { assignedAgent } from "./agentIdentity.js";
 import { toolTarget } from "./assistantStream.js";
+import { plural } from "./timeWords.js";
 
 // Until a roster of named specialists exists, the kind of work IS the name - which is the same
 // thing triage already decided. A worker explicitly assigned to the task outranks it.
@@ -67,7 +68,7 @@ export const saidFromTail = (tail) => (tail || [])
 // history stacked in front of the one thing that is happening.
 export const trailText = (work) => [
   work?.searches?.length && `${work.searches.length} search${work.searches.length === 1 ? "" : "es"}`,
-  work?.reads?.length && `${work.reads.length} page${work.reads.length === 1 ? "" : "s"} read`,
+  work?.reads?.length && `${plural(work.reads.length, "page")} read`,
 ].filter(Boolean).join(" · ");
 
 // The TURN's clock, not the session's: a conversation opened this morning has been alive for hours

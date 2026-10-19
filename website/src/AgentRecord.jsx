@@ -12,6 +12,7 @@ import PublishedPages from "./PublishedPages.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import { cardParts, hasMore, lastWords, moreParts, plain, recordFacts, recordHead, recordSteps, runsOf, sourceLabel, splitFiles } from "./agentRecord.js";
 import AgentStory, { StoryLine, Timeline } from "./AgentStory.jsx";
+import { plural } from "./timeWords.js";
 
 const head = { fontSize: 11, fontWeight: 600, color: FAINT, letterSpacing: ".04em", textTransform: "uppercase", mb: 0.35 };
 
@@ -98,7 +99,7 @@ export const SessionRecord = ({ s, pages = [], draft = "", startOpen = false, ti
             <Typography sx={head}>Files it saved</Typography>
             {mine.map((f) => <Typography key={f} noWrap title={f} sx={{ ...mono, fontSize: 11.5, color: INK }}>{f}</Typography>)}
             {!!other.length && <Typography title={other.join("\n")} sx={{ fontSize: 12, color: FAINT, mt: mine.length ? 0.4 : 0 }}>
-              {mine.length ? "and " : ""}{other.length} scratch file{other.length === 1 ? "" : "s"} it used while working</Typography>}
+              {mine.length ? "and " : ""}{plural(other.length, "scratch file")} it used while working</Typography>}
           </Box>}
           {!!timeline.length && <Box><Typography sx={head}>The run</Typography><Timeline steps={timeline} /></Box>}
           {/* what ended it upstream (a merge, a close) - ADDED to what the agent did, never in its place (the owner, 2026-10-12) */}

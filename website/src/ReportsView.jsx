@@ -32,6 +32,7 @@ import { onDraftHanded, takeDraft } from "./draftHandoff.js";
 import { label as btnLabel } from "./buttons.js";
 import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind, in lanes.json's words
 import { placeName } from "./words.js";
+import { plural } from "./timeWords.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -492,7 +493,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{c.title || s.Address}</Typography>
               <Typography variant="caption" sx={{ ...mono, color: FAINT }}>
-                {asSteps(c) && c.flow.length ? `${c.flow.length} step${c.flow.length === 1 ? "" : "s"}`
+                {asSteps(c) && c.flow.length ? plural(c.flow.length, "step")
                   : (c.sources || []).length > 1 ? `${c.sources.length} sources` : (TYPE_LABELS[c.type] || c.type || "rest")} · {sched || "no schedule"}{s.LastPolledAt ? ` · ran ${timeAgo(s.LastPolledAt)}` : " · never ran"}
               </Typography>
               {unscheduled && <Typography variant="caption" sx={{ color: ALERT_INK, display: "block" }}>
@@ -563,7 +564,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${reportSources.length} report${reportSources.length === 1 ? "" : "s"} · ${workflowSources.length} workflow${workflowSources.length === 1 ? "" : "s"} · reports read and summarise, workflows write`,
+      summary: `${plural(reportSources.length, "report")} · ${plural(workflowSources.length, "workflow")} · reports read and summarise, workflows write`,
       sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
@@ -719,7 +720,7 @@ function SavedReportSummary({ source, workflow = false }) {
     + (Array.isArray(c.watch_source_ids) ? c.watch_source_ids.length : 0);
   // what it reads is the CARDS it chose, named - not a fixed sentence that was true of one report
   const reads = c.type === "assistant"
-    ? [cardsLine(cardsOf(c)), watched ? `${watched} configured data source${watched === 1 ? "" : "s"}` : ""]
+    ? [cardsLine(cardsOf(c)), watched ? plural(watched, "configured data source") : ""]
       .filter(Boolean).join(" and ") || "nothing yet — add a Taskuary card or a source"
     : labels.length > 1 ? `${labels.length} sources — ${labels.join(", ")}` : labels[0] || "one report source";
   return (
@@ -804,8 +805,8 @@ function InvoiceWorkflowWizard({ sourceId, sources, connectors, reload, onBack, 
     setBusy("prepare"); setMsg("");
     try {
       const { data } = await api.post(`/api/invoice-batches/${batch.BatchId}/prepare`); setBatch(data.batch);
-      setMsg(data.errors?.length ? `${data.created} drafts created; ${data.errors.length} need attention: ${data.errors.join("; ")}`
-        : `${data.created} drafts created${data.reused ? `, ${data.reused} existing drafts reused` : ""}. They are waiting on the task.`);
+      setMsg(data.errors?.length ? `${plural(data.created, "draft")} created; ${data.errors.length} need attention: ${data.errors.join("; ")}`
+        : `${plural(data.created, "draft")} created${data.reused ? `, ${plural(data.reused, "existing draft")} reused` : ""}. They are waiting on the task.`);
     } catch (e) { setMsg(e?.response?.data?.detail || "Could not prepare drafts"); }
     setBusy("");
   };
@@ -1606,7 +1607,7 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
                 {preview.chart && (
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.5 }}>
-                      The chart this report will hand back, from {preview.rows} row{preview.rows === 1 ? "" : "s"}:
+                      The chart this report will hand back, from {plural(preview.rows, "row")}:
                     </Typography>
                     <Box sx={{ border: `1px solid ${BORDER}`, borderRadius: 1.5, overflow: "auto", bgcolor: "#fff" }}
                       dangerouslySetInnerHTML={{ __html: preview.chart }} />
@@ -2111,9 +2112,9 @@ function LastRun({ r, sid, embedded, flush, onFix, fixing, onChanged }) {
   const rv = r.reviewed || null;
   const outcome = r.steps?.length ? (r.failed || r.steps.some((x) => x.status === "waiting") ? runWords(r.steps, true) : r.summary || runWords(r.steps))
     : r.failed ? `failed${r.error ? ` — ${r.error}` : ""}`
-    : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "nothing to say — no post")
+    : r.type === "assistant" ? (r.said ? `posted ${plural(r.said, "line")}` : "nothing to say — no post")
     : r.subject ? `filed: ${r.subject}` : "ran";
-  const read = rv?.scope === "sources" ? [`${rv.systems ?? 0} configured data source${rv.systems === 1 ? "" : "s"} only`]
+  const read = rv?.scope === "sources" ? [`${plural(rv.systems ?? 0, "configured data source")} only`]
     : rv ? [`${rv.recent ?? rv.today ?? 0} sender/subject lines from the last two days`, `${rv.week ?? 0} tasks closed this week`,
       `${rv.open ?? 0} open`, `${rv.said ?? 0} already said`, Object.entries(rv.candidates || {}).map(([k, v]) => `${v} ${ideaCounted(k)}`).join(", ") || "no candidates"] : [];
   return (
@@ -2222,13 +2223,13 @@ function RunHistory({ sid, title, onClose, onFix }) {
     if (pick == null || full[pick] || missed === pick) return;
     api.get(`/api/reports/runs/${pick}`).then(({ data }) => setFull((f) => ({ ...f, [pick]: data }))).catch(() => setMissed(pick));
   }, [pick, full, missed]);
-  const outcome = (r) => r.failed ? "failed" : r.type === "flow" ? "ran its steps" : r.type === "assistant" ? (r.said ? `posted ${r.said} line${r.said === 1 ? "" : "s"}` : "quiet") : (r.subject ? "filed" : "ran");
+  const outcome = (r) => r.failed ? "failed" : r.type === "flow" ? "ran its steps" : r.type === "assistant" ? (r.said ? `posted ${plural(r.said, "line")}` : "quiet") : (r.subject ? "filed" : "ran");
   const cur = pick != null ? (full[pick] || runs?.find((r) => r.runId === pick)) : null;
   return (
     <Dialog open onClose={onClose} maxWidth="lg" fullWidth onClick={(e) => e.stopPropagation()}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 15 }}>
         {title || "Report"} — run history
-        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${runs.length} run${runs.length === 1 ? "" : "s"} kept` : lost ? "" : "loading…"}</Typography>
+        <Typography variant="caption" sx={{ color: FAINT }}>{runs ? `${plural(runs.length, "run")} kept` : lost ? "" : "loading…"}</Typography>
         <Box sx={{ flex: 1 }} />
         <Button size="small" onClick={onClose} startIcon={<CloseIcon sx={{ fontSize: 14 }} />}>Close</Button>
       </DialogTitle>

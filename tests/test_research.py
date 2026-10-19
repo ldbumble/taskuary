@@ -37,7 +37,7 @@ class ExaTests(unittest.TestCase):
         self.assertIn('text', sent['contents'])
         self.assertEqual(post.call_args.kwargs['headers']['x-api-key'], 'k')   # not Bearer
         self.assertEqual(post.call_args[0][0], 'https://api.exa.ai/search')
-        self.assertIn('1 results', head)
+        self.assertIn('1 result', head)
         self.assertIn('the body of the page', body)
 
     def test_the_optional_narrowing_is_passed_in_the_shape_exa_expects(self):

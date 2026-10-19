@@ -22,7 +22,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
-import { ago } from "./timeWords.js";
+import { ago, plural } from "./timeWords.js";
 import { Md } from "./md.jsx";
 import { looksMd } from "./mdText.js";
 import { pollWhileVisible } from "./visible.js";
@@ -152,7 +152,7 @@ const Post = ({ p, onChanged, onOpenTask, onRemoved, onOpen = null, defaultOpen 
               startIcon={<ChatBubbleOutlineIcon sx={{ fontSize: 14 }} />}
               sx={{ fontSize: 11.5, color: commentCount ? ACCENT2 : DIM, minWidth: 0,
                 fontWeight: commentCount ? 700 : 400 }}>
-              {commentCount} comment{commentCount === 1 ? "" : "s"}
+              {plural(commentCount, "comment")}
             </Button>
             <Box sx={{ flex: 1 }} />
             {removed ? (

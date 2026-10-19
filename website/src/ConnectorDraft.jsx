@@ -5,6 +5,7 @@ import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, INK } from "./theme.jsx";
 import { applied, changes, saveBody, say, stage, stageable } from "./connectorDraft.js";
+import { plural } from "./timeWords.js";
 
 const Draft = createContext(null);
 
@@ -85,7 +86,7 @@ export function SaveBar({ draft, labels = {}, words = {} }) {
     <Box className="tq-savebar" role="region" aria-label="Unsaved changes"
       sx={{ position: "sticky", bottom: 12, zIndex: 5, mt: 2, p: 1.5, bgcolor: PANEL, border: `1px solid ${BORDER}`,
         borderLeft: "3px solid #55697a", borderRadius: 2, boxShadow: "0 4px 16px rgba(30,40,50,.12)" }}>
-      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: 0.5 }}>{n} unsaved change{n === 1 ? "" : "s"}</Typography>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK, mb: 0.5 }}>{plural(n, "unsaved change")}</Typography>
       <Box component="ul" sx={{ m: 0, pl: 2.25, mb: 1, color: DIM, fontSize: 12.5, lineHeight: 1.6 }}>
         {draft.pending.map((c) => <li key={`${c.where}|${c.field}|${c.key}`}>{line(c)}</li>)}
       </Box>

@@ -1,6 +1,7 @@
 // A workflow as steps (taskuary/flow.py): the list the editor edits, and the words a run is read back in. Pure, so the editor's
 // rules - ids that never move, an agent only last, a token only for a step above - are tested without a browser.
 import { toShape } from "./sourceShape.js";
+import { plural } from "./timeWords.js";
 
 export const KINDS = ["source", "ai", "task", "draft", "agent"];
 export const KIND_WORDS = { source: "Read/write a system", ai: "AI judgment", task: "Open a task", draft: "Draft a message", agent: "Hand to an agent" };
@@ -111,7 +112,7 @@ export const tally = (recs) => {
   const ai = ran.filter((r) => USES_AI.has(r.kind)).length;
   const ms = (recs || []).reduce((n, r) => n + (r.ms || 0), 0), fixed = (recs || []).some((r) => r.status === "repaired");
   // a repair is a model call too (flow.repair): "no AI used" over a run that repaired itself would be untrue
-  return `Ran ${ran.length} step${ran.length === 1 ? "" : "s"} in ${secs(ms)}, ${ai ? `${ai} with AI` : fixed ? "AI only for the repair" : "no AI used"}`;
+  return `Ran ${plural(ran.length, "step")} in ${secs(ms)}, ${ai ? `${ai} with AI` : fixed ? "AI only for the repair" : "no AI used"}`;
 };
 // `short`: where the failed step's own row already says the error, the line above it does not say it again
 export const runWords = (recs, short = false) => {
@@ -126,7 +127,7 @@ export const testWords = (recs) => {
   const bad = (recs || []).findIndex((r) => r.status === "failed");
   if (bad >= 0) return `Step ${bad + 1} failed - its output is on the step.`;
   const dry = (recs || []).filter((r) => r.status === "dry").length;
-  return `${recs.length} step${recs.length === 1 ? "" : "s"} have output below${dry ? `; ${dry} would write, so ${dry === 1 ? "it" : "they"} only said what ${dry === 1 ? "it" : "they"} would do` : ""}.`;
+  return `${plural(recs.length, "step")} ${recs.length === 1 ? "has" : "have"} output below${dry ? `; ${dry} would write, so ${dry === 1 ? "it" : "they"} only said what ${dry === 1 ? "it" : "they"} would do` : ""}.`;
 };
 // the last record per step id, for "Test this step" to start from (the last run's, then each test as it comes back)
 export const outputsOf = (recs) => Object.fromEntries((recs || []).filter((r) => r?.id).map((r) => [r.id, r]));

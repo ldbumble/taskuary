@@ -11,6 +11,7 @@ agent_reply, the close-out redirect) reads draft kinds, so a slot can never be m
 import json
 import re
 from email.utils import parseaddr
+from .timewords import plural
 
 # what a slot can be - a new kind is a new entry here, never a branch elsewhere. A chat (the owner, 2026-10-09: "teams/chat
 # too") is one message into one chat id, sent by outbound.send_out like any of these: no CC, no files, no subject.
@@ -106,7 +107,7 @@ def _left(store, tid: int, said: str, actor: str) -> bool:
     if (store.get_task(tid) or {}).get('Status') in ('done', 'dropped'): return False
     from . import buttons
     n = len(open_(store, tid))
-    store.add_comment(tid, actor, 'human', f"{said} " + (f"{n} email{'s' if n != 1 else ''} still to go." if n
+    store.add_comment(tid, actor, 'human', f"{said} " + (f"{plural(n, 'email')} still to go." if n
                                                        else f"Every email is sent or dropped - {buttons.label('close')} when the task is finished."))
     return False
 

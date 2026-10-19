@@ -42,6 +42,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from loguru import logger
+from .timewords import plural
 
 BRIDGE = 'https://bridge.simplefin.org'          # where the owner gets a token; never called with the Secret
 TIMEOUT = 30
@@ -272,7 +273,7 @@ def probe(cfg) -> str:
     if not rows:
         return 'connected, but this token carries no accounts yet - link a bank at bridge.simplefin.org' + (f' ({errs[0]})' if errs else '')
     orgs = sorted({a['org'] for a in rows if a['org']})
-    said = f"connected - {len(rows)} account{'s' if len(rows) != 1 else ''}" + (f" at {', '.join(orgs[:4])}" if orgs else '') + \
+    said = f"connected - {plural(len(rows), 'account')}" + (f" at {', '.join(orgs[:4])}" if orgs else '') + \
            ': ' + ', '.join(a['name'] for a in rows[:6])
     # a bank needing re-authorisation is a 200 with a sentence in `errors`, so Test must say it
     return said + (f" - SimpleFIN also reports: {errs[0]}" if errs else '')
@@ -315,5 +316,5 @@ def run_simplefin_spend(cfg):
     days = max(0, int(cfg.get('days') or 0))
     rows = spend(cfg, cfg.get('account') or '', days)
     n = len(rows) - 1
-    head = f"{rows[-1]['spend']:,.2f} spent {_window(days)} across {n} account{'' if n == 1 else 's'}"
+    head = f"{rows[-1]['spend']:,.2f} spent {_window(days)} across {plural(n, 'account')}"
     return head, '\n'.join(json.dumps(r, default=str) for r in rows)[:BODY_CHARS]

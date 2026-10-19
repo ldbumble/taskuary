@@ -9,6 +9,7 @@ import {
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
 import { BORDER, DIM, FAINT, INK, PANEL2 } from "./theme.jsx";
+import { plural } from "./timeWords.js";
 
 export default function SoulInterview({ open, onClose, onWritten }) {
   const [question, setQuestion] = useState(null);
@@ -88,7 +89,7 @@ export default function SoulInterview({ open, onClose, onWritten }) {
             {!!answers.length && (
               <Box sx={{ mt: 2, bgcolor: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 1.5, p: 1.25 }}>
                 <Typography variant="caption" sx={{ color: FAINT, display: "block" }}>
-                  The assistant is carrying forward {answers.filter((row) => row.a).length} answer{answers.filter((row) => row.a).length === 1 ? "" : "s"} from the earlier questions.
+                  The assistant is carrying forward {plural(answers.filter((row) => row.a).length, "answer")} from the earlier questions.
                 </Typography>
               </Box>
             )}

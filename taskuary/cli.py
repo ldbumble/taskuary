@@ -1,6 +1,7 @@
 """`taskuary` - start the local server and open the app. Everything lives in ~/.taskuary."""
 import argparse, os, socket, subprocess, threading, webbrowser
 import uvicorn
+from .timewords import plural
 from . import __version__, config, launchkey
 try: import tomllib
 except ImportError: import tomli as tomllib  # py3.10
@@ -443,7 +444,7 @@ def main():
         except (AttributeError, OSError): pass
         moved = ingest.reroute_held_no_repo(SQLiteStore(config.db_path()))
         for t in moved: print(f"{task_ref(t['TaskId'])} -> general: {t['Title']}")
-        print(f"{len(moved)} task{'s' if len(moved) != 1 else ''} moved.")
+        print(f"{plural(len(moved), 'task')} moved.")
         return
     if args.backfill_asks:
         import sys

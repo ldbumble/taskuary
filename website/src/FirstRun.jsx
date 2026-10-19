@@ -23,6 +23,7 @@ import { doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requir
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
+import { plural } from "./timeWords.js";
 
 const CHECK_MS = 200_000;           // its test, then one test email sorted (firstrun._prove, 90s at most): past this we say so
 const INSTALL_MS = 6 * 60_000;
@@ -346,7 +347,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const aboutDue = q === "about";
   // the mail is sorted in the background: setup never waits on it, and says so (the owner, 2026-10-15: "it never says emails 45 are
   // processed, moving on or doing it in background as no need to wait") - and a mailbox read with nothing in it says that (st.empty)
-  const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${st.sorting} email${st.sorting === 1 ? "" : "s"} to go; no need to wait.`
+  const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${plural(st.sorting, "email")} to go; no need to wait.`
     : st.empty ? " Connected - nothing new to sort yet." : " Your mail is being read in the background - no need to wait.") : "";
   // the brain failing on the real mail, said the same on every step - the server's own line only came with its "reading" step
   const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting your mail - ${st.ai_error}.` : "";

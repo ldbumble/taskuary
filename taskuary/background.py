@@ -15,6 +15,7 @@ from its UI - so every job also carries its own deadline, and one past it is not
 """
 import json, re, time
 from datetime import datetime
+from .timewords import plural
 
 SHELL_MS = 1_800_000      # Bash run_in_background's default timeout
 _TID = re.compile(r'<task-id>([^<]+)</task-id>')
@@ -122,4 +123,4 @@ def summary(jobs) -> str:
     "'1 shell, 1 monitor still running' - the words Claude's own footer uses"
     n = {}
     for j in jobs: n[j['kind']] = n.get(j['kind'], 0) + 1
-    return ', '.join(f"{v} {k}{'' if v == 1 else 's'}" for k, v in n.items()) + ' still running' if n else ''
+    return ', '.join(plural(v, k) for k, v in n.items()) + ' still running' if n else ''

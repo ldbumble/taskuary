@@ -9,6 +9,7 @@ import MergeIcon from "@mui/icons-material/MergeType";
 import api from "./api";
 import { opError, runOperation } from "./taskOps.js";
 import { ACCENT, PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
+import { plural } from "./timeWords.js";
 
 const msgOf = (e, fallback) => (e?.response?.status === 404
   ? "This needs the new server — restart Taskuary and try again."
@@ -157,7 +158,7 @@ const FoldIntoAnother = ({ taskId, taskRef, onDone, onLeave, onStay }) => {
     <Section>
       <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>
         ✓ folded together — {done.ref} carries the work now
-        {done.moved ? `, with ${done.moved} message${done.moved === 1 ? "" : "s"} moved over` : ""}.
+        {done.moved ? `, with ${plural(done.moved, "message")} moved over` : ""}.
       </Typography>
     </Section>
   );

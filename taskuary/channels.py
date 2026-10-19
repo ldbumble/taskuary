@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from . import net, spawn
+from .timewords import plural
 requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
 from .ingest import ingest_message, rev_id, seen_before
@@ -216,8 +217,8 @@ def test_connector(store, cid: int) -> dict:
                     msgs = _teams_delta(tok, src['Address'], _utc(datetime.now() - timedelta(days=7)), cap=100)
                     people = {(((m.get('from') or {}).get('user') or {}).get('displayName'))
                               for m in msgs if ((m.get('from') or {}).get('user'))}
-                    detail = (f"chat read OK for {src['Address']} - {len(msgs)} messages in the last 7 days across "
-                              f"{len({m.get('chatId') for m in msgs})} chats, {len(people - {None})} people")
+                    detail = (f"chat read OK for {src['Address']} - {plural(len(msgs), 'message')} in the last 7 days across "
+                              f"{plural(len({m.get('chatId') for m in msgs}), 'chat')}, {plural(len(people - {None}), 'person', 'people')}")
                 else:
                     detail += ' - add a Teams source (user UPN) to probe chat access'
         elif c['Type'] == 'github':

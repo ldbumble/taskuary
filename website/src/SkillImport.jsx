@@ -8,6 +8,7 @@ import api from "./api";
 import { buildPayload, chosen, clashText, cutBy, isLink, reconcileImport, slug, toRows } from "./skillImport.js";
 import { BORDER, FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { Confirm } from "./ui.jsx";
+import { plural } from "./timeWords.js";
 
 const failure = (e) => e?.response?.data?.detail || e?.message || "Something went wrong";
 const kb = (n) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n || 0} B`);
@@ -235,7 +236,7 @@ export default function SkillImport({ onClose, onImported }) {
         {step === 2 && (
           <>
             {pending.length > 0 && <Typography variant="body2" sx={{ color: FAINT }}>
-              {pending.length} skill{pending.length === 1 ? "" : "s"} ready to write as {pending.length === 1 ? "a profile" : "profiles"}.
+              {plural(pending.length, "skill")} ready to write as {pending.length === 1 ? "a profile" : "profiles"}.
             </Typography>}
             <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {rows.map((r, i) => r.include && (

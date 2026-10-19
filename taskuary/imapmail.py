@@ -15,6 +15,7 @@ from email.header import decode_header, make_header
 from email.mime.text import MIMEText
 from loguru import logger
 from . import words
+from .timewords import plural
 
 BATCH = 25                  # messages per batch: the watermark is saved after each, the poll goes on until the gap is drained
 TRANSPORT = (imaplib.IMAP4.abort, OSError)   # the CONNECTION went, not one message: stop, keep the watermark, retry next poll
@@ -182,7 +183,7 @@ def test_imap(store, c) -> str:
         if typ != 'OK': raise RuntimeError(f'could not open INBOX: {data}')
         n = int((data[0] or b'0').decode() or 0)
         claim_source(store, c, user, 'connector-test', take=True)
-        return f'logged in as {user} - INBOX holds {n} messages; new mail flows in on the next sync'
+        return f'logged in as {user} - INBOX holds {plural(n, "message")}; new mail flows in on the next sync'
     finally:
         M.logout()
 

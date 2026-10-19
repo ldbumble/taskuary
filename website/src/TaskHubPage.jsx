@@ -28,6 +28,7 @@ import { SEARCH_PICKED, SearchBar, openSearch } from "./SearchEverything.jsx";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { label as btnLabel } from "./buttons.js";
 import { REPORT_EVENT, bellError, openBugReport } from "./bugReportOpen.js";
+import { plural } from "./timeWords.js";
 const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 
 // The strip reads left to right as the day does: what arrived (Timeline), what is being worked
@@ -81,7 +82,7 @@ function Bell({ onGo }) {
   };
   return (
     <>
-      <Tooltip title={n ? `${n} thing${n === 1 ? "" : "s"} failing — click to see` : news.length ? news[news.length - 1].title : "Nothing is failing"}>
+      <Tooltip title={n ? `${plural(n, "thing")} failing — click to see` : news.length ? news[news.length - 1].title : "Nothing is failing"}>
         <IconButton size="small" onClick={(e) => { setEl(e.currentTarget); load(); }} sx={{ position: "relative" }}>
           {n ? <NotificationsActiveIcon sx={{ fontSize: 18, color: ALERT }} /> : <NotificationsNoneIcon sx={{ fontSize: 18, color: DIM }} />}
           {!n && news.length > 0 && (

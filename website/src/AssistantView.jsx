@@ -2285,7 +2285,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // ...and only when the ROW IS EMPTY without it: a task card on the table already registers its own Next and verbs, and the floor's
   // "Press Next below" over them read as a bug (README capture, 2026-10-08). What the owner can press is the test, not which card is up
   const rowVerbs = useRowVerbs();
-  const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => String(x.id).startsWith("setup:") && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
+  // setup's lit move on the row - About your work's Next (`about:next`) included: it was never lit, as its id is not `setup:` (2026-10-19)
+  const setupLit = !firstRun ? null : (() => { const v = rowVerbs.list.find((x) => /^(setup|about):/.test(String(x.id)) && x.tone === "p" && !x.disabled); return v ? { id: v.id } : null; })();
   const rowEmpty = !rowVerbs.list.some((v) => !String(v.id).startsWith("floor:"));
   // ...and not under a page the owner opened on the canvas (Reports, Connections): they are working there, and the line read
   // as part of that page (the owner's workflow screenshot, 2026-10-15)

@@ -94,10 +94,14 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
   const back = () => (at ? setAt(at - 1) : onBack?.());
   const ready = !!a && (step !== "job" || job.state !== "running");
   const last = step === "job";
+  // THE ONE LIT MOVE (FirstRun.jsx, the owner 2026-10-19): Write it while there is no job description to look at, else the row's Next -
+  // and the line names it by its label
+  const writeLit = last && ["none", "failed"].includes(job.state);
+  const nextLabel = last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : "Next";
   useVerbs("setup-about", a ? [
     { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your email", run: back },
-    { id: "about:next", group: "decide", tone: "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : "",
-      label: last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : "Next",
+    { id: "about:next", group: "decide", tone: writeLit ? "s" : "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : "",
+      label: nextLabel,
       title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : "The next question", run: next },
   ] : [], !!a);
   // the question is the Advisor's line over the row
@@ -106,7 +110,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
       : job.state === "failed" ? `I couldn't write it from your email (${job.why}). Press Write it again, or say it in your own words.`
         : job.state === "ready" ? "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Looks right."
           : "Press Write it - I read your email and describe your job."
-    : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""}`;
+    : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""} Then press ${nextLabel}.`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
   useEffect(() => () => onLine?.(""), [onLine]);
   if (!a) return err ? <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography> : <CircularProgress size={16} />;
@@ -171,7 +175,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={jobText} /></Box>}
         <Box sx={{ display: "flex", gap: 1 }}>
           {jobText.trim() && <Button size="small" onClick={() => setEditing((v) => !v)}>{editing ? "Done editing" : "Edit"}</Button>}
-          <Button size="small" onClick={() => { setEditing(false); learn(); }} disabled={!!busy}>{job.state === "none" ? "Write it" : "Write it again"}</Button>
+          <Button size="small" onClick={() => { setEditing(false); learn(); }} disabled={!!busy}
+            data-tq-setup-lit={writeLit ? "about" : undefined}>{job.state === "none" ? "Write it" : "Write it again"}</Button>
         </Box>
       </>)}
       {note && step !== "job" && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}

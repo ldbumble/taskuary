@@ -19,11 +19,11 @@ test("the job is written once the title is answered, and the last press saves wh
   assert.match(src, /if \(step === "role" && who\(a\) !== learnedFor\.current\) learn\(\);/);
   assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", x\)/);
   assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/job"\)/);
-  assert.match(src, /label: last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : "Next"/);
+  assert.match(src, /const nextLabel = last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : "Next"/);
 });
 
 test("a failed email sign-in is the Advisor's line, with what to do", () => {
-  assert.match(read("FirstRun.jsx"), /: st\.mail_error \? `\$\{st\.mail_error\} Fix it in the card and press Connect again/);
+  assert.match(read("FirstRun.jsx"), /: st\.mail_error \? \(litCard[\s\S]{0,200}: `\$\{st\.mail_error\} Fix it in the card and press Connect again/);
 });
 
 test("while About your work is on the canvas setup's own Back and Next stand aside, and its question is the Advisor's line", () => {
@@ -44,7 +44,7 @@ test("the first time About your work is saved, setup is complete: confetti and o
   const fr = read("FirstRun.jsx"), done = read("SetupDone.jsx");
   // ...but only once the AI and the mail work too: saved from the rail over no AI, it went to Setup complete (2026-10-17)
   assert.match(fr, /go\(!s \? "other" : !requiredDone\(s\) \? frontierOf\(s\) : first \? "done" : "other"\);/);
-  assert.match(fr, /\{q === "done" && <SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/>\}/);
+  assert.match(fr, /\{q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay=\{finishThen\(onFinish\)\} onMore=\{\(\) => go\("other"\)\}\s+aiError=\{aiErr\} onChangeAi=\{\(\) => go\("ai"\)\} \/><\/Box>\}/);
   assert.match(fr, /const navShown = view === "done" \? \[\] :/);
   assert.match(done, />Setup complete</); assert.match(done, /size="large" onClick=\{onDay\}/); assert.match(done, />Go to my day</);
   assert.match(done, /prefers-reduced-motion: reduce/);

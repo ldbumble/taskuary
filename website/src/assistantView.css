@@ -638,6 +638,10 @@
 .tq-ab { font: 600 11.5px/1 'IBM Plex Sans', system-ui, sans-serif; min-height: 26px; border-radius: 99px; padding: 0 12px; border: 1px solid #d8d1c5; background: #fff; color: #262521; white-space: nowrap; cursor: pointer; }
 .tq-ab:hover:not(:disabled) { border-color: #55697a; }
 .tq-ab.p { background: #55697a; color: #fff; border-color: #55697a; }   /* the primary is the brand slate, like the walk's way in */
+/* SETUP'S LIT MOVE (FirstRun's Light): the Advisor tints the real control where it stands - a shelf card, or the open card's own button -
+   in the same slate, as a ring that takes no room, so the screen never moves when the advice lands */
+[data-tq-card][data-tq-setup-lit] { border-color: #55697a; outline: 2px solid #55697a; outline-offset: 2px; }
+.MuiButton-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
 .tq-ab.p:hover:not(:disabled) { background: #46586a; border-color: #46586a; }
 .tq-ab.q { border-color: transparent; background: transparent; color: #6e685f; padding-inline: 8px; }
 .tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }

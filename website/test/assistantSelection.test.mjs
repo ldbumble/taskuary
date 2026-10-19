@@ -162,7 +162,7 @@ test("Walk validates Current without creating a turn and stale gestures remove t
   assert.match(surface, /const scopeMoved = !key && !sameSelectionScope\(scope, activeScope\)/);
   assert.match(surface, /epoch !== chatEpoch\.current \|\| resettingRef\.current \|\| scopeMoved/);
   assert.match(surface, /if \(scopeMoved\) setErr/);
-  assert.ok(surface.indexOf("selectionContractSeen.current && !capture") < surface.indexOf("setMsgs((m) => [...m"),
+  assert.ok(surface.indexOf("selectionContractSeen.current && !capture") < surface.indexOf("setMsgs((m) => pickLine(m"),
     "an unavailable capture is rejected before drawing an optimistic owner turn");
   assert.match(view, /m\.filter\(\(message\) => message\.id !== optimisticId\)/);
   assert.match(view, /Next changed while the list refreshed/);

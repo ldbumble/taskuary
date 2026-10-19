@@ -412,8 +412,14 @@ async function faults() {
   for (const f of ["nocli", "badrepo"]) {
     await fault(f); page.step = `faults ${f}`; await fresh();
     page.expect.add("/dispatch");                                      // its status is the subject here, judged by WAYOUT and WORDS
-    const r = await openItem(page, (x) => /📋/.test(x.text));
-    if (!r || !(await pressVerb(page, "regular_agent"))) { note("WAYOUT", page.step, "no task with Send to agent to start"); continue; }
+    // every task row in turn until one offers Send to agent: the rail's order follows the clock, so the first 📋 row was a task with
+    // no Send to agent when CI ran just after midnight (2026-10-19)
+    let started = false;
+    for (const r of (await look(page)).rail.filter((x) => /📋/.test(x.text))) {
+      if (!(await openItem(page, r.key))) continue;
+      if (await pressVerb(page, "regular_agent")) { started = true; break; }
+    }
+    if (!started) { note("WAYOUT", page.step, "no task with Send to agent to start"); page.expect.delete("/dispatch"); await fault(""); continue; }
     await wait(3000);
     await clickText(page, choice("agent", "coding_agent"));            // the card's question, when it asks which agent
     await wait(5000);

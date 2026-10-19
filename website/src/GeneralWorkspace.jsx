@@ -542,7 +542,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
             {/* A CLOSED task's conversation is read, not typed into: a message started a live session on a done task, which
                 then read "waiting on you" under a bar offering only Reopen (the owner, 2026-10-14). The server refuses it too. */}
             {closedChat ? <div className="tq-aui-hint" role="status" style={{ padding: "10px 4px" }}>
-              This task is closed. Reopen it, then continue the session, to pick the conversation back up.</div> : <>
+              This task is closed. Press {btn("reopen")}, then {btn("continue")}, to pick the conversation back up.</div> : <>
             <ComposerPrimitive.Root className="tq-aui-composer">
               <IconButton size="small" onClick={onAttach} title="Attach an image" className="tq-aui-attach">
                 <AttachFileIcon sx={{ fontSize: 18 }} />

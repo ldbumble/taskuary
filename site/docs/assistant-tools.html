@@ -125,12 +125,12 @@ except the few that can be undone, which run at once with an undo on the receipt
 </tr>
 <tr>
 <td><strong>task</strong></td>
-<td>change any task - the one on the table or one named with ref</td>
-<td>task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), review.approve, review.reject</td>
+<td>change any task - the table&#39;s, or one named by ref</td>
+<td>task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject</td>
 </tr>
 <tr>
 <td><strong>agents</strong></td>
-<td>start, continue, answer or stop the agent on a task, and teach where work belongs</td>
+<td>start, continue, answer or stop a task&#39;s agent, and teach where work belongs</td>
 <td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value)</td>
 </tr>
 <tr>
@@ -141,7 +141,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <tr>
 <td><strong>pipe</strong></td>
 <td>the walk and sets of items, and filing mail</td>
-<td>pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule</td>
+<td>pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
 </tr>
 <tr>
 <td><strong>reports</strong></td>
@@ -236,7 +236,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>text</code> - where (a call, a meeting)</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h2 id="task">Task<a class="anchor" href="#task" aria-label="Link to this section">#</a></h2>
-<p>Change any task - the one on the table or one named with ref.</p>
+<p>Change any task - the table&#39;s, or one named by ref.</p>
 <h3 id="task-update"><code>task.update</code><a class="anchor" href="#task-update" aria-label="Link to this section">#</a></h3>
 <p>Change a task&#39;s priority, title, owner or due day. Any other value is refused with the allowed ones.</p>
 <ul>
@@ -330,6 +330,13 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>text</code> - the question</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
+<p class="runs">Waits for your yes on a card.</p><h3 id="task-share"><code>task.share</code><a class="anchor" href="#task-share" aria-label="Link to this section">#</a></h3>
+<p>Email what a task&#39;s work found; a draft for the owner&#39;s yes, never sent.</p>
+<ul>
+<li><code>who</code> - an address</li>
+<li><code>about</code> (optional)</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
+</ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="review-approve"><code>review.approve</code><a class="anchor" href="#review-approve" aria-label="Link to this section">#</a></h3>
 <p>The owner&#39;s yes to what is drafted: sends the reply as it stands - and on a task&#39;s close-out merges the pull request (or closes the issue) FIRST, sending the reply only if that worked. The task stays open: task.complete (Mark done) is the close.</p>
 <p class="runs">Waits for your yes on a card.</p><h3 id="review-reject"><code>review.reject</code><a class="anchor" href="#review-reject" aria-label="Link to this section">#</a></h3>
@@ -338,7 +345,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>ref</code> (optional) - the task</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
-<p>Start, continue, answer or stop the agent on a task, and teach where work belongs.</p>
+<p>Start, continue, answer or stop a task&#39;s agent, and teach where work belongs.</p>
 <h3 id="dispatch-prepare"><code>dispatch.prepare</code><a class="anchor" href="#dispatch-prepare" aria-label="Link to this section">#</a></h3>
 <p>Start an agent on an EXISTING task; a coding task asks which repository when it is not clear.</p>
 <ul>
@@ -353,7 +360,7 @@ except the few that can be undone, which run at once with an undo on the receipt
 <li><code>note</code> - when the owner said what to tell it as it picks up</li>
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="agent-answer"><code>agent.answer</code><a class="anchor" href="#agent-answer" aria-label="Link to this section">#</a></h3>
-<p>Answer the agent that is waiting. With no agent on the task (TASK NOW says so) the words wait there for the next agent that starts on it - say that; starting one is the owner&#39;s call, never this.</p>
+<p>Answer the agent that is waiting. With no agent on the task (TASK NOW says so) nobody hears it - say so; agent.continue or starting one is the owner&#39;s call, never this.</p>
 <ul>
 <li><code>text</code></li>
 <li><code>ref</code> (optional) - its task when it is not the one on the table</li>
@@ -411,6 +418,8 @@ except the few that can be undone, which run at once with an undo on the receipt
 </ul>
 <p class="runs">Waits for your yes on a card.</p><h3 id="preference-sender-rule"><code>preference.sender_rule</code><a class="anchor" href="#preference-sender-rule" aria-label="Link to this section">#</a></h3>
 <p>An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.</p>
+<p class="runs">Waits for your yes on a card.</p><h3 id="message-retriage"><code>message.retriage</code><a class="anchor" href="#message-retriage" aria-label="Link to this section">#</a></h3>
+<p>Triage reads the message on the table again - one it could not sort.</p>
 <p class="runs">Waits for your yes on a card.</p><h2 id="reports">Reports<a class="anchor" href="#reports" aria-label="Link to this section">#</a></h2>
 <p>Reports and workflows.</p>
 <h3 id="report-create"><code>report.create</code><a class="anchor" href="#report-create" aria-label="Link to this section">#</a></h3>

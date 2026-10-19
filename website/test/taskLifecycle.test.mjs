@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT, agentPhase, focusStage, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  AGENT, agentPhase, focusStage, ownerControlsCompletion, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -65,10 +65,11 @@ test("one stage is open: the last thing owed wins, and a closed task shows itsel
   assert.equal(focusStage({ kind: "task", task: "open", agent: "agent stopped", reply: "not drafted" }), "agent");
   assert.equal(focusStage({ kind: "task", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");
   assert.equal(focusStage({ kind: "reply", task: "open", agent: "waiting to start", reply: "not drafted" }), "task");   // no sender to answer
-  // finished: the last thing done - the message sent, else the agent's work, else the task
+  // finished: closed by you opens on Close out, where the close is shown (2026-10-19); closed by the agent itself, on its work
   assert.equal(focusStage({ kind: "coding", task: "done", agent: "stopped and saved", reply: "sent" }), "reply");
-  assert.equal(focusStage({ kind: "coding", task: "done", agent: "stopped and saved", reply: "not needed" }), "agent");
-  assert.equal(focusStage({ kind: "general", task: "done", agent: "waiting to start", record: true }), "agent");
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: "stopped and saved", reply: "not needed" }), "reply");
+  assert.equal(focusStage({ kind: "general", task: "done", agent: "waiting to start", record: true }), "reply");
+  assert.equal(focusStage({ kind: "general", task: "done", agent: AGENT.finished, record: true }), "agent");
   assert.equal(focusStage({ kind: "task", task: "dropped", agent: "waiting to start" }), "task");
   assert.equal(focusStage({}), "task");
 });
@@ -197,4 +198,15 @@ test("a sent reply on an open task stays on Close out; only an agent working aga
     assert.equal(focusStage({ kind: "general", task: "open", agent, reply: "sent", hasSender: true, record: true }), "reply", `agent ${agent}`);
   assert.equal(focusStage({ kind: "general", task: "open", agent: AGENT.working, reply: "sent", hasSender: true }), "agent");
   assert.equal(focusStage({ kind: "general", task: "open", agent: AGENT.waiting, reply: "sent", hasSender: true }), "agent");
+});
+
+// ...and every close-out, not only a reply: a pull request merged, an issue closed (approved actions), an email the task owed
+test("after a merge, a closed issue or an owed email went out, the page stays on Close out", () => {
+  for (const r of [{ Kind: "action", Status: "approved" }, { Kind: "slot", Status: "sent" }, { Kind: "draft", Status: "edited" }])
+    assert.equal(wentOut([r]), true, JSON.stringify(r));
+  assert.equal(wentOut([{ Kind: "action", Status: "pending" }, { Kind: "draft", Status: "no_reply" }]), false);
+  for (const agent of [AGENT.finished, AGENT.saved, null])
+    assert.equal(focusStage({ kind: "coding", task: "open", agent, reply: "not drafted", out: true, record: true }), "reply", `agent ${agent}`);
+  assert.equal(focusStage({ kind: "coding", task: "open", agent: AGENT.working, reply: "not drafted", out: true }), "agent");
+  assert.equal(focusStage({ kind: "coding", task: "done", agent: AGENT.finished, reply: "not drafted", out: true, record: true }), "reply");
 });

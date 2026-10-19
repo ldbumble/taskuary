@@ -417,11 +417,13 @@ async function faults() {
     let started = false;
     for (const r of (await look(page)).rail.filter((x) => /📋/.test(x.text))) {
       if (!(await openItem(page, r.key))) continue;
+      // the coding agent by its own button where the row splits Send to agent in two, else Send to agent and the card's question
+      if (await pressVerb(page, "coding_agent")) { started = "coding"; break; }
       if (await pressVerb(page, "regular_agent")) { started = true; break; }
     }
     if (!started) { note("WAYOUT", page.step, "no task with Send to agent to start"); page.expect.delete("/dispatch"); await fault(""); continue; }
     await wait(3000);
-    await clickText(page, choice("agent", "coding_agent"));            // the card's question, when it asks which agent
+    if (started !== "coding") await clickText(page, choice("agent", "coding_agent"));   // the card's question, when it asks which agent
     await wait(5000);
     await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : label("pick_repo"), (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");

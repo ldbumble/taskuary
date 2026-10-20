@@ -3648,10 +3648,11 @@ class SQLiteStore:
                 from .processing_projection import processing_projection
                 item_ids = [r[0] for r in cur.execute(
                     'SELECT ItemId FROM processing_item WHERE RedirectItemId IS NULL ORDER BY ItemId').fetchall()]
+                verdicts = processing_reads.legacy_verdicts(cur, str(version)) if _activate_reads else None
                 for item_id in item_ids:
                     picture = processing_projection(cur, item_id, live_state=live_state)
                     if _activate_reads:
-                        processing_reads.capture_legacy(cur, str(version), picture, at=str(fixed_now))
+                        processing_reads.capture_legacy(cur, str(version), picture, at=str(fixed_now), verdicts=verdicts)
                     cur.execute('''INSERT INTO processing_context_snapshot
                         (MigrationVersion,ItemId,ContextRevision,ViewRevision,ContextJson,ViewJson)
                         VALUES (?,?,?,?,?,?)''',

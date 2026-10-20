@@ -204,13 +204,20 @@ def record(cur, current, *, version, at, by, origin):
             unit['fingerprint'], version, at, by, origin))
 
 
-def capture_legacy(cur, version, picture, *, at):
-    """Retain the frozen evaluator's permanent verdict, never the displayed state later."""
-    view = picture['view']
-    verdicts = {r['LocalId']: bool(r['PermanentRead']) for r in cur.execute('''
+def legacy_verdicts(cur, version):
+    return {r['LocalId']: bool(r['PermanentRead']) for r in cur.execute('''
         SELECT LocalId,PermanentRead FROM processing_legacy_evidence
         WHERE MigrationVersion=? AND EntityKind='message' AND PermanentRead IS NOT NULL''',
         (version,)).fetchall()}
+
+
+def capture_legacy(cur, version, picture, *, at, verdicts=None):
+    """Retain the frozen evaluator's permanent verdict, never the displayed state later."""
+    # ONE READ PER MIGRATION. Every item re-read every verdict, so the cutover was O(N^2) and ran before the port opened:
+    # a 2k-message home started in 156 s (perf report 2.4, 2026-10-19: "just make it feel snappy"). The verdicts are
+    # written before the item loop and never change inside it, so the caller reads them once and passes them in.
+    view = picture['view']
+    if verdicts is None: verdicts = legacy_verdicts(cur, version)
     messages = [r for r in view['messages'] if str(r['MessageId']) in verdicts]
     task_rows = {str(r['TaskId']): r for r in view['tasks']}
     review_rows = {str(r['ReviewId']): r for r in view['reviews']}

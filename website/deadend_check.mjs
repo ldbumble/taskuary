@@ -45,6 +45,9 @@
 //   ADDRESS   the address names a task the table has moved past - a reload would open it again
 //   RING      a task opened by any road and not the one rail row ringed for it, or the box not asking about it - and a reload that
 //             puts another on the table (the 2026-10-19 UI walk, G1: a Board, link or typed open left the rail ringing the item before)
+//   SWAP      a frame that shows a wrong state on the way to the next one (the 2026-10-19 UI walk, G8): after a press, the rail's ring on one
+//             item and the task view on another, a task view standing empty (its task not drawn) past a second, two rail rows drawn
+//             over each other that are not trading places, or a goal's "no steps yet" over steps that then arrive
 //   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
@@ -216,6 +219,7 @@ async function pageOn(srv, phase) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1366, height: 768 });            // a laptop: where "the card is off the screen" happens
   await page.evaluateOnNewDocument((t) => { try { localStorage.setItem("taskuary_token", t); } catch { /* none */ } }, srv.token);
+  await page.evaluateOnNewDocument(swapWatch);
   page.step = phase;
   page.on("pageerror", (e) => note("CRASH", page.step, e.message));
   page.expect = new Set();                                           // an /api path whose failure the step forced on purpose
@@ -241,8 +245,56 @@ const clickText = async (page, t, scope = "") => {
   return false;
 };
 
-// one read of everything the rules look at
-const look = (page) => page.evaluate(() => {
+// SWAP: every frame of the page, watched in the page itself - a screenshot every few hundred ms missed what lasts five frames. The
+// ring and the empty view are judged from a press (a click, Enter or Space) until it settles, as the report asked - a reload landing
+// on the server's word is not a transition. Each wrong frame is kept once per kind and item; look() hands them to the running step.
+function swapWatch() {
+  const seen = new Set(), out = window.__swap = [], since = new Map(), rest = new Map(), said = new Set();
+  const add = (kind, what) => { if (!seen.has(`${kind} ${what}`)) { seen.add(`${kind} ${what}`); out.push(`${kind}: ${what}`); } };
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  let pressAt = -1e9;
+  const pressed = (e) => { if (e.type !== "keydown" || ["Enter", " "].includes(e.key)) pressAt = performance.now(); };
+  addEventListener("pointerdown", pressed, true); addEventListener("keydown", pressed, true);
+  const tick = () => {
+    const now = performance.now(), afterPress = now - pressAt < 4000;
+    const ring = [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((r) => r.getAttribute("data-tq-key"));
+    const views = [...document.querySelectorAll("[data-tq-canvas-item]")].filter(vis);
+    const view = views[views.length - 1], key = view?.getAttribute("data-tq-canvas-item") || "";
+    // THE RING AND ITS VIEW MOVE TOGETHER: after a press the ring names the view on the table in every frame - the view drawn ahead
+    // with it (AssistantView surface), or both at the answer. A history read that put an older line back on the table under the ring
+    // is caught here too (2026-10-20: about 1.7 s after a Next, until the next press - assistantTurns keeps the aliases now)
+    if (afterPress && ring.length === 1 && key && ring[0] !== key) add("ring", `the rail rings ${ring[0]} while the table shows ${key}`);
+    // a view mounted before its task: one read ahead draws it on its first frame (taskDetail.js); a cold one may wait for its read,
+    // never past a second - a view that stands empty that long is a read that is not coming
+    const shell = view?.querySelector("[data-tq-task-loading]");
+    if (shell) { if (!since.has(key)) since.set(key, now); else if (afterPress && now - since.get(key) > 1000) add("shell", `${key}'s task view stood empty past a second`); }
+    else since.delete(key);
+    const steps = view?.querySelector("[data-tq-steps]")?.getAttribute("data-tq-steps");
+    if (steps === "0") said.add(key); else if (steps && steps !== "reading" && said.has(key)) add("steps", `${key} said "no steps yet" and then drew ${steps}`);
+    // rows that keep their order must never be drawn over each other on the way; rows trading places cross, which is the reorder.
+    // Where a row comes FROM is where it last stood still.
+    const here = new Set();
+    for (const st of document.querySelectorAll("[data-tq-rail] .tq-pile-stack")) {
+      const top0 = st.getBoundingClientRect().top;
+      const rs = [...st.querySelectorAll(":scope > .tq-pile-row")].filter((r) => vis(r) && +getComputedStyle(r).opacity > 0.05).map((r) => {
+        const b = r.getBoundingClientRect(), k = r.getAttribute("data-tq-key"), to = parseFloat(r.style.top), at = b.top - top0;
+        if (Math.abs(at - to) <= 0.5 || !rest.has(k)) rest.set(k, at);
+        here.add(k);
+        return { k, top: b.top, bottom: b.bottom, to, from: rest.get(k) };
+      }).sort((a, b) => a.top - b.top);
+      for (let i = 1; i < rs.length; i++) {
+        const a = rs[i - 1], b = rs[i];
+        if (a.bottom - b.top > 1.5 && (a.from < b.from) === (a.to < b.to)) add("rows", `${a.k} drawn over ${b.k}`);
+      }
+    }
+    for (const k of rest.keys()) if (!here.has(k)) rest.delete(k);           // a row that comes back comes from where it is drawn then
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+// one read of everything the rules look at - and the wrong frames since the last read, said for the step that drew them
+const look = async (page) => { const s = await readPage(page); for (const w of s.swap) note("SWAP", page.step, w); return s; };
+const readPage = (page) => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
   const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
@@ -267,6 +319,7 @@ const look = (page) => page.evaluate(() => {
   const msgs = chat ? [...chat.querySelectorAll(".tq-msg")] : [];
   const tail = msgs.slice(-8);                       // a receipt stays a few lines up once the walk has brought the next item
   return { verbs, cardBtns, advice: !!adviceEl, adv: adviceEl?.innerText || "", errs, rail, ref, read, chat: chat?.innerText || "", pops, lit,
+    swap: (window.__swap || []).splice(0),
     strip: strip ? { empty: !strip.querySelector(".tq-next"), busy: strip.getAttribute("data-tq-strip") === "busy" } : null,
     undoSaid: tail.some((m) => /Undo: |confirm below/i.test(m.innerText || "")),
     undoBtns: [...document.querySelectorAll("button")].filter(vis).map((b) => b.innerText.trim()).filter((w) => /^(take it back|undo\b)/i.test(w)),

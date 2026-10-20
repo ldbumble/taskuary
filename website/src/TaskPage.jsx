@@ -1318,7 +1318,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {err && <Alert severity="error" onClose={() => { setErr(""); setStartFail(null); }} sx={{ mb: 1, flexShrink: 0 }}>{err}
             {startFail && startFail.text === err && <FailWays fail={startFail} onRetry={() => { const go = startFail.again; setErr(""); setStartFail(null); go?.(); }} />}</Alert>}
           {!t ? (
-            <Box sx={{ height: "100%", display: "grid", placeItems: "center" }}>
+            <Box data-tq-task-loading={selected ? "" : undefined} sx={{ height: "100%", display: "grid", placeItems: "center" }}>
               {selected ? <CircularProgress size={20} /> : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
             </Box>
           ) : (

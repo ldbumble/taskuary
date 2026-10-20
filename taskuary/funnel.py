@@ -1434,6 +1434,12 @@ def full_items(store) -> list | None:
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
 
 
+def unwritten_full_items(store) -> list | None:
+    """full_items, only while nothing at all has been written since that build began (the dirty-row top it was built at)."""
+    top = _rail_top(store)
+    return full_items(store) if top is not None and _CACHE.get('mark') == top else None
+
+
 def cached_pile(store) -> dict | None:
     """The rail as last built, or None - never a build (the Tasks list asks, and must not pay for one)."""
     return _CACHE['pile'] if _CACHE.get('store') is store else None

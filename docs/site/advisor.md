@@ -26,8 +26,9 @@ What one run of the Advisor report hands the model, today:
 | The outcome ledger | The last month of what came of actions, each with an id to cite, and the ledger's page on each person the run names |
 
 Two more inputs reach the Advisor at **reflection**, the pass that rewrites `LEARNED.md`, rather
-than on a report run: `LEARNED.md` itself, whole, hypotheses included, and the outcome ledger
-below. The playbooks and your mutes are designed as inputs and not yet read.
+than on a report run: `LEARNED.md` itself, whole, hypotheses included, the outcome ledger
+below, and what you pressed while its line was shown. A matching playbook reaches its line on an
+item (below); your mutes are designed as an input and not yet read.
 
 None of this is copied into a prompt you cannot see. The report's **Preview** shows exactly what one
 run hands the model.
@@ -44,19 +45,56 @@ where **Next** reads it in turn. Nothing fires for absence; something has to loo
 
 **On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
 off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
-due day is missed, a report lands. One small prompt on the light model reads the event, the item's
-facts, the verbs the item carries, the promoted lines of `LEARNED.md` and the ledger rows that bear
-on it, and answers with one verb from the actions the app already has and one line, or nothing.
-Code checks the verb is one the item offers; a verb it does not is dropped and noted. Those
-findings are never rows. They attach to the item at its revision and show when the walk reaches
-it, as ghost text in the prompt box with one pill where the send arrow sits: "Continue ·
-8 of 8 times". The number is read from the outcome ledger, never written by the model. The pill is
-the card's own button through the same proposal and the same receipt; typing anything brings the
-arrow back. A changed item drops its old line by one comparison. The item on the table earns one
-bigger read, with what the hub knows about the people on it and the month's outcomes. The rail's
-order does not read advice, by construction: the test that pins it builds the rail with and
-without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
+due day is missed, a report lands - and every item the walk or the chat puts on the table, an email,
+a chat line from WhatsApp or Teams, a task, a goal or one of the assistant's own ideas, when no event
+has judged it yet. One small prompt on the light model answers with one verb from the actions the
+item's row already draws and one line, or nothing. Code checks the verb is one the row offers; a
+verb it does not is dropped and noted. What the prompt carries, each part bounded and the whole
+capped at 9,000 characters (whole sections drop from the end, the item and its verbs never):
+
+| Part | What it is |
+|---|---|
+| The item | Its title, who, when, why, channel and where it stands - and the task's due date, priority, remind date and done-when |
+| The verbs offered | The row's own buttons, the fix for a failed send under the name of the place it opens, and New task to fix this when nothing here fixes a failure |
+| What failed | A send refused or unconfirmed, a draft that could not be written, an act that errored, an agent run that failed - in plain words, with its reason |
+| The draft | The draft waiting for your yes, word for word, and what is attached to it |
+| The thread | The last three messages on it, theirs and yours, any channel |
+| Possible duplicates | Other open tasks with the same sender, thread or subject - and whether an agent is already on one |
+| Your notes | Standing notes and past verdicts about the sender or topic, and your corrections of triage there - the same evidence triage is handed |
+| The agent | What it last said, what it is asking, how its run ended, and mail that came in since its last turn |
+| The goal or the idea | A goal's open steps, who holds each, its day and how late, and when anything last moved. An idea's words, and for a follow-up how long the person has been quiet against their own day |
+| `LEARNED.md` | Its promoted sections, `## Moves` included; an empty heading is left out |
+| The ledger | Outcome rows on the item, and your habit for each verb offered on this kind of item from this sender |
+| The playbook, `SOUL.md`, `JOB.md` | The matching playbook, and the opening of each document |
+| The bigger read | For the item on the table: what the hub knows about the people on it, and the month's outcomes |
+
+Its rules name the moments it used to get wrong: an agent run that failed is a failure, never a
+Continue into the same wall; a send refused for its address is fixed at the address, never
+redrafted; a draft that promises what nothing shows (a payment date, a file that is not attached)
+is not sent; work an agent can do, like an issue with a traceback, goes to an agent; someone quiet
+past their day is chased, where the row draws Chase.
+
+Those findings are never rows. They attach to the item at its revision and show when the walk
+reaches it, as one line in the strip at the foot of the canvas, above the action row, and the
+advised button on the row is the one dark button - the row's own, pressed through its own handler.
+**Why?** beside the line says what it rests on, and the count under it is your habit, not the
+Advisor's record: "Your own habit, not the Advisor's record: you pressed Send to agent 3 of the
+last 4 times on GitHub items from northwind/ledger". The number is read from your presses and the
+outcome ledger, never written by the model. A changed item drops its old line by one comparison.
+The rail's order does not read advice, by construction: the test that pins it builds the rail with
+and without advice and asks for the same order. Two settings govern it, in Settings → Advisor: the
 switch, and a cap on judgements per hour.
+
+**What you pressed.** Every press on the row, and Next, while a line is shown is kept: the move it
+lit, the one you pressed, and what kind of item it was from whom. That log is where your moves are
+learned: a moment you answer the same way becomes a line in `LEARNED.md` - a hypothesis first, then
+under `## Moves` once it holds by the same bar the reflection promotes at (strength 4, three
+items, two people or threads) - and the Advisor reads it. Delete the line to undo it; that moment
+then counts only your presses from then on.
+
+**How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
+matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
+are, and what its prompt must carry. It runs in the suite against the demo's scripted Advisor.
 
 **Seeing what it did.** The clock menu on the stage opens the Advisor's notes for the item on the
 table: a receipt, not a transcript. Each entry says the event, what it decided (the pill and the

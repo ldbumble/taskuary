@@ -32,10 +32,22 @@ def tick(store) -> int:
         try: ws.reconcile_screen_request(store, term, terminal.screen_asking(term))
         except Exception as e: logger.debug(f'screen question for {sid}: {e}')
         fields = terminal.worker_fields(store, term)
-        current[ident] = bool(fields['waiting'])
-        if fields['waiting'] and not _state.get(ident): events.append(term)
+        current[ident] = (bool(fields['waiting']), fields.get('state'))
+        was = _state.get(ident)
+        if fields['waiting'] and not (was and was[0]): events.append(term)
+        # A TRANSITION ONLY THE SCREEN SAW is still a transition: a pane that went quiet, or drew a chooser, wrote no event, so
+        # nothing woke the views - the Board and the task page said "working" until their next poll (G7, 2026-10-20)
+        if was is not None and was != current[ident]: moved(term.task_id)
     _state = current
     return len(events)
+
+
+def moved(tid) -> None:
+    """Wake every view on this task: the pile's cache goes and task-changed goes out, as a recorded event does (workerstate.record)."""
+    try:
+        from . import funnel, live
+        funnel.invalidate(); live.emit('task-changed', task_id=tid)
+    except Exception as e: logger.debug(f'task {tid}: the change was not announced - {e}')
 
 
 def reset():

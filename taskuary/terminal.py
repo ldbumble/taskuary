@@ -328,6 +328,11 @@ class Term:
             if not getattr(self, 'on_purpose', False): release_task(self.store, self.task_id)
             blackboard.drain_later(self.store)
             waitroom.later(self.store)                    # ...and notes left for THIS agent reopen it
+        # ...and the session ENDING is a transition every view hears now: a close that wrote nothing on the task left the Board and
+        # the task page drawing a live agent until their next poll (G7, 2026-10-20)
+        if self.task_id:
+            from . import handraise
+            handraise.moved(self.task_id)
 
     def keep(self):
         """File this session's readable transcript on its task. A pty is not storage: sessions are

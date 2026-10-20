@@ -10,6 +10,7 @@
 // hover previews, click pins). Past chats slide over; New chat starts a fresh conversation.
 // Everything durable lives on the server; this file only draws and pushes buttons.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { workingLine } from "./agentWork.js";
 import { Box, CircularProgress, IconButton, MenuItem, Popover, Select, Tooltip, Typography, useMediaQuery } from "@mui/material";
 import HistoryIcon from "@mui/icons-material/History";
 import EditNoteIcon from "@mui/icons-material/EditNote";
@@ -811,6 +812,14 @@ export const quietWhy = (d = "") => {
   if (s.startsWith("verb not offered")) return "Its idea wasn't one of the buttons here, so it kept quiet.";
   return "Nothing for you to do here.";
 };
+// Counts from its own mount - the turn it waits on - and is the only thing that redraws each second
+function WorkingFor() {
+  const [t0] = useState(() => Date.now()), [now, setNow] = useState(t0);
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const line = workingLine(now - t0);
+  return line ? <span className="tq-working" data-tq-working="">{line}</span> : null;
+}
+
 function AdvisorNotes({ keyOnTable }) {
   const [rows, setRows] = useState(null);
   useEffect(() => {
@@ -2539,6 +2548,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
               <div className="body"><span className="tq-typing"><i /><i /><i /></span>
+                {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}
+                {busy && answering.current && !DEMO && <WorkingFor />}
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}
                 {busy && answering.current && !DEMO && (
                   <button type="button" className="tq-chip" style={{ marginLeft: 8 }} title="Stops the answer being written and gives you the chat back."

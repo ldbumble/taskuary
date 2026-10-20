@@ -45,6 +45,7 @@
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
 //             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
+//   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links,search]
 //
@@ -730,7 +731,6 @@ async function links() {
     await wait(4500);
   }
   walked.push("links: the address through four Nexts");
-  await page.close(); srv.stop();
   // OVER: + New playbook asks over the list it was pressed on, and Cancel leaves that list - never SOUL.md, open under the dialog
   page.step = "links new playbook";
   await page.goto(`${srv.base}/#settings`, { waitUntil: "load" }); await wait(5000);
@@ -747,7 +747,18 @@ async function links() {
     if (await under()) note("OVER", page.step, "Cancel on + New playbook left a document open to edit");
     walked.push("links: + New playbook asked over its list, and cancelled back to it");
   }
+  await page.close(); srv.stop();
 }
+
+// PHONE: nothing runs off a 390px screen and no word stands a letter a line - read on whatever the page shows now
+const phoneLook = (page) => page.evaluate(() => ({ wide: document.scrollingElement.scrollWidth - innerWidth,
+  stacked: [...document.querySelectorAll("body *")].filter((e) => {
+    if (![...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 6)) return false;
+    const r = e.getBoundingClientRect(), cs = getComputedStyle(e), fs = parseFloat(cs.fontSize) || 13, lh = parseFloat(cs.lineHeight) || fs * 1.4;
+    return r.width > 0 && r.width < 4 * fs && r.height >= 2.5 * lh; }).map((e) => `"${e.textContent.trim().slice(0, 24)}" ${Math.round(e.getBoundingClientRect().width)}px wide`) }));
+const phoneNote = async (page, where) => { const l = await phoneLook(page);
+  if (l.wide > 0) note("PHONE", page.step, `${where}: the page runs ${l.wide}px off a 390px screen`);
+  for (const x of l.stacked.slice(0, 3)) note("PHONE", page.step, `${where}: ${x} - a letter a line`); };
 
 // THE ONE SEARCH (the 2026-10-19 UI walk, G9): what Enter opens is what was typed, the count is the whole count, a setting or a
 // connection is found and opened, focus goes to what opened, and a phone has the box
@@ -870,6 +881,14 @@ async function searchPass() {
   const trig = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-search-open]")].find((x) => x.getBoundingClientRect().width > 0), r = e?.getBoundingClientRect();
     return e ? r.right <= innerWidth && r.bottom > 0 : false; });
   if (!trig) note("SEARCH", page.step, "at 390px wide there is no search to press");
+  // ...the walk's FYI card, its subjects beside each sender (they stood a letter a line), and the Your work drawer with its tooltip
+  page.step = "phone";
+  await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000);
+  for (let n = 0; n < 14 && !(await page.$(".tq-fyi-line")); n++) { if (!(await pressNext(page))) break; await wait(2500); }
+  if (await page.$(".tq-fyi-line")) { await phoneNote(page, "the FYI card"); walked.push("phone: the FYI card at 390px"); }
+  const rail = await page.$("[data-testid=ViewSidebarIcon]");
+  if (rail) { await rail.hover(); await wait(900); await rail.click(); await wait(1500); await phoneNote(page, "Your work"); await closePops(page); walked.push("phone: Your work at 390px"); }
+  page.step = "search phone";
   else {
     await box();
     if (!(await page.$("[data-tq-search-input]"))) note("SEARCH", page.step, "at 390px the search did not open");

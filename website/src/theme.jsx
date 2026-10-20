@@ -166,6 +166,8 @@ export const theme = createTheme({
       "*::-webkit-scrollbar-track": { background: "transparent" },
       "*::-webkit-scrollbar-button": { display: "none", width: 0, height: 0 },
       "*::-webkit-scrollbar-corner": { background: "transparent" },
+      // NOTHING SCROLLS THE PAGE SIDEWAYS: a tooltip near the edge of a phone ran 200px off it and the whole app panned (2026-10-19 UI walk)
+      "html, body": { overflowX: "clip" },
     } },
     MuiPaper: { styleOverrides: { root: { backgroundImage: "none", border: `1px solid ${BORDER}`, boxShadow: "none" } } },
     MuiButton: {
@@ -182,7 +184,12 @@ export const theme = createTheme({
     MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
     MuiTextField: { defaultProps: { size: "small" } },
     MuiSelect: { defaultProps: { size: "small" } },
-    MuiTooltip: { styleOverrides: { tooltip: { backgroundColor: INK, fontSize: 11.5, borderRadius: 6, padding: "6px 10px" } } },
+    // a tooltip is a mouse's hint: on a touch screen a tap opened it over the drawer it had just opened, and it stayed (2026-10-19 UI walk)
+    // ...and it stays on the screen: placed "right" of a full-width row on a phone, it ran 200px off the edge and the page panned. Let it
+    // slide back across its row rather than leave the screen
+    MuiTooltip: { defaultProps: { disableTouchListener: true,
+      slotProps: { popper: { modifiers: [{ name: "preventOverflow", options: { altAxis: true, tether: false, padding: 8 } }] } } },
+      styleOverrides: { tooltip: { backgroundColor: INK, fontSize: 11.5, borderRadius: 6, padding: "6px 10px" } } },
     MuiDialog: {
       styleOverrides: {
         paper: { borderRadius: 16, border: `1px solid ${BORDER}`, boxShadow: "0 24px 60px rgba(30,50,38,.18)", padding: 4 },

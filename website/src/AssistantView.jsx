@@ -447,6 +447,24 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the rail genuinely does not fit and scrolls: your task and agents working are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
+  // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
+  const shownIn = (level, rows) => { const cap = opened.has(level) ? rows.length : (caps[level] ?? rows.length);
+    return rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key)); };
+  // THE RAIL IS ONE TAB STOP (owner-approved, 2026-10-20): a listbox with a roving tabindex - Tab lands on the row on the table (else
+  // the first), Up/Down move the focus ring, Enter opens the row as a click does, Escape gives focus back to where it came from
+  const [kbdKey, setKbdKey] = useState(null);
+  const kbdBack = useRef(null);
+  const stops = bands.flatMap(({ level, items: rows }) => shownIn(level, rows)).filter((i) => !i.settling).map((i) => i.key);
+  const tabKey = stops.includes(kbdKey) ? kbdKey : stops.includes(curKey) ? curKey : stops[0];
+  const railKey = (e) => {
+    const all = [...(wrapRef.current?.querySelectorAll('.card[role="option"]:not([aria-disabled="true"])') || [])], at = all.indexOf(document.activeElement);
+    if (at < 0 || !["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key)) return;
+    e.preventDefault();
+    if (e.key === "Enter") { all[at].click(); return; }
+    if (e.key === "Escape") { const b = kbdBack.current; kbdBack.current = null; if (b?.isConnected) b.focus(); else all[at].blur(); return; }
+    const to = all[Math.max(0, Math.min(all.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))];
+    setKbdKey(to.closest("[data-tq-key]")?.dataset.tqKey || null); to.focus();
+  };
   // A ROW THAT JOINS A BAND WAITS FOR THE GLIDE (G8): a row moving in - passed into For later, a slot freed under a cap - was drawn in
   // its slot at once, under the rows still gliding out of it, for ten-odd frames. It comes in once the others have moved. Not on the
   // first draw, and not a row falling in from above the pipe (`landing`), which has its own way in.
@@ -500,7 +518,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   });
 
   return (
-    <div className="tq-pile" data-tq-keep ref={wrapRef}>
+    <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey}
+      onFocus={(e) => { if (!wrapRef.current?.contains(e.relatedTarget)) kbdBack.current = e.relatedTarget || null; }}>
       {!pile ? (error ? (
         /* A LOAD THAT FAILED IS NOT A LOAD IN PROGRESS. This spun on "Loading timeline" for as long
            as the tab stayed open while the server had answered 500 twenty minutes earlier - and the
@@ -521,12 +540,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const extra = level === "fyi" ? tail : 0;           // the band's rows not here yet - counted, never dropped
-        const cap = open ? rows.length : (caps[level] ?? rows.length);
         // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
         // working are never hidden, so a chevron on them would offer nothing
         const folds = CAPPED.includes(level) && rows.length > FLOOR;
         // what is on the table is never capped away, wherever in its band it sits
-        const shown = rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key));
+        const shown = shownIn(level, rows);
         const hidden = rows.length - shown.length + extra;
         let stackHeight = 0;
         // BULK PROCESSING: the "250 more" pill hangs off the LAST ranked row, where reading stopped -
@@ -619,7 +637,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
-                    <div className="card" onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
+                    <div className="card" role="option" aria-selected={isCur} aria-disabled={i.settling ? true : undefined}
+                      tabIndex={i.key === tabKey ? 0 : -1} onFocus={() => setKbdKey(i.key)}
+                      onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">

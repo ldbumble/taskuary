@@ -406,7 +406,7 @@ export default function BoardView({ onOpenTask, onOpenReports, active = true }) 
                 const badge = agentBadge(chat ? agentName(t) : (brain || live[t.TaskId]?.AgentName || t.RunAgent),
                   t.RunStatus, !!live[t.TaskId], cmds);
                 return (
-                <Box key={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
+                <Box key={t.TaskId} data-tq-board-task={t.TaskId} onClick={() => onOpenTask(t.TaskId)}
                   sx={{ ...card, ...hoverable, p: 1.1, mb: 0.9, cursor: "pointer",
                     position: "relative",
                     ...(badge ? { mt: 1.1, borderColor: `${badge.color}55` } : {}) }}>

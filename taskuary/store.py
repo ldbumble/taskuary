@@ -5148,12 +5148,21 @@ class SQLiteStore:
         push = cfg['agents_push'] if 'agents_push' in cfg else st.get('agent_push_enabled') == '1'
         return bool(tracker), bool(push)
 
-    def github_replies_ok(self) -> bool:
+    def github_for(self, repo=None, with_secret=False):
+        """The GitHub card that reaches `repo` - the one its source row belongs to - else the default card. Two
+        accounts (a personal one and an org's) are two cards, and the first card's token cannot see the second's repos."""
+        src = next((s for s in self.list_sources(active_only=False) if s.get('Channel') == 'github' and s.get('ConnectorId')
+                    and str(s.get('Address') or '').lower() == str(repo or '').lower()), None) if repo else None
+        c = self.get_connector(src['ConnectorId'], with_secret) if src else None
+        return c if c and c.get('Type') == 'github' else self.get_connector_by_type('github', with_secret)
+
+    def github_replies_ok(self, repo=None) -> bool:
         """May Taskuary answer issue/PR authors - which means posting a PUBLIC comment on the
         thread? Off by default: an open repository's drive-by authors should not each get a
         drafted reply, and before this flag the drafts were dead ends anyway (github had no
-        send road at all). The switch lives on the GitHub connector card, with its siblings."""
-        c = self.get_connector_by_type('github')
+        send road at all). The switch lives on the GitHub connector card, with its siblings -
+        the card that reaches `repo`, when one is named."""
+        c = self.github_for(repo)
         try: return bool(json.loads((c or {}).get('ConfigJson') or '{}').get('reply_comments'))
         except ValueError: return False
 

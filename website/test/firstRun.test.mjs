@@ -34,7 +34,7 @@ test("three questions on the Advisor's line, each answered on the Connections pa
   assert.match(fr, /api\.post\("\/api\/setup\/first-run\/ai", \{ name: ai\.name \}, \{ timeout: CHECK_MS \}\)/);
   assert.match(cv, /api\.post\("\/api\/setup\/first-run\/key", \{ type: conn\.Type, key: secret, cid: conn\.ConnectorId, config: cfg \}/);
   assert.match(cv, /api\.post\("\/api\/setup\/first-run\/mail"/, "the Connections email card itself, in its simple mode");
-  assert.match(cv, /if \(conn\.Type === "outlook"\) return <MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>;/);
+  assert.match(cv, /if \(conn\.Type === "outlook"\) return \(\s+<Box[^>]*>\s+<MsSignIn conn=\{conn\} cfg=\{cfg\} reload=\{reload\} onSignedIn=\{onConnected\} plain \/>/);
   assert.match(fr, /if \(Date\.now\(\) > until\) throw new Error\("the install is taking too long"\)/, "an install never spins forever");
   assert.match(fr, /Pick it again to retry\./, "a failure always says what to press");
   assert.doesNotMatch(fr, /<Dialog|<Popover|<Drawer/);

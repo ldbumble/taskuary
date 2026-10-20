@@ -23,8 +23,8 @@ BRANCH_SAFE = re.compile(r'[^a-zA-Z0-9._/-]+')
 TOKEN_URL = re.compile(r'https://[^@/]*@')     # never let a PAT reach a log line or a comment
 
 
-def _conn(store):
-    c = store.get_connector_by_type('github', with_secret=True)
+def _conn(store, repo=None):
+    c = store.github_for(repo, with_secret=True)       # the card that reaches this repo (store.github_for)
     if not (c and c.get('Secret')):
         from . import words
         raise RuntimeError(f"no GitHub PAT saved ({words.card('GitHub')})")
@@ -88,7 +88,6 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     from main to main is not a thing, and it is the shape a mis-detected branch takes."""
     from . import github, terminal as hub_term
     from .store import task_ref
-    c = _conn(store)
     if not store.get_setting('agent_push_enabled') == '1':
         raise RuntimeError("pushing is off - flip 'Agents may push / deploy' on the GitHub card first")
     ses = hub_term.session_for(task_id)
@@ -97,6 +96,7 @@ def open_for_task(store, task_id: int, actor='owner') -> dict:
     repo, _ = hub_term.guess_repo(store, task_id, {})
     repo = repo or _cfg(store).get('default_repo')
     if not repo: raise RuntimeError('no repository known for this task')
+    c = _conn(store, repo)
     branch = branch_for(store, task_id, cwd)
     base = _cfg(store).get('default_base') or 'master'
     if not branch or branch == base:
@@ -201,7 +201,7 @@ def check_task(store, task_id: int, llm=None) -> dict:
     at = landing_of(store, task_id)
     if not at: return {'state': 'not-landed'}
     try:
-        c = _conn(store)
+        c = _conn(store, at['repo'])
         if at['kind'] == 'pr':
             fresh = github.pr(c['Secret'], at['repo'], at['number'])
             at = {**at, **fresh}
@@ -253,7 +253,7 @@ def pull_comments(store, task_id: int, at: dict) -> int:
     from .store import task_ref
     if at.get('kind') != 'pr': return 0
     try:
-        c = _conn(store)
+        c = _conn(store, at['repo'])
         comments = github.pr_review_comments(c['Secret'], at['repo'], at['number'])
     except Exception as e:
         logger.warning(f'reading PR comments for task {task_id} failed: {e}')
@@ -299,7 +299,7 @@ def pr_ended(store, task_id: int, at: dict) -> bool:
     offered = [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action'", (task_id,)) if proposals._action(r) == 'merge_pr']
     if not offered: return False
     rv = next((r for r in offered if r.get('Status') == 'pending'), None)
-    try: cur = github.pr(_conn(store)['Secret'], at['repo'], at['number'])
+    try: cur = github.pr(_conn(store, at['repo'])['Secret'], at['repo'], at['number'])
     except Exception as e:
         logger.warning(f'PR state for task {task_id} could not be read: {e}')
         return False

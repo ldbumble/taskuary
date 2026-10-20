@@ -1878,8 +1878,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 }
 
 /* Every catalog card is an instance. Its name is the human-facing identity used everywhere
-   Taskuary lists it; Add another creates a clean instance of the same connector type. */
-function ConnectorIdentity({ conn, reload, onCreated }) {
+   Taskuary lists it; Add another creates a clean instance of the same connector type.
+   `addOnly`: setup's simple card has no name to edit, only the door to a second mailbox of the same kind - a second
+   Outlook account had no way in there at all (the owner, 2026-10-20: "I only see a way to connect one"). */
+function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   const [name, setName] = useState(conn.Name || "");
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -1905,11 +1907,13 @@ function ConnectorIdentity({ conn, reload, onCreated }) {
     setBusy("");
   };
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1.5, maxWidth: 720 }}>
-      <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
-      <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
-        onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
+    <Box data-tq-add-another={conn.Type} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: addOnly ? 0 : 1.5, maxWidth: 720 }}>
+      {!addOnly && <>
+        <TextField size="small" label="Connection name" value={name} onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") rename(); }} sx={{ bgcolor: "#fff", minWidth: 240 }} />
+        <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
+          onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
+      </>}
       {!adding ? (
         <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another</Button>
       ) : (
@@ -2316,8 +2320,15 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // (firstrun.connect_mail) - for the first run, where the stepper, roles and tabs are more than anyone needs yet
   // (the owner, 2026-10-14: "it should show the settings page for email in connectors. reuse our component but make it simple")
   if (simple) {
+    // a mailbox card keeps the Connections page's own Add another, so a second account of the same kind has a way in from setup too
+    const another = MAIL_CARDS.includes(conn.Type) && <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} addOnly />;
     // Microsoft is one sign-in, nothing to type; an AI card's key becomes the AI (firstrun.choose_key) - the same card either way
-    if (conn.Type === "outlook") return <MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={onConnected} plain />;
+    if (conn.Type === "outlook") return (
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 720 }}>
+        <MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={onConnected} plain />
+        {another}
+      </Box>
+    );
     // an AI card asks only what it cannot run without - the model and base URL have defaults (Azure's endpoint has none, nor
     // the organisation's gateway: its address came with the access code)
     const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1])
@@ -2329,7 +2340,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         const { data } = isAI
           ? await api.post("/api/setup/first-run/key", { type: conn.Type, key: secret, cid: conn.ConnectorId, config: cfg }, { timeout: 200000 })
           : await api.post("/api/setup/first-run/mail",
-            { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
+            { type: conn.Type, cid: conn.ConnectorId, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
         setTest({ ok: data.ok, detail: data.why });
         // refused, the first run reads its state again so the Advisor's line says why at once - not at the next poll (2026-10-19)
         if (data.ok) { setSecret(""); onConnected?.(); } else reload?.();
@@ -2351,6 +2362,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         <Box><Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>
           {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button></Box>
         <TestLine test={test} mt={0} />
+        {another}
       </Box>
     );
   }

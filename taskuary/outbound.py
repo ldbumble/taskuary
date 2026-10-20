@@ -61,7 +61,11 @@ def _graph_token(store, kind='outlook', connector_id=None):
 def _mailbox(store, msg=None):
     """Which mailbox sends. The one the message arrived in, else the first email source."""
     if msg and msg.get('SourceName') and '@' in (msg['SourceName'] or ''): return msg['SourceName']
-    src = next((s for s in store.list_sources() if s['Channel'] == 'email'), None)
+    # Graph sends this, so an Outlook card's own mailbox: the first email source could be an IMAP card's, which no Outlook
+    # sign-in can send as - and with two Outlook cards, its connector is the one that owns the address (_source_connector_id)
+    graph = {c['ConnectorId'] for c in store.connectors_by_type('outlook') if c.get('Active')}
+    srcs = [s for s in store.list_sources() if s['Channel'] == 'email']
+    src = next((s for s in srcs if s.get('ConnectorId') in graph), None) or next(iter(srcs), None)
     if not src: raise Fixable('no mailbox is connected to send from', *MAIL)
     return src['Address']
 
@@ -829,9 +833,6 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
     if ch == 'github':
         # the answer is a PUBLIC comment on the issue/PR - so it goes only with the owner's
         # explicit say-so (the GitHub card's 'Reply to issue/PR authors' switch)
-        if not store.github_replies_ok():
-            raise Fixable("replying on GitHub is off - its card's 'Reply to issue/PR authors' lets Taskuary post comments",
-                          'Open the GitHub card', '#connector=github')
         # the CONVERSATION names the item bare ('gh:owner/repo#N'); the row's own id never is - the item is a revision
         # ('gh:owner/repo#N@<hash>', ingest.rev_id) and a comment 'gh:owner/repo#N:c<id>', so parsing it refused every reply (#205)
         ref = str(msg.get('ConversationId') or '') if str(msg.get('ConversationId') or '').startswith('gh:') else ext
@@ -839,6 +840,10 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
         repo, _, num = ref[3:].rpartition('#')
         if not (ref.startswith('gh:') and repo and num.isdigit()):
             raise RuntimeError('this github item carries no issue/PR reference to comment on')
+        # ...asked of the card that reaches this repo: two GitHub accounts are two cards, each with its own switch
+        if not store.github_replies_ok(repo):
+            raise Fixable("replying on GitHub is off - its card's 'Reply to issue/PR authors' lets Taskuary post comments",
+                          'Open the GitHub card', '#connector=github')
         connector_id = _source_connector_id(store, 'github', repo)
         c = store.get_connector(connector_id, with_secret=True) if connector_id else \
             store.get_connector_by_type('github', with_secret=True)

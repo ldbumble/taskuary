@@ -1865,6 +1865,9 @@ def update_task(task_id: int, body: TaskBody, background: BackgroundTasks = None
     closing = fields.get('Status') == 'done' and t.get('Status') not in ('done', 'dropped')
     if closing: fields.pop('Status')
     store.update_task(task_id, fields, ACTOR)
+    # the owner's own priority call is evidence: every task from one sender marked urgent by hand is a rule worth asking about (promote.py)
+    if fields.get('Priority') and fields['Priority'] != t.get('Priority'):
+        store.audit('task', task_id, 'priority', ACTOR, detail={'from': t.get('Priority'), 'to': fields['Priority']})
     if closing:
         from . import concierge
         concierge.close_task(store, task_id, ACTOR)
@@ -7114,14 +7117,8 @@ def save_policy(body: PolicyBody):
         raise HTTPException(422, 'A rule can skip, ignore or escalate a message - pick one of those three.')
     if body.Kind is not None and body.Kind not in policy_engine.KINDS:
         raise HTTPException(422, 'A rule matches on a keyword, a sender, a domain, an automated address or a first-time sender - pick one of those.')
-    pid = store.save_policy(fields, ACTOR)
-    store.audit('policy', pid, 'edit' if body.PolicyId else 'create', ACTOR, detail=fields)
-    # a skip rule also reaches BACKWARDS: the sender's existing rows leave the timeline
-    # (and come back if you switch the rule off) - see policy.apply_retroactively
-    saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
-    hidden = policy_engine.apply_retroactively(store, saved or {})
-    if hidden: store.audit('policy', pid, 'apply_history', ACTOR, detail={'messages': hidden, 'active': bool(saved.get('Active'))})
-    return {'ok': True, 'policyId': pid, 'affected': hidden}
+    # a skip rule also reaches BACKWARDS: the sender's existing rows leave the timeline (policy.save)
+    return policy_engine.save(store, fields, ACTOR)
 
 @app.delete('/api/policies/{pid}')
 def delete_policy(pid: int):

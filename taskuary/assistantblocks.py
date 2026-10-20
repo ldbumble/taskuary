@@ -155,6 +155,10 @@ def _health(store, o):
     from .assistant import health_ideas
     return health_ideas(store), []
 
+def _rules(store, o):
+    from . import promote
+    return promote.ideas(store), []
+
 
 # ── the sixteen ──────────────────────────────────────────────────────────────────────────────────
 # CONTEXT first, in the order inputs() renders them - the catalogue order IS the payload's order.
@@ -225,6 +229,9 @@ CATALOGUE = (
           knobs=(('floor', 3, 'Threads before it is worth saying'),)),
     Block('health', 'App health', 'view', ('source', 'report_run', 'connector'),
           None, _health, proposes=True),
+    # a learned pattern clear-cut enough to be a rule, asked as a yes/no (promote.py) - counted, never read into the prompt
+    Block('rules', 'Rules worth making', 'view', ('route', 'advice_press', 'memory', 'audit', 'policy'),
+          None, _rules, proposes=True),
 )
 
 _BY_ID = {b.id: b for b in CATALOGUE}
@@ -235,7 +242,7 @@ PRODUCER_OF = {'waiting_on': 'followup', 'promised': 'promise', 'meeting_prep': 
 # ...and back the other way, plus the two that raise a row without a `producers` switch behind them.
 # This is how a candidate is attributed with NO model involved: its kind already says which block
 # made it, so source_of never has to ask and can never be told wrong.
-BLOCK_OF_KIND = {v: k for k, v in PRODUCER_OF.items()} | {'health': 'health', 'connect': 'connectors'}
+BLOCK_OF_KIND = {v: k for k, v in PRODUCER_OF.items()} | {'health': 'health', 'connect': 'connectors', 'rule': 'rules'}
 
 _WORDS = {1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve'}
 
@@ -518,9 +525,9 @@ CARDS = (
          (('done_days', 'days of done work', 7, (('done_this_week', 'days'),)),
           ('quiet_days', 'days before work is quiet', 3, (('gone_quiet', 'days'),))),
          'open tasks, what got done, and work that has gone quiet'),
-    Card('automation', 'Automation', ('automation',),
+    Card('automation', 'Automation', ('automation', 'rules'),
          (('days', 'days counted', 30, (('automation', 'days'),)),),
-         'once a week, a month of traffic counted - what repeats enough to be worth automating'),
+         'once a week, a month of traffic counted - what repeats enough to be worth automating - and the rules your own presses already draw'),
     Card('memory', 'Memory', ('already_said', 'notes', 'knowledge', 'learned', 'ledger'),
          (('days', 'days of outcomes', 30, (('ledger', 'days'),)),),
          'what it already said, its note from the last check, the knowledge base, what its verdicts taught, and the outcome ledger'),

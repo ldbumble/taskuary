@@ -93,3 +93,15 @@ def evaluate(msg: dict, policies: list, known_sender: bool = True) -> dict:
         tier = sorted([p for p in hits if p['Action'] == action], key=lambda p: p.get('SortOrder', 100))
         if tier: return {'action': action, 'rule': tier[0]['Name'], 'reason': tier[0]['Reason']}
     return {'action': 'none', 'rule': 'default', 'reason': 'no rule matched'}
+
+
+def save(store, fields: dict, actor: str, **detail) -> dict:
+    """THE one way a rule is written - Settings -> Rules and the Advisor's promoted rules alike: saved, audited (with whatever
+    `detail` says of where it came from), and a skip rule applied BACKWARDS - the sender's existing rows leave the timeline, and
+    come back if the rule is switched off (apply_retroactively)."""
+    pid = store.save_policy(fields, actor)
+    store.audit('policy', pid, 'edit' if fields.get('PolicyId') else 'create', actor, detail={**fields, **detail})
+    saved = next((p for p in store.list_policies(active_only=False) if p['PolicyId'] == pid), None)
+    hidden = apply_retroactively(store, saved or {})
+    if hidden: store.audit('policy', pid, 'apply_history', actor, detail={'messages': hidden, 'active': bool((saved or {}).get('Active'))})
+    return {'ok': True, 'policyId': pid, 'affected': hidden}

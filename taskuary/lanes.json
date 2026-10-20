@@ -279,6 +279,7 @@
     "ahead": { "word": "coming up", "counted": "coming up", "section": "ideas" },
     "idea": { "word": "advisor idea", "counted": "idea", "section": "ideas" },
     "connect": { "word": "worth connecting", "counted": "worth connecting", "section": "ideas" },
+    "rule": { "word": "worth a rule", "counted": "rule worth making", "section": "ideas" },
     "health": { "word": "needs a look", "counted": "needs a look", "section": "ideas" },
     "unjudged": { "word": "couldn't sort this", "counted": "couldn't be sorted", "section": "ideas" },
     "unanswered": { "word": "no answer yet", "counted": "unanswered", "section": "loose" },

@@ -221,6 +221,20 @@ export const interactiveCardIndex = (messages) => {
   }
   return -1;
 };
+// THE CARD DRAWN LIVE IS THE TABLE'S (the dead-end walk's RING, 2026-10-20): the canvas drew the newest item line while the rail ringed the
+// table, so after a Next and a link to another task the rail ringed TQ-0005 over TQ-0001's live card - a chat read merged after the pull
+// put the item's own durable line back above the one before it. The newest card still leads, unless it is another ITEM while the table's
+// own line is in the chat and not put down; a proposal, the walk or the brief after it lead as before.
+const keyed = (c, key) => c?.key === key || (c?.aliases || []).includes(key);
+export const tableCardIndex = (messages, key) => {
+  const at = interactiveCardIndex(messages), top = at >= 0 ? messages[at] : null;
+  if (!key || !top || top.proposal || NOT_ITEMS.has(top.card.kind) || keyed(top.card, key)) return at;
+  for (let i = (messages || []).length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.card && !m.card.background_event && !m.done && !m.proposal && keyed(m.card, key)) return i;
+  }
+  return at;
+};
 // ...and a RELOADED conversation knows only the server's word. The page's `done` mark does not travel in the history, so
 // after "All read, next" on the last batch found nothing next, the reload drew the read batch live again while the server
 // said nothing was on the table (the owner, 2026-10-02: "it reopens the same 4 again before disappearing"). Every item

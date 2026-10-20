@@ -3300,7 +3300,16 @@ const WaPair = ({ conn, reload }) => {
     tick();
     return () => { alive = false; };
   }, [conn.ConnectorId, reload, startBridge]);
-  if (!st) return null;
+  // ROOM HELD FOR IT WHILE IT IS READ (the 2026-10-19 UI walk, G8): nothing was drawn until the bridge answered, and then the box
+  // pushed the rest of the card ~250px down under the owner's eyes. The box is there from the first frame, at about the height of
+  // the steps and QR it will hold - the unpaired box, which is the one a person opens this card to see.
+  if (!st) return (
+    <Box data-tq-wa-pair="reading" sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, minHeight: 230, boxSizing: "border-box" }}>
+      <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>
+      <Typography variant="body2" sx={{ color: DIM, mt: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
+        <CircularProgress size={11} sx={{ color: DIM }} />Reading the pairing status…</Typography>
+    </Box>
+  );
   if (st.unreachable) return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Pair with your phone</Typography>

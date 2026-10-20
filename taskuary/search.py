@@ -76,18 +76,31 @@ def _ids(words) -> set:
     return {int(m[1] or m[2]) for w in words if (m := re.fullmatch(r'(?i)tq-?0*(\d+)|0*(\d+)', w))}
 
 
+def _holder(a: str) -> str:
+    """An assignee as the owner reads it: the address or the agent, not the store's 'person:' / 'agent:' key (verify, 2026-10-20)."""
+    kind, _, who = str(a or '').partition(':')
+    return f'the {who} agent' if kind == 'agent' and who else who if kind == 'person' and who else str(a or '')
+
+
+def _clip(s, n: int = 70) -> str: s = str(s or ''); return s if len(s) <= n else s[:n - 1] + '…'
+
+
 def _task_why(t: dict, words, mail: list) -> str:
-    """Where the words matched that the row does not show: the title, summary, kind, source and ref are on it already."""
+    """Where the words matched that the row does not show: the title, summary, kind, source and ref are on it already.
+    ...and WHAT it matched, every time: "a link on its mail" named no link - the mail's id and link are said as they are."""
     seen = ' '.join(str(t.get(k) or '') for k in ('Title', 'Summary', 'Kind', 'Source')) + f" {task_ref(t['TaskId'])} {t['TaskId']}"
+    def on_mail(k, say): return next((say(m[k]) for m in mail if _in(m.get(k), w)), '')
     out = []
     for w in (w for w in words if not _in(seen, w)):
-        said = (f"tagged {t['Tags']}" if _in(t.get('Tags'), w) else f"assigned to {t['Assignee']}" if _in(t.get('Assignee'), w) else
+        said = (f"tagged {t['Tags']}" if _in(t.get('Tags'), w) else f"assigned to {_holder(t['Assignee'])}" if _in(t.get('Assignee'), w) else
                 next((f"a mail on it is from {m.get('FromName') or m.get('FromEmail')}" for m in mail
                       if _in(m.get('FromName'), w) or _in(m.get('FromEmail'), w)), '') or
-                next((f"a mail on it: {m['Subject'][:70]}" for m in mail if _in(m.get('Subject'), w)), '') or
+                on_mail('Subject', lambda v: f"a mail on it: {_clip(v)}") or
                 next((f"it came in on {m.get('SourceName') or m.get('Channel')}" for m in mail
                       if _in(m.get('SourceName'), w) or _in(m.get('Channel'), w)), '') or
-                ('its source reference' if _in(t.get('SourceRef'), w) else 'a link on its mail'))
+                (f"its source reference {_clip(t['SourceRef'])}" if _in(t.get('SourceRef'), w) else '') or
+                on_mail('SourceLink', lambda v: f"a mail on it links to {_clip(re.sub(r'^https?://(www[.])?', '', v))}") or
+                on_mail('ExternalId', lambda v: f"the id of a mail on it: {_clip(v)}") or 'a mail on it')
         if said not in out: out.append(said)
     return '; '.join(out)
 
@@ -100,7 +113,7 @@ def _tasks(store, q: str, words, status: str = '') -> tuple:
     ts.sort(key=lambda t: str(t.get('UpdatedAt') or t.get('CreatedAt') or ''), reverse=True)
     ts.sort(key=lambda t: (t['TaskId'] not in ids, t.get('Status') in CLOSED, not all(w in (t.get('Title') or '').lower() for w in lw)))
     top, mail = ts[:N_TASKS], {}
-    for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail FROM message WHERE TaskId IN "
+    for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail, ExternalId, SourceLink FROM message WHERE TaskId IN "
                          f"({','.join('?' * len(top))})", [t['TaskId'] for t in top]) if top else []:
         mail.setdefault(r['TaskId'], []).append(r)
     return [{'type': 'task', 'id': f"task:{t['TaskId']}", 'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',

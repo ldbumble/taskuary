@@ -20,6 +20,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
+import { nothingMatches } from "./searchHits.js";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
@@ -626,7 +627,7 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
       {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
-      {!list.length && <Empty>{q ? "Nothing here." : workflowOverview
+      {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Workflows" : "Reports") : workflowOverview
         ? "No workflows yet — New workflow describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}

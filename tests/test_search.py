@@ -84,6 +84,14 @@ class SearchTests(unittest.TestCase):
         self.assertEqual((h['tid'], h['why']), (t, 'a mail on it is from Ray Colton'))
         self.assertEqual(next(x for x in self.hits('cutover') if x['type'] == 'task')['why'], '')     # the title shows it
 
+    # ...and says WHAT matched, as the owner reads it (verify, 2026-10-20): "assigned to person:ray@...", and "a link on its mail"
+    def test_the_why_names_the_holder_and_the_link_it_matched(self):
+        t = self.s.create_task({'Title': 'Vendor follow-up', 'Kind': 'reply', 'Status': 'open', 'Assignee': 'person:ray@vendor.example'}, 't')
+        mail(self.s, 'Status', 'Any news?', 'c10', tid=t, status='routed', link='https://tracker.example/case/7731')
+        why = lambda q: next(x for x in self.hits(q) if x['tid'] == t)['why']
+        self.assertEqual(why('vendor.example'), 'assigned to ray@vendor.example')
+        self.assertEqual(why('7731'), 'a mail on it links to tracker.example/case/7731')
+
     # ..."Gmail" and "model" found nothing, though a Connections card and four settings are called that
     def test_settings_and_connections_are_found_and_carry_their_link(self):
         g = next(h for h in self.hits('gmail') if h['type'] == 'connector')

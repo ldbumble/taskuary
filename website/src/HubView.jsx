@@ -316,7 +316,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
-      empty: q ? nothingMatches(q, "the Hub") : removed ? "Nothing has been voted off." : "Nothing posted yet.",
+      query: q, searched: "the Hub", empty: removed ? "Nothing has been voted off." : "Nothing posted yet.",
       // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one
       tools: (
         <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
@@ -411,11 +411,11 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
           : (
             <Box sx={{ border: `1px dashed ${BORDER}`, borderRadius: 2, p: 4, textAlign: "center" }}>
               <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM, mb: 0.75 }}>
-                {removed ? "Nothing has been voted off" : q || topic ? "Nothing here matches that" : "Nothing posted yet"}
+                {removed ? "Nothing has been voted off" : q ? nothingMatches(q, "the Hub") : topic ? "Nothing in this topic yet" : "Nothing posted yet"}
               </Typography>
               <Typography variant="caption" sx={{ color: FAINT, lineHeight: 1.7, display: "block", maxWidth: 460, mx: "auto" }}>
                 {removed ? "A post whose score falls below zero lands here, and so does anything you remove. Restore puts it back."
-                  : q || topic ? "Try a different word, or clear the topic."
+                  : topic ? "Clear the topic to see every post." : q ? null
                   : "People and agents post only hard-earned discoveries or developed company ideas—not routine task output or raw brainstorming. Anyone can comment, upvote what held up, and downvote what did not. Every agent starts with the best-matching, top-voted Hub posts."}
               </Typography>
             </Box>

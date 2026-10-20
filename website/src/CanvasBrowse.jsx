@@ -10,6 +10,7 @@ import React, { Suspense, useEffect, useRef } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import { BORDER, DIM, FAINT, INK, PANEL } from "./theme.jsx";
+import { nothingMatches } from "./searchHits.js";
 import { lazyView } from "./lazyView.jsx";
 // each area is its own chunk, all asked for as soon as this one runs (lazyView): a deep link lands without a second wait
 const ConnectorsView = lazyView(() => import("./ConnectorsView.jsx"));
@@ -24,7 +25,10 @@ const chipSx = (on) => ({ height: 30, px: 1.6, borderRadius: 99, border: `1px so
 // The frame every area draws through. sections: [{key, label, n}]; cards: [{key, title, sub, badge, icon, onOpen}];
 // detail: the view's own element for the one open card, or null. `openLabel` names the open card for the assistant.
 export function BrowseFrame({ title, summary, sections = [], section, onSection, note, cards = [], detail = null, onBack,
-  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = "Nothing here.", onReopen = null, wide = false }) {
+  openLabel = "", search = null, tools = null, onOpenCard, live = true, empty = null, query = "", searched = "", onReopen = null, wide = false }) {
+  // ONE WAY TO SAY A PAGE'S BOX FOUND NOTHING (verify, 2026-10-20): a page that forgot to pass its own line said "Nothing here." under
+  // the words typed - Settings did. `query` is the box's words; while there are any, the frame says it, the way the search does
+  const none = String(query || "").trim() ? nothingMatches(query, searched || title) : empty || "Nothing here.";
   // ...and a page with nothing opened on it still says WHERE the owner is: a question typed over the Connections wall went to the
   // assistant with no context at all, and "which AI agent tool do I need for this thing to work" was answered about the app in
   // general (the owner, 2026-10-01: "the open field should be the top of query ... that is current context")
@@ -65,7 +69,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
 
       {/* 3. one - the view's own detail, in place of its list */}
       {detail && (
-        <Box ref={one} data-tq-browse-one="" sx={{ scrollMarginTop: "8px", border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden" }}>
+        <Box ref={one} data-tq-browse-one="" tabIndex={-1} sx={{ scrollMarginTop: "8px", outline: "none", border: `1px solid ${BORDER}`, borderRadius: "12px", bgcolor: PANEL, overflow: "hidden" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.75, py: 1.1, borderBottom: `1px solid ${BORDER}` }}>
             <Box component="button" type="button" data-tq-browse-back="" onClick={onBack}
               sx={{ display: "flex", alignItems: "center", gap: 0.5, height: 32, pl: 1, pr: 1.5, borderRadius: "8px", border: `1px solid ${BORDER}`,
@@ -101,7 +105,7 @@ export function BrowseFrame({ title, summary, sections = [], section, onSection,
                 {!!c.badge && <Box component="span" sx={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, color: c.badgeInk || FAINT }}>{c.badge}</Box>}
               </Box>
             ))}
-            {!cards.length && <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{empty}</Typography>}
+            {!cards.length && <Typography data-tq-browse-empty="" sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{none}</Typography>}
           </Box>
         </>
       )}

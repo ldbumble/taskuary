@@ -114,19 +114,38 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
 }
 
 // FOCUS GOES TO WHAT WAS OPENED (the 2026-10-19 UI walk): the dialog gave it back to the search bar, a screen away from the task.
-// The canvas draws the pick a moment later, under its own key: its box is focused once it is there - the one holding the task, or
-// for a mail no task holds, the one that was not on the table before
-const ITEM = "[data-tq-canvas-item]";
-const focusDrawn = (tid) => {
+// ...AND STAYS THERE WHILE IT LANDS (verify, 2026-10-20): a task already on the table was focused on the first frame, its card drew
+// again and focus fell to the page; a setting or a connection was never focused at all. `find` is asked each frame - a box redrawn is
+// a new element, a knob stands up after its group - and focus is put back on it until it has held still for HOLD; the owner's own
+// key, click or scroll lets go at once (appLinks.focusPlace holds the scroll the same way). Its own terminal keeps the keys.
+const ITEM = "[data-tq-canvas-item]", HOLD = 1500, OWNER = ["keydown", "pointerdown", "wheel", "touchstart"];
+const focusOpened = (find) => {
   if (typeof window === "undefined" || !window.requestAnimationFrame) return;
-  const t0 = Date.now(), before = new Set(document.querySelectorAll(ITEM));
+  const t0 = Date.now();
+  let on = true, last = null, since = 0;
+  const stop = () => { on = false; OWNER.forEach((e) => window.removeEventListener(e, stop, true)); };
+  OWNER.forEach((e) => window.addEventListener(e, stop, true));
   const tick = () => {
-    const el = tid ? document.querySelector(`${ITEM} [data-tq-task-page="${Number(tid)}"]`)?.closest(ITEM)
-      : [...document.querySelectorAll(ITEM)].find((e) => !before.has(e));
-    if (el) { if (!el.contains(document.activeElement)) el.focus({ preventScroll: true }); }    // its own terminal keeps the keys
-    else if (Date.now() - t0 < 5000) window.requestAnimationFrame(tick);
+    if (!on) return;
+    const el = find(), now = Date.now();
+    if (el !== last) { last = el; since = now; }
+    if (el && !el.contains(document.activeElement)) {
+      // a knob's row takes focus without joining the Tab order, as the canvas's boxes do (CanvasItem tabIndex -1)
+      if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "-1"); el.style.outline = "none"; }
+      el.focus({ preventScroll: true });
+    }
+    if (now - t0 < 5000 && (!el || now - since < HOLD)) window.requestAnimationFrame(tick); else stop();
   };
   window.requestAnimationFrame(tick);
+};
+// what each kind of pick opened: the box holding the task; for a mail no task holds, the box that was not on the table before; for
+// a setting or a connection, the place its link names (focusPlace's [data-tq-held] - a knob) else the open card it landed on
+const fresh = (sel, before) => [...document.querySelectorAll(sel)].find((e) => !before.has(e));
+const opened = (h) => {
+  const before = new Set(document.querySelectorAll(`${ITEM}, [data-tq-held]`));
+  if (h.href) return () => fresh("[data-tq-held]", before) || document.querySelector("[data-tq-browse-one]");
+  if (h.tid) return () => document.querySelector(`${ITEM} [data-tq-task-page="${Number(h.tid)}"]`)?.closest(ITEM);
+  return () => fresh(ITEM, before);
 };
 
 export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource }) {
@@ -156,12 +175,14 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
 
   const pick = (h) => {
     if (!h) return;
+    const find = h.type === "source" ? null : opened(h);
     onClose();
     // a setting or a connection: the page that holds it, by its link - the road every in-app link takes, which brings it to view
     if (h.href) { searchPicked(); openAppLink(h.href); }
-    else if (h.type === "task") { onOpenTask?.(h.tid, h); focusDrawn(h.tid); }
+    else if (h.type === "task") onOpenTask?.(h.tid, h);
     else if (h.type === "source") onPickSource?.(h.pick);
-    else { if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h); focusDrawn(h.tid); }
+    else if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h);
+    if (find) focusOpened(find);
   };
   // the held Enter, spent when its words' answer lands - on nothing, when they found nothing (the empty line says so)
   useEffect(() => {
@@ -189,7 +210,9 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const footer = all.n > shown.flat.length || all.more ? `${shown.flat.length} of ${countWords(all)} · add a word to narrow` : `${shown.flat.length} of ${all.n}`;
   let i = -1;
   return (
-    <Dialog open={open} onClose={onClose} data-tq-search="true" disableRestoreFocus
+    // no disableRestoreFocus (verify, 2026-10-20): Esc left focus on the page, and words typed next went nowhere - a cancel gives it
+    // back to where it was (the chat's composer); a pick moves it on from there, to what it opened (focusOpened)
+    <Dialog open={open} onClose={onClose} data-tq-search="true"
       slotProps={{ backdrop: { sx: { bgcolor: "rgba(38,37,33,.28)", backdropFilter: "blur(2px)" } } }}
       sx={{ "& .MuiDialog-container": { alignItems: "flex-start" } }}
       PaperProps={{ sx: { mt: "9vh", width: 680, maxWidth: "calc(100vw - 32px)", borderRadius: "14px", bgcolor: PANEL,
@@ -238,7 +261,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
               {g.group}<Box component="span" sx={{ fontWeight: 500 }}>{groupCount(g)}</Box></Box>
             {g.hits.map((h) => { i += 1; const n = i; return (
               <Row key={h.id} hit={h} words={words} on={n === at} onPick={pick} onHover={() => n !== at && setAt(n)}
-                onTask={(tid) => { onClose(); onOpenTask?.(tid); focusDrawn(tid); }} />); })}
+                onTask={(tid) => { const find = opened({ tid }); onClose(); onOpenTask?.(tid); focusOpened(find); }} />); })}
           </Box>
         ))}
       </Box>

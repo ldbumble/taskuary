@@ -1197,6 +1197,7 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
           if (c.sel) { const e = c; setDocSel(e.sel.action ? { ...e.sel, n: Date.now() } : e.sel); }
           onBrowseState?.({ ...browseState, section: c.section || section, open: c.key, knob: c.knob || "", at: c.knob ? Date.now() : browseState.at });
         } })),
+      query: q,
       search: (
         <TextField fullWidth size="small" placeholder="Search settings…" value={q} onChange={(e) => setQ(e.target.value)}
           inputProps={{ "aria-label": "Search settings", "data-tq-browse-search": "" }}

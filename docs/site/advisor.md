@@ -52,9 +52,9 @@ comes back only once the evidence has tripled. The bars are counts, never a read
 from one sender put down (Not ours, Not a task, Ignore this sender) and none taken up is an ignore
 rule; twenty from an automated sender is a skip; three automated senders on one domain with twelve
 between them is a domain rule; five of one sender's tasks marked urgent by hand, none ever put down,
-is an escalate rule. Never for a colleague, never an ignore or a skip for anyone you have written to
-(an escalate rule may be - it is for the people you answer), never when a rule already covers them,
-and one such question at a time.
+is an escalate rule. Never an ignore or a skip for a colleague or for anyone you have written to (an
+escalate rule may be - it is for exactly those people, the boss above all), never when a rule already
+covers them, and one such question at a time.
 
 **On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
 off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a

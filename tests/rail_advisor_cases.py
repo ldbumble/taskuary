@@ -223,10 +223,10 @@ def _rule_notes(s):
                        'SentAt': at(d=1 + i), 'BodyText': 'x', 'Status': 'filed', 'SenderClass': 'automated'})
         s.add_memory({'Scope': 'subject', 'ScopeKey': f'digest {i}', 'Source': 'verdict', 'Active': 1, 'CreatedBy': 'owner',
                       'Note': f'{at(d=i)[:10]}: "Digest {i}" from digest@vendor.example - NOT A TASK: the owner filed it, no task, no reply'})
-def _rule_urgent(s):
+def _rule_urgent(s, em='alerts@vendor.example'):
     for i in range(5):
         t = s.create_task({'Title': f'Disk alert {i}', 'Status': 'open'}, 'triage')
-        s.add_message({'ConversationId': f'email:alert:{i}', 'Channel': 'email', 'Subject': f'Disk alert {i}', 'FromEmail': 'alerts@vendor.example',
+        s.add_message({'ConversationId': f'email:alert:{i}', 'Channel': 'email', 'Subject': f'Disk alert {i}', 'FromEmail': em,
                        'SentAt': at(d=1 + i), 'BodyText': 'disk at 95%', 'Status': 'routed', 'TaskId': t, 'SenderClass': 'automated'})
         s.audit('task', t, 'priority', 'owner', detail={'from': 'normal', 'to': 'urgent'})
 def _cold_draft_waits(s):
@@ -243,6 +243,7 @@ def _rule_urgent_answered(s):
     _rule_urgent(s)
     s.add_message({'ConversationId': 'email:alert:0', 'Channel': 'email', 'Subject': 'Re: Disk alert 0', 'FromEmail': OWNER, 'SentAt': at(h=2),
                    'BodyText': 'on it', 'Status': 'context', 'Direction': 'out'})
+def _rule_urgent_colleague(s): _rule_urgent(s, 'marcus@northwind.example')
 def _rule_covered(s):
     _ignored(s, 'newsletter@vendor.example', 12)
     s.save_policy({'Name': 'x', 'Kind': 'sender', 'Pattern': 'newsletter@vendor.example', 'Action': 'skip', 'Reason': 'x', 'Active': 1}, 'owner')
@@ -297,7 +298,8 @@ CASES = [
     ('rule', "eight Not a task notes (LEARNED.md's evidence only)", True, _rule_notes, None),
     ('rule', 'every task from them marked urgent by hand', True, _rule_urgent, None),
     ('rule', 'marked urgent every time, and the owner answers them', True, _rule_urgent_answered, None),
-    ('rule', 'a colleague', False, _rule_colleague, None),
+    ('rule', 'a colleague (the boss) whose every task is marked urgent', True, _rule_urgent_colleague, None),
+    ('rule', 'a colleague whose mail is all put down - never ignore or skip', False, _rule_colleague, None),
     ('rule', 'the owner wrote to them once', False, _rule_replied, None),
     ('rule', 'seven put down - under the bar', False, _rule_under, None),
     ('rule', 'a rule already covers them', False, _rule_covered, None),

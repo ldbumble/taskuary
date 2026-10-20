@@ -14,8 +14,6 @@ KNOWN = {
     'twelve mails put down, none taken up': "the automation card's skip-rule idea beside the rule question",
 }
 WORLD_KNOWN = {
-    'world, next check: cold:TQ-0037': 'gone quiet over a live agent session',
-    'world, next check: cold:TQ-0038': 'gone quiet over a live agent session',
 }
 
 

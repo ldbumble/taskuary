@@ -366,6 +366,12 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
     return out, blank
 
 
+def _live_agent(store, tid) -> bool:
+    from . import workerstate
+    try: return bool(workerstate.status(store, int(tid)).get('live'))
+    except Exception: return False
+
+
 def cold(store, days: int) -> list:
     """Open work nothing has touched for `days`: no comment, no message, no run. A live agent on
     it is activity; a draft waiting on the task is the owner's to move. Work the owner PUT AWAY (Remind me) is quiet
@@ -378,6 +384,9 @@ def cold(store, days: int) -> list:
         if _ts(t.get('RemindAt')) > now: continue
         last = _ts(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         if not last or last > cut: continue
+        # ...and a live agent SESSION is activity too, working or waiting on the owner: a CLI in a terminal writes no run row, so
+        # "push it or drop it?" stood over an agent mid-job and over one whose question is its own row on the rail (the eval)
+        if _live_agent(store, t['TaskId']): continue
         age = max(days, (datetime.now() - (_dt(last) or datetime.now())).days)
         wait = t.get('Status') == 'waiting' or t.get('ReviewStatus') == 'pending'
         ref = task_ref(t['TaskId'])

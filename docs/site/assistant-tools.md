@@ -9,7 +9,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
-| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere |
+| **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | start, continue, answer or stop a task's agent, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
@@ -166,6 +166,30 @@ The "Chase them" button: chase the person who has gone quiet on the item - a sho
 ### `let_go`
 
 The "Let it go" button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `accept_invite`
+
+The "Accept" button: accept the invite waiting on the owner - drafted for their Send.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `decline_invite`
+
+The "Decline" button: decline the invite waiting on the owner - drafted for their Send.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `propose_time`
+
+The "Propose a new time" button: propose another time for the invite from its free times - drafted for their Send.
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `find_time`
+
+The "Find a time" button: free times for the meeting a thread asks for - the pick drafted as an invite for their Send.
 
 <p class="runs">Brings up its button for you to press.</p>
 
@@ -464,7 +488,7 @@ Teach triage to file this sender or subject from now on - their mail still arriv
 
 ### `preference.sender_rule`
 
-An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.
+An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the work rail.
 
 <p class="runs">Brings up its button for you to press.</p>
 

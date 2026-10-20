@@ -131,6 +131,8 @@ AGENT_WRITES = (
 # door is a decision, not something that inherits whatever the table happened to say.
 OWNER_ONLY = (
     (r'POST', r'^/api/(bug-report/draft|open-url)$', "a bug report is drafted from the owner's own screen, and only the owner's click opens a page on their desktop"),
+    (r'POST', r'^/api/messages/\d+/calendar$', "answering an invite or drafting one is the owner's - drafted for their Send (calwrite)"),
+    (r'POST', r'^/api/advice/press$', "the owner's own press, recorded against what the Advisor lit (learn.moves)"),
     (r'POST', r'^/api/launch-key$', "a launch key opens a page that carries the owner token (launchkey.py, R29)"),
     (r'POST', r'^/api/tasks/\d+/trust$', "raising a task's origin is the owner's decision (origin.raise_to) - never a session's"),
     (r'POST', r'^/api/cloudfix/setup$', 'it commits a workflow to the repository - only ever the owner pressing Set up (cloudfix.install)'),

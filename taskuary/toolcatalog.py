@@ -253,10 +253,10 @@ _DECIDE = {
     'chase':           "chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent",
     'let_go':          'let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them',
     # the calendar's answers (calwrite.py): each DRAFTS for the owner's Send - nothing reaches a calendar before it
-    'accept_invite':   "accept the invite waiting on the owner - the yes is drafted, with a line they can change, for their Send",
-    'decline_invite':  "decline the invite waiting on the owner - the no is drafted for their Send",
-    'propose_time':    "propose another time for the invite - its free times are offered, and the pick is drafted for their Send",
-    'find_time':       "find a time for the meeting a thread asks for - free times that fit are offered, the pick drafted as an invite for their Send",
+    'accept_invite':   "accept the invite waiting on the owner - drafted for their Send",
+    'decline_invite':  "decline the invite waiting on the owner - drafted for their Send",
+    'propose_time':    "propose another time for the invite from its free times - drafted for their Send",
+    'find_time':       "free times for the meeting a thread asks for - the pick drafted as an invite for their Send",
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons

@@ -148,7 +148,7 @@ def candidates(store, state: dict = None, days: int = DAYS) -> list:
             act = 'skip' if r['auto'] and down >= SKIP_AT else 'ignore'
             seen = len(r['threads'])
             lead = f"all {plural(down, 'mail')}" if seen <= down else f"{down} of the {plural(seen, 'mail')}"
-            what = ('never reach you' if act == 'skip' else 'are filed without reaching you - still on your Timeline, never a task')
+            what = ('never reach you' if act == 'skip' else 'are filed without reaching you - still on your work rail, never a task')
             out.append(_cand('sender', em, act, down,
                              f"You've put down {lead} from {em} and acted on none. Make it a rule so they {what}? (Rules run before the AI.)",
                              f"{plural(down, 'thread')} from {em} put down by you (Not ours / Not a task) in {days} days, none answered or taken up; "

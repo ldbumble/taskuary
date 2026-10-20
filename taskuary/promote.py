@@ -12,8 +12,9 @@ rule silences the very corrections that would revoke it (learned.md's "Proposed 
   - skip a sender:     the same at SKIP_AT, and only for mail the headers call automated or bulk - skip hides it from the timeline
   - a whole domain:    DOMAIN_SENDERS automated senders on it, DOMAIN_AT put-downs between them, none taken up by anyone there
   - escalate a sender: ESCALATE_AT tasks from them the owner marked urgent by hand, and none of theirs ever put down
-NEVER for a colleague (the owner's own or team domains) or anyone the owner has written to - so never a skip for someone ever
-replied to. Never when an active rule already covers them. One rule question open at a time, the strongest first."""
+NEVER for a colleague (the owner's own or team domains). Never an ignore or a skip for anyone the owner has written to - an
+escalate rule is for exactly the people one answers, so it may be (the owner, 2026-10-20). Never when an active rule already
+covers them. One rule question open at a time, the strongest first."""
 import json, re
 from datetime import datetime, timedelta
 from loguru import logger
@@ -138,10 +139,10 @@ def candidates(store, state: dict = None, days: int = DAYS) -> list:
     state = state if state is not None else {i['Key']: i for i in store.list_ideas()}
     mine, me = _who(store)
     ev, out = evidence(store, days), []
-    ok = {em: r for em, r in ev.items() if _dom(em) and _dom(em) not in mine and em not in me and not written_to(store, em)}
+    ok = {em: r for em, r in ev.items() if _dom(em) and _dom(em) not in mine and em not in me}
     for em, r in ok.items():
         down, up, urgent = len(r['down'] - r['up']), len(r['up']), len(r['urgent'])
-        if up == 0 and down >= IGNORE_AT and not covered(store, em, ('skip', 'ignore')):
+        if up == 0 and down >= IGNORE_AT and not covered(store, em, ('skip', 'ignore')) and not written_to(store, em):
             act = 'skip' if r['auto'] and down >= SKIP_AT else 'ignore'
             seen = len(r['threads'])
             lead = f"all {plural(down, 'mail')}" if seen <= down else f"{down} of the {plural(seen, 'mail')}"

@@ -239,6 +239,10 @@ def _new_error(s, lines):
     for l in lines: assistant.act(s, l['id'], 'dismiss')
     sid = s._one("SELECT SourceId FROM source WHERE Address='Nightly AP aging'")['SourceId']
     for i in range(3): s.add_report_run(sid, {'at': at(m=3 - i), 'title': 'x', 'failed': True, 'error': 'permission denied for table ap_aging'})
+def _rule_urgent_answered(s):
+    _rule_urgent(s)
+    s.add_message({'ConversationId': 'email:alert:0', 'Channel': 'email', 'Subject': 'Re: Disk alert 0', 'FromEmail': OWNER, 'SentAt': at(h=2),
+                   'BodyText': 'on it', 'Status': 'context', 'Direction': 'out'})
 def _rule_covered(s):
     _ignored(s, 'newsletter@vendor.example', 12)
     s.save_policy({'Name': 'x', 'Kind': 'sender', 'Pattern': 'newsletter@vendor.example', 'Action': 'skip', 'Reason': 'x', 'Active': 1}, 'owner')
@@ -292,6 +296,7 @@ CASES = [
     ('rule', 'Not ours pressed on nine mails (the press log only)', True, _rule_pressed, None),
     ('rule', "eight Not a task notes (LEARNED.md's evidence only)", True, _rule_notes, None),
     ('rule', 'every task from them marked urgent by hand', True, _rule_urgent, None),
+    ('rule', 'marked urgent every time, and the owner answers them', True, _rule_urgent_answered, None),
     ('rule', 'a colleague', False, _rule_colleague, None),
     ('rule', 'the owner wrote to them once', False, _rule_replied, None),
     ('rule', 'seven put down - under the bar', False, _rule_under, None),

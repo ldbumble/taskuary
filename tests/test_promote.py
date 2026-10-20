@@ -91,6 +91,15 @@ class Promotion(unittest.TestCase):
         s2 = _store(); urgent(s2, ALERTS, promote.ESCALATE_AT); mails(s2, ALERTS, 1, down=1, start=99)
         self.assertEqual(promote.ideas(s2), [], 'one of theirs put down: not always urgent')
 
+    def test_escalate_is_asked_for_someone_the_owner_answers(self):
+        """The never-for-people-you-reply-to block is ignore and skip's alone: escalate is for the people one answers."""
+        s = _store(); urgent(s, 'paula@vendor.example', promote.ESCALATE_AT)
+        s.add_message({'ConversationId': 'email:alert:0', 'Channel': 'email', 'Subject': 'Re: Disk alert 0', 'FromEmail': 'alex@northwind.example',
+                       'BodyText': 'on it', 'Status': 'context', 'Direction': 'out'})
+        self.assertEqual(promote.ideas(s)[0]['action']['policy']['Action'], 'escalate')
+        s2 = _store(); urgent(s2, 'erin@northwind.example', promote.ESCALATE_AT)
+        self.assertEqual(promote.ideas(s2), [], 'still never a colleague')
+
     def test_a_domain_of_machines_is_one_question(self):
         s = _store()
         for em in ('billing@mail.vendor.example', 'promo@mail.vendor.example', 'news@mail.vendor.example'): mails(s, em, 4, down=4)

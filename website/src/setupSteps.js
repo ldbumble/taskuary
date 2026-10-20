@@ -55,13 +55,15 @@ export const navMoves = (st, view, reopened = false) => {
   return out;
 };
 // THE STEP'S CARD IS THE LIT MOVE (the owner, 2026-10-19: the Advisor lights the REAL control - the card itself - never a button of its
-// own on the row): of the cards the shelf shows, one failing first (its fix is on it), then one already connected here - a fresh home
-// lit ChatGPT, the shelf's first, beside a Claude card reading "Connected - pick it to make it your AI" - then the shelf's first, the
-// one most people have. null once the step is done, or while a card is open or a pick is under way: that setup's own button is the move.
+// own on the row): of the cards the shelf shows, one failing first (its fix is on it), then one already connected here, then - for the
+// email only - the shelf's first. null once the step is done, or while a card is open or a pick is under way: that setup's own button
+// is the move. THE AI IS THE PERSON'S CHOICE (the owner, 2026-10-20: "the advisor says claude is installed, set it up?? ... stop
+// assuming that ... It should let them choose the AIs"): with nothing connected no AI card is lit - lighting the shelf's first was
+// Taskuary picking a vendor for them.
 export const cardOf = (st, view, cards, held = false) => {
   if (held || !["ai", "mail"].includes(view) || doneOf(st, view)) return null;
   const can = (cards || []).filter((c) => c.go);
-  return can.find((c) => c.state === "failing") || can.find((c) => c.state === "on") || can[0] || null;
+  return can.find((c) => c.state === "failing") || can.find((c) => c.state === "on") || (view === "mail" ? can[0] : null) || null;
 };
 // the open setup's button to light: its filled one, else its outlined one - read off what is drawn, so the line names its own words
 export const buttonOf = (buttons) => buttons.find((b) => b.filled) || buttons.find((b) => b.outlined) || null;

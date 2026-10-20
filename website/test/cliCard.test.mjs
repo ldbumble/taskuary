@@ -9,6 +9,8 @@ test("the CLI agents card is on only when a CLI is connected; installed alone is
   assert.deepEqual(cliCardOf(clis), { state: "off", desc: "2 installed on this computer · none connected - open to connect one" });
   clis[0].configured = true;
   assert.deepEqual(cliCardOf(clis), { state: "on", desc: "Connected: Claude Code" });
+  // a saved connection to a CLI that is not on this machine is not "Connected" (a fresh install, 2026-10-20)
+  assert.equal(cliCardOf([{ name: "claude", label: "Claude Code", installed: false, configured: true }]).state, "off");
   assert.equal(cliCardOf([]).state, "off");
   assert.deepEqual(cliCardOf(null), {});
 });

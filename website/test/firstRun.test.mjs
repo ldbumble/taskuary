@@ -104,7 +104,8 @@ test("setup reads for someone with no coding tool, and its loops and errors beha
   // ChatGPT, the organisation card and the keys lead; the coding tools sit under their own heading
   assert.match(fr, /const lead = \[\.\.\.\(planCard \? \[planCard\] : \[\]\), \.\.\.keyCards\];/);
   assert.match(fr, /\{ label: "If you use a coding tool", cards: coding \}/);
-  assert.match(fr, /"Can't install on this computer - pick ChatGPT or a key instead"/); assert.match(fr, /"Installed - needs sign-in"/);
+  assert.match(fr, /"Can't install on this computer - pick ChatGPT or a key instead"/); assert.match(fr, /"On this computer - pick it to check it works"/);
+  assert.doesNotMatch(fr, /"Installed - needs sign-in"/, "found on PATH says nothing about a sign-in it never checked");
   assert.doesNotMatch(fr, /below - |Click it below|card below/, "the cards are above the line");
   // Cancel stops the ChatGPT sign-in loop - it is checked after every wait - and so does leaving setup
   assert.match(fr, /const gone = \(\) => signRef\.current !== me;/); assert.match(fr, /const cancelSignin = \(\) => \{\n\s+signRef\.current = null;/);

@@ -347,7 +347,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts your mail"]
     // connected on the Connections page, just not the one sorting the mail: it read "Not set up" (the owner, 2026-10-16)
     : ai.connected ? ["on", "Connected - pick it to make it your AI"]
-    : ["off", ai.installed ? "Installed - needs sign-in" : ai.install ? "Not installed - pick it to install" : noInstall]);
+    : ["off", ai.installed ? "On this computer - pick it to check it works" : ai.install ? "Not installed - pick it to install" : noInstall]);
   const cliCards = st.ais.map((ai) => {
     const [state, words] = stateOf(ai);
     return { key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
@@ -468,10 +468,13 @@ ${fix.detail || ""}`, screen: "Setup",
   const onward = nav.find((m) => !m.disabled && m.id === (q === "other" ? "finish" : "next"));
   const litId = canvas || litCard || ["about", "done"].includes(q) ? "" : fixRow[0]?.id || (onward ? `setup:${onward.id}` : "");
   if (litId !== rowLit) setRowLit(litId);
+  // what detection PROVED is on this machine - the only CLI the line may name when nothing is lit, and then as one choice of many
+  const found = st.ais.filter((a) => a.installed);
   // ...and THE LINE NAMES IT by the words the screen draws: the card's title, the button's own label, the row verb's
   lineRef.current = said || err || {
     ai: (!browse && fix?.why) || (signing ? "Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done." : "") || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? `What AI do you have? ${!litCard
-      ? "Pick it" : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
+      ? (found.length === 1 ? `${found[0].title} is on this computer - pick it if that is the one you use, or pick any other` : "Pick the one you use")
+      : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
       : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort your mail.`
       : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail

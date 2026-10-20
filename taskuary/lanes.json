@@ -281,6 +281,7 @@
     "connect": { "word": "worth connecting", "counted": "worth connecting", "section": "ideas" },
     "health": { "word": "needs a look", "counted": "needs a look", "section": "ideas" },
     "unjudged": { "word": "couldn't sort this", "counted": "couldn't be sorted", "section": "ideas" },
-    "unanswered": { "word": "no answer yet", "counted": "unanswered", "section": "loose" }
+    "unanswered": { "word": "no answer yet", "counted": "unanswered", "section": "loose" },
+    "loose": { "word": "no next step", "counted": "loose end", "section": "loose" }
   }
 }

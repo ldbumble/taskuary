@@ -40,7 +40,13 @@
   "loose_ends": {
     "_": "WHAT FELL THROUGH, SAID ON ITS ROW (sweep.py, 2026-10-20): the daily check's one sentence for each way an item can sit where nothing will move it, and the reason under it (`_why`). {ref} is the task's TQ number, {who} the person, {gist} their words, {ago} how long ago.",
     "unanswered": "{who} asked \"{gist}\" {ago} - no answer, no task, nothing decided",
-    "unanswered_why": "a person asked you this over {days} days ago and nothing has happened to it since"
+    "unanswered_why": "a person asked you this over {days} days ago and nothing has happened to it since",
+    "no_step": "{ref} has no next step",
+    "no_step_why": "it is open, and nothing on your list or anyone else's moves it",
+    "waiting_nobody": "{ref} is waiting on nobody named",
+    "waiting_nobody_why": "it says waiting, but not on whom - nothing will bring it back",
+    "waiting_no_date": "{ref} is waiting on {who} with no date",
+    "waiting_no_date_why": "nothing brings it back if they never answer - give it a date, or chase them"
   },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]

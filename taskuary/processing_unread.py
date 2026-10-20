@@ -427,6 +427,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # like the rest now, and the quiet hours (task_return_minutes) bring it back. A Remind me date outranks it.
     # ...a goal's CHILD is folded here, once its lane is final: the worker relabel above is where `working` comes from, so
     # a fold decided earlier let a running child escape as a row beside its goal (the review, 2026-10-12)
+    # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
+    # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
+    # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow
+    if active and not review and not worker and tid:
+        from . import sweep
+        loose = sweep.loose_on(view.get('ideas'), task, card, deferred=bool(read.get('deferred')), now=now,
+                               mids=[m['MessageId'] for m in view.get('messages') or []])
+        if loose: card.update(lane_was=card['lane'], lane='yours', why=loose['Text'], loose=True, loose_at=loose.get('LastSaid'))
     if task.get('ParentId') and active: card['folded'] = card['lane'] in FOLD_LANES
     read_at = processing_all._stamp(read.get('read_at'))
     back = bool(tid and active and not read.get('deferred') and read_at
@@ -499,7 +507,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     stopped = active and card['lane'] in ('stopped', 'saved') and not read.get('deferred') and (read_at is None or bool(since and read_at < since))
     # ...and Remind me puts away a live agent or a paused conversation too, until its day (R7, 2026-09-25)
     away = bool(reminded and remind.waiting(task, now)) and not asking_now
-    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or (finished and finished['unread']) or
+    # ...said since it was last read: on the rail until it is read, like news on the task (Next puts it down for the quiet hours)
+    raised = bool(card.get('loose') and (read_at is None or read_at < (processing_all._stamp(card.get('loose_at')) or now)))
+    unread = not closed and not receipt and bool((read['unread'] and not read.get('deferred')) or back or stopped or raised or (finished and finished['unread']) or
                                                  (active and not away and (worker or row.get('Working') or persisted_working or card.get('paused'))))
     # the arrow means triage moved it up: an idea or a task raised to "asked you", or an urgent ask
     card['promoted'] = bool(card.get('urgent_request')) or (card['lane'] == 'asked' and (card['kind'] == 'idea' or row.get('Channel') == 'assistant'))

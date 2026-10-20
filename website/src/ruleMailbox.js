@@ -1,4 +1,4 @@
-// WHICH MAILBOX A RULE IS FOR (Settings → Rules, the owner, 2026-10-20): "Applies to: All mailboxes / each connected sending
+// WHICH MAILBOX A RULE IS FOR (Settings → Routing policies, the owner, 2026-10-20): "Applies to: All mailboxes / each connected sending
 // mailbox", saved to the rule's Mailbox (policy.on_mailbox: blank is every mailbox, today's behaviour). The choice is shown only
 // when more than one mailbox is connected - with one, every rule is that mailbox's anyway.
 export const ALL_MAILBOXES = "All mailboxes";

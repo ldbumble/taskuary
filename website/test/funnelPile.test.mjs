@@ -425,3 +425,12 @@ test('a task pulled onto the table from outside the pile sits under On you, not 
   // ...a message with no task behind it stays where its own lane puts it
   assert.equal(levelOf(pulledRow({ key: 'msg:9', kind: 'fyi', lane: 'fyi', order_band: 4 })), 'fyi');
 });
+
+test('an agent on the table keeps its own lane on the rail when the walk has taken its row out of the pile (G7)', async () => {
+  const { pulledRow } = await import("../src/funnelPile.js");
+  // it asked while it stood there: the rail said "on you" under a header saying the agent waited on you
+  assert.equal(pulledRow({ key: 'processing:p2', kind: 'agent', lane: 'blocked', order_band: 2, tid: 37 }).lane, 'blocked');
+  assert.equal(pulledRow({ key: 'processing:p2', kind: 'agent', lane: 'working', order_band: 5, tid: 37 }).lane, 'working');
+  // ...a task's own card is still on you while it is open
+  assert.equal(pulledRow({ key: 'processing:p3', kind: 'todo', lane: 'queued', order_band: 2, tid: 38 }).lane, 'yours');
+});

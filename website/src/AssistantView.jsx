@@ -1410,6 +1410,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // caused the write reloaded the rows itself, and this was the fourth full build of one press
     return onLive(["feed-changed", "task-changed"], (ev, meta) => { if (!coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true); }, { wait: 1500, max: 5000 });
   }, [active, loadPile]);
+  // ...but THE ITEM ON THE TABLE is read at once: its agent asking is the one change the owner is looking at, and the burst's 1.5s
+  // left its rail row saying "working" under a header that already said it waited on them (G7, 2026-10-20)
+  useEffect(() => {
+    if (!active) return undefined;
+    return onLive("task-changed", (ev, meta) => {
+      const tid = Number(ev?.task_id) || 0;
+      if (tid && tid === currentRef.current?.tid && !coveredByReload(meta, forcedLoadStartedAt.current)) loadPile(true);
+    }, { wait: 150, max: 600 });
+  }, [active, loadPile]);
   // ...but only once there IS a conversation: on the empty welcome it scrolled "Good morning" and the
   // day's meetings off the top of the screen (the owner, 2026-09-23: "this is cutting off the top")
   // ...on a NEW line, not on a line's own state changing: browsing (a chip, a card, Back) rewrites its line in place, and

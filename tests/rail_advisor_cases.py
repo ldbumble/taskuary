@@ -101,8 +101,8 @@ def _task(s, title, quiet_d, status='open', **kw):
     return t
 
 
-def _report(s, title, fails=0, ok=0, workflow=False, active=True, error='connection refused on port 5432'):
-    cfg = {'type': 'sql', 'title': title, 'daily_at': '07:00'}
+def _report(s, title, fails=0, ok=0, workflow=False, active=True, error='connection refused on port 5432', clock=True):
+    cfg = {'type': 'sql', 'title': title, **({'daily_at': '07:00'} if clock else {})}
     if workflow: cfg |= {'type': 'agent', 'access': 'write', 'prompt': 'pull the vendor statements into the ledger'}      # a job that writes
     sid = s.save_source({'Channel': 'report', 'Address': title, 'Active': 1 if active else 0, 'ConfigJson': json.dumps(cfg)}, 'owner')
     for i in range(ok): s.add_report_run(sid, {'at': at(d=10 - i), 'title': title, 'failed': False, 'said': 1})
@@ -175,6 +175,11 @@ def _health_plus(s): _report(s, 'Nightly AP aging', fails=3)
 def _health_two(s): _report(s, 'Nightly AP aging', fails=2, ok=3)
 def _health_off(s): _report(s, 'Nightly AP aging', fails=3, active=False)
 def _health_workflow(s): _report(s, 'Monthly vendor statement pull', workflow=True)
+def _health_unscheduled(s):
+    """A workflow with no clock, known for two days, never run - said once (the owner, 2026-10-20)."""
+    sid = _report(s, 'Vendor statement pull', workflow=True, clock=False)
+    s.set_setting('health_workflow_seen', json.dumps({str(sid): at(d=2)}), 'eval')
+def _nothing(s, lines): pass
 def _health_workflow_old(s):
     """A workflow the Advisor has known for two days whose daily clock has passed twice, and that never ran."""
     sid = _report(s, 'Monthly vendor statement pull', workflow=True)
@@ -264,6 +269,8 @@ CASES = [
     ('health', 'a new failure after a No', True, _health_plus, _new_error),
     ('health', 'a workflow saved a minute ago, never run yet', False, _health_workflow, None),
     ('health', 'a workflow known for two days that never ran', True, _health_workflow_old, None),
+    ('health', 'an unscheduled workflow that never ran', True, _health_unscheduled, None),
+    ('health', 'the unscheduled workflow again, next check', False, _health_unscheduled, _nothing),
     ('health', 'mail waits and no brain is set', True, _health_brain, None),
     # connect: a system the threads are really about, nothing connected
     ('connect', 'four threads about QuickBooks', True, _connect_plus, None),

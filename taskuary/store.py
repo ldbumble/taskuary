@@ -4164,9 +4164,11 @@ class SQLiteStore:
                                   'ORDER BY TranscriptId LIMIT 1', (task_id, row['ExtId']))
         return {**row, 'Brain': first['Brain']} if first else row
     def agented_task_ids(self) -> set:
-        """Every task an agent has ever touched - a live-session transcript or a headless run. The
+        """Every task an agent has ever touched - a live-session transcript, a headless run, or a run that reported on itself (a
+        general agent leaves only its worker events: one that finished or failed was off the Board its column named, G7). The
         Board is the agents' board: a reply the owner answered by hand is finished work, not board work."""
-        return {r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM transcript UNION SELECT DISTINCT TaskId FROM run') if r['TaskId']}
+        return {r['TaskId'] for r in self._rows('SELECT DISTINCT TaskId FROM transcript UNION SELECT DISTINCT TaskId FROM run '
+                                                'UNION SELECT DISTINCT TaskId FROM worker_event') if r['TaskId']}
     def report_runs_before(self, conversation_id, mid):
         """Earlier runs of the SAME report, newest first. One report is one conversation
         (reports.py writes `report:<SourceId>` on every run), so this is what "the previous one"

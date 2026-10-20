@@ -1531,6 +1531,11 @@ def triage_ideas(store, rows: list, llm, report_title: str = None) -> list:
         except ValueError: a = {}
         tri = a.get('triage') or {}
         if tri and tri.get('sig') == (i.get('Sig') or '') and not tri.get('error') and not tri.get('pending'): continue
+        if i.get('Kind') == 'rule':
+            # a rule question is the owner's yes or no on the row itself: triage reading it as work opened a task to make the rule
+            a['triage'] = {'intent': 'fyi', 'kind': None, 'why': 'a question for you - its own row says yes or no', 'sig': i.get('Sig') or '',
+                           'at': now, 'linked_task': None, 'error': None}
+            store.set_idea_action(i['IdeaId'], a); done.append(i['IdeaId']); continue
         msg, tid, _ = _idea_message(store, i, a, report_title)      # the task's status is the model's to weigh, not this branch's
         if llm is None:
             a['triage'] = {'pending': True, 'sig': i.get('Sig') or '', 'at': now}
@@ -1786,6 +1791,10 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
         on = lambda bid: blocks is None or bool((blocks.get(bid) or {}).get('on'))
         try:
             props = health_ideas(store, now) if on('health') else []
+            # ...and a rule the owner's own presses already draw, asked once (promote.py) - counted, never thought
+            if on('rules'):
+                from . import promote
+                props += promote.ideas(store, state)
             # ...and it is a line like any other: it counts toward "Lines per post", first because it is the app's own
             # (health rode on top of the cap, and a post said to hold 3 lines held 5 - I9, 2026-09-27)
             say = ([x | {'why': x['action'].get('why', '')} for x in props if x['key'] not in have and fresh(state, x, now)]
@@ -1866,7 +1875,8 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
 # Make a task (task: yours, nothing works it), Send to agent (agent), Not ours (dismiss: never said again), Remind me
 # (snooze: back on its day), and done - handled some other way, which is what the rail's Done writes. Next is the
 # walk's own and touches nothing. Draft follow-up, Discuss and the talk-back chat are gone: a task's agent drafts.
-VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done')
+# ...and a rule question's yes (promote.py): the rule it proposed is made, through the one create path
+VERBS = ('task', 'agent', 'dismiss', 'dismiss_kind', 'snooze', 'done', 'rule')
 # WHAT THE OWNER DID WITH AN IDEA, kept where the Advisor reads it (the owner, 2026-10-02: "feedback on assistant ideas even on
 # desktop does it teach it anything? we should have that"). The idea row's status said dismissed or done - and done covered a
 # task made from it and a line merely handled alike - and a dismissed row ages out of ALREADY SAID with the rest. This log is
@@ -1964,6 +1974,9 @@ def act(store, idea_id: int, verb: str, actor: str = 'owner', days: int = 1, unt
         store.audit('idea', idea_id, verb, actor, detail={'until': at})
         return out | {'until': at, 'remindAt': at, 'when': remind.when(at)}
     if verb in ('task', 'agent'): out |= _make_task(store, i, a, verb == 'agent', actor)
+    if verb == 'rule':
+        from . import promote
+        out |= promote.accept(store, i, a, actor)
     store.set_idea_status(idea_id, 'dismissed' if verb in ('dismiss', 'dismiss_kind') else 'done', actor)
     store.audit('idea', idea_id, verb, actor, detail={'kind': i.get('Kind')})
     _keep_verdict(store, i, verb, actor)

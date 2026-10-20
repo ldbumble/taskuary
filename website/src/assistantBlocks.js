@@ -25,6 +25,7 @@ export const BLOCKS = [
   { id: "gone_quiet", label: "Work gone quiet", days: 3 },
   { id: "connectors", label: "Connectors mentioned", days: 30 },
   { id: "health", label: "App health" },
+  { id: "rules", label: "Rules worth making" },
 ];
 
 // One block's override, merged. Only the block touched is written: the rest of the choice is the
@@ -80,9 +81,9 @@ export const TASKUARY_CARDS = [
   { id: "work", label: "Work", blocks: ["open_work", "done_this_week", "gone_quiet"],
     knobs: [{ name: "done_days", label: "days of done work", default: 7 }, { name: "quiet_days", label: "days before work is quiet", default: 3 }],
     says: "open tasks, what got done, and work that has gone quiet" },
-  { id: "automation", label: "Automation", blocks: ["automation"],
+  { id: "automation", label: "Automation", blocks: ["automation", "rules"],
     knobs: [{ name: "days", label: "days counted", default: 30 }],
-    says: "once a week, a month of traffic counted - what repeats enough to be worth automating" },
+    says: "once a week, a month of traffic counted - what repeats enough to be worth automating - and the rules your own presses already draw" },
   { id: "memory", label: "Memory", blocks: ["already_said", "notes", "knowledge", "learned", "ledger"],
     knobs: [{ name: "days", label: "days of outcomes", default: 30 }],
     says: "what it already said, its note from the last check, the knowledge base, what its verdicts taught, and the outcome ledger" },

@@ -813,8 +813,17 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
 }
 
 // the assistant's own line: the slipped ask, the promise, the thread gone quiet
-export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
+export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
   const a = card.action || {};
+  // A RULE QUESTION's yes makes the rule it proposed (promote.py); its no is the chips' Not ours, like a connect idea's
+  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const rule = card.idea_kind === "rule" && a.policy && card.idea;
+  const makeRule = async () => {
+    setBusy(true); setErr("");
+    try { await api.post(`/api/assistant/ideas/${card.idea}/rule`, {}); onDone?.(`The rule is made - ${a.policy.Name}. It is in Settings, under Rules.`); }
+    catch (e) { setErr(failOf(e)); }
+    setBusy(false);
+  };
   // THE REPORT PROPOSES, THE CARD HAS THE DOORS (the assistant-runs-the-app design, 2026-09-18): a
   // system to connect opens its card on the Connections tab; a health finding opens the tab that fixes
   // it. Putting it down is the chips' Not ours, the same word every idea carries (C5, 2026-09-27).
@@ -835,12 +844,16 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate }) {
             onClick={() => go("Connections", `connector=${a.connector_type}`)}>{a.planned ? `See ${a.title || a.connector_type}` : `Connect ${a.title || a.connector_type}`}</Button>
         ) : card.idea_kind === "health" && a.tab ? (
           <Button size="small" variant="contained" disableElevation sx={primary} onClick={() => go(a.tab, a.hash || "")}>Open {a.tab}</Button>
+        ) : rule ? (
+          <Button size="small" variant="contained" disableElevation sx={primary} disabled={busy} onClick={makeRule}>{busy ? "Making it…" : "Make it a rule"}</Button>
         ) : null}
         then={card.idea_kind === "connect" && a.connector_type ? <><b>{a.planned ? "See" : "Connect"}</b> opens its card on Connections - nothing changes until you finish there.</>
           : card.idea_kind === "health" && a.tab ? <><b>Open {a.tab}</b> takes you to the tab that fixes it.</>
+          : rule ? <><b>Make it a rule</b> adds it under Settings, Rules - switch it off there to undo it.</>
           // the buttons in the bar say what they do; the sentence that explained them is gone (2026-10-10)
           : null}
         where={<Where card={{ ...card, tid: a.tid || card.tid, mid: a.mid || card.mid }} onOpenTask={onOpenTask} onTimeline={onTimeline} />} />
+      <CardErr err={err} />
     </CardShell>
   );
 }

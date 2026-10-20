@@ -43,6 +43,18 @@ a sender you keep hearing from through a system you have not connected. Their fi
 judged like any arrival, because a forgotten task is work waiting on you and belongs on the rail
 where **Next** reads it in turn. Nothing fires for absence; something has to look.
 
+**A rule worth making.** When your own presses already draw a hard edge, the clock asks once
+whether to make it a rule, phrased as a question on its own idea row: "You've put down all 12 mails
+from newsletter@vendor.example and acted on none. Make it a rule so they are filed without reaching
+you? (Rules run before the AI.)" **Make it a rule** writes the rule under Settings → Rules, named
+"(learned)" and saying it was promoted from learning; **Not ours** is the no, and the same question
+comes back only once the evidence has tripled. The bars are counts, never a reading: eight threads
+from one sender put down (Not ours, Not a task, Ignore this sender) and none taken up is an ignore
+rule; twenty from an automated sender is a skip; three automated senders on one domain with twelve
+between them is a domain rule; five of one sender's tasks marked urgent by hand, none ever put down,
+is an escalate rule. Never for a colleague, never for anyone you have written to, never when a rule
+already covers them, and one such question at a time.
+
 **On the event.** The same brain also runs when one item changes: an agent stops or asks (or was cut
 off by Taskuary closing, which the next launch reports), a reply arrives on a watched thread, a mail is attached to a task, a pull request opens, a task closes, a
 due day is missed, a report lands - and every item the walk or the chat puts on the table, an email,

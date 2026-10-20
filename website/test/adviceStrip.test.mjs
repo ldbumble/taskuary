@@ -69,5 +69,19 @@ test("an advised move the row has greyed says why it is off, and a move lit on t
   const src = read("ActionRow.jsx");
   assert.match(src, /const off = advisedAny\(theirs, advice\);\s*if \(!off\?\.disabled\) return null;/);
   assert.match(src, /data-tq-advice="off"[\s\S]{0,120}\$\{off\.label\} is off - \$\{off\.why/);
-  assert.match(read("ReviewDecision.jsx"), /if \(lit\.startsWith\(`\$\{r\.ReviewId\}:`\)\) movesRef\.current\?\.querySelector\("\.MuiButton-contained"\)\?\.scrollIntoView/);
+  // ...and held clear of what stands over it (inView.js), marked so the conversation's pin keeps it clear too (the phone pass, 2026-10-20)
+  const rd = read("ReviewDecision.jsx");
+  assert.match(rd, /if \(!lit\.startsWith\(`\$\{r\.ReviewId\}:`\)\) return undefined;\s*const el = movesRef\.current\?\.querySelector\("\.MuiButton-contained"\);/);
+  assert.match(rd, /el\?\.setAttribute\("data-tq-lit", ""\);\s*const stop = holdInView\(el\);/);
+  assert.match(read("AssistantView.jsx"), /el\.querySelector\("\[data-tq-lit\]"\)[\s\S]{0,200}floorOf\(body, el\)/);
+});
+
+// THE MATRIX'S VERIFY (2026-10-20): a chat's Mark done copies the draft - with the box emptied the line still said "copy it to where the
+// question came from"; the move stays the advised one, and says what it does now (`blank`)
+test("a move whose text is gone says what it does now, still lit", () => {
+  const list = [v("12:approve", "decide", { label: "Mark done", card: true, tone: "p", blank: "The draft box is empty - Mark done closes it with nothing copied" }), v("next", "next")];
+  assert.equal(advisedIn(list, { verb: "close", label: "Mark done" })?.id, "12:approve", "still the advised move");
+  assert.match(read("actionRow.js"), /\.\.\.\(v\.blank \? \{ blank: v\.blank \} : \{\}\)/, "the row carries it to the strip");
+  assert.match(read("ActionRow.jsx"), /if \(onRow\.blank\) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">\{`\$\{onRow\.blank\}\.`\}/);
+  assert.match(read("ReviewDecision.jsx"), /blank: value\.trim\(\) \? "" : `The draft box is empty - \$\{btn\("close"\)\} closes it with nothing copied`/);
 });

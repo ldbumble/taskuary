@@ -20,19 +20,22 @@ import { hint as btnHint, label as btnLabel } from "./buttons.js";
 // view's foot, which was handed none - so the suggestion's line stood over a row whose dark button was something else. Read for
 // this item, re-read when the Advisor's event names it, and dropped when the item moves on (adviceShown).
 function useItemAdvice(card, on) {
-  const [advice, setAdvice] = useState(null);
+  // ...and WHILE IT IS STILL BEING READ (`asking`): the phone's strip drew nothing at all over an item the Advisor had not judged yet,
+  // where the page's says "Thinking about this one…" (the matrix's phone pass, 2026-10-20)
+  const [advice, setAdvice] = useState(null), [asking, setAsking] = useState(false);
   const key = card?.key || "";
   useEffect(() => {
-    if (!on || !key) { setAdvice(null); return undefined; }
+    if (!on || !key) { setAdvice(null); setAsking(false); return undefined; }
     let live = true;
     const read = () => api.get("/api/advice", { params: { key } })
-      .then(({ data }) => { if (live) setAdvice(adviceRead(data, key).advice); }).catch(() => { if (live) setAdvice(null); });
-    setAdvice(null); read();
+      .then(({ data }) => { if (!live) return; const r = adviceRead(data, key); setAdvice(r.advice); setAsking(!!r.asking); })
+      .catch(() => { if (live) { setAdvice(null); setAsking(false); } });
+    setAdvice(null); setAsking(true); read();
     const off = onLive("advice", (ev) => { if (adviceKeyFor(ev, { key, aliases: card.aliases || [] })) read(); });
     const after = onPressed(() => read());          // an act on the item moves its revision: read the line again (2026-10-19)
     return () => { live = false; off?.(); after(); };
   }, [on, key]);   // eslint-disable-line react-hooks/exhaustive-deps
-  return advice;
+  return [advice, asking];
 }
 
 // the height the view takes: the chat body's own, less its padding - the same in both states (see above). Said in CSS,
@@ -53,7 +56,7 @@ export const showsTask = (card, kind) => !!card?.tid && !["proposal", "setup", "
 // arrow - full screen, and still never a resize: the box it pins is measured in place, the same width and height.
 export const phoneItemHeight = (innerHeight) => Math.max(420, Math.round((innerHeight || 0) - 16));
 
-export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, onReminded, phone = false, lit = null }) {
+export default function CanvasItem({ card, height, expanded, onExpand, onNext, busy, onFold, onAfter, onLeave, onStay, onListChanged, onChanged, onGoReports, onOpenTask, onReminded, phone = false, lit = null, onPropose = null }) {
   // a task opened "and start it" or "with this dialog up" (TaskHubPage.openTask): once, then it is spent
   const [auto, setAuto] = useState(card.autostart ? { taskId: card.tid, ...card.autostart } : null);
   const [act, setAct] = useState(card.act ? { taskId: card.tid, act: card.act } : null);
@@ -73,7 +76,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   // NEXT, in the row: the walk's ONE button on a task (the owner, 2026-09-29), the same handler as the button it replaces
   useHost(phone);
   useVerbs("next", [{ id: "next", group: "next", label: btnLabel("next"), disabled: !!busy, run: () => onNext(), title: btnHint("next") }]);
-  const read = useItemAdvice(card, phone);
+  const [read, asking] = useItemAdvice(card, phone);
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
   const none = !lit && !advised && !busy && read?.none && read.none !== "no_ai" ? read : null;
@@ -110,7 +113,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
       {/* ...and the Advisor's line rides WITH the row it lights: pinned over the composer, it stood a screen away (2026-10-19) */}
       {phone && <div className="tq-docked"><div className="tq-strip" data-tq-strip="">
         {lit && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{lit.line}</div></div>}
-        <AdvisorNext advice={advised} /><AdviceNone advice={none} /></div>
+        {!lit && !advised && !none && !busy && asking && card.lane !== "working" && (
+          <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
+        <AdvisorNext advice={advised} onPropose={onPropose} /><AdviceNone advice={none} /></div>
         <ActionRow inline advised={lit || advised || none} /></div>}
     </Box>
     </>

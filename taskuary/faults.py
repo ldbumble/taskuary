@@ -125,7 +125,8 @@ def world(store) -> dict:
     store._exec("UPDATE review SET DeliveryState='failed' WHERE ReviewId=?", (rid,))
     out['send-failed'] = tid
     # agents of both kinds in every state workerstate reads: a live one working or asking at its terminal, the rest with none
-    for kind in ('coding', 'general'):
+    from .kinds import AGENT
+    for kind in AGENT:
         for st, said in (('working', ''), ('input_needed', 'Should the export keep inter-company rows, or drop them as before?'),
                          ('finished', 'Done - the export keeps inter-company rows now, and the tests pass.'),
                          ('failed', 'The run stopped: the test database was not reachable.'), ('stopped', '')):

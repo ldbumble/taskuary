@@ -1008,20 +1008,22 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const startGoalStep = async () => {
     if (!selected || startingAgent) return;
     const id = selected;
-    setStartingAgent("step"); setErr("");
+    setStartingAgent("step"); setErr(""); setStartFail(null);
     try {
       const { data: got } = await api.get(`/api/tasks/${id}/steps`);
       const step = (got.steps || []).find((s) => !s.done);
       if (!step) { setErr("Every step is done - close the goal, or add a step."); return; }
       const child = step.tid || (await api.post(`/api/tasks/${id}/steps/${step.id}/start`)).data.taskId;
-      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null });
+      // `via`: the press was made HERE, so a start that fails is left on the goal, where its line is read (server._pressed_on)
+      const { data } = await api.post(`/api/tasks/${child}/dispatch`, { kind: "general", agent: run.agent || null, pick: run.pick || null, model: run.model || null, via: id });
       const outcome = outcomeOf(data);
       if (outcome.state === "needs_repo") setErr(`${outcome.text} - open the step and pick one.`);
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
       (onOpenTask || onSelect)?.(child);
     } catch (e) {
-      if (!stale(id)) setErr(e?.response?.data?.detail || "Could not start the agent on the next step");
+      // ...with its ways past it as buttons on the error, as the task's own start has: the sentence stood alone (the matrix's verify, 2026-10-20)
+      if (!stale(id)) { const msg = e?.response?.data?.detail || "Could not start the agent on the next step"; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: startGoalStep }); }
     } finally { if (!stale(id)) setStartingAgent(""); }
   };
   // CONTINUE SESSION is the rail's box here too (T14): one road (/continue-work) for a coding and a regular agent, and

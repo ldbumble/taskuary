@@ -403,6 +403,10 @@ class DispatchBody(BaseModel):
     # The button says "Send to agent".  The task's Kind remains authoritative once a task
     # exists; this hint is only how an unpromoted message says which kind of task to create.
     kind: str | None = None
+    # A GOAL'S PRESS STARTS ITS STEP: Send to agent on a goal dispatches the step's own task, and a start that failed was left on the
+    # step - a task nobody had pressed - while the goal's card showed the error under a line that never moved (the matrix's verify,
+    # 2026-10-20). `via` is the goal the press was made on; a failed start is left there, where it was pressed and is read.
+    via: int | None = None
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -2081,6 +2085,11 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
 NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
 
 
+def _pressed_on(task_id: int, body) -> int:
+    """The task the press was made on: the goal a step was started from (DispatchBody.via, only the step's own parent), else the task."""
+    via = getattr(body, 'via', None)
+    return int(via) if via and (store.get_task(task_id) or {}).get('ParentId') == int(via) else task_id
+
 def _start_failed(task_id: int, e):
     """A START THAT FAILED IS LEFT ON THE TASK, where the Advisor reads what failed: said only in the answer, the line over it still
     advised the move from before the press, as if the agent had started (the advisor matrix, 2026-10-19)."""
@@ -2088,13 +2097,24 @@ def _start_failed(task_id: int, e):
     try: failures.record(store, task_id=task_id, kind='dispatch.prepare', error=e, what='the agent did not start')
     except Exception as x: logger.debug(f'task {task_id}: the failed start was not kept - {x}')
 
+def _start_went(task_id: int):
+    """...and A START THAT WENT clears it: the failure is the newest act on the task, so the Advisor kept saying the agent did not start
+    over one that had, once pressed again (the matrix's verify, 2026-10-20). Written only over a failed start, so nothing else moves."""
+    last = (store.operations_for(task_id) or [{}])[-1]
+    if last.get('Kind') == 'dispatch.prepare' and last.get('Status') == 'error':
+        import uuid
+        store.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'dispatch.prepare', 'TargetKind': 'task', 'TargetId': int(task_id), 'ParamsJson': '{}',
+                             'Version': 1, 'Status': 'done', 'OutcomeJson': json.dumps({'what': 'the agent started'})})
+
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     from . import asks
     asks.mark(store, task_id)          # the owner started it - the button or the assistant: it reports back like an ask
     try:
-        return _dispatch_task_to_its_agent(task_id, body, background)
+        out = _dispatch_task_to_its_agent(task_id, body, background)
+        if isinstance(out, dict) and (out.get('started') or out.get('existing')): _start_went(_pressed_on(task_id, body))
+        return out
     except HTTPException as e:
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a
         # DECISION for the owner, shown as a visible choice, never a session in some other checkout (PW-095)
@@ -2102,7 +2122,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
             from . import funnel; funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
-        if e.status_code >= 422: _start_failed(task_id, str(e.detail or 'the agent did not start'))
+        if e.status_code >= 422: _start_failed(_pressed_on(task_id, body), str(e.detail or 'the agent did not start'))
         raise
     except Exception as e:
         # A START THAT FAILED is said once, with its fix (failures.classify): a missing coding tool answered 500 with the raw
@@ -2110,7 +2130,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import failures
         logger.warning(f'dispatch of task {task_id} failed: {e}')
         c = failures.classify(e, act='dispatch.prepare')
-        _start_failed(task_id, e)
+        _start_failed(_pressed_on(task_id, body), e)
         return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
 class RepoBody(BaseModel):

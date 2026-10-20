@@ -1,4 +1,5 @@
 import { record } from "./lastError.js";
+import { noteWrite } from "./wrote.js";
 
 export async function* readNdjson(body) {
   const reader = body.getReader();
@@ -53,10 +54,12 @@ export async function* streamAssistant(taskId, body, signal) {
     const e = new Error(message); record({ message, stack: e.stack, config: { url: `/api/tasks/${taskId}/assistant/stream` } });
     throw e;
   }
-  for await (const ev of readNdjson(response.body)) {
-    if (ev?.type === "error") record({ message: String(ev.error || ev.message || "the answer stopped with an error"), config: { url: `/api/tasks/${taskId}/assistant/stream` } });
-    yield ev;
-  }
+  try {
+    for await (const ev of readNdjson(response.body)) {
+      if (ev?.type === "error") record({ message: String(ev.error || ev.message || "the answer stopped with an error"), config: { url: `/api/tasks/${taskId}/assistant/stream` } });
+      yield ev;
+    }
+  } finally { noteWrite(); }                      // a turn can change what the sync caption shows (wrote.js)
 }
 
 export const toolTarget = (args) => {

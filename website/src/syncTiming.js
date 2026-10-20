@@ -6,7 +6,10 @@ export const syncStatusDelay = ({ running = false, nextAt = null, now = Date.now
   if (running) return 2000;
   if (!nextAt) return 30000;
   const untilDue = nextAt - now;
-  return untilDue > 35000 ? Math.min(30000, untilDue - 30000) : 500;
+  if (untilDue > 35000) return Math.min(30000, untilDue - 30000);
+  // A minute overdue the scheduler is off, asleep or stuck (the demo never polls): 2 Hz for ever was ~120 reads an idle minute,
+  // each a full re-render of the rail on a large home (perf 2.8, 2026-10-19). A sync that does start says so on the socket.
+  return untilDue > -60000 ? 500 : 30000;
 };
 
 // One face for the sync clock, so the Timeline's caption and the pipe's chip can never disagree

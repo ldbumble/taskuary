@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import { ALERT, ROLES } from "./theme.jsx";
+import { fmtTime } from "./dates.js";
 
 export default function QueuedStart({ taskId, queued, onChanged, compact = false }) {
   const [busy, setBusy] = useState(""), [err, setErr] = useState("");
@@ -15,7 +16,7 @@ export default function QueuedStart({ taskId, queued, onChanged, compact = false
   // a start that failed and will try again read "Waiting for a free agent slot"; and the reason was the raw exception -
   // its first line, cut short, is the part a person reads (the whole of it stays on hover)
   const why = String(queued.lastError || "").split("\n")[0].slice(0, 140);
-  const at = retrying && queued.nextAt ? new Date(String(queued.nextAt).replace(" ", "T")).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  const at = retrying && queued.nextAt ? fmtTime(new Date(String(queued.nextAt).replace(" ", "T")), [], { hour: "numeric", minute: "2-digit" }) : "";
   const act = (e, what) => {
     e.stopPropagation();
     setBusy(what); setErr("");

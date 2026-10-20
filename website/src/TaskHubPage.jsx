@@ -14,6 +14,7 @@ import SportsEsportsIcon from "@mui/icons-material/SportsEsportsOutlined";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import api from "./api";
 import { track } from "./demoTrack";
+import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
 import BoardView from "./BoardView.jsx";
 import { canvasRequestFromHash } from "./canvasLinks.js";
@@ -63,7 +64,7 @@ const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
 // report that failed - in the last few hours (problems.STALE_HOURS) - each with the way to where it is fixed. The setup chip beside it says
 // what is not yet set up; this says what was working and is not. Grey and quiet when nothing is.
 // "3h ago" alone hides a day boundary: the clock time says which morning
-const fmtWhen = (s) => asUtc(s).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+const fmtWhen = (s) => fmtStamp(asUtc(s), [], { weekday: "short", hour: "numeric", minute: "2-digit" });
 function Bell({ onGo }) {
   const [items, setItems] = useState([]);
   const [el, setEl] = useState(null);

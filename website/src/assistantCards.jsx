@@ -46,6 +46,7 @@ import { closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
+import { fmtTime } from "./dates.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -909,7 +910,7 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
     // for a while, and Check again is the whole repair. A Microsoft sign-out is not - that one needs the sign-in, so it leads.
     const cid = String(card.key || "").split(":")[1], signin = /signed you out/i.test(card.title || "");
     const openIt = () => { window.location.hash = `connector=${card.channel}`; onNavigate?.("Connections"); };
-    const at = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const at = () => fmtTime(new Date(), [], { hour: "numeric", minute: "2-digit" });
     // THE ERROR IS SAID ONCE (the owner, 2026-10-15): a failed check said it again under the card, word for word. A check that
     // gets the same answer says when it looked; a different answer takes the error's place
     const check = async () => {

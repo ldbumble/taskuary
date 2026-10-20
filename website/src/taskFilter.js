@@ -1,3 +1,4 @@
+import { fmtDate } from "./dates.js";
 // Keep the master list and detail pane telling the same story. A task can finish while its
 // detail is open; leaving the selected pill on "in progress" makes the accurate Done header
 // look like a second, conflicting status. Search views remain untouched.
@@ -30,7 +31,7 @@ export const remindDay = (at) => {
     const [hh, mm] = String(at).slice(11, 16).split(":").map(Number);
     return Number.isFinite(mm) ? `today at ${hh % 12 || 12}:${String(mm).padStart(2, "0")}` : "today";
   }
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return fmtDate(new Date(y, m - 1, d), undefined, { weekday: "short", day: "numeric", month: "short" });
 };
 
 // Closing the detail on the right advances through the work list on the left. Keep this tiny and

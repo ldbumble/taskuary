@@ -477,6 +477,12 @@ LOGOS.openai_image = LOGOS.openai;
 LOGOS.azure_openai_image = LOGOS.azure_openai;
 LOGOS.openrouter_image = LOGOS.openrouter;
 LOGOS.image_server = LOGOS.stt_server;     // "a server you run yourself", same idea as the Whisper one
+// the organisation's own AI wears Taskuary's mark (ui.jsx TaskuaryMark's file): it is no vendor's product, and the shared AI
+// sparkle read as one more provider (the owner, 2026-10-20)
+LOGOS.hipaa_ai = ({ sx }) => (
+  <img src={`${import.meta.env?.BASE_URL ?? "/"}favicon.png?v=4`} alt="" aria-hidden
+    style={{ width: "1em", height: "1em", fontSize: sx?.fontSize ?? 15, display: "block", flexShrink: 0, borderRadius: "27%" }} />
+);
 
 export const hasLogo = (k) => !!LOGOS[k];
 export const Logo = ({ name, sx }) => (LOGOS[name] ? LOGOS[name]({ sx }) : null);

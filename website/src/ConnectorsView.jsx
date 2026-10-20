@@ -1606,6 +1606,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const [syncing, setSyncing] = useState(false);
   const [err, setErr] = useState("");
   const [clis, setClis] = useState(null);   // the CLIs (/api/cli/connections): what the AI CLI agents card says it is (cliCard.js)
+  const [nOn, setNOn] = useState(null);     // "N connected", counted once by the server - the cards and the AI CLI agents (connectorcatalog.connected_count)
 
   const load = useCallback(async () => {
     try {
@@ -1616,6 +1617,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   useEffect(() => { load(); api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, [load]);
   // ...read again whenever a card closes: connecting or disconnecting a CLI happens on its panel
   useEffect(() => { if (!open) api.get("/api/cli/connections").then(({ data }) => setClis(data.data || [])).catch(() => {}); }, [open]);
+  // ...and the count with it: an agent connected on its page is one more connected, said when the page closes
+  const wasOpen = useRef(open);
+  useEffect(() => { if (!open && wasOpen.current) load(); wasOpen.current = open; }, [open, load]);
 
   const reports = sources.filter((x) => x.Channel === "report");
   const syncNow = async () => {
@@ -1805,7 +1809,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   if (browse) {
     const all = groups.flatMap((g) => g.cards);
-    const connected = connectors.filter((c) => c.Active && (c.HasSecret || c.LastSyncAt) && !c.LastError).length;
+    const connected = nOn ?? connectors.filter((c) => c.Active && (c.HasSecret || c.LastSyncAt) && !c.LastError).length;
     const openCard = all.find((c) => c.key === browseState.open);
     const inSection = q ? hits : (groups.find((g) => g.title === browseState.section)?.cards || []);
     return browse({

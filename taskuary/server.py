@@ -5293,7 +5293,8 @@ def connectors(request: Request):
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
-    return {'data': rows}
+    from .connectorcatalog import connected_count
+    return {'data': rows, 'connected': connected_count(store, cfg.get('cli_connections'))}
 
 @app.get('/api/scopes')
 def scope_catalog():

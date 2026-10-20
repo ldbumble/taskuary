@@ -55,3 +55,14 @@ test("a task's session is held with it: unknown until read, null for a task no a
   forgetTasks(7);
   assert.equal(heldTerm(3), undefined, "a write lets the session list go with the task");
 });
+
+// NEXT PUTS THE NEXT ONE UP AT THE PRESS (G8): the fold left the canvas with no view and the rail ringing the item put down until the
+// server answered - the item the capture names is drawn at once from its held read, and the answer fills that same line
+test("Next draws what its capture names in the same frame as the fold, and the answer fills that line in place", () => {
+  const view = src("AssistantView.jsx"), turns = src("assistantTurns.js");
+  assert.match(view, /heldTask\(aheadItem\.tid\) && heldTerm\(aheadItem\.tid\) !== undefined/, "only from a read already held - never an empty view");
+  assert.match(view, /aheadRef\.current = \{ id: line\.id, key: aheadItem\.key \};\s+setMsgs\(\(m\) => \[\.\.\.m, line\]\);\s+putOnTable\(aheadItem\);/);
+  assert.match(view, /const id = ahead && card\?\.key === ahead\.key \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
+  assert.match(view, /if \(ahead\) \{ setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== ahead\.id\)\); putOnTable\(was\); \}/, "a failure puts the table back");
+  assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
+});

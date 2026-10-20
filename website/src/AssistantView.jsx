@@ -1573,6 +1573,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     selectionRef.current = captureNextSelection(data, scope);
     setPile((p) => refreshPilePresentation(p, data));
   }, []);
+  const aheadRef = useRef(null);                     // the line Next drew before its answer: { id, key } (surface, landed)
   const landed = useCallback((data) => {
     if (data.exhausted && !only.current?.startsWith("view:")) only.current = null;            // the mail ran out: Next continues with the rest of the pipe
     // a task opened to start its agent or an act (the Board's, a workflow's) carries that start onto the row the server answered with
@@ -1580,7 +1581,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const card = data.item ? { ...data.item, ...(extra && extra.tid === data.item.tid ? { autostart: extra.autostart, act: extra.act } : {}) } : null;
     // the end of the walk's "Open TQ-12" words come as `chips`: dropped here, its only button was a Next that said it again
     // ONE COPY PER ITEM (2026-10-19 UI walk): an item opened again - from search, the Board, the rail - moves its line to the end, never a second
-    setMsgs((m) => placeLine(m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
+    // ...and the line Next drew ahead of this answer (surface) is THIS line when it named the same item - its id kept, so the view in it
+    // stays mounted - and comes down when the answer brought something else
+    const ahead = aheadRef.current; aheadRef.current = null;
+    const id = ahead && card?.key === ahead.key ? ahead.id : `a${Date.now()}`;
+    setMsgs((m) => placeLine(ahead ? m.filter((x) => x.id !== ahead.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     putOnTable(card);
     say(data.say);
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
@@ -1654,6 +1659,23 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // line now and the "…" shows while the next one loads; a Next that fails opens it again
     const putDown = !key && currentRef.current?.key ? currentRef.current.key : null;
     if (putDown) { setExpanded(false); setFoldedKey(putDown); }
+    // ...AND THE NEXT ONE IS PUT UP IN THE SAME FRAME (G8, swap never clear): between the fold and the server's answer the canvas held
+    // no view at all and the rail still rang the item just put down - 10-25 frames on every Next. The capture already names what this
+    // Next brings (the server refuses any other - PW-050), so a single item with a task view is drawn now, from the pile's row and its
+    // task read ahead (taskDetail.js), and the answer fills the same line in place (landed). Anything else waits for the answer as before.
+    // A rail row pulled by name is the same: the server answers with the row that was pressed. A refusal or a failure takes it down
+    // again and puts the table back on the item it left (the catch below).
+    const was = currentRef.current, rows = pileRef.current?.items || [];
+    const aheadKey = key || (putDown && capture?.expected_next_key && (capture.expected_next_members || []).length <= 1 ? capture.expected_next_key : null);
+    const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling) : null;
+    // ...only when its task is read already (and whether an agent holds it, which half its row turns on): an empty view put up ahead
+    // of its own read is the shell this is here to end, so a row clicked cold keeps the view it has until the answer, as before
+    if (aheadItem && showsTask(aheadItem, cardFor(aheadItem)) && heldTask(aheadItem.tid) && heldTerm(aheadItem.tid) !== undefined) {
+      const line = { id: `a${Date.now()}`, role: "assistant", text: "", options: [], chips: [], card: aheadItem, ahead: true };
+      aheadRef.current = { id: line.id, key: aheadItem.key };
+      setMsgs((m) => [...m, line]);
+      putOnTable(aheadItem);
+    }
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
@@ -1682,6 +1704,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         loadPile(true);                       // refresh the rows, never retry the navigation
       }
       if (putDown) setFoldedKey((k) => (k === putDown ? null : k));
+      // ...and what was put up ahead of the answer comes down, the table back on the item it left
+      const ahead = aheadRef.current; aheadRef.current = null;
+      if (ahead) { setMsgs((m) => m.filter((x) => x.id !== ahead.id)); putOnTable(was); }
       setErr(errText(e));
     }
     turnFlight.current = false;

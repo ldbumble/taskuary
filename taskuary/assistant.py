@@ -388,12 +388,15 @@ def cold(store, days: int) -> list:
         # "push it or drop it?" stood over an agent mid-job and over one whose question is its own row on the rail (the eval)
         if _live_agent(store, t['TaskId']): continue
         age = max(days, (datetime.now() - (_dt(last) or datetime.now())).days)
-        wait = t.get('Status') == 'waiting' or t.get('ReviewStatus') == 'pending'
+        # a draft waiting is the owner's move; a task WAITING with no draft waits on THEM - it was told as "a reply waiting on you"
+        # (the rail Advisor's eval), which sent the owner looking for a draft that was never there
+        wait, theirs = t.get('ReviewStatus') == 'pending', t.get('Status') == 'waiting' and t.get('ReviewStatus') != 'pending'
         ref = task_ref(t['TaskId'])
         out.append({'key': f'cold:{ref}', 'kind': 'cold', 'sig': last,
                     'facts': f"{ref} \"{_short(t.get('Title'), 80)}\" [{t['Status']}, kind {t.get('Kind')}] - nothing has happened on it for {age} days"
-                             + (' and a draft waits for you on the task' if wait else ''),
+                             + (' and a draft waits for you on the task' if wait else '; it waits on someone else, not on you' if theirs else ''),
                     'text': (f"{ref} has a reply waiting on you for {age} days - \"{_short(t.get('Title'), 60)}\"" if wait
+                             else f"{ref} has waited on someone else for {age} days - \"{_short(t.get('Title'), 60)}\". Chase it or drop it?" if theirs
                              else f"{ref} has sat quiet for {age} days - \"{_short(t.get('Title'), 60)}\". Push it or drop it?"),
                     'action': {'type': 'task', 'tid': t['TaskId']}})
     return out

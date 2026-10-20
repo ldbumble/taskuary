@@ -565,6 +565,56 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     return out
 
 
+# THE THREE QUESTIONS AT ONCE, THE ANSWERS IN ORDER (2026-10-20): a wrap asked the report, then the handbook, then the playbook
+# question one after another - 18 s of a Mark done with a 6-second brain. The handbook and playbook questions do not depend on
+# the report: each is asked AHEAD, beside it, exactly as it will be asked (the real function is run up to its question, which
+# is caught and not answered - _question). At its own place in the ending each function runs as it always did, and when it
+# asks the very question that was asked ahead it gets that answer; anything it asks differently - the state moved - is asked
+# then, as before. So what is written, and in what order, is today's. At most two are asked ahead at a time (with the report
+# beside them, three at once for a CLI brain).
+_AHEAD = None
+_AHEAD_LOCK = threading.Lock()
+
+
+class _Asked(BaseException):
+    """A question caught before it is put: BaseException, so the functions' own `except Exception` lets it through."""
+
+
+def _question(fn, *args, **kwargs):
+    """(system, user, kwargs) of the question fn would put to the brain now - or None when it would put none."""
+    asked = []
+    def record(system, user, **kw):
+        asked.append((system, user, tuple(sorted(kw.items())))); raise _Asked()
+    try: fn(*args, llm=record, **kwargs)
+    except _Asked: pass
+    return asked[0] if asked else None
+
+
+def _ask_ahead(store, questions: list) -> dict:
+    """{question: future answer} for each question, asked on the shared pool."""
+    global _AHEAD
+    from .llm import build_llm
+    from concurrent.futures import ThreadPoolExecutor
+    with _AHEAD_LOCK:
+        if _AHEAD is None: _AHEAD = ThreadPoolExecutor(max_workers=2, thread_name_prefix='wrap-ahead')
+    out = {}
+    for q in questions:
+        brain = build_llm(store)
+        if q is not None and brain and q not in out: out[q] = _AHEAD.submit(lambda b=brain, q=q: b(q[0], q[1], **dict(q[2])))
+    return out
+
+
+def _answered(store, ahead: dict):
+    """The brain a function asks at its place in the ending: a question asked ahead is answered from there."""
+    from .llm import build_llm
+    brain = build_llm(store)
+    if not brain: return None
+    def llm(system, user, **kw):
+        f = ahead.get((system, user, tuple(sorted(kw.items()))))
+        return f.result() if f is not None else brain(system, user, **kw)
+    return llm
+
+
 CUT_OFF = '(The session was closed while the agent was still working on this turn - it had not finished, so there is no final message.)'
 _WRAP_LOCK = threading.Lock()
 _ACTIVE = {}                            # (store, session id) -> task id, while that session is being wrapped; once wrapped, the audit says so
@@ -598,7 +648,11 @@ def _close_again(store, tid, close, actor, agent, text, no_reply) -> dict:
 
 def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut) -> dict:
     """wrap's coding ending, once per session: the report, the result, the pty closed, proposals, the reply."""
-    from . import proposals, terminal as term
+    from . import proposals, terminal as term, handbook, playbooks
+    # the handbook's and the playbook's questions, asked now beside the report's - answered at their own places below (_AHEAD)
+    ahead = _ask_ahead(store, [
+        _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None,
+        _question(playbooks.draft, store, tid, text, agent)])
     rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message)
     report = resolution_text(rep)
     # SAVE FIRST, close after (PW-231/233): the result and the final answer land before the pty goes. A save that fails raises here - the session stays, the report is
@@ -639,16 +693,14 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # session work out anything still true next month? Usually not, and "not" is the answer it
     # is told to give (handbook.py). A failure here never stops a task closing - and it waits until the task's status is set:
     # run between the pty closing and finish(), its AI call left the task in_progress with no session (TQ-1112 shape).
-    from . import handbook
     if handbook.enabled(store):
-        try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '')
+        try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '', llm=_answered(store, ahead))
         except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')
     # ...and the last question, once the report and the reply are in hand: was this a KIND of job that
     # will recur, done here for the first time? The answer is a proposal on the task, never a file
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
     # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
-    from . import playbooks
-    pbd = playbooks.draft(store, tid, text, agent)
+    pbd = playbooks.draft(store, tid, text, agent, llm=_answered(store, ahead))
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)

@@ -10,7 +10,7 @@ nothing is a design, a deny list is a control - and the list is written so that 
 added next month is refused until somebody decides otherwise.
 """
 import os
-import unittest
+import time, unittest
 from unittest import mock
 
 from taskuary import demo
@@ -295,6 +295,37 @@ class TheWorldTests(unittest.TestCase):
         self.assertIn('phase', info)
         r.close()
         self.assertFalse(r.alive)
+
+    def test_a_replay_asking_carries_its_question_like_a_real_session(self):
+        """The run's word outranks the screen for a replay too (terminal.worker_fields): a question recorded on it is the request the
+        rail shows and an answer binds to - it read "waiting" with no request, so nothing could show or answer the question (G7)."""
+        from taskuary import workerstate
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'the export', 'Kind': 'coding'}, 'o')
+        with mock.patch.object(demo.Replay, '_play'): r = demo.Replay(s, tid)
+        try:
+            workerstate.record(s, tid, r.sid, 'working')
+            self.assertEqual((r.info()['waiting'], r.info()['state']), (False, None))
+            workerstate.record(s, tid, r.sid, 'input_needed', text='Keep the inter-company rows?')
+            i = r.info()
+            self.assertEqual((i['waiting'], i['state'], i['request']['text']), (True, 'asking', 'Keep the inter-company rows?'))
+            self.assertIn('Keep the inter-company rows?', i['line'])
+        finally: r.close()
+
+    def test_a_replay_says_when_it_moves(self):
+        """Stopping to wait, and being closed, are session transitions: each wakes the views as a real run's events do (G7)."""
+        from taskuary import live
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'the export', 'Kind': 'coding'}, 'o')
+        with mock.patch.object(live, 'emit') as emit:
+            r = demo.Replay(s, tid, lines=[('working…', 0.01)])
+            for _ in range(200):
+                if not r.busy: break
+                time.sleep(0.01)
+            self.assertFalse(r.busy)
+            self.assertIn(mock.call('task-changed', task_id=tid), emit.call_args_list)
+            emit.reset_mock(); r.close()
+            emit.assert_any_call('task-changed', task_id=tid)
 
     def test_the_replay_takes_no_dictation(self):
         """It is a recording. Typing at it must not pretend to reach an agent."""

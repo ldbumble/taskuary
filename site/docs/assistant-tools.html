@@ -121,7 +121,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tbody><tr>
 <td><strong>table</strong></td>
 <td>decide about the item on the table</td>
-<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, elsewhere</td>
+<td>reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere</td>
 </tr>
 <tr>
 <td><strong>task</strong></td>
@@ -230,6 +230,14 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p>The &quot;Chase them&quot; button: chase the person who has gone quiet on the item - a short nudge in the owner&#39;s voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="let-go"><code>let_go</code><a class="anchor" href="#let-go" aria-label="Link to this section">#</a></h3>
 <p>The &quot;Let it go&quot; button: let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="accept-invite"><code>accept_invite</code><a class="anchor" href="#accept-invite" aria-label="Link to this section">#</a></h3>
+<p>The &quot;Accept&quot; button: accept the invite waiting on the owner - drafted for their Send.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="decline-invite"><code>decline_invite</code><a class="anchor" href="#decline-invite" aria-label="Link to this section">#</a></h3>
+<p>The &quot;Decline&quot; button: decline the invite waiting on the owner - drafted for their Send.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="propose-time"><code>propose_time</code><a class="anchor" href="#propose-time" aria-label="Link to this section">#</a></h3>
+<p>The &quot;Propose a new time&quot; button: propose another time for the invite from its free times - drafted for their Send.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="find-time"><code>find_time</code><a class="anchor" href="#find-time" aria-label="Link to this section">#</a></h3>
+<p>The &quot;Find a time&quot; button: free times for the meeting a thread asks for - the pick drafted as an invite for their Send.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="elsewhere"><code>elsewhere</code><a class="anchor" href="#elsewhere" aria-label="Link to this section">#</a></h3>
 <p>The &quot;They answered elsewhere&quot; button: they answered elsewhere; the step somebody owed closes as done, or the follow-up is put down.</p>
 <ul>
@@ -417,7 +425,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>scope</code> - sender | subject</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="preference-sender-rule"><code>preference.sender_rule</code><a class="anchor" href="#preference-sender-rule" aria-label="Link to this section">#</a></h3>
-<p>An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline.</p>
+<p>An exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the work rail.</p>
 <p class="runs">Brings up its button for you to press.</p><h3 id="message-retriage"><code>message.retriage</code><a class="anchor" href="#message-retriage" aria-label="Link to this section">#</a></h3>
 <p>Triage reads the message on the table again - one it could not sort.</p>
 <p class="runs">Brings up its button for you to press.</p><h2 id="reports">Reports<a class="anchor" href="#reports" aria-label="Link to this section">#</a></h2>
@@ -641,7 +649,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.11 · updated 2026-10-20</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.12 · updated 2026-10-20</p>
   </main>
 </div>
 <script src="./docs.js"></script>

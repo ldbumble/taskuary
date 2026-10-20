@@ -89,7 +89,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
     it on admits it from the next message onward. That registration is also how you FIND a
     chat id - message the bot once and read it off the card."""
     from datetime import datetime
-    from .channels import images_for_triage, save_attachments
+    from .channels import files_for_triage, images_for_triage, save_attachments
     from .ingest import ingest_message
     tok, cfg = c['Secret'], _cfg(c)
     if not tok: return 0
@@ -162,7 +162,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
             'source_name': chat.get('title') or who,
             # the platform's word that this chat is one-to-one: what senders.known needs, never guessed from who has spoken
             **({'mail_meta': {'dm': True}} if chat.get('type') == 'private' else {}),
-            'images': images_for_triage(store, atts),
+            'images': images_for_triage(store, atts), **files_for_triage(atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += out['status'] != 'duplicate'
         if atts and out.get('message_id') and out['status'] != 'duplicate':
@@ -400,7 +400,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
     import os
     from datetime import datetime
     from .ingest import ingest_message
-    from .channels import images_for_triage, ingest_own_message, save_attachments
+    from .channels import files_for_triage, images_for_triage, ingest_own_message, save_attachments
     from . import voice, wabridge
     # the launch grace lives HERE, in front of the one call that files "bridge not running": the catch-up, the chat clock,
     # the doorway and Sync now all come through, and none of them - nor the mail beside them - waits when no bridge was started
@@ -531,7 +531,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
             **({} if m.get('group') or jid.endswith('@g.us') else {'mail_meta': {'dm': True}}),    # a person's JID, not a group's
-            'images': images_for_triage(store, atts),
+            'images': images_for_triage(store, atts), **files_for_triage(atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'
         if atts and r.get('message_id') and r['status'] != 'duplicate':

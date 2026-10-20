@@ -560,6 +560,16 @@ def images_for_triage(store, items: list) -> list:
     return out
 
 
+def files_for_triage(items: list) -> dict:
+    """{'file_text': [...]} - what the documents on a mail SAY (attachtext), read before the row exists for the same reason
+    as the pictures above: "please see the attached invoice" is the whole ask, and the total is in the PDF. {} when no
+    document rode along, so a mail without one carries nothing new."""
+    from . import attachtext
+    try: got = attachtext.of_items(items)
+    except Exception as e: logger.warning(f'attachment text not read: {e}'); got = []
+    return {'file_text': got} if got else {}
+
+
 def _local(iso):
     try: return datetime.fromisoformat(iso.replace('Z', '+00:00')).astimezone().strftime('%Y-%m-%d %H:%M:%S')
     except ValueError: return iso
@@ -1677,7 +1687,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts), 'invite': is_invite(m),
+                            'images': images_for_triage(store, atts), **files_for_triage(atts), 'invite': is_invite(m),
                             **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),

@@ -165,13 +165,19 @@ def _from_row(r: dict, store=None) -> dict:
         from .llm import readable_images          # the vision switch and the size caps are its own
         try: images = readable_images(store, [r['MessageId']])
         except Exception as e: logger.debug(f'ingest: images for a held message not read - {e}')
+    files = []
+    if store is not None and r.get('MessageId'):
+        from . import attachtext                  # ...and the documents' text, off disk the same way (cached by hash)
+        try: files = attachtext.of_message(store, r['MessageId'])
+        except Exception as e: logger.debug(f'ingest: attachment text for a held message not read - {e}')
     try: meta = json.loads(r.get('MailMetaJson') or 'null') or {}
     except (TypeError, ValueError): meta = {}
     return {**({'invite': True} if meta.get('invite') else {}),       # judged later, it is still an invite (V5)
             'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
-            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r), **({'images': images} if images else {})}
+            'to': rec.get('to'), 'cc': rec.get('cc'), 'no_auto': _gh_no_auto(store, r), **({'images': images} if images else {}),
+            **({'file_text': files} if files else {})}
 
 
 def _playbook_menu() -> str:
@@ -546,6 +552,11 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # an assistant idea carries where it came from and what it is about (PW-199): the report, the task
     # it names and whether a worker has that task - facts the model needs to judge a generated line
     if msg.get('idea_context'): thread = {**thread, 'idea_context': msg['idea_context']}
+    # ...and what the files on it SAY (attachtext): the invoice's total, the contract's clause - scrubbed, fenced, and within
+    # attachtext.MESSAGE_CHARS beside the body's own budget; the later files are what a long attachment set loses first
+    if msg.get('file_text'):
+        from . import attachtext
+        if got := attachtext.lines(msg['file_text']): thread = {**thread, 'attached_files': got}
     # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
     # an ask it flagged, and what the owner did with it) - the other brain's last word
     from .assistant import said_about

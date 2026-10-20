@@ -253,7 +253,7 @@ CASES = [
     ('cold', 'an agent has been on it for six days', False, _cold_running, None),
     ('cold', 'its agent failed six days ago - the agent row says it', False, _cold_agent_failed, None),
     ('cold', 'put away until next week (Remind me)', False, _cold_put_away, None),
-    ('cold', 'waiting on someone else six days - said as theirs', True, _cold_waiting_on_them, None),
+    ('cold', 'waiting on someone else six days - the slipped lane chases', False, _cold_waiting_on_them, None),
     ('cold', 'put down, nothing moved since', False, _cold_plus, 'dismiss'),
     ('cold', 'a draft has waited on you for six days', True, _cold_draft_waits, None),
     # health: the app's own failures

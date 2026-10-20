@@ -19,7 +19,6 @@ test("each control carries the caption that names its effect on task versus agen
     ['{labelOfRow("reopen")}', "Reopens the task only. No agent starts until you choose one."],
     // one ending, and it writes the session up either way (2026-09-16)
     ['{labelOfRow("save-end")}', "ends it, and drafts the reply to whoever asked. The task stays open until you complete it."],
-    ['{labelOfRow("save-end")}', "Saves the stopped session's result and report. The task stays open."],
     // its label varies - "Write another" once a reply has already gone - but the caption does not
     // ONE reply button now, and it writes: the twin that drafted it was the thing the first one
     // was named for (2026-09-22), so the caption says what the press does
@@ -50,13 +49,13 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   const bar = tasks.slice(at, tasks.indexOf("\n  );", at));
   assert.ok(bar.includes("sx={primaryBtn}"), "it opens with the same filled primary");
   assert.ok(bar.includes('<Divider orientation="vertical"'), "a rule divides this session from another one");
-  assert.ok(bar.includes("sx={barContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
+  assert.ok(bar.includes("sx={canContinue ? barBtn : primaryBtn}"), "the named moves take barBtn");
   // a general agent's composer sits under this bar and continues the same conversation: no second door (2026-09-29)
   assert.match(tasks, /const barContinue = canContinue && !isGeneral;/);
   assert.ok(bar.includes("{barContinue && <Button"), "the bar's Continue is the coding agent's only");
-  // whichever state it is in, exactly one move is filled: continue it, file it, or run another
+  // whichever state it is in, exactly one move is filled: continue it or run another - an ended session has nothing to stop and save
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
-  assert.match(tasks, /const canSave = !report && !wrapped && !endedByStop\(listRow\?\.State, detail\?\.runEnded\);/);
+  assert.ok(!bar.includes("save-end"), "no Stop and save on an ended session's bar");
 });
 
 test("the agent heading is one short line, live or not", () => {

@@ -76,11 +76,25 @@ class AgentStatesAgreeTests(unittest.TestCase):
 
     def test_a_stopped_run_offers_no_stop(self):
         """Nothing is live on a stopped run: no Stop and save on its rail row, and its own word says it was stopped (the task page reads
-        runEnded to leave the button off - taskLifecycle.endedByStop)."""
+        no session alive, and offers Stop and save only on a live one)."""
         for kind in ('coding', 'general'):
             tid = self.w[f'{kind}-stopped-saved']
             self.assertNotIn('stop_agent', [c['verb'] for c in concierge.chips_for(self.s, self.pile[tid])])
             self.assertEqual(workerstate.ended(self.s, tid), 'stopped')
+
+    def test_an_ended_session_offers_no_stop_only_a_live_one_does(self):
+        """Failed, finished or cut off by a restart, a session that has ENDED has nothing to stop (owner-approved, 2026-10-20): its
+        chips, its row's buttons (what the Advisor may light) and a pick of it carry no Stop and save. A working one still does."""
+        verbs = lambda item, f: [c['verb'] for c in f(self.s, item)]
+        for kind in ('coding', 'general'):
+            for st in ('finished', 'failed', 'stopped-saved'):
+                item = self.pile[self.w[f'{kind}-{st}']]
+                self.assertNotIn('stop_agent', verbs(item, concierge.chips_for), f'{kind}-{st}')
+                self.assertNotIn('stop_agent', verbs(item, concierge.row_buttons), f'{kind}-{st}')
+                if item.get('lane') == 'stopped': self.assertIn('nothing to stop', concierge.cannot(item, 'stop_agent', self.s), f'{kind}-{st}')
+            working = self.pile[self.w[f'{kind}-working']]
+            self.assertEqual(concierge.cannot(working, 'stop_agent', self.s), '', f'{kind}-working')
+            self.assertIn('stop_agent', verbs(working, concierge.row_buttons), f'{kind}-working')
 
 
 if __name__ == '__main__': unittest.main()

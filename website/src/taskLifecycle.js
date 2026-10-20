@@ -39,11 +39,6 @@ export const agentPhase = ({ session, run, transcript, report, conversation, fin
   return handed === false ? null : AGENT.idle;
 };
 
-// A RUN THAT IS OVER BY BEING STOPPED - saved by you (taskstate's `saved`), or its own last word `stopped` (workerstate.ended): there
-// is nothing left to stop, so it offers no "Stop and save" (G7, 2026-10-20). A run that finished, failed or was cut off by a restart
-// is still written up from its transcript by the same button.
-export const endedByStop = (state, ended) => state === "saved" || ended === "stopped";
-
 // WHAT A LIVE SESSION SAYS ABOUT ITSELF, as one comparable value: whether it is alive and waiting, its sub-state and sentence, the
 // question an answer binds to. The task page holds the session it found and must take the same session's new word when it changes (G7).
 export const sessionWord = (s) => (s ? JSON.stringify([!!s.alive, !!s.waiting, s.state || null, s.line || null, s.request?.request_id || null,

@@ -844,7 +844,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
           </Typography>
         </Box>
       )}
-      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Connect an AI app under {placeName("ai_apps")} to run this work. An online AI is optional.</Alert>}
+      {/* "Connections → AI", as the chat says it (concierge.py, no AI connected): the AI CLI agents page's own name is a word the owner never reads
+          (words.json jargon), and the walk read it here on a box with no AI (WORDS, 2026-10-20) */}
+      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Connect an AI app under {placeName("ai")} to run this work. An online AI is optional.</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}

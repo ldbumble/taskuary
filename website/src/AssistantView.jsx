@@ -466,20 +466,30 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // ...AND A ROW REORDERED IN ITS BAND GLIDES TOO: React moves its node in the page to keep the order, and a moved node starts
   // from its new place with no transition - the row put on the table jumped to its slot, full height, over rows still gliding
   // past it (a rail click: 15 frames of rows drawn on each other). Such a row is sent back to where it was and let go from there.
+  // ...AND A GLIDE THAT CHANGES COURSE RESTARTS EVERY ROW TOGETHER. A close rings the next row at once (drawn ahead) and the pile's
+  // answer lands mid-glide with the closed row gone: the rows whose top changed again began a fresh .55s glide from where they were,
+  // while the ringed row's height kept its old one - it grew into the row under it (CI's slow runner, SWAP: 3-6px for a few frames).
+  // So on any change of course every row starts again from where it is drawn now, top and height, on the one curve: the drawn frame
+  // has no overlap and neither has the end, and one curve over one time never makes one in between.
   const rested = useRef(new Map());
   useLayoutEffect(() => {
     const was = rested.current, now = new Map();
-    for (const el of wrapRef.current?.querySelectorAll(".tq-pile-row[data-tq-key]") || []) {
-      const k = `${el.closest("[data-tq-run]")?.dataset.tqRun} ${el.dataset.tqKey}`, top = parseFloat(el.style.top) || 0;
-      const p = was.get(k);
-      if (p && !el.classList.contains("landing") && Math.abs(p.top - top) > 1 && Math.abs(parseFloat(getComputedStyle(el).top) - top) < 0.5) {
-        el.style.transition = "none"; el.style.top = `${p.top}px`; el.style.height = `${p.h}px`;
-        void el.offsetHeight;                                  // the old place is drawn as the start, then the glide runs from it
-        el.style.transition = ""; el.style.top = `${top}px`; el.style.height = "";
-      }
-      now.set(k, { top, h: (el.classList.contains("current") ? CUR_H : ROW_H) - 3 });   // where it comes to rest: the 3px is the gap
+    const els = [...(wrapRef.current?.querySelectorAll(".tq-pile-row[data-tq-key]") || [])].filter((el) => !el.classList.contains("landing"));
+    for (const el of els) {
+      const k = `${el.closest("[data-tq-run]")?.dataset.tqRun} ${el.dataset.tqKey}`;
+      now.set(k, { el, top: parseFloat(el.style.top) || 0, h: (el.classList.contains("current") ? CUR_H : ROW_H) - 3 });   // its rest: less the 3px gap
     }
-    rested.current = now;
+    rested.current = new Map([...now].map(([k, { top, h }]) => [k, { top, h }]));
+    const moved = [...now].some(([k, n]) => !was.has(k) || was.get(k).top !== n.top || was.get(k).h !== n.h) || was.size !== now.size;
+    if (!moved || !was.size) return;
+    // read every row first, then write: one frame's values for all of them. A row React moved in the page starts where it stood still.
+    const from = [...now].map(([k, { el, top }]) => {
+      const p = was.get(k), cs = getComputedStyle(el), at = parseFloat(cs.top);
+      return p && Math.abs(p.top - top) > 1 && Math.abs(at - top) < 0.5 ? [el, p.top, p.h] : [el, at, parseFloat(cs.height)];
+    });
+    for (const [el, top, h] of from) { el.style.transitionProperty = "opacity, transform"; el.style.top = `${top}px`; el.style.height = `${h}px`; }
+    void wrapRef.current.offsetHeight;                         // that frame is the start; then the glide runs from it, for every row at once
+    for (const { el, top } of now.values()) { el.style.transitionProperty = ""; el.style.top = `${top}px`; el.style.height = ""; }
   });
   useLayoutEffect(() => {
     const el = wrapRef.current;

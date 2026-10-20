@@ -54,7 +54,7 @@
 //             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
 //   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
 //
-//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links,search]
+//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
@@ -71,6 +71,7 @@ import { VERBS, ALL_LABELS, label, verbOfRow, choice } from "./src/buttons.js";
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
 // on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
+const throttle = Number(arg("--throttle", 1));
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
 const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -218,6 +219,7 @@ let browser;
 async function pageOn(srv, phase) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1366, height: 768 });            // a laptop: where "the card is off the screen" happens
+  if (throttle > 1) await page.emulateCPUThrottling(throttle);      // CI's runner, on a dev box: what a glide does a few times slower
   await page.evaluateOnNewDocument((t) => { try { localStorage.setItem("taskuary_token", t); } catch { /* none */ } }, srv.token);
   await page.evaluateOnNewDocument(swapWatch);
   page.step = phase;

@@ -2063,7 +2063,7 @@ function MacPermissions({ conn, test, busy, runTest }) {
               {openErr.full_disk_access && ` · ${openErr.full_disk_access}`}
             </Typography>
             <TestLine test={test} mt={1} />
-            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+            {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
           </Card>
           <Card title="Send Messages" sub="Automation: Messages" ok={sendOk}>
             <Typography variant="caption" sx={{ color: DIM, display: "block", mb: 1 }}>
@@ -2119,23 +2119,27 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
+  // WHAT SAVE SAYS STAYS UNDER SAVE (the 2026-10-19 UI walk): a refused save, or a GitHub token the service turned down, was written
+  // into the Test step - folded shut under the one the owner was looking at - so they pressed Save and saw nothing happen
+  const [saveSaid, setSaveSaid] = useState(null);
 
   const mine = sources.filter((s) => s.ConnectorId === conn.ConnectorId);   // owned, never channel-shared
 
   const saveCreds = async () => {
-    setBusy("save"); setMsg("");
+    setBusy("save"); setMsg(""); setSaveSaid(null);
     try {
       const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) };
       if (secret) body.Secret = secret;
       const { data } = await api.post("/api/connectors", body);
-      setMsg("saved ✓");
-      if (data.discovery) {
-        const d = data.discovery;
-        setTest(d.error ? { ok: false, detail: d.error }
-          : { ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
+      const d = data.discovery;
+      setSecret(""); reload();
+      if (d?.error) setSaveSaid({ ok: false, detail: d.error });     // saved, but the key was refused: the fix is here, not a step on
+      else {
+        setMsg("saved ✓");
+        if (d) setTest({ ok: true, detail: `authenticated as ${d.login} · ${d.repos} repos discovered · ${d.added} sources added · repo map written to SOUL.md` });
+        setStep(1);
       }
-      setSecret(""); setStep(1); reload();
-    } catch (e) { setMsg(""); setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
+    } catch (e) { setSaveSaid({ ok: false, detail: plainError(e, "That didn't save. Try again in a moment.") }); }
     setBusy("");
   };
   const runTest = async () => {
@@ -2174,7 +2178,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
 
   const steps = [
-    { label: "Credentials", done: !!conn.HasSecret || !m.secretLabel, body: (
+    // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
+    { label: "Credentials", done: !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError), body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
         {conn.Type === "outlook" && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
@@ -2204,6 +2209,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
                 {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save & continue"}</Button>
               {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
             </Box>
+            <TestLine test={saveSaid} mt={0} />
           </>
         )}
       </Box>
@@ -2216,7 +2222,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
         <TestLine test={test} mt={1} />
-        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
       </Box>
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
@@ -2466,7 +2472,7 @@ function MssqlConnection({ conn, drivers, reload }) {
           <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
             startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
           <TestLine test={test} mt={1} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </StepContent>
       </Step>
     </Stepper>
@@ -2521,7 +2527,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           <TestLine test={test} mt={0} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </Box>
       )}
       <CardPlaybooks type={conn.Type} />
@@ -2876,7 +2882,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           </Box>
           {meta.search && <KbSearch conn={conn} />}
           <TestLine test={test} mt={0} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastError}</Typography>}
+          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </Box>
       )}
       {tab === "Connection" && meta.discovers && (

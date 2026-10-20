@@ -153,13 +153,20 @@ ACTOR_DISCOVER = 'connector-test'
 _DNS = re.compile(r'getaddrinfo failed|Name or service not known|nodename nor servname|Temporary failure in name resolution|NameResolutionError|No address associated', re.I)
 _TIMEOUT = re.compile(r'timed? ?out|ReadTimeout|ConnectTimeout', re.I)
 _REFUSED = re.compile(r'Connection refused|actively refused|ECONNREFUSED|WinError 10061', re.I)
+_AUTH_WORDS = re.compile(r'\b(invalid_auth|not_authed|token_revoked|token_expired|account_inactive|bad credentials|invalid[_ ]api[_ ]key|incorrect api key)\b', re.I)
 def _status(e):
     r = getattr(e, 'response', None)
     code = getattr(r, 'status_code', None) or getattr(e, 'code', None) or getattr(e, 'status_code', None)
     if isinstance(code, int): return code
     # requests/httpx spell it "401 Client Error: Unauthorized for url" when only the text survives a re-raise
     m = re.search(r'\b(401|403)\b[^\n]{0,20}(?:Client Error|Unauthori[sz]ed|Forbidden)', str(e), re.I)
-    return int(m.group(1)) if m else None
+    if m: return int(m.group(1))
+    # ...and an API that answers 200 with its own word for it: Slack's "invalid_auth" was printed to the owner as it came
+    return 401 if _AUTH_WORDS.search(str(e)) else None
+
+def plain_error_text(raw) -> str:
+    """A stored LastError (kept raw for problems.lapsed) in the words a fresh Test failure gets - '' for none."""
+    return plain_failure(RuntimeError(raw)) if raw else ''
 
 def plain_failure(e: Exception) -> str:
     raw = str(e)

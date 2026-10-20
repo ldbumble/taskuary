@@ -47,14 +47,12 @@ export const navMoves = (st, view, reopened = false) => {
   }
   return out;
 };
-// THE STEP'S CARD IS THE LIT MOVE (the owner, 2026-10-19: the Advisor lights the REAL control - the card itself - never a button of its
-// own on the row): of the cards the shelf shows, one failing first (its fix is on it), then one already connected here - a fresh home
-// lit ChatGPT, the shelf's first, beside a Claude card reading "Connected - pick it to make it your AI" - then the shelf's first, the
-// one most people have. null once the step is done, or while a card is open or a pick is under way: that setup's own button is the move.
-export const cardOf = (st, view, cards, held = false) => {
-  if (held || !["ai", "mail"].includes(view) || doneOf(st, view)) return null;
-  const can = (cards || []).filter((c) => c.go);
-  return can.find((c) => c.state === "failing") || can.find((c) => c.state === "on") || can[0] || null;
+// THE STEP'S PICK IS A LIT MOVE (2026-10-19): on Your AI and Your email with nothing picked, Back was plain, Next was off and the line
+// named a card the shelf did not show ("Microsoft 365" over "Outlook mail") - nothing on the row said what to press. The shelf's first
+// card is the pick most people have (it leads the shelf for that reason); it is offered on the row by its own title, and the line
+// names it the same way. null once the step is done, a card is open, or a pick is under way - the card's own setup is the move then.
+export const pickOf = (st, view, cards, busy = false) => {
+  if (busy || !["ai", "mail"].includes(view) || doneOf(st, view)) return null;
+  const c = (cards || []).find((x) => x.go);
+  return c ? { title: c.title, run: c.go } : null;
 };
-// the open setup's button to light: its filled one, else its outlined one - read off what is drawn, so the line names its own words
-export const buttonOf = (buttons) => buttons.find((b) => b.filled) || buttons.find((b) => b.outlined) || null;

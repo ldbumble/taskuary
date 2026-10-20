@@ -67,11 +67,9 @@ test("a new line always shows; only a browse card's own steps hold the bottom", 
   assert.doesNotMatch(view, /holdBottom\.current = !!browsing/);
 });
 
-// ...and both go: a page open beside the item no longer takes the item off the table - the Assistant's own Settings page, opened for
-// "turn off background sync", sent the next "mark this done" out about nothing (verify, 2026-10-19). The model reads which "this" is
-test("a card open in the canvas goes with the turn, beside the item still on the table", () => {
-  assert.match(view, /const subject = tableKey \|\| current \|\| cardRef\.current;/);
-  assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
+test("a card open in the canvas is the turn's subject, not the item folded above it", () => {
+  assert.match(view, /const subject = openCardRef\.current \? null : \(tableKey \|\| current\);/);
+  assert.match(view, /key: subject, context_mid: currentItem\?\.mid && subject === current && !openCardRef\.current \? currentItem\.mid : null,\n\s+open_card: openCardRef\.current/);
 });
 
 // the owner, 2026-09-29: "fill up more width and more height for tasks so you can see more in one screen ... same for all items"

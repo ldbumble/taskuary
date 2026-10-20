@@ -1354,7 +1354,7 @@ export const ConnCard = ({ c }) => {
   const st = CARD_STATE[connState(c)], extra = st.width - 1;
   const ring = extra > 0 ? `inset 0 0 0 ${extra}px ${st.border}` : "";
   return (
-    <Box onClick={c.planned ? undefined : c.go} data-tq-card={c.key}
+    <Box onClick={c.planned ? undefined : c.go}
       sx={{ bgcolor: st.bg, border: `1px solid ${st.border}`, boxShadow: ring || "none", borderRadius: 2.5, p: 1.6, boxSizing: "border-box",
         opacity: c.planned ? 0.5 : connState(c) === "off" ? 0.85 : 1, cursor: c.planned ? "default" : "pointer",
         transition: "border-color .15s, box-shadow .15s",
@@ -1365,7 +1365,7 @@ export const ConnCard = ({ c }) => {
           {c.channel === "cli" ? <TerminalIcon sx={{ fontSize: 17, color: "#55697a" }} />
             : <ChannelIcon channel={c.channel} sx={{ fontSize: 17 }} />}
         </Box>
-        <Typography noWrap data-tq-setup-label="" sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
+        <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{c.title}</Typography>
         {connState(c) === "on" && !c.plain && (
           <Box component="span" data-tq-conn-pill sx={{ flexShrink: 0, px: 0.75, py: 0.1, borderRadius: 99, fontSize: 10, fontWeight: 600,
             lineHeight: 1.6, color: "#47654a", bgcolor: "#e8efe6", border: "1px solid #c9d8c5" }}>Connected</Box>
@@ -2297,8 +2297,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           : await api.post("/api/setup/first-run/mail",
             { type: conn.Type, address: cfg.address || "", password: secret, host: cfg.imap_host || "" }, { timeout: 90000 });
         setTest({ ok: data.ok, detail: data.why });
-        // refused, the first run reads its state again so the Advisor's line says why at once - not at the next poll (2026-10-19)
-        if (data.ok) { setSecret(""); onConnected?.(); } else reload?.();
+        if (data.ok) { setSecret(""); onConnected?.(); }
       } catch (e) { setTest({ ok: false, detail: `${e?.response?.data?.detail || e?.message || "That didn't work."} Press Connect to try again.` }); }
       setBusy("");
     };

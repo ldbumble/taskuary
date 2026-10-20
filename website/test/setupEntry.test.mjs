@@ -10,12 +10,11 @@ import path from "node:path";
 const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
 const head = view.slice(view.indexOf('<div className="tq-chat-head">'), view.indexOf('<Popover open={!!aiEl}'));
 
-// the owner, 2026-10-19: setup is the Setup button at the top - never a choice in the chat, its header or its welcome block
-test("the setup entry is the top bar's Setup, not the chat's header or its welcome block", () => {
-  assert.equal(head.includes("Set up Taskuary"), false, "the header carries no setup chip");
-  assert.equal(view.includes(">Set up Taskuary</button>"), false, "nor does the welcome block");
-  const top = fs.readFileSync(path.join(process.cwd(), "src", "TaskHubPage.jsx"), "utf8");
-  assert.match(top, /const openSetup = \(\) => \{ go\("Assistant"\); setTimeout\(\(\) => window\.dispatchEvent\(new Event\("tq-first-run"\)\), 60\); \};/);
+test("the setup entry lives on the empty chat's welcome block, not the header, and it calls the chat's own setup()", () => {
+  assert.equal(head.includes("Set up Taskuary"), false, "the header no longer carries a setup chip - the top bar's badge and the welcome block do");
+  const at = view.indexOf('title="Setup - your AI, your email');
+  const button = view.slice(view.lastIndexOf("<button", at), at);
+  assert.ok(button.includes("onClick={() => setupRef.current?.()}"), "the welcome entry reopens the setup canvas, never the popup walk");
 });
 
 test("setup() opens the conversation in place - no wizard route, no phrase to interpret", () => {

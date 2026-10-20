@@ -19,7 +19,7 @@ import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
-import { buttonOf, cardOf, doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
+import { doneOf, frontierOf, navMoves, nextOf, openAt, pickOf, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
@@ -39,38 +39,6 @@ const Ask = ({ text }) => (
     <div className="tq-next-txt">{text}</div>
   </div>
 );
-
-// LIGHT: the lit move tinted where it stands (data-tq-setup-lit, assistantView.css) - a shelf card by its key, or the open setup's own
-// button (setupSteps.buttonOf); that button's words go back up for the line. Re-applied as the setup redraws itself (Connect turning
-// on once the boxes are filled, a sign-in's next button), and scrolled into view the first time it is lit if it is not on the screen.
-function Light({ root, card, canvas, onShown }) {
-  useEffect(() => {
-    const top = root.current;
-    if (!top) return undefined;
-    const find = () => {
-      if (card) return top.querySelector(`[data-tq-card="${card}"]`);
-      if (!canvas) return null;
-      const bs = [...top.querySelectorAll("[data-tq-setup-scope] .MuiButton-root")].filter((e) => e.getBoundingClientRect().width > 0)
-        .map((e) => ({ e, filled: e.classList.contains("MuiButton-contained"), outlined: e.classList.contains("MuiButton-outlined") }));
-      return buttonOf(bs)?.e || null;
-    };
-    const apply = () => {
-      const el = find();
-      top.querySelectorAll('[data-tq-setup-lit="light"]').forEach((e) => { if (e !== el) e.removeAttribute("data-tq-setup-lit"); });
-      if (el && !el.hasAttribute("data-tq-setup-lit")) {
-        el.setAttribute("data-tq-setup-lit", "light");
-        const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        if (!hit || !(hit === el || el.contains(hit))) el.scrollIntoView({ block: "center" });
-      }
-      onShown(el && canvas ? { label: (el.innerText || "").trim(), off: !!el.disabled } : { label: "", off: false });
-    };
-    apply();
-    const mo = new MutationObserver(apply);
-    mo.observe(top, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["disabled", "class"] });
-    return () => { mo.disconnect(); top.querySelectorAll('[data-tq-setup-lit="light"]').forEach((e) => e.removeAttribute("data-tq-setup-lit")); };
-  }, [root, card, canvas, onShown]);
-  return null;
-}
 
 // one shelf: the first four cards, and More for the rest of it - the catalogue's card, never one of our own. A card that is
 // open stands alone with its setup under it: under all twenty-one, the form landed a screen away from the card that opened it
@@ -107,10 +75,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
   const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
-  // THE ONE LIT MOVE (Light, below): the row verb it is, as state so the row has it in the pass the shelf is drawn; and the words of
-  // the canvas button it lit, read off that button so the line can only name what the screen shows
-  const [rowLit, setRowLit] = useState(""), [shown, setShown] = useState({ label: "", off: false });
-  const onShown = useCallback((x) => setShown((s) => (s.label === x.label && s.off === x.off ? s : x)), []), rootRef = useRef(null);
+  // the step's pick (pickOf): its title as state, so the row has it in the pass the shelf is drawn; its press, the card's own
+  const [pickTitle, setPickTitle] = useState(""), pickRef = useRef(null);
   // ONE STEP ON THE CANVAS (setupSteps.ORDER: ai, mail, about, other), Back and Next in the row, and A STEP THAT COMPLETES MOVES ON
   // (the owner, 2026-10-15: "always have next/back button if possible and move to next step once one is complete"). Going back to
   // change the AI used to leave no way forward but the rail.
@@ -181,10 +147,6 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ...and NOT AS BUTTONS IN THE ROW: the row keeps its own moves (the owner, 2026-10-16: "No such buttons. If it suggest systems
   // then you can do it in search ... don't like new buttons besides for what there was before") - the picks it can connect are
   // typed into the catalogue's own search, so their cards are what the page shows
-  // THE ADVISOR LIGHTS THE REAL CONTROL (the owner, 2026-10-19, over the ruling above where it read as "advice never lights a row
-  // button"): every setup step has one obvious move, and the Advisor tints the control that IS that move where it already stands -
-  // a shelf card, the open card's own Connect or Sign in, Setup complete's big button, or the row's Next / Finish setup / Install. It
-  // never adds a button or a row of its own, and its line names that control by the label the screen draws.
   const typed = useRef(false);
   useEffect(() => {
     const names = (connSug?.picks || []).filter((x) => !x.planned).slice(0, 5).map((x) => x.title);
@@ -201,13 +163,16 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     ...(view !== "ai" && view !== "done" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
       title: "Back to Your AI, to pick one that sorts your mail", run: () => go("ai") }] : []),
   ];
-  // ONE filled move, and only when the lit move is on the row (rowLit): a card or the open setup's button lit leaves the row outlined
-  const toneOf = (id) => (id === rowLit ? "p" : "s");
+  // ...and THE STEP'S PICK, lit, when nothing else is (setupSteps.pickOf - the shelf's first card, by its own title; drawn below)
+  const pickRow = pickTitle && !fixRow.length ? [{ id: "setup:pick", group: "decide", tone: "p",
+    label: `Connect ${pickTitle}`, title: "Opens its setup here - the same as pressing its card", run: () => pickRef.current?.run?.() }] : [];
+  // ONE filled move: a fix leads when there is one; reopened setup's Back to my day is outlined beside Next
+  const toneOf = (m) => (fixRow.length && m.id !== "back" ? "s" : m.id === "finish" && view !== "other" ? "s" : VERB[m.id].tone);
   // ABOUT YOUR WORK MOVES ITS OWN QUESTIONS (FirstRunAbout's Back and Next, one question a screen): only the way back to the day stays
   // ...and SETUP COMPLETE has its one big button on the canvas (SetupDone), nothing in the row
   const navShown = view === "done" ? [] : view === "about" ? nav.filter((m) => m.id === "finish") : nav;
   useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id], tone: toneOf(`setup:${m.id}`) })), ...fixRow.map((v) => ({ ...v, tone: toneOf(v.id) }))], navShown.length + fixRow.length > 0);
+    ...VERB[m.id], tone: toneOf(m) })), ...fixRow, ...pickRow], navShown.length + fixRow.length + pickRow.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
@@ -376,6 +341,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const ai = inUse ? [...all.filter(using), ...lead.filter((c) => !using(c))] : lead;
   const coding = cliCards.filter((c) => !(inUse && using(c)));
   const mail = byType(MAIL_TYPES).map((c) => card(c, true));
+  pickRef.current = pickOf(st, view || frontierOf(st), (view || frontierOf(st)) === "mail" ? mail : ai, !!busy || !!signing || !!open || !!fix);
+  if ((pickRef.current?.title || "") !== pickTitle) setPickTitle(pickRef.current?.title || "");
   const conn = open && conns.find((c) => c.ConnectorId === open.id);
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
@@ -391,6 +358,21 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     : st.empty ? " Connected - nothing new to sort yet." : " Your mail is being read in the background - no need to wait.") : "";
   // the brain failing on the real mail, said the same on every step - the server's own line only came with its "reading" step
   const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting your mail - ${st.ai_error}.` : "";
+  lineRef.current = said || err || {
+    ai: fix?.why || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? "What AI do you have? Pick it - Taskuary checks it works and uses it to sort your mail."
+      : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch.`),
+    // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
+    // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
+    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way.`
+      // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
+      : st.mail_error ? `${st.mail_error} Fix it in the card and press Connect again - or pick a different email.`
+      : `What email do you have? Pick it - ${mail[0]?.title || "Outlook mail"} is one sign-in.`,
+    about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
+    done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
+    other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
+      : "Nothing else is needed - connect more here any time, from Connections."))
+      : "Looking at what you told me about your work to suggest what to connect…",
+  }[q];
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
@@ -453,49 +435,10 @@ ${fix.detail || ""}`, screen: "Setup",
       </Box>
     </Box>
   ) : null;
-  // THE ONE LIT MOVE, in this order: the open setup's own button (a card's Connect, Sign in with Microsoft, Sign in to Claude, Update,
-  // Try again - Light finds it) or Setup complete's; the row's fix (Install, Change AI); the step's card (setupSteps.cardOf); the row's
-  // Next, or Finish setup on the last step. About your work lights its own (FirstRunAbout).
-  const opened = (open && conn) || (focus && cliDetail);
-  const canvas = q === "done" || ((q === "ai" || q === "mail") && !!opened);
-  // ...Pick a different AI pressed over a failing one: the owner asked for another, so the failing card is not the move, nor its fix the line
-  const fixKey = fix && (fix.key || `cli-${fix.name}`);
-  const shelfShown = q === "mail" ? mail.slice(0, FIRST) : q === "ai" ? [...ai.slice(0, FIRST), ...coding].filter((c) => !browse || c.key !== fixKey) : [];
-  const litCard = canvas || fixRow.length ? null : cardOf(st, q, shelfShown, !!busy || !!signing || !!open || !!focus);
-  const oneSignIn = !!litCard && conns.some((c) => `c${c.ConnectorId}` === litCard.key && c.Type === "outlook");
-  const onward = nav.find((m) => !m.disabled && m.id === (q === "other" ? "finish" : "next"));
-  const litId = canvas || litCard || ["about", "done"].includes(q) ? "" : fixRow[0]?.id || (onward ? `setup:${onward.id}` : "");
-  if (litId !== rowLit) setRowLit(litId);
-  // ...and THE LINE NAMES IT by the words the screen draws: the card's title, the button's own label, the row verb's
-  lineRef.current = said || err || {
-    ai: (!browse && fix?.why) || (signing ? "Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done." : "") || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? `What AI do you have? ${!litCard
-      ? "Pick it" : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
-      : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort your mail.`
-      : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
-    // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
-    // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
-    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way - or press ${VERB.next.label}.`
-      // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
-      // ...and once that card is shut (a reload), the card to open again is the one lit, by its title
-      : st.mail_error ? (litCard ? `${st.mail_error} Pick ${litCard.title} to fix it - or pick a different email.`
-        : `${st.mail_error} Fix it in the card and press Connect again - or pick a different email.`)
-      : `What email do you have? Pick its card - ${!litCard ? "the one your mail is in" : oneSignIn ? `${litCard.title} is one sign-in` : `start with ${litCard.title} if that is yours`}.`,
-    about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
-    done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
-    other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
-      : "Nothing else is needed - connect more here any time, from Connections."))
-      : "Looking at what you told me about your work to suggest what to connect…",
-  }[q];
-  const named = canvas ? shown.label : litCard ? litCard.title : [...fixRow, ...navShown.map((m) => ({ id: `setup:${m.id}`, ...VERB[m.id] }))].find((v) => v.id === litId)?.label;
-  // an open setup says what to do on it; any line that does not name the lit control yet ends by naming it
-  if (!said && !err && !fix && !st.mail_error && !aiErr && canvas && open && conn && shown.label)
-    lineRef.current = shown.off ? `Fill in ${conn.Name} below, then press ${shown.label}.` : `Press ${shown.label} on ${conn.Name} below.`;
-  else if (!said && named && !lineRef.current.includes(named))
-    lineRef.current = `${lineRef.current} ${litCard ? `Pick ${named}.` : q === "other" ? `Press ${named} when you're done.` : `Press ${named}.`}`;
   const shelf = (k, cards, more, group = null) => q === k && (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Shelf cards={cards} more={more} opened={(open && `c${open.id}`) || (k === "ai" && focus) || null} group={group}
-        detail={<Box data-tq-setup-scope="">{open ? detail : cliDetail}</Box>} allLabel={k === "ai" ? "Pick a different AI" : "Show all"}
+        detail={open ? detail : cliDetail} allLabel={k === "ai" ? "Pick a different AI" : "Show all"}
         onAll={() => { setOpen(null); if (k === "ai") setBrowse(true); }} />
     </Box>
   );
@@ -505,15 +448,14 @@ ${fix.detail || ""}`, screen: "Setup",
     go(!s ? "other" : !requiredDone(s) ? frontierOf(s) : first ? "done" : "other");
   };
   return (
-    <Box ref={rootRef} data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
-      <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
+    <Box data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More email")}
       {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} />}
       {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) - or, with the AI
           failing on the mail, that problem and Change AI as its one big button */}
-      {q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")}
-        aiError={aiErr} onChangeAi={() => go("ai")} /></Box>}
+      {q === "done" && <SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")}
+        aiError={aiErr} onChangeAi={() => go("ai")} />}
       {q === "other" && <CanvasBrowse area="connections" state={browseSt} onState={setBrowseSt} live onOpenCard={() => {}} />}
     </Box>
   );

@@ -12,7 +12,6 @@ under each question are the Connections page's own (the owner, 2026-10-15: "Don'
 connections but just show them/tell what to do next") - this file says which step, and the one line on top.
 """
 import json, re, threading
-from . import buttons
 from loguru import logger
 from .timewords import plural
 
@@ -295,9 +294,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
         if not k.get('installable'):
             return failed({'ok': False, 'fix': '', 'detail': k.get('why_not') or '',
                            'why': f"{label} can't be installed on this computer - pick ChatGPT or an API key instead."})
-        # every button the line names, by the label the setup screen draws on it (FirstRun.jsx: `Install ${title}`, `Sign in to
-        # ${title}`, `Update ${title}`, buttons.json's Try again) - "Press Sign in" stood over a button reading "Sign in to Claude" (2026-10-19)
-        return failed({'ok': False, 'fix': 'install', 'why': f"{label} isn't on this computer yet. Press Install {label} - it takes about a minute."})
+        return failed({'ok': False, 'fix': 'install', 'why': f"{label} isn't on this computer yet. Press Install - it takes about a minute."})
     conns = cfg.setdefault('cli_connections', {})
     key = next((n for n, c in conns.items() if cli_connections.cli_key(c.get('cmd')) == name), None)
     if not key:
@@ -312,12 +309,12 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
             # signed in and still failing: the sign-in is not what is wrong, so it is never the move (clisetup.STATUS)
             return failed({'ok': False, 'fix': 'update' if k.get('installable') else 'retry',
                 'why': f"{label} is signed in, but it didn't answer the test."
-                       + (f' What it said is below - press Update {label}, or {buttons.label("try_again")}.' if k.get('installable')
-                          else f' Press {buttons.label("try_again")}, or pick another AI.'),
+                       + (f' What it said is below - update {label} or try again.' if k.get('installable')
+                          else ' Try again, or pick another AI.'),
                 'detail': str(e)[:400]})
         return failed({'ok': False, 'fix': 'signin' if k.get('setup') else '',
                 'why': f"{label} is installed but needs you to sign in once."
-                       + (f" Press Sign in to {label} - Taskuary checks it by itself when you're done." if k.get('setup') else
+                       + (" Press Sign in - Taskuary checks it by itself when you're done." if k.get('setup') else
                           ' Sign in to it on this computer, then pick it again.'),
                 'detail': str(e)[:200]})
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
@@ -325,7 +322,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     _everywhere(store, f'cli:{worker}', cli=key)                       # the owner's own click: theirs, not an auto-pick
     if (why := _prove(store)):
         _restore(store, was)
-        return failed({'ok': False, 'fix': 'retry', 'why': f"{label} answered, but {why.split(' - ')[0]}. Press {buttons.label('try_again')}, or pick another AI.",
+        return failed({'ok': False, 'fix': 'retry', 'why': f"{label} answered, but {why.split(' - ')[0]}. Try again, or pick another AI.",
                        'detail': why})
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
     store.set_setting(FIX, '', 'owner'); _close_setup(store, name)
@@ -397,7 +394,7 @@ def choose_connector(store, cid: int) -> dict:
     else: detail = str(out.get('detail') or 'no reason given')
     _restore(store, was)
     # not "you're signed in": a sign-in that had lapsed at OpenAI read "You're signed in to ChatGPT, but..." (a real copy, 2026-10-15)
-    msg = f"{title} didn't answer the test. What it said is below - press Sign in again or {buttons.label('try_again')}, or pick another AI."
+    msg = f"{title} didn't answer the test. What it said is below - sign in again, try again, or pick another AI."
     store.set_setting(FIX, json.dumps({'key': f'c{cid}', 'name': c.get('Type'), 'title': title, 'fix': 'retry', 'why': msg,
                                        'detail': detail[:400], 'setup': '', 'install': ''}), 'owner')
     return {'ok': False, 'why': msg}

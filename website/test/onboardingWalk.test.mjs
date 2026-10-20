@@ -159,13 +159,13 @@ test("a stop you have walked past is a numbered step, not a message", () => {
   assert.match(read("assistantView.css"), /\.tq-step-done/);
 });
 
-// SETUP IS THE TOP BAR'S BUTTON, never a choice in the chat (the owner, 2026-10-19) - and that button is not hidden on a phone
-test("setup is reachable on a phone, from the top bar, and the chat offers no Set up Taskuary", () => {
+// The header chip is tq-phone-hide, and it was the only door to the whole of this guidance.
+test("the walk is reachable on a phone", () => {
   const view = read("AssistantView.jsx");
   const welcome = view.slice(view.indexOf('className="tq-welcome"'), view.indexOf('className="tq-welcome"') + 3200);
-  assert.doesNotMatch(welcome, />Set up Taskuary</);
-  const top = read("TaskHubPage.jsx"), chip = top.slice(top.lastIndexOf("<", top.indexOf("<SetupChip")), top.indexOf("/>", top.indexOf("<SetupChip")));
-  assert.match(chip, /onOpen=\{openSetup\}/); assert.doesNotMatch(chip, /tq-phone-hide/);
+  const entry = welcome.slice(welcome.lastIndexOf("<button", welcome.indexOf("Set up Taskuary")), welcome.indexOf("Set up Taskuary"));
+  assert.ok(entry.includes("onClick={() => setupRef.current?.()}"), "the welcome block reopens the setup canvas, as the top bar does");
+  assert.doesNotMatch(entry, /tq-phone-hide/, "and it is not hidden on the device that needs it");
 });
 
 // The scripted walk took the identifier `setup`, and with it the welcome block's button - so the

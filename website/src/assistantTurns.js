@@ -69,9 +69,6 @@ export function placeLine(messages = [], line) {
   const old = messages[at];
   return [...messages.slice(0, at), ...messages.slice(at + 1), { ...line, alias: [...new Set([...ids(old).filter((v) => v !== line.id), ...(line.alias || [])])] }];
 }
-// ...and the owner's pick of it ("Show me ..." from the rail) is said once too: picking between two rows added another line per pick, the
-// same title twice and more (verify, 2026-10-19). The pick is the page's own line - the server never records it - so the last stands
-export const pickLine = (messages = [], line) => (line?.pick ? [...messages.filter((m) => !(m.role === "user" && m.pick === line.pick)), line] : [...messages, line]);
 export function oneCopy(messages = []) {
   const keys = messages.map(itemKey), all = keys.filter(Boolean);
   if (new Set(all).size === all.length) return messages;

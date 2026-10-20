@@ -4,17 +4,13 @@
 // the Advisor's tint, never a button of its own - until the owner presses something or the table moves on. Pure, so test/assistantLight.test.mjs
 // can hold it.
 
-// the server's `light` as the page keeps it; `landed` turns true once its item is the one on the table. `line` is what the Advisor's strip
-// says over it while it is lit ("Press Mark done when you're sure.") - the strip stood empty over a lit button (verify, 2026-10-19), and the
-// chat keeps only the past-tense record, so a reload never shows "press it" over a row with nothing lit
-export const pressLine = (label) => (label ? `Press ${label} when you're sure.` : "");
+// the server's `light` as the page keeps it; `landed` turns true once its item is the one on the table
 export const lightOf = (light) => (light && (light.verb || light.key)
-  ? { verb: light.verb || "", label: light.label || "", line: light.line || pressLine(light.label), key: light.key || "",
-      tid: light.tid ? Number(light.tid) : null, landed: false } : null);
+  ? { verb: light.verb || "", label: light.label || "", key: light.key || "", tid: light.tid ? Number(light.tid) : null, landed: false } : null);
 // is the lit item the one on the table - by its key, or by its task (a task brought up by name lands as its mail's row)
 export const litOn = (lit, table) => !!lit && !!table?.key && (lit.key === table.key || (!!lit.tid && Number(table.tid) === lit.tid));
 // the pick the row fills: the Assistant's, while its item is on the table - it outranks the Advisor's, which would fill another button
-export const litPick = (lit, table) => (litOn(lit, table) && lit.verb ? { verb: lit.verb, label: lit.label, line: lit.line || pressLine(lit.label) } : null);
+export const litPick = (lit, table) => (litOn(lit, table) && lit.verb ? { verb: lit.verb, label: lit.label } : null);
 // the light after the table moved: it lands on its item, and once landed any other item puts it out
 export const litAfter = (lit, table) => (!lit ? null : litOn(lit, table) ? (lit.landed ? lit : { ...lit, landed: true }) : lit.landed ? null : lit);
 // ...and where its item is not on the table yet, the key to bring up (null: it is up already, or names none)

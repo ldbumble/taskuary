@@ -60,9 +60,7 @@ class DeskRoutes(unittest.TestCase):
         out, _ = say(s, 'mark this done', item['key'], 'Sure.\nCALL: {"kind": "close", "params": {}}')
         self.assertNotIn('proposal', out)
         self.assertEqual((out['light']['verb'], out['light']['label']), ('close', buttons.label('close')))
-        # the strip over the row says to press it while it is lit; the chat keeps the past - after a reload nothing says "press" over a dark row
-        self.assertEqual(out['light']['line'], f"Press {buttons.label('close')} when you're sure.")
-        self.assertEqual(out['say'], f"Lit {buttons.label('close')} on TQ-{tid:04d}.")
+        self.assertEqual(out['say'], f"Press {buttons.label('close')} when you're sure.")
         self.assertEqual(s.get_task(tid)['Status'], 'open')                        # nothing ran on the words
         self.assertEqual(proposals(s), [])                                           # ...and nothing waits on a card either
 
@@ -78,7 +76,7 @@ class DeskRoutes(unittest.TestCase):
         out, _ = say(s, 'remind me about the Spendly one next week', item['key'],
                      f'CALL: {{"kind": "task.defer", "params": {{"ref": "TQ-{other:04d}", "until": "monday"}}}}')
         self.assertEqual((out['light']['verb'], out['light']['tid']), ('defer', other))
-        self.assertEqual(out['say'], f"Lit {buttons.label('defer')} on TQ-{other:04d}.")
+        self.assertIn('is up - press', out['say'])
         self.assertFalse(s.get_task(other).get('RemindAt'))
 
     def test_send_erin_the_answer_drafts_and_sends_nothing(self):
@@ -108,43 +106,9 @@ class DeskRoutes(unittest.TestCase):
         out, spawn = say(s, 'research which payroll vendors integrate with Payworth', None,
                          'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
         self.assertEqual(out['new'], {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth'})
-        self.assertIn(buttons.label('regular_agent'), out['say']); self.assertNotIn('below', out['say'])
+        self.assertIn(buttons.label('regular_agent'), out['say'])
         spawn.assert_not_called()
         self.assertEqual([t for t in s.list_tasks() if 'Payworth' in str(t.get('Title'))], [])
-
-    def test_a_button_the_row_does_not_draw_is_never_named(self):
-        # a task's row has no Not ours: "Press Not ours" was said over it, lit nothing, and the model was never told (verify, 2026-10-19)
-        s = store(); tid = s.create_task({'Title': 'New starter on Monday', 'Kind': 'task'}, 't')
-        item = funnel.item_for_key(s, f'task:{tid}')
-        self.assertNotIn('not_ours', [b['verb'] for b in concierge.row_buttons(s, item)])
-        said = []
-        def llm(system, user, **kw):
-            said.append(user)
-            return 'CALL: {"kind": "message.file", "params": {}}' if len(said) == 1 else 'That one is a task - Mark done or Remind me are its moves.'
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = concierge.say(s, 'this is not ours', key=item['key'], llm=llm)
-        self.assertNotIn('light', out)
-        self.assertNotIn(buttons.label('not_ours'), out['say'])
-        self.assertIn(f'"{buttons.label("not_ours")}" is not one of the actions', said[1])
-        # ...and whatever road the act comes by, the light itself refuses a button the row does not draw, and says what the row has
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]), self.assertRaises(concierge.CallMiss) as miss:
-            concierge._lit(s, tid, item, item, 'not_ours')
-        self.assertIn(f"has no {buttons.label('not_ours')} button", str(miss.exception)); self.assertIn(buttons.label('close'), str(miss.exception))
-
-    def test_a_page_beside_the_item_keeps_the_item_on_the_table(self):
-        # the router's own Settings page, beside the item: the next ask carries both, and "this" is still the item (verify, 2026-10-19)
-        s = store(); tid, item = on_table(s)
-        seen = []
-        def llm(system, user, **kw): seen.append(user); return 'CALL: {"kind": "close", "params": {}}'
-        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            out = concierge.say(s, 'mark this done', key=item['key'], llm=llm, open_card='Settings - Sync & startup')
-        self.assertIn('OPEN BESIDE IT: Settings - Sync & startup', seen[0])
-        self.assertEqual(out['light']['verb'], 'close')
-
-    def test_page_lines_say_the_page_never_beside_this(self):
-        s = store(); _, item = on_table(s)
-        out, _ = say(s, 'turn off background sync', item['key'], 'CALL: {"kind": "setting.set", "params": {"setting": "poll_minutes", "value": "0"}}')
-        self.assertNotIn('beside', out['say']); self.assertIn('Settings', out['say'])
 
     def test_a_tool_with_no_button_goes_back_to_the_model_never_to_a_card(self):
         s = store(); _, item = on_table(s)

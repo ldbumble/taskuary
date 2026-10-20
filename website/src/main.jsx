@@ -9,6 +9,8 @@ import BugReportDialog from "./BugReportDialog.jsx";
 import { label as btnLabel } from "./buttons.js";
 import { installOneLine } from "./oneLine.js";
 installOneLine();
+import { installTouchHints } from "./touchHint.js";
+installTouchHints();
 
 // a crash that draws no Assistant line still leaves its report ready behind the Help icon
 window.addEventListener("error", (e) => record(e.error || e.message));

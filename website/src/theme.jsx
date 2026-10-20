@@ -185,6 +185,7 @@ export const theme = createTheme({
     MuiTextField: { defaultProps: { size: "small" } },
     MuiSelect: { defaultProps: { size: "small" } },
     // a tooltip is a mouse's hint: on a touch screen a tap opened it over the drawer it had just opened, and it stayed (2026-10-19 UI walk)
+    // - a finger gets the same words on a long press instead (touchHint.js)
     // ...and it stays on the screen: placed "right" of a full-width row on a phone, it ran 200px off the edge and the page panned. Let it
     // slide back across its row rather than leave the screen
     MuiTooltip: { defaultProps: { disableTouchListener: true,

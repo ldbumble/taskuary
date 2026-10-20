@@ -3563,7 +3563,7 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
         setFlow(null);
         if (data.status === "ok") { setState("ok"); setDetail(data.adopted ? `Signed in as ${data.name || data.account} - it now sorts your mail.`
           : `Signed in as ${data.name || data.account}. Your mail keeps the AI you chose; pick this one under ${placeName("sorting")} to switch.`); reload(); }
-        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); }
+        else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); reload(); }   // the card's red dot (its LastError)
       } catch (e) { if (!alive) return; setFlow(null); setState("error"); setDetail(e?.response?.data?.detail || "the sign-in did not complete"); }
     };
     const id = setTimeout(tick, 2000);
@@ -3604,6 +3604,9 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
       )}
       {detail && <Typography variant="body2" sx={{ fontWeight: 600, color: state === "ok" ? "#47654a" : "#6b2733" }}>
         {state === "ok" ? "✓" : "✗"} {detail}</Typography>}
+      {/* opened again after a failed sign-in: the failure is still said, over the button that tries again (2026-10-20) */}
+      {!detail && !flow && !signedIn && conn.LastError && <Typography variant="body2" sx={{ fontWeight: 600, color: "#6b2733" }}>
+        ✗ {String(conn.LastError).replace(/\.?\s*$/, ".")} Press Sign in with ChatGPT to try again.</Typography>}
     </Box>
   );
 };

@@ -12,6 +12,8 @@ from taskuary.store import MemoryStore
 ANSWERS = {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance systems lead', 'systems': ['Workday', 'Salesforce', 'Payworth']}
 LEARNED = ('### What my job is\n- I run the finance systems the month-end close depends on.\n'
            '### Who I work with\n- Erin Blake writes most about the close.')
+STYLE_GUIDE = ('### Greeting & sign-off\n- I open with "Hi" and the first name, and sign off "Best, {{owner_first}}".\n'
+               '### Tone & length\n- Two or three sentences, the answer first.')
 
 
 def learned(s, body=LEARNED):
@@ -175,6 +177,48 @@ class AboutTests(unittest.TestCase):
         s.save_source({'Channel': 'email', 'Address': 'shared@northwind.example', 'Active': 1, 'ConnectorId': off}, 't')   # its card is off
         self.assertEqual(firstrun.state(s)['mailboxes'], [{'address': 'alex.doyle@mail.example', 'type': 'gmail'},
                                                           {'address': 'alex@northwind.example', 'type': 'imap'}])
+
+    def test_the_job_is_learned_from_every_mailbox_with_a_section_per_organisation(self):
+        """JOB.md FROM EVERY MAILBOX (the owner, 2026-10-20): an Outlook mailbox at one organisation and an IMAP one at another are two
+        jobs - each section written from its own mailbox's mail alone, the Outlook card no longer ending the read."""
+        s = mailboxes(MemoryStore(), ('outlook', 'alex@northwind.example'), ('imap', 'alex@riverside.example'))
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner')
+        graph_sent = [{'subject': 'Re: month-end close', 'receivedDateTime': '2026-10-01T10:00:00Z', 'conversationId': 'n1',
+                       'toRecipients': [{'emailAddress': {'address': 'erin@northwind.example', 'name': 'Erin Blake'}}],
+                       'body': {'content': 'Signed off the accruals.'}, 'mailbox': 'alex@northwind.example'}]
+        graph_in = [{'subject': 'Month-end close', 'receivedDateTime': '2026-10-01T09:00:00Z', 'conversationId': 'n1', 'mailbox': 'alex@northwind.example',
+                     'from': {'emailAddress': {'address': 'erin@northwind.example', 'name': 'Erin Blake'}}}]
+        imap_sent = [{'subject': 'Board minutes', 'sent_at': '2026-10-02 08:00:00', 'conversation_id': 'r1', 'from_email': 'alex@riverside.example',
+                      'to': ['ray@riverside.example'], 'body': 'Minutes attached for the volunteer board.'}]
+        imap_in = [{'FromEmail': 'ray@riverside.example', 'FromName': 'Ray Colton', 'Subject': 'Volunteer rota', 'Status': 'routed',
+                    'BodyText': 'Can you draw up the rota?', 'SentAt': '2026-10-02 07:00:00', 'SourceName': 'alex@riverside.example',
+                    'ConversationId': 'r1'}]
+        asked = []
+        def brain(system, user, **kw):
+            if 'JOB IS' not in system: return STYLE_GUIDE
+            asked.append((system, user))
+            org = 'Northwind' if 'work at Northwind' in user else 'riverside'
+            return f'### What my job is\n- I do the {org} work, every week, and answer the people there who depend on it being done right.'
+        with mock.patch('taskuary.histgen._graph_mail', return_value=(graph_sent, graph_in, 1)), \
+             mock.patch('taskuary.imapmail.sent_history', return_value=imap_sent), \
+             mock.patch('taskuary.histgen._db_window', return_value=imap_in), mock.patch('taskuary.llm.build_llm', return_value=brain):
+            firstrun.learn(s, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance lead'}, wait=True)
+        self.assertEqual(firstrun.job_state(s)['state'], 'ready')
+        job = firstrun.about(s)['job']
+        self.assertEqual(job.count('\n## ') + job.startswith('## '), 2, job)
+        self.assertLess(job.index('## At Northwind (alex@northwind.example)'), job.index('## At riverside.example (alex@riverside.example)'))
+        self.assertIn('I do the Northwind work', job); self.assertIn('I do the riverside work', job)
+        (sys1, north), (_s, river) = asked
+        self.assertIn('ONE OF SEVERAL JOBS', sys1)
+        # each organisation read from its own mailbox: Northwind's colleagues never in the other's evidence, and the reverse
+        self.assertIn('erin@northwind.example', north); self.assertNotIn('ray@riverside.example', north)
+        self.assertIn('ray@riverside.example', river); self.assertNotIn('erin@northwind.example', river)
+        self.assertIn('Finance lead', north); self.assertNotIn('Finance lead', river)     # the title setup was told is the owner's own org's
+
+    def test_one_organisation_is_one_job_as_before(self):
+        s = mailboxes(MemoryStore(), ('gmail', 'alex@northwind.example'), ('imap', 'ap@northwind.example'))
+        from taskuary import histgen
+        self.assertEqual(histgen.org_groups(s), [('northwind.example', ['alex@northwind.example', 'ap@northwind.example'])])
 
     def test_the_systems_offered_are_the_catalogues_corporate_ones(self):
         offered = firstrun.about(MemoryStore())['offered']

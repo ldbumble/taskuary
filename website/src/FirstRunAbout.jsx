@@ -32,7 +32,8 @@ const ASK = {
   systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
   mailboxes: "Add every other mailbox you use with its card - your job is read from all of them.",
 };
-const who = (a) => JSON.stringify([a.name, a.org, a.role].map((x) => (x || "").trim()));
+// what the job was written from: the answers, and every mailbox it read - one added since is a reason to write it again
+const who = (a, boxes = []) => JSON.stringify([...[a.name, a.org, a.role].map((x) => (x || "").trim()), ...boxes.map((b) => b.address.toLowerCase()).sort()]);
 
 export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again = false, mailboxes = [], mailShelf = null }) {
   const [a, setA] = useState(null), [offered, setOffered] = useState([]), [seen, setSeen] = useState([]), [all, setAll] = useState(false);
@@ -48,7 +49,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
       const got = { name: data.name || "", org: data.org || "", role: data.role || "", signature: data.signature || "", systems: data.systems || [] };
       setOffered(data.offered || []); setA(got); setSeen(got.systems);
       // answered before and a job already written for those answers: no need to write it again unless one of them changes
-      if (data.done && data.job) { learnedFor.current = who(got); setJob({ state: "ready", why: "", text: data.job }); setJobText(data.job); }
+      if (data.done && data.job) { learnedFor.current = who(got, mailboxes); setJob({ state: "ready", why: "", text: data.job }); setJobText(data.job); }
       if (data.done && data.org && data.role) return;
       // what the mail says, for every box not typed in - the name guessed from the address included
       setReading(true);
@@ -82,7 +83,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   useEffect(() => () => onStep?.(""), [onStep]);
   const boxes = mailboxes.length;
   const learn = async (x = a) => {
-    learnedFor.current = who(x); setEdited(false); setJob({ state: "running", why: "", text: "" });
+    learnedFor.current = who(x, mailboxes); setEdited(false); setJob({ state: "running", why: "", text: "" });
     try { setJob((await api.post("/api/setup/first-run/about/learn", x)).data); }
     catch (e) { setJob({ state: "failed", why: errText(e), text: "" }); }
   };
@@ -102,7 +103,9 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   };
   const next = () => {
     setErr("");
-    if (step === "role" && who(a) !== learnedFor.current) learn();     // written while the systems are picked
+    if (step === "role" && who(a, mailboxes) !== learnedFor.current) learn();     // written while the systems are picked
+    // ...and again once every mailbox is in, when one was added since: the job is read from all of them
+    if (step === "mailboxes" && who(a, mailboxes) !== learnedFor.current) learn();
     if (step === "job") return save();
     setAt((i) => Math.min(i + 1, STEPS.length - 1));
   };
@@ -197,6 +200,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
           ? <TextField multiline fullWidth minRows={10} maxRows={22} value={jobText} sx={{ ...field, "& textarea": { fontSize: 14, lineHeight: 1.5 } }}
             onChange={(e) => { setEdited(true); setJobText(e.target.value); }} inputProps={{ "aria-label": "Your job" }} autoFocus={editing} />
           : <Box data-tq-job-read="" sx={{ border: "1px solid #ddd5c6", borderRadius: 1.5, bgcolor: "#fff", px: 2, py: 1, maxHeight: "52vh", overflowY: "auto",
+              "& h2": { fontSize: 15.5, fontWeight: 700, mt: 2, mb: 0.5, borderBottom: "1px solid #ece6db" }, "& h2:first-of-type": { mt: 0.5 },
               "& h3": { fontSize: 14.5, fontWeight: 700, mt: 1.5, mb: 0.5 }, "& h3:first-of-type": { mt: 0.5 }, "& ul": { pl: 2.5, my: 0.5 },
               "& li": { fontSize: 14, lineHeight: 1.55, mb: 0.4 } }}><Md text={jobText} /></Box>}
         <Box sx={{ display: "flex", gap: 1 }}>

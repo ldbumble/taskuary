@@ -62,7 +62,7 @@ const DRAFT = (text) => ({ state: "ready", why: "", text });
 test("About your work: Skip lands on the mailbox step, which cannot be skipped and moves on once a mailbox is in", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
   const world = { boxes: [], drafts: { job: DRAFT("### What my job is\n- I run the month-end close.") } };
-  const { page, errors } = await open(harness, world);
+  const { page, errors, sent } = await open(harness, world);
   assert.match(await page.evaluate(() => document.body.innerText), /About your work · 1 of \d+/);
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
@@ -78,6 +78,9 @@ test("About your work: Skip lands on the mailbox step, which cannot be skipped a
   await shot(page, "about-mailboxes");
   assert.ok(await press(page, "That's all my mail"));
   await onStep(page, "job");
+  // passing it writes the job from every mailbox in - Skip went past the title, so this is the first time it is written
+  assert.equal(sent["/api/setup/first-run/about/learn"], 1);
+  assert.equal(world.learned.name, "Alex Doyle");
   // Back to it and Skip from a question before it: lands on it again, never past it
   for (const s of ["mailboxes", "systems", "signature"]) { assert.ok(await press(page, "Back")); await onStep(page, s); }
   assert.ok(await press(page, "Skip these questions"));

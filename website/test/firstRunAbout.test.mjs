@@ -16,7 +16,10 @@ test("the questions come one at a time: name, organisation, title, signature, sy
 
 test("the job is written once the title is answered, and the last press saves what the owner left", () => {
   const src = read("FirstRunAbout.jsx");
-  assert.match(src, /if \(step === "role" && who\(a\) !== learnedFor\.current\) learn\(\);/);
+  assert.match(src, /if \(step === "role" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\);/);
+  // ...and again as the mailbox step is passed, when a mailbox came in since: the job is read from every one of them
+  assert.match(src, /if \(step === "mailboxes" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\);/);
+  assert.match(src, /\.\.\.boxes\.map\(\(b\) => b\.address\.toLowerCase\(\)\)\.sort\(\)/);
   assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", x\)/);
   assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/job"\)/);
   assert.match(src, /const nextLabel = last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : step === "mailboxes" \? "That's all my mail" : "Next"/);

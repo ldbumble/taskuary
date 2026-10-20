@@ -75,6 +75,7 @@ ALLOWED_WRITES = (
     r'^/api/operations/[^/]+/execute$',
     r'^/api/tasks/\d+/remind$',
     r'^/api/messages/\d+/reply$',                      # puts a draft on the table - only approving it sends
+    r'^/api/messages/\d+/calendar$',                   # ...and a calendar answer the same way: drafted, never sent (calwrite.py)
     r'^/api/reviews/\d+/draft$',
 )
 
@@ -512,6 +513,52 @@ HISTORY = [
 ]
 
 
+# ── the calendar, scripted (calwrite.py): the demo has no calendar behind it, so the week it answers invites against is this ──
+def _workdays(n: int) -> list:
+    """The next n working days after today - a demo opened at night or on a weekend still has its week ahead of it."""
+    out, d = [], datetime.now().date()
+    while len(out) < n:
+        d += timedelta(days=1)
+        if d.weekday() < 5: out.append(d)
+    return out
+
+
+def agenda() -> list:
+    """The owner's busy times, as calendar.agenda's events: the week the invite clashes with and Find a time fits around."""
+    d1, d2, d3 = _workdays(3)
+    ev = lambda d, a, b, subject, who=(): {'start': f'{d} {a}', 'end': f'{d} {b}', 'subject': subject, 'all_day': False, 'status': 'busy',
+                                           'where': '', 'mailbox': 'demo', 'organizer': '', 'who': list(who), 'about': '', 'join': '', 'link': ''}
+    return [ev(d1, '09:00', '12:00', 'Quarter-end planning', ('Marcus Reed',)), ev(d1, '15:00', '16:00', '1:1 with Marcus', ('Marcus Reed',)),
+            ev(d2, '09:00', '10:30', 'Budget review', ('Priya Shah', 'Tom Alvarez')), ev(d2, '13:00', '14:00', 'Vendor call - Payworth'),
+            ev(d3, '11:00', '12:00', 'Site leads sync')]
+
+
+def seed_calendar(store, f) -> int:
+    """An invite waiting on Dana's answer that clashes with her planning block, and a thread asking for half an hour - the
+    two rows whose buttons answer the calendar. Returns how many it made."""
+    from . import calwrite
+    d1, d2, _ = _workdays(3)
+    ruth, priya = PEOPLE[3], PEOPLE[1]
+    c = {'kind': 'request', 'provider': 'outlook', 'mailbox': 'demo', 'event_id': 'demo-event-1', 'ical_uid': 'demo-uid-1', 'update': False,
+         'answered': False, 'asks': True, 'subject': 'AP cutover dry run', 'start': f'{d1} 10:00', 'end': f'{d1} 11:00', 'all_day': False,
+         'organizer': ruth[0], 'organizer_email': ruth[1], 'attendees': [ruth[1], 'dwhitfield@northwind.example']}
+    at, clash = calwrite.when(c['start'], c['end']), calwrite.clash_line(store, c['start'], c['end'], skip=c['subject'], events=agenda())
+    tid = f.task(title=f"Invite: {c['subject']}", status='open', kind='reply', source='email',
+                 Summary=f"{ruth[0]} invited you to {c['subject']}, {at}." + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.')
+    mid = f.message(task_id=tid, subject=f"Invitation: {c['subject']}", from_name=ruth[0], from_email=ruth[1], sent_at=f.ago(hours=1),
+                    body='A dry run of the AP cutover before Thursday - we walk the export end to end with the team.',
+                    conversation_id='email:ap-dry-run', MailMetaJson=json.dumps({'invite': True, 'cal': c}))
+    f.route(mid, tid, 'create', f"{ruth[0]} invited you - {at}" + (f' - {clash}' if clash else ''))
+    # the ask: half an hour on the audit list, the day after - triage's `meet` on the message (store.add_route)
+    t2 = f.task(title='Half an hour on the audit list', status='open', kind='reply', source='email')
+    m2 = f.message(task_id=t2, subject='Audit list - 30 minutes?', from_name=priya[0], from_email=priya[1], sent_at=f.ago(hours=2),
+                   body=f"Can we find 30 minutes {d2.strftime('%A')} to go through the auditors' list before I send it back?",
+                   conversation_id='email:audit-30', MeetJson=json.dumps({'minutes': 30, 'from': str(d2), 'to': str(d2)}))
+    f.route(m2, t2, 'create', 'she asks for half an hour with you on a named day')
+    f.review(t2, m2, draft=f"Yes - {d2.strftime('%A')} works. I'll send an invite.")
+    return 2
+
+
 def seed(store) -> int:
     """Build the demo's world. Idempotent: a home that already has work in it is left alone."""
     from . import artifacts, general
@@ -619,7 +666,7 @@ def seed(store) -> int:
                     sent_at=f.ago(hours=5), status='routed', conversation_id='github:214')
     f.route(gid, gh, 'create', 'an issue with a traceback in it: a coding agent can start on this now')
     f.feed_only(title='northwind/importers#215 - keep inter-company rows in the GL export (open)')
-    made += 9
+    made += 9 + seed_calendar(store, f)
 
     # ...and spread across the day: the pictures all stamp themselves 'now', so a demo opened
     # at 8pm showed a morning's work arriving in the same minute

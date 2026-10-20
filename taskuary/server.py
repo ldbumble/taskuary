@@ -651,7 +651,7 @@ def _review_send_state(memo: dict, r: dict) -> tuple:
     the message alone it was "nothing arrived to reply to", and the card offered Copy & close instead of Send (2026-10-09)."""
     try: env = json.loads(r.get('Deliver') or '{}') or {}
     except (TypeError, ValueError, AttributeError): env = {}
-    if env.get('kind') == 'zoho_invoice': return True, ''
+    if env.get('kind') in outbound.OWN_ROAD: return True, ''
     return _send_state(memo, r.get('Channel') or env.get('channel'), bool(r.get('MessageId')) or bool(env.get('to')))
 
 
@@ -1478,6 +1478,12 @@ def task_trust(task_id: int):
     o, why = origin.of_task(store, task_id)
     return {'origin': o, 'why': why}
 
+def _calendar_of(task_id: int):
+    from . import calwrite
+    try: return calwrite.of_task(store, task_id)
+    except Exception as e:
+        logger.debug(f'task {task_id}: the calendar ask was not read - {e}'); return None
+
 @app.get('/api/tasks/{task_id}')
 def task_detail(task_id: int):
     d = store.task_detail(task_id)
@@ -1503,6 +1509,8 @@ def task_detail(task_id: int):
             'repeats': concierge.repeats(store, task_id, d.get('messages'), d.get('routes')),
             # a WORKFLOW RUN has no message and no triage behind it: which workflow, and what started it (workflows.of_task)
             'workflow': workflows.of_task(store, d['task']),
+            # an invite waiting on the owner, or a thread asking for a time: the row's Accept / Decline / Propose a new time / Find a time
+            'calendar': _calendar_of(task_id),
             'messages': [_readable(x) for x in d.get('messages') or []],
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
@@ -2696,6 +2704,45 @@ def fetch_attachments(mid: int):
     except Exception as e:
         raise HTTPException(422, str(e)[:300])
     return {'fetched': n, 'data': [_att_row(a) for a in store.list_attachments(mid)]}
+
+# ── answering the calendar (calwrite.py): each press DRAFTS into the approval queue; only the owner's Send writes the calendar ──
+def _cal_refusal(e) -> dict:
+    """The one line a press that cannot be drafted answers with, and its way out (failures.py's fix shape) - 200, so the row
+    says it where it was pressed instead of an error toast."""
+    from . import calwrite
+    if isinstance(e, calwrite.NoAccess): return {'ok': False, 'say': str(e), 'fix': e.fix}
+    return {'ok': False, 'say': str(e)[:300], 'fix': None}
+
+@app.get('/api/messages/{mid}/calendar/slots')
+def calendar_slots(mid: int, act: str = 'schedule'):
+    """The 2-3 free times Propose a new time and Find a time offer - checked against the card's right to write FIRST, so a
+    read-only card says so at the press, not after a pick."""
+    from . import calwrite
+    m = store.get_message(mid)
+    if not m: raise HTTPException(404, 'message not found')
+    if act not in ('propose', 'schedule'): raise HTTPException(422, 'slots are for proposing or finding a time')
+    try:
+        calwrite.require_write(store, calwrite.account(store, m))
+        out = calwrite.slots_for(store, m, act)
+    except Exception as e: return _cal_refusal(e)
+    c = calwrite.invite_of(m) or {}
+    return {'ok': True, **out, 'act': act, 'subject': c.get('subject') if act == 'propose' else calwrite._title(m),
+            **({'now': calwrite.when(c.get('start'), c.get('end'))} if act == 'propose' and c.get('start') else {})}
+
+class CalendarBody(BaseModel):
+    act: str
+    start: str | None = None
+    end: str | None = None
+
+@app.post('/api/messages/{mid}/calendar')
+def calendar_answer(mid: int, body: CalendarBody):
+    """Accept, Decline, Propose a new time or Find a time, pressed: the answer drafted as a review on the message (and its
+    task) for the owner's Send - nothing reaches the calendar here. {ok, reviewId, taskId, say} or {ok: false, say, fix}."""
+    from . import calwrite
+    if not store.get_message(mid): raise HTTPException(404, 'message not found')
+    try: out = calwrite.draft(store, mid, body.act, body.start, body.end, ACTOR)
+    except Exception as e: return _cal_refusal(e)
+    return {'ok': True, **out}
 
 class OpenReplyBody(BaseModel):
     draft: bool = True
@@ -4955,6 +5002,8 @@ def draft_review(rid: int, body: DraftBody = None):
     except (TypeError, ValueError): deliver = {}
     # ...unless the owner started it from the task (outbox.task_email): it keeps their brief, and is written from it again
     if rv.get('Kind') == 'slot' and deliver.get('by') != 'owner': raise HTTPException(422, 'the agent writes this email - ask it again, or edit it here')
+    # a calendar answer's note is the owner's one line: no redrafter writes an RSVP (calwrite.py)
+    if deliver.get('kind') == 'calendar': raise HTTPException(422, 'the note on a calendar answer is yours to write - or leave it empty')
     try:
         if rv.get('Kind') == 'slot':
             from . import outbox as ob

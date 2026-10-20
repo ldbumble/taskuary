@@ -18,6 +18,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import RemindMe, { RemindPicker } from "./RemindMe.jsx";
+import { SlotPicker } from "./CalendarPick.jsx";
 import { onPressed, useVerbs } from "./actionRow.js";
 import { choice, hint as btnHint, hintOfRow, label as btn, labelOfRow } from "./buttons.js";   // theme.jsx owns `label`
 import BlockIcon from "@mui/icons-material/Block";
@@ -1141,6 +1142,25 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => (canvas || !active ? undefined : onPressed(() => readTaskAdvice(selRef.current))), [canvas, active, readTaskAdvice]);
   const [remindAt, setRemindAt] = useState(null);
   const notDone = !!t && !["done", "dropped"].includes(t.Status);
+  // THE CALENDAR'S ANSWERS (calwrite.py, server task_detail's `calendar`): an invite waiting on the owner is answered from the row -
+  // Accept, Decline, Propose a new time - and a thread asking for a time offers Find a time. Each DRAFTS into Close out for the
+  // owner's Send; a card that may not write says so on the error line with its sign-in as the way out (failures.py's fix).
+  const calAsk = notDone && !liveSession ? detail?.calendar || null : null;
+  const [slotAt, setSlotAt] = useState(null);           // { act, at } - Propose a new time / Find a time's free times
+  const calAnswer = async (act, slot = null) => {
+    if (!calAsk) return;
+    setErr(""); setStartFail(null);
+    try {
+      const { data } = await api.post(`/api/messages/${calAsk.mid}/calendar`, { act, ...(slot || {}) });
+      if (!data?.ok) { setErr(data?.say || "That could not be drafted."); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); return; }
+      setOpenStage("reply"); loadDetail(selected); onChanged?.();
+    } catch (e) { setErr(e?.response?.data?.detail || e?.message || "That could not be drafted."); }
+  };
+  const calVerbs = !calAsk ? [] : calAsk.invite ? [
+    { id: "accept_invite", group: "decide", tone: "s", label: btn("accept_invite"), run: () => calAnswer("accept"), title: btnHint("accept_invite") },
+    { id: "decline_invite", group: "decide", tone: "s", label: btn("decline_invite"), run: () => calAnswer("decline"), title: btnHint("decline_invite") },
+    { id: "propose_time", group: "decide", tone: "s", label: btn("propose_time"), run: (e, a) => setSlotAt({ act: "propose", at: a || e?.currentTarget || document.body }), title: btnHint("propose_time") },
+  ] : [{ id: "find_time", group: "decide", tone: "s", label: btn("find_time"), run: (e, a) => setSlotAt({ act: "schedule", at: a || e?.currentTarget || document.body }), title: btnHint("find_time") }];
   // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,
   // whose row holds them
   const headControls = sessionView && !inRow && notDone;
@@ -1167,7 +1187,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
     : [
-      ...(replyMessage && !liveSession && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
+      ...calVerbs,
+      // ...an invite is answered by the calendar, not by an email back (calwrite.py)
+      ...(replyMessage && !liveSession && !calAsk?.invite && (stage !== "reply" || !pendingReview) ? [{ id: "reply", group: "decide", tone: "p", label: openingReply ? "Drafting…" : replyPrimary,
         disabled: !!openingReply, run: () => (pendingReview ? setOpenStage("reply") : openReply(true)), title: hintOfRow("reply") }] : []),
       // done off the app - a call - closes with what came of it: the card opens in the conversation, under the item. It is Mark
       // done with words, so it registers with Mark done and the row stands it beside that (actionRow.rowOf)
@@ -1928,6 +1950,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         </Box>
                         <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg} onOpen={setOpenMsg} />
                       </Box>}
+                      {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
+                      {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}
+                        {!!calAsk.clash && <Box component="span" sx={{ color: "#7a2f3c", fontWeight: 600 }}> - it {calAsk.clash}</Box>}</Typography>}
                       {/* the emails that close it (slots.py), where a task's close is decided - each with its own draft */}
                       <SlotList taskId={t?.TaskId} checklist={detail?.checklist || []} reviews={detail?.reviews || []}
                         onChanged={() => { loadDetail(selected); loadTasks(); onChanged?.(); }} />
@@ -2333,6 +2358,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         "& > div": { mt: 0, pt: 0, borderTop: 0 } }}>{nextRunForm}</Box>, nextRunSlot)}
       {t && <CloseNote anchor={noteAt} taskRef={t.ref || ""} onClose={() => setNoteAtRaw(null)} onSubmit={closeWithNote} />}
       {t && inRow && <RemindPicker task={t} anchor={remindAt} onClose={() => setRemindAt(null)} onDone={reminded} onLeave={onLeave} onStay={onStay} live={liveSession} />}
+      {calAsk && slotAt && <SlotPicker mid={calAsk.mid} act={slotAt.act} anchor={slotAt.at} onClose={() => setSlotAt(null)}
+        onRefused={(data) => { setErr(data?.say || ""); setStartFail({ text: data?.say || "", fix: data?.fix || null, retry: false }); }}
+        onPick={(slot) => calAnswer(slotAt.act, slot)} />}
     </>
   );
 }

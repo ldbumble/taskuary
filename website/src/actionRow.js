@@ -187,6 +187,8 @@ const TYPE_OF = {
   chase: "reply", mine: "agent", answer_agent: "agent", coding_agent: "agent", regular_agent: "agent", rerun: "agent",
   elsewhere: "close", not_ours: "task", not_ours_sender: "task", not_ours_kind: "task", block_sender: "task",
   let_go: "task", defer: "task", split: "task", test_connection: "task",
+  // the calendar's answers (calwrite.py) are what goes back: an invite's yes, no or other time, and a thread's meeting
+  accept_invite: "reply", decline_invite: "reply", propose_time: "reply", find_time: "reply",
 };
 export const typeOf = (v) => TYPE_OF[String(v?.id || "").split(":").pop()] || "act";
 export function clustersOf(row, keep = 2) {

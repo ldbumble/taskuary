@@ -45,7 +45,7 @@ usually `report` and `tool`.
 
 | System | Notes |
 |---|---|
-| **Outlook** | Mail and calendar, through Microsoft sign-in or a tenant app registration |
+| **Outlook** | Mail and calendar, through Microsoft sign-in or a tenant app registration - answering invites and booking meetings needs Calendars.ReadWrite, which a sign-in from before it asks for again |
 | **Gmail and IMAP** | Any IMAP mailbox. Approved replies go back through the provider's SMTP, in-thread |
 
 Taskuary reads your **Sent** folder as well as your inbox. That is what makes "has this been

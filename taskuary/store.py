@@ -48,7 +48,7 @@ TASK_COLS = ('Title', 'Summary', 'Kind', 'Status', 'Priority', 'Assignee', 'Sour
              'DoneWhen', 'ParentId', 'OriginBase', 'TrustedThrough', 'Origin', 'OriginWhy')
 MSG_COLS = ('TaskId', 'ExternalId', 'ConversationId', 'Channel', 'SourceName', 'Subject',
             'FromName', 'FromEmail', 'SentAt', 'BodyText', 'SourceLink', 'Status', 'Direction', 'RecipientsJson',
-            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass')
+            'MailMetaJson', 'OwnText', 'TriageTitle', 'RankValue', 'RankWhy', 'SenderClass', 'MeetJson')
 RUN_COLS = ('Status', 'TraceJson', 'Result', 'LastError', 'SessionId', 'DiffText')
 def _fold(value):
     """Case-fold for search. casefold() beats lower() on the pairs that differ (German ss)."""
@@ -1027,6 +1027,10 @@ class SQLiteStore:
             # or ranking's for a batched arrival): a warning on a stranger's card, never a gate
             if 'Danger' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Danger TEXT')
+            # the message asks the owner to find a time to meet (the triage verdict's `meet`, JSON {minutes, from, to}): its row
+            # offers Find a time (calwrite.slots_for)
+            if 'MeetJson' not in mcols:
+                self.cx.execute('ALTER TABLE message ADD COLUMN MeetJson TEXT')
             # WHAT ORDER TO JUDGE IT IN (bulk processing, rank.py). Triage is the expensive call, so a
             # connector in rank mode ranks its arrivals BEFORE judging any: 300 pull requests cost one
             # listwise ranking call and four triage calls, not 300 triage calls. The value lives on the
@@ -4186,6 +4190,8 @@ class SQLiteStore:
         sc = (verdict or {}).get('sender_class') if isinstance(verdict, dict) else None
         if sc in ('person', 'automated', 'bulk') and mid: self._exec('UPDATE message SET SenderClass=? WHERE MessageId=?', (sc, mid))
         if isinstance(verdict, dict) and 'danger' in verdict and mid: self.set_message_danger(mid, verdict.get('danger'))
+        if isinstance(verdict, dict) and isinstance(verdict.get('meet'), dict) and mid:
+            self._exec('UPDATE message SET MeetJson=? WHERE MessageId=?', (json.dumps(verdict['meet']), mid))
         return self._exec('''INSERT INTO route
             (MessageId,TaskId,Decision,Score,Reason,CandidatesJson,RoutedBy,CreatedAt,RawOutput,ParseError,VerdictJson)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)''',

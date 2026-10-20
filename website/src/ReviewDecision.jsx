@@ -61,6 +61,21 @@ export const InvoiceLine = ({ meta }) => (
   </Box>
 );
 
+// A CALENDAR ANSWER (calwrite.py) says what the calendar will be told - the act, the meeting, the time, and what it clashes with -
+// where an email says who it goes to. The box under it is the note that rides along, and may be left empty.
+const CAL_ACT = { accept: btn("accept_invite"), decline: btn("decline_invite"), propose: "Propose", schedule: "Invite" };
+// The times are the server's words (calwrite.when): the envelope carries them as they will be said.
+export const CalendarLine = ({ meta }) => (
+    <Box data-tq-calendar={meta.act} sx={{ display: "grid", gap: 0.25, mb: 1, px: 1.25, py: 0.8, bgcolor: "#eef1ec", border: "1px solid #d9e0d6", borderRadius: 1.5 }}>
+      <Typography variant="caption" sx={{ color: INK, fontWeight: 600 }}>
+        {CAL_ACT[meta.act] || "Answer"} · {meta.subject || "the meeting"}{meta.when ? ` · ${meta.when}` : ""}</Typography>
+      <Typography variant="caption" sx={{ color: DIM }}>
+        {meta.act === "schedule" ? `Invites ${(meta.to || []).join(", ") || "them"}` : `${(meta.to || [])[0] || "The organizer"} is told`}
+        {meta.act === "propose" && meta.was ? ` · instead of ${meta.was}` : ""}</Typography>
+      {!!meta.clash && <Typography variant="caption" sx={{ color: "#7a2f3c" }}>This {meta.clash}.</Typography>}
+    </Box>
+);
+
 // `onOpenTask` is optional: on the task page you are already there.
 // `closeout` is the task's pending close-out (merge the PR, close the issue): given beside its reply, the two are
 // ONE decision on this card, and the close-out runs first (verdicts.decide's reply_text).
@@ -84,6 +99,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const value = delivery.frozen ? delivery.body : text ?? reviewText(r);
   const ccNow = delivery.frozen ? deliveryCc(filedDelivery) : cc ?? deliveryCc(r);
   const meta = deliveryMeta(r);
+  const isCal = meta.kind === "calendar";             // an invite answered or a meeting booked: its note may be empty
   const co = closeout && !proposal ? proposalPresentation(closeout) : null;
   // a reply to a GitHub PR/issue IS a comment on it, so the close-out carries it whatever the replies switch says
   const carried = !!co && String(r.Channel || "").toLowerCase() === "github";
@@ -107,6 +123,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const thenLine = delivery.frozen ? "" : simulated ? "This approves the fictional reply and completes the demo task. No email is sent."
     : co ? `${co.approveLabel} ${co.then}${sendable ? `, then sends your reply to ${replyContext(r)}` : ""} - and only that; ${stays}.`
     : chatFile ? `A ${r.Channel} message cannot carry a file. Reply by email with the file, or send the words alone.`
+    : isCal && !r.Stale ? `${sendWord} tells the calendar, with the note above if there is one - ${stays}.`
     : onTask && !r.Stale && canSendIt ? `${sendWord} sends this to ${replyContext(r)} - ${stays}.`
     : onTask && !r.Stale && !canSendIt ? `${btn("close")} copies the draft for you to paste and send yourself, and closes the task.` : "";
   const [coFail, setCoFail] = useState(null);       // the close-out itself refused: nothing was sent ({offers} = what fits instead)
@@ -210,7 +227,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
   const doneTitle = `${btnHint("close")} - nothing is sent; the draft stays on it, to send later if you want`;
   // Redraft (Draft with AI while nothing is drafted): the same handler the in-card button has
-  const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isSlot;   // the redrafter writes a REPLY to the sender
+  const canRedraft = !proposal && meta.kind !== "zoho_invoice" && !isCal && !isSlot;   // the redrafter writes a REPLY to the sender
   const redraftWord = r.DraftText || r.Stale ? btn("redraft") : btn("redraft", "none");
   // the alternative (Decline) sends WHAT IS IN THE BOX, edited or not - and with the box empty it just closes the pull request, sending nothing
   const altSends = sendable && !!value.trim();
@@ -254,8 +271,8 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       { id: no("approve"), label: busy ? "Sending…" : `${sendWord} without the file`, tone: "s", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
         run: () => decide("approve"), title: `Sends only the words to ${replyContext(r)} - no file goes with them` },
     ] : [
-      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || !value.trim(), why: value.trim() ? "" : "write the reply first",
-        run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : `Sends this response to ${replyContext(r)}` },
+      { id: no("approve"), label: busy ? (simulated ? "Simulating…" : "Sending…") : simulated ? "Simulate approval" : `${sendWord}${ccNow.length && !isCal ? `, copying ${ccNow.length}` : ""}`, tone: "p", disabled: busy || (!value.trim() && !isCal), why: value.trim() || isCal ? "" : "write the reply first",
+        run: () => decide("approve"), title: simulated ? "Complete this temporary demo; no email is sent" : isCal ? thenLine : `Sends this response to ${replyContext(r)}` },
     ]),
     ...(proposal?.alt ? [{ id: no("palt"), label: proposal.alt.label, tone: "s", disabled: busy, run: () => decide(proposal.alt.verb), title: `${proposal.alt.label} - ${proposal.alt.then}` }] : []),
     // A CLOSE-OUT HAS NO "NOT YET" (the owner, 2026-10-02): Next keeps it open and moves on, Remind me keeps it open until a day
@@ -334,8 +351,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         {r.LatestPreview && <Box sx={{ mt: 0.5, fontSize: 11.5 }}>Latest: {r.LatestPreview}</Box>}
       </Alert>}
       {!proposal && <Inbound r={r} />}
-      {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not */}
-      {!proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
+      {/* an EMAIL draft's recipient is the owner's to correct (ToRow); a proposal's destination and a chat's room are not - and a
+          calendar answer goes to the calendar: what it will be told stands in their place, with no copies and no files */}
+      {isCal ? <CalendarLine meta={meta} /> : !proposal && String(r.Channel || deliveryMeta(r).channel || "").toLowerCase() === "email" ? (
         <ToRow to={replyContext(filedDelivery)} disabled={busy || delivery.frozen}
           onSave={async (to) => { await api.put(`/api/reviews/${r.ReviewId}/envelope`, { to }); onChanged?.(); }} />
       ) : (
@@ -353,9 +371,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           <Typography variant="caption" sx={{ color: FAINT }} noWrap>· first, then the reply goes out</Typography>
         </Box>
       )}
-      {!proposal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
+      {!proposal && !isCal && <ReplyFiles reviewId={r.ReviewId} files={deliveryFiles(filedDelivery)}
         text={value} channel={r.Channel} onChanged={onChanged} toRow={toRow} disabled={busy || delivery.frozen} />}
-      {!proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
+      {isCal ? null : !proposal && (busy || delivery.frozen) ? String(r.Channel || "").toLowerCase() === "email" && (
         <Typography variant="caption" data-tq-delivery-cc sx={{ display: "block", color: DIM, mb: 0.75 }}>
           CC: {ccNow.length ? ccNow.join(", ") : "none"}
         </Typography>
@@ -371,7 +389,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         </Typography>
       )}
       <DraftField value={value} onChange={(e) => setText(e.target.value)}
-        placeholder={proposal?.kind === "closeout" ? proposal.placeholder : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
+        placeholder={proposal?.kind === "closeout" ? proposal.placeholder : isCal ? "A note with your answer - or leave it empty" : drafting ? "Drafting…" : r.DraftText ? "" : proposal ? "Proposal details unavailable" : "No draft yet — hit Draft with AI"}
         inputProps={{ readOnly: busy || delivery.frozen, style: { fontSize: 12.5, lineHeight: 1.45 } }} />
       {compare?.reviewId === r.ReviewId && (
         <Box sx={{ mt: 0.75, border: "1px solid #d2d6cf", borderRadius: 1.5, px: 1.25, py: 0.75, bgcolor: PANEL2 }}>

@@ -1687,6 +1687,12 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                         if wants_attachments(m) and not store.message_exists(f"graph:{m['id']}"):
                             try: atts = mail_attachments(tok, s['Address'], m['id'])
                             except Exception as e: logger.warning(f"attachments for {m['id']} failed: {e}")
+                        # an invite is read in full once, as it arrives: the meeting to answer and whether it still needs answering
+                        inv = is_invite(m)
+                        cal_ = None
+                        if inv and not store.message_exists(f"graph:{m['id']}"):
+                            from . import calwrite
+                            cal_ = calwrite.graph_invite(store, tok, s['Address'], m)
                         out = ingest_message(store, file_only=file_only, msg={
                             'external_id': f"graph:{m['id']}", 'channel': 'email',
                             'subject': m.get('subject'), 'body': _body(m), 'own_text': _own(m),
@@ -1694,11 +1700,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                             'to': _addrs(m.get('toRecipients')), 'cc': _addrs(m.get('ccRecipients')),
                             'conversation_id': m.get('conversationId'), 'sent_at': _local(m.get('receivedDateTime') or ''),
                             'source_link': m.get('webLink'), 'source_name': s['Address'],
-                            'images': images_for_triage(store, atts), **files_for_triage(atts), 'invite': is_invite(m),
+                            'images': images_for_triage(store, atts), **files_for_triage(atts), 'invite': inv, **({'cal': cal_} if cal_ else {}),
                             **_header_marks(m),
                             'mail_meta': {'folder': folder, 'focus': m.get('inferenceClassification'),
                                           'flag': (m.get('flag') or {}).get('flagStatus'),
-                                          'invite': is_invite(m)}}, llm=llm)
+                                          'invite': inv, **({'cal': cal_} if cal_ else {})}}, llm=llm)
                         if atts and out.get('message_id') and out['status'] != 'duplicate':
                             try: save_attachments(store, out['message_id'], atts, f"graph:{m['id']}")
                             except Exception as e: logger.warning(f"saving attachments for {m['id']} failed: {e}")

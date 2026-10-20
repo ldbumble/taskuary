@@ -36,6 +36,9 @@ _AUTH = re.compile(r'\((401|403)\)|535|authentication (unsuccessful|failed)|in
 def auth_fix(e) -> dict | None:
     return {'label': 'Sign in again', 'href': MAIL[1]} if isinstance(e, smtplib.SMTPAuthenticationError) or _AUTH.search(str(e)) else None
 MAIL = ('Connect a mailbox', words.href('mail'))          # the places, by their one link (words.json)
+# ENVELOPES THAT ARE NOT MAIL: an invoice Zoho sends and a calendar answer (calwrite.py) leave by their own provider - no reply
+# channel, no redraft, no mailbox receipt to check
+OWN_ROAD = ('zoho_invoice', 'calendar')
 REPLIES = ('Turn replies on', words.href('replies'))
 
 
@@ -733,7 +736,7 @@ def reconcile_sent(store, msg: dict, body: str, since: str = None, to=None, cc=N
 
 def reconcile_outbound(store, envelope: dict, body: str, since: str = None):
     """New messages use the same conservative receipt check as replies."""
-    if str(envelope.get('channel') or '').lower() != 'email' or envelope.get('kind') == 'zoho_invoice':
+    if str(envelope.get('channel') or '').lower() != 'email' or envelope.get('kind') in OWN_ROAD:
         return {'state': 'unknown', 'reason': 'this provider cannot verify an uncertain outbound message'}
     c = store.get_connector_by_type('outlook')
     if not c or not c.get('Active'):

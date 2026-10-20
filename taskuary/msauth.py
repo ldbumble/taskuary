@@ -15,7 +15,7 @@ as before, and graph_token asks here when the card says auth=user.
 Caveats the card states: a tenant that forbids user consent ends the sign-in at "Need admin
 approval" - the admin approves ONCE for everyone (a consent grant, not an app registration).
 Teams chat reading (getAllMessages) is app-only in Graph, so the sign-in covers mail, send
-and calendar; Teams still needs the tenant app.
+and calendar (reading it, and answering invites - Calendars.ReadWrite); Teams still needs the tenant app.
 """
 import os, time, threading
 from urllib.parse import quote
@@ -24,7 +24,11 @@ from loguru import logger
 
 AUTH = 'https://login.microsoftonline.com'
 GRAPH = 'https://graph.microsoft.com/v1.0'
-SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
+# Calendars.ReadWrite answers invites and books meetings (calwrite.py) - and reads, so it replaces Calendars.Read. A sign-in
+# from before it was asked for holds Calendars.Read only: its refresh asks for exactly what it was granted (refresh_scope),
+# so it keeps reading as it always did, and the next sign-in asks for the rest.
+SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'
+LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
 # Taskuary's own registration (multi-tenant + personal accounts, public client, device code
 # on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.
 PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', 'd32e53c9-f00d-49fc-8b93-227b3e0190f0')
@@ -85,10 +89,17 @@ def device_poll(cfg: dict, device_code: str) -> dict:
     raise (AdminConsent if _needs_admin(desc) else RuntimeError)(_friendly(desc))
 
 
+def refresh_scope(cfg: dict) -> str:
+    """What a refresh asks for: what this sign-in was granted. Asking an older sign-in for Calendars.ReadWrite it never
+    consented to is refused (AADSTS65001) - and a refusal reads as the sign-in lapsing, for every read it used to make."""
+    granted = [s for s in str((cfg or {}).get('granted_scope') or '').split() if s.lower() not in ('openid', 'profile', 'email')]
+    return ' '.join(dict.fromkeys(['offline_access', *granted])) if granted else LEGACY_SCOPES
+
+
 def refresh(cfg: dict, refresh_token: str) -> dict:
     r = requests.post(f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/token', timeout=20,
                       data={'client_id': _need_client(cfg), 'refresh_token': refresh_token,
-                            'grant_type': 'refresh_token', 'scope': SCOPES})
+                            'grant_type': 'refresh_token', 'scope': refresh_scope(cfg)})
     # only Microsoft REFUSING the token is a lapse: a 5xx or a throttle is their service having a bad minute, and
     # calling it "signed out" would send the owner to sign in again for nothing (problems.py reads LAPSED)
     if r.status_code in (400, 401):

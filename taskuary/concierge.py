@@ -659,7 +659,8 @@ def assent_verb(item: dict | None) -> str | None:
 NEEDS = {'reply': 'mid', 'approve': 'rid', 'redraft': 'rid', 'not_ours': 'mid', 'not_ours_remember': 'mid',
          'not_ours_sender': 'mid', 'block_sender': 'mid', 'mine': 'mid', 'forward': 'mid', 'archive': 'mid',
          'rerun': 'source_id', 'close': 'tid', 'answer_agent': 'tid', 'split': 'key', 'defer': 'tid', 'continue': 'tid',
-         'chase': 'key', 'let_go': 'key', 'elsewhere': 'key'}
+         'chase': 'key', 'let_go': 'key', 'elsewhere': 'key',
+         'accept_invite': 'mid', 'decline_invite': 'mid', 'propose_time': 'mid', 'find_time': 'mid'}
 SAYS_VERB = {'approve': 'approve', 'redraft': 'redraft', 'not_ours': 'file', 'not_ours_remember': 'file',
              'not_ours_sender': 'file', 'block_sender': 'write an exclusion rule for', 'coding_agent': 'hand to a coding agent', 'regular_agent': 'hand to an agent', 'mine': 'put on your list', 'forward': 'forward',
              'archive': 'archive', 'rerun': 'rerun', 'close': 'close', 'answer_agent': 'answer', 'reply': 'reply to',
@@ -740,6 +741,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
         how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
         return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
+    # a calendar answer's note is the owner's line - no AI redrafts an RSVP (calwrite.py)
+    if verb == 'redraft' and item.get('rid') and store is not None:
+        from . import calwrite
+        if calwrite.env_of(store.get_review(int(item['rid'])) or {}).get('kind') == 'calendar':
+            return f"The note on {what} is yours to change in the box - there is nothing for the AI to redraft."
     # A DRAFT THAT CANNOT LEAVE is not offered Send (capabilities.can_send_draft): a Teams chat is read here and never
     # posted into, so the button - and the Advisor's line over it - could only ever end "not sent" (2026-10-18)
     if verb == 'approve' and item.get('kind') == 'review' and item.get('rid') and store is not None:
@@ -821,6 +827,24 @@ def _general(store, item: dict) -> bool:
     except (TypeError, ValueError): return False
 
 
+CAL_KINDS = ('asked', 'todo', 'fyi', 'task', 'review')
+
+def calendar_asks(store, item: dict | None) -> tuple:
+    """(an invite waiting on the owner's answer, a thread asking to find a time) for the message behind this item - read off the
+    message itself (MailMetaJson 'cal', MeetJson), never its words. Neither while a calendar answer already waits on it; a reply
+    drafted on the thread (a review) still offers Find a time beside it."""
+    if store is None or not item or not item.get('mid') or item.get('kind') not in CAL_KINDS: return False, False
+    from . import calwrite
+    try: m = store.get_message(int(item['mid'])) or {}
+    except (TypeError, ValueError): return False, False
+    if not m: return False, False
+    if any(r.get('Status') == 'pending' and calwrite.env_of(r).get('kind') == 'calendar' for r in store.reviews_for_message(m['MessageId'])):
+        return False, False
+    t = (store.get_task(int(item['tid'])) or {}) if item.get('tid') else {}
+    if t.get('Status') in ('done', 'dropped'): return False, False
+    return item.get('kind') != 'review' and calwrite.needs_answer(calwrite.invite_of(m)), bool(calwrite.meet_of(m))
+
+
 def chips_for(store, item: dict | None, first: str = None) -> list:
     """The action words to put under the assistant's line: this kind's vocabulary, minus anything this
     particular item cannot actually carry. An offered chip is a chip that works - which is the whole
@@ -834,6 +858,14 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     verbs = list(CHIPS[kind] if kind in CHIPS else ('next',))    # the handful's () is deliberate
     # SLIPPED (spec 2026-10-12): the four answers, whatever row leads the item - Chase, Let it go, They answered elsewhere, Remind me
     if item.get('lane') == 'forgotten': verbs = ['chase', 'let_go', 'elsewhere', 'defer', 'next']
+    # AN INVITE WAITING ON YOUR ANSWER is answered here - Accept, Decline, Propose a new time, each drafted for your Send - and a
+    # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
+    # invite is answered, nor is it an agent's or a list's.
+    inv, meet = calendar_asks(store, item)
+    if inv: verbs = ['accept_invite', 'decline_invite', 'propose_time'] + [v for v in verbs if v not in ('reply', 'mine', 'regular_agent')]
+    elif meet:
+        at = next((verbs.index(v) + 1 for v in ('reply', 'redraft') if v in verbs), 0)
+        verbs = verbs[:at] + ['find_time'] + verbs[at:]
     # CONTINUE leads on work an agent left - stopped, saved by you, or paused when Taskuary stopped (A19)
     if item.get('tid') and (item.get('lane') in ('stopped', 'saved') or item.get('paused')): verbs = ['continue'] + [v for v in verbs if v != 'continue']
     # ...and never on FINISHED work: an agent that is done is closed or opened, not sent on (the owner, 2026-10-18: "no keep going

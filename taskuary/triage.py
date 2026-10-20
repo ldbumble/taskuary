@@ -125,7 +125,19 @@ def _bullet(name: str) -> str:
 # WHAT THE ANSWER MUST CONTAIN (title, summary, checklist...), as opposed to what the verdict should BE: appended when a
 # document never asks for it, because without it every task carried the whole email as its ask (2026-09-10, TQ-0665).
 TASK_FIELDS = shipped_section('## 5.') + '\n\n' + shipped_section('## 7.')
-URGENT, DUE, SENDER, GOAL, DANGER = _bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger')
+URGENT, DUE, SENDER, GOAL, DANGER, MEET = (_bullet('urgent'), _bullet('due'), _bullet('sender_class'), _bullet('goal'), _bullet('danger'),
+                                           _bullet('meet'))
+
+
+def meet_of(j: dict, sent=None) -> dict | None:
+    """The verdict's ask for a time to meet - {minutes, from, to} - with only real numbers and real days in it (due_of's bounds);
+    None when the message asks for no meeting. The row's Find a time reads it (calwrite.slots_for)."""
+    m = (j or {}).get('meet')
+    if not isinstance(m, dict): return None
+    try: mins = int(m.get('minutes')) if m.get('minutes') is not None else None
+    except (TypeError, ValueError): mins = None
+    days = {k: due_of({'due': m.get(k)}, sent) for k in ('from', 'to')}
+    return {'minutes': mins if mins and 5 <= mins <= 480 else None, **days}
 
 
 def due_of(j: dict, sent=None) -> str | None:
@@ -163,6 +175,9 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          # what the text tries to make an AI do, or null - read here because triage already reads every word (the owner,
          # 2026-10-15: "not a separate call but part of the triage"); a stranger's card shows it, nothing is gated on it
          'danger': {'type': ['string', 'null']},
+         # the message asks the owner to find a time to meet: how long and which days (its row's Find a time, calwrite.py)
+         'meet': {'type': ['object', 'null'], 'additionalProperties': False, 'required': ['minutes', 'from', 'to'],
+                  'properties': {'minutes': {'type': ['integer', 'null']}, 'from': {'type': ['string', 'null']}, 'to': {'type': ['string', 'null']}}},
          # what closes it beyond the reply (slots.py): emails to OTHER people the message asks the owner to send
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
@@ -660,6 +675,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             if not shape and 'sender_class' not in base: system += '\n\n' + SENDER   # ...and who wrote it (2026-10-11)
             if not shape and 'done_when' not in base: system += '\n\n' + GOAL       # ...and whether it is a goal (2026-10-12)
             if not shape and '"danger"' not in base: system += '\n\n' + DANGER     # ...and what it tries to make an AI do (2026-10-15)
+            if not shape and '"meet"' not in base: system += '\n\n' + MEET         # ...and whether it asks for a time to meet (2026-10-20)
             # the last thing asked for, after every block that says how to JUDGE: the output shape
             if shape: system += '\n\n' + TASK_FIELDS
             # ...and the shape goes on the WIRE as well, where the brain has one: a schema the
@@ -725,6 +741,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 # urgent only means something on work: an fyi that says "urgent" is still an fyi
                 if j.get('urgent') is True and out['intent'] in ('task', 'reply_only'): out['urgent'] = True
                 if out['intent'] in ('task', 'reply_only') and due_of(j, msg.get('sent_at')): out['due'] = due_of(j, msg.get('sent_at'))
+                if meet_of(j, msg.get('sent_at')): out['meet'] = meet_of(j, msg.get('sent_at'))
                 if out['intent'] == 'task' and isinstance(j.get('checklist'), list):
                     out['checklist'] = [x for x in j['checklist'] if isinstance(x, str)]
                 if out['intent'] == 'task' and parse_outputs(j): out['outputs'] = parse_outputs(j)

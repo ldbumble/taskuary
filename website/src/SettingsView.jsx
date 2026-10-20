@@ -326,7 +326,10 @@ const defaultNote = (s, type) => {
   return now === d ? `Default: ${d} \u2014 unchanged.` : `Default: ${d}. Yours: ${now}.`;
 };
 
-const hidden = (name) => HIDDEN.has(name) || isState(name)
+// ONLY A KNOB THE SCHEMA NAMES IS DRAWN (the 2026-10-19 UI walk): Configuration > Other listed twelve one-shot migration flags
+// (assistant_report_renamed_advisor, review_task_backfilled...) as switches - each new one the app wrote slipped every rule below.
+// The schema is the allowlist; the rules stay for the keys it does name.
+const hidden = (name) => !KNOB_META[name] || HIDDEN.has(name) || isState(name)
   || name.startsWith("owner_") || name.endsWith("_seeded");   // owner_* = About you
 const meta = (name) => KNOB_META[name] || { group: "Other", label: name, type: "auto" };
 
@@ -1193,7 +1196,8 @@ export default function SettingsView({ onNavigate, browse = null, browseState = 
     }).filter((c) => (SHELF[section] || []).includes(c.shelf));
     // ...a hit keeps the knob it found: it opened its group at the top, the setting itself somewhere below (the 2026-10-19 UI walk)
     const cards = needle ? hits.map(([k, m]) => ({ key: m.group, title: m.label || k, sub: `${m.group} · ${m.desc || ""}`, section: "config", knob: k }))
-      : section === "config" ? GROUPS.filter((g) => g !== "Coding agent" || canCode).map((g) => ({ key: g, title: g, sub: `${knobsIn(g) || "its own panel"}${knobsIn(g) ? " settings" : ""}` }))
+      // ...a group the schema puts nothing in is not a card: "Other" said "its own panel" over an empty page once strays stopped drawing
+      : section === "config" ? GROUPS.filter((g) => knobsIn(g) && (g !== "Coding agent" || canCode)).map((g) => ({ key: g, title: g, sub: `${knobsIn(g)} settings` }))
       : SHELF[section] ? docCards
       : section ? [{ key: section, title: PAGES[section].title, sub: PAGES[section].desc }] : [];
     const open = gone || !section ? null : browseState.open;

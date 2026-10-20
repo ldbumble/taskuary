@@ -29,7 +29,12 @@ export function put(owner, verbs, ref = "") {
 const pressed = new Set();
 export const onPressed = (f) => { pressed.add(f); return () => pressed.delete(f); };
 export const acted = (id) => pressed.forEach((f) => f(id));
+// ...and BEFORE it runs, to whoever records what was lit against what was pressed (the deep dive, 2026-10-20): read after the press
+// settled, the line had already moved on to the next item's
+const pressing = new Set();
+export const onPressing = (f) => { pressing.add(f); return () => pressing.delete(f); };
 export const press = (id, e, anchor) => {
+  pressing.forEach((f) => { try { f(id); } catch { /* a lost record never stops the press */ } });
   const out = live.get(id)?.run?.(e, anchor);
   Promise.resolve(out).catch(() => {}).then(() => acted(id));
   return out;

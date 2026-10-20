@@ -985,6 +985,12 @@ class SQLiteStore:
                             'Revision TEXT, Tier INTEGER, Line TEXT, Verb TEXT, Label TEXT, CountJson TEXT, EvidenceJson TEXT, Model TEXT, '
                             'Dropped TEXT, CreatedAt TEXT)')
             self.cx.execute('CREATE INDEX IF NOT EXISTS advice_target ON advice(TargetKind, TargetId)')
+            # ...AND WHAT THE OWNER PRESSED while it was shown (the deep dive, 2026-10-20): nothing recorded whether the lit button was the
+            # one pressed. One row per press - advised and pressed verb, whether they matched, and what kind of item from whom - the
+            # evidence the moves in LEARNED.md are learned from (advisor.press, learn.moves)
+            self.cx.execute('CREATE TABLE IF NOT EXISTS advice_press (Id INTEGER PRIMARY KEY, Key TEXT, TargetKind TEXT, TargetId INTEGER, '
+                            'Revision TEXT, Advised TEXT, Pressed TEXT, Match INTEGER, ItemKind TEXT, Channel TEXT, Sender TEXT, '
+                            'SenderDomain TEXT, Scope TEXT, Thread TEXT, Stale INTEGER, CreatedAt TEXT)')
             # a verified 'this mailbox wrote to them' hit, remembered so the mail server is asked once per address (PW-080)
             self.cx.execute('CREATE TABLE IF NOT EXISTS sender_trust (Mailbox TEXT, Address TEXT, Reason TEXT, CheckedAt TEXT, '
                             'PRIMARY KEY (Mailbox, Address))')

@@ -71,7 +71,7 @@ import SetupSteps from "./SetupSteps.jsx";
 import SetupLine from "./SetupLine.jsx";
 import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
-import { refreshToday } from "./calendarToday.js";
+import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
 import { MORE_PX, backAt, dueWord, placed, pulledRow, sectionDone, sectionNext } from "./funnelPile.js";
 import { age, ago, band, bandUntil, plural } from "./timeWords.js";
@@ -149,6 +149,30 @@ const speak = (text) => {
 export const keyForRow = (r) => r.ReviewStatus === "pending" && r.ReviewId ? `review:${r.ReviewId}`
   : r.AgentWaiting && r.TaskId ? `agent:${r.TaskId}` : !r.MessageId && r.TaskId ? `task:${r.TaskId}`   // a search hit on a task: never msg:undefined
   : r.Channel === "report" ? `report:${r.MessageId}` : `msg:${r.MessageId}`;
+
+// THE DAY'S ROOM, HELD (2026-10-20): the meetings, the counts and the since-line land moments after the Walk row draws, and
+// each pushed it down under a reaching pointer. While any of them is still loading, the region above the row keeps the height
+// it settled at last time at this width - this browser's memory, so a first load has none and draws as before. Settled, the
+// region is its own height again, and the page looks exactly as it did.
+const DAY_H = "taskuary_day_height";
+const dayHeights = () => { try { return JSON.parse(window.localStorage.getItem(DAY_H) || "{}") || {}; } catch { return {}; } };
+function DayHold({ loading, children }) {
+  const ref = useRef(null), today = useCalendarToday(), settled = !loading && !!today;
+  useLayoutEffect(() => {
+    const el = ref.current, w = () => String(Math.round(el.clientWidth / 10) * 10);
+    if (!el) return undefined;
+    if (!settled) { const h = dayHeights()[w()]; el.style.minHeight = h ? `${h}px` : ""; return undefined; }
+    el.style.minHeight = "";
+    const save = () => {
+      const { [w()]: _, ...rest } = dayHeights();   // newest last, a handful of widths kept
+      try { window.localStorage.setItem(DAY_H, JSON.stringify(Object.fromEntries([...Object.entries(rest).slice(-7), [w(), el.offsetHeight]]))); } catch { /* memory only */ }
+    };
+    save();
+    const ro = new ResizeObserver(save); ro.observe(el);
+    return () => ro.disconnect();
+  }, [settled]);
+  return <div ref={ref} className="tq-day-hold">{children}</div>;
+}
 
 // ── the pipe: the top of the rail ────────────────────────────────────────────────────────────
 // An assistant that has just woken up says hello like one (the owner, 2026-09-04: "it should be
@@ -2284,6 +2308,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {/* no card.away line here: SinceBlock below already says what came in, and the two counts read as a contradiction (U6) */}
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
+      <DayHold loading={pileLoading || mailReading}>
       <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
       {pileLoading ? <span data-tq-pile-loading="">Loading...</span>
@@ -2291,6 +2316,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {/* greyed with no reason read as broken: say why, and where the rows are */}
       {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
         Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
+      </DayHold>
       <div className="tq-modes">
         <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || walkQueued || (!pileLoading && !canAdvance)}
           // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click

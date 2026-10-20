@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 const read = (n) => fs.readFileSync(path.join(process.cwd(), "src", n), "utf8");
-import { CATALOGUE, PLANNED_CONNECTORS, plannedFor } from "../src/connectorCatalog.js";
+import { CATALOGUE, PLANNED_CONNECTORS, onceEach, plannedFor } from "../src/connectorCatalog.js";
 import { AI_SHELF } from "../src/aiShelf.js";
 
 const CATEGORIES = [
@@ -58,4 +58,16 @@ test("every card in the catalogue, working or planned, has a one-line descriptio
 
 test("unknown categories safely return no entries", () => {
   assert.deepEqual(plannedFor("not a category"), []);
+});
+
+// the server's planned list and this catalogue name the same systems apart: PointClickCare drew twice, once under Corporate systems by
+// its catalogue name and once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)
+test("each connector type is drawn once: a planned card never repeats a live one or an earlier planned one", () => {
+  const groups = onceEach([
+    { title: "Corporate systems", cards: [{ key: "catalog-pcc", type: "pointclickcare", planned: true }, { key: "d1", channel: "intacct" }] },
+    { title: "Agentic web", cards: [{ key: "catalog-x", type: "exa", planned: true }, { key: "d2", channel: "exa" }, { key: "d3", channel: "exa" }] },
+    { title: "Everything else", cards: [{ key: "ppointclickcare", channel: "pointclickcare", planned: true }, { key: "pgraphql", channel: "graphql", planned: true }] },
+  ]);
+  assert.deepEqual(groups.map((g) => g.cards.map((c) => c.key)), [["catalog-pcc", "d1"], ["d2", "d3"], ["pgraphql"]]);
+  assert.match(read("ConnectorsView.jsx"), /const groups = onceEach\(\[/, "the page's groups go through onceEach");
 });

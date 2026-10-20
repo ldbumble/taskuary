@@ -75,3 +75,21 @@ def test_stripping_for_display_does_not_reclassify_the_sender(db):
     plain = a_message(db, 'Plain', body, sender='team@vendor.example')
     wrapped = a_message(db, 'Wrapped', BANNER + '\r\n\r\n' + body, sender='team@vendor.example')
     assert row_for(db, wrapped)['Category'] == row_for(db, plain)['Category']
+
+
+def _uncached(body, n):
+    """The preview as it was before it was remembered: the specification the cache must keep."""
+    from taskuary.triage import own_words, strip_footer
+    text = str(body or '')
+    return (strip_footer(own_words(text[:n * 4])) or text)[:n] if text else ''
+
+
+@pytest.mark.parametrize('n', [0, 1, 40, 400, 4000])
+def test_the_remembered_preview_is_the_preview(n):
+    """Every rail build asked the same question of every row again (2026-10-20); the answer is remembered, and is the
+    same answer - for any body, any cut, a body longer than the scanned head, and one that differs only past it."""
+    long = 'Can you approve the refund?\n' + 'x' * 20000
+    bodies = [None, '', ' ', 'hi', BANNER, BANNER + '\r\n\r\nThe ask.', long, long + 'tail differs', 'a' * (n * 4) + '\nOn Mon, X wrote:\n> q',
+              'Short ask.\n\nNOTICE: this message is confidential and intended only for the addressee.', 12345]
+    for body in bodies * 2:
+        assert processing_all._preview(body, n) == _uncached(body, n)

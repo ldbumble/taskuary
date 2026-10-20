@@ -863,7 +863,14 @@ async function table() {
     const tid = await open();
     if (tid === null) return;                                  // the road was not there to walk: open() said why
     const got = await ringed(page, page.step, tid);
-    // ...and a reload keeps it
+    // ...and a reload keeps it - once the open has landed: a row drawn ahead of the server's answer (a rail pick whose task is read
+    // ahead) is ringed at the press, and a reload in that first tenth of a second never told the server. The address is written when
+    // the answer lands, so the reload waits for it - and an open that never writes it is a RING of its own
+    if (got) {
+      let at = "";
+      for (let t = 0; t < 8000 && at !== `#task=${got}`; t += 250) { at = await page.evaluate(() => location.hash); if (at !== `#task=${got}`) await wait(250); }
+      if (at !== `#task=${got}`) note("RING", page.step, `${tqOf(got)} is on the table and the address says "${at}" 8 s on - a reload would not keep it`);
+    }
     if (got) { used.push(Number(got)); await page.reload({ waitUntil: "load" }); await wait(6000); await ringed(page, `${page.step} reload`, got); }
     walked.push(`table: ${name}, and reloaded`);
   };

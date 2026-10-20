@@ -8303,10 +8303,14 @@ async def terminal_ws(ws: WebSocket, sid: str):
         # is the same corruption by a different road.
         await send_frame(geom_frame(t, owns_geometry()))
         if t.scrollback():
-            snap = hub_term.replay_text(t)
-            if snap: await send_frame({'type': 'out', 'replay': True, 'data': snap,
-                                      'promptPending': hub_term.prompt_pending(t),
-                                      'cli': hub_term.cli_of(t.argv)})
+            # Drawn on the replay worker, never on the loop: here it froze every other socket - the Wall's typing - for
+            # 1-5 s a pane. The send lock is held across the draw so live output that lands meanwhile still follows the
+            # replay on the wire, as it did when nothing else could run.
+            async with send_lock:
+                snap = await asyncio.get_running_loop().run_in_executor(hub_term.REPLAYS, hub_term.replay_snapshot, t)
+                if snap: await ws.send_json({'type': 'out', 'replay': True, 'data': snap,
+                                             'promptPending': hub_term.prompt_pending(t),
+                                             'cli': hub_term.cli_of(t.argv)})
         first_resize = True
         while True:
             m = await ws.receive_json()

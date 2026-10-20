@@ -345,6 +345,8 @@
 .tq-fyi-line .t { flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.45; color: #262521;
   overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .tq-fyi-line .chev { flex: 0 0 auto; color: #746e64; font-size: 10px; }
+/* ON A PHONE THE SUBJECT GETS ITS OWN LINE: beside the sender and the date it was squeezed to one letter a line at 390px (2026-10-19 UI walk) */
+@container (max-width: 480px) { .tq-fyi-line { flex-wrap: wrap; } .tq-fyi-line .t { order: 9; flex-basis: 100%; padding-left: 20px; } }
 .tq-fyi-gist { margin: 0 8px 7px 28px; font-size: 11.5px; color: #6e685f; line-height: 1.45;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-fyi.open .tq-fyi-line { padding-bottom: 6px; }

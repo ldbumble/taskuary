@@ -1006,6 +1006,8 @@ class SQLiteStore:
             # explicit worker events (workerstate.py, PW-222/227): what a run said about itself, by task, run and request
             self.cx.execute('CREATE TABLE IF NOT EXISTS worker_event (Id INTEGER PRIMARY KEY, TaskId INTEGER, Sid TEXT, Kind TEXT, RequestId TEXT, '
                             'Text TEXT, ChoicesJson TEXT, Source TEXT, EventId TEXT UNIQUE, CreatedAt TEXT)')
+            # ...read by task on every session row, hand-raise tick and task list: without this each read scanned every event ever written
+            self.cx.execute('CREATE INDEX IF NOT EXISTS idx_worker_event_task ON worker_event(TaskId, Id)')
             # the assistant's private read on the message (counsel.py) - JSON, shown on the panel
             if 'Brief' not in mcols:
                 self.cx.execute('ALTER TABLE message ADD COLUMN Brief TEXT')

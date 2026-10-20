@@ -58,6 +58,26 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(calls, [1])
         self.assertEqual(answers, ['fresh', 'fresh'])
 
+    def test_a_rebuild_that_began_before_a_write_is_not_shared_with_a_read_after_it(self):
+        # PW-118: a comment landed on the next task while the page's own pile read was building; Next's admission waited on that
+        # build and took it as its selection, then its commit check built again, with the comment, and refused the press
+        s, top = store(), [1]
+        started, release, calls, answers = threading.Event(), threading.Event(), [], []
+
+        def slow_build(_store):
+            calls.append(1); started.set(); release.wait(2)
+            return {'rev': f'build {len(calls)}', 'items': []}
+
+        def read(**kw): answers.append(funnel.pile(s, observed=[], **kw)['rev'])
+
+        with mock.patch.object(funnel, 'announce', return_value=[]), mock.patch.object(funnel, 'build', side_effect=slow_build), \
+             mock.patch.object(funnel, 'alerts', return_value=[]), mock.patch.object(funnel, '_rail_top', side_effect=lambda _s: top[0]):
+            first = threading.Thread(target=read, kwargs={'force': True}); first.start(); self.assertTrue(started.wait(1))
+            top[0] = 2                                                     # the write, while the first build runs
+            second = threading.Thread(target=read, kwargs={'quiet': True}); second.start(); time.sleep(.03); release.set()
+            first.join(2); second.join(2)
+        self.assertEqual(answers, ['build 1', 'build 2'])
+
 
 class PausedConversationTests(unittest.TestCase):
     def test_saved_general_work_is_a_paused_agent_with_its_last_answer(self):

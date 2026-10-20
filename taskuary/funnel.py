@@ -1336,11 +1336,11 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
     workers = workers_signature(observed)
     with _LOCK:
         same_store = _CACHE.get('store') is store
-        if same_store and _CACHE['pile'] and not force:
+        def moved():                                   # written to, or a worker moved, since the cached build began
             top = _rail_top(store)
-            moved = (top is not None and _CACHE.get('mark') is not None and top != _CACHE['mark']) \
-                    or workers is None or workers != _CACHE.get('workers')
-            if moved: _CACHE.update(at=0.0); force = True
+            return (top is not None and _CACHE.get('mark') is not None and top != _CACHE['mark']) \
+                   or workers is None or workers != _CACHE.get('workers')
+        if same_store and _CACHE['pile'] and not force and moved(): _CACHE.update(at=0.0); force = True
         # One websocket event wakes every open browser. If they all arrive while the first forced
         # rebuild is running, that one result satisfies all of them; rebuilding once per tab is a
         # thundering herd that can hold every other API request behind this lock for a minute. A
@@ -1350,8 +1350,11 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         # clock comparison (`cache_at >= requested_at`) is not a generation check: Windows can
         # give two successive time.time() calls the same value, which made an immediate forced
         # refresh return the old agent/message state.
+        # ...and only one that holds every write so far: a rebuild already running when a write landed was built without it. Next's
+        # admission waited on the page's own pile read, took that build as its selection, and its commit check - building again, with
+        # the write - saw the shown item's stamp move and refused the press (PW-118: a comment landed on the task about to be shown)
         refreshed_while_waiting = (same_store and force and _CACHE['pile']
-                                   and _CACHE.get('generation', 0) != seen_generation)
+                                   and _CACHE.get('generation', 0) != seen_generation and not moved())
         if same_store and _CACHE['pile'] and (refreshed_while_waiting or (not force and time.time() - _CACHE['at'] < PILE_EVERY)):
             return _CACHE['pile']
         mark = _rail_top(store)                        # taken BEFORE the build: a write during it counts as after

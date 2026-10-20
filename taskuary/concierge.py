@@ -2543,6 +2543,15 @@ def move_on(store, key: str, actor: str = 'owner') -> dict:
 
     The TASK is left alone. Nothing is cancelled and no session is stopped."""
     if not key: return {}
+    # The row being left is found in the build the rail already holds, while nothing has been written since it began
+    # (on Next the commit guard has just re-read the rail - recheck_selection -> funnel.pile, rebuilt if anything moved).
+    # A keyed build only to read back the same row's sig was 0.2-1 s of every Next on a big home (2026-10-20). Not
+    # there (older than the rail, a batch key) or written since - the lookup it always was.
+    full = funnel.unwritten_full_items(store) if not key.startswith('fyis:') else None
+    held = next((i for i in full or () if i['key'] == key or key in i.get('aliases', [])), None)
+    if held is not None:
+        funnel.settle(store, key, 'surfaced', actor, note=held.get('sig'), read=True, put_down=True)
+        return {'key': key, 'read': True, 'reviews_ended': []}
     try: item = funnel.next_item(store, key, include_surfaced=True) or funnel.item_for_key(store, key)
     except Exception as e:
         logger.debug(f'concierge: nothing to put down for {key} - {e}'); return {}

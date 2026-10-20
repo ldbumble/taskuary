@@ -54,3 +54,18 @@ def test_the_mailbox_is_saved_and_cleared_with_the_rule():
     s.save_policy({'PolicyId': pid, 'Mailbox': ''}, 't')
     assert not s.list_policies()[0]['Mailbox'] and matches(s.list_policies()[0], mail(NW))
     assert 'Mailbox' not in policy.KINDS                                           # a reach, not a kind of match
+
+
+def test_the_rule_editor_saves_and_clears_the_mailbox_through_the_one_save():
+    from fastapi.testclient import TestClient
+    from taskuary import server
+    s = MemoryStore()
+    old, server.store = server.store, s
+    try:
+        c = TestClient(server.app)
+        pid = c.post('/api/policies', json={**RULE, 'Active': True, 'Mailbox': CT}).json()['policyId']
+        assert c.get('/api/policies').json()['data'][0]['Mailbox'] == CT
+        c.post('/api/policies', json={'PolicyId': pid, 'Mailbox': ''})                 # All mailboxes
+        p = c.get('/api/policies').json()['data'][0]
+    finally: server.store = old
+    assert not p['Mailbox'] and matches(p, mail(NW)) and matches(p, mail(CT))

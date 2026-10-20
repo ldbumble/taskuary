@@ -108,7 +108,8 @@ class EveryLabelIsOnTheList(unittest.TestCase):
 
     def test_the_prompt_names_buttons_by_label(self):
         self.assertFalse(dropped_in(advisor.SYSTEM))
-        for v in ('reply', 'answer_agent', 'close', 'let_go', 'continue'): self.assertIn(buttons.label(v), advisor.SYSTEM)
+        for v in ('reply', 'close', 'let_go', 'continue'): self.assertIn(buttons.label(v), advisor.SYSTEM)
+        self.assertNotIn(buttons.label('answer_agent'), advisor.SYSTEM)      # no such button on any row (2026-10-20)
 
 
 class NoRemovedButton(unittest.TestCase):

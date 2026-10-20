@@ -56,7 +56,8 @@ test("every live agent ends the same way, and never without being written up", (
   // agent ends exactly as a coding one does
   assert.doesNotMatch(controls, /liveCodingSession && <Button[^>]*>\{labelOfRow\("save-end"\)/);
   // ...and the action row (layout B) registers the same ending for the canvas, gated on the live session alone
-  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]*?\{ id: "save-end", group: "agent", label: labelOfRow\("save-end"\)/);
+  assert.match(tasks, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview, label: labelOfRow\("save-end"\)/);
+  assert.match(tasks, /\.\.\.\(liveSession \? \[[\s\S]{0,400}\.\.\.\(!pendingReview \? \[stopSave\] : \[\]\),/);
 });
 
 test("task references use readable sans-serif digits", () => {

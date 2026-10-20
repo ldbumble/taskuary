@@ -882,11 +882,9 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # ...but never on a general agent: its card's own chat box is the way on, so the row draws no Continue (the owner,
     # 2026-09-29) - and the Advisor, offered one, picked it and its line was hidden as a move the row could not make (2026-10-15)
     if 'continue' in verbs and _general(store, item): verbs = [v for v in verbs if v != 'continue']
-    # AN AGENT WAITING ON YOU is answered, not ended (U7): Stop and save led the row and nothing said where the answer goes. A stall
-    # has nothing to answer - it picks up on its own - and a saved or stopped one has nobody listening
-    if (item.get('kind') == 'agent' and not item.get('paused') and item.get('lane') not in ('stopped', 'saved')
-            and ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None) != 'stalled'):
-        verbs = ['answer_agent'] + [v for v in verbs if v != 'answer_agent']
+    # NO "ANSWER IT" BUTTON (owner-approved, 2026-10-20: "we don't need that button"): an agent's question is answered by typing in its
+    # own pane, right above the row - and the button was even the lit one over a FINISHED agent whose reply waited on the owner's
+    # approval. A live agent's row leads with Stop and save (CHIPS['agent']); a typed answer still reaches it (decide, the phone).
     # A REPORT THAT FAILED says "run it again" - so Run it again leads, where there is a report to run (B7)
     if item.get('kind') == 'report' and item.get('bad') and item.get('source_id'): verbs = ['rerun'] + [v for v in verbs if v != 'rerun']
     first = canon_verb(first) if first else first             # an old word typed (Later, Handled) promotes the button it became
@@ -1219,8 +1217,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         sub = ws.sub_state(True, bool(item.get('asking')), {'kind': item['request_kind']} if item.get('request_kind') else None)
         line = item['why'] if item.get('request_kind') and item.get('why') else ws.says(sub, item.get('agent') or 'An agent', item['tail'][-1] if sub == 'asking' and item.get('tail') else '')
         if sub == 'stalled': return f"{line} ({item.get('ref') or item['title']}) - it picks up again on its own when the limit lifts. Nothing is lost."
-        # "answer it below" only where Answer it is on the row - a stopped or saved run has nobody listening (chips_for)
-        ans = any(c['verb'] == 'answer_agent' for c in chips_for(store, item))
+        # "answer it below" only where somebody is listening - a stopped, saved or paused run has nobody (a stall is answered above)
+        ans = not item.get('paused') and item.get('lane') not in ('stopped', 'saved')
         return f"{line} ({item.get('ref') or item['title']}) - " + ('answer it below.' if ans else f"{_cap(_from_you(store, item))}.")
     if item['kind'] == 'wrapup':
         return f"{item.get('ref') or item['title']}: the reply went out" + (f" and the work is done ({item['summary']})" if item.get('summary') else '') + '. The task is still open - close it?'

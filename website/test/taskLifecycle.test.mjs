@@ -227,6 +227,7 @@ test("an ended session offers no Stop and save anywhere on the task page - only 
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(page, /canSave|endedByStop/, "no second road to the write-up for a session that has ended");
   assert.equal((page.match(/\{ id: "save-end"/g) || []).length, 1, "one row verb");
-  assert.match(page, /\.\.\.\(liveSession \? \[[\s\S]{0,700}\{ id: "save-end", group: "agent"/, "...and it is the live session's");
+  const live = page.indexOf("...(liveSession ? ["), uses = [...page.matchAll(/\[stopSave\]/g)].map((m) => m.index);
+  assert.ok(uses.length === 2 && uses.every((at) => at > live && at - live < 900), "...and it is the live session's");
   assert.equal((page.match(/>\{labelOfRow\("save-end"\)\}<\/Button>/g) || []).length, 1, "one button: the live controls'");
 });

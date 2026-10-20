@@ -436,13 +436,14 @@ class AuditFixTests(_Rail):
             rid = advisor.notice(s, advisor.SHOWN, 'task', t, tier=2, wait=True, llm=llm)
         self.assertEqual((s._one('SELECT Dropped FROM advice WHERE Id=?', (rid,))['Dropped'], llm.calls), ('left to the item', []))
 
-    def test_an_agent_waiting_on_you_can_be_answered(self):
+    def test_an_agent_waiting_on_you_is_answered_in_its_pane_never_by_a_lit_answer_it(self):
+        """No "Answer it" button (owner-approved, 2026-10-20): it was even the lit one over a finished agent whose reply waited on the
+        owner's approval. The Advisor is never offered it and its prompt never names it; a live agent's row leads with Stop and save."""
         s = MemoryStore()
         vs = advisor.offered(s, {'kind': 'agent', 'lane': 'blocked', 'tid': 1, 'asking': True, 'key': 'agent:1'})
-        self.assertEqual((vs[0]['verb'], vs[0]['label']), ('answer_agent', advisor.concierge.CHIP_WORDS['answer_agent']))
-        self.assertNotIn('next', [v['verb'] for v in vs]); self.assertIn('Answer it', advisor.SYSTEM)
-        # a paused agent has nobody listening: no Answer it to advise
-        self.assertNotIn('answer_agent', [v['verb'] for v in advisor.offered(s, {'kind': 'agent', 'lane': 'blocked', 'tid': 1, 'paused': True, 'key': 'agent:1'})])
+        self.assertNotIn('answer_agent', [v['verb'] for v in vs]); self.assertEqual(vs[0]['verb'], 'stop_agent')
+        self.assertNotIn('next', [v['verb'] for v in vs]); self.assertNotIn('Answer it', advisor.SYSTEM)
+        self.assertIn('answered in its own pane', advisor.SYSTEM)
 
     def test_the_prompt_speaks_by_the_owners_voice_and_says_where_it_stands_in_words(self):
         s = MemoryStore(); s.save_doc('counsel', '# Mine\n\n## Voice\n- Speak like a butler.\n', 'owner')

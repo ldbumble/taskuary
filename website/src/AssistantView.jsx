@@ -959,6 +959,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const chatEpoch = useRef(0);
   const resettingRef = useRef(false);
   const turnFlight = useRef(false);       // React state updates after the event; this closes same-tick double submits
+  const turnsBegun = useRef(0);           // every turn sent, counted: a read sent before one began is older than its answer (readChat)
   const openExtra = useRef(null);         // the agent start / act a task opened by name rides in on (openTaskCard -> landed)
   const stopRef = useRef(null);           // the Stop beside the dots: aborts the turn being waited on
   // ...only a turn the model is ANSWERING. Next loading the following item is a fetch, not an answer: it showed "Stop"
@@ -1035,6 +1036,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turnOnce = useCallback(async (body) => {
+    turnsBegun.current += 1;
     if (body.mode === "next") body = { ...body, fyi: fyiWant.current };
     setWork([]);
     const stop = new AbortController(); stopRef.current = stop;
@@ -1126,6 +1128,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // The live socket carries no event for these turns (store.add_comment pokes nothing), so this read
   // runs on the 30 s tick even while the socket is up - the pile beside it does not need to.
   const readChat = useCallback(async (epoch = chatEpoch.current) => {
+    const turns = turnsBegun.current;
     const { data: st } = await api.get("/api/concierge");
     if (epoch !== chatEpoch.current || resettingRef.current) return false;
     setMsgs((m) => mergeDurableTurns(m, st.messages || []).messages);
@@ -1140,9 +1143,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // (PW-162) wherever it is read; never while a turn of ours is in flight, because that answer
     // is the newer truth and the poll would drag the table back a step.
     // ...and not over a task the owner opened by name here: the walk's Current is not what this tab is showing then
+    // ...nor from a read sent before a turn that has answered since: it was taken before that turn moved the table, and dragged a
+    // cold link's task back to the item before it (a link's pull outran the boot's own read, found by the perf pass, 2026-10-20)
     if (!turnFlight.current && !cardRef.current) {
       const said = st.current || null;
-      if ((said?.key || null) !== (currentRef.current?.key || null)) putOnTable(said, "sync");
+      if (turns === turnsBegun.current && (said?.key || null) !== (currentRef.current?.key || null)) putOnTable(said, "sync");
     }
     return true;
   }, [putOnTable]);

@@ -171,7 +171,7 @@ def state(store) -> dict:
                                                  'type': brain.get('Type') or ''}, 'fix': fix,
            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'first_items': items,
            'empty': empty, 'next': nxt, 'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
-           'more_connected': more_connected(store), 'dismissed': dismissed(store)}
+           'more_connected': more_connected(store), 'dismissed': dismissed(store), 'mailboxes': _mailboxes(store)}
     return {**out, **rail(out)}
 
 
@@ -493,6 +493,13 @@ ABOUT_WANT = {'name': 'about', 'schema': {'type': 'object', 'additionalPropertie
                              'systems': {'type': 'array', 'items': {'type': 'string'}}}}}
 SIG_MAILS, IN_MAILS = 12, 40            # sent mails whose ends are read for the signature; received mails read for names and systems
 SYS_DOMAINS, SYS_TOPICS = 40, 40        # the vendors and the returning subjects the systems are read from
+
+
+def _mailboxes(store) -> list:
+    """The mailboxes connected so far, for About your work's mailbox step - never a reason for the state itself to fail."""
+    from . import histgen
+    try: return histgen.mailboxes(store)
+    except Exception as e: logger.debug(f'setup: mailboxes not listed - {e}'); return []
 
 
 def more_connected(store) -> int:

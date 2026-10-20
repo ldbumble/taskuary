@@ -122,6 +122,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
   const [signFail, setSignFail] = useState(null);                           // {cid}: the last ChatGPT sign-in ENDED without signing in
   const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
+  const [aboutStep, setAboutStep] = useState("");                           // ...and which question: its mailbox step draws the email cards
+  const onAboutStep = useCallback((s) => { setAboutStep(s); setOpen(null); }, []);
   // THE ONE LIT MOVE (Light, below): the row verb it is, as state so the row has it in the pass the shelf is drawn; and the words of
   // the canvas button it lit, read off that button so the line can only name what the screen shows
   const [rowLit, setRowLit] = useState(""), [shown, setShown] = useState({ label: "", off: false });
@@ -261,10 +263,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   }, [st, fails, reload]);
   // while mail is being read - or a Microsoft sign-in may finish in another tab, or a key is being tried on an AI card - read again
   useEffect(() => {
-    if (!st || st.step === "done" || (st.step === "ai" && !open)) return undefined;
+    if (!st || (st.step === "done" && aboutStep !== "mailboxes") || (st.step === "ai" && !open)) return undefined;
     const id = setTimeout(reload, st.step === "reading" ? 3000 : 5000);
     return () => clearTimeout(id);
-  }, [st, reload, open]);
+  }, [st, reload, open, aboutStep]);
   // a step moved: the rail reloads and says what is next, and so does the top bar's chip (TaskHubPage listens) - it went stale
   // ...and About your work saved is a step too: keyed on the step alone, the chip said "about your work" after it (2026-10-16)
   useEffect(() => {
@@ -503,7 +505,8 @@ ${fix.detail || ""}`, screen: "Setup",
   // Try again - Light finds it) or Setup complete's; the row's fix (Install, Change AI); the step's card (setupSteps.cardOf); the row's
   // Next, or Finish setup on the last step. About your work lights its own (FirstRunAbout).
   const opened = (open && conn) || (focus && cliDetail);
-  const canvas = q === "done" || ((q === "ai" || q === "mail") && !!opened);
+  const mailAbout = q === "about" && aboutStep === "mailboxes";
+  const canvas = q === "done" || ((q === "ai" || q === "mail" || mailAbout) && !!opened);
   // ...Pick a different AI pressed over a failing one: the owner asked for another, so the failing card is not the move, nor its fix the line
   const fixKey = fix && (fix.key || `cli-${fix.name}`);
   const shelfShown = q === "mail" ? mail.slice(0, FIRST) : q === "ai" ? [...ai.slice(0, FIRST), ...coding].filter((c) => !browse || c.key !== fixKey) : [];
@@ -561,7 +564,9 @@ ${fix.detail || ""}`, screen: "Setup",
       <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More email")}
-      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} />}
+      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout}
+        onStep={onAboutStep} mailboxes={st.mailboxes || []} mailShelf={mailAbout && <Shelf cards={mail} more="More email"
+          opened={open ? `c${open.id}` : null} detail={<Box data-tq-setup-scope="">{detail}</Box>} onAll={() => setOpen(null)} />} />}
       {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) - or, with the AI
           failing on the mail, that problem and Change AI as its one big button */}
       {q === "done" && <Box data-tq-setup-scope=""><SetupDone onDay={finishThen(onFinish)} onMore={() => go("other")}

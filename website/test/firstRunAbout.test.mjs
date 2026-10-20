@@ -6,9 +6,9 @@ import { readFileSync } from "node:fs";
 
 const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
 
-test("the questions come one at a time: name, organisation, title, signature, systems, then the job", () => {
+test("the questions come one at a time: name, organisation, title, signature, systems, every mailbox, then the job", () => {
   const src = read("FirstRunAbout.jsx");
-  assert.match(src, /export const STEPS = \["name", "org", "role", "signature", "systems", "job"\];/);
+  assert.match(src, /export const STEPS = \["name", "org", "role", "signature", "systems", "mailboxes", "job"/);
   assert.match(src, /useVerbs\("setup-about", a \? \[/, "its own Back and Next in the row");
   assert.match(src, /&& \(!x\[k\] \|\| \(data\.guessed \|\| \[\]\)\.includes\(k\)\)\)/, "the mail fills only empty boxes and the guessed name");
   assert.doesNotMatch(src, /placeholder=/, "a box is filled from the mail or empty - never a sample answer that reads as one");
@@ -19,7 +19,26 @@ test("the job is written once the title is answered, and the last press saves wh
   assert.match(src, /if \(step === "role" && who\(a\) !== learnedFor\.current\) learn\(\);/);
   assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", x\)/);
   assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/job"\)/);
-  assert.match(src, /const nextLabel = last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : "Next"/);
+  assert.match(src, /const nextLabel = last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : step === "mailboxes" \? "That's all my mail" : "Next"/);
+});
+
+// EVERY MAILBOX BEFORE THE JOB (the owner, 2026-10-20): never skipped - Skip before it lands on it - and it moves on once one is in
+test("the mailbox step comes right before the job, and Skip lands on it instead of passing it", () => {
+  const src = read("FirstRunAbout.jsx");
+  const body = src.slice(src.indexOf("export const STEPS")), steps = JSON.parse(body.slice(body.indexOf("["), body.indexOf("]") + 1));
+  const at = steps.indexOf("mailboxes");
+  assert.equal(at + 1, steps.indexOf("job"), "right before the job");
+  // the rule as the component states it: every question before the mailboxes skips TO them; on them there is no Skip
+  assert.match(src, /export const skipTo = \(at\) => \(at < MAIL_AT \? MAIL_AT : null\);/);
+  assert.match(src, /export const canSkip = \(step\) => step !== "mailboxes";/);
+  const skipTo = (i) => (i < at ? at : null);
+  for (let i = 0; i < at; i++) assert.equal(skipTo(i), at, `Skip on ${steps[i]} lands on the mailboxes`);
+  assert.match(src, /\{!again && canSkip\(step\) && <Box><Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
+  assert.match(src, /if \(to !== null\) return setAt\(to\);/);
+  // "That's all my mail" moves on only with one connected, and the cards are the email step's own
+  assert.match(src, /\(step !== "mailboxes" \|\| boxes > 0\)/);
+  assert.match(src, /step === "mailboxes" \? "That's all my mail" : "Next"/);
+  assert.match(read("FirstRun.jsx"), /mailboxes=\{st\.mailboxes \|\| \[\]\} mailShelf=\{mailAbout && <Shelf cards=\{mail\} more="More email"/);
 });
 
 test("a failed email sign-in is the Advisor's line, with what to do", () => {
@@ -79,7 +98,7 @@ test("More connections suggests in the catalogue's search, never as row buttons,
 // "pull the signature from the email and use that in emails ... have a setting so they can check it" (the owner, 2026-10-16)
 test("the email signature is a setup question and a Settings field, both with a preview under an email", () => {
   const about = read("FirstRunAbout.jsx"), settings = read("SettingsView.jsx");
-  assert.match(about, /export const STEPS = \["name", "org", "role", "signature", "systems", "job"\];/);
+  assert.match(about, /export const STEPS = \["name", "org", "role", "signature", "systems", "mailboxes", "job"/);
   assert.match(about, /data-tq-signature-preview=""/);
   assert.match(settings, /if \(m\.type === "signature"\) return <SignatureSetting/);
   assert.match(settings, /api\.post\("\/api\/signature\/learn"/);

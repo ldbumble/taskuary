@@ -8,6 +8,8 @@ const limits = {
   firstVisibleMs: Number(process.env.TASKUARY_BROWSER_VISIBLE_MS || 8000),
   navigationMs: Number(process.env.TASKUARY_BROWSER_NAVIGATION_MS || 3000),
   inputMs: Number(process.env.TASKUARY_BROWSER_INPUT_MS || 1500),
+  // not a budget: firstVisibleMs is the budget, measured from before goto. This only bounds a load that never ends.
+  loadMs: 60000,
 };
 
 test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t) => {
@@ -27,7 +29,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   });
 
   const started = performance.now();
-  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: limits.loadMs });
   await page.waitForSelector(".tq-pile-row.next .card", { timeout: limits.firstVisibleMs });
   await page.waitForSelector(".tq-compose textarea:not([disabled])", { timeout: limits.firstVisibleMs });
   const firstVisibleMs = Math.round(performance.now() - started);
@@ -43,7 +45,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   // the cold first paint above, then let the synthetic world finish moving and consume the helper's
   // fresh blank dock before making deterministic owner-navigation assertions below.
   await settleDemoWatcher(harness, await waitForDemoReplays(harness));
-  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: limits.loadMs });
   await page.waitForFunction(() => {
     const walk = [...document.querySelectorAll("button")]
       .find((button) => button.innerText === "Walk me through my tasks");
@@ -87,11 +89,24 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   assert.ok(firstVisibleMs <= limits.firstVisibleMs, `Assistant took ${firstVisibleMs}ms to become visible`);
   assert.equal((await bodyText(page)).includes("restoring the session"), false, "Assistant loading must not start a terminal replay");
 
+  // The budget is the PAGE's time on each keystroke - from the key event reaching the window to every listener, React's
+  // render and its commit having run (the commit's microtask runs before the bubbling window listener). Timing
+  // input.type() from here counted ~70 CDP round trips as well, and a busy box failed the budget on that transport
+  // alone (1652ms for a page that spent a fraction of it). The round trip is still reported, as typedMs.
   const input = await page.$(".tq-compose textarea");
-  const inputStarted = performance.now();
+  await page.evaluate(() => {
+    const spent = window.__tqInputMs = [];
+    let began = 0;
+    for (const kind of ["keydown", "keypress", "input", "keyup"]) {
+      window.addEventListener(kind, () => { began = performance.now(); }, true);
+      window.addEventListener(kind, () => { spent.push(performance.now() - began); }, false);
+    }
+  });
+  const typedStarted = performance.now();
   await input.type("phase zero latency probe");
-  await page.waitForFunction(() => document.querySelector(".tq-compose textarea")?.value === "phase zero latency probe", { timeout: limits.inputMs });
-  const inputMs = Math.round(performance.now() - inputStarted);
+  await page.waitForFunction(() => document.querySelector(".tq-compose textarea")?.value === "phase zero latency probe", { timeout: 30000 });
+  const typedMs = Math.round(performance.now() - typedStarted);
+  const inputMs = Math.round(await page.evaluate(() => window.__tqInputMs.reduce((a, b) => a + b, 0)));
   assert.ok(inputMs <= limits.inputMs, `Assistant input took ${inputMs}ms`);
   await input.click({ clickCount: 3 });
   await page.keyboard.press("Backspace");
@@ -102,7 +117,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
     ["Board", "text", "Agent board", "census sync fails when a site has no manager"],
     ["Reports", "text", "reports read and summarise", "Headcount by site, nightly"],
   ];
-  const timings = { firstVisibleMs, inputMs };
+  const timings = { firstVisibleMs, inputMs, typedMs };
   for (const [label, waitKind, readyMarker, fixtureText] of surfaces) {
     const before = performance.now();
     await clickNav(page, label);
@@ -128,7 +143,7 @@ test("P0-BROWSER renders isolated fixture flows", { timeout: 120000 }, async (t)
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "tab navigation must retain Current");
 
-  await page.reload({ waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: limits.loadMs });
   await page.waitForSelector(".tq-pile-row.current .card", { timeout: limits.firstVisibleMs });
   assert.equal(await page.$eval(".tq-pile-row.current .card b", (node) => node.textContent.trim()), advancedCurrent,
     "durable replay must restore Current");

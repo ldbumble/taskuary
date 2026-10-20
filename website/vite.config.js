@@ -11,6 +11,9 @@ const demoOff = (mode) => loadEnv(mode, fileURLToPath(new URL(".", import.meta.u
   : [{ find: /^\.\/demoApi\.js$/, replacement: fileURLToPath(new URL("./src/demoOff.js", import.meta.url)) }];
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  // the browser harness gives each checkout its own dep cache: worktrees share node_modules through a junction, and a config
+  // whose root differs re-optimized the one shared cache under another checkout's open page (browser/harness.mjs)
+  ...(process.env.TASKUARY_VITE_CACHE ? { cacheDir: process.env.TASKUARY_VITE_CACHE } : {}),
   resolve: { alias: demoOff(mode) },
   build: { outDir: "../taskuary/web", emptyOutDir: true },
   // TASKUARY_API points the dev server at another backend (a --demo instance, a blank home) without touching the one you run

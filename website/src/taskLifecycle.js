@@ -39,6 +39,11 @@ export const agentPhase = ({ session, run, transcript, report, conversation, fin
   return handed === false ? null : AGENT.idle;
 };
 
+// WHAT A LIVE SESSION SAYS ABOUT ITSELF, as one comparable value: whether it is alive and waiting, its sub-state and sentence, the
+// question an answer binds to. The task page holds the session it found and must take the same session's new word when it changes (G7).
+export const sessionWord = (s) => (s ? JSON.stringify([!!s.alive, !!s.waiting, s.state || null, s.line || null, s.request?.request_id || null,
+  (s.questions || []).length, !!s.held, !!s.promptPending, s.busy ?? null]) : "");
+
 // A general agent's chat stays open after it answers, so "the session exists" is not "it is working": open and not busy is an
 // answer waiting on you (the owner, 2026-10-15: the heading said "researcher is working" under its finished answer). A pty
 // session has no `busy`, so a coding agent is never read this way.

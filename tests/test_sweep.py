@@ -1,12 +1,12 @@
-"""Nothing falls through (sweep.py): a person's ask nobody answered comes back past its day, wherever the rail's window ends.
-No model, said once per set of facts, and nothing else on the rail moves."""
+"""Nothing falls through (sweep.py): a person's ask nobody answered comes back past its day, wherever the rail's window ends;
+an open task in no state says so on its own row. No model, said once per set of facts, and nothing else on the rail moves."""
 from datetime import datetime, timedelta
 from unittest import mock
 
 import pytest
 
 from taskuary import demo, funnel, processing_startup, processing_unread, sweep
-from taskuary.store import MemoryStore
+from taskuary.store import MemoryStore, task_ref
 from taskuary.testing import Factory
 
 
@@ -85,7 +85,7 @@ def test_a_fresh_ask_a_notice_and_a_handled_ask_are_left_alone(s):
 def test_it_is_said_once_and_a_line_put_down_stays_down(s):
     ask(s, 6)
     assert check(s)['said'] == 1
-    assert check(s) == {'asks': 1, 'said': 0, 'cleared': 0}             # not again tomorrow for the same ask, and kept
+    assert check(s) == {'asks': 1, 'loose': 0, 'said': 0, 'cleared': 0}             # not again tomorrow for the same ask, and kept
     i = next(iter(lines(s).values()))
     assert i['Status'] == 'open' and i['SaidCount'] == 1
     s.set_idea_status(i['IdeaId'], 'dismissed', 'owner')
@@ -100,6 +100,57 @@ def test_an_answer_puts_the_line_down(s):
     assert check(s)['cleared'] == 1 and next(iter(lines(s).values()))['Status'] == 'done'
 
 
+# ── the open task in no state ────────────────────────────────────────────────────────────────
+
+def waiting(s, **kw): return Factory(s).task(title='Vendor contract renewal', status='waiting', kind='general', source='manual', **kw)
+
+
+def card_of(s, tid): return next(c for c in rail(s, include_read=True) if c.get('tid') == tid)
+
+
+def test_waiting_on_nobody_named_says_so_on_the_tasks_own_row(s):
+    tid = waiting(s)
+    assert card_of(s, tid)['lane'] == 'theirs'
+    n = len(rail(s))
+    assert check(s)['loose'] == 1
+    c = card_of(s, tid)
+    assert (c['lane'], c['why']) == ('yours', f'{task_ref(tid)} is waiting on nobody named') and c['unread']
+    assert len(rail(s)) == n                                                          # its own row, not a second one
+
+
+def test_waiting_on_a_person_with_no_date_and_with_one(s):
+    no_day = waiting(s, Assignee='person:ray.colton@northwind.example')
+    on_day = waiting(s, Assignee='person:erin@northwind.example', DueAt=(datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'))
+    check(s)
+    assert card_of(s, no_day)['why'] == f'{task_ref(no_day)} is waiting on Ray Colton with no date'
+    assert not card_of(s, on_day).get('loose')
+
+
+def test_a_date_takes_the_line_off_at_once_and_the_next_check_puts_it_down(s):
+    tid = waiting(s, Assignee='person:ray.colton@northwind.example')
+    check(s)
+    s.update_task(tid, {'DueAt': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d')}, 'owner')
+    assert not card_of(s, tid).get('loose') and card_of(s, tid)['lane'] == 'theirs'
+    assert check(s)['cleared'] == 1
+
+
+def test_remind_me_and_an_agent_are_states(s):
+    later = waiting(s, RemindAt=(datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d 08:00:00'))
+    assert check(s)['loose'] == 0 and not card_of(s, later).get('loose')
+
+
+def test_the_owners_move_is_a_state(s):
+    Factory(s).task(title='Draft the board pack', status='open', kind='general', source='manual')
+    assert check(s)['loose'] == 0
+
+
+def test_it_runs_once_a_day(s):
+    waiting(s)
+    with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        assert sweep.run_if_due(s)['loose'] == 1 and sweep.run_if_due(s) is None
+        assert sweep.run_if_due(s, datetime.now() + timedelta(days=1))['said'] == 0     # tomorrow: checked, nothing said again
+
+
 # ── and nothing else moves ───────────────────────────────────────────────────────────────────
 
 KEEP = ('key', 'lane', 'why', 'title', 'tid', 'mid', 'unread', 'deferred', 'kind')
@@ -108,16 +159,19 @@ KEEP = ('key', 'lane', 'why', 'title', 'tid', 'mid', 'unread', 'deferred', 'kind
 def test_the_demo_world_is_in_order_and_its_rail_is_unchanged(s):
     demo.seed(s)
     before = [{k: c.get(k) for k in KEEP} for c in rail(s)]
-    assert check(s) == {'asks': 0, 'said': 0, 'cleared': 0}
+    assert check(s) == {'asks': 0, 'loose': 0, 'said': 0, 'cleared': 0}
     assert [{k: c.get(k) for k in KEEP} for c in rail(s)] == before
 
 
-def test_in_the_demo_world_only_the_new_row_appears(s):
+def test_in_the_demo_world_only_the_new_rows_appear(s):
     demo.seed(s)
     before = {c['key']: {k: c.get(k) for k in KEEP} for c in rail(s)}
-    mid = ask(s, 7)
+    mid, tid = ask(s, 7), waiting(s)
     added = {c['key']: {k: c.get(k) for k in KEEP} for c in rail(s)}
     check(s)
     after = {c['key']: {k: c.get(k) for k in KEEP} for c in rail(s)}
-    assert [(c['kind'], c['lane'], c['mid']) for k, c in after.items() if k not in added] == [('idea', 'asked', mid)]
-    assert all(after[k] == added[k] for k in added) and all(after[k] == before[k] for k in before)
+    new = [after[k] for k in after if k not in added]
+    assert [(c['kind'], c['lane'], c['mid']) for c in new] == [('idea', 'asked', mid)]        # the aged ask, once
+    moved = [k for k in added if k in after and after[k] != added[k]]
+    assert [after[k]['tid'] for k in moved] == [tid] and after[moved[0]]['lane'] == 'yours'  # the loose task's own row
+    assert all(after[k] == before[k] for k in before)                                           # every demo row as it was

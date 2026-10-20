@@ -12,6 +12,8 @@ JARGON = tuple(_J['jargon'])
 LOCAL = _J['local']
 # what the Advisor's strip says when it has no line, by advisor.status's reason - one sentence and the one move it lights
 ADVICE_NONE = {k: v for k, v in _J['advice_none'].items() if not k.startswith('_')}
+# what the daily check says about an item that fell through, by why (sweep.py)
+LOOSE = {k: v for k, v in _J['loose_ends'].items() if not k.startswith('_')}
 def local(tool: str) -> str: return f'{tool} ({LOCAL})'
 
 

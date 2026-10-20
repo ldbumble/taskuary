@@ -7727,6 +7727,11 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             outcomes.sweep_if_due(target_store)
         except Exception as e:
             logger.warning(f'outcome sweep skipped: {e}')
+        try:                                            # ...and nothing fell through: the aged ask, the open task in no state (sweep.py)
+            from . import sweep
+            sweep.run_if_due(target_store)
+        except Exception as e:
+            logger.warning(f'loose-end check skipped: {e}')
         _lap('housekeeping')
         return added
     finally:

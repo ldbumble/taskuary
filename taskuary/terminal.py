@@ -52,13 +52,15 @@ SEED_CHUNK, SEED_CHUNK_GAP = 160, .03
 # 2,600 + this 6,000 + a playbook block) ran past SEED_CEILING's 24,000. 5600 clears the coding document's
 # measured 4,884 - the whole point of raising this - with room for an edit (4900 cleared it by 16
 # characters, a trap for whoever next touches that doc), while the ceiling stays reachable only in a
-# genuinely maximal seed, where the trim below cuts the ask and nothing else.
-DOC_CHARS = 5600
+# genuinely maximal seed, where the trim below cuts the ask and nothing else. 6400 since the ask-before-deploy
+# rule (2026-10-20) took it to 5,688; the seed's trim cuts the ask, never this, so the ceiling is not what bounds it.
+DOC_CHARS = 6400
 # AGENT.md, the rules both worker kinds share (PW-182); its boundaries lead. At 2600 it cut the doc's own
 # 3,087 characters mid-sentence (2026-10-09), so no coding session ever read how to end with --done/--reply/
 # --no-reply - DOC_CHARS's trap again. 4000 holds the 3,358 it measures now, with room for an edit; past the
-# ceiling the ask still gives, never the rules.
-AGENT_CHARS = 4000
+# ceiling the ask still gives, never the rules. ...and it grew to 4,034 unnoticed, so the closing "a session John
+# opened is theirs to end" was cut away; 4800 holds the 4,249 the no-promised-later-step rule makes it (2026-10-20).
+AGENT_CHARS = 4800
 SOUL_CHARS = 1200                   # legacy budget; SOUL.md no longer rides in a worker prompt (PW-184)
 # The fastest way to type a prompt is not to type it at all: these CLIs take the first prompt
 # on the COMMAND LINE, so the session starts with it already submitted - instant, and immune
@@ -1790,7 +1792,7 @@ def seed_text(store, tid: int, instruction: str = None, repo: str = None, cwd: s
                     'Do NOT create GitHub issues, PRs or other tracker items unless this message asks for one - '
                     'Taskuary IS the tracker and this task is the record. ')
                  + ('You may push and deploy as the work needs. ' if push_ok else
-                    'Do NOT push, deploy, publish or release - commit locally and stop; the owner reviews and pushes. ')
+                    'Do NOT push, deploy or release unless told to - commit and stop; must it go live? Ask and wait. ')
                  + 'Missing required detail? Change nothing: ask one concrete question here, say if the sender must '
                    'answer, and wait.')
     # how this session ENDS. Without it the only ending is a person clicking Done, so a task

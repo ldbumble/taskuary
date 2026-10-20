@@ -205,6 +205,17 @@ _SUMMARY_NOW = ('"summary": "<two sentences. The first says who wants what from 
 with open(__file__[:__file__.replace('\\', '/').rfind('/') + 1] + 'triage_kind_rules.json', encoding='utf-8') as _f:
     _KIND_RULES = [tuple(p) for p in json.load(_f)]
 _CODING_WAS = "`coding` is for work INSIDE a system this install holds the code or the credentials for: a change to one of the owner's repositories, a query against one of their databases, a file or report produced from them, an account on a system they run."
+# CODING.md said only "do not push, deploy, publish or release unless the brief says you may: commit locally and stop", so a
+# change the requester gets only once it is LIVE was committed, closed with --done and a reply promising "I'll let you know
+# when it's live" - and the owner had to Continue it to deploy (2026-10-20). The stop is a question now, and AGENT.md says a
+# reply never promises a later step. Both go into a document the owner edited where the old text still reads as shipped.
+_DEPLOY_WAS = '- Do not push, deploy, publish or release unless the brief says you may: commit locally and stop.'
+_DEPLOY_NOW = ("- Push, deploy, publish or release only when the brief or John's Continue says to - otherwise commit locally and stop.\n"
+               '  When the ask is met only once the change is LIVE, that stop is a question, not the end: ask John here, "ready to\n'
+               '  deploy <what> to <where> - go ahead?", and wait - no `--reply`, no `--done`. On yes: deploy, check it is live, then finish.')
+_PROMISE_AT = '- "Nothing to do here" is also an ending'
+_PROMISE_NOW = ('- A reply goes when what it says is true. Never promise a later step ("I\'ll let you know when it\'s live"): do\n'
+                '  it, or ask for the go-ahead and wait. If something is genuinely left, say plainly what, and who does it.\n')
 _CODING_NOW = "`coding` is for a CHANGE inside a system this install holds the code or the credentials for: code changed in one of the owner's repositories, data changed in one of their systems, an account created or granted on a system they run. Reading from those systems - a query, a report, a look-up - changes nothing and is `general`."
 _SHAPE_WAS = ('Classify one inbound work message. Answer JSON only: {"intent": "task|reply_only|fyi", '
               '"kind": "coding|general|task", "why": "<one concrete sentence: what you saw in the message '
@@ -1337,6 +1348,16 @@ class SQLiteStore:
                 if _CODING_WAS in body:
                     self.cx.execute("UPDATE doc SET Content=?, UpdatedAt=? WHERE Name='triage'", (body.replace(_CODING_WAS, _CODING_NOW), _now()))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('triage_reading_not_coding', '1', 'migration')")
+            # ...and THE STOP BEFORE A DEPLOY IS A QUESTION (_DEPLOY_WAS): a CODING.md / AGENT.md the owner edited no longer tracks
+            # the template, so the two rules go in where the old text still reads as shipped, once. Everything else stays theirs.
+            if not self.cx.execute("SELECT 1 FROM setting WHERE Name='coding_asks_before_deploy'").fetchone():
+                for name, was, now in (('coding', _DEPLOY_WAS, _DEPLOY_NOW), ('agent', _PROMISE_AT, _PROMISE_NOW + _PROMISE_AT)):
+                    row = self.cx.execute('SELECT Content FROM doc WHERE Name=?', (name,)).fetchone()
+                    body = (row['Content'] or '') if row else ''
+                    if body.count(was) != 1 or 'Never promise a later step' in body: continue
+                    if '\r\n' in body: now = now.replace('\n', '\r\n')
+                    self.cx.execute('UPDATE doc SET Content=?, UpdatedAt=? WHERE Name=?', (body.replace(was, now), _now(), name))
+                self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('coding_asks_before_deploy', '1', 'migration')")
             # ...and THE GUIDE REPLACES THE PATCHWORK (the owner, 2026-10-09: "make it clear how to triage things, what to
             # look for, signs that would suggest things"). The sentence swaps above each fixed one rule; the template is now
             # one guide written as questions and signs, and the judgement code used to append lives in it. A document only

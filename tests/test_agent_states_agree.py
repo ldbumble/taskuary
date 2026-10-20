@@ -48,6 +48,16 @@ class AgentStatesAgreeTests(unittest.TestCase):
                 got[f'{kind}-{st}'] = (self.tasks[tid]['State'], self.pile.get(tid, {}).get('lane'))
         self.assertEqual(got, {f'{k}-{st}': want for k in ('coding', 'general') for st, want in AGREE.items()})
 
+    def test_every_agent_is_on_the_board_in_its_column(self):
+        """The Board draws agent work only (HadAgent): a general agent that finished or failed leaves only its worker events, and
+        was off the Board while its state named a column (G7)."""
+        from taskuary import taskstate
+        for kind in ('coding', 'general'):
+            for st in AGREE:
+                t = self.tasks[self.w[f'{kind}-{st}']]
+                self.assertTrue(t['HadAgent'], f'{kind}-{st}')
+                self.assertIsNotNone(taskstate.column(t['State']), f'{kind}-{st}')
+
     def test_an_asking_agent_carries_its_question_and_answer_it_everywhere(self):
         for kind in ('coding', 'general'):
             tid = self.w[f'{kind}-asking']

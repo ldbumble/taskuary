@@ -14,11 +14,14 @@ const go = () => {};
 const shelf = [{ key: "c1", title: "ChatGPT", state: "off", go }, { key: "c2", title: "Anthropic API", state: "off", go },
   { key: "cli-claude", title: "Claude", state: "on", go }, { key: "cli-codex", title: "Codex", state: "off", go }];
 
-test("a fresh home lights the AI already connected here, not the shelf's first card", () => {
+test("the AI already connected here is lit; with none connected no AI card is - the person picks, Taskuary never does", () => {
   assert.equal(cardOf(st(false), "ai", shelf).title, "Claude");
   const two = shelf.map((c) => (c.key === "cli-codex" ? { ...c, state: "on" } : c));
   assert.equal(cardOf(st(false), "ai", two).title, "Claude", "several connected: the first the shelf shows");
-  assert.equal(cardOf(st(false), "ai", shelf.map((c) => ({ ...c, state: "off" }))).title, "ChatGPT", "none connected: the shelf's first");
+  // the owner, 2026-10-20: "the advisor says claude is installed, set it up?? ... stop assuming that ... let them choose the AIs"
+  assert.equal(cardOf(st(false), "ai", shelf.map((c) => ({ ...c, state: "off" }))), null, "none connected: no vendor is lit");
+  const mail = [{ key: "c7", title: "Outlook mail", state: "off", go }, { key: "c8", title: "Gmail", state: "off", go }];
+  assert.equal(cardOf(st(true), "mail", mail).title, "Outlook mail", "the email step still lights the shelf's first");
 });
 
 test("a failing card leads - its fix is on it - and a card that cannot be pressed is never the move", () => {

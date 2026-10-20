@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
@@ -104,7 +104,9 @@ async function waitHttp(url, child, headers = {}) {
   }, child);
 }
 
-export async function startHarness() {
+// `fresh`: a first start on a machine with nothing set up instead of the demo world - its PATH holds only the system's own
+// folders and `bin` (a folder of fake CLIs, or none), so no AI tool of the machine running the test can be seen
+export async function startHarness({ fresh = false, bin = "" } = {}) {
   const backendPort = await freePort();
   const frontendPort = await freePort(new Set([backendPort]));
   if (backendPort === frontendPort || forbiddenPorts.has(backendPort) || forbiddenPorts.has(frontendPort)) {
@@ -151,13 +153,23 @@ export async function startHarness() {
     PYTHONUNBUFFERED: "1",
   };
 
+  let pythonExe = python, backendEnv = isolated;
+  if (fresh) {
+    // the interpreter by its full path: the backend's own PATH no longer finds it
+    pythonExe = execFileSync(python, ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+    const system = process.platform === "win32" ? [path.join(process.env.SystemRoot || "C:\\Windows", "System32"), process.env.SystemRoot || "C:\\Windows"]
+      : ["/usr/bin", "/bin"];
+    backendEnv = { ...isolated, TASKUARY_FIXTURE_FRESH: "1", PATH: [bin, ...system].filter(Boolean).join(path.delimiter) };
+    delete backendEnv.TASKUARY_DEMO;
+    if (process.platform === "win32") delete backendEnv.Path;
+  }
   let backend;
   let frontend;
   let browser;
   try {
-    backend = loggedProcess(python, [path.join(here, "fixture_server.py")], {
+    backend = loggedProcess(pythonExe, [path.join(here, "fixture_server.py")], {
       cwd: repository,
-      env: isolated,
+      env: backendEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const token = isolated.TASKUARY_TOKEN;

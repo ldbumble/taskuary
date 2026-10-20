@@ -121,9 +121,12 @@ def state(store) -> dict:
     # while Connections had them all connected (the owner, 2026-10-16)
     from . import config as config_mod
     linked = set((config_mod.load() or {}).get('cli_connections') or {})
+    # ...and only one that is ON THIS MACHINE: a saved connection to a CLI nobody installed read "Connected - pick it to make it your
+    # AI" and was lit, on a fresh install with no Claude Code (the owner, 2026-10-20: "stop assuming that")
     ais = [{'name': k['name'], 'title': PLAIN.get(k['name'], (k['label'], ''))[0], 'sub': PLAIN.get(k['name'], ('', 'Already on this computer'))[1],
             'installed': k['installed'], 'install': k['install'] if k.get('installable') else '', 'setup': k.get('setup') or '',
-            'why_not': k.get('why_not') or '', 'more': k['name'] not in OFFERED, 'connected': k['name'] in linked} for k in ais]
+            'why_not': k.get('why_not') or '', 'more': k['name'] not in OFFERED,
+            'connected': k['name'] in linked and bool(k['installed'])} for k in ais]
     by = lambda t: (store.get_connector_by_type(t) or {}).get('ConnectorId')
     keys = [{'type': t, 'title': label, 'sub': where, 'cid': by(t)} for t, label, where in KEYS if by(t)]
     mail = [{'type': t, 'title': label, 'sub': sub, 'cid': by(t)} for t, label, sub in MAIL if by(t)]

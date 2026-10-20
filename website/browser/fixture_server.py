@@ -17,8 +17,12 @@ HOST = "127.0.0.1"
 PORT = int(os.environ["TASKUARY_PORT"])
 if PORT in (7787, 7790):
     raise RuntimeError("the browser fixture may not use Taskuary's live ports")
-if not os.environ.get("TASKUARY_HOME") or os.environ.get("TASKUARY_DEMO") != "1":
+# FRESH: a first start on a machine with nothing set up - not the demo world, still a disposable home and no outbound sockets
+FRESH = os.environ.get("TASKUARY_FIXTURE_FRESH") == "1"
+if not os.environ.get("TASKUARY_HOME") or (os.environ.get("TASKUARY_DEMO") != "1" and not FRESH):
     raise RuntimeError("the browser fixture requires an isolated demo home")
+if FRESH and os.environ.get("TASKUARY_DEMO"):
+    raise RuntimeError("a fresh fixture is not the demo")
 
 listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -72,9 +76,14 @@ async def run() -> None:
         raise RuntimeError("browser fixture event-loop connection guard is not active")
     print("PHASE0_FIXTURE_NETWORK_GUARD=blocked", flush=True)
 
+    if FRESH:
+        # the registry's PATH is this box's, never a fresh machine's: the fixture's PATH is all a CLI can be found on
+        from taskuary import agents
+        agents._fresh_path = lambda: os.environ.get("PATH", "")
     from taskuary.server import app, store
-    from fixture_changes import install_processing_changes
-    install_processing_changes(app, store)
+    if not FRESH:
+        from fixture_changes import install_processing_changes
+        install_processing_changes(app, store)
 
     config = uvicorn.Config(app, host=HOST, port=PORT, log_level="warning")
     server = uvicorn.Server(config)

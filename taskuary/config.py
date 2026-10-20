@@ -102,13 +102,11 @@ def load() -> dict:
     # to act on. It is written back to config.toml so it survives a restart.
     from . import guard
     guard.ensure_tokens(_read, _write, cfg['server'])
-    # --dangerously-skip-permissions matters: without it a headless claude waits forever
-    # for permission approvals nobody can click. stream-json (+ required --verbose) makes
-    # claude emit events AS IT WORKS so the Board can stream the run live.
-    cfg.setdefault('agents', {'coding': {'kind': 'coding', 'cmd': 'claude',
-                                        'args': ['-p', '--dangerously-skip-permissions',
-                                                 '--output-format', 'stream-json', '--verbose'],
-                                        'resume_args': ['--resume'], 'timeout': 1500}})
+    # A FRESH INSTALL NAMES NO AI (the owner, 2026-10-20: "the advisor says claude is installed, set it up?? ... it was not, and
+    # stop assuming that"): this default carried `cmd = "claude"`, cli_connections.migrate split it into a `claude` connection on
+    # the first start, and setup drew Claude as "Connected" and lit it on a machine with no Claude Code. The coding profile is
+    # instructions on whichever brain the owner picks (clis.KNOWN carries each CLI's headless flags for when they do).
+    cfg.setdefault('agents', {'coding': {'kind': 'coding'}})
     cfg.setdefault('github', {})
     cfg['server'].update(_env_server())
     return cfg

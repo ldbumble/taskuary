@@ -33,7 +33,7 @@ PURPOSE = {
     'message.file':             "file it - not ours, just this one",
     'message.archive':          'archive it: off the pipe and closed, nothing deleted',
     'preference.exclude_sender': 'teach triage to file this sender or subject from now on - their mail still arrives (`scope`: sender | subject)',
-    'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the Timeline',
+    'preference.sender_rule':   'an exclusion rule in Settings: this sender never reaches triage again and what already arrived leaves the work rail',
     'item.settle':              'put the item down, read and settled - `verb`: done (the item on the table is the target)',
     'task.complete':            (f'{L("close")} - the task is finished; `note` (optional): what came of it, in the owner\'s words when they '
                                  'said it ("the GL export reconciled fine") - kept on the task'),

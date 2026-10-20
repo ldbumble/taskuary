@@ -90,7 +90,7 @@ class ReportSetupTests(unittest.TestCase):
         self.assertEqual(r['outcome']['link'], f"#report={src['SourceId']}")                                # the real resource and its screen
         self.assertEqual(run(s, p).json()['duplicate'], True)                                               # a second click creates nothing
         dock = general.dock_task(s)[0]['TaskId']
-        self.assertTrue(any('is on the Reports tab and runs on its schedule' in (c.get('Body') or '') for c in general.chat_rows(s, dock)))
+        self.assertTrue(any('is under Reports and runs on its schedule' in (c.get('Body') or '') for c in general.chat_rows(s, dock)))
 
     def test_a_report_the_chat_model_calls_for_is_built_by_the_composer_not_the_chat(self):
         """The CALL carried the chat model's own config - invented keys - and the card read "report.create" (2026-09-24)."""

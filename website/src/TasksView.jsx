@@ -350,7 +350,7 @@ export default function TasksView({ selected, onSelect, onChanged, autostart, on
           <Box sx={{ overflowY: "auto", flex: 1, bgcolor: "#f1ede7", px: 1, py: 1 }}>
             {!tasks ? <CircularProgress size={20} sx={{ m: 2 }} /> : !shown.length && !nOlder
               ? <Empty>{search ? `No tasks match “${search}”.`
-                : !tasks.length ? "No tasks yet — they arrive from the Timeline as work comes in, or start one with New."
+                : !tasks.length ? "No tasks yet — they arrive on your work rail as work comes in, or start one with New."
                 : filter === "upcoming" ? "Nothing put away. Remind me on a task puts it here until that day."
                 : filter === "done" ? "Nothing finished yet. Mark done on a task puts it here."
                 : "Nothing in progress. New starts one, or the Assistant hands you work as it comes in."}</Empty> : shown.map((task) => {

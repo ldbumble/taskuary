@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { JARGON, jargonIn, place, placeName } from "../src/words.js";
+import { GONE, JARGON, jargonIn, noun, place, placeName } from "../src/words.js";
 import { canvasRequestFromHash } from "../src/canvasLinks.js";
 
 const SRC = path.join(process.cwd(), "src");
@@ -33,4 +33,31 @@ test("no page types a place of this app: the sentence asks words.place", () => {
     code.forEach((l, i) => { if (typed.test(l)) hits.push(`${f}:${i + 1}`); });
   }
   assert.deepEqual(hits, []);
+});
+
+// THE SURFACES THAT ARE GONE are named in no line the owner reads (2026-10-19 UI walk: copy still sent people to the Timeline, the
+// Reports tab and the Assistant tab). Read in the strings and the JSX text of every page, comments left out - "Timeline" the component
+// name is code, not a line
+const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
+const linesOf = (s) => [...(s.match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g) || []), ...(s.match(/>[^<>{}]+</g) || [])];
+test("no page, demo or catalogue line names a surface that is gone", () => {
+  const hits = [];
+  const files = [...fs.readdirSync(SRC).filter((f) => /\.(jsx?|mjs)$/.test(f)).map((f) => path.join(SRC, f)),
+    path.join(process.cwd(), "..", "taskuary", "connectorcatalog.json")];
+  // ...a bare "Timeline" is a destination key the router still resolves (TaskHubPage go()), not a line
+  for (const f of files) for (const l of linesOf(stripComments(fs.readFileSync(f, "utf8")))) if (l.slice(1, -1) !== "Timeline")
+    for (const re of GONE.map((w) => new RegExp(`\\b${w}\\b`))) if (re.test(l)) hits.push(`${path.basename(f)}: ${l.slice(0, 90)}`);
+  assert.deepEqual(hits, []);
+  assert.ok(jargonIn("it lands on the Timeline"), "a gone surface is flagged with the jargon");
+  assert.equal(jargonIn("the project timeline slipped"), null, "...matched as written, so the word itself is not");
+});
+
+// ONE NAME PER THING (2026-10-19 UI walk): the coding tools' card, its crumb and the hints that send you there say words.noun's name
+test("the AI CLI agents are named by words.noun, never typed", () => {
+  assert.equal(noun("cli_agents"), "AI CLI agents");
+  assert.ok(placeName("ai_apps").endsWith(noun("cli_agents")), "the place and the noun say the same name");
+  const typed = [];
+  for (const f of fs.readdirSync(SRC).filter((f) => /\.jsx?$/.test(f) && !f.startsWith("demo")))
+    for (const l of linesOf(stripComments(fs.readFileSync(path.join(SRC, f), "utf8")))) if (/AI CLI agents/.test(l)) typed.push(`${f}: ${l.slice(0, 80)}`);
+  assert.deepEqual(typed, []);
 });

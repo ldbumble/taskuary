@@ -12,7 +12,7 @@ const said = (r) => [
   r.playbooks_added.length ? `Added ${r.playbooks_added.length} playbook${r.playbooks_added.length > 1 ? "s" : ""}.` : "",
   `Mail with no better-suited worker now goes to ${r.profile}.`,
   r.ledger_narrowed ? `${r.ledger_narrowed} is set to read: every bill becomes a proposal you approve.` : "",
-  r.workflow_id ? "The daily portal job is on the Reports tab under Workflows, switched off until you have signed in to the portal once." : "",
+  r.workflow_id ? "The daily portal job is under Reports, in Workflows, switched off until you have signed in to the portal once." : "",
 ].filter(Boolean).join(" ");
 
 export default function RoleStart({ onApplied }) {

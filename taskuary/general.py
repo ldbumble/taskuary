@@ -286,7 +286,7 @@ def dock_task(store, actor='owner') -> tuple[dict, bool]:
         return task, False
     tid = store.create_task({
         'Title': 'Taskuary guide',
-        'Summary': 'An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.',
+        'Summary': 'An always-available walkthrough of the work rail, outstanding work, reviews, and agent output.',
         'Kind': 'general', 'Status': 'open', 'Priority': 'normal',
         'Source': 'assistant', 'SourceRef': DOCK_TAG,
     }, actor, numbered=False)        # a conversation, not work: it takes no TQ number (store.INTERNAL_TASK_BASE)
@@ -335,7 +335,7 @@ def dock_snapshot(store) -> str:
     lines = [f'WORKSPACE SNAPSHOT ({datetime.now().strftime("%Y-%m-%d %H:%M local")})']
     lines.append('\nNEEDS THE OWNER NOW')
     if not needs:
-        lines.append('- Nothing in the recent Timeline is currently marked as needing the owner.')
+        lines.append('- Nothing on the work rail is currently marked as needing the owner.')
     for r in needs:
         ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
         who = r.get('FromName') or r.get('FromEmail') or r.get('SourceName') or r.get('Channel')
@@ -361,7 +361,7 @@ def dock_snapshot(store) -> str:
             lines.append(f"  Draft ready: {one_line(r.get('DraftText'), 700)}")
 
     lines.append('\nRECENT TIMELINE')
-    if not recent: lines.append('- The Timeline is empty in the current lookback window.')
+    if not recent: lines.append('- The work rail is empty in the current lookback window.')
     for r in recent[:18]:
         ref = task_ref(r['TaskId']) if r.get('TaskId') else f"message {r.get('MessageId')}"
         flag = ' | NEEDS OWNER' if r.get('NeedsYou') else ''
@@ -569,7 +569,7 @@ def _prompt(store, tid: int) -> tuple[str, str]:
             "what agents produced, and what to do next. Prioritize; do not merely recite every row. "
             "When you mention a task, link it as [TQ-0001](#task=1), using its real id. The buttons above "
             "the chat start focused walkthroughs and open Task, Report, and Connection creation surfaces; "
-            "the smaller links open Timeline, Tasks, and Review. You may explain or perform actions only through "
+            "the smaller links open what they name. You may explain or perform actions only through "
             "tools you actually have; approval and sending remain the owner's actions.\n\n"
             "ACTION SURFACE\nThe chat renders a separate action card beneath your commentary for the "
             "pending review or task you name. Treat that card as part of this workspace. When a reply is "

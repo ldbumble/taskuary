@@ -636,7 +636,7 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
       // response.data.detail is flattened to a string for rendering (apiError.js). Reading the
       // flattened one is what showed a reconcile lag as "Request failed with status code 409".
       if (processingErrorCode(e) === "processing_target_moved") {
-        setErr(e.detail?.message || "That item changed. Refreshing the Timeline.");
+        setErr(e.detail?.message || "That item changed. Refreshing your work rail.");
         closeSelection(); load(rowsLen.current);
       } else {
         setErr(processingErrorMessage(e, "Failed to load item detail"));
@@ -1523,7 +1523,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
       )}
       {!answered && !replyOpen && (["report", "assistant"].includes(sel.Channel) ? (
         <Typography variant="caption" sx={{ color: FAINT, display: "block", lineHeight: 1.7 }}>
-          Nobody sent this, so there is nobody to answer. Findings stay with the Timeline item.
+          Nobody sent this, so there is nobody to answer. Findings stay with the item on your work rail.
         </Typography>
       ) : (
         <ChoiceRow tint={PANEL2} busy={opening} onClick={openReply}
@@ -1664,7 +1664,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                 <Box>
                   <Typography sx={{ color: INK, fontWeight: 600, fontSize: 12.5 }}>Triaging this message…</Typography>
                   <Typography variant="caption" sx={{ color: FAINT }}>
-                    It is safely on the Timeline. The task, agent, and reply steps will appear when the decision lands.
+                    It is safely on your work rail. The task, agent, and reply steps will appear when the decision lands.
                   </Typography>
                 </Box>
               </Box>
@@ -1959,7 +1959,7 @@ const ReviewCanvas = ({ sel, detail, editText, setEditText, editOwner, decide, o
                     {skipped !== null ? `Skipped${skipped ? ` · ${skipped} hidden` : ""}` : "Skip sender"}</TrayBtn>
                   <Confirm open={skipConfirm} onClose={() => setSkipConfirm(false)} confirmLabel="Skip this sender"
                     title={`Skip everything from ${sel.FromEmail}?`}
-                    text={"Their mail leaves the Timeline now - what they already sent, and everything after it. "
+                    text={"Their mail leaves your work rail now - what they already sent, and everything after it. "
                       + `It is still received and kept; it just never shows here again. The rule lives under ${placeName("rules")}, where it can be switched off.`}
                     onConfirm={skipSender} />
                 </Box>

@@ -9,13 +9,18 @@ export const place = (id) => PLACES[id] || { name: String(id || ""), href: "" };
 export const placeName = (id) => place(id).name;
 export const placeHref = (id) => place(id).href;
 export const JARGON = words.jargon;
+// one name per thing the owner is shown, and the surfaces that are gone (words.json's nouns and gone)
+export const NOUNS = Object.fromEntries(Object.entries(words.nouns).filter(([k]) => !k.startsWith("_")));
+export const noun = (id) => NOUNS[id] || String(id || "");
+export const GONE = words.gone.words;
 // a tool that runs on the owner's own machine - "claude (on this computer)", the server's words.local said the same way
 export const LOCAL = words.local;
 export const localName = (tool) => `${tool} (${LOCAL})`;
 // one pattern per word: an all-caps word (CLI, PR, JSON) is matched as written, the rest in any case; a prefix ("claude-") has no
 // end boundary. Word edges keep "approve" from reading as "PR".
 const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-export const JARGON_RES = JARGON.map((w) => new RegExp(`\\b${esc(w)}${/-$/.test(w) ? "" : "\\b"}`, w === w.toUpperCase() ? "" : "i"));
+export const JARGON_RES = [...JARGON.map((w) => new RegExp(`\\b${esc(w)}${/-$/.test(w) ? "" : "\\b"}`, w === w.toUpperCase() ? "" : "i")),
+  ...GONE.map((w) => new RegExp(`\\b${esc(w)}\\b`))];   // a removed surface is matched as written: "the project timeline" is a word
 export const jargonIn = (text) => { const s = String(text || ""); for (const re of JARGON_RES) { const m = s.match(re); if (m) return m; } return null; };
 // WHEN THE ADVISOR HAS NO LINE (advisor.status {none: why}): the sentence the strip says and the one move the row lights. An unknown
 // reason is said as "nothing" - a strip that goes blank is the thing this exists to stop

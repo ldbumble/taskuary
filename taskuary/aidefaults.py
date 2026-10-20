@@ -37,7 +37,7 @@ SLOTS = [
      'why': 'This is the expensive, capable gear: it reads your repository and writes code.'},
     {'key': 'concierge_ai', 'label': 'Assistant', 'pick': 'brain', 'gear': 'light',
      'model_setting': 'concierge_model',
-     'desc': 'Speaks on the Assistant tab and on your phone (WhatsApp, Telegram), and walks you through the pipe.',
+     'desc': 'Speaks in the chat here and on your phone (WhatsApp, Telegram), and walks you through the pipe.',
      'why': 'Turn by turn and conversational, so it rides the same quick gear as triage.'},
     # The fourth worker had no row here, so the page that exists to say "what will actually run"
     # was silent about half the tasks on the board. `assistant_ai` was buried on the Assistant tab

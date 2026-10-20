@@ -120,7 +120,7 @@ STOPS = [
         _can('close it - which is yours, never the agent\'s', 'Tasks')]},
     {'key': 'reports', 'title': 'Reports & workflows', 'image': '/walk/reports.png',
      'blurb': 'A report is a scheduled check that reads and summarises. A workflow is the one that '
-              'writes. Both file what they find onto the Timeline on their own schedule.',
+              'writes. Both file what they find onto the work rail on their own schedule.',
      'goto': _goto('Reports'), 'can': [
         _can('schedule a check that reads and summarises', 'Reports', 'report=new'),
         _can('build a workflow that writes back to a system', 'Reports'),

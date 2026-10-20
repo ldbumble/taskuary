@@ -1274,7 +1274,7 @@ export function SetupCard({ card, onNavigate, onHandOff }) {
       <div className="tq-card-actions">
         <Button size="small" variant="contained" disableElevation disabled={!text.trim()} onClick={() => { onHandOff?.(text); setText(""); }} sx={primary}>Open walkthrough</Button>
         <span className="sp" />
-        <Button size="small" onClick={() => { openAppLink("report=new"); onNavigate?.("Reports"); }} sx={faint}>Reports tab</Button>
+        <Button size="small" onClick={() => { openAppLink("report=new"); onNavigate?.("Reports"); }} sx={faint}>Reports</Button>
         <Button size="small" onClick={() => onNavigate?.("Connections")} sx={faint}>Connections tab</Button>
       </div>
     </CardShell>

@@ -191,8 +191,8 @@ def test_notion(store, c) -> str:
     if not c.get('Secret'): raise RuntimeError('no integration secret saved - create one at notion.so/my-integrations, then share pages with it')
     me = _notion(c, 'get', '/users/me')
     _seed_source(store, c, me.get('name') or 'Notion')
-    return (f"authenticated as {me.get('name') or 'the integration'} - pages shared with it show on the "
-            'Timeline as they change (a feed: Notion edits are information, not assignments)')
+    return (f"authenticated as {me.get('name') or 'the integration'} - pages shared with it show on your "
+            'work rail as they change (a feed: Notion edits are information, not assignments)')
 
 
 def poll_notion(store, c, since, llm=None, file_only=False) -> int:

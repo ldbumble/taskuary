@@ -35,7 +35,7 @@ import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource }
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
-import { placeName } from "./words.js";
+import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 
@@ -67,7 +67,7 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
       <Box sx={{ flex: 1, minWidth: 240 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up — needs an AI app on this computer</Typography>
         <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
-          {ready.why || "Set one up under Connections > AI CLI agents, or follow the Guide tab and fill the card yourself."}
+          {ready.why || `Set one up under ${placeName("ai_apps")}, or follow the Guide tab and fill the card yourself.`}
         </Typography>
       </Box>
       {openAgents && <Button size="small" variant="outlined" onClick={openAgents}>Set up an AI app</Button>}
@@ -162,7 +162,7 @@ const META = {
       "Remind the owner the bot must be invited into each of those channels (/invite @bot) or the read will fail; then Test (POST {base}/api/connectors/{cid}/test{hdr}), turn the connector on, SETUP DONE."] },
   telegram: { group: "Messaging", channel: "telegram", srcLabel: "Chat IDs — only chats flipped ON become work", srcPh: "-1001234567890",
     fields: [["Assistant chat id", "assistant_chat", "",
-      "Your own private chat with the bot — the assistant walks you through your work there, and the Assistant tab can hand its walk to it"],
+      "Your own private chat with the bot — the assistant walks you through your work there, and the chat here can hand its walk to it"],
       pollSecondsField("telegram")],
     secretLabel: "bot token (from @BotFather)",
     desc: "A Telegram bot as an inbound channel - approved chats flow through triage; approved replies go back into the same chat. Unknown chats never become work: a bot is public.",
@@ -459,7 +459,7 @@ const META = {
       "Paste it under Credentials. Leave model blank for muse-spark-1.2, or name muse-spark-1.3.",
       "muse-spark-1.2-contributor costs about a twelfth as much — because you opt in to Meta using your prompts and completions to improve its products, and it is rate-limited to 100 requests/minute against 3,000. Do not point it at real work mail unless you mean to share it.",
       `Test runs a real round trip. Enable to wire it into triage, drafts and the digest — or pick it explicitly under ${placeName("sorting")}.`,
-      "This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under AI CLI agents (Windows, macOS and Linux)."] },
+      `This is the TRIAGE road. For coding sessions on Muse Spark, install the muse CLI under ${placeName("ai_apps")} (Windows, macOS and Linux).`] },
   // NINE PROVIDERS, ONE SURFACE. Each of these speaks the OpenAI chat-completions schema exactly,
   // so llm.py holds them as a table (OPENAI_COMPATIBLE) rather than nine branches, and a card here
   // is a base url, a default model and a key. base_url is offered on every one for the same reason
@@ -560,7 +560,7 @@ const META = {
     howto: ["Install Ollama (ollama.com) and pull a model: ollama pull llama3.2 — or point base_url at LM Studio (http://127.0.0.1:1234), llama.cpp or vLLM.",
       "Enter the model name (ollama list shows what's installed). No key needed for a local server.",
       `Test runs a real round trip through the local model, then Enable makes it the triage brain — or pick it under ${placeName("sorting")}.`,
-      "For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under AI CLI agents."],
+      `For the CODING side, local models ride the CLI road instead: add any CLI that reads a prompt on stdin under ${placeName("ai_apps")}.`],
     agent: ["Check for a local server yourself: GET http://127.0.0.1:11434/api/tags (Ollama) - and http://127.0.0.1:1234/v1/models for LM Studio. If Ollama is not installed, ask the owner once whether to install it, then do it (winget install Ollama.Ollama on Windows, brew install ollama on a Mac, the ollama.com script on Linux) and start it.",
       "If /api/tags lists no models, ask which to pull (suggest llama3.2 for a laptop, qwen2.5 for more headroom) and run `ollama pull <model>` yourself - it downloads gigabytes, so say so and wait for it.",
       "Save model (and base_url only if not the default) in ConfigJson; no Secret. Test (POST {base}/api/connectors/{cid}/test{hdr}) runs a real round trip. Turn the connector on and say SETUP DONE - and that the owner can pick it as the triage brain under Settings."] },
@@ -706,7 +706,7 @@ const MSSQL_AGENT = [
   "Check the machine yourself first: `Get-OdbcDriver -Name '*SQL Server*'` (Windows) or `odbcinst -q -d` lists the ODBC drivers; none installed means the owner needs 'ODBC Driver 18 for SQL Server' from Microsoft - offer to install it (winget install Microsoft.msodbcsql.18) and do it if they agree.",
   "Ask for the server (HOST or HOST\\INSTANCE) and database. Probe reachability yourself (Test-NetConnection <host> -Port 1433, or the instance's port) before saving.",
   "Try Windows authentication first - auth 'windows' in ConfigJson, no Secret - because on a domain-joined machine it usually just works. Only if Test says the login failed, ask for a SQL login: auth 'sql', username in ConfigJson, the password as Secret.",
-  "Save server, database, auth (and driver only to override the auto-pick) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - it connects for real and reports the server version - then SETUP DONE; reports are built on the Reports tab.",
+  "Save server, database, auth (and driver only to override the auto-pick) in ConfigJson, Test (POST {base}/api/connectors/{cid}/test{hdr}) - it connects for real and reports the server version - then SETUP DONE; reports are built under Reports.",
 ];
 
 /* ── data-connection cards that share one field-driven detail page (mssql keeps its
@@ -724,7 +724,7 @@ const DATA_META = {
       "Build the actual reports (query + AI summary + schedule) on the REPORTS tab; agents with the tool role can query it too."],
     agent: ["Ask what database it is and where (engine, host, port, database name, user). Build the connection string yourself with {password} where the password goes - never the real one - and save it as conn_str in ConfigJson; ask for the password and save it as Secret.",
       "Install the Python driver yourself in the environment Taskuary runs in: `pip install taskuary[db]` plus psycopg2-binary (Postgres), pymysql (MySQL), snowflake-sqlalchemy (Snowflake) as needed; check with `pip show`. Then Test (POST {base}/api/connectors/{cid}/test{hdr}) - it runs SELECT 1; an engine that wants FROM DUAL gets test_query in ConfigJson.",
-      "Say SETUP DONE and that reports are built on the Reports tab."] },
+      "Say SETUP DONE and that reports are built under Reports."] },
   aws: { title: "Amazon Web Services", types: ["aws", "s3_object", "cloudwatch_logs"], discovers: true,
     fields: [["access key id", "access_key_id"], ["region(s), comma-separated (e.g. us-east-2, us-east-1)", "region"]],
     secretLabel: "secret access key (write-only; blank = server env / ~/.aws / instance role)",
@@ -734,8 +734,8 @@ const DATA_META = {
       "Several regions? List them comma-separated. CloudWatch log groups exist PER REGION - the same account shows a completely different set in us-east-1 and us-east-2 - so discovery sweeps each one and every object remembers where it was found. S3 is one global namespace, listed once, and each bucket is asked for its own region so reads go to the right endpoint.",
       "Nothing to install: the desktop build ships boto3, and where it is missing the card's Test offers an Install button rather than a command to go and run.",
       "Test & discover calls STS (reporting which account/ARN you are) and then asks the keys what they can SEE: every S3 bucket and CloudWatch log group is listed under 'What you have access to'.",
-      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new objects / matching log lines show up to read), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."],
+      "Each discovered object gets its own picker: report only (the default — selectable under Reports, nothing polled), feed (new objects / matching log lines show up to read), tasks (they go through triage), or off.",
+      "Reports then offers the same objects as pipelines: S3 object (read a file or list a prefix), CloudWatch logs (grep a group), and a generic AWS call (any service + operation, e.g. athena or ec2)."],
     agent: ["Look for credentials this machine already has before asking: `aws sts get-caller-identity` (if the CLI is installed), ~/.aws/credentials, AWS_* environment variables. If they exist and the owner agrees to use them, leave the key fields blank - the server uses its own credentials.",
       "Otherwise the IAM user and keys are the owner's to create (read-only policies such as AmazonS3ReadOnlyAccess, CloudWatchLogsReadOnlyAccess); ask for the access key id and region(s), save them in ConfigJson, and the secret access key as Secret.",
       "Install boto3 yourself: `pip install taskuary[aws]`. Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) reports the account and lists buckets and log groups; read that back, then SETUP DONE - what each object does (report, feed, tasks) is picked on the card."] },
@@ -753,7 +753,7 @@ const DATA_META = {
       "Multi-entity? Leave the entity id blank to sit at the top level, or name one to scope every report to it.",
       "Test logs in for real and then tries to READ \u2014 a green card that only proves the password works hides the usual failure, which is a role with permission on nothing.",
       "Build the reports on the REPORTS tab: name an object (GLENTRY, APBILL, VENDOR, GLACCOUNT\u2026), the fields you want and any filters. Nobody remembers the field ids: the source card's 'What fields does APBILL have?' asks Sage itself and lists them, custom fields included, and the same lookup is a report in its own right when you want to hear about a new one.",
-      "Or just say what you want in English: at the top of the Reports tab for a whole report, or on any source card for that one card. Either way it reads the object's real field list before writing the query.",
+      "Or just say what you want in English: at the top of Reports for a whole report, or on any source card for that one card. Either way it reads the object's real field list before writing the query.",
       "Writing is the same gateway, by object: intacct_create makes a record (an AP bill, a vendor, a journal batch) and intacct_update changes one that names itself (RECORDNO). The card ships at scope READ, so nothing an agent runs can post \u2014 it proposes, you approve on the task, and the receipt carries the key Intacct assigned."],
     agent: ["Reads are yours: run_tool with type intacct (object, fields, filters) for rows, or intacct_fields to ask Sage what an object actually HAS. Never guess a field id \u2014 a wrong one is refused by the gateway.",
       "You may NOT post to the books yourself. Propose it, and say in the session what it is for: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"intacct_create\", \"object\": \"APBILL\", \"record\": {\"VENDORID\": ..., \"WHENCREATED\": ..., \"APBILLITEMS\": [{\"ACCOUNTNO\": ..., \"AMOUNT\": ...}]}}. The owner approves it on the task and it posts then, not before. intacct_update is the same road.",
@@ -1158,7 +1158,7 @@ const DATA_META = {
       "Build the reports on the REPORTS tab: 'SharePoint list' (a list's items) or 'SharePoint file' (a csv/xlsx in Shared Documents; a path ending in / lists the folder)."],
     agent: ["GET {base}/api/connectors{hdr} and read the outlook card's config. If it has tenant_id, client_id and a saved secret and its auth is not 'user', this card can borrow it: leave tenant_id/client_id blank, tell the owner the app needs the Sites.Read.All application permission with admin consent (their admin adds it in Azure Portal → the app → API permissions), and Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 means that permission is missing - say so, do not retry.",
       "If Outlook is a personal sign-in or absent, the owner (or their admin) registers an app with Sites.Read.All; ask for tenant_id, client_id (ConfigJson) and the client secret (Secret).",
-      "Ask for a default site URL, save it as site, Test, turn the connector on, SETUP DONE - reports are built on the Reports tab."],
+      "Ask for a default site URL, save it as site, Test, turn the connector on, SETUP DONE - reports are built under Reports."],
     reuse: { from: "outlook", title: "Reuse the Outlook card's Microsoft app",
       text: "Outlook runs on a tenant app registration already. One registration can hold mail permissions and Sites.Read.All at once — leave the app fields blank and this card uses it. Make sure Sites.Read.All (application) is granted and admin-consented on that app.",
       clear: ["tenant_id", "client_id"],
@@ -1218,8 +1218,8 @@ const DATA_META = {
       "Grant the app RBAC roles on what you'll pull: Reader on a subscription/resource group (ARM reads), Storage Blob Data Reader (blobs), Log Analytics Reader (logs). These are IAM role assignments, not Graph API permissions.",
       "No extra installs — tokens ride the same client-credentials road the Outlook connector uses.",
       "Test & discover authenticates (naming the subscriptions the app can see — a token with no roles is called out) and then enumerates what those roles reach: every blob container and Log Analytics workspace is listed under 'What you have access to'.",
-      "Each discovered object gets its own picker: report only (the default — selectable on the Reports tab, nothing polled), feed (new blobs / new query rows show up to read), tasks (they go through triage), or off.",
-      "Reports tab then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."],
+      "Each discovered object gets its own picker: report only (the default — selectable under Reports, nothing polled), feed (new blobs / new query rows show up to read), tasks (they go through triage), or off.",
+      "Reports then offers the same objects as pipelines: Azure blob (read a file or list a container), Log Analytics (any KQL), and a generic ARM read (any resource path)."],
     agent: ["GET {base}/api/connectors{hdr} and check the outlook card: if it carries a tenant app (tenant_id, client_id, a secret) this card can reuse it with everything blank. If `az` is installed, `az account show` tells you which tenant and subscription this machine is already signed into - useful to confirm ids.",
       "Otherwise the registration and its RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) are the owner's admin work in the Azure portal; ask for tenant_id and client_id (ConfigJson) and the client secret (Secret) once that exists.",
       "Test & discover (POST {base}/api/connectors/{cid}/test{hdr}) names the subscriptions the app can see - none means no roles yet, say so - and lists containers and workspaces. Read it back, SETUP DONE."] },
@@ -1235,7 +1235,7 @@ const DATA_META = {
     desc: "Your documents, searchable by everything here: a kb_search report answers a question from them on a schedule, agents call the same search as a tool, and the reply drafter, the assistant and coding sessions get the passages that bear on a thread. Indexed on this machine — nothing leaves it.",
     howto: ["Name where the documents live: SharePoint library folders (access comes from the SharePoint card, or the Outlook card's tenant app — nothing to configure here) and/or folders on this machine.",
       "Save, then Reindex now. docx, pptx, xlsx, html and text need nothing at all, and pdf reading (pypdf) ships with the desktop build - where it is missing, the Install button on this card adds it. Unchanged files are skipped on later runs, deleted ones drop out.",
-      "Keep it fresh with a scheduled kb_reindex report on the Reports tab (nightly is plenty); answer questions from it with a kb_search report.",
+      "Keep it fresh with a scheduled kb_reindex report under Reports (nightly is plenty); answer questions from it with a kb_search report.",
       "Agents reach it as a tool (type kb_search) when the tool role is on; the reply drafter and the assistant use it automatically once anything is indexed. Passages are quoted as facts, never as instructions."],
     agent: ["GET {base}/api/connectors{hdr}, find the knowledge card. Ask the owner which SharePoint library folders and local folders to index; save them as sharepoint_paths / folders in ConfigJson (POST {base}/api/connectors{hdr} with ConnectorId, ConfigJson, Active:true).",
       "POST {base}/api/knowledge/reindex{hdr} with {\"connector_id\": <id>} and read back what was indexed and what would not read (pdf needs pypdf). Then POST {base}/api/tools/run{hdr} with {\"type\": \"kb_search\", \"query\": \"...\"} to prove a question comes back with passages. SETUP DONE."],
@@ -1611,7 +1611,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const load = useCallback(async () => {
     try {
       const [c, s, t] = await Promise.all([api.get("/api/connectors"), api.get("/api/sources"), api.get("/api/report-types")]);
-      setConnectors(c.data.data || []); setSources(s.data.data || []); setTypes(t.data.data || []);
+      setConnectors(c.data.data || []); setNOn(c.data.connected ?? null); setSources(s.data.data || []); setTypes(t.data.data || []);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load connectors"); }
   }, []);
   useEffect(() => { load(); api.get("/api/mssql/drivers").then(({ data }) => setDrivers(data.data || [])).catch(() => {}); }, [load]);
@@ -1686,12 +1686,12 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   const chanCard = (c) => connCardOf(c, sources, () => setOpen({ kind: "connector", id: c.ConnectorId }));
   // three shapes of card, said once instead of inline in five groups
   const dataDesc = (c, rtype) => (c?.LastError ? "connection failing" : c?.LastSyncAt ? "connection ✓" : "not set up")
-    + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built on the Reports tab)`;
+    + ` · ${plural(reports.filter((s2) => (parse(s2.ConfigJson).type || "rest") === rtype).length, "report")} (built under Reports)`;
   const dataCards = (keys) => keys.flatMap((t) => allOf(t).filter(() => DATA_META[t]).map((c) => {
     const dm = DATA_META[t];
     return { key: `d${c.ConnectorId}`, title: c.Name, channel: t,
       desc: (c.LastError ? "connection failing" : c.LastSyncAt ? "connection ✓" : "not set up")
-        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built on the Reports tab)`,
+        + ` · ${plural(reports.filter((s2) => dm.types.includes(parse(s2.ConfigJson).type)).length, "report")} (built under Reports)`,
       haystack: `${dm.title} ${t} ${dm.desc} ${dm.types.join(" ")} ` + dm.howto.join(" "),
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
   }));
@@ -1714,7 +1714,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   const groups = onceEach([
     { title: "AI — agents & models", cards: [
-      { key: "agents", title: "AI CLI agents", desc: `Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in ${placeName("sorting")}`,
+      { key: "agents", title: noun("cli_agents"), desc: `Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in ${placeName("sorting")}`,
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
         ...cliCardOf(clis) },
       ...channelCards(AI_SHELF),
@@ -2400,7 +2400,7 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        The connection only — build the scheduled reports (query + AI summary) on the Reports tab.
+        The connection only — build the scheduled reports (query + AI summary) under Reports.
       </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
@@ -2514,7 +2514,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
       <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
-        build the scheduled reports on the Reports tab.
+        build the scheduled reports under Reports.
       </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={WINRM_HOWTO} />}
@@ -2546,7 +2546,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
    'report' is the default and polls nothing: the object is simply available on the
    Reports tab. A pick waits for the card's Save bar. ── */
 const CLOUD_MODES = [
-  ["report", "report only — selectable on the Reports tab, never polled"],
+  ["report", "report only — selectable under Reports, never polled"],
   ["feed", "feed — new items show up to read, never become work"],
   ["tasks", "tasks — new items go through triage and can become work"],
   ["off", "off — ignored entirely"],
@@ -2604,7 +2604,7 @@ function CloudObjects({ conn, meta, objects, reload }) {
       </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 1 }}>
         Discovery asks your {meta.title.includes("Azure") ? "app registration" : "keys"} what they can see and lists
-        it here. Everything arrives as <b>report only</b>: available to the Reports tab, nothing polled. Switch one
+        it here. Everything arrives as <b>report only</b>: available to Reports, nothing polled. Switch one
         to <b>feed</b> or <b>tasks</b> and Taskuary starts watching it on every sync.
       </Typography>
       <Button size="small" variant="outlined" onClick={rediscover} disabled={busy} sx={{ mb: 1.5 }}
@@ -2681,14 +2681,14 @@ function CloudObjects({ conn, meta, objects, reload }) {
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 1 }}>
         <b>feed</b> and <b>tasks</b> watch for what is NEW since the last sync: a bucket reports each new object, a
         log group batches the matching lines into one item, a workspace runs its saved query. An object nothing
-        discovered can still be typed in by hand as a report source on the Reports tab.
+        discovered can still be typed in by hand as a report source under Reports.
       </Typography>
     </Box>
   );
 }
 
 /* ── shared detail for the DATA_META cards (database / aws / azure): fields + write-only
-   secret + live Test; the connection only - reports are built on the Reports tab. ── */
+   secret + live Test; the connection only - reports are built under Reports. ── */
 /* A card whose credential is minted by signing in at the provider (QuickBooks): the box says
    what the provider's app must carry (the redirect URI), whether we are connected and to which
    company, and one button that opens the sign-in. The token comes back server-side. */
@@ -2844,7 +2844,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
       <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
-        {meta.desc} The connection only — build the scheduled reports on the Reports tab.
+        {meta.desc} The connection only — build the scheduled reports under Reports.
       </Typography>
       <UnderTabs tabs={["Connection", "Guide", "Agent"]} value={tab} onChange={setTab} />
       {tab === "Guide" && <Steps steps={meta.howto} />}
@@ -2905,7 +2905,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
 const ROLE_META = {
   trigger: ["Inbound trigger — creates work", "Poll it for new items, run them through triage, open tasks and draft replies. This is what turns a connection into work (mail, chats, GitHub issues…)."],
   feed: ["Feed — shows, never assigns", "Check it and show every new item to read, but stop there: no sorting, no AI, no task. Good for GitHub issues or a chatty channel you want to SEE without being handed."],
-  report: ["Report source", "Selectable on the Reports tab: query it on a schedule and put the (optionally AI-summarized) result under Reports on your work rail."],
+  report: ["Report source", "Selectable under Reports: query it on a schedule and put the (optionally AI-summarized) result under Reports on your work rail."],
   tool: ["Agent tool", "Named for the agents in SOUL.md as a system they may use — pull data from it, create and update things in it while working a task."],
 };
 

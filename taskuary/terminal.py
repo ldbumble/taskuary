@@ -2101,7 +2101,7 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     # with a `cwd` opened wherever the coding agent's repository map pointed, and the REPO line named that one (workflows.cwd_of)
     wf_cwd = None if continued_cwd else workflows.cwd_of(store, t)
     if wf_cwd:
-        if not os.path.isdir(wf_cwd): raise ValueError(f"no such folder: {wf_cwd} - the workflow's cwd; fix it on the Reports tab")
+        if not os.path.isdir(wf_cwd): raise ValueError(f"no such folder: {wf_cwd} - the workflow's cwd; fix it under Reports")
         continued_cwd, repo = wf_cwd, None
     for i, candidate in enumerate(chain):
         try:

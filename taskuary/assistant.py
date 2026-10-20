@@ -209,10 +209,14 @@ def _owner_closed(store, key: str, sent) -> bool:
 
 def _other_side(store, cid):
     """The last word of theirs on the thread, or None when there is nobody to chase: no inbound at all, or a report,
-    the Advisor's own thread, an auto-reply or a calendar response - the mail system wrote those (2026-10-06)."""
+    the Advisor's own thread, an auto-reply or a calendar response - the mail system wrote those (2026-10-06). Nor a
+    machine's mail: the owner answering a portal's notification with a question raised "No answer from Vendor Portal in
+    3 days - follow up?" - a noreply address never answers, and nobody is there to chase (the rail Advisor's eval)."""
+    from .categories import sender_class
     inbound = store.last_inbound_in(cid) if cid else None
     if not inbound: return None
     if inbound.get('Channel') in ('report', CHANNEL) or _ooo_row(inbound) or _cal_mail(inbound): return None
+    if sender_class(inbound) in ('automated', 'bulk'): return None
     return inbound
 
 

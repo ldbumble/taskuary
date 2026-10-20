@@ -9,7 +9,6 @@ from tests import rail_advisor_cases as C
 
 # what still fails, and why - strict, so a fix that lands without crossing it off fails too
 KNOWN = {
-    'the last word was to an automated address': 'a chase to a noreply address',
     'put away until next week (Remind me)': 'gone quiet over a task the owner put away',
     'waiting on someone else six days - said as theirs': 'says a reply waits on the owner when it waits on them',
     'a workflow saved a minute ago, never run yet': 'never run, the minute it is saved',

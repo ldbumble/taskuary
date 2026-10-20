@@ -727,7 +727,7 @@ def blk_label(bid: str) -> str:
 
 
 # ── the model's pass: its own read, given what it already said ───────────────────────────────
-CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short list of things worth saying right now. You get '
+CONTRACT = ('\n\nYou are writing your POST on the owner\'s work rail - the short list of things worth saying right now. You get '
             'CANDIDATES the hub found itself (each with a key), WHAT PEOPLE SAID (the words, by thread), who is OUT OF OFFICE, the '
             'CALENDAR, what arrived (with each report\'s schedule, when it last ran and what that run did, and each failure\'s cause), what got done, what is open, and WHAT '
             'YOU ALREADY SAID. Answer JSON only: {"say": [{"key": "<a candidate key, or idea:<short-slug> for a thought of your own>", '
@@ -756,7 +756,7 @@ CONTRACT = ('\n\nYou are writing your POST on the owner\'s Timeline - the short 
             'Never a standing rule about what to ignore or what is noise: the instruction decides that, and a note that says '
             '\'ignore X\' would silence you for good. Rewrite it whole each time; empty if nothing>"}.\n'
             'At most {max_lines} entries. A line about ONE message must tell the owner something the message does not: the mail '
-            'is already on their Timeline with triage\'s own verdict on it, so "X forwarded this with no message, I would ask '
+            'is already on their work rail with triage\'s own verdict on it, so "X forwarded this with no message, I would ask '
             'what they want" is a second copy of the mail and not a line. Say the thing they could not see - who else is in it, '
             'what it answers, what it costs them on Monday - or say nothing (the owner, 2026-09-07: "Why did assistant triagger '
             'on bare email meaning saying the same thing?"). This rule is the contract\'s, not the instruction\'s, so it holds '
@@ -1318,7 +1318,7 @@ def build_sections(store, cands: list, head: str = 'CANDIDATES', watch_source_id
 # message with its data, and how that message opens - the one text the model reads, the run record
 # keeps and the Preview shows.
 PLACED_SAYS = 'It is at the top of the message, with the cards it names placed where it names them.'
-PLACED_HEAD = "YOUR INSTRUCTION (the owner's, from the Reports tab), with the cards it names placed in it:"
+PLACED_HEAD = "YOUR INSTRUCTION (the owner's, from Reports), with the cards it names placed in it:"
 
 
 def placed_message(shaped: str, rest: str) -> str: return f'{PLACED_HEAD}\n{shaped}\n\n{rest}'
@@ -1375,7 +1375,7 @@ def think(store, cands: list, llm, instruction: str = None, max_lines: int = MAX
         else: direction, user = PLACED_SAYS, placed_message(shaped, rest)
     # the report's prompt is the report's own: instruction, data scope, output contract, owner (PW-242).
     # COUNSEL is the chat's document; its walkthrough rules governed idea generation until 2026-09-06.
-    system = (f"YOUR INSTRUCTION (the owner's, from the Reports tab):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
+    system = (f"YOUR INSTRUCTION (the owner's, from Reports):\n{direction}" + contract.replace('{max_lines}', str(max_lines))
               # WHOLE (the owner, 2026-09-25): cut at 1500 chars it stopped inside "Escalate", and the systems, people and
               # repository map - what the ledger repository is, who owns what - never reached the voice that reasons about them
               + (f"\n\nWho the owner is (their own document; its reply rules are for text sent to OTHERS):\n{soul[:SOUL_CHARS]}" if soul else '')

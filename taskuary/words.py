@@ -7,6 +7,10 @@ from pathlib import Path
 _J = json.loads(Path(__file__).with_name('words.json').read_text(encoding='utf-8'))
 PLACES = {k: v for k, v in _J['places'].items() if not k.startswith('_')}
 JARGON = tuple(_J['jargon'])
+# one name per thing the owner is shown, and the surfaces that no longer exist - matched as written ("timeline" is a word)
+NOUNS = {k: v for k, v in _J['nouns'].items() if not k.startswith('_')}
+GONE = tuple(_J['gone']['words'])
+def noun(nid: str) -> str: return NOUNS[nid]
 # a tool that runs on the owner's own machine, said the one way the server and the page both say it ("claude (your CLI)" was
 # code-speak on the agent card - the dead-end walk's WORDS, 2026-10-18)
 LOCAL = _J['local']
@@ -35,6 +39,8 @@ _JRE = re.compile(r'(?<![\w-])(?:' + '|'.join(re.escape(w) + (r'[\w.-]+' if w.en
                                               for w in sorted(JARGON, key=len, reverse=True)) + r')(?![\w])', re.I)
 # the short all-caps ones only as written: "pr" inside a sentence is a word, "PR" is the jargon
 _CAPS = {w for w in JARGON if w.isupper()}
+_GRE = re.compile(r'\b(?:' + '|'.join(map(re.escape, GONE)) + r')\b')
 def jargon_in(text: str) -> list:
-    """The jargon words a line for the owner says, as found - [] for a plain line."""
-    return [m.group(0) for m in _JRE.finditer(str(text or '')) if m.group(0).upper() not in _CAPS or m.group(0).isupper()]
+    """The jargon words a line for the owner says, as found - [] for a plain line. A surface that is gone counts too."""
+    return [m.group(0) for m in _JRE.finditer(str(text or '')) if m.group(0).upper() not in _CAPS or m.group(0).isupper()] \
+        + _GRE.findall(str(text or ''))

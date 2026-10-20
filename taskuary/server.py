@@ -1309,7 +1309,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         if not ok: raise RuntimeError(why)
         title = str(cfg.get('title') or '').strip()
         if any(x.get('Channel') == 'report' and str(x.get('Address') or '').casefold() == title.casefold() for x in store.list_sources(active_only=False)):
-            raise RuntimeError(f'a report named {title!r} already exists - open it on the Reports tab')
+            raise RuntimeError(f'a report named {title!r} already exists - open it under Reports')
         enabled = bool(p.get('enabled', True))
         out = save_source(SourceBody(Channel='report', Address=title, Active=enabled, ConfigJson=json.dumps(cfg)))
         return {**out, 'title': title, 'type': cfg.get('type'), 'enabled': enabled, 'link': f"#report={out['sourceId']}"}
@@ -1347,7 +1347,7 @@ def preview_operation(oid: str):
     if not op or op['kind'] != 'report.create': raise HTTPException(404, 'nothing to preview')
     cfg = dict((op['params'] or {}).get('config') or {})
     if scopes.needs(cfg.get('type')) != 'read':
-        raise HTTPException(422, f"{cfg.get('type')} writes to a system - a dry run could too; run it from the Reports tab once created")
+        raise HTTPException(422, f"{cfg.get('type')} writes to a system - a dry run could too; run it from Reports once created")
     for k in ('deliver', 'alert', 'triage', 'on_startup', 'cron', 'every_minutes', 'daily_at'): cfg.pop(k, None)
     return report_preview(cfg)
 

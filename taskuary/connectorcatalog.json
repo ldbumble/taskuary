@@ -6,7 +6,7 @@
       "title": "Outlook mail",
       "group": "Messaging",
       "planned": false,
-      "desc": "Your Microsoft mailbox on the Timeline through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
+      "desc": "Your Microsoft mailbox on your work rail through triage. Sign in with your own account - no Azure portal - or register your own app if you prefer.",
       "match": [
         "outlook mail",
         "outlook"
@@ -29,7 +29,7 @@
       "title": "Slack",
       "group": "Messaging",
       "planned": false,
-      "desc": "Ingest Slack channels with a bot token - messages land on the Timeline through triage.",
+      "desc": "Ingest Slack channels with a bot token - messages land on your work rail through triage.",
       "match": [
         "slack"
       ]
@@ -353,7 +353,7 @@
       "title": "Jira",
       "group": "Project management",
       "planned": false,
-      "desc": "Jira issues ASSIGNED TO YOU land on the Timeline through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
+      "desc": "Jira issues ASSIGNED TO YOU land on your work rail through triage — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
       "match": [
         "jira"
       ]
@@ -363,7 +363,7 @@
       "title": "Asana",
       "group": "Project management",
       "planned": false,
-      "desc": "Asana tasks ASSIGNED TO YOU land on the Timeline through triage, linking back to Asana.",
+      "desc": "Asana tasks ASSIGNED TO YOU land on your work rail through triage, linking back to Asana.",
       "match": [
         "asana"
       ]
@@ -373,7 +373,7 @@
       "title": "Monday.com",
       "group": "Project management",
       "planned": false,
-      "desc": "Monday.com items ASSIGNED TO YOU (any People column naming you) land on the Timeline through triage.",
+      "desc": "Monday.com items ASSIGNED TO YOU (any People column naming you) land on your work rail through triage.",
       "match": [
         "monday.com"
       ]
@@ -383,7 +383,7 @@
       "title": "ClickUp",
       "group": "Project management",
       "planned": false,
-      "desc": "ClickUp tasks ASSIGNED TO YOU land on the Timeline through triage, with their list, status and priority.",
+      "desc": "ClickUp tasks ASSIGNED TO YOU land on your work rail through triage, with their list, status and priority.",
       "match": [
         "clickup"
       ]
@@ -393,7 +393,7 @@
       "title": "Todoist",
       "group": "Project management",
       "planned": false,
-      "desc": "The Todoist tasks a filter says are live — due today and overdue by default — land on the Timeline through triage.",
+      "desc": "The Todoist tasks a filter says are live — due today and overdue by default — land on your work rail through triage.",
       "match": [
         "todoist"
       ]
@@ -403,7 +403,7 @@
       "title": "GitLab",
       "group": "Developer",
       "planned": false,
-      "desc": "GitLab issues and merge requests ASSIGNED TO YOU land on the Timeline through triage — gitlab.com or your own instance.",
+      "desc": "GitLab issues and merge requests ASSIGNED TO YOU land on your work rail through triage — gitlab.com or your own instance.",
       "match": [
         "gitlab"
       ]
@@ -413,7 +413,7 @@
       "title": "Azure DevOps",
       "group": "Developer",
       "planned": false,
-      "desc": "Azure DevOps work items ASSIGNED TO YOU land on the Timeline through triage.",
+      "desc": "Azure DevOps work items ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "azure devops",
         "azure",
@@ -426,7 +426,7 @@
       "title": "Linear",
       "group": "Project management",
       "planned": false,
-      "desc": "Linear issues ASSIGNED TO YOU land on the Timeline through triage.",
+      "desc": "Linear issues ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "linear"
       ]
@@ -436,7 +436,7 @@
       "title": "Trello",
       "group": "Project management",
       "planned": false,
-      "desc": "Open Trello cards ASSIGNED TO YOU land on the Timeline through triage.",
+      "desc": "Open Trello cards ASSIGNED TO YOU land on your work rail through triage.",
       "match": [
         "trello"
       ]
@@ -446,7 +446,7 @@
       "title": "Notion",
       "group": "Project management",
       "planned": false,
-      "desc": "Notion pages shared with your integration show on the Timeline as they change — a FEED by default: edits are information, not assignments.",
+      "desc": "Notion pages shared with your integration show on your work rail as they change — a FEED by default: edits are information, not assignments.",
       "match": [
         "notion"
       ]
@@ -456,7 +456,7 @@
       "title": "Discord",
       "group": "Messaging",
       "planned": false,
-      "desc": "Watch Discord channels with a bot — messages land on the Timeline through triage, and approved replies post back to the channel.",
+      "desc": "Watch Discord channels with a bot — messages land on your work rail through triage, and approved replies post back to the channel.",
       "match": [
         "discord"
       ]
@@ -466,7 +466,7 @@
       "title": "Sentry",
       "group": "Developer",
       "planned": false,
-      "desc": "New unresolved Sentry errors land on the Timeline through triage — production breakage joins the same funnel as the mail about it.",
+      "desc": "New unresolved Sentry errors land on your work rail through triage — production breakage joins the same funnel as the mail about it.",
       "match": [
         "sentry"
       ]
@@ -476,7 +476,7 @@
       "title": "PagerDuty",
       "group": "Developer",
       "planned": false,
-      "desc": "Open PagerDuty incidents (triggered / acknowledged) land on the Timeline through triage.",
+      "desc": "Open PagerDuty incidents (triggered / acknowledged) land on your work rail through triage.",
       "match": [
         "pagerduty"
       ]
@@ -1217,7 +1217,7 @@
       "title": "Google Chat",
       "group": "Messaging",
       "planned": false,
-      "desc": "Google Chat spaces on the Timeline, replies back into the space. Reuses the Gmail card's OAuth client.",
+      "desc": "Google Chat spaces on your work rail, replies back into the space. Reuses the Gmail card's OAuth client.",
       "match": [
         "google chat",
         "hangouts chat",
@@ -1229,7 +1229,7 @@
       "title": "Mattermost",
       "group": "Messaging",
       "planned": false,
-      "desc": "Your own Mattermost server on the Timeline - each watched channel is a source, and replies go back as the account you connect with.",
+      "desc": "Your own Mattermost server on your work rail - each watched channel is a source, and replies go back as the account you connect with.",
       "match": [
         "mattermost"
       ]

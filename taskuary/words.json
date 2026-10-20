@@ -48,6 +48,16 @@
     "waiting_no_date": "{ref} is waiting on {who} with no date",
     "waiting_no_date_why": "they have been quiet longer than they usually take to answer, and nothing brings it back - give it a date, or chase them"
   },
+  "nouns": {
+    "_": "ONE NAME FOR EACH THING THE OWNER IS SHOWN (2026-10-19 UI walk: the coding tools on this computer were 'AI CLI agents' on their card, 'Connections > AI CLI agents' in a hint and their own crumb, each typed apart). A surface that names one asks words.noun(id).",
+    "cli_agents": "AI CLI agents",
+    "rail":       "your work rail",
+    "reports":    "Reports"
+  },
+  "gone": {
+    "_": "SURFACES THAT NO LONGER EXIST, named in no line the owner reads: the Timeline (removed 2026-10-15), the Reports tab and the Assistant tab (Reports is a page of the canvas, the chat is the app). Matched as written - 'timeline' in a sentence is a word. The page's walk (deadend_check.mjs WORDS) and words.jargon_in flag them with the jargon.",
+    "words": ["Timeline", "Reports tab", "Assistant tab"]
+  },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]
 }

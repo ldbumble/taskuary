@@ -248,12 +248,12 @@ OLD_PROMPTS = (
 )
 
 HEADER = ('# DIGEST.md — your morning brief\n\n'
-          '_Written by the Morning digest report (Reports tab - its prompt decides what goes in\n'
+          '_Written by the Morning digest report (under Reports - its prompt decides what goes in\n'
           "here; deleting the report turns it off). For YOUR eyes - agents get their task's own\n"
           'context instead. Durable rules belong in Agent memory (Settings) or SOUL.md._\n\n')
 
 # what the assistant's voice document does NOT settle for a brief: the shape of the answer
-CONTRACT = ('\n\nYOU ARE WRITING THE MORNING BRIEF, not a Timeline post: the instruction in the user message decides the '
+CONTRACT = ('\n\nYOU ARE WRITING THE MORNING BRIEF, not a post on the work rail: the instruction in the user message decides the '
             'sections and the length. Plain text with the emoji headers it names - no JSON, no markdown headings, no '
             'tables. Facts only from the data you are given; a TQ-ref keeps the title and the link the data gave it; a '
             'block reading "(none)" has nothing to say. The data may be a CAPPED slice (a block says so when it is cut) - '
@@ -430,7 +430,7 @@ def gather(store, days: int = DAYS) -> str:
     _block(out, 'VERDICTS GIVEN THIS WINDOW (already durable in memory - standing rules, NOT open work,\n'
                 'and the mail they quote is already decided):',
            (f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]))
-    _block(out, 'WHAT THE ASSISTANT ALREADY RAISED (its Timeline posts in the window, with their state and your replies):',
+    _block(out, 'WHAT THE ASSISTANT ALREADY RAISED (its posts in the window, with their state and your replies):',
            A.raised(store, span))
     n, at = A.notes(store)
     _block(out, "THE ASSISTANT'S NOTES TO ITSELF (its facts and timings from its last check" + (f", {A._ts(at)}" if at else '') + '):', n or '(none)')

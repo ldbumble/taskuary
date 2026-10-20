@@ -4,7 +4,7 @@ import { Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, Dialo
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
-import { placeName } from "./words.js";
+import { noun, placeName } from "./words.js";
 import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
 import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
@@ -75,7 +75,7 @@ export const CliConnectionsPage = ({ onBack }) => {
     } catch (e) { setTests((t) => ({ ...t, [name]: { ok: false, error: failure(e) } })); }
   };
   return <Box sx={{ maxWidth: 980, mx: "auto" }}>
-    <Crumb section="Connections" title="AI CLI agents" onBack={onBack} />
+    <Crumb section={placeName("connections")} title={noun("cli_agents")} onBack={onBack} />
     <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 1 }}>
       <Typography variant="body2" sx={{ color: DIM, flex: 1 }}>Configure each CLI once. Its command and arguments are shared by every profile that chooses it.</Typography>
       <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDraft({ ...BLANK_CONNECTION })}>Add CLI connection</Button>

@@ -114,7 +114,7 @@ IN_PART = ("You are Taskuary. Never talk about yourself as a model or a CLI, or 
 
 CONTRACT = (
     "WHERE YOU ARE\n"
-    "You are speaking to {owner} in the chat on the Assistant tab. The action words under your line are the owner's "
+    "You are speaking to {owner} in the chat. The action words under your line are the owner's "
     "buttons and they are already chosen for this item - never list them, and never end a line with an offer to do "
     "something. When you cannot tell which of two things the owner's words mean, say which two and ask - one short "
     "question, and OPTIONS instead of a CALL. When the words say what they want, CALL it: Taskuary brings up the "
@@ -3340,9 +3340,6 @@ def away_line(o: dict) -> str:
     return f"Away until {o['when']} - it is under {places.name('later')}, and back in front of you that morning." + (f" {o['warn']}" if o.get('warn') else '')
 
 
-def op_label(kind: str, p: dict) -> str:
-    """The button's words for an operation, in the owner's terms. toolcatalog.PURPOSE is written for the
-    MODEL ("start an agent from a brief when there is no message behind it - `kind`, `text`"); read as a
 def _day_said(until) -> str:
     """A Remind me day the way the page says it ("Tue 20 Oct"), not the model's 2026-10-20 - as written when it is no day remind reads."""
     from . import remind
@@ -3351,6 +3348,9 @@ def _day_said(until) -> str:
     return remind.when(at) if at else str(until)
 
 
+def op_label(kind: str, p: dict) -> str:
+    """The button's words for an operation, in the owner's terms. toolcatalog.PURPOSE is written for the
+    MODEL ("start an agent from a brief when there is no message behind it - `kind`, `text`"); read as a
     label it put that sentence on the button of a plain to-do, and said an agent had started when none had."""
     by_kind = {kind_: [PROPOSALS[v][1] for v in PROPOSALS if PROPOSALS[v][0] == kind_][0] for kind_ in {PROPOSALS[v][0] for v in PROPOSALS}}
     label = by_kind.get(kind) or toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
@@ -3467,7 +3467,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind == 'agent.stop': return ' The task stays open - say close it when you want it closed.'
     if kind == 'memory.remember': return ' I will use it from now on; whatever you were on stays where it was.'
     if kind == 'report.create' and o.get('sourceId'):
-        return f" \"{o.get('title')}\" is on the Reports tab{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
+        return f" \"{o.get('title')}\" is under Reports{' and runs on its schedule' if o.get('enabled') else ', switched off'}."
     if kind == 'connection.create' and o.get('connectorId'):
         return (f" The {o.get('type')} card \"{o.get('name')}\" is {o.get('state')} - finish it on the card (sign in or paste the secret there), "
                 'then Test; it stays off until you turn it on.')
@@ -3479,7 +3479,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
                     'reach it - turn off "Can be given new work from your mail" on its profile to stop that' if o.get('on_roster') else
                     'your mail goes where it went before')
         if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
-        flow = (f" \"{o['workflow_title']}\" is on the Reports tab, switched off. Say run it and I'll start it once - "
+        flow = (f" \"{o['workflow_title']}\" is under Reports, switched off. Say run it and I'll start it once - "
                 'when it stops at the sign-in, sign in yourself in the browser beside the chat.') if o.get('workflow_id') else ''
         said = '; '.join(bits)
         return f' {said[0].upper()}{said[1:]}.{flow}'

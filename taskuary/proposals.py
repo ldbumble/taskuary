@@ -93,11 +93,11 @@ SETTING_ALLOW = {
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',
     'task_return_minutes': 'how long an open task you cleared stays quiet before it comes back',
-    'timeline_fade': 'how old rows dim on the Timeline',
+    'timeline_fade': 'how old rows dim on the work rail',
     'calendar_enabled': 'read your calendar',
     'learn_enabled': 'learn from your verdicts',
     'playbooks_enabled': 'let agents follow and propose playbooks',
-    'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are Timeline rows, not tasks)',
+    'agent_issues_enabled': 'treat GitHub issues as the tracker (off = GitHub items are rows on the work rail, not tasks)',
 }
 # ...and the same rule for a CONNECTOR's own switches, which is where "PRs are Timeline items, not
 # tasks" actually lives (store.github_permissions reads the connector first).

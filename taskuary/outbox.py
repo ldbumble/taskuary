@@ -167,7 +167,7 @@ def compose(store, channel: str, to, about: str, mode: str = 'draft', subject: s
                              'SentAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
     deliver = json.dumps({'channel': channel, 'to': to, 'cc': cc, 'subject': subject})
     store.add_route(mid, tid, 'outbox', None,
-                    f'you started this from the Timeline - ' +
+                    f'you started this from Taskuary - ' +
                     ('an agent is finding out first, then it drafts the message'
                      if mode == 'task' else 'drafted for you to approve, then it sends'), [], actor)
 

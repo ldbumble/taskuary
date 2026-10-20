@@ -116,7 +116,7 @@ export default function FloatingAssistant({ onNavigate, onChanged, activeTab }) 
               <Typography sx={{ fontSize: 13.5, lineHeight: 1.2, fontWeight: 600 }}>Taskuary</Typography>
               <Typography sx={{ fontSize: 10.5, opacity: 0.78 }}>{busy ? "Working on your last message…" : "Talk it through. Take action."}</Typography>
             </Box>
-            <Tooltip title={expanded ? "Return to compact view" : "Fill the workspace beside Timeline"}>
+            <Tooltip title={expanded ? "Return to compact view" : "Fill the workspace beside your work rail"}>
               <IconButton size="small" aria-label={expanded ? "Return Taskuary to compact view" : "Expand Taskuary"}
                 onClick={() => setExpanded((v) => !v)} sx={{ color: "white" }}>
                 {expanded ? <CloseFullscreenIcon sx={{ fontSize: 17 }} /> : <OpenInFullIcon sx={{ fontSize: 17 }} />}

@@ -350,7 +350,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
             head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})
-            detail = f'query OK ({head}) - build the reports on the Reports tab'
+            detail = f'query OK ({head}) - build the reports under Reports'
         elif c['Type'] == 'datadog':
             from .reports import datadog_connection
             dd = datadog_connection(store)

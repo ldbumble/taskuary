@@ -27,7 +27,7 @@ class ReportPromptIsolation(unittest.TestCase):
     def test_the_report_keeps_its_instruction_and_contract(self):
         st = MemoryStore()
         system = self.prompt(st, 'List anything about invoices.')
-        self.assertIn("YOUR INSTRUCTION (the owner's, from the Reports tab):\nList anything about invoices.", system)
+        self.assertIn("YOUR INSTRUCTION (the owner's, from Reports):\nList anything about invoices.", system)
         self.assertIn('writing your POST', system)
 
     def test_a_systems_monitor_keeps_its_own_prompt_and_rule(self):

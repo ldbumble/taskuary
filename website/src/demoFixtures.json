@@ -544,7 +544,7 @@
    {
     "key": "ai",
     "title": "Set up an AI",
-    "why": "This is what reads each message and decides whether it is work, a question, or noise. Until it exists every message just files itself onto the Timeline, untriaged - the app runs, and does nothing for you. A coding CLI you already pay for will do it; so will an API key.",
+    "why": "This is what reads each message and decides whether it is work, a question, or noise. Until it exists every message just files itself onto your work rail, unsorted - the app runs, and does nothing for you. A coding CLI you already pay for will do it; so will an API key.",
     "done": false,
     "detail": "",
     "goto": {
@@ -568,7 +568,7 @@
    {
     "key": "inbound",
     "title": "Connect where work arrives",
-    "why": "A mailbox or a chat - somewhere people actually write to you. Without one the Timeline is empty because nothing is being read, not because nothing happened. Trackers and report sources come later; they file work, they do not bring it in.",
+    "why": "A mailbox or a chat - somewhere people actually write to you. Without one your work rail is empty because nothing is being read, not because nothing happened. Trackers and report sources come later; they file work, they do not bring it in.",
     "done": false,
     "detail": "",
     "goto": {
@@ -1232,7 +1232,7 @@
   "task": {
    "TaskId": 20,
    "Title": "Taskuary guide",
-   "Summary": "An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.",
+   "Summary": "An always-available walkthrough of the work rail, outstanding work, reviews, and agent output.",
    "Kind": "general",
    "Status": "open",
    "Priority": "normal",

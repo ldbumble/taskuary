@@ -232,7 +232,7 @@ const dockTask = () => {
   if (old) return old;
   const id = ++nextId;
   const row = { TaskId: id, ref: `TQ-${String(id).padStart(4, "0")}`, Title: "Taskuary guide",
-    Summary: "An always-available walkthrough of the Timeline, outstanding work, reviews, and agent output.",
+    Summary: "An always-available walkthrough of the work rail, outstanding work, reviews, and agent output.",
     Kind: "general", Status: "open", Priority: "normal", Source: "assistant", SourceRef: "assistant:dock",
     CreatedAt: new Date().toISOString().slice(0, 19).replace("T", " ") };
   state["/api/tasks/detail"][id] = { task: row, ref: row.ref, messages: [], attachments: [], routes: [], comments: [], runs: [], audit: [], reviews: [], session: null };
@@ -272,10 +272,10 @@ const demoReply = (taskId, asked) => {
     return `Start with [${ref}](#task=${work.TaskId}) — **${work.Title}**. It is ${work.Status || "open"}; after that, I would clear anything already waiting on the task.`;
   }
   if (attention) {
-    const ref = attention.TaskId ? `[TQ-${String(attention.TaskId).padStart(4, "0")}](#task=${attention.TaskId})` : "the newest Timeline item";
+    const ref = attention.TaskId ? `[TQ-${String(attention.TaskId).padStart(4, "0")}](#task=${attention.TaskId})` : "the newest item on your rail";
     return `I’d start with ${ref}: **${attention.Subject || attention.Title || "the latest message"}**. ${attention.RouteReason || "It is the item currently marked as needing you."} Then open Review for any answer that is already drafted.`;
   }
-  return "Nothing in the current Timeline is marked as needing you. I’d use this quiet window to review the active task list or ask me about recent agent output.";
+  return "Nothing on your rail is marked as needing you. I’d use this quiet window to review the active task list or ask me about recent agent output.";
 };
 
 const scriptedItemLine = (item) => {
@@ -297,7 +297,7 @@ const itemFromTimeline = (key) => {
   if (!row) return null;
   return {
     key, kind: row.Channel === "report" ? "report" : "fyi", lane: "fyi",
-    title: row.Subject || row.Title || "Timeline item", who: row.FromName || row.FromEmail || row.SourceName,
+    title: row.Subject || row.Title || "Item", who: row.FromName || row.FromEmail || row.SourceName,
     when: row.SentAt, why: row.RouteReason, mid: row.MessageId, tid: row.TaskId, channel: row.Channel,
     preview: row.Preview,
   };

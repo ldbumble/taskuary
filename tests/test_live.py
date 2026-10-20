@@ -5,6 +5,7 @@ knows how to GET /api/feed with an ETag. emit() is safe from a worker thread (th
 a pty byte) because the fan-out hops onto the asyncio loop that owns the sockets.
 """
 import asyncio, time, unittest
+from unittest import mock
 
 from taskuary import funnel, live
 from taskuary.store import MemoryStore
@@ -34,6 +35,32 @@ async def _await_kind(tab, kind, n=1, seconds=2.0):
             return got
         await asyncio.sleep(0.01)
     return [m for m in tab.sent if m.get('type') == kind]
+
+
+class _Clock:
+    """threading.Timer on a clock the test turns by hand: a debounce window opens at one advance() and closes at the
+    advance() that passes its delay, whatever the host's load. A fired timer runs on the caller's thread, as the real
+    one would on its own."""
+    def __init__(self): self.now,self.timers = 0.0,[]
+    def Timer(self, interval, fn):
+        clock = self
+        class _T:
+            daemon = True
+            def __init__(t): t.at,t.fn,t.dead = None,fn,False
+            def start(t): t.at = clock.now+interval; clock.timers.append(t)
+            def cancel(t): t.dead = True
+        return _T()
+    def advance(self, dt):
+        self.now += dt
+        due = sorted((t for t in self.timers if not t.dead and t.at <= self.now+1e-9), key=lambda t: t.at)
+        self.timers = [t for t in self.timers if t not in due and not t.dead]
+        for t in due: t.fn()
+
+
+async def _turns(n=5):
+    """A fired window reaches the tab through run_coroutine_threadsafe: a callback, then the fan-out task. A few turns
+    of the loop land it; no wall clock is involved."""
+    for _ in range(n): await asyncio.sleep(0)
 
 
 class LiveSocketTests(unittest.TestCase):
@@ -197,55 +224,49 @@ class LiveSocketTests(unittest.TestCase):
         """A write every 20ms into a 50ms window used to re-arm forever and deliver 0
         until the stream paused. The Studio tail (pty poke 200ms, delay 250ms) froze
         for the same reason. A fixed window must flush while the writes are still coming."""
-        tab = _Tab()
+        # The windows run on a hand-turned clock. On real threading.Timers a loaded macOS runner failed this twice: the stream
+        # loop raced a 0.6 s wall-clock budget, and then the second run-tail was still in its timer thread when the test, which
+        # waited only for feed-changed, took its snapshot ("1 not greater than or equal to 2"). Now every write is 20ms after
+        # the last by construction, a window closes exactly when its delay has passed, and both kinds are counted after the
+        # same turns of the loop - a debounce that re-arms on each write still never fires while they keep coming.
+        tab, clock = _Tab(), _Clock()
         orig = dict(live._DELAY)
         live._DELAY[live.FEED] = 0.05
         live._DELAY[live.RUN] = 0.05
+        kinds = lambda sent, k: [m for m in sent if m.get('type') == k]
         async def once():
             live.bind(asyncio.get_running_loop())
             live.attach(tab)
             try:
                 i = 0
-                until = time.monotonic() + 0.6
-                while time.monotonic() < until:
+                async def write():
+                    nonlocal i
                     live.emit('feed-changed', message_id=i)
                     live.emit('run-tail', run_id=i)
                     i += 1
-                    await asyncio.sleep(0.02)
-                    if (any(m.get('type') == 'feed-changed' for m in tab.sent)
-                            and any(m.get('type') == 'run-tail' for m in tab.sent)):
-                        break
+                    clock.advance(0.02)
+                    await _turns()
+                for _ in range(30):             # 600ms of stream, the budget the wall-clock version had
+                    await write()
+                    if kinds(tab.sent, 'feed-changed') and kinds(tab.sent, 'run-tail'): break
                 during = list(tab.sent)
-                # The stream KEEPS going after the snapshot, and that second delivery must not be
-                # raced for. A time-bounded burst here failed on macos-latest twice: a loaded
-                # runner can spend the whole 150 ms between computing the deadline and testing it,
-                # so the loop ran zero times and there was nothing left to deliver. A fixed count
-                # plus flush() - the module's own affordance - says the same thing with no clock in
-                # it. The during-the-stream assertions below are the actual regression guard and
-                # are untouched: they still fail if the debounce goes back to re-arming.
-                for _ in range(3):
-                    live.emit('feed-changed', message_id=i)
-                    live.emit('run-tail', run_id=i)
-                    i += 1
-                    await asyncio.sleep(0)          # let the loop turn; never a wall-clock wait
-                live.flush()
-                await _await_kind(tab, 'feed-changed', n=max(2, len([m for m in during if m.get('type') == 'feed-changed']) + 1))
+                # the stream KEEPS going after the first delivery, so a second window opens and closes while it does
+                for _ in range(3): await write()
                 return during, list(tab.sent)
             finally:
                 live.reset()
         try:
-            during, after = _run(once())
+            with mock.patch.object(live.threading, 'Timer', clock.Timer):
+                during, after = _run(once())
         finally:
             live._DELAY.clear()
             live._DELAY.update(orig)
-        feed_during = [m for m in during if m.get('type') == 'feed-changed']
-        run_during = [m for m in during if m.get('type') == 'run-tail']
-        self.assertGreaterEqual(len(feed_during), 1,
+        self.assertGreaterEqual(len(kinds(during, 'feed-changed')), 1,
             'sliding debounce would deliver nothing until the stream paused')
-        self.assertGreaterEqual(len(run_during), 1,
+        self.assertGreaterEqual(len(kinds(during, 'run-tail')), 1,
             'run-tail must reach the Studio while the pty is still printing')
-        self.assertGreaterEqual(len([m for m in after if m.get('type') == 'feed-changed']), 2)
-        self.assertGreaterEqual(len([m for m in after if m.get('type') == 'run-tail']), 2)
+        self.assertGreaterEqual(len(kinds(after, 'feed-changed')), 2)
+        self.assertGreaterEqual(len(kinds(after, 'run-tail')), 2)
 
     def test_a_closed_loop_is_a_noop(self):
         """The poll thread can emit after a TestClient's asyncio.run has finished. That used

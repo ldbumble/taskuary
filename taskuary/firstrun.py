@@ -349,6 +349,14 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
     from .channels import test_connector
     secret = str(secret or '').strip()
     if not c: return {'ok': False, 'why': f'There is no {typ} card here.'}
+    if typ == 'hipaa_ai':
+        from . import llm
+        config = dict(config or {})
+        try: config['base_url'] = llm.gateway_url(config.get('base_url'))
+        except ValueError as e: return {'ok': False, 'why': str(e)}
+        try: saved = json.loads(c.get('ConfigJson') or '{}')
+        except ValueError: saved = {}
+        if not (config['base_url'] or saved.get('base_url') or llm.OPENAI_COMPATIBLE['hipaa_ai'][0]): return {'ok': False, 'why': llm.GATEWAY_MISSING}
     if len(secret) < 12: return {'ok': False, 'why': "That doesn't look like a whole key - copy it again and paste the full thing."}
     row = {'ConnectorId': c['ConnectorId'], 'Secret': secret, 'Active': 1}
     if config:
@@ -359,6 +367,8 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
     out = test_connector(store, c['ConnectorId'])
     if not out.get('ok'):
         store.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 0}, 'owner')
+        # the gateway's own words already say which of the address or the code is wrong (llm.gateway_problem)
+        if typ == 'hipaa_ai': return {'ok': False, 'why': str(out.get('detail') or llm.GATEWAY_SILENT)[:300]}
         return {'ok': False, 'why': f"That key didn't work ({str(out.get('detail') or 'the provider said no')[:200]}). Copy all of it again and press Connect."}
     was = _brains(store)
     _everywhere(store, f"connector:{c['ConnectorId']}")

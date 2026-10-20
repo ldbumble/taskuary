@@ -32,7 +32,7 @@ import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
-import { AI_SHELF } from "./aiShelf.js";
+import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
 import { label as btnLabel } from "./buttons.js";
 import { placeName } from "./words.js";
@@ -115,6 +115,8 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
     </Box>
   );
 };
+
+const GATEWAY_HINT = "Paste the address you were sent with your access code.";
 
 /* ── connector metadata: channel + AI connectors (rows in the connector table) ── */
 const META = {
@@ -464,10 +466,11 @@ const META = {
   // ollama's is: a gateway or proxy in front of any of them still speaks this surface.
   // HIPAA AI (llm.OPENAI_COMPATIBLE): an organisation's own AI behind its gateway - the access code IS the person's gateway key
   hipaa_ai: { group: "AI — agents & models", channel: "ai", srcLabel: null,
-    fields: [["gateway address (from whoever sent your code)", "base_url"]], secretLabel: "Access code",
+    // the address comes WITH the code, and this build ships none (llm.HIPAA_AI_URL) - the card that asked only for the code could never connect
+    fields: [["Gateway address", "base_url", "https://", GATEWAY_HINT]], secretLabel: "Access code",
     desc: "Your organisation's own AI, run in its own cloud - switched on with the access code it sent you. Nothing to install, no API account of your own.",
-    howto: ["Paste the access code you were sent. It is yours alone - usage is counted against it.",
-      "If the card asks for a gateway address, it came with your code.",
+    howto: ["Paste the gateway address and the access code you were sent. The code is yours alone - usage is counted against it.",
+      "The address starts with https:// - with or without /v1 at the end, either works.",
       "Test runs a real round trip. Enable to wire it into triage, drafts and the digest."] },
   groq: { group: "AI — agents & models", channel: "ai", srcLabel: null,
     fields: [["model (default llama-3.3-70b-versatile)", "model"], ["base_url", "base_url"]], secretLabel: "API key",
@@ -2098,6 +2101,7 @@ const SIMPLE_HINT = {
     <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>
     {" "}- 2-Step Verification has to be on first.</>,
   imap: "Usually your normal email password. Yahoo and iCloud want an app password from their account page instead.",
+  hipaa_ai: "The code is yours alone - usage is counted against it.",
 };
 
 export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, onBack: leave, onCreated, onNavigate, simple = false, onConnected }) {
@@ -2302,9 +2306,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   if (simple) {
     // Microsoft is one sign-in, nothing to type; an AI card's key becomes the AI (firstrun.choose_key) - the same card either way
     if (conn.Type === "outlook") return <MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={onConnected} plain />;
-    // an AI card asks only what it cannot run without - the model and base URL have defaults (Azure's endpoint has none)
-    const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1]).filter((k) => !isAI || !["model", "base_url"].includes(k));
-    const ready = isAI ? !!secret.trim() : !!(cfg.address || "").trim() && !!secret.trim();
+    // an AI card asks only what it cannot run without - the model and base URL have defaults (Azure's endpoint has none, nor
+    // the organisation's gateway: its address came with the access code)
+    const keep = SIMPLE_FIELDS[conn.Type] || m.fields.map((f) => f[1])
+      .filter((k) => !isAI || (k !== "model" && (k !== "base_url" || conn.Type === "hipaa_ai")));
+    const ready = isAI ? !!secret.trim() && !needsGateway(conn, cfg) : !!(cfg.address || "").trim() && !!secret.trim();
     const connect = async () => {
       setBusy("save"); setTest(null);
       try {
@@ -2324,9 +2330,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>
             That is a Microsoft mailbox - use the Microsoft 365 / Outlook card instead.</Typography>
         )}
-        {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph]) => (
+        {m.fields.filter(([, key]) => keep.includes(key)).map(([label, key, ph, helper]) => (
           <TextField key={key} size="small" label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
-            onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+            helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
         ))}
         {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={{ bgcolor: "#fff" }}
           onChange={(e) => setSecret(e.target.value)} helperText={SIMPLE_HINT[conn.Type] || (isAI ? (m.howto || [])[0] : (m.howto || [])[1]) || ""} />}

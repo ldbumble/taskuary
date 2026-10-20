@@ -44,6 +44,54 @@ OPENAI_COMPATIBLE = {
     # is the gateway's, filled in here once it is deployed (HIPAA_AI_URL), and `hipaa-ai` is the alias the gateway maps to its model.
     'hipaa_ai':   (HIPAA_AI_URL, 'hipaa-ai'),
 }
+
+# THE GATEWAY ADDRESS IS THE CARD'S when the build ships none (HIPAA_AI_URL blank, as this public repo is): it comes with the access
+# code, so the card asks for it - the card that only asked for the code could never connect (the owner, 2026-10-20). Pasted as sent,
+# with or without its /v1; https, since the access code rides it - plain http only to this computer.
+GATEWAY_MISSING = 'Add the gateway address you were sent, then press Connect.'
+GATEWAY_NOT_HTTPS = 'The gateway address has to start with https:// - copy it again from the message your access code came in.'
+GATEWAY_SILENT = "The gateway address didn't answer - check it against the one you were sent, then press Connect."
+GATEWAY_CODE = "The access code didn't work - copy all of it again and press Connect."
+GATEWAY_FAULT = 'The gateway answered with an error of its own - try again in a minute, or ask whoever sent your access code.'
+LOCAL_HOSTS = ('localhost', '127.0.0.1', '::1')
+
+
+def gateway_url(raw) -> str:
+    """A gateway address as pasted -> its OpenAI-compatible base (https://host/v1); '' when blank. ValueError (GATEWAY_NOT_HTTPS)
+    on one that is not https, or plain http anywhere but this computer."""
+    from urllib.parse import urlsplit
+    s = str(raw or '').strip().rstrip('/')
+    if not s: return ''
+    if '://' not in s: s = f'https://{s}'
+    u = urlsplit(s)
+    if not u.hostname or u.scheme not in ('https', 'http') or (u.scheme == 'http' and u.hostname not in LOCAL_HOSTS):
+        raise ValueError(GATEWAY_NOT_HTTPS)
+    path = re.sub(r'/(chat/completions|models)$', '', u.path.rstrip('/'))
+    return f"{u.scheme}://{u.netloc}{path if path.endswith('/v1') else path + '/v1'}"
+
+
+def gateway_base(cfg: dict) -> str:
+    """The card's own address, else the one the build ships; '' when neither."""
+    return gateway_url((cfg or {}).get('base_url') or OPENAI_COMPATIBLE['hipaa_ai'][0])
+
+
+def gateway_problem(cfg: dict, key: str) -> str:
+    """'' when the gateway answers this access code on its model list, else the one thing to fix, in the owner's words:
+    no address, an address that does not answer, or a code it turned away (only a 401/403 from a gateway that answered)."""
+    try: base = gateway_base(cfg)
+    except ValueError as e: return str(e)
+    if not base: return GATEWAY_MISSING
+    try: r = requests.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}, timeout=15)
+    except requests.RequestException: return GATEWAY_SILENT
+    if r.status_code in (401, 403): return GATEWAY_CODE
+    if r.status_code == 404 or (r.status_code == 200 and not _json_list(r)): return GATEWAY_SILENT
+    return '' if r.status_code == 200 else GATEWAY_FAULT
+
+
+def _json_list(r) -> bool:
+    try: return isinstance(r.json().get('data'), list)
+    except (ValueError, AttributeError): return False
+
 # `chatgpt` is the owner's ChatGPT plan through Sign in with ChatGPT (chatgptauth.py): no key, a signed-in account
 AI_TYPES = ('anthropic', 'openai', 'azure_openai', 'vertex_ai', 'openrouter', 'ollama', 'meta', 'chatgpt') + tuple(OPENAI_COMPATIBLE)
 
@@ -561,7 +609,7 @@ def _list_models(t, cfg: dict, key: str) -> list:
     else:
         base = {'openai': 'https://api.openai.com/v1', 'openrouter': 'https://openrouter.ai/api/v1', 'meta': 'https://api.meta.ai/v1',
                 'ollama': 'http://127.0.0.1:11434/v1'}.get(t) or (OPENAI_COMPATIBLE.get(t) or ('',))[0]
-        base = (cfg.get('base_url') or base).rstrip('/')
+        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or base).rstrip('/')
         if t == 'ollama' and base.endswith('11434'): base += '/v1'
         if not base: return []
         url, h, k = f'{base}/models', ({'Authorization': f'Bearer {key}'} if key else {}), 'data'
@@ -630,8 +678,8 @@ def make_llm(t, cfg: dict, key: str):
         headers = {'Authorization': f'Bearer {key}'} if key else {}
     elif t in OPENAI_COMPATIBLE:
         default_base, default_model = OPENAI_COMPATIBLE[t]
-        base = (cfg.get('base_url') or default_base).rstrip('/')
-        if not base: raise RuntimeError('no gateway address for this AI yet - ask whoever sent your access code for it')
+        base = gateway_base(cfg) if t == 'hipaa_ai' else (cfg.get('base_url') or default_base).rstrip('/')
+        if not base: raise RuntimeError('no gateway address on its card - add the one you were sent with your access code')
         urls = [f'{base}/chat/completions']
         headers, model = {'Authorization': f'Bearer {key}'}, cfg.get('model') or default_model
     elif t == 'vertex_ai':
@@ -763,6 +811,9 @@ def _log_web(t, why):
 def test_ai(store, cid: int) -> str:
     """Real round trip through the configured model; returns a detail string or raises."""
     c = store.get_connector(cid, with_secret=True)
+    # the organisation's gateway says first whether its address and the code are right, in words a person can act on
+    if c['Type'] == 'hipaa_ai' and (why := gateway_problem(json.loads(c.get('ConfigJson') or '{}'), c.get('Secret') or '')):
+        raise RuntimeError(why)
     out = make_llm(c['Type'], json.loads(c.get('ConfigJson') or '{}'), c.get('Secret'))(
         'Reply with exactly: ok', 'ping')
     return f'model responded: {(out or "").strip()[:80]} - wired into intent triage'

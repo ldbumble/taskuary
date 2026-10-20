@@ -3,6 +3,7 @@ the person's own gateway key, so usage is metered and billed per person and one 
 else's (the owner, 2026-10-16: "it will be card called hipaa ai - access code"). The code is the only secret; the app ships
 no key."""
 import json, unittest
+import pytest
 from pathlib import Path
 from unittest import mock
 
@@ -74,3 +75,105 @@ class ModelsByJobTests(unittest.TestCase):
             r = TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'Secret': 'hai-code-123', 'Active': 1}).json()
         self.assertEqual(r['discovery'], {'fast': 'gemini-3.8-flash', 'agent': 'claude-sonnet-5-5'})
         self.assertEqual((s.get_setting('triage_ai'), s.get_setting('assistant_ai')), ('cli:claude', f'connector:{cid}'))
+
+
+class _Gateway:
+    """A gateway on this computer that answers /v1/models and /v1/chat/completions - or turns every code away (`status`)."""
+    def __init__(self, allow, status=200):
+        import http.server, threading
+        me = self
+        class H(http.server.BaseHTTPRequestHandler):
+            def _send(self, body):
+                code = me.status if self.path.startswith('/v1/') else 404
+                self.send_response(code); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                self.wfile.write(json.dumps(body if code == 200 else {'error': 'no'}).encode())
+            def do_GET(self): self._send({'data': [{'id': 'hipaa-ai'}]})
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length') or 0)); self._send({'choices': [{'message': {'content': 'ok'}}]})
+            def log_message(self, *a): pass
+        self.status, self.srv = status, http.server.ThreadingHTTPServer(('127.0.0.1', 0), H)
+        self.url = f'http://127.0.0.1:{allow(self.srv.server_address[1])}'
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+    def __enter__(self): return self
+    def __exit__(self, *a): self.srv.shutdown(); self.srv.server_close()
+
+
+def _closed_port():
+    import socket
+    s = socket.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+    return port
+
+
+class GatewayAddressTests(unittest.TestCase):
+    """The card asks for the gateway address, since this build ships none: with only the code it could never connect, and said
+    "That key didn't work ... copy all of it again" about an address nobody had been asked for (the owner, 2026-10-20)."""
+    CODE = 'hai-code-1234567890'
+
+    @pytest.fixture(autouse=True)
+    def _loopback(self, allow_test_port): self.allow = allow_test_port
+
+    def setUp(self):
+        self.s = MemoryStore(); self.cid = self.s.get_connector_by_type('hipaa_ai')['ConnectorId']
+
+    def choose(self, address):
+        from taskuary import firstrun
+        return firstrun.choose_key(self.s, 'hipaa_ai', self.CODE, cid=self.cid, config={'base_url': address})
+
+    def saved(self): return json.loads(self.s.get_connector(self.cid).get('ConfigJson') or '{}').get('base_url')
+
+    def test_the_build_ships_no_address(self):
+        self.assertEqual(llm.HIPAA_AI_URL, '')
+
+    def test_an_address_is_taken_as_pasted_and_saved_ending_v1(self):
+        for raw in ('https://ai.northwind.example', 'https://ai.northwind.example/', 'https://ai.northwind.example/v1/',
+                    'ai.northwind.example', ' https://ai.northwind.example/v1/models '):
+            self.assertEqual(llm.gateway_url(raw), 'https://ai.northwind.example/v1', raw)
+        self.assertEqual(llm.gateway_url('https://ai.northwind.example/llm'), 'https://ai.northwind.example/llm/v1')
+        self.assertEqual(llm.gateway_url('http://localhost:4000'), 'http://localhost:4000/v1')
+        self.assertEqual(llm.gateway_url(''), '')
+
+    def test_plain_http_is_refused_anywhere_but_this_computer(self):
+        for raw in ('http://ai.northwind.example', 'ftp://ai.northwind.example'):
+            with self.assertRaises(ValueError) as e: llm.gateway_url(raw)
+            self.assertEqual(str(e.exception), llm.GATEWAY_NOT_HTTPS)
+        self.assertEqual(self.choose('http://ai.northwind.example')['why'], llm.GATEWAY_NOT_HTTPS)
+
+    def test_no_address_says_add_it_not_that_the_key_failed(self):
+        out = self.choose('')
+        self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_MISSING))
+        self.assertNotIn("key didn't work", out['why'])
+        self.assertEqual(llm.gateway_problem({}, self.CODE), llm.GATEWAY_MISSING)
+
+    def test_an_address_that_does_not_answer_says_so(self):
+        out = self.choose(f'http://127.0.0.1:{self.allow(_closed_port())}')
+        self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_SILENT))
+        self.assertTrue(self.saved().endswith('/v1'), 'the address stays on the card for the next try')
+
+    def test_a_page_that_is_no_gateway_did_not_answer_either(self):
+        with _Gateway(self.allow) as g: self.assertEqual(llm.gateway_problem({'base_url': f'{g.url}/elsewhere'}, self.CODE), llm.GATEWAY_SILENT)
+
+    def test_only_a_gateway_that_turned_the_code_away_blames_the_code(self):
+        for status in (401, 403):
+            with _Gateway(self.allow, status) as g: out = self.choose(g.url)
+            self.assertEqual((out['ok'], out['why']), (False, llm.GATEWAY_CODE))
+            self.assertNotRegex(out['why'], r'\d{3}')
+        with _Gateway(self.allow, 500) as g: self.assertEqual(llm.gateway_problem({'base_url': g.url}, self.CODE), llm.GATEWAY_FAULT)
+
+    def test_the_saved_address_is_what_test_and_the_model_list_use(self):
+        with _Gateway(self.allow) as g:
+            self.s.save_connector({'ConnectorId': self.cid, 'Secret': self.CODE, 'ConfigJson': json.dumps({'base_url': g.url})}, 'owner')
+            self.assertIn('model responded: ok', llm.test_ai(self.s, self.cid))
+            self.assertEqual(llm.list_models('hipaa_ai', {'base_url': g.url}, self.CODE), ['hipaa-ai'])
+
+    def test_the_connections_card_saves_it_normalised_and_says_when_it_is_built_in(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        with mock.patch.object(server, 'store', self.s):
+            c = TestClient(server.app)
+            r = c.post('/api/connectors', json={'ConnectorId': self.cid, 'ConfigJson': json.dumps({'base_url': 'ai.northwind.example/'})})
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(self.saved(), 'https://ai.northwind.example/v1')
+            r = c.post('/api/connectors', json={'ConnectorId': self.cid, 'ConfigJson': json.dumps({'base_url': 'http://ai.northwind.example'})})
+            self.assertEqual((r.status_code, r.json()['detail']), (422, llm.GATEWAY_NOT_HTTPS))
+            row = next(x for x in c.get('/api/connectors').json()['data'] if x['Type'] == 'hipaa_ai')
+            self.assertIs(row['GatewayBuiltIn'], False)

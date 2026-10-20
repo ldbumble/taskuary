@@ -84,6 +84,7 @@ import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { noteWrite } from "./wrote.js";
+import { revealRing } from "./railReveal.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -384,6 +385,13 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   if (tail) for (const b of bands) if (b.level === "fyi") b.total = b.items.length + tail;
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
+  // what is on the table is ringed WHERE THE OWNER CAN SEE IT (railReveal.js): once per change, after the rows' .55s glide
+  const tableKey = current?.key || null;
+  useEffect(() => {
+    if (!tableKey) return undefined;
+    const t = setTimeout(() => revealRing(wrapRef.current), 620);
+    return () => clearTimeout(t);
+  }, [tableKey]);
   const [room, setRoom] = useState(0);
   useLayoutEffect(() => {
     const el = wrapRef.current;

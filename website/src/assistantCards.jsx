@@ -1096,6 +1096,9 @@ export function DayCards({ groups, onSection }) {
 // No meetings: the waiting side alone; nothing waiting: the meetings alone; neither: nothing.
 const atLocal = (s) => new Date(String(s).replace(" ", "T")).getTime();
 const firstNames = (who = []) => who.slice(0, 2).map((w) => String(w).split(/[ @]/)[0]).join(", ") + (who.length > 2 ? ` +${who.length - 2}` : "");
+// what is ON YOU across the opener's groups: a section's `you` (summarize), or all its rows where the section is on you (lanes.json) -
+// the headline's count, and the opener's line under the card reads the same number (AssistantView welcome)
+export const onYouCount = (groups = []) => groups.reduce((n, g) => n + (g.you ?? (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0)), 0);
 // `loading`: the launch is still reading the mail, so the counts are not the day's yet - they say so instead of growing under you
 export function DayOpener({ groups = [], onSection, top = null, loading = false }) {
   const today = useCalendarToday();
@@ -1110,7 +1113,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   // are on you (summarize - waiting on THEM is under On you but not on you, as the greeting has always said)
   const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
   const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
-  const onYou = groups.reduce((n, g) => n + (g.you ?? (SECTION[g.key]?.on_you ? g.n ?? g.rows.length : 0)), 0), toRead = cnt(read);
+  const onYou = onYouCount(groups), toRead = cnt(read);
   const row = (g) => (
     <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
       <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>

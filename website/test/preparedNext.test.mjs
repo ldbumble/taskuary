@@ -35,7 +35,7 @@ test("the press draws the prepared answer only for the selection it was prepared
   assert.match(surface, /preparedRef\.current\?\.selection_revision === capture\.selection_revision/);
   assert.match(surface, /if \(prep\) drawAhead\(\{ \.\.\.line, text: prep\.answer\.say[^;]*\}, prep\.answer_hash\);/);
   assert.match(surface, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;/);
-  assert.match(surface, /else if \(aheadItem && drawsNow\(aheadItem\)\)\s+drawAhead\(/);
+  assert.match(surface, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)\s+drawAhead\(/);
   assert.match(surface, /const aheadKey = prep \? null : /, "one line ahead, never two");
   assert.match(surface, /\} catch \(e\) \{\s+unshow\(\);/);
   const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("const ensureNextSelection = useCallback"));

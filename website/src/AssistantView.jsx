@@ -1750,9 +1750,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const drawsNow = (c) => !!c && showsTask(c, cardFor(c)) && !!heldTask(c.tid) && heldTerm(c.tid) !== undefined;
     if (prep) drawAhead({ ...line, text: prep.answer.say, options: prep.answer.options || [], chips: prep.answer.chips || [], card: prep.answer.item || null,
                           ...(drawsNow(prep.answer.item) ? {} : { held: true }) }, prep.answer_hash);
-    // ...only when its task is read already (and whether an agent holds it, which half its row turns on): an empty view put up ahead
-    // of its own read is the shell this is here to end, so a row clicked cold keeps the view it has until the answer, as before
-    else if (aheadItem && drawsNow(aheadItem))
+    // ...a Next's only when its task is read already (and whether an agent holds it, which half its row turns on): an empty view put up
+    // ahead of its own read is the shell this is here to end. A ROW CLICKED COLD is drawn at the click all the same (owner-approved,
+    // 2026-10-20): the old view stayed up under the click for the whole read and the ring sat on it, so the click looked unheard - now
+    // the new item's frame comes up with its title over the view's own loading state, the ring moves with it, and the answer fills it.
+    // (A pick by name carries no selection to refuse as stale, so its view's first read is no PW-118 write.)
+    else if (aheadItem && (drawsNow(aheadItem) || (key && showsTask(aheadItem, cardFor(aheadItem)))))
       drawAhead({ ...line, text: "", card: aheadItem });
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact

@@ -16,7 +16,8 @@ import api from "./api";
 import { track } from "./demoTrack";
 import { fmtStamp } from "./dates.js";
 import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRAND } from "./theme.jsx";
-import BoardView from "./BoardView.jsx";
+import { lazyView } from "./lazyView.jsx";
+const BoardView = lazyView(() => import("./BoardView.jsx"));   // the Board is a tab away from the first screen
 import { canvasRequestFromHash } from "./canvasLinks.js";
 import { onPlace, openAppLink } from "./appLinks.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";

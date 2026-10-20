@@ -22,7 +22,8 @@ test("the set-up post enters the walk instead of handing back a link to press la
 });
 
 test("the walk is the task's own conversation, with its browser, mounted right here", () => {
-  assert.match(view, /import GeneralWorkspace from "\.\/GeneralWorkspace\.jsx"/);
+  // its own chunk (lazyView), the same component: the walk is drawn after the pile, never on the first frame
+  assert.match(view, /const GeneralWorkspace = lazyView\(loadGeneral\)/);
   assert.match(view, /<GeneralWorkspace task=\{walk\.task\} compact \/>/,
     "GeneralWorkspace owns the session, the provider and the SessionPane browser");
   assert.match(css, /\.tq-walk \{[^}]*flex: 1;[^}]*min-height: 0;/, "it has a parent that can shrink");

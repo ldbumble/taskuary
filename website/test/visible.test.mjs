@@ -2,72 +2,91 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pollWhileActive, pollWhileVisible } from "../src/visible.js";
 
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// Every interval here runs on node:test's fake clock: on real timers a loaded box starved the 20ms
+// poll to one tick inside 55ms, and a failed assertion skipped stop(), so the live interval kept the
+// process from ever exiting (one `node --test` sat 18 minutes). tick(ms) is "ms passed", exactly.
+const fakeClock = (t) => { t.mock.timers.enable({ apis: ["setInterval"] }); return (ms) => t.mock.timers.tick(ms); };
 
-test("an active mounted view refreshes immediately instead of waiting for its interval", () => {
+// A fake document whose cleanup runs even when an assertion throws, so no test leaks it or a poll.
+function fakeDocument(t, visibilityState) {
+  const listeners = {};
+  globalThis.document = {
+    visibilityState,
+    addEventListener: (e, fn) => { listeners[e] = fn; },
+    removeEventListener: (e) => { delete listeners[e]; },
+  };
+  t.after(() => { delete globalThis.document; });
+  const show = (state) => { document.visibilityState = state; listeners.visibilitychange(); };
+  return { listeners, show };
+}
+
+test("an active mounted view refreshes immediately instead of waiting for its interval", (t) => {
+  const tick = fakeClock(t);
   let n = 0;
   const stop = pollWhileActive(true, () => { n += 1; }, 1000);
+  t.after(stop);
   assert.equal(n, 1);
-  stop();
+  tick(999);
+  assert.equal(n, 1, "the interval adds nothing before it is due");
+  tick(1);
+  assert.equal(n, 2);
 });
 
-test("an inactive mounted view neither refreshes nor arms a poll", () => {
+test("an inactive mounted view neither refreshes nor arms a poll", (t) => {
+  const tick = fakeClock(t);
   let n = 0;
   const stop = pollWhileActive(false, () => { n += 1; }, 1000);
   assert.equal(n, 0);
   assert.equal(stop, undefined);
+  tick(5000);
+  assert.equal(n, 0, "no interval was armed");
 });
 
-test("an active app tab still waits when the whole browser is hidden", () => {
-  const listeners = {};
-  globalThis.document = {
-    visibilityState: "hidden",
-    addEventListener: (e, fn) => { listeners[e] = fn; },
-    removeEventListener: (e) => { delete listeners[e]; },
-  };
+test("an active app tab still waits when the whole browser is hidden", (t) => {
+  const tick = fakeClock(t);
+  const { show } = fakeDocument(t, "hidden");
   let n = 0;
   const stop = pollWhileActive(true, () => { n += 1; }, 1000);
+  t.after(stop);
   assert.equal(n, 0);
-  document.visibilityState = "visible";
-  listeners.visibilitychange();
+  tick(3000);
+  assert.equal(n, 0, "a hidden browser must not poll either");
+  show("visible");
   assert.equal(n, 1, "showing the browser must perform the deferred refresh immediately");
-  stop();
-  delete globalThis.document;
 });
 
-test("with no document the interval just runs (node tests, no window)", async () => {
+test("with no document the interval just runs (node tests, no window)", (t) => {
+  const tick = fakeClock(t);
   let n = 0;
-  // a generous window: with a 20ms interval and 55ms of waiting this test starved to one tick
-  // whenever a build or pytest ran beside it - the assertion is "it keeps ticking", not "on time"
   const stop = pollWhileVisible(() => { n += 1; }, 20);
-  await wait(250);
+  t.after(stop);
+  assert.equal(n, 0, "pollWhileVisible itself waits for the first interval");
+  tick(20); tick(20);
+  assert.equal(n, 2, "it keeps ticking, once per interval");
   stop();
-  assert.ok(n >= 2, `expected a few ticks, got ${n}`);
+  tick(100);
+  assert.equal(n, 2, "stop() ends the interval");
 });
 
-test("a hidden document stops the interval and showing it again restarts it", async () => {
-  const listeners = {};
-  globalThis.document = {
-    visibilityState: "visible",
-    addEventListener: (e, fn) => { listeners[e] = fn; },
-    removeEventListener: (e) => { delete listeners[e]; },
-  };
+test("a hidden document stops the interval and showing it again restarts it", (t) => {
+  const tick = fakeClock(t);
+  const { listeners, show } = fakeDocument(t, "visible");
   let n = 0;
   const stop = pollWhileVisible(() => { n += 1; }, 20);
-  await wait(55);
-  assert.ok(n >= 2);
-  const atHide = n;
-  document.visibilityState = "hidden";
-  listeners.visibilitychange();
-  await wait(55);
-  assert.equal(n, atHide, "must not tick while hidden");
-  document.visibilityState = "visible";
-  listeners.visibilitychange();
-  assert.ok(n > atHide, "must tick as soon as the tab is shown, not wait for the interval");
-  const atShow = n;
-  await wait(55);
-  assert.ok(n > atShow, "must keep ticking on the interval once visible");
+  t.after(stop);
+  tick(20); tick(20);
+  assert.equal(n, 2);
+  show("hidden");
+  tick(200);
+  assert.equal(n, 2, "must not tick while hidden");
+  show("visible");
+  assert.equal(n, 3, "must tick as soon as the tab is shown, not wait for the interval");
+  tick(19);
+  assert.equal(n, 3, "the interval restarts from the show, not from the old schedule");
+  tick(1);
+  assert.equal(n, 4, "must keep ticking on the interval once visible");
   stop();
   assert.equal(listeners.visibilitychange, undefined);
-  delete globalThis.document;
+  tick(100);
+  assert.equal(n, 4, "stop() ends the interval");
 });

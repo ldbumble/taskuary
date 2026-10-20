@@ -146,7 +146,11 @@ def world(store) -> dict:
                 terminal.SESSIONS.pop(r.sid, None); r.sid, r.agent = sid, kind; terminal.SESSIONS[sid] = r
             workerstate.record(store, t, sid, 'working')
             if st != 'working': workerstate.record(store, t, sid, st, text=said)
+            # what a real run leaves behind: a coding session names its worker on the task (terminal.open_session) and files its
+            # transcript when its pty ends (Term.keep) - the world's runs that are over had neither, so no surface could read them
+            if kind == 'coding': store.update_task(t, {'Assignee': 'agent:coding'}, 'walk')
             if st == 'stopped': store.add_transcript(t, sid, 'Reading the export job.', agent=kind, ext_id=f'conv-{sid}', brain='claude')
+            elif kind == 'coding' and st in ('finished', 'failed'): store.add_transcript(t, sid, 'Reading the export job.', agent=kind, brain='claude')
             out[f'{kind}-{word}'] = t
     g = f.task(title='Move payroll to Payworth', status='open', kind='task', DoneWhen='payroll runs on Payworth for every site',
                DueAt=(datetime.now() + timedelta(days=60)).strftime('%Y-%m-%d'))

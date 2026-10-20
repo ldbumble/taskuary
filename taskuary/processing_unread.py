@@ -409,6 +409,20 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         # ...and a session YOU ended is `session saved`, not `agent stopped` (A1, 2026-09-25): its report is written
         if funnel.agent_left(store, card['tid']):
             card.update(lane='saved' if funnel.session_saved(store, card['tid']) else 'stopped', why=card['why_idle'])
+    # HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the task list and the Board take (taskstate):
+    # a run that failed or was stopped read "on you" here and one that finished "waiting to start", whatever the worker had said (G7)
+    if tid and active and not workers and not persisted_working and not news and not review and card['lane'] in ('yours', 'queued'):
+        from . import workerstate as ws
+        end = ws.ended(store, tid)
+        if end in ws.TERMINAL:
+            last = store.last_worker_event(tid, kinds=ws.TERMINAL) or {}
+            said = ' '.join(str(last.get('Text') or '').split())[:160]
+            card.update(lane='saved' if funnel.session_saved(store, tid) else 'stopped',
+                        why=f"{agent_word(task.get('Kind'))} {'failed' if end == 'failed' else 'stopped'}" + (f': {said}' if said else ''))
+        elif end == 'finished':
+            last = store.last_worker_event(tid, kinds=('finished',)) or {}
+            said = ' '.join(str(last.get('Text') or '').split())[:160]
+            card.update(lane='yours', why=f"{agent_word(task.get('Kind'))} finished" + (f': {said}' if said else ' - read what it found'))
     # THE LATEST ACTION IS THE STATUS (the owner, 2026-09-24). An agent parked or asking already spoke
     # for its task over a draft; one still WORKING did not, so a reply it wrote a minute into the session
     # read "reply ready" through forty more minutes of edits. Working is newer than any draft it made -

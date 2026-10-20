@@ -4939,6 +4939,13 @@ class SQLiteStore:
     def add_worker_event(self, fields: dict) -> int:
         return self._insert('worker_event', fields, ('TaskId', 'Sid', 'Kind', 'RequestId', 'Text', 'ChoicesJson', 'Source', 'EventId'), {'CreatedAt': _now()})
     def worker_events(self, task_id: int) -> list: return self._rows('SELECT * FROM worker_event WHERE TaskId=? ORDER BY Id', (task_id,))
+    def last_worker_event(self, task_id: int, kinds=None, skip=()):
+        """The task's newest worker event - of `kinds` only, none of `skip` - or None. Read newest-first down the task's index, so it
+        stops at the first match however long the run's history is (workerstate.ended)."""
+        q, args = 'SELECT * FROM worker_event WHERE TaskId=?', [task_id]
+        if kinds: q += f" AND Kind IN ({','.join('?' * len(kinds))})"; args += list(kinds)
+        if skip: q += f" AND Kind NOT IN ({','.join('?' * len(skip))})"; args += list(skip)
+        return self._one(q + ' ORDER BY Id DESC LIMIT 1', tuple(args))
     def worker_event_exists(self, event_id: str) -> bool: return self._one('SELECT 1 x FROM worker_event WHERE EventId=?', (event_id,)) is not None
     def wrote_to_locally(self, mailbox: str, email: str, exclude_mid=None) -> bool:
         """Verified SENT evidence this store already holds, scoped to the receiving mailbox: the mailbox's own

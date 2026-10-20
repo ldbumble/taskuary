@@ -60,6 +60,25 @@ class StateTests(unittest.TestCase):
                          ['queued', 'working', 'blocked', 'left', 'left', 'agentdone', 'agentdone'])
         self.assertIsNone(taskstate.column('yours')); self.assertIsNone(taskstate.column('theirs'))
 
+    def test_how_the_last_run_ended_is_the_state_when_nothing_is_live(self):
+        """The run's own word about how it ended (workerstate.ended) - the list and the Board said "on you" over a run that failed or
+        was stopped, and "waiting to start" over one that finished (G7, 2026-10-20)."""
+        from taskuary import workerstate as ws
+        s = MemoryStore()
+        def ran(*kinds, **kw):
+            t = task(s, **kw)
+            for k in kinds: ws.record(s, t, 'r1', k, text='the test database was not reachable' if k == 'failed' else '')
+            return t
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'failed'))), 'stopped')
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'stopped'))), 'stopped')
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'finished'))), 'agentdone')
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'finished', Assignee='agent:coding'))), 'agentdone')
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'finished', 'working', 'turn_end'))), 'yours')   # asked for more since
+        self.assertEqual(taskstate.state(s, row(s, ran('working', 'turn_end'))), 'yours')                          # silence is not an ending
+        t = ran('working', 'stopped'); s.tag_task(t, terminal.SAVED, True, 'owner')
+        self.assertEqual(taskstate.state(s, row(s, t)), 'saved')
+        self.assertEqual((ws.ended(s, ran('working', 'failed')), ws.ended(s, ran('working', 'turn_end'))), ('failed', None))
+
 
 
 class MakeATaskTests(unittest.TestCase):

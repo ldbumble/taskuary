@@ -118,3 +118,23 @@ test("a rail pick of the same item twice leaves one pick line, and keeps everyth
   const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
   assert.match(view, /setMsgs\(\(m\) => pickLine\(m, \{ id: optimisticId, role: "user", text: asUser, pick: key \|\| undefined \}\)\)/);
 });
+
+// SWAP, NEVER CLEAR (G8, 2026-10-20): an item shown before was opened again - placeLine moved its line to the end and kept the old
+// line's id as an alias - and the read that matched the new line to its durable turn dropped that alias. The next read found the old
+// line unknown, pushed it at the end, and oneCopy kept it: the item before came back live on the table while the rail rang the new one
+test("a line that replaced an item's older line keeps that line's id through every read, so the old line never comes back last", async () => {
+  const { placeLine } = await import("../src/assistantTurns.js");
+  const card = (key) => ({ key, kind: "todo" });
+  const old = [{ id: 33, role: "assistant", text: "Erin asked for the August numbers.", card: card("processing:a") },
+    { id: 38, role: "assistant", text: "Ray asked about the cutover.", card: card("processing:b") }];
+  // the walk opens item a again, then item b again - each from the server's turn, with its own words
+  let m = placeLine(old, { id: "a1", role: "assistant", text: "Erin asked for the August numbers (2h ago).", card: card("processing:a") });
+  const durable1 = [...old, { id: 41, role: "assistant", text: "Erin asked for the August numbers (2h ago).", card: card("processing:a") }];
+  m = mergeDurableTurns(m, durable1).messages;
+  assert.deepEqual(m.find((x) => x.id === "a1").alias, [33], "the old line's id is still one of its names");
+  m = placeLine(m, { id: "a2", role: "assistant", text: "Ray asked about the cutover (1h ago).", card: card("processing:b") });
+  const durable2 = [...durable1, { id: 42, role: "assistant", text: "Ray asked about the cutover (1h ago).", card: card("processing:b") }];
+  for (let read = 0; read < 3; read++) m = mergeDurableTurns(m, durable2).messages;
+  assert.equal(m.at(-1).card.key, "processing:b", "the item the walk brought last is the last line - the one on the table");
+  assert.equal(m.filter((x) => x.card?.key === "processing:a").length, 1);
+});

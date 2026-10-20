@@ -56,7 +56,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
@@ -1775,7 +1775,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // ...and otherwise WHAT IS OPEN ON THE TABLE, whatever put it there (the owner, 2026-10-01: "the assistant has the open box in
       // context always regardless of what it is"): a task opened by name or from the rail never became the walk's `current`, so a
       // question about it went out about the walk's old item, or about nothing. The newest live card that is not folded leads.
-      const table = msgs[interactiveCardIndex(msgs)]?.card;
+      const table = msgs[tableCardIndex(msgs, current || cardRef.current)]?.card;
       const tableKey = table?.key && table.key !== foldedKey && !browsing ? table.key : null;
       // ...and a page open beside it does not take it off the table: the Assistant's own "turn off background sync" opened Settings, and the
       // next "mark this done" went out about nothing while the rail still said ON THE TABLE (verify, 2026-10-19). Both go; the words say which
@@ -2625,7 +2625,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     pickUp: (key, why) => { setFoldedKey((k) => (k === key ? null : k)); setNextComing(false); setLeavingTid(null); if (why) setErr(why); } }),
     [bodyH, expanded, foldedKey, browsing, phone, litNow?.verb, litNow?.line]);   // eslint-disable-line react-hooks/exhaustive-deps
   const handedTo = handoff ? (state?.doorways || []).find((d) => d.channel === handoff.channel) : null;
-  const lastCardIdx = useMemo(() => interactiveCardIndex(shown), [shown]);
+  const lastCardIdx = useMemo(() => tableCardIndex(shown, old ? null : current || cardKey), [shown, old, current, cardKey]);
   const lastSaidIdx = useMemo(() => lastActIndex(shown), [shown]);
   // a reloaded answer is text only: the item still on the table lends it its verbs, so Next is never gone
   // ONE ROW OF WORDS (the owner, 2026-10-05: "why is there buttons both places?"): a task on the table is drawn as its task view,

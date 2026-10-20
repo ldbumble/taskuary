@@ -173,5 +173,5 @@ test("background events can notify but cannot choose, clear, or advance Current"
   assert.match(events, /speakRef\.current/);
   assert.doesNotMatch(events, /setCurrent|setCurrentItem|currentRef\.current\s*=|putOnTable|surfaceRef|deferInChat/);
   assert.match(view, /putOnTable\(data\.current \|\| null, "sync"\)/);   // the server's validated Current, never the last card (PW-162)
-  assert.match(view, /const lastCardIdx = useMemo\(\(\) => interactiveCardIndex\(shown\), \[shown\]\)/);
+  assert.match(view, /const lastCardIdx = useMemo\(\(\) => tableCardIndex\(shown, old \? null : current \|\| cardKey\), \[shown, old, current, cardKey\]\)/);
 });

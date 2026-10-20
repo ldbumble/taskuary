@@ -997,8 +997,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
   const [lit, setLit] = useState(null);
   useEffect(() => onPressed(() => setLit(null)), []);
-  // an act makes every task read held ahead of its view old (taskDetail.js) - Next is no act: it is what the read ahead is for
-  useEffect(() => onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) forgetTasks(); }), []);
+  // an act makes the read held of ITS task old (taskDetail.js) - the task last on the table, since a close has put it down by the time
+  // the act is told. Forgetting every read let go of the next item's too, just before the walk went on to it (G8). Next is no act
+  const actedTid = useRef(null);
+  useEffect(() => { if (currentItem?.tid) actedTid.current = currentItem.tid; }, [currentItem?.tid]);
+  useEffect(() => onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) forgetTasks(actedTid.current ?? null); }), []);
   // ...and a write anywhere - an agent, another tab, a sync - makes that task's held read old (all of them, when it names none)
   useEffect(() => onLive("task-changed", (ev) => forgetTasks(ev?.task_id ?? null)), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
@@ -1667,8 +1670,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // A rail row pulled by name is the same: the server answers with the row that was pressed. A refusal or a failure takes it down
     // again and puts the table back on the item it left (the catch below).
     const was = currentRef.current, rows = pileRef.current?.items || [];
-    const aheadKey = key || (putDown && capture?.expected_next_key && (capture.expected_next_members || []).length <= 1 ? capture.expected_next_key : null);
-    const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling) : null;
+    // ...and the same after a close that already put the table down (Mark done, Remove, Remind me: advance), and at the walk's start
+    const aheadKey = key || (capture?.expected_next_key && (capture.expected_next_members || []).length <= 1 ? capture.expected_next_key : null);
+    // ...never an item an agent is working: the server answers "it is with the agent right now" and puts nothing on the table
+    const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling && i.lane !== "working") : null;
     // ...only when its task is read already (and whether an agent holds it, which half its row turns on): an empty view put up ahead
     // of its own read is the shell this is here to end, so a row clicked cold keeps the view it has until the answer, as before
     if (aheadItem && showsTask(aheadItem, cardFor(aheadItem)) && heldTask(aheadItem.tid) && heldTerm(aheadItem.tid) !== undefined) {

@@ -42,7 +42,9 @@ test("the view draws from the held read, and the reads ahead are where the next 
   assert.match(view, /onPointerEnter=\{\(\) => \{ if \(!isCur && i\.tid\) prefetchTask\(api, i\.tid\); \}\}/);        // a rail row under the pointer
   assert.match(search, /if \(aheadTid\) prefetchTask\(api, aheadTid\);/);                                             // a search hit highlighted
   // an act makes the held reads old - but Next is no act, it is what they are for
-  assert.match(view, /onPressed\(\(id\) => \{ if \(!\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) forgetTasks\(\); \}\)/);
+  assert.match(view, /onPressed\(\(id\) => \{ if \(!\/\(\^\|:\)next\$\/\.test\(String\(id \|\| ""\)\)\) forgetTasks\(actedTid\.current \?\? null\); \}\)/);
+  assert.match(view, /useEffect\(\(\) => \{ if \(currentItem\?\.tid\) actedTid\.current = currentItem\.tid; \}, \[currentItem\?\.tid\]\);/,
+    "an act lets go of its own task's read only - not the next item's, just before the walk goes on to it");
 });
 
 test("a task's session is held with it: unknown until read, null for a task no agent holds", async () => {
@@ -53,7 +55,10 @@ test("a task's session is held with it: unknown until read, null for a task no a
   assert.equal(heldTerm(3).sid, "s2", "the live one first, as findTerm picks");
   assert.equal(heldTerm(7), null);
   forgetTasks(7);
-  assert.equal(heldTerm(3), undefined, "a write lets the session list go with the task");
+  assert.equal(heldTerm(3).sid, "s2", "another task's write leaves this one's session as it was");
+  assert.equal(heldTerm(7), undefined, "...and its own is unknown again");
+  forgetTasks();
+  assert.equal(heldTerm(3), undefined, "a write that names no task lets the whole list go");
 });
 
 // NEXT PUTS THE NEXT ONE UP AT THE PRESS (G8): the fold left the canvas with no view and the rail ringing the item put down until the
@@ -65,4 +70,5 @@ test("Next draws what its capture names in the same frame as the fold, and the a
   assert.match(view, /const id = ahead && card\?\.key === ahead\.key \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
   assert.match(view, /if \(ahead\) \{ setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== ahead\.id\)\); putOnTable\(was\); \}/, "a failure puts the table back");
   assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
+  assert.match(view, /i\.key === aheadKey && !i\.settling && i\.lane !== "working"/, "never an item an agent has: the server puts nothing up for it");
 });

@@ -13,6 +13,7 @@
 //   WORD    the lit button is not the one the line was judged for (/api/advice's label)
 //   HIDDEN  the lit button is off the screen or covered (elementFromPoint), a scroll away from the line naming it - at EVERY width the
 //           walk runs (--viewports): at 390px a refused send's Redraft stood under the phone's docked strip and row, unseen at 1366
+//   TABLE   the rail marks one task on the table and the canvas draws another, once the screen has settled (14s)
 //   CRASH   the page threw, or a press could not be made - a walk that did not happen is a failure, never a pass
 //   STALE   after a press the item moved on the server (its advice revision) and the screen still shows the line read before it
 //
@@ -120,10 +121,12 @@ const look = (page) => page.evaluate(() => {
   const errs = [...document.querySelectorAll('[role="alert"], .MuiAlert-standardError, .tq-next-err')].filter(vis).map((e) => e.innerText.trim()).filter(Boolean);
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && /^on the table$/i.test(e.textContent?.trim() || ""));   // textContent: a phone folds the rail away
   const rail = [...document.querySelectorAll("[data-tq-rail] [data-tq-key]")].map((e) => ({ key: e.getAttribute("data-tq-key"), text: e.innerText.replace(/\s+/g, " ").trim() }));
-  const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
+  // the task the rail marks on the table, and the one the canvas draws - textContent: a phone folds the rail away
+  const tableRef = (table?.closest("[data-tq-key]")?.textContent.match(/TQ-\d+/) || [])[0] || "", cardRef = ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
+  const ref = tableRef || cardRef;
   const box = card && [...card.querySelectorAll("textarea")].find((t) => vis(t) && !t.readOnly && t.getAttribute("aria-hidden") !== "true");
   return {
-    ref, rail, table: table?.closest("[data-tq-key]")?.getAttribute("data-tq-key") || "",
+    ref, tableRef, cardRef, rail, table: table?.closest("[data-tq-key]")?.getAttribute("data-tq-key") || "",
     line: lineEl ? lineEl.querySelector(".tq-next-txt")?.innerText.trim() || "" : "", none: noneEl ? { why: noneEl.getAttribute("data-tq-advice"), line: noneEl.innerText.trim() } : null,
     strip: strip ? { busy: strip.getAttribute("data-tq-strip") === "busy", text: strip.innerText.replace(/\s+/g, " ").trim() } : null,
     lit, row: rowBtns, cardBtns, chips, errs, draft: box ? box.value : null,
@@ -161,7 +164,9 @@ async function settle(page, ms = 14000) {
   for (let t = 0; t < ms; t += 500) {
     await wait(500); s = await look(page);
     const k = JSON.stringify([s.line, s.none, s.lit, s.row, s.strip?.busy]);
-    same = k === last && !s.strip?.busy ? same + 1 : 0; last = k;
+    // ...and the canvas drawing what the rail marks: a row read while the pulled item was still loading was the last item's row
+    const landed = !(s.tableRef && s.cardRef && s.tableRef !== s.cardRef);
+    same = k === last && !s.strip?.busy && landed ? same + 1 : 0; last = k;
     if (same >= 3) break;
   }
   return s;
@@ -192,6 +197,7 @@ async function record(page, srv, item, step, s) {
   if (!s.strip && s.onTable && !s.line && !s.none && !s.pops.length) note("EMPTY", at, "an item is on the table and no strip is drawn over it");
   if (s.line && !s.lit && !s.pops.length) note("NOLIT", at, `"${s.line.slice(0, 70)}" and no button is lit`);
   if (s.line && s.lit && adv?.label && !s.lit.word.startsWith(adv.label) && !(adv.verb === "fix")) note("WORD", at, `the line was judged for "${adv.label}" and "${s.lit.word}" is lit`);
+  if (s.tableRef && s.cardRef && s.tableRef !== s.cardRef) note("TABLE", at, `the rail marks ${s.tableRef} on the table and the canvas draws ${s.cardRef}`);
   if (s.line && s.lit && !s.pops.length && (!s.lit.inView || s.lit.covered)) note("HIDDEN", at, `the lit "${s.lit.word}" (${s.lit.where}) is ${s.lit.inView ? "covered" : "off the screen"}`);
   return rec;
 }

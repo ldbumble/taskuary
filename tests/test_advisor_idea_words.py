@@ -91,7 +91,8 @@ class RunTests(unittest.TestCase):
         for at in ('06:00', '07:00', '08:00'):
             s.add_report_run(A.AR['sid'], {'at': f'2026-09-18 {at}:00', 'title': 'Monthly AR Report', 'failed': True, 'error': 'x'})
         # a second health line - a workflow that never ran (an erroring connection is the rail's row, not an idea)
-        s.save_source({'Channel': 'report', 'Address': 'wf9', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Nightly sync', 'type': 'agent', 'access': 'write', 'cron': '0 1 * * *'})}, 't')
+        wf = s.save_source({'Channel': 'report', 'Address': 'wf9', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Nightly sync', 'type': 'agent', 'access': 'write', 'cron': '0 1 * * *'})}, 't')
+        s.set_setting(assistant.WORKFLOWS_SEEN, json.dumps({str(wf): '2026-09-01 00:00:00'}), 't')      # known for weeks, never run
         self.assertGreaterEqual(len(assistant.health_ideas(s)), 2)
         s.set_setting('assistant_max_lines', '1', 't')
         self.assertEqual(assistant.run(s, llm=None, force=True)['said'], 1)

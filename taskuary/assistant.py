@@ -509,11 +509,29 @@ def candidates(store, c: dict) -> list:
 # is taken or declined in the walk, and the decline is remembered on its key (fresh() below - a
 # constant `sig` means a dismissed idea never returns; a health sig is the failure's own stamp, so a
 # NEW failure comes back after the old one was seen).
+WORKFLOWS_SEEN = 'health_workflow_seen'   # {source id: when the Advisor first saw it as a workflow that never ran}
+
+
+def _workflows_seen(store, reports: list, now: datetime) -> dict:
+    """When each never-run workflow was first seen. A source row keeps no saved-at stamp, so "has never run" was said the
+    minute one was saved, before its clock had come round once (the rail Advisor's eval); it waits a day from first sight now."""
+    try: was = json.loads(store.get_setting(WORKFLOWS_SEEN) or '{}') or {}
+    except ValueError: was = {}
+    stamp = now.strftime('%Y-%m-%d %H:%M:%S')
+    want = {str(r['source_id']) for r in reports if r['workflow'] and r['active']}
+    got = {k: was.get(k) or stamp for k in want}
+    if got != was:
+        try: store.set_setting(WORKFLOWS_SEEN, json.dumps(got), 'assistant')
+        except Exception as e: logger.debug(f'health: the workflows seen were not kept - {e}')
+    return got
+
+
 def health_ideas(store, now: datetime = None) -> list:
     """A report that failed its last three runs; a workflow never run since it was saved; a live
     connection erroring; a brain left blank while mail waits. One row each, the door is the tab that fixes it."""
     from . import appfacts
     out, now = [], now or datetime.now()
+    seen = _workflows_seen(store, appfacts.reports(store), now)
     for r in appfacts.reports(store):
         if not r['active']: continue
         runs = store.report_runs(r['source_id'], 3) or []
@@ -526,7 +544,7 @@ def health_ideas(store, now: datetime = None) -> list:
                         'text': f"{r['title']} failed its last three runs - {_short(runs[0].get('error') or 'no reason recorded', 80)}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],
                                    'why': 'three failures in a row is a broken report, not a bad day'}})
-        elif r['workflow'] and not runs:
+        elif r['workflow'] and not runs and _ts(seen.get(str(r['source_id']))) <= (now - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S'):
             out.append({'key': f"health:workflow:{r['source_id']}", 'kind': 'health', 'sig': 'never',
                         'text': f"{r['title']} is a workflow that has never run - its clock is {r['schedule'] or 'not set'}.",
                         'action': {'type': 'health', 'tab': 'Reports', 'hash': f"report={r['source_id']}", 'source_id': r['source_id'],

@@ -19,6 +19,10 @@ import { theme, ACCENT, ALERT, BG, BORDER, DIM, FAINT, INK, PANEL, GRADIENT, BRA
 import { lazyView } from "./lazyView.jsx";
 const BoardView = lazyView(() => import("./BoardView.jsx"));   // the Board is a tab away from the first screen
 import { canvasRequestFromHash } from "./canvasLinks.js";
+import { readLists } from "./connectorLists.js";
+// a link to Connections asks for its lists the moment the address is read - not once the canvas, its chunk and Connections' own
+// chunk have all come in (connectorLists.js: a cold #connector=whatsapp sent its first read ~1.4 s after the page was asked for)
+const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connections") readLists(api); };
 import { onPlace, openAppLink } from "./appLinks.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
@@ -252,7 +256,7 @@ export default function TaskHubPage() {
   // On a busy live session that left the requested page looking completely blank for many seconds.
   const [tab, setTab] = useState("Assistant");
   // what the canvas is asked to open - a task, or a browse card - numbered so the same one asked twice opens twice
-  const [canvasReq, setCanvasReq] = useState(() => { const r = canvasRequestFromHash(window.location.hash || "", 1); return r && { ...r, fromUrl: true }; });
+  const [canvasReq, setCanvasReq] = useState(() => { const r = canvasRequestFromHash(window.location.hash || "", 1); readAhead(r); return r && { ...r, fromUrl: true }; });
   const ask = useCallback((req) => setCanvasReq((cur) => ({ ...req, n: (cur?.n || 0) + 1 })), []);
   const demo = useDemo();          // the badge, and what the header hides to make room for it
   useEffect(() => holdLive(), []);
@@ -377,6 +381,7 @@ export default function TaskHubPage() {
   // writes it more exactly, never as a new step
   useEffect(() => onPlace((h, back) => {
     const req = canvasRequestFromHash(h, 0);
+    readAhead(req);
     if (req || (back && !h)) { ask({ ...(req || { kind: "home" }), fromUrl: true }); setTab("Assistant"); tabRef.current = "Assistant"; }
     else if (/^#msg=\d+/.test(h)) go("Assistant");
     // eslint-disable-next-line react-hooks/exhaustive-deps

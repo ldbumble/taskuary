@@ -20,6 +20,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
+import { takeLists } from "./connectorLists.js";
 import { nothingMatches } from "./searchHits.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
@@ -1610,7 +1611,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
   const load = useCallback(async () => {
     try {
-      const [c, s, t] = await Promise.all([api.get("/api/connectors"), api.get("/api/sources"), api.get("/api/report-types")]);
+      // the page's read ahead the first time (connectorLists.js); every load after it - a save, a sync - reads anew
+      const [c, s, t] = await (takeLists() || Promise.all([api.get("/api/connectors"), api.get("/api/sources"), api.get("/api/report-types")]));
       setConnectors(c.data.data || []); setNOn(c.data.connected ?? null); setSources(s.data.data || []); setTypes(t.data.data || []);
     } catch (e) { setErr(e?.response?.data?.detail || "Failed to load connectors"); }
   }, []);

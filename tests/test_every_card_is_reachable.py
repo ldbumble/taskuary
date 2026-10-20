@@ -113,7 +113,7 @@ class EveryCardIsOnThePage(unittest.TestCase):
         (2026-09-22).
         """
         src = (ROOT / 'website' / 'src' / 'ConnectorsView.jsx').read_text(encoding='utf-8')
-        groups = src[src.index('const groups = ['):src.index('const terms = q.split')]
+        groups = src[src.index('const groups = '):src.index('const terms = q.split')]
         listed = set(re.findall(r'specialCards\("([a-z0-9_]+)"', groups))
         for call in re.findall(r'(?:channelCards|dataCards|plannedCards)\(\[(.*?)\]\)', groups, re.S):
             listed |= set(re.findall(r'"([a-z0-9_]+)"', call))

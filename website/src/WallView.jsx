@@ -136,7 +136,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       const wrote = await closeAgentWork(api, s.taskId);
       const t = tasks[s.taskId] || {};
       const report = typeof wrote?.report === "string" ? wrote.report : "";
-      setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`, drafting: false,
+      setWrapDone({ tid: s.taskId, ref: t.ref || `TQ-${String(s.taskId).padStart(4, "0")}`, drafting: false, writing: wrote?.writing === true,
         line: report.replace(/^(?:AGENT|CODER) REPORT\s*/, "").split("\n").map((x) => x.trim()).find(Boolean)?.replace(/[.\s]+$/, "") || "" });   // the notice adds its own full stop
       setSessions((ss) => (ss || []).filter((x) => x.sid !== s.sid));
       setOrder((o) => o.filter((sid) => sid !== s.sid));
@@ -173,7 +173,11 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       {wrapNotice && <Alert severity="error" onClose={() => setWrapNotice("")} sx={{ mb: 1 }}>{wrapNotice}</Alert>}
       {wrapDone && <Alert severity="success" onClose={() => setWrapDone(null)} sx={{ mb: 1 }}
         action={<Button color="inherit" size="small" onClick={() => onOpenTask?.(wrapDone.tid)}>Open {wrapDone.ref}</Button>}>
-        Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}
+        {/* the write-up runs on the server and closes the task after it (writeup.py): until the close lands - the task leaves the
+            active list, which a task-changed event reloads - the notice says what is true now, in the closing card's own words */}
+        {wrapDone.writing && tasks[wrapDone.tid] && !["done", "dropped"].includes(tasks[wrapDone.tid].Status)
+          ? <>Writing up {wrapDone.ref}. The task closes when that is filed.</>
+          : <>Wrapped up {wrapDone.ref}{wrapDone.line ? ` — ${wrapDone.line}` : ""}. {wrapDone.drafting ? "A reply is drafted for your approval on the task; the task closes when you send or dismiss it." : "The task is closed."}</>}
       </Alert>}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.25 }}>
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 15 }}>The wall</Typography>

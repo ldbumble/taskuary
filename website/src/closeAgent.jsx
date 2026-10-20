@@ -18,7 +18,11 @@ export const writeUpThenClose = (api, tid) => api.post(`/api/tasks/${tid}/wrap`,
   .then(() => true).catch(() => false);
 // the Wall's Close agent and the task page's Mark done on a live session (TaskPage.stopAndFinish): the job, or - when it cannot
 // start (nothing on screen to write up) - the close alone, as a write-up that fails always did
-export const closeAgentWork = async (api, tid) => { if (!(await writeUpThenClose(api, tid))) await completeTask(api, tid); return null; };
+// ...and says which: {writing: true} while the job writes up and closes, null once the task closed here
+export const closeAgentWork = async (api, tid) => {
+  if (await writeUpThenClose(api, tid)) return { writing: true };
+  await completeTask(api, tid); return null;
+};
 
 const SAYS = {
   stop: ["Stopping this session…", "The session is ending. The task and reply are not changed."],

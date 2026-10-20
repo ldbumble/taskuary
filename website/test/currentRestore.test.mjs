@@ -19,7 +19,11 @@ test("mounting, activating, remounting and reconnecting only load - nothing call
   const view = read("AssistantView.jsx");
   const effects = view.match(/useEffect\(\(\) => [^]*?\}, \[[^\]]*\]\);|useEffect\(\(\) => [^\n]*\n/g) || [];
   assert.ok(effects.length > 5);
-  for (const e of effects) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
+  // the one effect allowed to start the walk runs the owner's OWN press, kept while the pile loaded (walkQueued): it is gated on
+  // that press, never on a mount, an activation or a reconnect
+  const kept = effects.filter((e) => /^useEffect\(\(\) => \{\s*if \(!walkQueued \|\| pileLoading\) return;/.test(e));
+  assert.equal(kept.length, 1);
+  for (const e of effects) if (!kept.includes(e)) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
   assert.match(view, /useEffect\(\(\) => \{ loadState\(\)\.catch\(\(e\) => setErr\(errText\(e\)\)\); \}, \[loadState\]\);/);
   assert.match(view, /pollWhileActive\(active, \(\) => \{\s*if \(first \|\| !liveUp\(\) \|\| \+\+n % 10 === 0\) loadPile\(false\);\s*else readChat\(\)/);
   assert.match(view, /onLive\(\["feed-changed", "task-changed"\], \(ev, meta\) => \{ if \(!coveredByReload\(meta, forcedLoadStartedAt\.current\)\) loadPile\(true\); \}, \{ wait: 1500, max: 5000 \}\)/);

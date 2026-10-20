@@ -859,6 +859,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const msgsRef = useRef(msgs); msgsRef.current = msgs;      // what is on screen, for a read to tell what it ADDED
   const caps = useCapabilities(), canCode = caps.coding;   // coding is mentioned only where a coding tool is connected
   const [pile, setPile] = useState(null);
+  // NOT READ YET IS NOT EMPTY (the owner, 2026-10-20): until the first pile read lands the welcome says it is loading, in the
+  // place of "Nothing is waiting on you", and a Walk press made then is kept and run when the rows are in (walkQueued)
+  const [pileRead, setPileRead] = useState(false), [walkQueued, setWalkQueued] = useState(false);
   useEffect(() => { pileRef.current = pile; }, [pile]);   // the section walk reads the rail as drawn
   // the day's meetings are asked for NOW, not when the welcome first draws - the strip is ready with it
   useEffect(() => { refreshToday(); }, []);
@@ -1173,7 +1176,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured;
       pileRef.current = refreshPilePresentation(pileRef.current, data);
-      setPile((p) => refreshPilePresentation(p, data));
+      setPile((p) => refreshPilePresentation(p, data)); setPileRead(true);
       if (!(await readChat(epoch))) return;
       if (data.events?.length) {
         // The watcher's word is a strip notice the server keeps (PW-165/166) and, here, a spoken line.
@@ -1220,6 +1223,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       }
       // membership still settling behind a write: ask again in a moment rather than freeze on stale rows
       if (isCoveragePending(error)) setTimeout(() => loadPileRef.current?.(force), 1200);
+      else setPileRead(true);                 // a failed read draws what it drew before; the retry fills it in
       return null; /* the live event or safety timer will retry */
     }
     finally {
@@ -1428,6 +1432,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const items = pile?.items || [];
   const ready = items.filter((i) => !i.settling);
   const canAdvance = canAdvanceSelection(pile, ready, only.current);
+  const pileLoading = pile === null && !pileRead;
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
   // The rail came WITH an answer - a turn's or a settle's - read on the server after that write. The
@@ -1585,6 +1590,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       setStarting(false);
     }
   };
+  // the Walk press kept while the pile loaded: run once the rows are in - and only if there is a walk to start, which is
+  // exactly when the button would have been pressable had the rows been there
+  useEffect(() => {
+    if (!walkQueued || pileLoading) return;
+    setWalkQueued(false);
+    if (canAdvance) start(null);
+  }, [walkQueued, pileLoading, canAdvance]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
   // also landed UNDER a "Set something up" the owner had already pressed (2026-09-03: "I hit new chat
@@ -2269,13 +2281,18 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           digest, on the screen the day opens on (2026-09-23) */}
       <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
-      {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+      {pileLoading ? <span data-tq-pile-loading="">Loading...</span>
+        : !items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
       {/* greyed with no reason read as broken: say why, and where the rows are */}
       {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
         Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
       <div className="tq-modes">
-        <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || !canAdvance} onClick={() => start(null)}
-          title="Everything waiting, most important first - mail, reports, agents, meetings">{starting ? "Getting your first one..." : "Walk me through my tasks"}</button>
+        <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || walkQueued || (!pileLoading && !canAdvance)}
+          // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
+          // whose release lands after the move never reaches the button
+          onPointerDown={pileLoading ? () => setWalkQueued(true) : undefined}
+          onClick={() => (pileLoading ? setWalkQueued(true) : start(null))}
+          title="Everything waiting, most important first - mail, reports, agents, meetings">{starting || walkQueued ? "Getting your first one..." : "Walk me through my tasks"}</button>
         {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}
         {/* RUN, not set up: setting things up is the top bar's Setup; this door goes where the reports and workflows ARE
             (the owner, 2026-10-08: "it should be run report/workflow which will take you to reports/workflows") */}

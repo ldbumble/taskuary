@@ -2411,6 +2411,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
     if (request.fromUrl) navHow.current = "replace";
   }, [request, state]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // A COLD LINK TO A TASK (#task=N in a new tab) draws that task first: the conversation came back with the walk's last item on
+  // the table, which drew whole - its view and every read behind it - for the 0.6-1 s the link's own pull took, then gave way.
+  // The page stays on its loading spinner until the pull has answered (or failed); what it then draws is what it drew before.
+  // Before paint (layout effect), so the frame that lands the pull is the first one drawn; every render, as the pull may end in any
+  // state (busy, the messages, an error).
+  const [linkHold, setLinkHold] = useState(() => (request?.kind === "task" && request.fromUrl ? request.n : 0));
+  useLayoutEffect(() => { if (linkHold && (doneReq.current === linkHold || request?.n !== linkHold) && !turnFlight.current) setLinkHold(0); });
+  const holding = !!linkHold && !err && !firstRun;
   // THE ADDRESS SAYS WHERE THE OWNER IS (the 2026-10-19 UI walk, G2): the page open on the canvas, else the task on the table, else
   // nothing - a reload lands on the server's own table. Never while a turn is landing (the table is about to move) or a link is still
   // on its way (the address is the link's), nor over setup or an old conversation, which are not places
@@ -2531,7 +2539,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {!walk && (
       <div className={`tq-chat-body${expanded ? " expanded" : ""}`} ref={bodyRef}>
         <div className={`tq-chat-inner${expanded ? " expanded" : ""}`}>
-          {!state && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
+          {/* ...the spinner holds while a cold link's task is on its way (linkHold) */}
+          {(!state || holding) && !err && <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={22} /></Box>}
+          {!holding && <>
           {/* SETUP MODE IS ITS OWN SCREEN (the owner, 2026-10-15: "it should be a distinct setup mode vs regular operations mode"):
               setup alone on the canvas, never under the day's conversation */}
           {/* ...but a place picked from the sidebar during setup opens: it lit up and nothing opened, and nothing said why (re-audit,
@@ -2588,6 +2598,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           {err && <Typography component="div" sx={{ color: "#7a2f3c", fontSize: 12, mb: 1 }}>{err}<ReportLink text={err} /></Typography>}
           {/* the floor's Next is the filled button under the chat - no line telling the owner to press it (the owner, 2026-10-15: "Don't be
               dumb like saying click next to move on if it's obvious") */}
+          </>}
         </div>
       </div>
       )}
@@ -2623,7 +2634,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           ) : <>
             {/* THE ADVICE IS ON ITS WAY: the row has nothing dark until it lands (rowOf), and a quiet line says so - no button.
                 ONE STRIP, ONE HEIGHT from Thinking to its answer: it came and went under the row, which jumped (2026-10-19) */}
-            {table.speaks && !hostedRow && <div className="tq-strip" data-tq-strip={busy ? "busy" : ""}>
+            {table.speaks && !holding && !hostedRow && <div className="tq-strip" data-tq-strip={busy ? "busy" : ""}>
             {/* THE ASSISTANT'S LIT BUTTON SAYS SO HERE, over the row it lit: the strip stood empty over a dark Mark done, and "Press Mark done"
                 was only up in the chat (verify, 2026-10-19) - it goes out with the light */}
             {table.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">{litNow.line}</div></div>}

@@ -45,7 +45,7 @@ import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./
 // the speaker's mark is TASKUARY'S OWN LOGO, never a second drawing of it (the owner, 2026-10-06: "logo should match the
 // taskuary one not a different one")
 const AssistantMark = () => <TaskuaryMark size={24} />;
-import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
+import { DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
 import { adviceRead, tableOf, tableWords } from "./tableState.js";

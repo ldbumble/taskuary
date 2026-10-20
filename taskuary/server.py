@@ -5285,6 +5285,9 @@ def connectors(request: Request):
     from . import problems, scopes
     # SignedOut: a stored token is not a sign-in - Microsoft can let it lapse, and the card said "Signed in" over it
     rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c)} for c in store.list_connectors()]
+    # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
+    from .llm import OPENAI_COMPATIBLE
+    rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
     return {'data': rows}
@@ -5373,6 +5376,14 @@ def save_connector(body: ConnectorBody):
                             and c['ConnectorId'] != fields.get('ConnectorId')
                             for c in store.connectors_by_type(typ)):
         raise HTTPException(409, f'a {typ} connector named {name!r} already exists')
+    if typ == 'hipaa_ai' and fields.get('ConfigJson'):
+        # the gateway address saved as every reader of it expects it: https, ending /v1 (llm.gateway_url)
+        from . import llm
+        try: conf = json.loads(fields['ConfigJson'])
+        except ValueError: conf = None
+        if isinstance(conf, dict) and conf.get('base_url'):
+            try: fields['ConfigJson'] = json.dumps({**conf, 'base_url': llm.gateway_url(conf['base_url'])})
+            except ValueError as e: raise HTTPException(422, str(e))
     cid = store.save_connector(fields, ACTOR)
     safe = {k: v for k, v in fields.items() if k != 'Secret'} | ({'secret': 'updated'} if 'Secret' in fields else {})
     store.audit('connector', cid, 'edit' if body.ConnectorId else 'create', ACTOR, detail=safe)

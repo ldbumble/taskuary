@@ -356,6 +356,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       setDocs((d) => ({ ...d, [key]: data.content || "" })); setSaved((d) => ({ ...d, [key]: data.content || "" }));
     } catch (e) { setErr(e?.response?.data?.detail || `could not open playbook ${slug}`); }
   }, [tpl]);
+  // ...a new one opened before the shelf's template arrived (Settings opens the editor as the page mounts) starts from it when it lands
+  useEffect(() => { if (tpl && docName === "pb:new" && !docs["pb:new"]) setDocs((d) => ({ ...d, "pb:new": tpl })); }, [tpl, docName]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // THE RAIL OWNS THE SELECTION. When Settings drives this page its sidebar is the only
   // navigation - nothing in the page header, like every other settings page - so a click there is

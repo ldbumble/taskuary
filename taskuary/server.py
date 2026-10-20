@@ -1186,6 +1186,19 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
     # the bigger hammer, down the SAME road the card's own button took (ignore_sender, how='rule')
     if kind == 'preference.sender_rule': return ignore_sender(mid, IgnoreSenderBody(how='rule'), background)
+    if kind == 'calendar.answer':
+        # THE CALENDAR'S ANSWERS, by words (a phone chat; on the desk the words only light the row's button): drafted, never sent - a
+        # new time with none named is the first free one the row's picker would offer, there to change before Send
+        from . import calwrite
+        m = store.get_message(mid)
+        if not m: raise HTTPException(404, 'that message is gone')
+        act, start, end = str(p.get('act') or ''), p.get('start'), p.get('end')
+        if act in ('propose', 'schedule') and not (start and end):
+            free = calwrite.slots_for(store, m, act)['slots']
+            if not free: raise HTTPException(422, 'there is no free time in those days - pick one on the row')
+            start, end = free[0]['start'], free[0]['end']
+        try: return calwrite.draft(store, mid, act, start, end, ACTOR)
+        except calwrite.NoAccess as e: raise outbound.Fixable(str(e), e.fix['label'], e.fix['href'])
     if kind in ('task.chase', 'task.let_go', 'task.elsewhere'):
         # THE SLIPPED ANSWERS (spec 2026-10-12): each is an outcome. The item is the rail's card (a person's step, or a thread with
         # a follow-up on it); the person is its `who_email`, the ledger's key. A chase is a draft for your yes, never a send.

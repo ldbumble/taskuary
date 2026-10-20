@@ -108,9 +108,20 @@ class TheOwnersMove(unittest.TestCase):
         verbs = [c['verb'] for c in concierge.chips_for(s, item)]
         self.assertEqual(verbs[:3], ['accept_invite', 'decline_invite', 'propose_time'])
         self.assertNotIn('reply', verbs)
-        # ...and once an answer is drafted, the row is that draft's, not three more answers
-        with mock.patch.object(calwrite, 'busy', return_value=BUSY): calwrite.draft(s, out['message_id'], 'accept')
+        # ...and once an answer is drafted all three stay, its Send first: another press REPLACES the drafted answer
+        with mock.patch.object(calwrite, 'busy', return_value=BUSY): first = calwrite.draft(s, out['message_id'], 'accept')
+        rv_item = {**item, 'kind': 'review', 'rid': first['reviewId'], 'draft': True}
+        verbs = [c['verb'] for c in concierge.chips_for(s, rv_item)]
+        self.assertEqual(verbs[:4], ['approve', 'accept_invite', 'decline_invite', 'propose_time']); self.assertNotIn('redraft', verbs)
+        with mock.patch.object(calwrite, 'busy', return_value=BUSY): second = calwrite.draft(s, out['message_id'], 'decline')
+        self.assertEqual(s.get_review(first['reviewId'])['Status'], 'rejected')
+        pending = [r for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']
+        self.assertEqual([json.loads(r['Deliver'])['act'] for r in pending], ['decline'])
+        self.assertTrue(calwrite.of_task(s, out['task_id'])['invite'])
+        # ...and the answer the calendar took ends them
+        with mock.patch.object(calwrite, 'requests', Fake()): send(s, second['reviewId'], '')
         self.assertNotIn('accept_invite', [c['verb'] for c in concierge.chips_for(s, item)])
+        self.assertIsNone(calwrite.of_task(s, out['task_id']))
 
 
 class DraftedThenSent(unittest.TestCase):
@@ -288,6 +299,73 @@ class TheDemo(unittest.TestCase):
             self.assertEqual(len(calwrite.slots_for(s, ask, 'schedule')['slots']), 3)
             self.assertEqual(demo.refuse('POST', f"/api/messages/{inv['MessageId']}/calendar", s), '', 'drafting is the demo')
             self.assertEqual(demo.refuse('POST', f"/api/reviews/{d['reviewId']}/decide", s), demo.SENDS, 'Send stays refused')
+
+
+class MovedMeeting(unittest.TestCase):
+    """An update that moves a meeting the owner had accepted is theirs to answer again; any other update stays fyi."""
+    def moved(self, s, start, had=''):
+        end = INVITE['end'] if start == INVITE['start'] else start[:11] + '17:00'
+        return arrive(s, {**INVITE, 'update': True, 'start': start, 'end': end, 'had': had}, external_id=f'graph:upd-{start}-{had}')
+
+    def test_moved_after_you_accepted_here_is_yours_again_on_the_same_task(self):
+        s = outlook_store(); out = arrive(s, conversation_id='conv-1')
+        with mock.patch.object(calwrite, 'requests', Fake()), mock.patch.object(calwrite, 'busy', return_value=BUSY):
+            send(s, calwrite.draft(s, out['message_id'], 'accept')['reviewId'])
+        s.update_task(out['task_id'], {'Status': 'done'}, 'owner')
+        up = arrive(s, {**INVITE, 'update': True, 'start': f'{D} 16:00', 'end': f'{D} 17:00'}, external_id='graph:upd-1', conversation_id='conv-1')
+        self.assertEqual(up.get('task_id'), out['task_id'], up)
+        self.assertNotIn(s.get_task(out['task_id'])['Status'], ('done', 'dropped'), 'the moved meeting reopens its task')
+        item = {'kind': 'asked', 'key': f"msg:{up['message_id']}", 'mid': up['message_id'], 'tid': out['task_id'], 'title': 'x'}
+        self.assertIn('accept_invite', [c['verb'] for c in concierge.chips_for(s, item)])
+        said = ' '.join(str(r.get('Reason')) for r in s._rows('SELECT * FROM route WHERE MessageId=?', (up['message_id'],)))
+        self.assertIn('you had accepted it', said)
+        self.assertEqual(s.reviews_for_message(up['message_id']), [], 'no email drafted for it')
+
+    def test_an_update_that_keeps_the_time_or_that_you_never_accepted_stays_fyi(self):
+        s = outlook_store(); arrive(s)
+        same = self.moved(s, INVITE['start'], had='accepted')                    # a new room, the same time
+        self.assertEqual(same['status'], 'filed')
+        s2 = outlook_store(); arrive(s2)
+        never = self.moved(s2, f'{D} 16:00')                                      # moved, and nobody had said yes
+        self.assertEqual(never['status'], 'filed')
+        s3 = outlook_store(); arrive(s3)
+        self.assertEqual(self.moved(s3, f'{D} 16:00', had='accepted')['status'], 'created', 'moved after a yes given in Outlook')
+
+    def test_graph_says_moved_and_what_you_had_said(self):
+        c = calwrite.from_graph({'@odata.type': '#microsoft.graph.eventMessageRequest', 'previousStartDateTime': {'dateTime': f'{D}T10:00:00'},
+                                 'event': {'id': 'ev-1', 'responseStatus': {'response': 'tentativelyAccepted'}}}, ME)
+        self.assertEqual((c['update'], c['moved'], c['had']), (True, True, 'tentative'))
+        self.assertTrue(calwrite.needs_answer(c))
+        self.assertFalse(calwrite.needs_answer({**c, 'moved': False}), 'a new room is fyi')
+
+
+class AssistantTools(unittest.TestCase):
+    """"accept it" lights the row's real Accept; words never send - by a phone's words they draft, as the press does."""
+    def test_the_row_buttons_the_assistant_may_light(self):
+        from taskuary import toolcatalog
+        s = outlook_store(); out = arrive(s)
+        item = {'kind': 'asked', 'key': f"msg:{out['message_id']}", 'mid': out['message_id'], 'tid': out['task_id'], 'title': 'x'}
+        have = {b['verb'] for b in concierge.row_buttons(s, item)}
+        self.assertTrue({'accept_invite', 'decline_invite', 'propose_time'} <= have, have)
+        self.assertNotIn('find_time', have, 'no ask for a time on an invite')
+        self.assertTrue(all(v in toolcatalog.DECISIONS and v in concierge.PROPOSALS for v in concierge.CAL_ACT))
+        self.assertTrue(concierge.cannot({'kind': 'asked', 'mid': 999, 'title': 'x'}, 'accept_invite', s))
+
+    def test_the_operation_drafts_and_never_sends(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = outlook_store(); out = arrive(s)
+        g = Fake()
+        with mock.patch.object(server, 'store', s), mock.patch.object(calwrite, 'requests', g), mock.patch.object(calwrite, 'busy', return_value=BUSY):
+            c = TestClient(server.app)
+            for act in ('accept', 'propose'):
+                op = c.post('/api/operations', json={'kind': 'calendar.answer', 'target': out['message_id'], 'params': {'act': act}}).json()
+                r = c.post(f"/api/operations/{op['id']}/execute", json={'version': op['version']})
+                self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(g.calls, [], 'nothing reached a calendar')
+        pending = [json.loads(r['Deliver']) for r in s.reviews_for_message(out['message_id']) if r['Status'] == 'pending']
+        self.assertEqual([e['act'] for e in pending], ['propose'])
+        self.assertFalse(calwrite.clashes(s, pending[0]['new_start'], pending[0]['new_end'], events=BUSY))
 
 
 class Clash(unittest.TestCase):

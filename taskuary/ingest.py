@@ -479,15 +479,21 @@ def invite_verdict(store, msg: dict) -> dict | None:
     drafted for it), titled and summed up from the invite itself - who, what, when, and what it clashes with. None for any
     other meeting mail, which stays fyi. No model reads it: the mail system already said what it is."""
     from . import calwrite
-    c = calwrite.invite_of(msg)
+    c = calwrite.remember(store, calwrite.invite_of(msg))      # an update is read against the meeting it moves
+    if c and msg.get('_mid'):                                    # ...and what it learned stays on the row a later drain reads
+        store._exec('UPDATE message SET MailMetaJson=json_set(IFNULL(MailMetaJson, \'{}\'), \'$.cal\', json(?)) WHERE MessageId=?',
+                    (json.dumps(c), msg['_mid']))
     if not calwrite.needs_answer(c): return None
     who = msg.get('from_name') or c.get('organizer') or msg.get('from_email') or 'Someone'
     what, at = c.get('subject') or msg.get('subject') or 'a meeting', calwrite.when(c.get('start'), c.get('end'), c.get('all_day'))
     try: clash = calwrite.clash_line(store, c['start'], c['end'], skip=what) if c.get('start') and not c.get('all_day') else ''
     except Exception as e: clash = ''; logger.debug(f'ingest: the invite clash was not read - {e}')
-    return {'intent': 'reply_only', 'invite': True, 'title': f'Invite: {what}'[:120],
-            'why': f"{who} invited you - {at}" + (f' - {clash}' if clash else ''),
-            'summary': f"{who} invited you to {what}, {at}." + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.'}
+    had = {'tentative': 'tentatively accepted'}.get(c.get('had'), c.get('had'))
+    said = f"{who} moved it to {at} - you had {had} it" if c.get('update') else f"{who} invited you - {at}"
+    return {'intent': 'reply_only', 'invite': True, 'title': f"{'Moved' if c.get('update') else 'Invite'}: {what}"[:120],
+            'why': said + (f' - {clash}' if clash else ''),
+            'summary': (f"{who} moved {what} to {at} - you had {had} it." if c.get('update') else f"{who} invited you to {what}, {at}.")
+                       + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.'}
 
 
 def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
@@ -753,7 +759,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # a chat line joined on a FACT (burst, live agent) was not read and is not re-judged here
         # a calendar invite is a meeting to be ready for on BOTH roads - an updated invite joins its meeting's thread
         # as the newest word on it, never work and never a reopening (the owner, 2026-09-25)
-        elif msg.get('invite'): follow = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}
+        # ...unless it MOVED a meeting the owner had accepted: then it is theirs to answer again, on the same task (invite_verdict)
+        elif msg.get('invite'): follow = invite_verdict(store, msg) or {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}
         # no keyword fyi before the model any more (the owner, 2026-09-25): triage reads every follow-up
         elif cfg.get('intent_classify_enabled', '1') == '1' and llm is not None and not is_chat(msg):
             try: follow, _fail = judge(store, msg, llm, mine, me)
@@ -782,7 +789,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # new was added to task, if not and it was just comment don't reopen this"). A Teams "sure" to a meeting time and a WhatsApp
         # "Ok. Monday 2 pm?" each reopened the day's closed task - triage read both as reply_only, an answer and not work. Its own
         # intent says which: a task reopens it under the new ask (_retitle, below); a reply or a comment is kept on it, still closed.
-        kept = bool(r.get('reopen') and follow and follow.get('intent') != 'task')
+        kept = bool(r.get('reopen') and follow and follow.get('intent') != 'task' and not follow.get('invite'))
         if follow and (follow.get('intent') == 'fyi' or kept) and not follow.get('degraded'):
             mid = _land(store, msg, tid, 'filed')
             said = (f"{follow.get('intent')} on {task_ref(tid)}, which is closed - nothing new to do on it, so it stays closed" if kept
@@ -830,7 +837,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # change is said on the task rather than made silently (PW-076)
             added = store.merge_task_checklist(tid, follow['checklist'], 'triage')
             if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
-        if follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not store.pending_review(tid):
+        if (follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not follow.get('invite')
+                and not store.pending_review(tid)):
             # a fresh question on an existing task is reply-needed there: one pending review for
             # this message, drafted at once, whatever the channel can carry (PW-043)
             unsendable = send_block(store, msg.get('channel'))
@@ -1075,6 +1083,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
     # answered a question nobody asked
     reason = r['reason']
     verdict = _stored_verdict(follow) if r['decision'] == 'attach' and follow else None
+    if r['decision'] == 'attach' and (follow or {}).get('invite'):     # a moved meeting reads as itself on its task (invite_verdict)
+        reason = f"{follow['why']} · your answer goes out only when you press {buttons.label('approve')}"
     if r['decision'] != 'attach':
         # every kind names its OWN ending. Without the two lines in the middle a general or a
         # task fell through to "sent to the coding agent" - which nothing had done - and the

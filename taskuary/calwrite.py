@@ -64,7 +64,8 @@ def from_graph(m: dict, mailbox: str, tz=None) -> dict:
     resp = str(((ev.get('responseStatus') or {}).get('response')) or '').lower()
     return {'kind': _ms_kind(m), 'provider': 'outlook', 'mailbox': mailbox, 'event_id': ev.get('id') or '', 'ical_uid': ev.get('iCalUId') or '',
             'update': bool(m.get('previousStartDateTime') or m.get('previousEndDateTime') or m.get('previousLocation')),
-            'answered': resp not in ('', 'none', 'notresponded'), 'asks': m.get('responseRequested') is not False and ev.get('responseRequested') is not False,
+            'moved': bool(m.get('previousStartDateTime') or m.get('previousEndDateTime')),
+            'had': _HAD.get(resp, ''), 'answered': resp not in ('', 'none', 'notresponded'), 'asks': m.get('responseRequested') is not False and ev.get('responseRequested') is not False,
             'subject': ev.get('subject') or m.get('subject') or '', 'start': _local(ev.get('start') or m.get('startDateTime'), tz),
             'end': _local(ev.get('end') or m.get('endDateTime'), tz), 'all_day': bool(ev.get('isAllDay')),
             'organizer': org.get('name') or org.get('address') or '', 'organizer_email': (org.get('address') or '').lower(),
@@ -140,6 +141,7 @@ def from_ics(text: str, me=(), tz=None) -> dict | None:
     name, addr = ev.get('org') or ('', '')
     return {'kind': kind, 'provider': 'google', 'ical_uid': ev.get('UID') or '', 'event_id': '', 'update': seq > 0,
             'answered': ev.get('partstat', 'NEEDS-ACTION') not in ('NEEDS-ACTION', ''), 'asks': True,
+            'had': _HAD.get(ev.get('partstat', '').lower(), ''),
             'subject': ev.get('SUMMARY') or '', 'start': ev.get('DTSTART') or '', 'end': ev.get('DTEND') or ev.get('DTSTART') or '',
             'all_day': bool(ev.get('all_day')), 'organizer': name or addr, 'organizer_email': addr, 'attendees': (ev.get('who') or [])[:20]}
 
@@ -166,8 +168,28 @@ def invite_of(m: dict | None) -> dict | None:
 
 
 def needs_answer(c: dict | None) -> bool:
-    """The owner's move: a request, not an update, that nobody has answered and that asks for one."""
-    return bool(c) and c.get('kind') == 'request' and not c.get('update') and not c.get('answered') and c.get('asks', True) is not False
+    """The owner's move: a request nobody has answered that asks for one - or an UPDATE that moved the time of a meeting the
+    owner had accepted or tentatively accepted (the owner, 2026-10-20); any other update stays fyi."""
+    if not c or c.get('kind') != 'request' or c.get('asks', True) is False: return False
+    return bool(c.get('moved') and c.get('had')) if c.get('update') else not c.get('answered')
+
+
+def remember(store, c: dict | None) -> dict | None:
+    """An invite read against the earlier mail about the same meeting (its iCalendar UID, or Graph's event id): an update whose
+    start or end differs from the last one MOVED it, and what the owner said to that one - the calendar's own answer on it, or
+    the answer they sent from here - is what they HAD said. Fills `moved` and `had` in place; the mail alone often cannot say."""
+    if not c or c.get('kind') != 'request': return c
+    key = c.get('ical_uid') or c.get('event_id')
+    if not key: return c
+    rows = store._rows("SELECT MessageId, MailMetaJson FROM message WHERE MailMetaJson LIKE ? ORDER BY MessageId DESC LIMIT 20", (f'%{key}%',))
+    for r in rows:
+        p = invite_of(r)
+        if not p or p is c or key not in (p.get('ical_uid'), p.get('event_id')) or (p.get('start'), p.get('end'), p.get('update')) == (c.get('start'), c.get('end'), c.get('update')): continue
+        if c.get('update') and (p.get('start'), p.get('end')) != (c.get('start'), c.get('end')): c['moved'] = True
+        sent = [env_of(x).get('act') for x in store.reviews_for_message(r['MessageId']) if x.get('DeliveryState') == 'sent' and env_of(x).get('kind') == 'calendar']
+        c['had'] = c.get('had') or {'accept': 'accepted', 'propose': 'tentative'}.get(next(iter(sent), ''), '') or p.get('had') or ''
+        break
+    return c
 
 
 def when(start: str, end: str = '', all_day: bool = False) -> str:
@@ -337,6 +359,9 @@ def require_write(store, acct: dict):
 
 
 # ── drafting the answer (nothing leaves here) ──────────────────────────────────────────────
+_HAD = {'accepted': 'accepted', 'tentativelyaccepted': 'tentative', 'tentative': 'tentative'}
+
+
 def window_of(meet: dict | None) -> tuple:
     """(minutes, first day, last day) a thread's ask names - triage's `meet` - else half an hour in the coming week."""
     m = meet or {}
@@ -377,17 +402,24 @@ def slots_for(store, msg: dict, act: str) -> dict:
     return {'slots': out, 'minutes': mins}
 
 
+def open_on(store, m: dict) -> tuple:
+    """(the invite still waits on the owner's answer, the thread's ask for a time is still open) for one message. A DRAFTED answer
+    keeps both open - another press replaces it; an answer the calendar took (its review sent) closes its own."""
+    sent = {env_of(r).get('act') for r in store.reviews_for_message(m['MessageId']) if r.get('DeliveryState') == 'sent' and env_of(r).get('kind') == 'calendar'}
+    return needs_answer(invite_of(m)) and not sent & {'accept', 'decline', 'propose'}, bool(meet_of(m)) and 'schedule' not in sent
+
+
 def of_task(store, tid: int) -> dict | None:
     """What the task page's row answers the calendar with: the newest message on the task that is an invite waiting on the owner,
-    or a thread asking for a time - {mid, invite, meet, line, clash} - and None once an answer is drafted or the task is closed."""
+    or a thread asking for a time - {mid, invite, meet, line, clash} - and None once the calendar has the answer or the task is closed."""
     t = store.get_task(int(tid)) or {}
     if not t or t.get('Status') in ('done', 'dropped'): return None
     msgs = [m for m in store.list_messages(int(tid)) if m.get('Direction') != 'out' and m.get('Status') not in ('context', 'history')]
     for m in sorted(msgs, key=lambda m: (str(m.get('SentAt') or ''), m['MessageId']), reverse=True):
-        c, meet = invite_of(m), meet_of(m)
-        if not (needs_answer(c) or meet): continue
-        if any(r.get('Status') == 'pending' and env_of(r).get('kind') == 'calendar' for r in store.reviews_for_message(m['MessageId'])): return None
-        if needs_answer(c):
+        inv, meet = open_on(store, m)
+        if not (inv or meet): continue
+        c = invite_of(m)
+        if inv:
             try: clash = clash_line(store, c['start'], c['end'], skip=c.get('subject') or '') if c.get('start') and not c.get('all_day') else ''
             except Exception as e: clash = ''; logger.debug(f'calwrite: no clash read - {e}')
             return {'mid': m['MessageId'], 'invite': True, 'meet': False, 'clash': clash,

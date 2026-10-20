@@ -177,6 +177,10 @@ async def _lifespan(_app):
     from . import batch as _batch
     try: _batch.recover_later(store)
     except Exception as e: logger.warning(f'pending batch closes not recovered: {e}')
+    # ...and a session's write-up the restart cut short (writeup.py) is finished from the harvest it saved - and its close made
+    from . import writeup as _writeup
+    try: _writeup.resume(store)
+    except Exception as e: logger.warning(f'interrupted write-ups not resumed: {e}')
     from . import wabridge
     try:
         wabridge.start_configured(store)      # the launch grace is spent by the first poll (wabridge.ready), never here
@@ -8268,12 +8272,20 @@ class WrapBody(BaseModel):
     # Mark done on a live session writes the report and then closes the task, and the close dismisses every draft -
     # so a reply drafted here would be a model call thrown away, or worse, land after the close on a done task
     no_reply: bool = False
+    # THE WRITE-UP RUNS BEHIND THE PRESS (writeup.py, 2026-10-20): the answer comes back once the session is harvested, the job
+    # writes it up, and `then_close` closes the task after it through task.complete - Mark done on a live agent, Close agent
+    background: bool = False; then_close: bool = False
 
-def _wrap_task(tid: int, close: bool, sid: str = None, no_reply: bool = False):
+def _wrap_task(tid: int, close: bool, sid: str = None, no_reply: bool = False, background: bool = False, then_close: bool = False):
     """The route's thin end of wrapup.wrap - which is also what a self-closing agent calls
     (selfclose.py), so "the agent decided it was done" and "you clicked Done" travel the
     same road and leave the same record."""
-    try: return end_task(store, tid, close, ACTOR, sid, no_reply=no_reply)
+    try:
+        if background:
+            from . import writeup
+            if close: raise ValueError('a write-up in the background keeps the task open; then_close closes it after')
+            return writeup.start(store, tid, close=then_close, actor=ACTOR, no_reply=no_reply, sid=sid)
+        return end_task(store, tid, close, ACTOR, sid, no_reply=no_reply)
     except ValueError as e: raise HTTPException(422, str(e))
 
 
@@ -8313,7 +8325,7 @@ def wrap_task(task_id: int, body: WrapBody):
     the reply from that report and the task waits on you to send it. Typing a wrap-up prompt into
     the pty meant one more prompt to read, minutes of waiting, and a fresh chance for an agent you
     just stopped to go do more work."""
-    return _wrap_task(task_id, body.close, no_reply=body.no_reply)
+    return _wrap_task(task_id, body.close, no_reply=body.no_reply, background=body.background, then_close=body.then_close)
 
 @app.post('/api/tasks/{task_id}/pause')
 def pause_task(task_id: int, body: WrapBody):
@@ -8328,7 +8340,7 @@ def pause_task(task_id: int, body: WrapBody):
 def wrap_terminal(sid: str, body: WrapBody):
     """Same thing, addressed by session - what the terminal pane itself has a handle on."""
     t = hub_term.get(sid)
-    return _wrap_task(body.task_id or (t.task_id if t else None), body.close, sid)
+    return _wrap_task(body.task_id or (t.task_id if t else None), body.close, sid, background=body.background, then_close=body.then_close)
 
 @app.post('/api/terminals/{sid}/pause')
 def pause_terminal(sid: str, body: WrapBody):

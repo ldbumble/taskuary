@@ -12,8 +12,13 @@ import { DIM, INK, card } from "./theme.jsx";
 export const writeUpSession = (api, tid) => api.post(`/api/tasks/${tid}/wrap`, { close: false, no_reply: true }).then((r) => r.data).catch(() => null);
 // the close itself: the one completion road every surface takes
 export const completeTask = (api, tid, note) => runOperation(api, "task.complete", tid, note ? { note } : {});
-// both, in order - the Wall's Close agent; the task page runs the same two around its own page state (TaskPage.stopAndFinish)
-export const closeAgentWork = async (api, tid) => { const wrote = await writeUpSession(api, tid); await completeTask(api, tid); return wrote; };
+// ...both, in order, as ONE job the server owns (writeup.py, 2026-10-20): answered once the session is harvested, the write-up
+// and then the close run behind the press - a close pressed anywhere meanwhile waits for it. True when the job started.
+export const writeUpThenClose = (api, tid) => api.post(`/api/tasks/${tid}/wrap`, { close: false, no_reply: true, background: true, then_close: true })
+  .then(() => true).catch(() => false);
+// the Wall's Close agent and the task page's Mark done on a live session (TaskPage.stopAndFinish): the job, or - when it cannot
+// start (nothing on screen to write up) - the close alone, as a write-up that fails always did
+export const closeAgentWork = async (api, tid) => { if (!(await writeUpThenClose(api, tid))) await completeTask(api, tid); return null; };
 
 const SAYS = {
   stop: ["Stopping this session…", "The session is ending. The task and reply are not changed."],

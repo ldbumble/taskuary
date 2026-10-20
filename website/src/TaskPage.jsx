@@ -29,7 +29,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
-import { ClosingCard, completeTask, writeUpSession } from "./closeAgent.jsx";
+import { ClosingCard, completeTask, writeUpThenClose } from "./closeAgent.jsx";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -355,6 +355,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
+  // Stop and save's write-up, running on the server: {id, n} - the task and how many notes it had at the press. It is over when a
+  // report or the write-up's failure lands after those (writeup.py says either on the task)
+  const [writingUpAt, setWritingUpAt] = useState(null);
+  const writingUp = writingUpAt && !(detail?.comments || []).slice(writingUpAt.n)
+    .some((c) => /^(?:(?:AGENT|CODER) REPORT|The write-up of this session did not finish)/.test(String(c.Body || "").trimStart())) ? writingUpAt.id : null;
+  const setWritingUp = (id) => setWritingUpAt(id ? { id, n: (detail?.comments || []).length } : null);
   // Once a live session disappears, its report and reply draft are still being filed. Keep
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
@@ -459,13 +465,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (sessionAlive) sessionSettleUntil.current = Date.now() + 120000;
     const settling = detailTaskStatus === "in_progress" && hasTranscript
       && (hasAgentReport || Date.now() < sessionSettleUntil.current);
-    if (!((running || wrapping || settling) && selected)) return undefined;
+    if (!((running || wrapping || settling || writingUp === selected) && selected)) return undefined;
 
     // Terminal bytes already travel over their own websocket. Turning each output frame into a
     // task + waitroom fetch made switching and typing wait behind the terminal's own repaints.
     // The surrounding lifecycle state only needs a calm check; the terminal remains fully live.
     return pollWhileActive(active, () => loadDetail(selected), 3000);
-  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping]);
+  }, [active, detailTaskStatus, hasAgentReport, hasRunningRun, hasTranscript, loadDetail, selected, sessionAlive, wrapping, writingUp]);
 
   // THE MENUS' CHANGES ARE THE TASK TOOLS (Stream B, the owner 2026-10-18: "every act leaves a receipt"): who does it, priority and
   // who holds it run down the operations road, so each is recorded and said in the chat when the task is on the Assistant's table
@@ -499,18 +505,18 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
   // the reply to whoever asked (wrapup.wrap -> finish(keep_open=True)); completing the task stays a
   // separate control, because what the work was worth is the owner's verdict and not the run's.
+  // THE WRITE-UP RUNS BEHIND THE PRESS (writeup.py, 2026-10-20): the server harvests the session and answers at once; the
+  // report lands on the task when the job has written it (the poll below reads it), and a failure is said on the task.
   const wrapUp = async () => {
     if (!canWrap) return;
     const id = selected;
-    setWrapping("wrap"); setErr("");
+    setErr("");
     try {
-      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false });
+      await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
       loadTasks(); onChanged?.();
       if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
-      setWrapped({ report: data.report, drafting: data.drafting });
-      setTerm(null); loadDetail(id);
+      setWritingUp(id); setTerm(null); loadDetail(id);
     } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again."); }
-    if (!stale(id)) setWrapping(false);
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
@@ -721,14 +727,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     // ...and it is put down at the press like any close: the write-up below takes as long as the AI does (18 s on
     // 2026-10-01), and the task sat open on the page and the rail all that time - under For later, already seen
     onLeave?.();
-    if (canWrap) {
-      setWrapping("done"); setErr("");
-      await writeUpSession(api, id);            // a write-up that fails still closes (closeAgent.jsx)
+    // ...and the write-up runs on the server, which closes the task after it (writeup.py, 2026-10-20): the press is answered once
+    // the session is harvested, and the page walks on. A write-up that cannot start closes the task here, as before.
+    if (canWrap && await writeUpThenClose(api, id)) {
       if (stale(id)) return;
       setTerm(null);
+      return closedHere("done");
     }
     await finish("done");
-    if (!stale(id)) setWrapping(false);
   };
   // what Mark done does HERE - it said "ends the live agent session" with no session in sight (T11), and a waiting
   // draft is kept on the task, never thrown away: it can be brought back and sent later
@@ -1847,6 +1853,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </Box>
                 ) : workspaceMode === "wrapping" ? (
                   <ClosingCard mode={wrapping} />
+                ) : writingUp === selected ? (
+                  /* Stop and save's write-up runs on the server (writeup.py): the task stays usable, this line until the report lands */
+                  <Typography variant="caption" data-tq-writing-up="" sx={{ color: "#6f8a6e", display: "block", mt: 0.5 }}>
+                    Closing the session and writing up what is on screen — the agent is not asked anything.
+                  </Typography>
                 ) : workspaceMode === "live" && peek ? (
                   /* the session, folded to one line while the task behind it is being read */
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.8, borderRadius: 1.5,

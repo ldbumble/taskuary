@@ -2401,6 +2401,10 @@ def forward_item(store, item: dict, who: str, text: str, actor: str = 'owner') -
 def close_task(store, tid: int, actor: str = 'owner') -> bool:
     """Close a task from the chat: the pending draft on it is dismissed first (a closed task must not
     leave a reply waiting for a yes), then the task itself. False when already closed with no draft."""
+    # ...and a write-up running for this task (writeup.py) finishes first: a close from anywhere - the task page, the chat, an
+    # operation - never ends the session before its transcript is harvested, and lands on what the write-up left
+    from . import writeup
+    if not writeup.in_job(): writeup.wait_for(tid)
     t = store.get_task(tid) or {}
     if not t: return False
     closed = t.get('Status') in ('done', 'dropped')

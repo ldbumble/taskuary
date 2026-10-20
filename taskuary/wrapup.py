@@ -459,7 +459,7 @@ def _ended(store, tid: int, close: bool, actor: str):
 
 
 def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = None,
-         final_message: str = '', no_reply: bool = False) -> dict:
+         final_message: str = '', no_reply: bool = False, harvested: dict = None, on_harvest=None) -> dict:
     """"We're done" - the whole ending, in one callable. The transcript becomes the report, the
     session dies, proposals become reviews, and finish() drafts the reply the sender gets.
 
@@ -523,6 +523,21 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
                 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
+    if harvested:          # harvested already - by a write-up that was interrupted (writeup.resume): the session is gone
+        text, agent, found, final_message, cut = (harvested[k] for k in ('text', 'agent', 'found', 'final_message', 'cut'))
+    else: text, agent, found, final_message, cut = _harvest(store, tid, final_message)
+    if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
+    if on_harvest: on_harvest({'text': text, 'agent': agent, 'found': found, 'final_message': final_message, 'cut': cut})
+    # ONE SESSION, ONE ENDING (TQ-1112 shape): a settle retried while the first ending was still writing wrapped the same session
+    # again, and twice more - two AGENT REPORTs, the second from a screen already gone. A wrap of a session being wrapped now does
+    # nothing; one wrapped before only closes the task, if this caller asks for that and it is still open.
+    return _wrap_once(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut)
+
+
+def _harvest(store, tid, final_message) -> tuple:
+    """(transcript, agent, session id, final message, cut off) - everything a wrap reads off the live session, taken before the
+    session is closed."""
+    from . import terminal as term
     live = term.session_for(tid)
     # The agent's OWN final answer, matched to the run (PW-230): the explicit `--done` sentence recorded as the
     # run's Finished event first, then the Stop hook's last message the witness kept - never a second AI's
@@ -546,10 +561,10 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if cut and not final_message: turn = (turn + '\n\n' if turn else '') + CUT_OFF
     final_message = str(final_message or turn).strip()
     text, agent, found = term.transcript_for(store, tid)
-    if not text.strip(): raise ValueError('nothing to wrap up - this task has no session transcript')
-    # ONE SESSION, ONE ENDING (TQ-1112 shape): a settle retried while the first ending was still writing wrapped the same session
-    # again, and twice more - two AGENT REPORTs, the second from a screen already gone. A wrap of a session being wrapped now does
-    # nothing; one wrapped before only closes the task, if this caller asks for that and it is still open.
+    return text, agent, found, final_message, cut
+
+
+def _wrap_once(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut) -> dict:
     key = (id(store), str(found)) if found else None
     if key:
         with _WRAP_LOCK:

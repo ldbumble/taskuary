@@ -734,11 +734,30 @@ async function searchPass() {
   const opened = (tid, ms = 8000) => page.waitForFunction((t) => {
     const e = document.querySelector(`[data-tq-canvas-item] [data-tq-task-page="${t}"]`)?.closest("[data-tq-canvas-item]");
     return e && !document.querySelector("[data-tq-search-input]") && e.contains(document.activeElement);
-  }, { timeout: ms }, tid).then(() => "", async () => page.evaluate((t) => {
+  }, { timeout: ms }, tid).then(() => held(`task ${tid}'s box`, (t) => document.querySelector(`[data-tq-canvas-item] [data-tq-task-page="${t}"]`)
+    ?.closest("[data-tq-canvas-item]"), tid), async () => page.evaluate((t) => {
     const e = document.querySelector(`[data-tq-canvas-item] [data-tq-task-page="${t}"]`), a = document.activeElement;
     return document.querySelector("[data-tq-search-input]") ? "the search stayed open" : !e ? `nothing put task ${t} on the table`
       : `focus is on ${a?.getAttribute("aria-label") || a?.className || a?.tagName}, not in task ${t}'s box`;
   }, tid));
+  // ...and still there once the page has finished drawing it (verify, 2026-10-20): a task already on the table was focused on the
+  // first frame, its card drew again, and focus fell to the page
+  const where = () => page.evaluate(() => { const a = document.activeElement;
+    return a === document.body || !a ? "the page itself" : a.getAttribute("aria-label") || a.getAttribute("placeholder") || a.tagName; });
+  const held = async (what, fn, arg) => { await wait(2500); return (await page.evaluate((f, x) => { const e = new Function(`return (${f})`)()(x);
+    return !!e && e.contains(document.activeElement); }, fn.toString(), arg)) ? "" : `focus left ${what} for ${await where()} as the page drew`; };
+  // a cancel gives focus back: Esc over the search, from the chat's composer, and the words typed next land in the composer
+  page.step = "search esc";
+  const comp = await page.$("textarea[placeholder^='Ask']");
+  if (!comp) note("SEARCH", page.step, "no chat composer to type in");
+  else {
+    await comp.focus(); await page.keyboard.down("Control"); await page.keyboard.press("k"); await page.keyboard.up("Control");
+    await page.waitForSelector("[data-tq-search-input]", { timeout: 4000 }).catch(() => {});
+    await wait(300); await page.keyboard.press("Escape"); await wait(600);
+    const back = await page.evaluate(() => document.activeElement?.matches?.("textarea[placeholder^='Ask']"));
+    if (!back) note("SEARCH", page.step, `Esc from the search left focus on ${await where()}, not the composer it was in`);
+    walked.push("search: Esc gives focus back");
+  }
   // the race: one word typed and answered, then another task's id typed over it and Enter at once - its task opens, not the first's
   const [a, b, c] = tasks.filter((t) => /\w{4,}/.test(t.title)).slice(-3);
   if (!c) note("SEARCH", page.step, `the demo has ${tasks.length} tasks to search for - the Enter race was not walked`);
@@ -757,7 +776,13 @@ async function searchPass() {
     await page.keyboard.type(c.ref); await page.keyboard.press("Enter");
     const early = await opened(c.tid);
     if (early) note("SEARCH", page.step, `${c.ref} typed and Enter pressed before any answer: ${early}`);
-    walked.push("search: Enter over an earlier answer and before any");
+    // ...and a task that is already on the table: its box takes focus, and keeps it
+    page.step = "search same task";
+    await box();
+    await page.keyboard.type(b.ref); await settledOn(); await page.keyboard.press("Enter");
+    const same = await opened(b.tid);
+    if (same) note("SEARCH", page.step, `${b.ref} picked while it was on the table: ${same}`);
+    walked.push("search: Enter over an earlier answer and before any, and on a task already open");
   }
   // the count: a word on more tasks than the list holds says how many there were, never "8 of 8"
   page.step = "search totals";
@@ -785,7 +810,32 @@ async function searchPass() {
       return e ? { text: e.innerText.slice(0, 200), inView: r.top < innerHeight - 40 && r.bottom > 40 } : null;
     });
     if (!card?.inView || !/gmail/i.test(card.text)) note("SEARCH", page.step, `Enter on the Gmail hit left ${card ? `"${card.text.slice(0, 60)}"` : "no card"} on the canvas`);
+    const why = await held("the Gmail card", () => document.querySelector("[data-tq-browse-one]"));
+    if (why) note("SEARCH", page.step, `Enter on the Gmail hit: ${why}`);
     walked.push("search: a connection found by name and opened");
+  }
+  // a setting: its knob is in view and has focus
+  page.step = "search setting";
+  await box();
+  await page.type("[data-tq-search-input]", "model"); await settledOn();
+  const set = await page.$eval("[data-tq-search-hit^='set:']", (e) => e.getAttribute("data-tq-search-hit")).catch(() => "");
+  if (!set) note("SEARCH", page.step, `"model" found no setting`);
+  else {
+    await page.click(`[data-tq-search-hit='${set}']`); await wait(1500);
+    const why = await held(`the ${set.slice(4)} setting`, (k) => document.querySelector(`[data-tq-knob~="${k}"]`), set.slice(4));
+    if (why) note("SEARCH", page.step, `the ${set} hit opened: ${why}`);
+    walked.push("search: a setting found and focused");
+  }
+  // a page's own box, nothing found: the one line the search says, naming the page (verify, 2026-10-20: Settings said "Nothing here.")
+  page.step = "search empty settings";
+  await page.evaluate(() => { window.location.hash = "settings"; }); await wait(2500);
+  const sb = (await page.$$("[data-tq-browse-search][aria-label='Search settings']")).pop();
+  if (!sb) note("SEARCH", page.step, "#settings drew no Settings box");
+  else {
+    await sb.type("zzqxv"); await wait(800);
+    const line = await page.$$eval("[data-tq-browse-empty]", (es) => es.map((e) => e.innerText).pop() || "");
+    if (!line.startsWith("Nothing matches “zzqxv” in Settings")) note("SEARCH", page.step, `the Settings box found nothing and said "${line}"`);
+    walked.push("search: a page's box says nothing matched the one way");
   }
   // a phone: the box is there, as its icon, and opens
   page.step = "search phone";
@@ -793,7 +843,17 @@ async function searchPass() {
   const trig = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-search-open]")].find((x) => x.getBoundingClientRect().width > 0), r = e?.getBoundingClientRect();
     return e ? r.right <= innerWidth && r.bottom > 0 : false; });
   if (!trig) note("SEARCH", page.step, "at 390px wide there is no search to press");
-  else { await box(); if (!(await page.$("[data-tq-search-input]"))) note("SEARCH", page.step, "at 390px the search did not open"); walked.push("search: at a phone's width"); }
+  else {
+    await box();
+    if (!(await page.$("[data-tq-search-input]"))) note("SEARCH", page.step, "at 390px the search did not open");
+    else if (b) {
+      // ...and a pick there lands focus on what it opened, as on a desktop (verify, 2026-10-20: it fell to the page at 390px)
+      await page.keyboard.type(b.ref); await settledOn(); await page.keyboard.press("Enter");
+      const why = await opened(b.tid);
+      if (why) note("SEARCH", page.step, `${b.ref} picked at 390px: ${why}`);
+    }
+    walked.push("search: at a phone's width");
+  }
   await page.close(); srv.stop();
 }
 

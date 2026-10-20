@@ -1824,7 +1824,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
-      empty: q ? nothingMatches(q, "Connections") : "Nothing in this section yet.",
+      query: q, empty: "Nothing in this section yet.",
     });
   }
 

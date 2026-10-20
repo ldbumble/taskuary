@@ -59,7 +59,8 @@ const AssistantGame = React.lazy(() => import("./AssistantGame.jsx"));
 // top bar. Every old destination still lands: go("Connections") and #connector=... open that card in the canvas.
 const VIEWS = ["Assistant", "Board"];
 const BROWSED = { Reports: "reports", Connections: "connections", Settings: "settings", Hub: "hub" };
-const SUPPORT_URL = "https://github.com/ldbumble/taskuary/issues/new/choose";
+const DEMO_SETUP = { left: 0 };      // the static demo: nothing to finish, so the plain Setup pill the finished app shows
+const SUPPORT_URL ="https://github.com/ldbumble/taskuary/issues/new/choose";
 
 // The bell: what is FAILING right now - a connector whose poll errors, the triage brain down, a
 // report that failed - in the last few hours (problems.STALE_HOURS) - each with the way to where it is fixed. The setup chip beside it says
@@ -438,7 +439,9 @@ export default function TaskHubPage() {
               until it slid UNDER the tab strip, which is absolutely centred on the window and so
               yields to nothing - the banner sat on top of "Timeline". */}
           <StaleBuild />
-          {!DEMO && !demo && <SetupChip state={setup} onOpen={openSetup} />}
+          {/* ...and the static demo has the same Setup, which says how to install Taskuary: the chat's own setup button went (the owner,
+              2026-10-19) and the demo was left with no way to that page. A server run with --demo keeps its badge where it was */}
+          {(DEMO || !demo) && <SetupChip state={DEMO ? DEMO_SETUP : setup} onOpen={openSetup} />}
           <Tooltip title="Report a problem">
             <IconButton onClick={() => openBugReport()} size="small" aria-label="Report a problem">
               <HelpOutlineIcon sx={{ fontSize: 17, color: DIM }} />

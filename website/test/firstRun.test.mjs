@@ -11,7 +11,9 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
   const hub = read("TaskHubPage.jsx");
   assert.doesNotMatch(hub, /<SetupPanel/);
   assert.doesNotMatch(hub, /setSetupOpen\(true\)/);
-  assert.match(hub, /<SetupChip state=\{setup\} onOpen=\{openSetup\} \/>/);
+  // ...and the static demo has the same Setup, which says how to install Taskuary (the owner, 2026-10-19); a --demo server keeps its badge
+  assert.match(hub, /\{\(DEMO \|\| !demo\) && <SetupChip state=\{DEMO \? DEMO_SETUP : setup\} onOpen=\{openSetup\} \/>\}/);
+  assert.match(read("AssistantView.jsx"), /if \(DEMO\) \{\s+const show = \(\) => setupRef\.current\?\.\(\);\s+window\.addEventListener\("tq-first-run", show\);/);
   const view = read("AssistantView.jsx");
   assert.match(view, /const welcome = \(m = null\) => firstRun \?/);
   assert.match(view, /<FirstRun onChanged=\{\(\) => loadPile\(true\)\} onWalk=\{\(\) => \{ setFirstRun\(false\); start\(null\); \}\}\s+onFinish=/);

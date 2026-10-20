@@ -56,7 +56,7 @@ def _fold(value):
 
 
 REVIEW_COLS = ('TaskId', 'MessageId', 'RunId', 'Kind', 'DraftText', 'FinalText', 'Status', 'Reason', 'Deliver')
-POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active')
+POLICY_COLS = ('Name', 'Kind', 'Pattern', 'Action', 'Reason', 'SortOrder', 'Active', 'Mailbox')
 SOURCE_COLS = ('Channel', 'Address', 'Owner', 'ConnectorId', 'Active', 'ConfigJson')
 # The reports this app seeds, as (sentinel setting, the Address the seeder writes, the config type).
 # KEEP IN STEP with the seeding blocks below - tests/test_assistant_blocks.py builds a fresh store and
@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS review (ReviewId INTEGER PRIMARY KEY, TaskId INTEGER,
   RunId INTEGER, Kind TEXT, DraftText TEXT, FinalText TEXT, Status TEXT DEFAULT 'pending',
   Reason TEXT, DecidedBy TEXT, DecidedAt TEXT, DecideNote TEXT, CreatedAt TEXT, Deliver TEXT);
 CREATE TABLE IF NOT EXISTS policy (PolicyId INTEGER PRIMARY KEY, Name TEXT, Kind TEXT, Pattern TEXT,
-  Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT);
+  Action TEXT, Reason TEXT, SortOrder INTEGER DEFAULT 100, Active INTEGER DEFAULT 1, CreatedBy TEXT, Mailbox TEXT);
 CREATE TABLE IF NOT EXISTS source (SourceId INTEGER PRIMARY KEY, Channel TEXT, Address TEXT,
   Owner TEXT, ConnectorId INTEGER, Active INTEGER DEFAULT 1, ConfigJson TEXT, LastPolledAt TEXT);
 CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT, Name TEXT,
@@ -868,6 +868,9 @@ class SQLiteStore:
             # ...and Warn: its text read as an attempt to instruct an AI (batch.injections)
             for c in ('Sha', 'Propose', 'Fix', 'FixAt', 'FixLink', 'Trusted', 'Screen', 'Warn'):
                 if c not in bcols: self.cx.execute(f'ALTER TABLE batch_item ADD COLUMN {c} TEXT')
+            # a rule meant for one mailbox names it (policy.matches): blank, as every rule before it, is every mailbox
+            if 'Mailbox' not in {r[1] for r in self.cx.execute('PRAGMA table_info(policy)')}:
+                self.cx.execute('ALTER TABLE policy ADD COLUMN Mailbox TEXT')
             routecols = {r[1] for r in self.cx.execute('PRAGMA table_info(route)')}
             if 'RawOutput' not in routecols:
                 self.cx.execute('ALTER TABLE route ADD COLUMN RawOutput TEXT')
@@ -3863,7 +3866,7 @@ class SQLiteStore:
             where.append('(' + ' OR '.join(["lower(FromEmail) LIKE '%@'||?"] * len(from_domains)) + ')')
             args += [x.lower() for x in from_domains]
         body = 'substr(BodyText, 1, 2000) BodyText' if include_body else "'' BodyText"
-        sql = ('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, ' + body + ' FROM message'
+        sql = ('SELECT MessageId, TaskId, ConversationId, FromEmail, Subject, Status, SentAt, SourceName, ' + body + ' FROM message'
                + ((' WHERE ' + ' AND '.join(where)) if where else '') + ' ORDER BY MessageId DESC LIMIT ?')
         return self._rows(sql, (*args, limit))
     def set_message_status(self, mid, status):

@@ -1708,7 +1708,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 from . import policy as policy_engine
                 pols = store.list_policies()
                 sent_fill = _hydrate(tok, s['Address'])
-                in_fill = _hydrate(tok, s['Address'], drop=lambda m: policy_engine.dropped_unseen(_envelope(m), pols))
+                in_fill = _hydrate(tok, s['Address'], drop=lambda m: policy_engine.dropped_unseen({**_envelope(m), 'source_name': s['Address']}, pols))
                 broken = []
                 for folder, handle in folders:
                     try:

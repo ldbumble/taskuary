@@ -20,11 +20,13 @@ BACKGROUND = True        # the suite turns this off (tests/conftest.py): a judge
 def _now(): return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
-def key_of(target_kind: str, target_id) -> str: return f"{'task' if target_kind == 'task' else 'msg'}:{int(target_id)}"
+def key_of(target_kind: str, target_id) -> str:
+    return f"{'task' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'msg'}:{int(target_id)}"
 def target_of(store, key: str):
-    """A rail key -> (target kind, id), or None for a key with nothing to advise on (a connection, a meeting, a batch)."""
-    m = re.match(r'^(task|agent|wrap|msg|report):(\d+)$', str(key or ''))
-    if m: return ('task' if m.group(1) in ('task', 'agent', 'wrap') else 'message', int(m.group(2)))
+    """A rail key -> (target kind, id), or None for a key with nothing to advise on (a connection, a meeting, a batch). An idea - the
+    Advisor's own line, a slipped follow-up - is a target of its own: it was None, so no idea ever had a line (the deep dive, 2026-10-20)."""
+    m = re.match(r'^(task|agent|wrap|msg|report|idea):(\d+)$', str(key or ''))
+    if m: return ('task' if m.group(1) in ('task', 'agent', 'wrap') else 'idea' if m.group(1) == 'idea' else 'message', int(m.group(2)))
     # a draft waiting for your yes is keyed by its review (funnel's review:N, in a bare store and the demo): advised as the
     # task it answers for, else the message - read as "nothing to advise on", every draft on the demo's rail had an empty bar
     m = re.match(r'^review:(\d+)$', str(key or ''))
@@ -38,7 +40,7 @@ def target_of(store, key: str):
                 hit = store._processing_read_target(cur, key)
                 rows = cur.execute("SELECT EntityKind, LocalId FROM processing_member WHERE ItemId=? AND RetiredAt IS NULL", (hit[0],)).fetchall() if hit else []
         except Exception: rows = []
-        for kind in ('task', 'message'):
+        for kind in ('task', 'message', 'idea'):
             m = next((r for r in rows if r['EntityKind'] == kind), None)
             if m: return (kind, int(m['LocalId']))
     return None
@@ -49,6 +51,13 @@ def revision(store, target_kind: str, target_id) -> str:
     revision leaves out and an event changes - the task's state and the newest word its agent said."""
     from .operations import context_revision
     base = context_revision(store, target_kind, target_id)
+    if target_kind == 'idea':                         # an idea moves with its own state and words, and the thread it is about
+        i = store.get_idea(int(target_id)) or {}
+        try: a = json.loads(i.get('ActionJson') or '{}') or {}
+        except ValueError: a = {}
+        base = f"{i.get('Status')}|{i.get('LastSaid')}|{i.get('Text')}|{i.get('ActionJson')}"
+        if a.get('mid'): base += '|' + context_revision(store, 'message', int(a['mid']))
+        if a.get('tid'): base += '|' + context_revision(store, 'task', int(a['tid']))
     if target_kind == 'task':
         t = store.get_task(target_id) or {}
         ev = store._one('SELECT MAX(Id) AS Id FROM worker_event WHERE TaskId=?', (int(target_id),)) or {}
@@ -64,6 +73,9 @@ def _acted(store, target_kind, target_id) -> str:
     operation that ran on it, done, failed or declined (a proposal still waiting for its yes is no act yet). DeliveryState alone
     skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState NULL) changed nothing it saw."""
     col = 'TaskId' if target_kind == 'task' else 'MessageId'
+    if target_kind == 'idea':                         # an idea carries no draft; its acts are its own operations
+        op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind='idea' AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1", (int(target_id),)) or {}
+        return f"/{op.get('OpId') or ''}:{op.get('Status') or ''}"
     # ...and whether its draft could not be written: a Reply whose draft failed left the line it was judged before standing (2026-10-19)
     rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>''), ',') AS d FROM "
                     f"(SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
@@ -145,7 +157,11 @@ SYSTEM = (
     f"{L('reply')}. "
     f"SOMEONE THE OWNER WAITS ON IS QUIET PAST THEIR DAY (the item says how long, and {L('chase')} is offered): {L('chase')} - a short "
     f"nudge for the owner's yes - unless the item says they answered or are away. "
-    "A POSSIBLE DUPLICATE with an agent already on it is said in the line, so the owner does not answer the same ask twice.")
+    "A POSSIBLE DUPLICATE with an agent already on it is said in the line, so the owner does not answer the same ask twice. "
+    f"A GOAL (a THE GOAL line): a step past its day, or held by someone late, is named in the line with the move offered that gets it "
+    f"going ({L('chase')} when offered, else {L('defer')} to look again on a day); a goal with no news says so, and the move is "
+    f"{L('defer')}. AN IDEA (a THE IDEA line, the assistant's own suggestion): {L('mine')} when it names work worth doing now, "
+    f"{L('defer')} when it is for later, {L('not_ours')} when it is nothing for the owner.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
     speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
@@ -172,7 +188,7 @@ def _item(store, target_kind, target_id, key: str = None):
         pile = funnel.pile(store, quiet=True).get('items') or []
         items = (funnel.full_items(store) or []) + pile                      # read items kept: the one on the table is often read
     except Exception: items = []
-    f = 'tid' if target_kind == 'task' else 'mid'
+    f = 'tid' if target_kind == 'task' else 'idea' if target_kind == 'idea' else 'mid'
     mine = [i for i in items if i.get(f) == int(target_id)]
     return (next((i for i in mine if key and key in keys_of(i)), None) or next(iter(mine), None)
             or funnel.item_for_key(store, key_of(target_kind, target_id)))
@@ -367,6 +383,13 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     if item.get('priority') and 'priority' not in facts: facts['priority'] = item['priority']
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
+    # AN IDEA AND A GOAL ARE ADVISED TOO (the deep dive, 2026-10-20): an idea had no target at all, and a goal's card said "0 of 2" with
+    # nothing of which step was late or when anything last moved. An idea's context is the task or mail it is about.
+    if target_kind == 'idea':
+        lines.append(idea_line(store, target_id, item))
+        target_kind, target_id = ('task', int(item['tid'])) if item.get('tid') else ('message', int(item['mid'])) if item.get('mid') else ('none', 0)
+    try: lines.append(goal_line(store, t) if t and is_goal(t) else '')
+    except Exception as e: logger.debug(f'advisor: no goal read for {item.get("key")} - {e}')
     try: f = failure(store, item)
     except Exception as e: logger.debug(f'advisor: no failure read for {item.get("key")} - {e}'); f = None
     if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"
@@ -426,6 +449,48 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         more = outcomes.evidence(store, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'), limit=15)
         if more: lines.append('RECENT OUTCOMES:\n' + '\n'.join(more))
     return _bounded(lines)
+
+
+def is_goal(t) -> bool:
+    from .store import is_goal as g
+    return g(t)
+
+
+def idea_line(store, idea_id, item: dict) -> str:
+    """THE IDEA: what the Advisor raised, why, and - for a follow-up - whom it waits on and how long they have been quiet."""
+    i = store.get_idea(int(idea_id)) or {}
+    try: a = json.loads(i.get('ActionJson') or '{}') or {}
+    except ValueError: a = {}
+    bits = [f"\"{_one(i.get('Text') or item.get('title'), 300)}\"", f"raised {str(i.get('LastSaid') or i.get('FirstSeen') or '')[:16]}"]
+    if a.get('why'): bits.append(f"why: {_one(a['why'], 200)}")
+    # ...a follow-up says how long they have been quiet against their own day (funnel.slipped_followup, the rail's one rule)
+    if a.get('type') == 'followup':
+        from . import funnel
+        try: lane, late, quiet, day = funnel.slipped_followup(store, a)
+        except Exception: lane = None
+        if lane == 'forgotten': bits.append(f"{a.get('who_email') or 'they'} quiet {quiet} days - late for them after {day}")
+        elif lane == 'answered': bits.append('they have answered since')
+    return f"THE IDEA (the assistant raised it; {i.get('Kind') or 'idea'}): " + '; '.join(bits)
+
+
+def goal_line(store, t: dict) -> str:
+    """THE GOAL: what done looks like, each open step with who holds it and its day (late said in days), and when anything last moved -
+    or that nothing has."""
+    from .processing_unread import goal_facts, holder_name
+    now, tid = datetime.now(), int(t['TaskId'])
+    g = goal_facts(store, t, tid, now)
+    today, steps = now.strftime('%Y-%m-%d'), []
+    for k, x in enumerate(store.goal_steps(tid), 1):
+        if x['done']: continue
+        c = x.get('child') or {}
+        who = holder_name(c.get('Assignee')) or ('you' if not c or c.get('Status') == 'open' else '')
+        due = str(c.get('DueAt') or '')[:10]
+        late = (now - datetime.strptime(due, '%Y-%m-%d')).days if due and due < today else 0
+        steps.append(f"step {k} \"{_one(x['text'], 80)}\"" + (f" held by {who}" if who else '') + (f", due {due}" if due else '')
+                     + (f" - {late} days late" if late else ''))
+    news = f"last news {g['news_at'][:10]}" if g.get('news_at') else f"no news since it was set ({str(t.get('CreatedAt') or '')[:10]})"
+    return (f"THE GOAL: done when {_one(t.get('DoneWhen'), 200)}; {g.get('steps_done', 0)} of {g.get('steps', 0)} steps done; {news}"
+            + (f"; due {g['due']}" if g.get('due') else '') + ('\nOPEN STEPS: ' + ' | '.join(steps[:6]) if steps else ''))
 
 
 def _checklist(t: dict) -> list:

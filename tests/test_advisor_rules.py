@@ -53,3 +53,39 @@ def test_an_issue_with_a_traceback_goes_to_an_agent_and_a_slipped_person_is_chas
     assert issue['verb'] == 'regular_agent'
     assert ask('reply (Reply), regular_agent (Send to agent)', 'PREVIEW: can you approve badge access?')['verb'] == 'reply'
     assert ask('chase (Chase them), let_go (Let it go), defer (Remind me)', 'PREVIEW: ')['verb'] == 'chase'
+
+
+def test_an_idea_is_a_target_of_its_own_and_its_prompt_says_what_it_is():
+    from datetime import datetime, timedelta
+    s = MemoryStore()
+    ago = lambda d: (datetime.now() - timedelta(days=d)).strftime('%Y-%m-%d %H:%M:%S')
+    t = s.create_task({'Title': 'Budget', 'Status': 'open'}, 'owner')
+    mid = s.add_message({'ConversationId': 'c1', 'Channel': 'email', 'Subject': 'Budget', 'FromEmail': 'ray@northwind.example', 'SentAt': ago(12), 'BodyText': 'q', 'Status': 'filed', 'TaskId': t})
+    i = s.upsert_idea({'key': 'followup:c1', 'kind': 'followup', 'text': 'No answer from Ray on "Budget"', 'sig': 'x',
+                       'action': {'type': 'followup', 'mid': mid, 'tid': t, 'who_email': 'ray@northwind.example', 'asked_at': ago(10)}}, ago(0))['IdeaId']
+    assert advisor.target_of(s, f'idea:{i}') == ('idea', i) and advisor.key_of('idea', i) == f'idea:{i}'
+    a = advisor.revision(s, 'idea', i)
+    s.set_idea_status(i, 'done', 'owner')
+    assert advisor.revision(s, 'idea', i) != a, 'an idea put down is a new moment'
+    item = {'key': f'idea:{i}', 'kind': 'idea', 'lane': 'forgotten', 'idea': i, 'tid': t, 'mid': mid, 'title': 'No answer from Ray'}
+    p = advisor._prompt(s, advisor.SHOWN, item, [{'verb': 'chase', 'label': 'Chase them'}], 2, 'idea', i)
+    assert 'THE IDEA (the assistant raised it; followup)' in p and 'ray@northwind.example quiet 10 days - late for them after 5' in p
+
+
+def test_a_goal_says_which_step_is_late_and_when_anything_last_moved():
+    from datetime import datetime, timedelta
+    s = MemoryStore()
+    g = s.create_task({'Title': 'Move payroll', 'Status': 'open', 'DoneWhen': 'payroll runs on the new system'}, 'owner')
+    s.set_task_checklist(g, ['Export the pay rules', 'Sign-off'], 'owner')
+    k = s.create_task({'Title': 'Sign-off', 'Status': 'waiting', 'Assignee': 'person:gail@northwind.example', 'ParentId': g,
+                       'DueAt': (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')}, 'owner')
+    s.link_step(g, s.checklist_id('Sign-off'), k, 'owner')
+    line = advisor.goal_line(s, s.get_task(g))
+    assert 'THE GOAL: done when payroll runs on the new system; 0 of 2 steps done' in line
+    assert 'step 2 "Sign-off" held by Gail, due' in line and '3 days late' in line
+    quiet = s.create_task({'Title': 'Quiet goal', 'Status': 'open', 'DoneWhen': 'x'}, 'owner')
+    assert 'no news since it was set' in advisor.goal_line(s, s.get_task(quiet))
+    got = ask('close (Mark done), defer (Remind me)', line)
+    assert got['verb'] == 'defer' and 'Sign-off is 3 days late' in got['line']
+    assert ask('close (Mark done), defer (Remind me)', advisor.goal_line(s, s.get_task(quiet)))['verb'] == 'defer'
+    assert ask('mine (Put it on my list), not_ours (Not ours), defer (Remind me)', 'THE IDEA (the assistant raised it; idea): "a rule?"')['verb'] == 'mine'

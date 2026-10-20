@@ -240,6 +240,11 @@ PROMISED = {'redraft': 'The draft promises what nothing here shows - check it, t
             'reply': 'The draft promises what nothing here shows - write it again.'}
 AGENT_WORK = {'regular_agent': 'An agent can take this - it is an issue with a traceback in it.'}
 CHASED = {'chase': 'They are quiet past their day - send a short nudge.'}
+# ...and a goal and an idea, as the real one reads THE GOAL and THE IDEA lines
+GOAL_LATE = {'chase': '{step} is {days} days late - send a short nudge.', 'defer': '{step} is {days} days late - set a day to check on it.'}
+GOAL_QUIET = {'defer': 'Nothing has moved on this goal yet - set a day to look again.'}
+IDEA = {'mine': 'Worth doing - put it on your list.', 'defer': 'Worth a look later - set a day for it.'}
+_LATE = re.compile(r'step \d+ "([^"]+)"[^|\n]*? - (\d+) days late')
 
 
 def _advice(text: str) -> str:
@@ -257,6 +262,9 @@ def _advice(text: str) -> str:
             else BOUNCED if failed and _BOUNCE.search(failed)
             else None if failed
             else CHASED if 'chase' in offered
+            else GOAL_LATE if 'THE GOAL:' in text and _LATE.search(text)
+            else GOAL_QUIET if 'THE GOAL:' in text and 'no news' in text
+            else IDEA if 'THE IDEA' in text
             else PROMISED if draft and bare and _PROMISE.search(draft) and 'approve' in offered
             else AGENT_WORK if 'regular_agent' in offered and re.search(r'traceback|steps to reproduce', preview, re.I)
             else None)
@@ -264,7 +272,8 @@ def _advice(text: str) -> str:
         verb = next((v for v in said if v in offered), None)
         why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
         what = failed.split(' - ')[0].strip() or 'That did not go through'
-        return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else '',
+        late = _LATE.search(text) or [None, 'A step', '?']
+        return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why, step=late[1], days=late[2]) if verb else '',
                            'evidence': []})
     said = (REFUSED if 'This is the demo' in failed
             else CHECK if 'nobody knows whether it went' in failed else FAILED if failed

@@ -321,14 +321,21 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   ];
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
+  // ...and only into a rail that had rows: after an empty one (a read that failed, a first sync) every row would fall at once, the
+  // whole band squeezed above the pipe and drawn over itself on the way down (G8)
+  const arrivalsOf = (was) => (was?.size ? arrivals(was, items) : new Set());
   useEffect(() => {
-    const fresh = arrivals(prev.current, items);
+    const fresh = arrivalsOf(prev.current);
     prev.current = keysOf(items);
     if (!fresh.size) return undefined;
     setLanding(fresh);
     const t = setTimeout(() => setLanding(new Set()), 40);       // one frame above the pipe, then it falls to its slot
     return () => clearTimeout(t);
   }, [displayRevision(pile)]);                                     // eslint-disable-line react-hooks/exhaustive-deps
+  // ...and above it from its FIRST frame (G8): the mark above is set after that frame is painted, and the arrival was drawn once in its
+  // slot, over the row still gliding out of it. Until the effect has run, the rows this pile adds are told apart here.
+  const arriving = arrivalsOf(prev.current);
+  const falls = (k) => landing.has(k) || arriving.has(k);
   // The NEXT ring has to be what the Next button will actually bring up. The server skips what an
   // agent has in hand and what this walk already showed (funnel.next_item); the marker did not, so a
   // coding agent parked on a question wore NEXT while two fyi about lunch came out instead (2026-09-03).
@@ -433,6 +440,40 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the rail genuinely does not fit and scrolls: your task and agents working are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
+  // A ROW THAT JOINS A BAND WAITS FOR THE GLIDE (G8): a row moving in - passed into For later, a slot freed under a cap - was drawn in
+  // its slot at once, under the rows still gliding out of it, for ten-odd frames. It comes in once the others have moved. Not on the
+  // first draw, and not a row falling in from above the pipe (`landing`), which has its own way in.
+  // ...nor the row on the table: the ring lands with its card, in the same frame
+  const placedNow = useRef([]), placedBefore = useRef(null), enterTimer = useRef(0);
+  placedNow.current = [];
+  const [entering, setEntering] = useState(() => new Set());
+  useLayoutEffect(() => {
+    const now = placedNow.current, was = placedBefore.current, inPile = prev.current;
+    placedBefore.current = new Set(now);
+    const fresh = was ? now.filter((lk) => !was.has(lk)).map((lk) => lk.slice(lk.indexOf(" ") + 1)).filter((k) => k !== curKey && inPile?.has(k)) : [];
+    if (!fresh.length) return;
+    setEntering(new Set(fresh));
+    clearTimeout(enterTimer.current); enterTimer.current = setTimeout(() => setEntering(new Set()), 700);
+  });
+  useEffect(() => () => { clearTimeout(enterTimer.current); }, []);
+  // ...AND A ROW REORDERED IN ITS BAND GLIDES TOO: React moves its node in the page to keep the order, and a moved node starts
+  // from its new place with no transition - the row put on the table jumped to its slot, full height, over rows still gliding
+  // past it (a rail click: 15 frames of rows drawn on each other). Such a row is sent back to where it was and let go from there.
+  const rested = useRef(new Map());
+  useLayoutEffect(() => {
+    const was = rested.current, now = new Map();
+    for (const el of wrapRef.current?.querySelectorAll(".tq-pile-row[data-tq-key]") || []) {
+      const k = `${el.closest("[data-tq-run]")?.dataset.tqRun} ${el.dataset.tqKey}`, top = parseFloat(el.style.top) || 0;
+      const p = was.get(k);
+      if (p && !el.classList.contains("landing") && Math.abs(p.top - top) > 1 && Math.abs(parseFloat(getComputedStyle(el).top) - top) < 0.5) {
+        el.style.transition = "none"; el.style.top = `${p.top}px`; el.style.height = `${p.h}px`;
+        void el.offsetHeight;                                  // the old place is drawn as the start, then the glide runs from it
+        el.style.transition = ""; el.style.top = `${top}px`; el.style.height = "";
+      }
+      now.set(k, { top, h: (el.classList.contains("current") ? CUR_H : ROW_H) - 3 });   // where it comes to rest: the 3px is the gap
+    }
+    rested.current = now;
+  });
   useLayoutEffect(() => {
     const el = wrapRef.current;
     const scroller = el?.closest("[data-tq-rail]");
@@ -491,6 +532,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
           const top = stackHeight;
           stackHeight += item.key === curKey ? CUR_H : ROW_H;
           if (byKey[item.key]) { moreTops.push({ top: stackHeight, mark: byKey[item.key] }); stackHeight += MORE_PX; }
+          placedNow.current.push(`${level} ${item.key}`);
           return { item, top };
         });
         // the bracket spans its members where they already are: it adds no height and moves no row
@@ -536,7 +578,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 const meta = rowMeta(i);
                 const isCur = i.key === curKey;
                 const inBatch = batchKeys.has(i.key);
-                const cls = ["tq-pile-row", landing.has(i.key) ? "landing" : "", i.settling ? "settling" : "",
+                const cls = ["tq-pile-row", falls(i.key) ? "landing" : entering.has(i.key) ? "entering" : "", i.settling ? "settling" : "",
                   isCur ? "current" : inBatch ? "inbatch" : i.key === nextKey ? "next" : ""].filter(Boolean).join(" ");
                 // NO PILLS ON A ROW (the owner, 2026-09-28: "nothing else has pill"): a row's state is its mark and word, the same
                 // for every lane - "ready to send" and "agent waiting on you" included
@@ -551,7 +593,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
                     : meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
-                  <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: landing.has(i.key) ? -ROW_H : top }}>
+                  <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */

@@ -77,6 +77,8 @@ test("the dead-end walk takes a failed send's fix by its own words: an id ending
   const named = new Function("NAMED", `${line.replace("const named = ", "return ")}`)(new Set(["Send", "Next"]));
   assert.equal(named("Connect a mailbox", "12:fix"), true);
   assert.equal(named("Connect a mailbox", "12:approve"), false);
+  assert.equal(named("Connect a coding tool", "chat:go"), true);
+  assert.equal(named("Connect a coding tool", "chat:3:go"), true);
   assert.equal(named("Send", ""), true);
   assert.match(d, /id: b\.getAttribute\("data-tq-verb"\) \|\| ""/);
   assert.match(d, /s\.verbs\.filter\(\(v\) => !named\(v\.word, v\.id\)\)/);

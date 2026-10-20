@@ -3868,9 +3868,11 @@ def outbox(body: OutboxBody):
     except Exception as e: raise HTTPException(422, str(e)[:400])
 
 @app.get('/api/mailboxes')
-def mailboxes():
-    """The mailboxes a new email can go FROM (outbound.mailboxes) - Email someone's From picker."""
-    return {'data': outbound.mailboxes(store)}
+def mailboxes(task: int | None = None):
+    """The mailboxes a new email can go FROM (outbound.mailboxes) - Email someone's From picker - and, for a task, the one
+    it starts on: the mailbox the task's mail came in on (outbound.task_mailbox), else the first."""
+    data = outbound.mailboxes(store)
+    return {'data': data, 'default': (outbound.task_mailbox(store, task) if task else None) or (data[0]['address'] if data else None)}
 
 class TaskEmailBody(BaseModel):
     to: str; about: str = ''; cc: list[str] = []; subject: str | None = None
@@ -5003,7 +5005,7 @@ def save_review_text(rid: int, body: TextBody):
     text = str(body.body or '')[:50_000]
     m = store.get_message(rv.get('MessageId')) if rv.get('MessageId') else None
     if m and str(m.get('Channel') or '').lower() == 'email' and text.strip():
-        text = responder.with_signature(text, responder.signature_for(store))
+        text = responder.with_signature(text, responder.signature_for(store, outbound.sending_mailbox(store, rv, m)))
     store.save_review_draft(rid, text)
     store.audit('review', rid, 'edit_draft', ACTOR, detail={'characters': len(text)})
     return {'ok': True, 'draft': text}

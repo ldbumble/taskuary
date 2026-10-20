@@ -42,7 +42,9 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
       const list = (data.data || []).filter((t) => TASK_CHANNELS.includes(t.channel));
       setTargets(list); setChannel((c) => (list.some((t) => t.channel === c) ? c : list[0]?.channel || "email"));
     }).catch(() => setTargets([]));
-    api.get("/api/mailboxes").then(({ data }) => { setBoxes(data.data || []); setFrom(data.data?.[0]?.address || ""); }).catch(() => setBoxes([]));
+    // From starts on the mailbox this task's mail came in on (outbound.task_mailbox) - a second mailbox's work answered from the first was the wrong hat
+    api.get("/api/mailboxes", { params: { task: task?.TaskId } })
+      .then(({ data }) => { setBoxes(data.data || []); setFrom(data.default || data.data?.[0]?.address || ""); }).catch(() => setBoxes([]));
   }, [open]);
   const people = targets.find((t) => t.channel === channel)?.to || [];
   const flip = (k) => setPicked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });

@@ -75,9 +75,9 @@ EMAIL_SIGNED = ('This is EMAIL. Use the greeting STYLE.md specifies. Do NOT writ
                 "owner's saved signature is added under your text. Nothing else ceremonial.")
 
 
-def email_rule(store) -> str:
+def email_rule(store, mailbox: str = None) -> str:
     """The email line of the writer's prompt: told not to sign when a signature is saved, else to sign as STYLE.md says."""
-    return EMAIL_SIGNED if signature_for(store).strip() else EMAIL
+    return EMAIL_SIGNED if signature_for(store, mailbox).strip() else EMAIL
 
 # This line used to say "the owner will turn it into a task", and the model answered in kind:
 # a sentence about what someone ELSE would have to do. Say it the way a person would.
@@ -179,9 +179,19 @@ _SIGN_QUOTED = re.compile(r'(?:sign[- ]?off|signature)\s*:\s*"([^"]+)"', re.I | 
 _SIGN_LINE = re.compile(r'^\s*-?\s*(?:sign[- ]?off|signature)\s*:\s*(.+?)\s*$', re.I | re.M)
 
 
-def signature_for(store) -> str:
-    """The owner's email signature: the `email_signature` setting when set, else the `Sign off:` / `Signature:`
-    line in STYLE.md (quotes stripped, literal newlines honoured). '' when neither says anything (PW-065)."""
+def mailbox_in(m) -> str | None:
+    """The mailbox an email came in on (its SourceName) - None for anything else, or for mail the owner sent."""
+    m = m or {}
+    if str(m.get('Channel') or '').lower() != 'email' or m.get('Direction') == 'out': return None
+    return m.get('SourceName') if '@' in str(m.get('SourceName') or '') else None
+
+
+def signature_for(store, mailbox: str = None) -> str:
+    """The owner's email signature: the sending mailbox's own (its card), else the `email_signature` setting when set, else
+    the `Sign off:` / `Signature:` line in STYLE.md (quotes stripped, literal newlines honoured). '' when none says anything (PW-065)."""
+    from .outbound import card_signature
+    own = card_signature(store, mailbox) if mailbox else ''
+    if own: return own.replace('\\n', '\n')
     sig = str(store.get_setting('email_signature') or '').strip()
     if sig: return sig.replace('\\n', '\n')
     doc = store.doc('style') or ''
@@ -325,10 +335,11 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     notes = writing_notes(store)
     chat = written_as_chat(last.get('Channel'))
     sty = style_doc(store)
+    box = mailbox_in(next((m for m in reversed(msgs) if m.get('Direction') != 'out'), last))
     # The 60-word rule is useful for ordinary mail, but destructive for a completed eight-part
     # request. DONE supplies its own completeness/shape rules, so do not put BREVITY in conflict.
     length_rule = '' if resolution else BREVITY
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else email_rule(store)) + '\n'
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + length_rule + (CHAT if chat else email_rule(store, box)) + '\n'
               + (OWNER_SAYS if nudge else DONE if resolution else NOT_YET)
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
@@ -383,7 +394,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
         raise NoReply(out)
     # the owner's own signature with nothing above it is no draft at all - never an email of one signature to six people
     # (2026-10-08) - but it is not the writer's "no reply" either, so it FAILS (Redraft) rather than closing anything
-    body, sig = out.rstrip(), signature_for(store).strip()
+    body, sig = out.rstrip(), signature_for(store, box).strip()
     if sig and body.endswith(sig) and not body[:-len(sig)].strip():
         raise RuntimeError('the AI wrote only your signature - try Redraft with more to go on')
     return (strip_signoff(out) or out) if chat else out    # never strip a reply down to nothing
@@ -413,7 +424,7 @@ def draft_for_review(store, task_id: int, review_id: int, llm=None, resolution: 
     if saw and str(saw.get('Channel') or '').lower() == 'email':
         # the signature rides in the draft the owner reviews, once (PW-065); the recipients it will go to are pinned
         # with it, Reply all by default (PW-063/064) - an envelope the owner already set is kept
-        text = signed(text, signature_for(store))
+        text = signed(text, signature_for(store, mailbox_in(saw)))
         from . import outbound as _ob
         if not store.review_envelope(review_id):
             env = _ob.reply_envelope(store, saw)
@@ -492,7 +503,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     owner = owner_of(store, soul)
     chat = written_as_chat(m.get('Channel'))
     sty = style_doc(store)
-    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store)) + '\n' + NOT_YET
+    system = (SYSTEM.format(owner=owner) + signature_line(store) + BREVITY + (CHAT if chat else email_rule(store, mailbox_in(m))) + '\n' + NOT_YET
               # every block below describes YOU. They are written in the third person because
               # the same documents serve agents working FOR the owner - said once, here, so the
               # model does not read its own biography as notes about somebody else.
@@ -518,7 +529,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     if images: user += f"\n\n--- The picture{'s' if len(images) > 1 else ''} they sent with it {'are' if len(images) > 1 else 'is'} attached: look at {'them' if len(images) > 1 else 'it'}."
     out = (_ask(llm, system, user, REPLY_TOKENS, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
-    out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store))
+    out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))
     if not chat and not store.review_envelope(review_id):
         from . import outbound as _ob
         env = _ob.reply_envelope(store, m)

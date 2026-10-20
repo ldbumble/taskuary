@@ -18,3 +18,13 @@ test("the owner's scroll lets go of the end, and scrolling back down takes it ag
   assert.match(src, /const atEnd = \(\) => \{ if \(el\.scrollHeight - el\.scrollTop - el\.clientHeight < 4\) stuck\.current = true; \};/);
   assert.match(src, /el\.addEventListener\("scroll", atEnd/);
 });
+
+// ...and the pin on the card lets go for the KEYBOARD too: a card filled in by Tab and Enter snapped back to its top on Save (588px
+// up on the Slack card), because only a wheel or a finger released it. Focus the app moves itself must not count.
+test("a key pressed in the thread, focus Tabbed into it, or a press on its scrollbar lets go of the pin", () => {
+  assert.match(src, /const key = \(\) => \{ keyAt = Date\.now\(\); \}, typed = \(\) => \{ pin\.current = false; \};/);
+  assert.match(src, /const tabbed = \(\) => \{ if \(Date\.now\(\) - keyAt < 800\) pin\.current = false; \};/, "only focus a key just moved");
+  assert.match(src, /const bar = \(e\) => \{ if \(e\.target === el\) own\(\); \};/);
+  assert.match(src, /document\.addEventListener\("keydown", key, true\); el\.addEventListener\("keydown", typed\); el\.addEventListener\("focusin", tabbed\);/);
+  assert.match(src, /document\.removeEventListener\("keydown", key, true\);/, "and the listeners go with the effect");
+});

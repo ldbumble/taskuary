@@ -76,6 +76,7 @@ import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
 import { fmtDate, fmtTime } from "./dates.js";
+import { noteWrite } from "./wrote.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -994,7 +995,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const selectionContractSeen = useRef(false);
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
-  const turn = useCallback(async (body) => {
+  const turnOnce = useCallback(async (body) => {
     setWork([]);
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
@@ -1037,6 +1038,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     }
     throw new Error("The assistant stopped without an answer.");
   }, []);
+  // ...answered, refused or stopped, a turn can change what the sync caption shows (wrote.js)
+  const turn = useCallback(body => turnOnce(body).finally(noteWrite), [turnOnce]);
 
   const loadState = useCallback(async () => {
     const epoch = chatEpoch.current;

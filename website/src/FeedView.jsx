@@ -27,6 +27,7 @@ import SearchEverything, { OPEN_SEARCH, searchPicked } from "./SearchEverything.
 import { fadeBand } from "./timelineFade.js";
 import { syncFace, syncPhaseLabel } from "./syncTiming.js";
 import { observeSync } from "./syncObserver.js";
+import { onWrote } from "./wrote.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { availablePickerChannels, channelsForCategory } from "./feedFilters.js";
 import { splitTimelineMeetings } from "./timelineMeetings.js";
@@ -500,19 +501,23 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
     wasRunning.current = running;
     if (!running) setSyncing(false);
   }, [load]);
+  // The newest applyStatus, read when a status lands. Depending on it restarted the observer - an immediate status read - on
+  // every render of the Assistant (its inline `top` reaches `load`): 15 reads a press, and a rail re-render each (perf 2.8,
+  // 2026-10-19). What that accident also did, bring an owner's change to the caption at once, is now said by onWrote.
+  const applyLatest = useRef(applyStatus); applyLatest.current = applyStatus;
   useEffect(() => {
     // gated on `active`: the Timeline stays mounted behind another tab, and coming back
     // re-asks at once. Hidden windows stay subscribed via onLive but do not refetch.
     if (!active) return undefined;
     const observer = observeSync({
       read: () => api.get("/api/ingest/status", { timeout: 10000 }).then(({ data }) => data),
-      changed: applyStatus,
+      changed: d => applyLatest.current(d),
       failed: () => setSyncUnknown(true),
-      subscribe: refresh => onLive(["feed-changed", "ingest-status"], refresh),
+      subscribe: refresh => { const off = onLive(["feed-changed", "ingest-status"], refresh), offWrote = onWrote(refresh); return () => { off(); offWrote(); }; },
     });
     syncObserver.current = observer;
     return () => { observer.stop(); syncObserver.current = null; clearTimeout(completionTimer.current); };
-  }, [applyStatus, active]);
+  }, [active]);
   const syncNow = useCallback(async (silent) => {
     if (syncUnknown) { await syncObserver.current?.refresh(); return; }
     if (!silent) setSyncing(true);

@@ -90,6 +90,9 @@
    the dots beside it still run down the band */
 .tq-pile-row .card { margin-left: 8px; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 8px; padding: 4px 10px 5px; background: transparent; cursor: pointer; transition: background .15s; }
 .tq-pile-row .card:hover { background: #efebe4; }
+/* the keyboard's ring (the rail is one tab stop, Up/Down move it - AssistantView Pile): a focus outline and nothing else */
+.tq-pile-row .card:focus { outline: none; }
+.tq-pile-row .card:focus-visible { outline: 2px solid #55697a; outline-offset: -2px; }
 .tq-pile-row.settling .card { border-style: dashed; }
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */

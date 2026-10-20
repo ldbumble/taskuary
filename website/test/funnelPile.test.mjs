@@ -243,7 +243,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /onClick=\{\(\) => settle\("done"\)\}/);   // Done is a suggestion, not a button that settles
   assert.match(read("FeedView.jsx"), /\/api\/ingest\/poll/);            // sync now, on the rail's header
   // the chat keeps its bottom in view as it grows - except while a browse card is read from its top (the canvas redesign)
-  assert.match(view, /new ResizeObserver\(\(\) => \{ if \(keepTable\(\)\) return; if \(!holdBottom\.current && el\.scrollHeight/);
+  // ...and a thread stuck at its end stays there however much it grows (chatStick.test.mjs)
+  assert.match(view, /new ResizeObserver\(\(\) => \{ if \(keepTable\(\)\) return; if \(!holdBottom\.current && \(stuck\.current \|\| el\.scrollHeight/);
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);

@@ -29,6 +29,12 @@ def forget() -> None:
 def _mtime(d):
     try: return os.stat(d or os.curdir).st_mtime_ns
     except (OSError, ValueError): return None
+# ...but a Windows folder's mtime does not reliably move when a file lands in it (CI, 2026-10-20: a CLI copied into a PATH folder
+# after the first look was never found), so there the folder's own listing is the signature - what which() would see, read once
+def _listing(d):
+    try: return hash(tuple(sorted(os.listdir(d or os.curdir))))
+    except (OSError, ValueError): return None
+if sys.platform == 'win32': _mtime = _listing
 
 
 def _sig(path: str, cwd: str) -> tuple:

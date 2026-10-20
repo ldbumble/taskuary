@@ -49,7 +49,7 @@ build = ["pyinstaller>=6"]
 bundle = ["boto3>=1.28", "pyodbc>=4", "sqlalchemy>=2", "psycopg2-binary", "pymysql", "openpyxl>=3", "pypdf", "paramiko>=2.11"]
 docs = ["pypdf"]            # reading .pdf into the knowledge base
 semantic = ["numpy>=1.24"]  # optional: a faster scan for semantic knowledge search (it works without; the embedder is a plain HTTP call)
-dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3", "paramiko>=2.11"]   # openpyxl READS xlsx in tests; the writer is ours.
+dev = ["pytest>=7", "httpx>=0.24", "openpyxl>=3", "paramiko>=2.11", "pypdf"]   # openpyxl READS xlsx in tests; the writer is ours. pypdf: attachments are read
 # paramiko is optional for USERS and required to TEST the SFTP card: its host-key pinning is the
 # security of that connector, and skipping those tests where the library is absent would mean CI
 # never checks the one thing worth checking (tests/test_files.py, red on every runner 2026-09-08).

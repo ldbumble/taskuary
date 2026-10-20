@@ -69,6 +69,9 @@ test("setup: every AI card says what happened, never the opposite, and opens aga
       const field = await page.waitForSelector('[data-tq-firstrun] input[type="password"]', { timeout: 15000 }).catch(() => null);
       if (!field) { row.failure = "(no key to type - local)"; table.push(row); continue; }
       await field.type(KEY);
+      // an organisation's gateway (HIPAA AI) needs its address too, or Connect stays off - an address that answers nothing here
+      const gw = await page.evaluateHandle(() => [...document.querySelectorAll('[data-tq-firstrun] label')].find((l) => /Gateway address/i.test(l.innerText))?.parentElement?.querySelector('input'));
+      if (gw.asElement()) await gw.asElement().type("https://ai.northwind.example");
       const connect = () => page.evaluate(() => { const b = [...document.querySelectorAll("[data-tq-firstrun] button")].find((x) => x.innerText.trim() === "Connect" && !x.disabled); b?.click(); return !!b; });
       assert.ok(await connect(), `${row.card}: Connect`);
       await until(page, () => /✗/.test(document.querySelector("[data-tq-firstrun]")?.innerText || ""), null, 120000);

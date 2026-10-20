@@ -57,7 +57,7 @@ test("an item opened again is one line in the chat, at the end - and the server'
   // ...and a proposal is never an item copy
   const prop = { id: "p", role: "assistant", text: "Not ours?", proposal: { id: "x" }, card: { kind: "proposal", key: "task:10" } };
   assert.equal(placeLine([prop], item("a3")).length, 2);
-  assert.match(read("AssistantView.jsx"), /setMsgs\(\(m\) => placeLine\(m, \{ id: `a\$\{Date\.now\(\)\}`, role: "assistant"/);
+  assert.match(read("AssistantView.jsx"), /setMsgs\(\(m\) => placeLine\(ahead \? m\.filter\(\(x\) => x\.id !== ahead\.id\) : m, \{ id, role: "assistant"/);
 });
 
 test("the demo runs the page's task tools as its old doors did", () => {

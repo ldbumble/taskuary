@@ -63,7 +63,9 @@ export function mergeDurableTurns(local = [], durable = []) {
 // opened again moves its line to the end - folded there as the walk's record, live there when it is the table - never a second line.
 // The copies it replaces stay its aliases, so a later read of the server's history does not bring them back.
 const NOT_ITEM = new Set(["proposal", "words", "brief", "setup", "walk", "firstrun", "setup_questions"]);
-export const itemKey = (m) => (m?.role === "assistant" && m.card?.key && !m.proposal && !NOT_ITEM.has(m.card.kind) ? m.card.key : "");
+// ...and a line Next drew ahead of its answer (AssistantView surface) is no copy yet: the answer replaces it or takes it down, so an older
+// line's ids folded into it here would go down with it
+export const itemKey = (m) => (m?.role === "assistant" && m.card?.key && !m.proposal && !m.ahead && !NOT_ITEM.has(m.card.kind) ? m.card.key : "");
 const ids = (m) => [m.id, m.commentId, ...(m.alias || [])].filter((v) => v != null);
 export function placeLine(messages = [], line) {
   const key = itemKey(line);

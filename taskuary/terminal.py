@@ -1271,6 +1271,16 @@ def render_visible(raw: str, cols: int = 110, rows: int = 32) -> str:
         return render(raw, cols, rows)
 
 
+FEED_SLICE = 2048
+
+def _feed(stream, raw: str):
+    """Feed in slices and let go of the GIL between them. A draw is pure Python, so on the replay worker it held the GIL
+    for its whole 5 ms switch interval at a time and the event loop - every keystroke on the Wall - queued behind it.
+    pyte's parser keeps its state across feeds, so the screen is the one a single feed draws."""
+    for i in range(0, len(raw), FEED_SLICE):
+        stream.feed(raw[i:i + FEED_SLICE]); time.sleep(0)
+
+
 _HIST = []
 
 def _history_screen(pyte):
@@ -1298,7 +1308,7 @@ def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
         return plain(raw), None, None
     try:
         sc = _history_screen(pyte)(max(40, int(cols or 110)), max(4, int(rows or 32)), history=HISTORY_LINES, ratio=1.0)
-        pyte.Stream(sc).feed(raw)
+        _feed(pyte.Stream(sc), raw)
         # history rows are sparse Char maps (a missing cell is a blank); display rows are already strings
         n = sc.columns
         def line(r):
@@ -1352,6 +1362,28 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
         while tail and not tail[-1].strip(): tail.pop()
     if not any(r.strip() for r in tail): return ''
     return REPLAY_RESET + CRLF.join(tail) + cursor_back(len(tail) - 1, (cy - first) if cy is not None else None, cx)
+
+
+from concurrent.futures import ThreadPoolExecutor
+# ONE worker draws every reopened pane. On the event loop a 200 KB scrollback froze every socket for 1-5 s per pane, and
+# the Wall attaches five at once; on the default executor five pure-Python renders ran side by side and starved the
+# loop of the GIL instead (the perf pass, 2026-10-19). One at a time, off the loop, is the same total work.
+REPLAYS = ThreadPoolExecutor(max_workers=1, thread_name_prefix='replay')
+
+def replay_snapshot(t, lines: int = REPLAY_LINES) -> str:
+    """replay_text, drawn once per screen: a pane reopened on a session that has printed nothing since its last replay
+    gets the same text back without feeding the scrollback again. Kept only when nothing moved while it was drawn - a
+    write or a resize in between would file one screen under another's key."""
+    def key():
+        w, n = getattr(t, 'writes', None), getattr(t, 'n', None)
+        return (w, n, getattr(t, 'rows', 32), getattr(t, 'cols', 110), lines) if isinstance(w, int) and isinstance(n, int) else None
+    k = key()
+    if k is None: return replay_text(t, lines)       # stand-ins without counters (demo.Replay, the tests' fakes)
+    got = getattr(t, '_replayed', None)
+    if got and got[0] == k: return got[1]
+    text = replay_text(t, lines)
+    if key() == k: t._replayed = (k, text)
+    return text
 
 
 def cursor_back(last: int, row, col) -> str:

@@ -811,10 +811,8 @@ class Replay:
     def _moved(self):
         """A recording that stops typing, or is closed, is a session that changed state - and every surface hears it at once, as
         they hear a real run's events (workerstate.record): the Board and the task page waited for their next poll (G7, 2026-10-20)."""
-        try:
-            from . import funnel, live
-            funnel.invalidate(); live.emit('task-changed', task_id=self.task_id)
-        except Exception: pass
+        from . import handraise
+        handraise.moved(self.task_id)
     def info(self, tail=0):
         # THE RUN'S OWN WORD FIRST, as a real session's (terminal.worker_fields): a replay with a question recorded on it read only its
         # screen, so it said "waiting" with no request - the rail had no question to show and the chat none to answer (G7)

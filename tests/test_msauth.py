@@ -129,13 +129,14 @@ class EndpointTests(unittest.TestCase):
         with mock.patch.object(msauth, 'PUBLIC_CLIENT_ID', ''):
             self.assertEqual(c.get(f'/api/connectors/{cid}/ms/adminlink').status_code, 409)   # no app id yet: said, not a 500
 
-    def test_teams_cannot_ride_a_personal_sign_in(self):
+    def test_teams_does_not_ride_another_accounts_sign_in(self):
         from taskuary.store import MemoryStore
         s = MemoryStore()
         o = s.get_connector_by_type('outlook'); t = s.get_connector_by_type('teams')
         s.save_connector({'ConnectorId': o['ConnectorId'], 'ConfigJson': json.dumps({'auth': 'user', 'account': 'me@x.com'}), 'Secret': 'RT', 'Active': 1}, 't')
         out = channels.test_connector(s, t['ConnectorId'])
-        self.assertFalse(out['ok']); self.assertIn('tenant app', out['detail'])
+        # a Teams card naming no account is not read through whichever Outlook card is first: it signs in itself
+        self.assertFalse(out['ok']); self.assertIn('Sign in with Microsoft on this Teams card', out['detail'])
 
 
 class ImapMessagesTests(unittest.TestCase):

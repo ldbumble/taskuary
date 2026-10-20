@@ -80,7 +80,7 @@ import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, endedByStop, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -919,9 +919,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
   const barContinue = canContinue && !isGeneral;
-  // nothing filed yet, so this session is still worth writing up - unless its run is over by being STOPPED (or stopped and saved):
-  // "Stop and save" stood on the row of an agent that was already stopped, with its conversation saved (G7, 2026-10-20)
-  const canSave = !report && !wrapped && !endedByStop(listRow?.State, detail?.runEnded);
+  // STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): it stood on the row of an agent that was
+  // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
+  // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
   const rowState = listRow?.State;
@@ -1089,16 +1089,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
         onClick={(e) => setContinueAt(e.currentTarget)}>
         {startingAgent === "resume" ? "Continuing…" : labelOfRow("continue")}</Button>}
-      {canSave && <Button size="small" variant={barContinue ? "outlined" : "contained"} disableElevation
-        disabled={!!wrapping} sx={barContinue ? barBtn : primaryBtn}
-        startIcon={<DoneAllIcon sx={{ fontSize: 16, color: barContinue ? "#6f8a6e" : undefined }} />}
-        title="Writes up what this session did and files it as the task's result. The task stays open until you press Mark done."
-        onClick={wrapUp}>{labelOfRow("save-end")}</Button>}{/* ONE NAME for the write-up (the owner, 2026-10-02): an ended session has nothing left to end */}
       {!isGeneral && <>
-        {(canContinue || canSave) && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
-        <Button size="small" variant={canContinue || canSave ? "outlined" : "contained"} disableElevation
-          sx={canContinue || canSave ? barBtn : primaryBtn}
-          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue || canSave ? "#6f8a6e" : undefined }} />}
+        {canContinue && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
+        <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
+          sx={canContinue ? barBtn : primaryBtn}
+          startIcon={<RefreshIcon sx={{ fontSize: 16, color: canContinue ? "#6f8a6e" : undefined }} />}
           title="A fresh agent, with new instructions if you want. It gets what the last one saved, not its whole conversation."
           onClick={() => setRestartOpen(true)}>{labelOfRow("run-another")}</Button>
       </>}
@@ -1237,9 +1232,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         title: hintOfRow("remind") },
       { id: "hand", group: "more", label: labelOfRow("hand"), run: () => setHandoff(true), title: hintOfRow("hand") },
       { id: "reshape", group: "more", label: labelOfRow("reshape"), run: () => setReshape(true), title: hintOfRow("reshape") },
-      // ...the same write-up once the session has ended by itself: one button, one name (the owner, 2026-10-02 - its own name made it look like a second button)
-      ...(!liveSession && canSave && agentBar ? [{ id: "save-end", group: "more", label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp,
-        title: hintOfRow("save-end") }] : []),
       // ...whenever an agent has worked it and the bar's lead is not already the agent step (a paused general session had neither)
       ...(!liveSession && notDone && (ranBefore || generalStarted) && !startHere ? [runAnother] : []),
       // WHAT THE PILLS USED TO CHANGE, on the row now that the pills only read (section 1's redesign, 2026-10-16): the same PATCHes
@@ -1302,9 +1294,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             title="Which checkout the session works in - the session starts once you pick"
                             onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>{PICK_CODE.toLowerCase()}</Button>
                         </>}
-                        {detail?.transcript && canSave && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
-                          title="Saves the stopped session's result and report. The task stays open."
-                          startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>{labelOfRow("save-end")}</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above
                             become the profile, brain and model, and the next press starts it */}
                         {!generalOnly && <Button size="small" variant="outlined" disabled={!!startingAgent}

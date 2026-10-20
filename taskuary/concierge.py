@@ -775,8 +775,10 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
     if verb == 'mine' and item.get('tid') and not _agent_holds(store, item):
         return f"{what} is already a task on your list."
     if verb == 'close' and item.get('closed'): return f"{what} is already closed - the work on it is finished."
-    if verb == 'stop_agent' and item.get('paused'):
+    if verb == 'stop_agent' and (item.get('paused') or item.get('lane') in ('stopped', 'saved') or item.get('kind') in ('agentdone', 'wrapup')):
         # a paused conversation has no live session: the pick answered "no agent is running right now" (A20, 2026-09-25)
+        # ...nor has a session that already ENDED - failed, finished, or cut off by a restart (owner-approved, 2026-10-20): its
+        # card offered Stop and save over nothing to stop; Continue, Mark done and the write-up's own actions are what apply
         return f"{what} isn't running right now - there's nothing to stop."
     if verb == 'defer' and item.get('closed'): return f"{what} is closed - there is nothing to put away."
     need = NEEDS.get(verb)

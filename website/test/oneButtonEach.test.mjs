@@ -7,12 +7,12 @@ import { fileURLToPath } from "node:url";
 
 const read = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 
-test("the write-up is Stop and save, live or ended, and only one of them is ever offered", () => {
+test("the write-up is Stop and save, offered once, and only while the session is live", () => {
   const page = read("TaskPage.jsx");
   assert.doesNotMatch(page, /Save result/);
-  assert.equal((page.match(/\{ id: "save-end"/g) || []).length, 2);   // live (agent group) or ended (More) - never both
+  // an ended session (failed, finished, cut off by a restart) has nothing to stop (owner-approved, 2026-10-20)
+  assert.equal((page.match(/\{ id: "save-end"/g) || []).length, 1);
   assert.match(page, /\.\.\.\(liveSession \? \[/);
-  assert.match(page, /\.\.\.\(!liveSession && canSave && agentBar \? \[\{ id: "save-end", group: "more", label: labelOfRow\("save-end"\)/);
 });
 
 test("a finished agent's result is sent on by Hand it to a person", () => {

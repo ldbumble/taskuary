@@ -368,11 +368,14 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
 
 def cold(store, days: int) -> list:
     """Open work nothing has touched for `days`: no comment, no message, no run. A live agent on
-    it is activity; a draft waiting on the task is the owner's to move."""
-    cut = _since(days)
+    it is activity; a draft waiting on the task is the owner's to move. Work the owner PUT AWAY (Remind me) is quiet
+    on purpose until its day: "sat quiet for 6 days - push it or drop it?" over a task they parked until next week
+    argued with their own Remind me (the rail Advisor's eval)."""
+    cut, now = _since(days), datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     out = []
     for t in store.list_tasks(active_only=True):
         if t.get('Status') not in ('open', 'in_progress', 'waiting') or t.get('RunStatus') == 'running': continue
+        if _ts(t.get('RemindAt')) > now: continue
         last = _ts(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         if not last or last > cut: continue
         age = max(days, (datetime.now() - (_dt(last) or datetime.now())).days)

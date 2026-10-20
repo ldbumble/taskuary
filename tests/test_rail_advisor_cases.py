@@ -9,13 +9,11 @@ from tests import rail_advisor_cases as C
 
 # what still fails, and why - strict, so a fix that lands without crossing it off fails too
 KNOWN = {
-    'put away until next week (Remind me)': 'gone quiet over a task the owner put away',
     'waiting on someone else six days - said as theirs': 'says a reply waits on the owner when it waits on them',
     'a workflow saved a minute ago, never run yet': 'never run, the minute it is saved',
     'twelve mails put down, none taken up': "the automation card's skip-rule idea beside the rule question",
 }
 WORLD_KNOWN = {
-    'world: cold:TQ-0043': 'gone quiet over a task put away until later',
     'world, next check: cold:TQ-0037': 'gone quiet over a live agent session',
     'world, next check: cold:TQ-0038': 'gone quiet over a live agent session',
 }

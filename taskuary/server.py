@@ -1508,6 +1508,8 @@ def task_detail(task_id: int):
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
             'session': hub_term.for_task(task_id, tail=3, details=False),
+            # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read
+            'runEnded': _workerstate().ended(store, task_id),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
                            'at': tr['CreatedAt'], 'chars': len(tr['Text'] or '')} if tr else None,
             # ...and WHICH BRAIN ACTUALLY RAN IT, for a session that has ended (_ran_on)

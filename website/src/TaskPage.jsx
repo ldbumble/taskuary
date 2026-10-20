@@ -79,7 +79,7 @@ import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, endedByStop, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -900,7 +900,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
   const barContinue = canContinue && !isGeneral;
-  const canSave = !report && !wrapped;            // nothing filed yet, so this session is still worth writing up
+  // nothing filed yet, so this session is still worth writing up - unless its run is over by being STOPPED (or stopped and saved):
+  // "Stop and save" stood on the row of an agent that was already stopped, with its conversation saved (G7, 2026-10-20)
+  const canSave = !report && !wrapped && !endedByStop(listRow?.State, detail?.runEnded);
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
   // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
   const rowState = listRow?.State;
@@ -1260,7 +1262,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                             title="Which checkout the session works in - the session starts once you pick"
                             onClick={() => { setRepoPick(true); setResumeAfterRepo({ dispatch: true }); }}>{PICK_CODE.toLowerCase()}</Button>
                         </>}
-                        {detail?.transcript && !report && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
+                        {detail?.transcript && canSave && !handOff && <Button size="small" variant="outlined" disabled={!!wrapping}
                           title="Saves the stopped session's result and report. The task stays open."
                           startIcon={<DoneAllIcon sx={{ fontSize: 15 }} />} onClick={wrapUp}>{labelOfRow("save-end")}</Button>}
                         {/* it SWITCHES the row rather than dispatching on the spot: the pickers above

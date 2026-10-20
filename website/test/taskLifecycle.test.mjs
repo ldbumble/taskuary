@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT, agentPhase, focusStage, ownerControlsCompletion, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  AGENT, agentPhase, endedByStop, focusStage, ownerControlsCompletion, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -218,4 +218,12 @@ test("a session's new word is a change the task page takes, and the same word is
   assert.equal(sessionWord(working), sessionWord({ ...working, tail: ["more output"], idle: 3 }));   // output alone is not a new word
   assert.equal(agentPhase({ session: asking }), AGENT.waiting);
   assert.equal(sessionWord(null), "");
+});
+
+test("a run stopped, or stopped and saved, offers no Stop and save; one that failed or finished can still be written up (G7)", () => {
+  assert.equal(endedByStop("saved", null), true);
+  assert.equal(endedByStop("stopped", "stopped"), true);
+  assert.equal(endedByStop("stopped", "failed"), false);       // cut off or failed: its transcript is still worth writing up
+  assert.equal(endedByStop("agentdone", "finished"), false);
+  assert.equal(endedByStop(undefined, undefined), false);
 });

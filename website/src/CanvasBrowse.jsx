@@ -10,9 +10,11 @@ import React, { Suspense, useEffect, useRef } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import { BORDER, DIM, FAINT, INK, PANEL } from "./theme.jsx";
-import ConnectorsView from "./ConnectorsView.jsx";
-import ReportsView from "./ReportsView.jsx";
-import SettingsView from "./SettingsView.jsx";
+import { lazyView } from "./lazyView.jsx";
+// each area is its own chunk, all asked for as soon as this one runs (lazyView): a deep link lands without a second wait
+const ConnectorsView = lazyView(() => import("./ConnectorsView.jsx"));
+const ReportsView = lazyView(() => import("./ReportsView.jsx"));
+const SettingsView = lazyView(() => import("./SettingsView.jsx"));
 import NewSheet from "./NewSheet.jsx";
 const HubView = React.lazy(() => import("./HubView.jsx"));
 

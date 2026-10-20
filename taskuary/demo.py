@@ -246,7 +246,11 @@ def _advice(text: str) -> str:
     fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
     verb = next((v for v in said if fits(v)), None)
     what = failed.split(' - ')[0].strip() or 'That did not go through'
-    return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:]) if verb else '', 'evidence': []})
+    line = said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:]) if verb else ''
+    # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
+    dup = re.search(r'^- (TQ-\d+) [^\n]*an agent is on it$', text.split('POSSIBLE DUPLICATES', 1)[1], re.M) if 'POSSIBLE DUPLICATES' in text else None
+    if verb == 'reply' and dup: line = f'Someone is waiting - {dup[1]} may already cover it, and an agent is on that.'
+    return json.dumps({'verb': verb, 'line': line, 'evidence': []})
 
 
 def brain(seed: int = 0, store=None):

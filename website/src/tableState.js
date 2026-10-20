@@ -9,6 +9,17 @@ export function tableOf({ current = null, cardKey = null, foldedKey = null, brow
   return { key, folded, place, speaks: !!key && !folded && !place && !setup };
 }
 
+// WHAT THE RAIL'S TAG AND THE BOX SAY of it (the 2026-10-19 UI walk, G5): a page opened over the item keeps it on the table - the next
+// ask carries both, and its ringed row still brings it back - but it is not in view, and "on the table" and "Ask about this one" said
+// it was while Connections covered it
+export function tableWords(table, ref = "") {
+  const has = !!table?.key, under = has && !!table.place;
+  return { tag: under ? "under this page" : "on the table",
+    box: !has ? "Ask Taskuary anything — a name or a subject pulls it in…"
+      : under ? `Ask about this page or ${ref || "the one under it"}, or name something else…` : "Ask about this one, tell me what to do with it, or name something else…",
+    phone: !has ? "Ask Taskuary anything…" : under ? "Ask about this page…" : "Ask about this one…" };
+}
+
 // What an /api/advice answer (advisor.status) means for the strip: a line, "Thinking..." only while a judgement is really in
 // flight, or the reason there is none. It spun 20 s and then showed nothing over items the Advisor never judges (error sweep,
 // 2026-10-18) - and then showed nothing at all for every reason but two, so the strip came and went under the row (2026-10-19).

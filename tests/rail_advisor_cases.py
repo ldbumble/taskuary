@@ -163,6 +163,9 @@ def _cold_fresh(s): _task(s, 'Renew the PhishGuard licence', quiet_d=1)
 def _cold_running(s):
     t = _task(s, 'Migrate the census export', quiet_d=6)
     s._exec("INSERT INTO run (TaskId, AgentName, Status, StartedAt, UpdatedAt) VALUES (?,?,?,?,?)", (t, 'coding', 'running', at(d=6), at(d=6)))
+def _cold_agent_failed(s):
+    t = _task(s, 'Fix the export', quiet_d=6, Kind='coding')
+    s._exec("INSERT INTO run (TaskId, AgentName, Status, StartedAt, UpdatedAt, FinishedAt) VALUES (?,?,?,?,?,?)", (t, 'coding', 'failed', at(d=6), at(d=6), at(d=6)))
 def _cold_put_away(s):
     t = _task(s, 'Renew the PhishGuard licence', quiet_d=6)
     s._exec('UPDATE task SET RemindAt=? WHERE TaskId=?', ((datetime.now() + timedelta(days=5)).strftime('%Y-%m-%d 08:00:00'), t))
@@ -248,6 +251,7 @@ CASES = [
     ('cold', 'open task untouched for six days', True, _cold_plus, None),
     ('cold', 'touched yesterday', False, _cold_fresh, None),
     ('cold', 'an agent has been on it for six days', False, _cold_running, None),
+    ('cold', 'its agent failed six days ago - the agent row says it', False, _cold_agent_failed, None),
     ('cold', 'put away until next week (Remind me)', False, _cold_put_away, None),
     ('cold', 'waiting on someone else six days - said as theirs', True, _cold_waiting_on_them, None),
     ('cold', 'put down, nothing moved since', False, _cold_plus, 'dismiss'),
@@ -315,7 +319,10 @@ def noise_of(s, kind, line, rail) -> str:
         return f"too early - put away until {str(t['RemindAt'])[:10]}"
     if kind == 'cold' and t:
         from taskuary import workerstate
-        if workerstate.status(s, t['TaskId']).get('live'): return 'an agent is on it - its own row on the rail is the line, not "gone quiet"'
+        w = workerstate.status(s, t['TaskId'])
+        if w.get('live'): return 'an agent is on it - its own row on the rail is the line, not "gone quiet"'
+        if w.get('state') in ('finished', 'failed', 'stopped', 'disconnected'): return f"its agent {w['state']} - the agent's own row says it"
+        if (s.list_runs(t['TaskId']) or [{}])[-1].get('Status') in ('finished', 'failed', 'stopped', 'done'): return "its agent's run ended - the agent's own row says it"
     # the same thing twice on the rail: the idea's own row beside the row of the task or mail it is about
     me = next((r for r in rail if r.get('idea') == line.get('id')), None)
     if me and (twin := next((r for r in rail if r is not me and ((a.get('tid') and r.get('tid') == a['tid']) or (mid and r.get('mid') == mid))), None)):

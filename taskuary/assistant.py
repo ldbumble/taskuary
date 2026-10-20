@@ -366,10 +366,19 @@ def their_asks(store, days: float = 2, hours: int = 3) -> tuple:
     return out, blank
 
 
-def _live_agent(store, tid) -> bool:
+AGENT_ENDED = ('finished', 'failed', 'stopped', 'disconnected', 'done', 'cancelled')
+
+
+def _agent_row(store, tid) -> bool:
+    """Is an agent's own row on the rail the line for this task - a live session (working or waiting on the owner), or a run
+    that finished, failed or stopped? Its row already says so: "agent stopped", "finished" (the owner, 2026-10-20)."""
     from . import workerstate
-    try: return bool(workerstate.status(store, int(tid)).get('live'))
-    except Exception: return False
+    try:
+        w = workerstate.status(store, int(tid))
+        if w.get('live') or w.get('state') in AGENT_ENDED: return True
+    except Exception: pass
+    runs = store.list_runs(int(tid)) or []
+    return bool(runs) and str(runs[-1].get('Status') or '') in AGENT_ENDED
 
 
 def cold(store, days: int) -> list:
@@ -385,8 +394,9 @@ def cold(store, days: int) -> list:
         last = _ts(store.task_last_activity(t['TaskId']) or t.get('UpdatedAt') or t.get('CreatedAt'))
         if not last or last > cut: continue
         # ...and a live agent SESSION is activity too, working or waiting on the owner: a CLI in a terminal writes no run row, so
-        # "push it or drop it?" stood over an agent mid-job and over one whose question is its own row on the rail (the eval)
-        if _live_agent(store, t['TaskId']): continue
+        # "push it or drop it?" stood over an agent mid-job and over one whose question is its own row on the rail (the eval).
+        # An agent that finished, failed or stopped is its own row too - "agent stopped" says it, a second line is a copy
+        if _agent_row(store, t['TaskId']): continue
         age = max(days, (datetime.now() - (_dt(last) or datetime.now())).days)
         # a draft waiting is the owner's move; a task WAITING with no draft waits on THEM - it was told as "a reply waiting on you"
         # (the rail Advisor's eval), which sent the owner looking for a draft that was never there

@@ -65,11 +65,20 @@ test("a task's session is held with it: unknown until read, null for a task no a
 // server answered - the item the capture names is drawn at once from its held read, and the answer fills that same line
 test("Next draws what its capture names in the same frame as the fold, and the answer fills that line in place", () => {
   const view = src("AssistantView.jsx"), turns = src("assistantTurns.js");
-  assert.match(view, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;[^]*aheadItem && drawsNow\(aheadItem\)/, "only from a read already held - never an empty view");
+  assert.match(view, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;[^]*aheadItem && \(drawsNow\(aheadItem\) \|\|/, "a Next only from a read already held - never an empty view");
   assert.match(view, /drawAhead\(\{ \.\.\.line, text: "", card: aheadItem \}\)/);
   assert.match(view, /setMsgs\(\(m\) => \[\.\.\.m, \{ \.\.\.line, ahead: true \}\]\);\s+putOnTable\(line\.card\);/);
   assert.match(view, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
   assert.match(view, /setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== ahead\.id\)\);\s+const t = ahead\.table;/, "a failure puts the table back");
   assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
   assert.match(view, /i\.key === aheadKey && !i\.settling && i\.lane !== "working"/, "never an item an agent has: the server puts nothing up for it");
+});
+
+// A ROW CLICKED COLD IS DRAWN AT THE CLICK (owner-approved, 2026-10-20): the old view and its ring stayed up for the whole read
+test("a rail row clicked before its task is read puts its frame up at the click, titled, over the view's loading state", () => {
+  const view = src("AssistantView.jsx"), page = src("TaskPage.jsx"), item = src("CanvasItem.jsx");
+  assert.match(view, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)/,
+    "a pick by name needs no held read; a Next still does");
+  assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\}/, "the frame knows which item it is");
+  assert.match(page, /data-tq-task-loading=[\s\S]{0,800}canvas && !!title && <Typography data-tq-task-loading-title=""/, "...and says it while it reads");
 });

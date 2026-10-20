@@ -306,7 +306,7 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
 
 export default function TaskPage({ taskId: selected, listRow = null, onListChanged, onSelect, onClose, onFinish, onReminded, onLeave, onStay, onOpenTask,
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
-  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
+  onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false, title = "" }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
   // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
   const [detail, setDetail] = useState(() => heldTask(selected));
@@ -1350,7 +1350,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
             // shell was 22px - the dead-end walk's SEEN "only 22px of the card on the table is in view" after Remove (CI, 2026-10-20) was a
             // next view still waiting for its read - and the view then grew to 400 under the owner's eyes. The canvas's own floor, 340
             <Box data-tq-task-loading={selected ? "" : undefined} sx={{ height: "100%", minHeight: canvas && selected ? 340 : undefined, display: "grid", placeItems: "center" }}>
-              {selected ? <CircularProgress size={20} /> : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
+              {/* ...and on the table it says WHICH item is coming (a rail row clicked cold draws its frame at the click - AssistantView surface) */}
+              {selected ? <Box sx={{ display: "grid", justifyItems: "center", gap: 1 }}><CircularProgress size={20} />
+                {canvas && !!title && <Typography data-tq-task-loading-title="" sx={{ fontSize: 13, color: DIM, textAlign: "center", px: 2 }}>{title}</Typography>}</Box>
+                : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
             </Box>
           ) : (
             <>

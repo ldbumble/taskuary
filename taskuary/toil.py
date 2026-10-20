@@ -47,7 +47,14 @@ def gather(store, days: int = 30) -> str:
     # as "ignored" by hand (2026-09-29). So the code leaves those senders out rather than asking the model to.
     pols = store.list_policies(active_only=True)
     def handled(who): return any(p['Kind'] in BODYLESS and p['Action'] in ('skip', 'ignore') and matches(p, {'from_email': who}) for p in pols)
-    covered = {who for who in by if handled(who)}
+    # ...nor one the Advisor's rule check asks about (promote.py) - already asked, open or answered, or about to be: its rule
+    # question is the line, and the model's own "a skip rule on X" beside it was the same question twice in one post, and
+    # after a No it was the question the owner had refused
+    from . import promote
+    asked = {str(i['Key']).split(':', 2)[2] for i in store.list_ideas() if str(i.get('Key') or '').startswith('rule:sender')}
+    try: asked |= {c['action']['policy']['Pattern'] for c in promote.candidates(store, {})}
+    except Exception: pass
+    covered = {who for who in by if handled(who) or who in asked or who.rsplit('@', 1)[-1] in asked}
     out = [f'INBOUND BY SENDER (last {days} days; senders with 3+ messages):']
     for who, d in sorted(by.items(), key=lambda x: -x[1]['n']):
         if d['n'] < 3 or who in covered: continue
@@ -57,7 +64,7 @@ def gather(store, days: int = 30) -> str:
     if len(out) == 1: out.append('  (nothing repeated 3+ times)')
     hot = [f'  {who}: {n} drafts sent unchanged' for who, n in sorted(approved.items(), key=lambda x: -x[1]) if n >= 3]
     if hot: out += ['DRAFTS YOU ALWAYS APPROVE UNTOUCHED (auto_answer candidates):'] + hot
-    if covered: out.append(f'  ({len(covered)} more senders left out: your rules already skip or ignore them)')
+    if covered: out.append(f'  ({len(covered)} more senders left out: your rules already skip or ignore them, or the Advisor asks you about a rule for them)')
     out.append('EXISTING POLICIES (already automated - never propose these again):')
     out += [f"  [{p['Action']}] {p['Kind']}: {str(p.get('Pattern') or '')[:60]}" for p in pols] or ['  (none)']
     settings = store.get_settings()

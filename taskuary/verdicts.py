@@ -197,7 +197,12 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
         files = env.get('attachments')
         env = {**(outbound.reply_envelope(store, msg) or {'kind': 'reply'}), **({'attachments': files} if files else {})}
     if cc is not None: env['cc'] = list(cc)
-    snapshot = {'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb],
+    # a NEW email on a task leaves from the mailbox the task's mail came in on - not the first Outlook card, which sent a
+    # second mailbox's business out under the first one's address. Nothing came in by mail: send_out's own fallback, as before
+    if outgoing and not env.get('kind') and str(env.get('channel') or '').lower() == 'email' and not env.get('mailbox'):
+        box = outbound.task_mailbox(store, rv.get('TaskId'))
+        if box: env['mailbox'] = box
+    snapshot ={'envelope': env, 'message': msg, 'body': final, 'status': VERB2STATUS[verb],
                 'actor': actor, 'note': note, 'attempted_at': _now_iso()}
     claim = store.claim_review_delivery(rid, snapshot, rv)
     if not claim: return _delivery_busy(store, rid)

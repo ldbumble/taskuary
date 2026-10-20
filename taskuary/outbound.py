@@ -374,6 +374,40 @@ def mailboxes(store) -> list:
     return out
 
 
+def _box(store, mailbox): return next((m for m in mailboxes(store) if m['address'].lower() == str(mailbox or '').strip().lower()), None) if mailbox else None
+
+
+def card_signature(store, mailbox) -> str:
+    """The signature saved on the card that sends as this mailbox - '' when it has none, and the global one is used.
+    Two mailboxes are two hats: mail from the second one went out under the first one's name and title."""
+    from .channels import _cfg
+    box = _box(store, mailbox)
+    c = store.get_connector(box['connector_id']) if box else None
+    return str(_cfg(c).get('signature') or '').strip() if c else ''
+
+
+def task_mailbox(store, tid) -> str | None:
+    """The mailbox a task's mail came IN on - its newest inbound email's - while a connected card still sends as it. A new
+    message on that task goes out from there by default, not from whichever Outlook card happens to be first."""
+    if not tid: return None
+    have = {m['address'].lower(): m['address'] for m in mailboxes(store)}
+    for m in reversed(store.list_messages(int(tid))):
+        if m.get('Direction') == 'out' or str(m.get('Channel') or '').lower() != 'email': continue
+        a = have.get(str(m.get('SourceName') or '').strip().lower())
+        if a: return a
+    return None
+
+
+def sending_mailbox(store, rv: dict, msg: dict = None) -> str | None:
+    """The mailbox a review's email leaves from: the envelope's own pick, else the mailbox the mail it answers came in on,
+    else its task's. None: the sender's own fallback (send_out's first card) decides, as before."""
+    try: env = json.loads((rv or {}).get('Deliver') or '{}') or {}
+    except (TypeError, ValueError): env = {}
+    if env.get('mailbox'): return env['mailbox']
+    if msg and msg.get('Direction') != 'out' and '@' in str(msg.get('SourceName') or ''): return msg['SourceName']
+    return task_mailbox(store, (rv or {}).get('TaskId'))
+
+
 def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, attachments: list = None,
              mailbox: str = None) -> dict:
     """Send something nobody asked for: a report going OUT, to an address the owner chose.
@@ -700,7 +734,8 @@ def reconcile_outbound(store, envelope: dict, body: str, since: str = None):
     c = store.get_connector_by_type('outlook')
     if not c or not c.get('Active'):
         return {'state': 'unknown', 'reason': 'the sending mailbox cannot verify an uncertain outbound message'}
-    try: box = _mailbox(store)
+    picked = _box(store, envelope.get('mailbox'))       # it left from the mailbox it was sent from - checked there
+    try: box = picked['address'] if picked and picked['kind'] == 'outlook' else _mailbox(store)
     except Exception as e: return {'state': 'unknown', 'reason': str(e)[:160]}
     return _reconcile_graph(store, box, body, since, to=envelope.get('to'), cc=envelope.get('cc'), subject=envelope.get('subject'))
 

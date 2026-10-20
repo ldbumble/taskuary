@@ -2267,6 +2267,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             onChange={(e) => setNewSrc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSource()} />
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
+        {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} reload={reload} />}
       </Box>
     )}] : []),
     ...(isAI ? [] : [
@@ -3043,6 +3044,20 @@ const GithubCloseout = ({ conn, mine, reload }) => {
     </Box>
   );
 };
+
+// THE SIGNATURE MAIL FROM THIS MAILBOX CARRIES (outbound.card_signature): two mailboxes are two hats, and one global signature
+// put the first one's name and title under the second one's mail. Blank keeps the one in Settings. Held by the card's draft.
+const MAIL_CARDS = ["outlook", "gmail", "imap"];
+function MailSignature({ conn, reload }) {
+  const saveConn = useSaveConnector(reload);
+  const cfg = parse(conn.ConfigJson);
+  return (
+    <TextField data-tq-mail-signature fullWidth multiline minRows={2} size="small" sx={{ mt: 2, maxWidth: 460, bgcolor: "#fff" }}
+      label="Signature for mail from this mailbox" value={cfg.signature || ""}
+      helperText="Blank uses the signature in Settings."
+      onChange={(e) => saveConn({ ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify({ ...cfg, signature: e.target.value }) })} />
+  );
+}
 
 const useRoles = (conn, reload) => {
   const saveConn = useSaveConnector(reload);

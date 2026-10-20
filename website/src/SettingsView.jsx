@@ -426,7 +426,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [profileNames, setProfileNames] = useState([]);   // the general workers default_profile may name
   const [agentModels, setAgentModels] = useState({});
   const [connectors, setConnectors] = useState([]);
-  const [mailboxes, setMailboxes] = useState([]);           // the sending mailboxes a rule can be scoped to (ruleMailbox.js)
+  const [mailboxes, setMailboxes] = useState(null);         // the sending mailboxes a rule can be scoped to (ruleMailbox.js); null until read - no "Applies to" until then
 
   const load = useCallback(async () => {
     try {

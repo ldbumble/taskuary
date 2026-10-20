@@ -881,14 +881,6 @@ async function searchPass() {
   const trig = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-search-open]")].find((x) => x.getBoundingClientRect().width > 0), r = e?.getBoundingClientRect();
     return e ? r.right <= innerWidth && r.bottom > 0 : false; });
   if (!trig) note("SEARCH", page.step, "at 390px wide there is no search to press");
-  // ...the walk's FYI card, its subjects beside each sender (they stood a letter a line), and the Your work drawer with its tooltip
-  page.step = "phone";
-  await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000);
-  for (let n = 0; n < 14 && !(await page.$(".tq-fyi-line")); n++) { if (!(await pressNext(page))) break; await wait(2500); }
-  if (await page.$(".tq-fyi-line")) { await phoneNote(page, "the FYI card"); walked.push("phone: the FYI card at 390px"); }
-  const rail = await page.$("[data-testid=ViewSidebarIcon]");
-  if (rail) { await rail.hover(); await wait(900); await rail.click(); await wait(1500); await phoneNote(page, "Your work"); await closePops(page); walked.push("phone: Your work at 390px"); }
-  page.step = "search phone";
   else {
     await box();
     if (!(await page.$("[data-tq-search-input]"))) note("SEARCH", page.step, "at 390px the search did not open");
@@ -900,6 +892,13 @@ async function searchPass() {
     }
     walked.push("search: at a phone's width");
   }
+  // ...the walk's FYI card, its subjects beside each sender (they stood a letter a line), and the Your work drawer with its tooltip
+  page.step = "phone";
+  await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(4000);
+  for (let n = 0; n < 14 && !(await page.$(".tq-fyi-line")); n++) { if (!(await pressNext(page))) break; await wait(2500); }
+  if (await page.$(".tq-fyi-line")) { await phoneNote(page, "the FYI card"); walked.push("phone: the FYI card at 390px"); }
+  const rail = await page.$("[data-testid=ViewSidebarIcon]");
+  if (rail) { await rail.hover(); await wait(900); await rail.click(); await wait(1500); await phoneNote(page, "Your work"); await closePops(page); walked.push("phone: Your work at 390px"); }
   await page.close(); srv.stop();
 }
 

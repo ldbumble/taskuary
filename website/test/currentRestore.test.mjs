@@ -21,7 +21,7 @@ test("mounting, activating, remounting and reconnecting only load - nothing call
   assert.ok(effects.length > 5);
   // the one effect allowed to start the walk runs the owner's OWN press, kept while the pile loaded (walkQueued): it is gated on
   // that press, never on a mount, an activation or a reconnect
-  const kept = effects.filter((e) => /^useEffect\(\(\) => \{\s*if \(!walkQueued \|\| pileLoading\) return;/.test(e));
+  const kept = effects.filter((e) => /^useEffect\(\(\) => \{\s*if \(!walkQueued \|\| pileLoading \|\| walkOff\) return;/.test(e));
   assert.equal(kept.length, 1);
   for (const e of effects) if (!kept.includes(e)) assert.doesNotMatch(e, /surface\(\)|surface\(null|turn\(\{ mode: "next"|start\(/, e.slice(0, 120));
   assert.match(view, /useEffect\(\(\) => \{ loadState\(\)\.catch\(\(e\) => setErr\(errText\(e\)\)\); \}, \[loadState\]\);/);

@@ -1637,8 +1637,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, [busy, ensureNextSelection, handoff, landed, loadPile, noteLine, resetting, turn]);
   useEffect(() => { surfaceRef.current = surface; }, [surface]);
   const startFlight = useRef(false);
+  // ONE ANSWER TO "CAN THE WALK START?" (the 2026-10-19 UI walk): the button greyed on one list and the press returned on another, so a
+  // press could look taken and do nothing. Both read walkOff; the refs only close same-tick double presses the state has not caught.
+  const walkOff = busy || resetting || !!handoff || starting;
   const start = async (what) => {
-    if (busy || resetting || handoff || turnFlight.current || startFlight.current || starting) return;
+    if (walkOff || turnFlight.current || startFlight.current) return;
     startFlight.current = true;
     const epoch = chatEpoch.current;
     const said = "Walk me through my tasks.";
@@ -1668,11 +1671,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
   // the Walk press kept while the pile loaded: run once the rows are in - and only if there is a walk to start, which is
   // exactly when the button would have been pressable had the rows been there
+  // ...and kept while anything else holds the walk (walkOff): run then, never dropped by start()'s own refusal
   useEffect(() => {
-    if (!walkQueued || pileLoading) return;
+    if (!walkQueued || pileLoading || walkOff) return;
     setWalkQueued(false);
     if (canAdvance) start(null);
-  }, [walkQueued, pileLoading, canAdvance]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [walkQueued, pileLoading, canAdvance, walkOff]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
   // also landed UNDER a "Set something up" the owner had already pressed (2026-09-03: "I hit new chat
@@ -2366,7 +2370,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
         Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
       </DayHold>
       <div className="tq-modes">
-        <button type="button" className="tq-chip primary" disabled={busy || resetting || starting || walkQueued || (!pileLoading && !canAdvance)}
+        <button type="button" className="tq-chip primary" disabled={walkOff || walkQueued || (!pileLoading && !canAdvance)}
           // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
           // whose release lands after the move never reaches the button
           onPointerDown={pileLoading ? () => setWalkQueued(true) : undefined}

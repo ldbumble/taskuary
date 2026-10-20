@@ -18,9 +18,9 @@ test("the first read, landed or failed, ends the loading - a coverage retry does
 });
 
 test("Walk is pressable while loading, and the press is kept until the rows are in", () => {
-  assert.match(view, /disabled=\{busy \|\| resetting \|\| starting \|\| walkQueued \|\| \(!pileLoading && !canAdvance\)\}/);
+  assert.match(view, /disabled=\{walkOff \|\| walkQueued \|\| \(!pileLoading && !canAdvance\)\}/);   // walkOff: walkGuard.test
   assert.match(view, /onPointerDown=\{pileLoading \? \(\) => setWalkQueued\(true\) : undefined\}/);
   assert.match(view, /onClick=\{\(\) => \(pileLoading \? setWalkQueued\(true\) : start\(null\)\)\}/);
-  assert.match(view, /if \(!walkQueued \|\| pileLoading\) return;\s*setWalkQueued\(false\);\s*if \(canAdvance\) start\(null\);/);
+  assert.match(view, /if \(!walkQueued \|\| pileLoading \|\| walkOff\) return;\s*setWalkQueued\(false\);\s*if \(canAdvance\) start\(null\);/);
   assert.match(view, /\{starting \|\| walkQueued \? "Getting your first one\.\.\." : "Walk me through my tasks"\}/);
 });

@@ -4529,11 +4529,14 @@ def concierge_next(body: SurfaceBody = None):
     if not body.key: _refresh_after(out)         # ...and the walk's Next answers first, then asks the provider (design C)
     return _encoded(out)
 
+def _pile_rides(out: dict, body) -> bool: return not body.key and bool((out.get('item') or {}).get('key'))
+
+
 def _with_pile(out: dict, body) -> dict:
     """A Next answer with the rail as the turn left it. The item is on the table, so the page will hold
     the rail with everything but it - that is the scope it is captured under. The walk running out
     (no item) leaves the page to its own load; a named pull (`key`) is not a walk."""
-    if body.key or not (out.get('item') or {}).get('key'): return out
+    if not _pile_rides(out, body): return out
     return {**out, 'pile': _pile_along(only=body.only, include_surfaced=body.include_surfaced, exclude=out['item']['key'],
                                        fyi=getattr(body, 'fyi', None))}
 
@@ -4620,6 +4623,7 @@ async def concierge_stream(body: ConciergeStreamBody):
         admission.add_done_callback(release_admission)
         raise
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
+    rides = [False]                     # set before `done` is queued: the stream then ends on the `pile` that follows it
     def put(e):
         # encoded here, on the turn's thread: the `done` of a Next carries the whole rail, and json.dumps of it on the loop
         # held every other request (perf 2026-10-19). What cannot be encoded goes as it is and fails where it always did.
@@ -4671,8 +4675,14 @@ async def concierge_stream(body: ConciergeStreamBody):
             else: out = concierge.say(store, body.text or '', body.key, actor=ACTOR, trace=trace, cancel=cancel, item=freshness.get('item'),
                                       open_card=body.open_card, images=prompt_images(body.images))
             if notice: out['context_update'] = notice
-            if body.mode == 'next': out = _with_pile(out, body)       # the rail rides along (design B)
-            put({'type': 'done', **out})
+            # THE CARD FIRST, THE RAIL AFTER IT (the owner, 2026-10-20): the rail that rides along (design B) is read after the
+            # turn's writes, and that read was most of a press - the card waited on it. `done` goes now and says the rail
+            # follows; the rail comes as its own `pile` event, and the page keeps the rail it has until that one lands.
+            if body.mode == 'next' and _pile_rides(out, body):
+                rides[0] = True
+                put({'type': 'done', **out, 'pile_follows': True})
+                put({'type': 'pile', 'pile': _with_pile(out, body).get('pile')})
+            else: put({'type': 'done', **out})
             if body.mode == 'next': _refresh_after(out)     # after the answer, never before it (design C) - a clicked row too
         except NavigationStale as error:
             put({'type': 'error', 'code': 'selection_stale', 'detail': error.detail, 'error': str(error)})
@@ -4698,7 +4708,7 @@ async def concierge_stream(body: ConciergeStreamBody):
             e = await events.get()
             kind, line = e if isinstance(e, tuple) else (e.get('type'), json.dumps(e, default=str) + '\n')
             yield line
-            if kind in ('done', 'error'): break
+            if kind in ('pile', 'error') or (kind == 'done' and not rides[0]): break
     return StreamingResponse(generate(), media_type='application/x-ndjson', headers={'Cache-Control': 'no-cache, no-transform'})
 
 @app.post('/api/reports/{sid}/rerun')

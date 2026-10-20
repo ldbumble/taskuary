@@ -93,8 +93,9 @@ class TheChangeCheckFollowsTheFourTests(Base):
 class NoticeTests(Base):
     def stream(self, c, **body):
         with c.stream('POST', '/api/concierge/stream', json={'mode': 'next', **body}) as r:
-            # the sync_messages tool event is the poll's own receipt; the notice and the answer are what is asserted
-            return [e for e in (json.loads(l) for l in r.iter_lines() if l.strip()) if e.get('type') != 'tool_call']
+            # the sync_messages tool event is the poll's own receipt; the notice and the answer are what is asserted - and the
+            # rail that follows the card (its own `pile` event since 2026-10-20) is not either
+            return [e for e in (json.loads(l) for l in r.iter_lines() if l.strip()) if e.get('type') not in ('tool_call', 'pile')]
 
     def test_the_answer_comes_first_and_the_provider_is_asked_after_it(self):
         """Design C: no notice and no wait before the answer - the rail's item is spoken as it stands, the

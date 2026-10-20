@@ -33,7 +33,7 @@ import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted,
 import { forgetTasks, heldTask, heldTerm, prefetchTask } from "./taskDetail.js";
 import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
-import { readNdjson, toolTarget } from "./assistantStream.js";
+import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
 import { adviceKeyFor, adviceShown } from "./advice.js";
@@ -1132,6 +1132,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => { if (expanded) bodyRef.current?.querySelector(".tq-canvas-live")?.scrollIntoView({ block: "start" }); }, [expanded]);
   const pileRef = useRef(null);
   const selectionContractSeen = useRef(false);
+  const pendingPile = useRef(null), pileLoads = useRef(0);   // the rail still riding behind the card on the table (landed)
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turnOnce = useCallback(async (body) => {
@@ -1161,8 +1162,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       throw error;
     }
     if (!res.body) return plain();                    // the static demo, or an older server: the plain door
-    for await (const ev of readNdjson(res.body)) {
-      if (ev.type === "done") { setWork([]); return ev; }
+    const answer = await readTurn(res.body, (ev) => {
       if (ev.type === "error") {
         const error = new Error(ev.error || "The assistant could not answer.");
         error.code = ev.code; error.detail = ev.detail;
@@ -1176,7 +1176,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // only real work shows under the dots - a command, a read, a call - never the CLI's own housekeeping
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
         setWork((w) => [...w, `${ev.name || "tool"} ${toolTarget(ev.detail?.args).slice(0, 90)}`].slice(-6));
-    }
+    });
+    if (answer) { setWork([]); return answer; }
     throw new Error("The assistant stopped without an answer.");
   }, []);
   // ...answered, refused or stopped, a turn can change what the sync caption shows (wrote.js)
@@ -1262,6 +1263,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // must never replace or clear B.
     const requestedCurrentKey = currentRef.current?.key || null;
     const requestedScope = nextSelectionScope(only.current, requestedCurrentKey);
+    pileLoads.current += 1;                    // a rail still riding behind a card is older than this read (landed)
     if (force) forcedLoadStartedAt.current = Date.now();
     const request = (async () => { try {
       // the key we are holding rides along, so the server can say whether it is still a thing
@@ -1606,10 +1608,22 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
     // (the walk ran out, an older server, the demo) is the page's own load, as before.
     if (card && data.pile) holdPile(data.pile, nextSelectionScope(only.current, card.key));
+    else if (card && data.pileLater) {
+      // THE RAIL FOLLOWS THE CARD (2026-10-20): the card is drawn now and the rail it came from stays up - highlight and
+      // counts included - until the turn's own rail lands on the same stream. A rail read begun since is newer and wins.
+      const scope = nextSelectionScope(only.current, card.key), epoch = chatEpoch.current, loads = pileLoads.current;
+      const later = pendingPile.current = data.pileLater.then((fresh) => {
+        if (pendingPile.current === later) pendingPile.current = null;
+        if (epoch !== chatEpoch.current || resettingRef.current || loads !== pileLoads.current) return;
+        if (fresh) holdPile(fresh, scope);
+        else { selectionRef.current = null; loadPile(true); }
+      });
+    }
     else { selectionRef.current = null; loadPile(true); }
   }, [holdPile, loadPile, putOnTable, say]);
 
   const ensureNextSelection = useCallback(async (scope) => {
+    if (pendingPile.current) await pendingPile.current;        // the rail riding behind the last card carries the next token
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const captured = selectionRef.current;
       if (captured && sameSelectionScope(captured.scope, scope)) return captured;

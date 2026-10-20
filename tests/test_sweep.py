@@ -102,7 +102,11 @@ def test_an_answer_puts_the_line_down(s):
 
 # ── the open task in no state ────────────────────────────────────────────────────────────────
 
-def waiting(s, **kw): return Factory(s).task(title='Vendor contract renewal', status='waiting', kind='general', source='manual', **kw)
+def waiting(s, quiet=0, **kw):
+    """A task waiting on them, its last word `quiet` days old."""
+    tid = Factory(s).task(title='Vendor contract renewal', status='waiting', kind='general', source='manual', **kw)
+    s._exec('UPDATE task SET CreatedAt=?, UpdatedAt=? WHERE TaskId=?', (ago(quiet), ago(quiet), tid))
+    return tid
 
 
 def card_of(s, tid): return next(c for c in rail(s, include_read=True) if c.get('tid') == tid)
@@ -119,19 +123,40 @@ def test_waiting_on_nobody_named_says_so_on_the_tasks_own_row(s):
 
 
 def test_waiting_on_a_person_with_no_date_and_with_one(s):
-    no_day = waiting(s, Assignee='person:ray.colton@northwind.example')
-    on_day = waiting(s, Assignee='person:erin@northwind.example', DueAt=(datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'))
+    no_day = waiting(s, 8, Assignee='person:ray.colton@northwind.example')
+    on_day = waiting(s, 8, Assignee='person:erin@northwind.example', DueAt=(datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'))
     check(s)
     assert card_of(s, no_day)['why'] == f'{task_ref(no_day)} is waiting on Ray Colton with no date'
     assert not card_of(s, on_day).get('loose')
 
 
+def test_no_date_is_late_only_past_their_own_answer_time(s):
+    # nobody's history: five days. Two days quiet is still a wait; eight is late
+    inside, past = waiting(s, 2, Assignee='person:ray.colton@northwind.example'), waiting(s, 8, Assignee='person:gail@northwind.example')
+    assert check(s)['loose'] == 1
+    assert not card_of(s, inside).get('loose') and card_of(s, past).get('loose')
+    # ...and someone the ledger knows takes ten days to answer is not late at eight: the line comes off
+    with mock.patch('taskuary.outcomes.late_after', return_value=10):
+        assert not card_of(s, past).get('loose') and check(s) == {'asks': 0, 'loose': 0, 'said': 0, 'cleared': 1}
+
+
 def test_a_date_takes_the_line_off_at_once_and_the_next_check_puts_it_down(s):
-    tid = waiting(s, Assignee='person:ray.colton@northwind.example')
-    check(s)
+    tid = waiting(s, 8, Assignee='person:ray.colton@northwind.example')
+    assert check(s)['loose'] == 1
     s.update_task(tid, {'DueAt': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d')}, 'owner')
     assert not card_of(s, tid).get('loose') and card_of(s, tid)['lane'] == 'theirs'
     assert check(s)['cleared'] == 1
+
+
+def test_a_task_the_rail_does_not_draw_gets_a_row_of_its_own(s):
+    # its only mail is the owner's own (read back from Sent): the rail draws no row for it, so the line cannot ride on one
+    tid = waiting(s, 8)
+    Factory(s).message(tid, status='context', direction='out', subject='RE: renewal', body='Sent it.', from_email='alex@northwind.example',
+                       sent_at=ago(8), conversation_id='renewal')
+    assert not [c for c in rail(s, include_read=True) if c.get('tid') == tid]
+    assert check(s)['loose'] == 1
+    row = next(c for c in rail(s) if c.get('idea_kind') == sweep.LOOSE)
+    assert (row['lane'], row['title']) == ('asked', f'{task_ref(tid)} has no next step')
 
 
 def test_remind_me_and_an_agent_are_states(s):

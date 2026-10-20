@@ -24,7 +24,8 @@ from . import lanes, words
 from .store import task_ref
 
 SWEPT_KEY = 'loose_ends_swept'
-AGED_DAYS = 5              # a person's ask unanswered this long, with nothing deciding it, is raised
+AGED_DAYS = 5              # a person's ask unanswered this long, with nothing deciding it, is raised (fixed - the owner, 2026-10-20)
+SILENT_DAYS = 5            # how long someone with no answering history may be quiet before a wait on them is late
 LOOKBACK_DAYS = 120        # how far back the aged asks are read - past the rail's own window on purpose
 ASK, LOOSE = 'unanswered', 'loose'
 # the states an open task may be in, by lane: the owner's move (lanes.json on_you), or an agent's
@@ -91,9 +92,26 @@ def _chased(ideas, tid, mids) -> bool:
     return False
 
 
-def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: bool = False, folded: bool = False, now=None):
+def waited_on(store, task: dict, now=None) -> tuple:
+    """(who, days quiet, their day): the person a waiting task waits on - its holder, else the last person who wrote on it - how
+    long since the last word on it, and the day a silence is late for them: their own answer time (outcomes.late_after, the
+    ledger the reply watch reads), SILENT_DAYS when they have no history."""
+    from . import outcomes
+    msgs = store.list_messages(task['TaskId'])
+    who = str(task.get('Assignee') or '')
+    who = who[7:] if who.startswith('person:') else next((str(m['FromEmail']).lower() for m in reversed(msgs) if m.get('FromEmail')
+                                                         and m.get('Direction') != 'out' and m.get('Status') != 'context'), '')
+    last = max((_ts(m.get('SentAt')) for m in msgs if m.get('SentAt')), default='') or _ts(task.get('UpdatedAt') or task.get('CreatedAt'))
+    try: quiet = ((now or datetime.now()) - datetime.fromisoformat(last)).days if last else 0
+    except ValueError: quiet = 0
+    return who, quiet, (outcomes.late_after(store, who, SILENT_DAYS) if who else SILENT_DAYS)
+
+
+def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: bool = False, folded: bool = False, now=None,
+             waits=None):
     """Which state an open task is in: None when it is in one of them, else (code, who) - why it is in none. `card` is its rail
-    row as drawn (before any loose-end lift: `lane_was`), `deferred` Remind me with a day, `chased` an Advisor follow-up."""
+    row as drawn (before any loose-end lift: `lane_was`), `deferred` Remind me with a day, `chased` an Advisor follow-up, `waits`
+    the waited_on reading, asked for only when it matters."""
     if task.get('Status') not in ('open', 'in_progress', 'waiting'): return None             # closed or dropped: ruled
     now = now or datetime.now()
     if str(task.get('RemindAt') or '') > now.strftime('%Y-%m-%d %H:%M:%S') or deferred: return None
@@ -106,8 +124,11 @@ def state_of(task: dict, card: dict | None, *, deferred: bool = False, chased: b
     # WAITING ON THEM is the rail's word, not the status's: a waiting task they have since written on is the owner's move again
     if lane == 'theirs':
         if chased or (person and str(task.get('DueAt') or '')[:10]): return None
-        # waiting on them with nobody named, or named with no day: nothing will ever bring it back by itself
-        return ('waiting_no_date', person) if person else ('waiting_nobody', '')
+        who, quiet, day = waits() if waits else (person, SILENT_DAYS, SILENT_DAYS)
+        if not who: return ('waiting_nobody', '')               # nobody to hear from: nothing will ever bring it back
+        # ...and somebody with no date is only LATE once they have been quiet past their own usual answer time (the owner,
+        # 2026-10-20): a wait that is still inside it is a wait, not a loose end
+        return ('waiting_no_date', who) if quiet >= day else None
     if (lanes.LANE.get(lane) or {}).get('on_you') and lanes.lane_section(lane) in ('urgent', 'task'): return None
     return ('no_step', '')
 
@@ -117,7 +138,8 @@ def _say(task, code, who) -> str:
     return SAY[code].format(ref=task_ref(task['TaskId']), who=holder_name('person:' + who) if who else '')
 
 
-def _sig(task, code) -> str: return '|'.join(str(x or '') for x in (code, task.get('Status'), task.get('Assignee'), str(task.get('DueAt') or '')[:10]))
+def _sig(task, code, who='') -> str:
+    return '|'.join(str(x or '') for x in (code, task.get('Status'), task.get('Assignee') or who, str(task.get('DueAt') or '')[:10]))
 
 
 def loose_tasks(store, cards: list, now: datetime = None) -> list:
@@ -133,25 +155,28 @@ def loose_tasks(store, cards: list, now: datetime = None) -> list:
         mids = {m['MessageId'] for m in store.list_messages(tid)}
         c = by_tid.get(tid)
         st = state_of(t, c, deferred=bool(c and c.get('deferred') and c.get('defer_until')), chased=_chased(ideas, tid, mids),
-                      folded=folded, now=now)
+                      folded=folded, now=now, waits=lambda t=t: waited_on(store, t, now))
         if not st: continue
         code, who = st
-        out.append({'key': f'{LOOSE}:{tid}', 'kind': LOOSE, 'sig': _sig(t, code), 'text': _say(t, code, who),
-                    'action': {'type': 'task', 'tid': tid, 'loose': code, 'by': 'sweep', 'why': SAY[code + '_why'],
-                               'triage': {'intent': 'task', 'kind': t.get('Kind'), 'why': SAY[code + '_why'], 'sig': _sig(t, code),
+        # a task with NO row at all (its only mail is your own, which the rail does not draw) cannot carry the line on its row:
+        # the line is a row of its own, naming it (`task`, not `tid`, which would fold it into the task nobody sees)
+        on = {'tid': tid} if c else {'task': tid}
+        out.append({'key': f'{LOOSE}:{tid}', 'kind': LOOSE, 'sig': _sig(t, code, who), 'text': _say(t, code, who),
+                    'action': {'type': 'task', **on, 'loose': code, 'by': 'sweep', 'why': SAY[code + '_why'],
+                               'triage': {'intent': 'task', 'kind': t.get('Kind'), 'why': SAY[code + '_why'], 'sig': _sig(t, code, who),
                                           'at': (now or datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), 'linked_task': tid,
                                           'error': None, 'by': 'sweep'}}})
     return out
 
 
-def loose_on(view_ideas, task: dict, card: dict, *, deferred: bool, mids=(), now=None) -> dict | None:
+def loose_on(store, view_ideas, task: dict, card: dict, *, deferred: bool, mids=(), now=None) -> dict | None:
     """The loose end the check raised on this task's row, while the task is STILL in no state and the same one - read live, so
     a date or a name put on it takes the line off before the next check runs. None otherwise."""
     tid = task.get('TaskId')
     mine = [i for i in view_ideas or [] if i.get('Kind') == LOOSE and i.get('Status') == 'open' and _action(i).get('tid') == tid]
     if not mine: return None
-    st = state_of(task, card, deferred=deferred, chased=_chased(view_ideas, tid, set(mids)), now=now)
-    return next((i for i in mine if st and i.get('Sig') == _sig(task, st[0])), None)
+    st = state_of(task, card, deferred=deferred, chased=_chased(view_ideas, tid, set(mids)), now=now, waits=lambda: waited_on(store, task, now))
+    return next((i for i in mine if st and i.get('Sig') == _sig(task, *st)), None)
 
 
 # ── the check ─────────────────────────────────────────────────────────────────────────────────

@@ -46,7 +46,7 @@
     "waiting_nobody": "{ref} is waiting on nobody named",
     "waiting_nobody_why": "it says waiting, but not on whom - nothing will bring it back",
     "waiting_no_date": "{ref} is waiting on {who} with no date",
-    "waiting_no_date_why": "nothing brings it back if they never answer - give it a date, or chase them"
+    "waiting_no_date_why": "they have been quiet longer than they usually take to answer, and nothing brings it back - give it a date, or chase them"
   },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]

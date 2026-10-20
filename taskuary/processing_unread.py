@@ -432,7 +432,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow
     if active and not review and not worker and tid:
         from . import sweep
-        loose = sweep.loose_on(view.get('ideas'), task, card, deferred=bool(read.get('deferred')), now=now,
+        loose = sweep.loose_on(store, view.get('ideas'), task, card, deferred=bool(read.get('deferred')), now=now,
                                mids=[m['MessageId'] for m in view.get('messages') or []])
         if loose: card.update(lane_was=card['lane'], lane='yours', why=loose['Text'], loose=True, loose_at=loose.get('LastSaid'))
     if task.get('ParentId') and active: card['folded'] = card['lane'] in FOLD_LANES

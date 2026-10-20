@@ -435,7 +435,8 @@ export function fillCaps(avail, bands, { row = ROW_PX, head = HEAD_PX, more = MO
   const capped = (bands || []).filter((b) => CAPPED.includes(b.level));
   if (!capped.length) return caps;
   // the cost of a band drawn n deep - the "N more" button goes away once nothing is left hidden
-  const cost = (b, n) => n * row + (n < b.items.length ? more : 0);
+  // ...and `total` is a band's whole count when part of it is not here as rows (the FYI tail, pileRows)
+  const cost = (b, n) => n * row + (n < (b.total ?? b.items.length) ? more : 0);
   let used = bands.length * head
     + bands.filter((b) => !CAPPED.includes(b.level)).reduce((n, b) => n + b.items.length * row, 0);
   for (const b of capped) { caps[b.level] = Math.min(FLOOR, b.items.length); used += cost(b, caps[b.level]); }
@@ -479,3 +480,29 @@ export const sectionNext = (items, section, seen = new Set()) =>
   (bandsOf(items).find((b) => b.level === section)?.items || [])
     .find((i) => !i.settling && !seen.has(i.key) && !(i.aliases || []).some((a) => seen.has(a))) || null;
 export const sectionDone = (section) => `${SECTION_WORDS[section] || section} done.`;
+
+// ── the FYI tail (funnel.page_fyi) ─────────────────────────────────────────────────────────────
+// Six months of plain FYI was most of a big mailbox's rail and of every answer, while the rail draws a handful of them. The
+// page asks for FYI_PAGE of them whole; the rest come as `fyi_tail`, only the fields the page COUNTS by. So whatever DRAWS
+// or ACTS reads pile.items - the row on the table and the walk's next pick are always among them - and whatever COUNTS
+// (a heading, the day's opener, "in today", "N more fyi") reads pileRows, which is every row, the same as before paging.
+export const FYI_PAGE = 50;
+const tails = new WeakMap();
+export const fyiTail = (pile) => {
+  const t = pile?.fyi_tail;
+  if (!t || !Array.isArray(t.rows) || !t.rows.length) return [];
+  let rows = tails.get(t);
+  if (!rows) {
+    rows = t.rows.map((r) => {
+      const o = { lane: t.lane, order_band: t.order_band };
+      t.fields.forEach((f, n) => { if (f !== "shows_who") o[f] = r[n]; else if (r[n] != null) o.shows = { who: r[n] }; });
+      return o;
+    });
+    tails.set(t, rows);
+  }
+  return rows;
+};
+export const pileRows = (pile) => {
+  const tail = fyiTail(pile);
+  return tail.length ? [...(pile?.items || []), ...tail] : (pile?.items || []);
+};

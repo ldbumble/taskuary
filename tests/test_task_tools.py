@@ -260,7 +260,7 @@ class OneLineTests(unittest.TestCase):
         self.assertEqual(every - bucketed, set())
         for k in every | set(toolcatalog.READS):
             self.assertNotIn('There is no tool', toolcatalog.describe(k), k)
-        self.assertLess(len(toolcatalog.block()), 7000, 'the index rides every turn - keep it an index')
+        self.assertLess(len(toolcatalog.block()), 7400, 'the index rides every turn - keep it an index')   # 7000 until the four calendar tools (2026-10-20)
 
 
 class DocsPageTests(unittest.TestCase):

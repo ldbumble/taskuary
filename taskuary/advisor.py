@@ -301,6 +301,11 @@ def draft_line(store, item, target_kind, target_id) -> str:
 def thread_line(store, item, target_kind, target_id, n: int = 3) -> str:
     """The last few messages on it, theirs and the owner's: the preview is one message's first 300 characters, and the ask two
     messages back - or the owner's own answer - was never seen."""
+    # ...but not on a task an agent has worked: what came before its last turn is in its own conversation, and what came after is
+    # NEW SINCE THE AGENT'S LAST TURN - said twice it was read as news (test_reopened_conversation)
+    if target_kind == 'task':
+        from . import continuity
+        if continuity.last_agent_turn(store, int(target_id)): return ''
     ms = _msgs(store, item, target_kind, target_id)[-n:]
     if len(ms) < 2: return ''
     who = lambda m: 'the owner' if str(m.get('Direction') or 'in') == 'out' else (m.get('FromName') or m.get('FromEmail') or 'someone')

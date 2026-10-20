@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from . import kinds as task_kinds
@@ -539,7 +539,36 @@ def open_url(body: OpenUrl, request: Request):
 
 _assets = _web_root / 'assets'
 from fastapi.staticfiles import StaticFiles
-app.mount('/assets', StaticFiles(directory=str(_assets), check_dir=False), name='assets')
+
+
+class _HashedAssets(StaticFiles):
+    """vite's hashed build output, sent the way a hashed file can be: gzip-compressed for a browser that takes it, and
+    cached for good. Plain StaticFiles sent the 1.8 MB entry chunk raw, with no Cache-Control, so every cold load paid for
+    3+ MB on the wire and a warm one revalidated each file. A new build renames its files, so `immutable` is safe; the
+    page that names them (index.html) stays no-store. The compressed copy is kept per (file, mtime, size)."""
+    _gz: dict = {}
+    _GZ = ('.js', '.css', '.json', '.svg', '.map', '.txt', '.html')
+
+    async def get_response(self, path, scope):
+        r = await super().get_response(path, scope)
+        if r.status_code != 200 or not isinstance(r, FileResponse): return r
+        r.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        if not path.endswith(self._GZ): return r
+        r.headers['Vary'] = 'Accept-Encoding'
+        from starlette.datastructures import Headers
+        if scope.get('method') != 'GET' or 'gzip' not in Headers(scope=scope).get('accept-encoding', ''): return r
+        import gzip, os
+        st = os.stat(r.path); key = (str(r.path), st.st_mtime_ns, st.st_size)
+        body = self._gz.get(key)
+        if body is None:
+            raw = await asyncio.to_thread(Path(r.path).read_bytes)
+            body = await asyncio.to_thread(gzip.compress, raw, 6, mtime=0)
+            self._gz[key] = body
+        keep = {k: r.headers[k] for k in ('cache-control', 'etag', 'last-modified') if k in r.headers}
+        return Response(body, media_type=r.media_type, headers={**keep, 'Vary': 'Accept-Encoding', 'Content-Encoding': 'gzip'})
+
+
+app.mount('/assets', _HashedAssets(directory=str(_assets), check_dir=False), name='assets')
 # ...and the walk's shots of each tab. NOT under /assets: those are vite's hashed build output, and
 # these are files the repo ships and the page names by a fixed path (walk.STOPS holds `/walk/x.png`),
 # so mounting /assets never covered them. It was missing for a whole branch - the files were on disk,

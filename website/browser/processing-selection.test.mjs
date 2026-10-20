@@ -19,6 +19,17 @@ const clickNext = page => page.evaluate(() => {
   button.click();
 });
 
+// PW-115 waits on events only - the button, the held read, the reset's response, the delivery - and each wait is
+// bounded by `step` as a safety net, not a schedule. At 15 s a busy box failed it while the dev server was still
+// compiling the page; the harness now has Vite warm before the page opens, and the bound is generous so load only
+// slows the test down. A wait that is never met still fails, within the test's own 150 s.
+const step = 45000;
+const within = (promise, message) => {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), step); })])
+    .finally(() => clearTimeout(timer));
+};
+
 test("PW-115 abandons a Walk validation when New chat replaces its conversation", { timeout: 150000 }, async t => {
   const h = await startHarness();
   t.after(() => h.close());
@@ -29,11 +40,11 @@ test("PW-115 abandons a Walk validation when New chat replaces its conversation"
     const path = new URL(r.url()).pathname;     // arrive only notes the owner is here (welcome.arrive) - not a Walk turn
     if (r.method() === "POST" && path.startsWith("/api/concierge") && path !== "/api/concierge/arrive") writes.push(r.url());
   });
-  await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: 20000 });
+  await page.goto(h.ui, { waitUntil: "domcontentloaded", timeout: step });
   await page.waitForFunction(() => [...document.querySelectorAll("button")]
-    .some(n => n.textContent.trim() === "Walk me through my tasks"), { timeout: 15000 });
+    .some(n => n.textContent.trim() === "Walk me through my tasks"), { timeout: step });
   // Drain the initial pile/state loads before isolating the owner's Walk capture.
-  await page.waitForNetworkIdle({ idleTime: 150, timeout: 15000 });
+  await page.waitForNetworkIdle({ idleTime: 150, timeout: step });
   const cdp = await page.createCDPSession();
   let heldId, heldNetwork, resolveHeld, resolveDelivered;
   const held = new Promise(resolve => { resolveHeld = resolve; });
@@ -50,22 +61,22 @@ test("PW-115 abandons a Walk validation when New chat replaces its conversation"
   try {
     await page.evaluate(() => [...document.querySelectorAll("button")]
       .find(n => n.textContent.trim() === "Walk me through my tasks").click());
-    await Promise.race([held, new Promise((_, reject) => setTimeout(() => reject(new Error("Walk did not validate pile")), 15000))]);
+    await within(held, "Walk did not validate pile");
     assert.ok(heldNetwork);
     const resetResponse = page.waitForResponse(r => new URL(r.url()).pathname === "/api/assistant/dock/new"
-      && r.status() === 200, { timeout: 15000 });
+      && r.status() === 200, { timeout: step });
     await page.click('button[aria-label^="New chat"]');
     await (await resetResponse).buffer();
     await page.waitForFunction(() => {
       const button = document.querySelector('button[aria-label^="New chat"]');
       return button && !button.disabled;
-    }, { timeout: 15000 });
+    }, { timeout: step });
     const fresh = (await request(h, "/api/concierge")).messages;
     assert.deepEqual(fresh, []);
     await cdp.send("Fetch.continueRequest", { requestId: heldId });
-    await Promise.race([delivered, new Promise((_, reject) => setTimeout(() => reject(new Error("old Walk pile never delivered")), 15000))]);
+    await within(delivered, "old Walk pile never delivered");
     await cdp.send("Fetch.disable");
-    await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 });
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: step });
     assert.deepEqual(writes, [], "old Walk must not enter the replacement chat after its held read completes");
     assert.equal(await page.$('.tq-pile-row.current'), null);
     assert.deepEqual((await request(h, "/api/concierge")).messages, []);

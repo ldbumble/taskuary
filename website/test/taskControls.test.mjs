@@ -56,7 +56,7 @@ test("the agent card's bar is the same bar as the task's and the reply's", () =>
   assert.ok(bar.includes("{barContinue && <Button"), "the bar's Continue is the coding agent's only");
   // whichever state it is in, exactly one move is filled: continue it, file it, or run another
   assert.match(tasks, /const canContinue = !term\?\.alive && \(isGeneral \? generalStarted : !!detail\?\.resumable\);/);
-  assert.match(tasks, /const canSave = !report && !wrapped;/);
+  assert.match(tasks, /const canSave = !report && !wrapped && !endedByStop\(listRow\?\.State, detail\?\.runEnded\);/);
 });
 
 test("the agent heading is one short line, live or not", () => {

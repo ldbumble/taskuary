@@ -109,6 +109,9 @@ def world():
     for title, *_ in CASES:
         hit = next((i for i in rail if title in RAIL and title.lower() in str(i.get('title') or '').lower()), None)
         hit = hit or next((i for i in items if title.lower() in str(i.get('title') or '').lower()), None)
+        # ...and a row the legacy pile cut (its `hidden` tail - read before the processing reads are on) is still on the rail a real
+        # install draws: the demo's calendar rows pushed the GL-export notice past that cut (2026-10-20)
+        hit = hit or next((i for i in rail if title.lower() in str(i.get('title') or '').lower()), None)
         if not hit:
             t = next((x for x in s.list_tasks() if title.lower() in str(x.get('Title') or '').lower()), None)
             hit = advisor._item(s, 'task', t['TaskId']) if t else None

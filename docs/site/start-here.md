@@ -119,7 +119,7 @@ top always says what to do next, and so do the Work list and the **Setup** chip 
    Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
    press **Walk me through my tasks** when you are ready.
 
-**Setup** on the top bar opens the same three questions again whenever you want to
+**Set up Taskuary** on the Assistant opens the same three questions again whenever you want to
 change the AI or the mailbox. Setup does not overwrite an existing user's model or connection
 configuration.
 

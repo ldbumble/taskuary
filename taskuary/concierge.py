@@ -913,8 +913,6 @@ def table_op_verb(call: dict | None) -> str | None:
 # confirmation. An act whose button lives on a page opens that page beside the answer. A phone chat has no buttons, so it keeps its text
 # yes/no (DELIVERY == PHONE). The model still picks the act; code only finds its button, or tells the model there is none.
 def routes() -> bool: return DELIVERY.get() != PHONE
-# ...so "name the one you mean and I will ..." promises what this screen does: the desk brings it up, the phone does it (verify, 2026-10-19)
-def _there() -> str: return 'bring it up' if routes() else 'do it there'
 
 # the operation a tool names -> the row's own button for it (buttons.json)
 KIND_BUTTON = {'task.complete': 'close', 'item.settle': 'close', 'task.defer': 'defer', 'task.reopen': 'reopen', 'review.approve': 'approve',
@@ -927,57 +925,20 @@ FIELD_BUTTON = {'priority': 'priority', 'assignee': 'assign'}
 WAITS = 'Nothing happens until you say yes.'
 
 
-def _shows(store, it: dict, b: str) -> bool:
-    """The task page's own button for `b` (buttons.json `row`) is drawn on this item now - the few whose being there turns on state."""
-    if b == 'reopen': return bool(it.get('closed')) or str((store.get_task(int(it['tid'])) or {}).get('Status') or '') in ('done', 'dropped')
-    if b == 'stop_agent': return _agent_running(it['tid'])
-    if b == 'continue': return bool(store.resumable_session(it['tid'])) and not _general(store, it)
-    if b in ('review_changes', 'run_another', 'share'): return _agent_holds(store, it) or bool(store.resumable_session(it['tid']))
-    if b == 'attach': return bool(it.get('rid'))
-    if b == 'pick_repo': return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'coding'
-    return b != 'fix'                  # a failure's own way out, with its own words - never a button to light from the chat
-
-
-TASK_VIEW_NOT = frozenset({'proposal', 'setup', 'walk', 'brief', 'fyis', 'meeting'})      # kinds never drawn as a task view (showsTask)
-
-
-def row_buttons(store, it: dict) -> list:
-    """THE BUTTONS THIS ITEM'S ROW DRAWS, as {verb, label}: on an item drawn as its task's view, the task page's own verbs (buttons.json
-    `row`) it can carry now; on any other, the chips under the line; and a close-out's Approve. What the Assistant may light is one of these, and nothing else: "Press Not ours"
-    was said over a task whose row and menus had no Not ours, lit nothing, and the model was never told (verify, 2026-10-19)."""
-    # an item with a task behind it is drawn as the task's own view (CanvasItem.showsTask), whose row is the task page's verbs - the chips under
-    # the line are not drawn there: TQ-0001's chips had Not ours, its row did not, and "Press Not ours" lit nothing (verify, 2026-10-19)
-    if it.get('tid') and it.get('kind') not in TASK_VIEW_NOT and store is not None:
-        out = [{'verb': v, 'label': buttons.label(v)} for v, d in buttons.VERBS.items()
-               if d.get('row') and not cannot(it, v, store) and _shows(store, it, v) and not (v == 'regular_agent' and _agent_holds(store, it))]
-    else: out = [{'verb': c['verb'], 'label': c['label']} for c in chips_for(store, it) if c.get('verb') and c['verb'] != 'next']
-    if it.get('closeout'): out.insert(0, {'verb': 'approve', 'label': closeout_label(it)})
-    seen = set()
-    return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
-
-
 def _lit(store, tid: int, table: dict | None, it: dict, verb: str) -> dict:
-    """The item's own button for `verb`, lit - the item brought up first when it is not the one on the table (the page pulls `light.key`,
-    the rail's road). Nothing runs. A button the row does not draw is a miss the model answers in words (CallMiss), never a line naming it.
-    `light.line` is what the strip over the row says while it is lit; `say` is the chat's record of it - past, so a reload never shows
-    "press it" over a row with nothing lit (verify, 2026-10-19: "Press Mark done when you're sure" outlived its light)."""
+    """The item's own button for `verb`, lit, and the one line that says to press it - the item brought up first when it is not the one on
+    the table (the page pulls `light.key`, the rail's road). Nothing runs."""
     b = BUTTON_OF.get(verb, verb)
-    have = row_buttons(store, it)
-    label = next((x['label'] for x in have if x['verb'] == b), '')
-    if not label:
-        raise CallMiss(f"{_where(it) or 'This item'} has no {buttons.label(b) or b} button - its row has "
-                       f"{', '.join(x['label'] for x in have) or 'only Next'}. Say in plain words that it is not done from this row, or name "
-                       "the one of its buttons that does it. Nothing was changed.")
-    said = f"Lit {label} on {it.get('ref') or _where(it) or 'it'}."
+    label = next((c['label'] for c in chips_for(store, it) if c.get('verb') == b), '') or (closeout_label(it) if b == 'approve' else '') or buttons.label(b)
+    up = not _same(it, table) and not (table and it.get('tid') and table.get('tid') == it.get('tid'))
+    said = (f"{_cap(_where(it))} is up - press {label} when you're sure." if up and _where(it) else f"Press {label} when you're sure.")
     record(store, tid, 'assistant', said)          # the chat's line; the task's notes keep no "press it"
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'light': {'verb': b, 'label': label, 'line': f"Press {label} when you're sure.", 'key': it.get('key') or '', 'tid': it.get('tid'),
-                      'ref': it.get('ref') or ''}}
+            'light': {'verb': b, 'label': label, 'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or ''}}
 
 
 def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
-    """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it - said by the page's
-    name, never "beside this", so the line is still true after a reload, when nothing is beside it."""
+    """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it."""
     record(store, tid, 'assistant', said)
     return {'say': said, 'options': [], 'chips': chips_for(store, table), 'decision': None, 'open': href}
 
@@ -990,8 +951,7 @@ NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent',
 def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
     kind, how, verb = NEW_TAB[want]
     press = buttons.label(verb) if verb else {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it'}[kind]
-    # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
-    said = f"Wrote it into New - {press} there starts it."
+    said = f"It is written up in New below - press {press} when you're sure."
     record(store, tid, 'assistant', said)
     return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000]}}
 
@@ -1272,8 +1232,7 @@ def pages_block(store) -> str:
     """THE APP'S OWN SCREENS, by the links the canvas opens (the owner, 2026-10-15: "if i ask the assistant to help me set up
     the intacct api, does it just open the sage intacct settings page? it should ... pull into the chat any deterministic ui").
     The chat opens the first such link in a fresh answer beside it (appLinks.js), and draws every one as a link."""
-    from . import demo as _demo
-    try: on =[c for c in store.list_connectors() if c.get('Active')]
+    try: on = [c for c in store.list_connectors() if c.get('Active')]
     except Exception: on = []
     try: reports = [s for s in store.list_sources(active_only=False) if s.get('Channel') == 'report']
     except Exception: reports = []
@@ -1295,11 +1254,8 @@ def pages_block(store) -> str:
             '- the brains - which CLI tool or AI connection, at which model, runs triage, this Assistant, general agents and coding, '
             'and where report runs go: #settings=config&group=How%20mail%20is%20sorted\n'
             # SETUP IS THE BUTTON AT THE TOP, never a link or a script here (the owner, 2026-10-19): it replaces the whole page
-            # ...and the demo has no Setup button (it cannot connect an inbox): there it is said so, never pointed at (verify, 2026-10-19)
-            + ('- setup itself has no link and no button here: this is the demo, with invented mail - Taskuary installed on their own computer '
-               'is set up with the Setup button at the top; say so\n' if _demo.enabled() else
-               '- setup itself - their AI, their email, the questions about their work - has no link: it is the Setup button at the top of '
-               'the page; say so\n') +
+            '- setup itself - their AI, their email, the questions about their work - has no link: it is the Setup button at the top of '
+            'the page; say so\n'
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
             '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '
@@ -1994,7 +1950,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
                     str(params.get('text') or text or '').strip())
     if routes() and kind == 'role.apply':
-        return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles - press Set up beside the one you do.")
+        return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles, beside this - press Set up beside the one you do.")
     if routes() and kind == 'pipe.clear':
         raise CallMiss("Clearing a set of items has no button on the desk - the owner puts each one down with Next or Mark done, and a run of "
                        f"notices with {buttons.label('next', 'batch')}. Say so in plain words. Nothing was touched.")
@@ -2190,14 +2146,14 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
     if kind == 'memory.remember':
-        return _page(store, tid, table, '#settings=memory', 'Add it as a note under Verdicts & notes - it is used from then on.')
+        return _page(store, tid, table, '#settings=memory', 'Add it as a note under Verdicts & notes, beside this - it is used from then on.')
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
-                     f"{r.get('label') or named} is under Settings{' > ' + r['group'] if r.get('group') else ''} - change it there.")
+                     f"{r.get('label') or named} is on the settings page beside this - change it there.")
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
-        if typ: return _page(store, tid, table, f'#connector={typ}', f"{named or typ}'s card is under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
+        if typ: return _page(store, tid, table, f'#connector={typ}', f"{named or typ}'s card is open beside this - {CONN_SAYS.get(kind, 'change it')} there.")
     on = None
     if tk == 'item' or (tk == 'message' and table and int(table.get('mid') or 0) == target): on = table
     elif tk == 'message' and target: on = funnel.item_for_key(store, f'msg:{target}')
@@ -2206,7 +2162,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
     elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
     if tk == 'source' and not on and target:
-        return _page(store, tid, table, f'#report={target}', f"{named or 'The report'} is under Reports - {REPORT_SAYS.get(kind, 'change it')} there.")
+        return _page(store, tid, table, f'#report={target}', f"{named or 'The report'} is open beside this - {REPORT_SAYS.get(kind, 'change it')} there.")
     b = (next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '') if kind == 'task.update'
          else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
          else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
@@ -2215,7 +2171,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
         return _lit(store, tid, table, on, b)
     if on and kind in ON_TASK:
-        said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
+        said = f"{_cap(_where(on))} is up - {ON_TASK[kind]}."
         record(store, tid, 'assistant', said)
         return {'say': said, 'options': [], 'chips': [], 'decision': None,
                 'light': {'verb': '', 'label': '', 'key': on.get('key') or '', 'tid': on.get('tid'), 'ref': on.get('ref') or ''}}
@@ -3199,12 +3155,12 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     if routes():
         if sort['kind'] == 'report': return _new(store, tid, item, 'report', ask)
         if sort['kind'] == 'role':
-            return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles - press Set up beside the one you do.")
+            return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles, beside this - press Set up beside the one you do.")
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
         if sort.get('provider'):
             prov = sort['provider']
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
-            return _page(store, tid, item, f'#connector={prov}', f"{name}'s card is under Connections - fill it in and test it there. "
+            return _page(store, tid, item, f'#connector={prov}', f"{name}'s card is open beside this - fill it in and test it there. "
                                                                  'A key or password goes on the card, never in this chat.')
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",
@@ -3722,9 +3678,6 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       # mean that card - a connector, a settings group, a report - when no item is on the table
                       # ...or the PAGE open with nothing opened on it (2026-10-01): a question over the Connections wall is about connections
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
-                      # ...and a page opened BESIDE the item keeps the item on the table: the Assistant's own "turn off background sync" opened
-                      # Settings, and the next "mark this done" went out about nothing (verify, 2026-10-19). Both are said; their words say which
-                      + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table; 'this' is whichever of the two their words fit\n\n" if open_card and item else '')
                       + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
@@ -3849,8 +3802,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         other = _resolve_named(store, decision['on'], None)
         it2 = None if other == '?' else (funnel.next_item(store, other) or funnel.item_for_key(store, other))
         if not it2:
-            say_ = (f"I could not find {str(decision['on']).strip()!r} - say it again with the sender or the TQ ref and I will "
-                    f'{_there()}; nothing has been touched.')
+            say_ = (f"I could not find {str(decision['on']).strip()!r} - say it again with the sender or the TQ ref and I will do "
+                    'it there; nothing has been touched.')
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
         target_item, elsewhere = it2, True
@@ -3869,7 +3822,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
             # table" (2026-09-24). Without a read the words are a verb - "close it" answered "Ok." - and "Ok." would claim.
             say_ = reply if (did_read and reply) else (
                 'Nothing is on the table. Say next and I will bring the next thing up, or name the one '
-                f'you mean - the sender or its TQ ref - and I will {_there()}.')
+                'you mean - the sender or its TQ ref - and I will do it there.')
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}
     # a switch is already a proposal on the task (proposals.py); a hand-off to a person is a DRAFT for approval
@@ -3878,7 +3831,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         other = _resolve_named(store, decision['on'], item)
         if other == '?':
             say_ = (f"Careful - you named something that is not what is on the table. On the table is {_where(item)}, "
-                    f'and I could not find what you meant. Say it again with the sender or the ref and I will {_there()}; nothing has been touched.')
+                    'and I could not find what you meant. Say it again with the sender or the ref and I will do it there; nothing has been touched.')
             rec('assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
         # one entry of the fyi handful is a thing of its own (PW-126): the verb lands on it, its siblings stay unread
@@ -3934,12 +3887,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb == 'remember': return call_turn(store, tid, {'kind': 'memory.remember', 'params': {'note': decision.get('text') or text}}, item, text, actor)
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
-        if target_item:
-            try: return _lit(store, tid, item, target_item, verb)
-            except CallMiss:                                           # no such button on its row: the model says so in words
-                reply, options = _in_words(llm, system, table, text, verb)
-                rec('assistant', reply)
-                return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}
+        if target_item: return _lit(store, tid, item, target_item, verb)
         say_ = 'Nothing is on the table. Name the one you mean - the sender or its TQ ref - and I will bring it up.'
         rec('assistant', say_)
         return {'say': say_, 'options': [], 'chips': walk_chips(len(p['items'])), 'decision': None}

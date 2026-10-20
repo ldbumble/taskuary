@@ -82,18 +82,9 @@ class OnlyRealButtons(unittest.TestCase):
     def test_a_real_button_is_still_offered(self):
         s, a, b, item = two_tasks()
         item = dict(item)
-        llm, _ = scripted(call('close'))
-        out = ask(s, 'done with this one', item['key'], llm)
-        self.assertEqual(out['light']['verb'], 'close', 'Mark done is a button on its row - lit, not run')
-
-    def test_a_chip_the_task_view_does_not_draw_is_not_lit(self):
-        # a mail with a task behind it is drawn as the task's view, whose row has no Not ours - it was lit there over nothing (verify,
-        # 2026-10-19); the model answers in words instead
-        s, a, b, item = two_tasks()
-        llm, seen = scripted(call('not_ours'), 'That one is a task now - Mark done or Remind me are its moves.')
-        out = ask(s, 'not ours', dict(item)['key'], llm)
-        self.assertNotIn('light', out)
-        self.assertIn('Mark done', out['say'])
+        llm, _ = scripted(call('not_ours'))
+        out = ask(s, 'not ours', item['key'], llm)
+        self.assertEqual(out['light']['verb'], 'not_ours', 'Not ours is a button on a mail that asks for something - lit, not run')
 
 
 class ANamedTaskIsFound(unittest.TestCase):

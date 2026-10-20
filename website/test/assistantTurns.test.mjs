@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { mergeDurableTurns } from "../src/assistantTurns.js";
 
 test("durable chat turns reconcile with their optimistic bubbles instead of drawing twice", () => {
@@ -105,16 +103,4 @@ test("a failed press's receipt is the server's recorded line even when that line
   assert.equal(out.length, 1);
   assert.equal(out[0].role, "receipt");
   assert.equal(out[0].commentId, 901);
-});
-
-// ONE PICK LINE PER ITEM (verify, 2026-10-19): picking between two rail rows added another "Show me ..." line every time - the same title
-// twice and more, gone on a reload since the server never records them. The last pick of an item stands; other lines are untouched
-test("a rail pick of the same item twice leaves one pick line, and keeps everything else", async () => {
-  const { pickLine } = await import("../src/assistantTurns.js");
-  let m = [{ id: "u0", role: "user", text: "what is due?" }];
-  for (const [i, k] of [["1", "msg:1"], ["2", "msg:2"], ["3", "msg:1"], ["4", "msg:2"]]) m = pickLine(m, { id: `u${i}`, role: "user", text: `Show me ${k}`, pick: k });
-  assert.deepEqual(m.map((x) => x.id), ["u0", "u3", "u4"]);
-  assert.deepEqual(pickLine(m, { id: "u5", role: "user", text: "and this?" }).map((x) => x.id), ["u0", "u3", "u4", "u5"], "a typed line is never dropped");
-  const view = readFileSync(fileURLToPath(new URL("../src/AssistantView.jsx", import.meta.url)), "utf8");
-  assert.match(view, /setMsgs\(\(m\) => pickLine\(m, \{ id: optimisticId, role: "user", text: asUser, pick: key \|\| undefined \}\)\)/);
 });

@@ -9,7 +9,6 @@ from tests import rail_advisor_cases as C
 
 # what still fails, and why - strict, so a fix that lands without crossing it off fails too
 KNOWN = {
-    'twelve mails put down, none taken up': "the automation card's skip-rule idea beside the rule question",
 }
 WORLD_KNOWN = {
 }

@@ -56,3 +56,8 @@ test("the step draws the story once: never beside the record, and its last messa
   assert.doesNotMatch(story.slice(story.indexOf("export default")), /PANEL2|bgcolor/, "no tinted bubble");
   assert.equal(story.match(/setMore\(/g).length, 1, "the timeline is behind one More");
 });
+
+test("a run that finished wears the list's word for it, never 'not started' (G7)", () => {
+  assert.equal(STORY_CHIP.finished, "agent finished");
+  assert.equal(startLabel({ kind: "finished", line: "The coding agent finished its work" }, "coding", true), null);
+});

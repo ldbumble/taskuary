@@ -660,7 +660,8 @@ def agent_story(store, tid) -> dict | None:
     held, why = st['kind'] == 'held', st['line']
     if not (str(t.get('Assignee') or '').startswith('agent:') or left or q or held): return None
     # the sentence is whole and leads with its state ("Waiting for you.", "Couldn't start."): the page adds nothing before it
-    if not left: return {'kind': 'held' if held else 'queued' if q else 'idle', 'line': why}
+    # ...and a run that FINISHED is finished, not "not started" over its own "finished its work" sentence (G7, 2026-10-20)
+    if not left: return {'kind': 'held' if held else 'queued' if q else 'finished' if session_finished(store, tid) else 'idle', 'line': why}
     evs = store.worker_events(tid) or []
     sid = str(evs[-1]['Sid']) if evs else None
     run = [e for e in evs if str(e['Sid']) == sid]
@@ -728,6 +729,9 @@ def agent_left(store, tid) -> bool:
     if terminal.INTERRUPTED in [x.strip() for x in str(t.get('Tags') or '').split(',')]: return True
     if session_saved(store, tid): return True
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])): return True
+    # ...or the run's own last word says it failed or was stopped (workerstate.ended) - the reading taskstate takes (G7)
+    from . import workerstate
+    if workerstate.ended(store, tid) in workerstate.TERMINAL: return True
     return bool(store.last_transcript(tid)) and not session_finished(store, tid)
 
 

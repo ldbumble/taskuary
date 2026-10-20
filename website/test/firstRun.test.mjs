@@ -101,8 +101,10 @@ test("Set up Taskuary opens the two cards, open on both steps, and only a fresh 
 // the non-coder audit, 2026-10-17
 test("setup reads for someone with no coding tool, and its loops and errors behave", () => {
   const fr = read("FirstRun.jsx");
-  // ChatGPT, the organisation card and the keys lead; the coding tools sit under their own heading
-  assert.match(fr, /const lead = \[\.\.\.\(planCard \? \[planCard\] : \[\]\), \.\.\.keyCards\];/);
+  // ChatGPT, the organisation card and the keys lead, in the catalogue's own order - no vendor first because it is favoured
+  // (2026-10-20); the coding tools sit under their own heading
+  assert.match(fr, /const lead = \[\.\.\.\(planCard \? \[\{ \.\.\.planCard, type: "chatgpt" \}\] : \[\]\), \.\.\.keyCards\]\.sort\(\(a, b\) => shelfAt\(a\) - shelfAt\(b\)\);/);
+  assert.doesNotMatch(fr, /[Rr]ecommended/, "no card wears a recommendation");
   assert.match(fr, /\{ label: "If you use a coding tool", cards: coding \}/);
   assert.match(fr, /"Can't install on this computer - pick ChatGPT or a key instead"/); assert.match(fr, /"On this computer - pick it to check it works"/);
   assert.doesNotMatch(fr, /"Installed - needs sign-in"/, "found on PATH says nothing about a sign-in it never checked");

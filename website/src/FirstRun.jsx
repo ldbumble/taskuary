@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
-import { DIM } from "./theme.jsx";
+import { DIM, FAINT, INK } from "./theme.jsx";
 import { CardGrid, ChannelDetail, ConnCard, connCardOf } from "./ConnectorsView.jsx";
 import { CliPane, useCliSetup } from "./cliSetup.jsx";
 import { focusOf, signinUrl } from "./firstRunFocus.js";
@@ -21,7 +21,7 @@ import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
 import { buttonOf, cardOf, doneOf, frontierOf, landOn, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
-import { SETUP_AI } from "./aiShelf.js";
+import { AI_SHELF, SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
 import { plural } from "./timeWords.js";
 
@@ -85,8 +85,22 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all", grou
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <CardGrid>{shown.map((c) => <ConnCard key={c.key} c={c} />)}</CardGrid>
       {one ? <>{detail}{onAll && <Box><Button size="small" onClick={onAll} sx={small}>{allLabel}</Button></Box>}</>
-        : cards.length > FIRST && <Box><Button size="small" onClick={() => setAll((v) => !v)} sx={small}>
-          {all ? "Show fewer" : `${more} (${cards.length - FIRST})`}</Button></Box>}
+        : cards.length > FIRST && (all ? <Box><Button size="small" onClick={() => setAll(false)} sx={small}>Show fewer</Button></Box>
+          // MORE IS A CARD'S WEIGHT (the owner, 2026-10-20: "More AI options does not stand out enough"): the same frame, size and
+          // logo slot as the cards beside it, in the same place and doing the same thing - so the rest of the choices are seen
+          : <CardGrid><Box role="button" tabIndex={0} data-tq-shelf-more="" onClick={() => setAll(true)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAll(true); } }}
+              sx={{ bgcolor: "#fbfaf7", border: "1px solid #ddd6ca", borderRadius: 2.5, p: 1.6, boxSizing: "border-box", cursor: "pointer",
+                transition: "box-shadow .15s", "&:hover": { boxShadow: "0 2px 8px rgba(47,107,79,.12)" },
+                "&:focus-visible": { outline: "2px solid #55697a", outlineOffset: 2 } }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.1 }}>
+                <Box sx={{ width: 30, height: 30, borderRadius: 2, bgcolor: "#e9e3d8", flexShrink: 0, display: "flex", alignItems: "center",
+                  justifyContent: "center", color: "#55697a", fontWeight: 700, fontSize: 15 }}>+{cards.length - FIRST}</Box>
+                <Typography noWrap sx={{ color: INK, fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0 }}>{more} options</Typography>
+              </Box>
+              <Typography sx={{ color: FAINT, fontSize: 11.5, lineHeight: 1.5, pt: 1, minHeight: "3em" }}>
+                {`${cards.length - FIRST} more to choose from - open to see them all`}</Typography>
+            </Box></CardGrid>)}
       {!one && group?.cards.length > 0 && <>
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: DIM, mt: 1 }} data-tq-firstrun-group="">{group.label}</Typography>
         <CardGrid>{group.cards.map((c) => <ConnCard key={c.key} c={c} />)}</CardGrid>
@@ -388,11 +402,14 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
       : planOn ? "Your AI - it sorts your mail" : "Not set up"}` + " · sign in with your ChatGPT account",
     // ...and pressable while a sign-in waits: pressing it again starts a fresh one - it did nothing, and the old one never ended
     go: busy || planOn ? undefined : () => planSignin(plan) };
-  const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), pick: `connector:${c.ConnectorId}` }));
+  const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), type: c.Type, pick: `connector:${c.ConnectorId}` }));
   // WHAT MOST PEOPLE HAVE LEADS (the non-coder audit, 2026-10-17): the first four were ChatGPT and three coding tools, with the
   // organisation's card and the keys under More AI. ChatGPT, the organisation card when there is one, the keys - and the coding
   // tools under a heading of their own
-  const lead = [...(planCard ? [planCard] : []), ...keyCards];
+  // ...in THE CATALOGUE'S OWN ORDER (aiShelf.AI_SHELF), never a vendor first because Taskuary favours it (the owner, 2026-10-20:
+  // "never make Claude (or any vendor) the default anywhere in setup ... order not implying a pick")
+  const shelfAt = (c) => { const i = AI_SHELF.indexOf(c.type); return i < 0 ? AI_SHELF.length : i; };
+  const lead = [...(planCard ? [{ ...planCard, type: "chatgpt" }] : []), ...keyCards].sort((a, b) => shelfAt(a) - shelfAt(b));
   const all = [...lead, ...cliCards];
   // the AI in use leads the shelf, even one from More AI: the cards showed four others while the line named Azure OpenAI
   const inUse = st.step !== "ai" && st.brain?.name;

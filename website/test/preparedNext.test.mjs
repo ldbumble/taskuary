@@ -33,11 +33,11 @@ test("a line drawn ahead and filled, replaced or taken back leaves what the answ
 test("the press draws the prepared answer only for the selection it was prepared for, else the rail's row, on one road", () => {
   const surface = src.slice(src.indexOf("const surface = useCallback"), src.indexOf("useEffect(() => { surfaceRef.current = surface; }"));
   assert.match(surface, /preparedRef\.current\?\.selection_revision === capture\.selection_revision/);
-  assert.match(surface, /if \(prep\) drawAhead\(\{ \.\.\.line, text: prep\.answer\.say[^;]*\}, prep\.answer_hash\);/);
+  assert.match(surface, /else if \(prep\) aheadRef\.current = drawAhead\(\{ \.\.\.line, text: prep\.answer\.say[^;]*\}, prep\.answer_hash\);/);
   assert.match(surface, /const drawsNow = \(c\) => !!c && showsTask\(c, cardFor\(c\)\) && !!heldTask\(c\.tid\) && heldTerm\(c\.tid\) !== undefined;/);
-  assert.match(surface, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)\s+drawAhead\(/);
+  assert.match(surface, /else if \(aheadItem && \(drawsNow\(aheadItem\) \|\| \(key && showsTask\(aheadItem, cardFor\(aheadItem\)\)\)\)\)\s+aheadRef\.current = drawAhead\(/);
   assert.match(surface, /const aheadKey = prep \? null : /, "one line ahead, never two");
-  assert.match(surface, /\} catch \(e\) \{\s+unshow\(\);/);
+  assert.match(surface, /\} catch \(e\) \{\s+unshow\(aheadRef\.current\); aheadRef\.current = null;/);
   const landed = src.slice(src.indexOf("const landed = useCallback"), src.indexOf("const ensureNextSelection = useCallback"));
   assert.match(landed, /ahead\.hash === data\.answer_hash && !extra/);
   assert.match(landed, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");

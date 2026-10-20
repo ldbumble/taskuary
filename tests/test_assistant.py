@@ -588,6 +588,10 @@ class ApiTests(unittest.TestCase):
         from fastapi.testclient import TestClient
         from taskuary import server
         s = server.store
+        # the app's own store is shared by the whole run: switching learning off here and leaving it off made
+        # test_api's "editing a draft teaches LEARNED.md" fail whenever this file ran first - put both back
+        for k in ('calendar_enabled', 'learn_enabled'):
+            self.addCleanup(s.set_setting, k, s.get_setting(k) if s.get_setting(k) is not None else '1', 't')
         s.set_setting('calendar_enabled', '0', 't'); s.set_setting('learn_enabled', '0', 't')
         _mail(s, DANA, 'API ledger', 'Here.', days=6, conv='api-c1')
         _mine(s, 'Re: API ledger', 'Could you send the reconciled version?', days=4, conv='api-c1', said=ASK)

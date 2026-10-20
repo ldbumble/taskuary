@@ -93,6 +93,21 @@ def style_sample(text: str, limit: int = 800) -> str:
     return text[:limit - tail].rstrip() + '\n[... middle omitted ...]\n' + text[-tail:].lstrip()
 
 
+MAIL_TYPES = ('outlook', 'gmail', 'imap')
+
+
+def mailboxes(store) -> list:
+    """Every mailbox connected and switched on, [{address, type}], one per address: an Outlook card's mailboxes and each Gmail and
+    IMAP card's own. Setup lists them on its mailbox step, and the job is read out of all of them."""
+    cards = {c['ConnectorId']: c for c in store.list_connectors() if c.get('Active') and c.get('Type') in MAIL_TYPES}
+    out = {}
+    for s in store.list_sources():
+        c = cards.get(s.get('ConnectorId'))
+        if s.get('Channel') == 'email' and c and (s.get('Address') or '').strip():
+            out.setdefault(s['Address'].strip().lower(), {'address': s['Address'].strip(), 'type': c['Type']})
+    return list(out.values())
+
+
 def _page(tok, url, params, cap):
     import requests
     out = []

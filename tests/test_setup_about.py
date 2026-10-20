@@ -21,6 +21,15 @@ def learned(s, body=LEARNED):
                                       histgen.TITLES['job']), 'histgen')
 
 
+def mailboxes(s, *boxes):
+    """Mailboxes connected the way setup connects them: the card switched on, its address a source on that card."""
+    for typ, addr in boxes:
+        cid = s.get_connector_by_type(typ)['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
+        s.save_source({'Channel': 'email', 'Address': addr, 'Active': 1, 'ConnectorId': cid}, 't')
+    return s
+
+
 class AboutTests(unittest.TestCase):
     """ONE QUESTION A SCREEN, AND THE JOB READ OUT OF THE MAIL (the owner, 2026-10-16: "about your work is too much on one screen ...
     wait for email to read through all of them then let them fill out name/org/name of role/ then what they are responsible or job
@@ -157,6 +166,15 @@ class AboutTests(unittest.TestCase):
         self.assertEqual(firstrun.about(s)['guessed'], ['name'])
         firstrun._who(s, {'name': 'Alex Doyle'})
         self.assertEqual(firstrun.about(s)['guessed'], [])                   # answered: a reload never puts the guess back
+
+    def test_the_mailbox_step_lists_every_mailbox_connected_and_switched_on(self):
+        """EVERY MAILBOX BEFORE THE JOB (the owner, 2026-10-20): setup's mailbox step lists what is connected so far - each Gmail and
+        IMAP card's own, an Outlook card's mailboxes - once each, and never a card switched off."""
+        s = mailboxes(MemoryStore(), ('gmail', 'alex.doyle@mail.example'), ('imap', 'alex@northwind.example'), ('imap', 'ALEX@northwind.example'))
+        off = s.get_connector_by_type('outlook')['ConnectorId']
+        s.save_source({'Channel': 'email', 'Address': 'shared@northwind.example', 'Active': 1, 'ConnectorId': off}, 't')   # its card is off
+        self.assertEqual(firstrun.state(s)['mailboxes'], [{'address': 'alex.doyle@mail.example', 'type': 'gmail'},
+                                                          {'address': 'alex@northwind.example', 'type': 'imap'}])
 
     def test_the_systems_offered_are_the_catalogues_corporate_ones(self):
         offered = firstrun.about(MemoryStore())['offered']

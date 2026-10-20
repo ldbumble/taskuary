@@ -4,6 +4,9 @@
 // can (firstrun.suggest_about) and never over what was typed; the title answered, JOB.md is written from the mail with them in hand
 // (firstrun.learn) and the last screen asks whether it is right. No placeholder text: a box is either filled from the mail or empty.
 // The row's Back and Next are this component's while it is on the canvas; the question is the Advisor's line (onLine).
+// EVERY MAILBOX BEFORE THE JOB (the owner, 2026-10-20): the job is read out of all the mail, so a step lists the mailboxes connected
+// so far and adds the rest with the email step's own cards (FirstRun hands its shelf in as `mailShelf`). It is never skipped - Skip
+// on a question before it lands on it - and "That's all my mail" moves on once one is connected.
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Button, Chip, CircularProgress, TextField, Typography } from "@mui/material";
 import api from "./api";
@@ -12,9 +15,14 @@ import { useVerbs } from "./actionRow.js";
 import { Md } from "./md.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That didn't work.";
-export const STEPS = ["name", "org", "role", "signature", "systems", "job"];
+export const STEPS = ["name", "org", "role", "signature", "systems", "mailboxes", "job"];
+export const MAIL_AT = STEPS.indexOf("mailboxes");
+// Skip before the mailbox step lands on it; on it there is no Skip; past it, Skip leaves the rest (null)
+export const skipTo = (at) => (at < MAIL_AT ? MAIL_AT : null);
+export const canSkip = (step) => step !== "mailboxes";
+const KIND = { outlook: "Microsoft 365 / Outlook", gmail: "Gmail", imap: "Email (IMAP)" };
 const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", signature: "Your email signature",
-  systems: "Systems you work in", job: "Your job" };
+  systems: "Systems you work in", mailboxes: "Connect all your mailboxes", job: "Your job" };
 const ASK = {
   name: "What's your name?", org: "What organisation do you work for?",
   role: "What's your job title? Next, I write your job description from your email.",
@@ -22,10 +30,11 @@ const ASK = {
   // from the email and use that in emails ... have a setting so they can check it that it looks good")
   signature: "Is this your email signature? It goes under every email Taskuary writes for you, exactly like this - fix anything that's off.",
   systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
+  mailboxes: "Add every other mailbox you use with its card - your job is read from all of them.",
 };
 const who = (a) => JSON.stringify([a.name, a.org, a.role].map((x) => (x || "").trim()));
 
-export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }) {
+export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again = false, mailboxes = [], mailShelf = null }) {
   const [a, setA] = useState(null), [offered, setOffered] = useState([]), [seen, setSeen] = useState([]), [all, setAll] = useState(false);
   const [at, setAt] = useState(0), [reading, setReading] = useState(false), [note, setNote] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [other, setOther] = useState("");
@@ -69,6 +78,9 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
     return () => clearTimeout(id);
   }, [job, edited]);
   const step = STEPS[at];
+  useEffect(() => { onStep?.(step); }, [step, onStep]);
+  useEffect(() => () => onStep?.(""), [onStep]);
+  const boxes = mailboxes.length;
   const learn = async (x = a) => {
     learnedFor.current = who(x); setEdited(false); setJob({ state: "running", why: "", text: "" });
     try { setJob((await api.post("/api/setup/first-run/about/learn", x)).data); }
@@ -81,7 +93,10 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
     setBusy("");
   };
   const skip = async () => {
-    setBusy("skip"); setErr("");
+    setErr("");
+    const to = skipTo(at);
+    if (to !== null) return setAt(to);              // never past the mailboxes: Skip lands on them
+    setBusy("skip");
     try { await api.post("/api/setup/first-run/about/skip"); onSaved?.(); } catch (e) { setErr(errText(e)); }
     setBusy("");
   };
@@ -92,17 +107,18 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
     setAt((i) => Math.min(i + 1, STEPS.length - 1));
   };
   const back = () => (at ? setAt(at - 1) : onBack?.());
-  const ready = !!a && (step !== "job" || job.state !== "running");
+  const ready = !!a && (step !== "job" || job.state !== "running") && (step !== "mailboxes" || boxes > 0);
   const last = step === "job";
   // THE ONE LIT MOVE (FirstRun.jsx, the owner 2026-10-19): Write it while there is no job description to look at, else the row's Next -
   // and the line names it by its label
   const writeLit = last && ["none", "failed"].includes(job.state);
-  const nextLabel = last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : "Next";
+  const nextLabel = last ? (busy === "save" ? "Saving…" : job.state === "ready" ? "Looks right" : "Save") : step === "mailboxes" ? "That's all my mail" : "Next";
   useVerbs("setup-about", a ? [
     { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your email", run: back },
-    { id: "about:next", group: "decide", tone: writeLit ? "s" : "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : "",
+    { id: "about:next", group: "decide", tone: writeLit ? "s" : "p", disabled: !ready || !!busy, why: step === "job" ? "your job description is still being written" : step === "mailboxes" ? "connect a mailbox first" : "",
       label: nextLabel,
-      title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : "The next question", run: next },
+      title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : step === "mailboxes" ? "Every mailbox you use is connected"
+        : "The next question", run: next },
   ] : [], !!a);
   // the question is the Advisor's line over the row
   const line = !a ? "" : step === "job"
@@ -110,6 +126,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
       : job.state === "failed" ? `I couldn't write it from your email (${job.why}). Press Write it again, or say it in your own words.`
         : job.state === "ready" ? "This is your job as your email describes it. Is it right? Edit anything that's wrong, then press Looks right."
           : "Press Write it - I read your email and describe your job."
+    : step === "mailboxes" ? (boxes ? `${boxes === 1 ? "One mailbox is" : `${boxes} mailboxes are`} connected. ${ASK.mailboxes} Then press ${nextLabel}.`
+      : "Connect your email with its card - your job is read from every mailbox you use.")
     : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""} Then press ${nextLabel}.`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
   useEffect(() => () => onLine?.(""), [onLine]);
@@ -162,6 +180,14 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
         <Box><Button size="small" sx={{ color: DIM, fontSize: 12.5 }} onClick={() => setAll((v) => !v)}>
           {all ? "Show only mine" : "Show the full list"}</Button></Box>
       </>}
+      {step === "mailboxes" && <>
+        <Box data-tq-mailboxes="" sx={{ display: "flex", flexDirection: "column", gap: 0.4 }}>
+          {boxes ? mailboxes.map((m) => <Typography key={m.address} sx={{ fontSize: 14 }}>{m.address}
+            <span style={{ color: DIM, fontSize: 12.5 }}> · {KIND[m.type] || "Email"}</span></Typography>)
+            : <Typography sx={{ color: DIM, fontSize: 13.5 }}>No mailbox is connected yet.</Typography>}
+        </Box>
+        {mailShelf}
+      </>}
       {step === "job" && (job.state === "running" ? (
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}><CircularProgress size={14} />
           <Typography sx={{ color: DIM, fontSize: 13.5 }}>Writing your job description from your email…</Typography></Box>
@@ -181,7 +207,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, again = false }
       </>)}
       {note && step !== "job" && <Typography sx={{ color: DIM, fontSize: 13 }}>{note}</Typography>}
       {err && <Typography sx={{ color: "#9b2c2c", fontSize: 13 }}>{err}</Typography>}
-      {!again && <Box><Button size="small" disabled={!!busy} onClick={skip} sx={{ color: DIM, fontSize: 12.5 }}>Skip these questions</Button></Box>}
+      {!again && canSkip(step) && <Box><Button size="small" disabled={!!busy} onClick={skip} sx={{ color: DIM, fontSize: 12.5 }}>Skip these questions</Button></Box>}
     </Box>
   );
 }

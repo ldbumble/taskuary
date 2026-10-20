@@ -25,9 +25,3 @@ test("the task view's fold closes its drawer at the press and moves on as after 
   const done = part(page, "const reshaped = (r) =>", "};");
   assert.match(done, /canvas && onFinish \? onFinish\("dropped", async \(\) => \{\}\)/, "the walk moves on - the server already dropped it");
 });
-
-test("the Timeline's fold closes its drawer at the press too", () => {
-  const feed = read("FeedView.jsx");
-  assert.match(feed, /<Drawer anchor="right" open=\{reshape === true && !!sel\.TaskId\}[^\n]*ModalProps=\{\{ keepMounted: !!reshape \}\}/);
-  assert.match(feed, /onLeave=\{\(tid\) => tid === sel\.TaskId && setReshape\("merging"\)\} onStay=\{\(tid\) => tid === sel\.TaskId && setReshape\(true\)\}/);
-});

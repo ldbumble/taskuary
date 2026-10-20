@@ -165,10 +165,9 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /!pile \? \(/);                  // loading is not a false empty Timeline
   assert.match(view, /Loading timeline/);
   assert.match(view, /const sharedFilter = useRef\("\{\}"\)/); // default filter must not force a duplicate mount rebuild
-  // a row with no message - an assistant idea that became a task - still opens on the stage: the
-  // canonical item describes a task as readily as a message (2026-09-16)
-  assert.match(view, /openByItem\?\.\(pid, target\)/);
-  assert.match(read("FeedView.jsx"), /const openByItem = \(itemId, target\) =>/);
+  // a row opens on the canvas and nowhere else: the stage's second view of a row is gone (2026-10-20)
+  assert.doesNotMatch(view, /openByItem|openByMid/);
+  assert.doesNotMatch(read("FeedView.jsx"), /const openByItem|const openByMid/);
   const feedSource = read("FeedView.jsx");
   assert.match(feedSource, /if \(top && !unreadInventory\) return;/); // wait for canonical Work; do not race it with legacy feed reads
   assert.doesNotMatch(feedSource, /FunnelBar/); // the Assistant's pile replaced the legacy funnel query
@@ -198,8 +197,8 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /fillCaps\(room - \(curKey \? CUR_H - ROW_H : 0\), bands\)/);
   // Unread is the ranked pipe again: it is the only source for CURRENT/NEXT and for what the chat
   // will actually ask about. All remains FeedView's chronological history.
-  assert.match(view, /<FeedView[^]*top=\{\(\{ openByMid, openByItem \}\) => <Pile/);
-  assert.match(read("FeedView.jsx"), /typeof top === "function" \? top\(\{ openByMid, openByItem \}\) : top/);
+  assert.match(view, /<FeedView[^]*top=\{<Pile/);
+  assert.match(read("FeedView.jsx"), /\{setupRail \? null : top\}/);
   // The rail's kind/source filters narrow the rail's OWN rows and nothing else: the pile and the
   // walk are asked for over everything, so the assistant processes the whole pipe whatever the
   // rail is showing (the owner, 2026-09-04: "how the assistant works on filtered tasks - does it
@@ -214,9 +213,9 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /selection_revision: body\.selection_revision, expected_next_key: body\.expected_next_key, expected_next_members: body\.expected_next_members/);
   assert.doesNotMatch(view, /include_surfaced: true/); // a read row is not presented again by Next
   assert.doesNotMatch(view, /i\.surfaced && !i\.current \? "shown"/);                              // unread never looks processed
-  assert.match(view, /stage=\{stageMode === "chat" \? chat : placeholder\} rowMode=\{stageMode\}/);   // the two ways to use the stage
+  assert.match(view, /stage=\{chat\}/);   // the stage is the conversation, whatever was clicked
   assert.match(view, /onPull=\{\(r, o\) => pull\(keyForRow\(r\)/);   // a Timeline row is pulled in by the pipe's own key
-  assert.match(view, /openAppLink\(`msg=\$\{mid\}`\)/);   // "on the Timeline" pins the row over the chat
+  assert.match(view, /const timeline = \(mid\) => openMsgRef\.current\?\.\(mid\);/);   // a card's link to its message: that message's card
   assert.doesNotMatch(view, /turn\(\{ mode: "open" \}\)/);   // the day never writes itself: the welcome is the door
   // words are interpreted, never dispatched (PW-121..125): the two immediate exceptions (Next, a reply
   // draft) run on the decision; everything else arrives as a proposal card whose button submits the
@@ -248,8 +247,6 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.doesNotMatch(view, /maxWidth: 1380/);             // the chat takes the width it has
   assert.doesNotMatch(cardsSrc(), /Just what came in/);    // no mail-only walk: a set is the model's to name (2026-09-25)
   assert.match(view, /Walk me through my tasks/);
-  // the stage: no stray 0 under a verdict
-  assert.match(read("FeedView.jsx"), /\{!!\(verdict\.existing_task_id \|\| \(verdict\.related_message_ids/);
   assert.match(cardsSrc(), /All read, next/);             // a handful of fyi's goes in one click
   assert.match(read("TaskPage.jsx"), /<TerminalPane sid=\{term\.sid\}/);   // a stopped agent's own screen: its task view on the canvas
   assert.doesNotMatch(view, /left: side, right: side/);    // no taper: every row is a Timeline row's width
@@ -269,16 +266,12 @@ test("the Assistant page IS the app: the landing view, the Board the one other, 
   assert.match(view, /One more and you're clear/);    // ...the count is the encouragement, at the bottom, from fifteen
   const feed = read("FeedView.jsx");
   // the rail is the ranked pipe and nothing else - the Timeline's historical rows are gone (2026-10-15)
-  assert.match(feed, /\{typeof top === "function" \? top\(\{ openByMid, openByItem \}\) : top\}/);
-  assert.match(feed, /const chatMode = rowMode === "chat" && !!onPull/);
-  assert.match(feed, /\) : visibleStage \|\| \(/);                    // no selection shows the review placeholder, not chat history
-  assert.match(feed, /label: "Assistant discussion"/);               // task-bound walkthrough turns remain readable on the stage
-  assert.match(feed, /"concierge_user", "concierge_assistant"/);      // distinct from an agent's own working conversation
-  assert.match(feed, /tab === "discussion"/);
+  assert.match(feed, /\{setupRail \? null : top\}/);
+  assert.match(feed, /\n\s+\{visibleStage\}\n/);                    // the stage draws the conversation and nothing of its own
   assert.match(view, /for \(const pending of deferredChat\.current\) clearTimeout\(pending\)/); // one transition cannot queue two Next turns
   assert.match(view, /deferredChat\.current\.clear\(\);\s*const epoch = chatEpoch\.current/);
   assert.doesNotMatch(feed, /hoverSelect/);   // nothing opens on hover: the Timeline's rows were the only ones that did
-  assert.match(feed, /addEventListener\("hashchange", openHash\)/);   // a card's #msg= opens the row while the rail is already up
+  assert.doesNotMatch(feed, /openHash|#msg=\(/);   // a card's #msg= is the canvas's (canvasLinks), never the rail's own panel
   const cards = read("assistantCards.jsx");
   // the two "not ours" doors the owner asked for: one that teaches memory, one that does not
   // 'not ours' is the chat line's word now (concierge.CHIPS), not a panel on the card

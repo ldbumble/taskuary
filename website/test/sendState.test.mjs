@@ -77,7 +77,7 @@ test("the draft state names a failed draft with its reason and offers the retry"
 });
 
 test("the review, task-panel and assistant surfaces are wired to the shared send state", () => {
-  for (const f of ["FeedView.jsx", "assistantCards.jsx"]) {
+  for (const f of ["assistantCards.jsx"]) {
     const src = readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
     assert.match(src, /sendBlockLine\(/, `${f} shows the shared reason`);
     assert.match(src, /draftState\(/, `${f} shows the shared draft state`);

@@ -44,12 +44,9 @@ test("the delivery envelope carries the files up to the card", () => {
   assert.deepEqual(replyEnvelope({ Deliver: JSON.stringify({ kind: "reply", attachments: [null, {}, 3] }) }).attachments, []);
 });
 
-test("both surfaces that can approve a reply show what rides with it", () => {
-  const feed = read("FeedView.jsx"), review = read("ReviewDecision.jsx");
-  assert.match(feed, /<ReplyFiles reviewId=\{reviewId\} files=\{envelope\?\.attachments \|\| \[\]\}/);
+test("the surface that approves a reply shows what rides with it", () => {
+  const review = read("ReviewDecision.jsx");
   assert.match(review, /<ReplyFiles reviewId=\{r\.ReviewId\} files=\{deliveryFiles\(filedDelivery\)\}/);
-  // ...and the button counts them, so the send is never a surprise
-  assert.match(feed, /files\.length \? plural\(files\.length, "file"\) : ""/);
 });
 
 test("a chat says it cannot carry a file instead of offering a picker that lies", () => {

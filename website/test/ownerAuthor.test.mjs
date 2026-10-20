@@ -26,10 +26,3 @@ test("no owner name is hardcoded on the wall, and the demo's owner still comes f
   const fx = JSON.parse(read("demoFixtures.json"));
   assert.equal(fx["/api/board/notes"].owner, fx["/api/whoami"].facts.owner_name);
 });
-
-test("the Timeline's own-reply line reads the row's direction, not the route reason's words", () => {
-  const feed = read("FeedView.jsx");
-  const blurb = feed.slice(feed.indexOf("const blurb = (r) =>"), feed.indexOf("if (r.Channel === \"assistant\")"));
-  assert.match(blurb, /r\.Direction === "out"/);
-  assert.doesNotMatch(blurb, /RouteReason/);
-});

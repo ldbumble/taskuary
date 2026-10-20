@@ -55,19 +55,6 @@ test("unknown response fields are not silently discarded", () => {
   assert.deepEqual(extraTriageFields({ intent: "task", why: "x", system: "ADP" }), [["system", "ADP"]]);
 });
 
-test("the timeline draws the response as facts, repository, and a numbered task list", () => {
-  const view = readFileSync(new URL("../src/FeedView.jsx", import.meta.url), "utf8");
-  assert.ok(view.includes("Full triage response"));
-  assert.ok(view.includes("Triage's structured response"));
-  assert.ok(view.includes('label="Goes to"'));
-  assert.ok(view.includes("Repository choice needed"));
-  assert.ok(view.includes('component="ol"'));
-  assert.ok(view.includes("No separate checklist was returned."));
-  assert.ok(view.includes("limited saved response · reconstructed"));
-  assert.ok(view.includes("None — triage found no requested action."));
-  assert.ok(view.includes("This route was saved without structured triage details."));
-});
-
 // the record leads with whose the work is (categories.route_head); a row written before says the classifier's label
 test("a route's verdict reads the same in the new head and the old label", () => {
   for (const [reason, want] of [["triage: work for the coding agent in northwind/ledger - fix it · new task", "task"],

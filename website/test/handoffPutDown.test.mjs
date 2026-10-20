@@ -26,10 +26,3 @@ test("the task view's hand-off moves on without closing: the drawer goes, the wa
   assert.match(done, /closedHere\("waiting"\)/, "the list and the walk move on - the task waits on them, still open");
   assert.match(page, /onFinish \? onFinish\(status, async \(\) => \{\}\)/);
 });
-
-test("the Timeline's hand-off closes its drawer at the press and drops the panel once it is sent", () => {
-  const feed = read("FeedView.jsx");
-  assert.match(feed, /<Handoff taskId=\{sel\.TaskId\} onLeave=\{\(\) => setHandoff\("sending"\)\} onStay=\{\(\) => setHandoff\(true\)\}/);
-  assert.match(feed, /onSent=\{\(\) => \{ setHandoff\(false\); onSkipped\?\.\(\); \}\}/);
-  assert.match(feed, /<Drawer anchor="right" open=\{handoff === true && !!sel\.TaskId\}[^\n]*ModalProps=\{\{ keepMounted: !!handoff \}\}/);
-});

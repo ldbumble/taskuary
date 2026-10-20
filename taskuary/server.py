@@ -4330,6 +4330,7 @@ class SurfaceBody(BaseModel):
     leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
     expected_next_members: list[str] | None = None
     fyi: int | None = None              # how many plain FYI rows the page wants whole in the rail that rides along (funnel.page_fyi)
+    blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
@@ -4581,6 +4582,7 @@ class ConciergeStreamBody(BaseModel):
     open_card: str | None = None                  # the card browsed open in the canvas, said in words
     images: list[str] = []                        # pictures sent with the line (/api/prompt-image)
     include_surfaced: bool = False; exclude: str | None = None; leaving: str | None = None
+    blind: bool = False                 # pressed with nothing on the table (processing_navigation.reserve)
     selection_revision: str | None = None
     expected_next_key: str | None = None
     expected_next_members: list[str] | None = None
@@ -4603,7 +4605,9 @@ def _navigation_reservation(body):
         return reserve(store, selection_revision=body.selection_revision,
                        expected_next_key=body.expected_next_key,
                        expected_next_members=body.expected_next_members,
-                       only=body.only, include_surfaced=body.include_surfaced, exclude=body.exclude)
+                       only=body.only, include_surfaced=body.include_surfaced, exclude=body.exclude,
+                       # nothing on the table - the walk's start: no item the owner saw that a moved pick could skip past
+                       blind=bool(getattr(body, 'blind', False)))
     except NavigationStale as error:
         raise HTTPException(409, error.detail) from error
     except SelectionUnavailable as error:

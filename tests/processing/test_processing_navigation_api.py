@@ -354,3 +354,32 @@ def test_nothing_is_prepared_where_the_answer_cannot_be_known_ahead(nav_api, mon
     db, client, mid, rid = nav_api
     monkeypatch.setattr(concierge, 'INTRO_AI', True)          # a model introduces the item: its words are not known ahead
     assert client.get('/api/funnel/pile', params={'force': True}).json()['prepared_next'] is None
+
+
+def _startup_mail(db, n):
+    """What startup's catch-up writes while the opener still reads: new mail, each its own item on the rail."""
+    return db.add_message({'Channel': 'email', 'Status': 'filed', 'Subject': f'Arrived at startup {n}', 'BodyText': f'Catch-up {n}',
+                           'ExternalId': f'startup:{n}', 'ConversationId': f'startup-thread:{n}', 'FromEmail': f'p{n}@example.test',
+                           'SentAt': datetime.now().isoformat(sep=' ')})
+
+
+@pytest.mark.parametrize('route', ['next', 'stream'])
+def test_the_walks_first_press_made_while_startup_still_writes_proceeds(nav_api, monkeypatch, route):
+    """The owner, 2026-10-20: "Walk me through my tasks" pressed while the opener still said "Reading what came in" answered
+    "The list changed while you pressed Next". Nothing was on the table - no item the owner saw that a moved pick could skip -
+    so the walk's first press takes the rail as it is now, at admission and again at the commit check, and proceeds."""
+    db, client, mid, rid = nav_api
+    payload = binding(client)
+    for n in range(1, 3): _another(db, 10 + n)                  # the pick moved after the page read the rail...
+    real, writes = concierge.chips_for, []
+    def chips_while_catching_up(store, *a, **k):              # ...and moves again between the press's admission and its commit
+        if len(writes) < 2: writes.append(_startup_mail(db, len(writes))); _another(db, 20 + len(writes))
+        return real(store, *a, **k)
+    monkeypatch.setattr(concierge, 'chips_for', chips_while_catching_up)
+    response = client.post(f'/api/concierge/{route}', json={'mode': 'next', 'blind': True, **payload})
+    assert response.status_code == 200, response.text
+    data = response.json() if route == 'next' else done_of(response.text)
+    assert data.get('type', 'done') == 'done' and data['item'], data
+    assert 'selection_stale' not in response.text
+    assert writes, 'the rail moved under the press'
+    # (a press with an item on the table - no `blind` - is still refused when its pick moved: the PW-050 tests above)

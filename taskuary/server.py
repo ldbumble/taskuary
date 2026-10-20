@@ -4219,6 +4219,16 @@ class SurfaceBody(BaseModel):
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
+def _encoded(content) -> Response:
+    """An answer that carries the pile, encoded HERE on the request's worker thread. Handed back as a dict, FastAPI runs
+    jsonable_encoder over it on the event loop: 0.2-1.2 s for a big mailbox's 3 MB pile, during which every other request
+    waits, index.html included (perf 2026-10-19). Byte for byte what JSONResponse renders; anything json cannot take goes
+    through jsonable_encoder exactly as before."""
+    from fastapi.encoders import jsonable_encoder
+    return Response(json.dumps(content, ensure_ascii=False, allow_nan=False, indent=None, separators=(',', ':'),
+                               default=jsonable_encoder).encode('utf-8'), media_type='application/json')
+
+
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
                   include_surfaced: bool = False, exclude: str = None) -> dict:
     """The pile as the page draws it, with the selection token Next echoes. One road for the GET,
@@ -4263,7 +4273,7 @@ def funnel_pile(force: bool = False, current: str = None, only: str = None,
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
     from .funnel_selection import SelectionUnavailable
-    try: return _pile_payload(force, current, only, include_surfaced, exclude)
+    try: return _encoded(_pile_payload(force, current, only, include_surfaced, exclude))
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
@@ -4283,7 +4293,7 @@ def funnel_settle(body: SettleBody):
         if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
         # the table is empty now, so the page's next scope excludes nothing: the rail comes back captured that way
         out = {**out, 'pile': _pile_along(only=body.only)}
-    return out
+    return _encoded(out)
 
 @app.get('/api/concierge')
 def concierge_state():
@@ -4393,7 +4403,7 @@ def concierge_next(body: SurfaceBody = None):
                                          leaving=body.leaving)
             out = _with_pile(reservation.run(_surface, ACTOR), body)
             _refresh_after(out)                      # the change-check follows the four (design C)
-            return out
+            return _encoded(out)
         except NavigationStale as error:
             raise HTTPException(409, error.detail) from error
         except SelectionUnavailable as error:
@@ -4402,7 +4412,7 @@ def concierge_next(body: SurfaceBody = None):
     out = _with_pile(concierge.surface(store, body.key, actor=ACTOR, only=body.only,
                                        include_surfaced=body.include_surfaced, exclude=body.exclude, leaving=body.leaving), body)
     if not body.key: _refresh_after(out)         # ...and the walk's Next answers first, then asks the provider (design C)
-    return out
+    return _encoded(out)
 
 def _with_pile(out: dict, body) -> dict:
     """A Next answer with the rail as the turn left it. The item is on the table, so the page will hold
@@ -4494,6 +4504,10 @@ async def concierge_stream(body: ConciergeStreamBody):
         raise
     loop, events, cancel = asyncio.get_running_loop(), asyncio.Queue(), threading.Event()
     def put(e):
+        # encoded here, on the turn's thread: the `done` of a Next carries the whole rail, and json.dumps of it on the loop
+        # held every other request (perf 2026-10-19). What cannot be encoded goes as it is and fails where it always did.
+        try: e = (e.get('type'), json.dumps(e, default=str) + '\n')
+        except Exception: pass
         try: loop.call_soon_threadsafe(events.put_nowait, e)
         except RuntimeError: pass
     def trace(kind, name, detail):
@@ -4565,8 +4579,9 @@ async def concierge_stream(body: ConciergeStreamBody):
     async def generate():
         while True:
             e = await events.get()
-            yield json.dumps(e, default=str) + '\n'
-            if e.get('type') in ('done', 'error'): break
+            kind, line = e if isinstance(e, tuple) else (e.get('type'), json.dumps(e, default=str) + '\n')
+            yield line
+            if kind in ('done', 'error'): break
     return StreamingResponse(generate(), media_type='application/x-ndjson', headers={'Cache-Control': 'no-cache, no-transform'})
 
 @app.post('/api/reports/{sid}/rerun')

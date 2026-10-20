@@ -24,6 +24,34 @@ _SELF_FIELDS = {"presentation_revision"}
 _TRANSIENT_PILE_FIELDS = {"rev", "display_revision", "events", "captured_at", "generated_at"}
 
 
+_ATOMIC = frozenset({str, int, float, bool, type(None), bytes})
+
+
+def detach(value, memo=None):
+    """``copy.deepcopy`` for the JSON trees a pile is made of, at a quarter of its cost. A pile read
+    detached a 3 MB pile four times, and deepcopy's per-node dispatch was the largest single cost of
+    every read on a big mailbox (2026-10-20). Same result: a sub-object shared in the source stays
+    shared in the copy (the memo), and anything that is not a plain dict, list or scalar goes through
+    deepcopy itself with the same memo."""
+    return _detach(value, {} if memo is None else memo)
+
+
+def _detach(o, memo):
+    t = type(o)
+    if t in _ATOMIC: return o
+    i = id(o)
+    if i in memo: return memo[i]
+    if t is dict:
+        y = memo[i] = {}
+        for k, v in o.items(): y[k if type(k) in _ATOMIC else _detach(k, memo)] = v if type(v) in _ATOMIC else _detach(v, memo)
+        return y
+    if t is list:
+        y = memo[i] = []
+        y.extend(v if type(v) in _ATOMIC else _detach(v, memo) for v in o)
+        return y
+    return copy.deepcopy(o, memo)
+
+
 def _canonical(value) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -347,7 +375,7 @@ def present(store, payload: dict) -> dict:
     """Return a detached funnel payload with strong item and display revisions."""
     if not isinstance(payload, dict):
         raise TypeError("funnel presentation payload must be a dictionary")
-    out = copy.deepcopy(payload)
+    out = detach(payload)
     targets = [*(out.get("items") or [])]
     if "current" in out and out.get("current") is not None:
         targets.append(out["current"])

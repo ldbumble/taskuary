@@ -539,6 +539,10 @@ def open_url(body: OpenUrl, request: Request):
 
 _assets = _web_root / 'assets'
 from fastapi.staticfiles import StaticFiles
+import mimetypes
+# The bundled IBM Plex faces: Python before 3.11 (and a Windows registry without the type) guesses nothing for .woff2,
+# so they went out as text/plain
+mimetypes.add_type('font/woff2', '.woff2')
 
 
 class _HashedAssets(StaticFiles):

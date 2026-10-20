@@ -431,7 +431,9 @@ class BrainTests(unittest.TestCase):
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
             # 'next' asks no model at all now, so there is no tool_call to stream ahead of it: the
             # introduction is the item's own facts, and it is instant (2026-09-07)
-            self.assertEqual([l['type'] for l in lines], ['done'])
+            # ...and the rail the press left behind follows the card as its own event (2026-10-20: the card first)
+            self.assertEqual([l['type'] for l in lines], ['done', 'pile'])
+            self.assertTrue(lines[0]['pile_follows']); self.assertNotIn('pile', lines[0]); self.assertIn('items', lines[1]['pile'])
             self.assertEqual(lines[0]['item']['key'], it['key'])
             self.assertIn('GitHub Trending', lines[0]['say'])
             with c.stream('POST', '/api/concierge/stream', json={'mode': 'say', 'text': 'why did it fail?', 'key': it['key']}) as r:

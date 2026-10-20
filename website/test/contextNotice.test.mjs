@@ -8,7 +8,7 @@ import path from "node:path";
 const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
 
 test("a context_update stream event is rendered as it arrives", () => {
-  const reader = src.slice(src.indexOf("for await (const ev of readNdjson"), src.indexOf("throw new Error(\"The assistant stopped without an answer.\")"));
+  const reader = src.slice(src.indexOf("await readTurn(res.body"), src.indexOf("throw new Error(\"The assistant stopped without an answer.\")"));
   assert.match(reader, /ev\.type === "context_update"/);
   assert.match(reader, /role: "assistant", text: ev\.say/);
 });

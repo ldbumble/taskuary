@@ -16,6 +16,30 @@ export async function* readNdjson(body) {
   if (pending.trim()) yield JSON.parse(pending);
 }
 
+// ONE TURN READ OFF THE STREAM: every event before the answer goes to `on` (which may throw - an error event ends the turn),
+// and `done` is returned the moment it lands. A Next whose rail follows it (`pile_follows`, 2026-10-20: the card first, the
+// rail after) returns at once with `pileLater`, the rest of the same stream read on: the `pile` event's rail, or null when
+// none comes (an error, a cut stream) - the page then loads the rail itself, as it does when nothing rides along.
+// null: the stream ended without an answer.
+export async function readTurn(body, on = () => {}) {
+  const events = readNdjson(body);
+  for (;;) {
+    const { value: ev, done } = await events.next();
+    if (done) return null;
+    if (ev.type !== "done") { on(ev); continue; }
+    if (!ev.pile_follows) return ev;
+    const { pile_follows: _follows, ...answer } = ev;
+    const pileLater = (async () => {
+      for (;;) {
+        const { value, done: over } = await events.next();
+        if (over || value.type === "error") return null;
+        if (value.type === "pile") return value.pile || null;
+      }
+    })().catch(() => null);
+    return { ...answer, pileLater };
+  }
+}
+
 // the static demo has no server to stream from: the same events, from a script, at reading
 // speed - the chat is the thing visitors try first and it has to answer
 async function* demoStream(taskId, body) {

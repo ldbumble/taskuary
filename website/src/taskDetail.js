@@ -42,7 +42,7 @@ const readTerms = (api) => {
 // undefined while not known - the view looks for itself then - and null for a task with no session
 export const heldTerm = (tid) => {
   const id = Number(tid);
-  if (!id || !fresh(terms) || !terms.rows) return undefined;
+  if (!id || !fresh(terms) || !terms.rows || terms.gone?.has(id)) return undefined;
   return terms.rows.find((x) => x.taskId === id && x.alive) || terms.rows.find((x) => x.taskId === id) || null;
 };
 export const keepTerms = (rows) => { if (Array.isArray(rows)) terms = { at: now(), rows }; };
@@ -53,4 +53,9 @@ export const heldWait = (tid) => { const e = held.get(Number(tid)); return fresh
 // ...a view's own read is the newest word on its task; an act on any task makes every held read old
 export const keepTask = (tid, data, wait = undefined) => { const id = Number(tid), e = held.get(id);
   if (id && data?.task?.TaskId === id) held.set(id, { at: now(), data, p: Promise.resolve(data), steps: e?.steps, wait: wait === undefined ? e?.wait : wait }); };
-export const forgetTasks = (tid = null) => { terms = null; if (tid == null) held.clear(); else held.delete(Number(tid)); };
+// ...one task's write leaves every other task's session as it was: only that task's is unknown again
+export const forgetTasks = (tid = null) => {
+  if (tid == null) { terms = null; held.clear(); return; }
+  held.delete(Number(tid));
+  if (terms) terms.gone = new Set([...(terms.gone || []), Number(tid)]);
+};

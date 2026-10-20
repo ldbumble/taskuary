@@ -17,6 +17,7 @@ import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
 import TuneIcon from "@mui/icons-material/Tune";
 import api from "./api";
 import { openAppLink } from "./appLinks.js";
+import { prefetchTask } from "./taskDetail.js";
 import { ago } from "./timeWords.js";
 import { arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
@@ -172,6 +173,9 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const shown = useMemo(() => arrange(hits, only), [hits, only]);
   const words = useMemo(() => terms(res?.q || ""), [res]);
   useEffect(() => { if (only && !strip.some((f) => f.key === only)) setOnly(""); }, [strip, only]);
+  // the highlighted hit's task is read while it is highlighted, so Enter opens it whole - not an empty frame first (taskDetail.js, G8)
+  const aheadTid = settled ? shown.flat[at]?.tid || 0 : 0;
+  useEffect(() => { if (aheadTid) prefetchTask(api, aheadTid); }, [aheadTid]);
 
   const pick = (h) => {
     if (!h) return;

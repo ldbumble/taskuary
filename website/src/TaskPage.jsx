@@ -90,6 +90,7 @@ import EmailSomeone from "./EmailSomeone.jsx";
 import { ago, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
+import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
 
@@ -299,7 +300,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   onChanged, autostart, onAutostarted, onGoReports, active = true, openAct, onActOpened, canvas = false,
   onNext = null, nextBusy = false, expanded = false, onExpand = null, backArrow = false }) {
   const canCode = useCapabilities().coding;                   // no coding tool connected: coding is not offered (capabilities.js)
-  const [detail, setDetail] = useState(null);
+  // ...drawn from the task's read held ahead of it (taskDetail.js) - a view on the table opens whole, not as an empty shell (G8)
+  const [detail, setDetail] = useState(() => heldTask(selected));
   // Which task is on screen RIGHT NOW, readable from inside any await. Every fetch here is
   // keyed to a task, and a response that lands after you clicked another one must be dropped:
   // a wrap-up finishing 8 seconds later used to paint ITS task's header and report over the
@@ -341,7 +343,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [generalRevision, setGeneralRevision] = useState(0);
   const [comment, setComment] = useState("");
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
-  const [wait, setWait] = useState({ data: [], state: null });
+  const [wait, setWait] = useState(() => heldWait(selected) || { data: [], state: null });   // ...its waiting room with it (taskDetail.js)
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
@@ -374,11 +376,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const loadTasks = useCallback(async () => { await listRef.current?.(); }, []);
   const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
+    const ahead = heldTask(id);
+    if (ahead) { setDetail((d) => (d?.task?.TaskId === id ? d : ahead)); const w = heldWait(id); if (w) setWait(w); }
     try {
       const { data } = await api.get(`/api/tasks/${id}`);
       if (stale(id)) return;
-      setDetail(data);
-      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) setWait(w); }
+      setDetail(data); keepTask(id, data);
+      try { const w = (await api.get(`/api/tasks/${id}/waitroom`)).data; if (!stale(id)) { setWait(w); keepTask(id, data, w); } }
       catch { if (!stale(id)) setWait({ data: [], state: null }); }
     } catch (e) {
       if (stale(id)) return;
@@ -572,7 +576,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // The task's own session - the only terminal in the app. undefined means "not looked
   // yet", null means "looked, none running": the difference decides whether we may
   // auto-start one, so they must not collapse into each other.
-  const [term, setTerm] = useState(undefined);
+  const [term, setTerm] = useState(() => heldTerm(selected));   // the session list read ahead, when it was (taskDetail.js)
   // Wrapping up belongs to the TASK, not to the pty. An exited session is dropped after ten
   // minutes, and with it went the only handle these buttons had - so a task whose CLI had
   // finished on its own could never be closed out. The transcript is filed when a session ends.
@@ -587,6 +591,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       // Selecting a task only needs the session identity/lifecycle. Rich files + witness data is
       // fetched by WorkStrip if the owner opens it; waiting on git here blocked the terminal pane.
       const rows = (await api.get("/api/terminals", { params: { details: false } })).data.data || [];
+      keepTerms(rows);
       if (stale(tid)) return;
       // an exited session still holds its scrollback (they stay listed ~10 min), and that
       // transcript is exactly what Done and Pause need - dropping it left a task you could
@@ -594,7 +599,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       setTerm(rows.find((x) => x.taskId === tid && x.alive) || rows.find((x) => x.taskId === tid) || null);
     } catch { if (!stale(tid)) setTerm(null); }
   }, []);
-  useEffect(() => { setTerm(undefined); findTerm(selected); }, [selected, findTerm]);
+  useEffect(() => { setTerm(heldTerm(selected)); findTerm(selected); }, [selected, findTerm]);
   // The task's own detail already carries the live session (it is where sessionAlive is read
   // from), so take it rather than wait for a re-selection to go looking. A session that has
   // ENDED is deliberately not adopted: findTerm keeps the dead one because its scrollback is

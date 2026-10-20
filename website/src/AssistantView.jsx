@@ -30,6 +30,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { forgetTasks, heldTask, heldTerm, prefetchTask } from "./taskDetail.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
@@ -342,6 +343,10 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // New servers capture the selection from the same snapshot as this pile. FYI batches have a
   // composite selected key, so their first ordered member wears the visible NEXT marker.
   const nextKey = nextMarkerKey(pile, items, current);
+  // ...and its task is read now, so Next opens it whole (taskDetail.js, G8) - a rail row under the pointer the same way, below
+  const nextTid = items.find((i) => i.key === nextKey)?.tid || 0;
+  // ...again whenever the rail is drawn anew: a write in between let the held read go (taskDetail.js), and it is read once more here
+  useEffect(() => { if (nextTid) prefetchTask(api, nextTid); }, [nextTid, displayRevision(pile)]);   // eslint-disable-line react-hooks/exhaustive-deps
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
   const left = items.filter((i) => !i.settling && i.lane !== "working").length + tail;
@@ -603,6 +608,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>
                     {/* the row already on the table SHOWS it - on a phone that means closing the drawer over it */}
                     <div className="card" onClick={() => (isCur ? onCurrent?.() : !i.settling && onPull(i.key, `Show me “${i.title}”`))}
+                      onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
                         <span className="logo"><SourceMark item={i} size={15} /></span>
@@ -990,6 +996,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
   const [lit, setLit] = useState(null);
   useEffect(() => onPressed(() => setLit(null)), []);
+  // an act makes every task read held ahead of its view old (taskDetail.js) - Next is no act: it is what the read ahead is for
+  useEffect(() => onPressed((id) => { if (!/(^|:)next$/.test(String(id || ""))) forgetTasks(); }), []);
+  // ...and a write anywhere - an agent, another tab, a sync - makes that task's held read old (all of them, when it names none)
+  useEffect(() => onLive("task-changed", (ev) => forgetTasks(ev?.task_id ?? null)), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card

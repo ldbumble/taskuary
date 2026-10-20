@@ -111,7 +111,10 @@ def resolve(store, cfg, slot_key: str) -> dict:
            'value': value, 'model': '', 'effort': '', 'choices': [], 'efforts': [],
            # what a BLANK model box means here - shown as the field's placeholder, so an empty
            # field reads as "the provider's default" instead of as something not set up yet
-           'default_hint': '', 'owner': '', 'owner_link': '', 'ready': True, 'note': ''}
+           'default_hint': '', 'owner': '', 'owner_link': '', 'ready': True, 'note': '',
+           # the settings this card stands for, so a link to one of them (#settings=..&key=assistant_model) finds the card: its rows are
+           # not drawn under the panel, and a search hit for "General agent model" landed on no setting at all (verify, 2026-10-19)
+           'settings': [slot_key, *([s['model_setting']] if s.get('model_setting') else [])]}
 
     if s['pick'] == 'cli':
         from .agents import default_brain

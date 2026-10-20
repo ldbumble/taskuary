@@ -74,9 +74,43 @@ export const ownerHref = (link) => {
 
 // THE THING A LINK NAMED, IN VIEW AND SHOWN: scrolled to the middle and outlined for a moment (assistantView.css .tq-flash) - a
 // knob two screens down the group it opened was a link that seemed to do nothing
-export const focusPlace = (el) => {
-  if (!el) return;
-  el.scrollIntoView?.({ block: "center", behavior: "smooth" });
+const flash = (el) => {
   el.classList?.remove("tq-flash"); void el.offsetWidth; el.classList?.add("tq-flash");
-  setTimeout(() => el.classList?.remove("tq-flash"), 1800);
+  clearTimeout(el.tqFlash); el.tqFlash = setTimeout(() => el.classList?.remove("tq-flash"), 1800);   // shown again: an earlier timer must not cut it
+};
+// ...AND KEPT THERE WHILE THE PAGE FINISHES DRAWING (verify, 2026-10-19): one scroll on arrival was undone by whatever loaded above it
+// afterwards - How mail is sorted's AI panel stands up from a spinner over its rows, so a "Fallback AI programs" hit landed at the top
+// of its group with the setting 1,700px down. The thing's place in the page (its top plus every scroll above it, so a scroll does not
+// count as a move) is watched each frame; when the page above it moves, it is brought back. It is marked [data-tq-held] too, so the
+// chat's own hold on the card (AssistantView keepTable) holds IT rather than the card's top - two holds on one scroll fought. The
+// owner's own scroll, click or key lets go of both at once - a page never pulls back from under them; else the watch ends after HOLD.
+const HOLD = 8000, owner = ["wheel", "touchstart", "keydown", "pointerdown"];
+const layoutTop = (el) => {
+  let y = el.getBoundingClientRect().top;
+  for (let p = el.parentElement; p; p = p.parentElement) y += p.scrollTop || 0;   // <html> among them: the window's own scroll
+  return y;
+};
+let letGo = () => {};
+// `find` looks it up again each frame: a row redrawn is a new element, and a panel card that stands up late is not there at first
+export const focusPlace = (el, find = null) => {
+  if (!el && !find) return;
+  letGo();
+  if (el) { el.scrollIntoView?.({ block: "center", behavior: "smooth" }); flash(el); }
+  if (typeof window === "undefined" || !window.requestAnimationFrame) return;
+  const t0 = Date.now();
+  let cur = el, y = el ? layoutTop(el) : 0, watching = true;
+  const mark = (e) => { cur?.removeAttribute?.("data-tq-held"); cur = e; e.setAttribute?.("data-tq-held", ""); };
+  const stop = () => { watching = false; cur?.removeAttribute?.("data-tq-held"); owner.forEach((e) => window.removeEventListener(e, stop, true)); };
+  letGo = stop; if (el) mark(el);
+  owner.forEach((e) => window.addEventListener(e, stop, true));
+  const tick = () => {
+    if (!watching || Date.now() - t0 > HOLD) return;                                  // the watch ends; the mark stays till the owner acts
+    const e = (find && find()) || (cur?.isConnected ? cur : null);
+    if (e) {                                                                            // a row redrawn: between the two it is in neither
+      const ny = layoutTop(e);
+      if (e !== cur || Math.abs(ny - y) > 2) { mark(e); y = ny; e.scrollIntoView?.({ block: "center" }); flash(e); }
+    }
+    window.requestAnimationFrame(tick);
+  };
+  window.requestAnimationFrame(tick);
 };

@@ -632,7 +632,7 @@ async function links() {
     return e ? { text: e.innerText.replace(/\s+/g, " ").slice(0, 400), inView: r.top < innerHeight - 40 && r.bottom > 40 } : null;
   });
   const knobAt = (k) => page.evaluate((k) => {
-    const e = document.querySelector(`[data-tq-knob="${k}"]`), r = e?.getBoundingClientRect();
+    const e = document.querySelector(`[data-tq-knob~="${k}"]`), r = e?.getBoundingClientRect();
     return e ? { inView: r.top >= 0 && r.bottom <= innerHeight } : null;
   }, k);
   // two connections the catalogue draws as cards
@@ -657,33 +657,54 @@ async function links() {
     else if (!o?.text.includes(a.Name)) note("BACK", page.step, `Back after two opens shows ${o ? `"${o.text.slice(0, 60)}"` : "no card"}, not the first (${a.Name}) - ${url}`);
     walked.push("links: Back after two opens");
   }
-  // a setting by its key: the group opened over the owner's page, the knob two screens down in view - then the same from a fresh page
-  page.step = "links knob";
-  await open("#settings=config&group=Assistant"); await wait(4000);
-  const knobs = await page.evaluate(() => [...document.querySelectorAll("[data-tq-knob]")].map((e) => e.getAttribute("data-tq-knob")));
-  const k = knobs[knobs.length - 1];
-  if (!k) note("PLACE", page.step, "Settings' Assistant group drew no settings to link to");
-  else {
+  // a setting by its key: the group opened over the owner's page, the knob two screens down in view - then the same from a fresh page.
+  // Two groups: Assistant, and How mail is sorted, whose AI panel stands up from a spinner ABOVE its rows after they are drawn - one
+  // scroll on arrival was undone by it, the "Fallback AI programs" hit landing 1,700px over its setting (verify, 2026-10-19)
+  for (const grp of ["Assistant", "How mail is sorted"]) {
+    const g = encodeURIComponent(grp);
+    page.step = `links knob ${grp}`;
+    await open(`#settings=config&group=${g}`); await wait(4000);
+    const knobs = await page.evaluate(() => [...document.querySelectorAll("[data-tq-knob]")].map((e) => e.getAttribute("data-tq-knob")));
+    const k = knobs[knobs.length - 1];
+    if (!k) { note("PLACE", page.step, `Settings' ${grp} group drew no settings to link to`); continue; }
     await page.evaluate(() => window.scrollTo(0, 0));
-    await open(`#settings=config&group=Assistant&key=${k}`); await wait(3000);
+    await open(`#settings=config&group=${g}&key=${k}`); await wait(3000);
     if (!(await knobAt(k))?.inView) note("PLACE", page.step, `with Settings open, a link to ${k} left it off the screen`);
-    await page.goto(`${srv.base}/#settings=config&group=Assistant&key=${k}`, { waitUntil: "load" }); await wait(7000);
-    if (!(await knobAt(k))?.inView) note("PLACE", `${page.step} fresh`, `a link to ${k} on a fresh page left it off the screen`);
-    // ...and found by Settings' own search: the hit opens its group AT the setting
-    page.step = "links search";
-    const label = await page.evaluate((k) => document.querySelector(`[data-tq-knob="${k}"] p`)?.innerText || "", k);
-    await page.click("[data-tq-browse='settings'] [data-tq-browse-back]").catch(() => {}); await wait(1000);
-    const box = await page.$("[data-tq-browse='settings'] [data-tq-browse-search]");
-    if (!box || !label.trim()) note("PLACE", page.step, `Settings' search was not reached (box: ${!!box}, label of ${k}: "${label}")`);
-    else {
+    // ...and a setting the group's panel card stands for, with no row of its own ("General agent model" landed on nothing)
+    const card = knobs.find((x) => x.includes(" "));
+    if (card) {
+      const ck = card.split(" ").pop();
       await page.evaluate(() => window.scrollTo(0, 0));
-      await box.type(label.trim()); await wait(1200);
-      const hit = await page.$("[data-tq-browse='settings'] [data-tq-browse-card]");
-      if (!hit) note("PLACE", page.step, `searching "${label.trim()}" found nothing`);
-      else { await hit.click(); await wait(3000); if (!(await knobAt(k))?.inView) note("PLACE", page.step, `the search hit for "${label.trim()}" opened its group with ${k} off the screen`); }
-      walked.push("links: a setting by link, fresh and over Settings, and by search");
+      await open(`#settings=config&group=${g}&key=${ck}`); await wait(3000);
+      if (!(await knobAt(ck))?.inView) note("PLACE", page.step, `with Settings open, a link to ${ck} (a panel card's setting) left it off the screen`);
     }
+    await page.goto(`${srv.base}/#settings=config&group=${g}&key=${k}`, { waitUntil: "load" }); await wait(7000);
+    if (!(await knobAt(k))?.inView) note("PLACE", `${page.step} fresh`, `a link to ${k} on a fresh page left it off the screen`);
+    // ...and found by Settings' own search: the hit opens its group AT the setting - on a fresh page, so the group's loads come after
+    page.step = `links search ${grp}`;
+    const label = await page.evaluate((k) => document.querySelector(`[data-tq-knob="${k}"] p`)?.innerText || "", k);
+    await page.goto(`${srv.base}/#settings=config`, { waitUntil: "load" }); await wait(5000);
+    const box = await page.$("[data-tq-browse='settings'] [data-tq-browse-search]");
+    if (!box || !label.trim()) { note("PLACE", page.step, `Settings' search was not reached (box: ${!!box}, label of ${k}: "${label}")`); continue; }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await box.type(label.trim()); await wait(1200);
+    const hit = await page.$("[data-tq-browse='settings'] [data-tq-browse-card]");
+    if (!hit) note("PLACE", page.step, `searching "${label.trim()}" found nothing`);
+    else { await hit.click(); await wait(3500); if (!(await knobAt(k))?.inView) note("PLACE", page.step, `the search hit for "${label.trim()}" opened its group with ${k} off the screen`); }
+    walked.push(`links: a ${grp} setting by link, fresh and over Settings, and by search`);
   }
+  // NOTHING: a link the How mail is sorted panel draws in its own words ("still Connections") opens its place
+  page.step = "links panel";
+  await page.goto(`${srv.base}/#settings=config&group=${encodeURIComponent("How mail is sorted")}`, { waitUntil: "load" }); await wait(6000);
+  const before = await page.evaluate(() => location.hash);
+  const pressed = await page.evaluate(() => {
+    const b = [...document.querySelectorAll("[data-tq-browse='settings'] p button")].find((x) => x.innerText.trim() === "Connections");
+    b?.click(); return !!b;
+  });
+  if (!pressed) note("PLACE", page.step, "How mail is sorted drew no Connections link in its description - the panel link was not walked");
+  else { await wait(3000); const after = await page.evaluate(() => location.hash);
+    if (after === before || !(await page.$("[data-tq-browse='connections']"))) note("NOTHING", page.step, `the panel's Connections link left ${after} and no Connections page`);
+    walked.push("links: the How mail is sorted panel's own Connections link"); }
   // ADDRESS: Next moves the table on, and the address goes with it
   page.step = "links address";
   await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(5000);

@@ -1342,7 +1342,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const el = [...body.querySelectorAll(".tq-canvas-live, .tq-live-card")].pop();
     if (!el) return false;
     holdBottom.current = true;
-    const off = el.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    // ...UNLESS A LINK NAMED SOMETHING IN IT (appLinks.focusPlace marks it [data-tq-held]): then that is what is held, in the middle.
+    // Two holds on one scroll fought - the card's top pulled back over a setting a search hit had brought up (verify, 2026-10-19)
+    const held = el.querySelector("[data-tq-held]"), b = body.getBoundingClientRect(), r = (held || el).getBoundingClientRect();
+    const off = held ? r.top + r.height / 2 - (b.top + body.clientHeight / 2) : r.top - b.top;
     if (Math.abs(off) > 2) body.scrollTop += off;      // the body alone scrolls - scrollIntoView moved the whole page as well
     return true;
   }, []);

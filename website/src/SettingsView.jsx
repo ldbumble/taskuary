@@ -398,9 +398,13 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const knobShown = useRef("");
   useEffect(() => {
     const k = only?.knob || "", once = `${k}|${only?.at || ""}`;
-    if (!k || knobShown.current === once || !settings.some((x) => x.Name === k)) return;
+    // ...once the rows are in, not once the key is among them: a panel card's setting (concierge_model) may have no row at all
+    if (!k || knobShown.current === once || !settings.length) return;
     knobShown.current = once;
-    setTimeout(() => focusPlace(document.querySelector(`[data-tq-knob="${k}"]`)), 0);
+    // ...found again each frame: the row is redrawn when the group's panel stands up over it (focusPlace holds it there). `~=`: a panel
+    // card names every setting it stands for (AiDefaults' Slot) - the model of the General agent is that card, not a row of its own
+    const find = () => document.querySelector(`[data-tq-knob~="${k}"]`);
+    setTimeout(() => focusPlace(find(), find), 0);   // not drawn yet (the panel's card): focusPlace waits for it
   }, [only?.knob, only?.at, settings]);
   const [memory, setMemory] = useState([]);
   const [newNote, setNewNote] = useState(null);

@@ -37,7 +37,7 @@ test("a failed report run offers Try again as a real button, not a span", () => 
 test("AI defaults navigation links are keyboard-operable buttons", () => {
   const aiDefaults = read("AiDefaults.jsx");
   assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="caption" onClick={() => onGo(slot.owner_link)}'));
-  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}'));
+  assert.ok(aiDefaults.includes('<Typography component="button" type="button" variant="body2" onClick={() => onGo("connections")}'));   // a place words.json has (router.test.mjs)
 });
 
 test("Hub topic rows are keyboard-operable buttons", () => {

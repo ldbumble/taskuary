@@ -166,6 +166,9 @@ def _cold_running(s):
 def _cold_agent_failed(s):
     t = _task(s, 'Fix the export', quiet_d=6, Kind='coding')
     s._exec("INSERT INTO run (TaskId, AgentName, Status, StartedAt, UpdatedAt, FinishedAt) VALUES (?,?,?,?,?,?)", (t, 'coding', 'failed', at(d=6), at(d=6), at(d=6)))
+def _cold_five(s):
+    for i, title in enumerate(('Renew the PhishGuard licence', 'Close the August books', 'Trainly seats', 'Move payroll to Payworth', 'Lease renewal')):
+        _task(s, title, quiet_d=6 + i)
 def _cold_put_away(s):
     t = _task(s, 'Renew the PhishGuard licence', quiet_d=6)
     s._exec('UPDATE task SET RemindAt=? WHERE TaskId=?', ((datetime.now() + timedelta(days=5)).strftime('%Y-%m-%d 08:00:00'), t))
@@ -260,6 +263,8 @@ CASES = [
     ('cold', 'put away until next week (Remind me)', False, _cold_put_away, None),
     ('cold', 'waiting on someone else six days - the slipped lane chases', False, _cold_waiting_on_them, None),
     ('cold', 'put down, nothing moved since', False, _cold_plus, 'dismiss'),
+    ('cold', 'five tasks quiet - three said today', True, _cold_five, None),
+    ('cold', 'five tasks quiet - the next check the same day says none', False, _cold_five, 'dismiss'),
     ('cold', 'a draft has waited on you for six days', True, _cold_draft_waits, None),
     # health: the app's own failures
     ('health', 'a report failed its last three runs', True, _health_plus, None),
@@ -352,6 +357,9 @@ def evaluate(case) -> dict:
     mine = [l for l in lines if l['kind'] == kind]
     rail = rail_rows(s)
     noise = [r for r in (noise_of(s, l['kind'], l, rail) for l in lines) if r]
+    today = datetime.now().strftime('%Y-%m-%d')
+    if (n := sum(1 for i in s.list_ideas() if i.get('Kind') == 'cold' and str(i.get('LastSaid') or '')[:10] == today)) > 3:
+        noise.append(f'{n} "gone quiet" lines today - more than three a day')
     # a line of another kind is not this case's subject, but a line that should not be anywhere is noise wherever it lands
     if mine and not should: out, why = 'noise', f"fired: {mine[0]['text'][:110]}"
     elif mine and noise: out, why = 'noise', noise[0]
@@ -398,6 +406,9 @@ def world() -> list:
         else:
             why = noise_of(s, l['kind'], l, rail_rows(s))
             out.append({'kind': l['kind'], 'case': f"world, next check: {l['key']}", 'should': None, 'out': 'noise' if why else 'said', 'why': why or l['text'][:110]})
+    today = datetime.now().strftime('%Y-%m-%d')
+    if (n := sum(1 for i in s.list_ideas() if i.get('Kind') == 'cold' and str(i.get('LastSaid') or '')[:10] == today)) > 3:
+        out.append({'kind': 'cold', 'case': 'world: gone quiet, the day', 'should': False, 'out': 'noise', 'why': f'{n} "gone quiet" lines in one day'})
     return out
 
 

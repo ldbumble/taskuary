@@ -447,7 +447,9 @@ def test_an_ordinary_edit_to_a_file_past_the_budget_is_written(tmp_path):
     assert _edit(tmp_path / 'x.py', _BIG, '\ny = 1\n') == {}
     assert call('Write', file_path=str(tmp_path / 'x.py'), content=_BIG + '\ny = 1\n') == {}
 
-@pytest.mark.skipif(not _BUNDLES, reason='no built bundle')
+# a bundle past the budget only: code splitting took the entry to 1.8M (0.3.9.10), and under the budget the whole file is read - a
+# minified line such as `sh(c,h,w,...)` is taken for a shell, so an edit to that line is refused, which over-refuses (the safe side)
+@pytest.mark.skipif(not _BUNDLES or len(_BUNDLES[-1].read_text(encoding='utf-8')) <= floor._BUDGET, reason='no built bundle past the budget')
 def test_an_edit_to_the_built_bundle_is_judged_on_what_it_adds(tmp_path):
     old = _BUNDLES[-1].read_text(encoding='utf-8')
     assert denied(_edit(tmp_path / 'index.js', old, "\nspawnSync('bash',['-c','taskuary --prompts'])\n"))

@@ -79,6 +79,31 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(answers, ['build 1', 'build 2'])
 
 
+    def test_a_forced_read_after_a_write_never_takes_a_rebuild_that_began_before_it(self):
+        """A Done's rail rides along forced while a page's read is still building: that build began before the Done was
+        written, so handing it over gave the answer the rail from before the write - stamped as read after it."""
+        s = store()
+        started, release, calls, answers, top = threading.Event(), threading.Event(), [], [], [1]
+
+        def slow_build(_store):
+            n = len(calls); calls.append(1)
+            if not n: started.set(); release.wait(2)
+            return {'rev': f'build{n}', 'items': []}
+
+        def read(): answers.append(funnel.pile(s, force=True, observed=[])['rev'])
+
+        with mock.patch.object(funnel, 'announce', return_value=[]), \
+             mock.patch.object(funnel, 'build', side_effect=slow_build), \
+             mock.patch.object(funnel, 'alerts', return_value=[]), \
+             mock.patch.object(funnel, '_rail_top', side_effect=lambda _s: top[0]):
+            first = threading.Thread(target=read); first.start(); self.assertTrue(started.wait(1))
+            top[0] = 2                                             # the write, after the first build took its mark
+            second = threading.Thread(target=read); second.start(); time.sleep(.03); release.set()
+            first.join(2); second.join(2)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(answers, ['build0', 'build1'])
+
+
 class PausedConversationTests(unittest.TestCase):
     def test_saved_general_work_is_a_paused_agent_with_its_last_answer(self):
         s = store()

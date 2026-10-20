@@ -52,6 +52,7 @@ import { adviceRead, tableOf, tableWords } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { RemindPicker } from "./RemindMe.jsx";
+import { SlotPicker } from "./CalendarPick.jsx";
 import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
@@ -994,6 +995,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [old, setOld] = useState(null);               // an earlier chat, read-only
   const [aiEl, setAiEl] = useState(null);
   const [remindOn, setRemindOn] = useState(null);      // the walk's Remind me: { task, anchor }
+  const [slotsOn, setSlotsOn] = useState(null);        // the walk's Propose a new time / Find a time: { item, act, anchor }
   // THE ASSISTANT'S LIT BUTTON (assistantLight.js): a typed act lights the row's own verb for it until a press or the table moves on
   const [lit, setLit] = useState(null);
   useEffect(() => onPressed(() => setLit(null)), []);
@@ -1988,6 +1990,24 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     noteLine(`Type your answer below - it goes straight to ${item?.agent || "the agent"} that is waiting.`);
     setTimeout(() => composeRef.current?.focus(), 0);
   };
+  // THE CALENDAR'S ANSWERS (calwrite.py): Accept and Decline draft at once; Propose a new time and Find a time open the free times
+  // first (SlotPicker). Each lands on the table as a draft with Send lit, as a reply does - nothing reaches the calendar before the
+  // owner's Send. A card that may not write says so in one line, with its sign-in as the way out (failures.py's fix).
+  const calendarDrafted = (data, item) => {
+    if (!data?.ok) {
+      setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "error", text: data?.say || "That could not be drafted.", tid: item?.tid, ref: item?.ref,
+        chips: [...(data?.fix?.href ? [{ verb: "go", href: data.fix.href, label: data.fix.label }] : []), { verb: "next", label: btn("next") }] }]);
+      return;
+    }
+    setLit({ verb: "approve", label: btn("approve"), line: `Read it, then press ${btn("approve")} when you're sure.`, key: `review:${data.reviewId}`,
+             tid: item?.tid ? Number(item.tid) : null, landed: false });
+    putOnTable(null, "sync"); deferInChat(() => surfaceRef.current?.(`review:${data.reviewId}`), 300);
+  };
+  const calendarAnswer = async (item, act, slot = null) => {
+    setBusy(true); setErr("");
+    try { calendarDrafted((await api.post(`/api/messages/${item.mid}/calendar`, { act, ...(slot || {}) })).data, item); }
+    catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+  };
   // ONE road for every action word in the chat. A word the assistant offered is a word that runs: the
   // verb goes to the same proposal endpoint a card button uses, with the target explicit. The two that
   // are not proposals keep their own immediate behaviour - a reply DRAFTS (PW-126), Next moves the walk
@@ -2028,6 +2048,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // ...and with its agent still open the picker says to Stop and save first, instead of offering days (2026-10-01)
     if (c.verb === "defer") { if (item?.tid) setRemindOn({ task: { TaskId: item.tid, RemindAt: item.remind_at || "" }, anchor: anchor || null, ref: item.ref, live: agentOpen(item) }); return; }
     if (c.verb === "reply" || c.verb === "redraft") { await decide({ verb: c.verb }); return; }
+    if ((c.verb === "accept_invite" || c.verb === "decline_invite") && item?.mid) { await calendarAnswer(item, c.verb === "accept_invite" ? "accept" : "decline"); return; }
+    if ((c.verb === "propose_time" || c.verb === "find_time") && item?.mid) { setSlotsOn({ item, act: c.verb === "propose_time" ? "propose" : "schedule", anchor: anchor || null }); return; }
     // A FAILED ACT'S WAY ON (concierge.recover): the same confirmation once more, or the close-out's own GitHub button
     if (c.verb === "retry" && c.op) {
       await runProposal({ id: c.op, version: c.version, kind: c.kind, label: btn("try_again"), key: item?.key, tid: item?.tid, ref: item?.ref,
@@ -2663,6 +2685,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       </div>
       {remindOn && <RemindPicker task={remindOn.task} path={remindOn.path} anchor={remindOn.anchor || document.body} live={remindOn.live} onClose={() => setRemindOn(null)}
         onDone={(out) => { remindReceipt(out, remindOn.path ? null : remindOn.task.TaskId, remindOn.ref); if (out?.remindAt) advance(); }} />}
+      {slotsOn && <SlotPicker mid={slotsOn.item.mid} act={slotsOn.act} anchor={slotsOn.anchor || document.body} onClose={() => setSlotsOn(null)}
+        onRefused={(data) => calendarDrafted(data, slotsOn.item)} onPick={(slot) => calendarAnswer(slotsOn.item, slotsOn.act, slot)} />}
       <Popover open={!!aiEl} anchorEl={aiEl} onClose={() => setAiEl(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} transformOrigin={{ vertical: "top", horizontal: "right" }}
         slotProps={{ paper: { sx: { p: 1.5, width: 320 } } }}>
         <Typography sx={{ fontSize: 12, fontWeight: 600, color: INK, mb: 0.5 }}>{state?.scripted ? "Scripted demo assistant" : "Which AI speaks here"}</Typography>

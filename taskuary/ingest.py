@@ -14,7 +14,7 @@ from .routing import first_line, draft_task_fields, tokens
 from .policy import evaluate
 from .triage import classify_intent
 from .store import task_ref, auto_code_enabled, _now
-from . import remind, senders, words
+from . import buttons, remind, senders, words
 from .categories import agent_word, route_head
 
 # A task the stranger gate held back (senders.known). It is a TAG rather than a column because
@@ -173,6 +173,7 @@ def _from_row(r: dict, store=None) -> dict:
     try: meta = json.loads(r.get('MailMetaJson') or 'null') or {}
     except (TypeError, ValueError): meta = {}
     return {**({'invite': True} if meta.get('invite') else {}),       # judged later, it is still an invite (V5)
+            **({'cal': meta['cal']} if isinstance(meta.get('cal'), dict) else {}),     # ...and still the invite it was (calwrite)
             'external_id': r.get('ExternalId'), 'channel': r.get('Channel'), 'conversation_id': r.get('ConversationId'),
             'subject': r.get('Subject'), 'from_name': r.get('FromName'), 'from_email': r.get('FromEmail'), 'sent_at': r.get('SentAt'),
             'body': r.get('BodyText'), 'own_text': r.get('OwnText'), 'source_link': r.get('SourceLink'), 'source_name': r.get('SourceName'),
@@ -471,6 +472,22 @@ def drain(store, llm=None, progress=None, limit: int = 500, fresh=(), only_fresh
         return n
     finally:
         _DRAIN_LOCK.release()
+
+
+def invite_verdict(store, msg: dict) -> dict | None:
+    """An invite nobody has answered, as the owner's move: a reply-kind task whose answer is the calendar's (no email is
+    drafted for it), titled and summed up from the invite itself - who, what, when, and what it clashes with. None for any
+    other meeting mail, which stays fyi. No model reads it: the mail system already said what it is."""
+    from . import calwrite
+    c = calwrite.invite_of(msg)
+    if not calwrite.needs_answer(c): return None
+    who = msg.get('from_name') or c.get('organizer') or msg.get('from_email') or 'Someone'
+    what, at = c.get('subject') or msg.get('subject') or 'a meeting', calwrite.when(c.get('start'), c.get('end'), c.get('all_day'))
+    try: clash = calwrite.clash_line(store, c['start'], c['end'], skip=what) if c.get('start') and not c.get('all_day') else ''
+    except Exception as e: clash = ''; logger.debug(f'ingest: the invite clash was not read - {e}')
+    return {'intent': 'reply_only', 'invite': True, 'title': f'Invite: {what}'[:120],
+            'why': f"{who} invited you - {at}" + (f' - {clash}' if clash else ''),
+            'summary': f"{who} invited you to {what}, {at}." + (f' It {clash}.' if clash else '') + ' Accept, decline or propose a new time.'}
 
 
 def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
@@ -840,7 +857,10 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
             # NO KEYWORD FYI (the owner, 2026-09-25: "let triage decide that - fyi can sometimes be tasks"). The one
             # verdict made without a model is a calendar invite: a meeting to be READY for (assistant.prep preps it),
             # promoted by hand if the meeting itself needs something prepared.
-            pre = {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'} if msg.get('invite') else None
+            # ...unless it is a REQUEST nobody has answered (calwrite.needs_answer, by the mail system's own type): then the answer is
+            # the owner's move - its row offers Accept, Decline and Propose a new time, each drafted for their yes (the owner, 2026-10-20).
+            # An answer, an update or a cancellation is still a meeting to be ready for.
+            pre = (invite_verdict(store, msg) or {'intent': 'fyi', 'why': 'a calendar invite - a meeting to be ready for, not work'}) if msg.get('invite') else None
             if pre:
                 intent = pre
             elif llm is None:
@@ -1011,7 +1031,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         #   there is no setting for it (S1, 2026-09-25)
         # - CODING and GENERAL tasks start their agent by themselves when Settings and the sender allow it
         # - anything else that is real work queues as needs-you, for you to route
-        if f['kind'] == 'reply':
+        # ...an invite's answer is not an email: its row's Accept, Decline and Propose a new time draft it (calwrite.draft)
+        if f['kind'] == 'reply' and not intent.get('invite'):
             new_rid = rid = store.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending',
                                               'Reason': f"needs a reply: {intent.get('why') or 'question for you'}"
                                                         + (f' · {unsendable}' if unsendable else '')})
@@ -1078,6 +1099,8 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         # keeps its own verdict above for the Timeline, while store.task_verdict deliberately
         # continues to read the task-creating verdict for correction learning.
         verdict = _stored_verdict(intent)
+        # an invite's row reads as the invite - who, when, what it clashes with - not as triage's reply road (invite_verdict)
+        if intent.get('invite'): reason = f"{intent['why']} · your answer goes out only when you press {buttons.label('approve')}"
     store.add_route(mid, tid, r['decision'], r['score'], reason, r['candidates'], actor, verdict=verdict)
     logger.info(f"ingest: {r['decision']} -> {task_ref(tid)}")
     if r['decision'] == 'attach':                   # the Advisor on the event (advisor.py): the task has new mail

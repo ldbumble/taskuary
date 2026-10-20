@@ -24,7 +24,7 @@ export const draftCanSend = (caps, r) => {
   if (!r || r.CanSend === false) return false;
   let env = {};
   try { env = JSON.parse(r.Deliver || "{}") || {}; } catch { /* not an envelope */ }
-  return env.kind === "zoho_invoice" || canSend(caps, r.Channel || env.channel);
+  return env.kind === "zoho_invoice" || env.kind === "calendar" || canSend(caps, r.Channel || env.channel);   // outbound.OWN_ROAD
 };
 export function refreshCapabilities() {
   asked = null;

@@ -64,7 +64,7 @@ caught it before triage ever saw it".
 | 7 | Still the same ask? | **AI** | Chats only, and only when step 6 attached: does this line continue that task or start a new one? |
 | 8 | Your standing ruling | gate | If you already ruled on this conversation it is filed, quoting your own words. Your rulings outrank the classifier. |
 | 9 | An agent is waiting | gate | If a run is live on the attached task, no verdict is asked for — the message goes to the agent as its answer. |
-| 10 | The verdict | gate, then **AI** | Tracker items, obvious noise and calendar invites settle with no call. Everything else is one call reading `TRIAGE.md`, `SOUL.md`, `JOB.md`, `LEARNED.md` and your past verdicts. |
+| 10 | The verdict | gate, then **AI** | Tracker items, obvious noise and calendar mail settle with no call - an invite nobody has answered becomes yours to Accept, Decline or Propose a new time; an answer, an update or a cancellation is fyi. Everything else is one call reading `TRIAGE.md`, `SOUL.md`, `JOB.md`, `LEARNED.md` and your past verdicts. |
 | 11 | Acting on it | gate | `fyi` files. A reply files instead of drafting when replies are off for that channel. Anything else becomes a task with its kind. |
 
 Two rules hold wherever AI is involved. With no AI connector, a message is **filed** with

@@ -59,7 +59,7 @@ def draft_channel(store, rid) -> str:
     if not r or r.get('Kind') == 'action': return ''
     try: env = json.loads(r.get('Deliver') or '{}') or {}
     except (TypeError, ValueError): env = {}
-    if not isinstance(env, dict) or env.get('kind') == 'zoho_invoice': return ''
+    if not isinstance(env, dict) or env.get('kind') in ('zoho_invoice', 'calendar'): return ''      # outbound.OWN_ROAD
     m = (store.get_message(r['MessageId']) if r.get('MessageId') else None) or {}
     return str(m.get('Channel') or env.get('channel') or '')
 

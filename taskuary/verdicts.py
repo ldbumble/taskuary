@@ -27,6 +27,8 @@ def context_moved(store, rv: dict):
     # one of the task's emails (slots.py) never goes stale: the stale road REWRITES the draft as a reply to the sender,
     # which would put an answer to someone else under this email's address. The owner sends the words they see.
     if rv.get('Kind') == 'slot': return False, None
+    # ...nor does a calendar answer (calwrite.py): it answers the invite, not the newest mail on the thread
+    if _envelope(rv).get('kind') == 'calendar': return False, None
     if tid:
         latest = store.last_material_inbound_on_task(tid)
         if rv.get('ContextRevision'): moved = operations.message_revision(store, tid) != rv['ContextRevision']
@@ -160,6 +162,9 @@ def _send_snapshot(store, snapshot):
         scopes.require(c, 'zoho_invoice_send')
         return zoho.send_invoice(zoho.connection(store, c['ConnectorId']), env.get('invoice_id'),
                                  env.get('to'), env.get('subject'), body)
+    if env.get('kind') == 'calendar':                 # an invite answered or a meeting booked: the note is the comment
+        from . import calwrite
+        return calwrite.deliver(store, env, body)
     return outbound.send_out(store, env.get('channel'), env.get('to'), env.get('subject'), body, cc=env.get('cc'),
                              attachments=env.get('attachments'), mailbox=env.get('mailbox'))
 
@@ -228,7 +233,10 @@ def _deliver_review(store, rv, final, verb, actor, note=None, cc=None, envelope=
             from . import invoice_workflow
             invoice_workflow.mark_sent(store, int(attempted['envelope'].get('item_id')),
                                         attempted['envelope'].get('subject'), attempted['body'])
-        if rv.get('TaskId'):
+        if rv.get('TaskId') and attempted['envelope'].get('kind') == 'calendar':
+            from . import calwrite
+            store.add_comment(rv['TaskId'], actor, 'human', calwrite.done_line(attempted['envelope'], attempted['body']))
+        elif rv.get('TaskId'):
             copied = f", copied {', '.join(sent.get('cc') or [])}" if sent.get('cc') else ''
             files = f" with {', '.join(sent.get('attached') or [])}" if sent.get('attached') else ''
             store.add_comment(rv['TaskId'], actor, 'human', f"Reviewed draft ({verb}):\n{attempted['body']}")
@@ -437,7 +445,9 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
             and not all('@' in str(x) for x in (_envelope(rv).get('to') or [''])):
         return {'ok': False, 'status': 'pending', 'sent': None,
                 'send_error': 'this email has no address yet - the agent fills it with --to, or drop it'}
-    if verb_in in ('approve', 'edit') and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
+    # A CALENDAR ANSWER NEEDS NO WORDS (calwrite.py): its note is optional, and an emptied box is "no note", never the line it held
+    cal = _envelope(rv).get('kind') == 'calendar'
+    if verb_in in ('approve', 'edit') and not cal and not (final_text or '').strip() and not (rv.get('DraftText') or '').strip():
         return {'ok': False, 'status': 'pending', 'sent': None, 'empty': True,
                 'send_error': 'there is no draft to send - write the reply (or let the AI draft it) and approve that'}
     # the draft is checked against the thread AS IT IS NOW before anything leaves (PW-055): a stale mark, or an
@@ -471,7 +481,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         return {'ok': True, 'status': 'closed_unsent', 'sent': None, 'send_error': None}
     # ONE approve: if the text differs from the draft, it was edited - no need to declare it
     if verb_in in ('approve', 'edit'):
-        final = final_text if (final_text or '').strip() else rv.get('DraftText')
+        final = final_text if (final_text or '').strip() or (cal and final_text is not None) else rv.get('DraftText')
         verb = 'edit' if (final or '').strip() != (rv.get('DraftText') or '').strip() else 'approve'
     else:
         final, verb = None, verb_in
@@ -507,7 +517,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
         proposals.settle(store, rv, verb, actor)
         return {'ok': True, 'status': VERB2STATUS[verb], 'sent': None, 'send_error': None}
     deliver = _envelope(rv)
-    if final and (rv.get('MessageId') or deliver):
+    if (final or (cal and verb in ('approve', 'edit'))) and (rv.get('MessageId') or deliver):
         result = _deliver_review(store, rv, final, verb, actor, note, cc, anyway=anyway)
         if not result.get('ok') or result.get('send_error'): return result
         sent, send_err = result.get('sent'), None
@@ -532,7 +542,7 @@ def decide(store, rv: dict, verb_in: str, final_text: str = None, note: str = No
     if result is None and verb in ('approve', 'edit') and rv.get('TaskId') and not send_err:
         _settle_task_after_sent_reply(store, rv, actor, False)
     store.audit('review', rid, verb, actor, detail={'kind': rv.get('Kind'), 'sent': bool(sent)})
-    if verb in ('edit', 'reject', 'no_reply'):
+    if verb in ('edit', 'reject', 'no_reply') and not cal:          # a calendar note's one line teaches no voice
         m = (store.get_message(rv['MessageId']) if rv.get('MessageId') else None) or {}
         # an EDIT's note is about the wording - it goes to STYLE.md as a writing instruction (PW-061); a rejection's
         # or no-reply's note is about whether a reply was owed at all, which is triage's to learn

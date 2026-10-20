@@ -83,6 +83,8 @@ const NOT_BUTTONS = {
   "BugReportDialog.jsx": ["Send"], "GeneralWorkspace.jsx": ["Send"], "ui.jsx": ["Send"],
   // a report's setup wizard steps forward with its own Continue - not the agent's (2026-10-18, when continue's label became "Continue")
   "ReportsView.jsx": ["Continue"],
+  // a pull request close-out's other answer - close it unmerged - not an invite's Decline (2026-10-20, when decline_invite came)
+  "reviewProposal.js": ["Decline"],
 };
 test("no page file types a button's label: every one is read from buttons.js", () => {
   const hits = [];

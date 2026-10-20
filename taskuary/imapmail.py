@@ -362,7 +362,7 @@ def _rewound(user: str, box: str, saved, seen) -> bool:
     return changed
 
 
-def protocol_marks(msg) -> dict:
+def protocol_marks(msg, me=(), tz=None) -> dict:
     """What a raw mail's own protocol says about it, for ingest: an auto-reply (autoreply.from_headers), a calendar
     message (its text/calendar part - counsel.mime_invite) and who sent it before a model has read it
     (categories.header_class). Never a subject or a body word (2026-10-11)."""
@@ -376,7 +376,11 @@ def protocol_marks(msg) -> dict:
     try: v = mailauth.verdict(msg)                # did the receiving server verify the From (senders.known)
     except Exception as e: v = 'none'; logger.warning(f'imap: mail auth unreadable - {e}')   # never a stuck UID
     if v != 'none': out['auth'] = v
-    if mime_invite(msg): out.update(invite=True, mail_meta={'invite': True})
+    if mime_invite(msg):
+        # ...and WHICH calendar message: a request, an answer or a cancellation, and whether `me` answered it (calwrite.from_ics)
+        from .calwrite import from_ics, ics_of
+        c = from_ics(ics_of(msg), me, tz)
+        out.update(invite=True, mail_meta={'invite': True, **({'cal': c} if c else {})}, **({'cal': c} if c else {}))
     return out
 
 
@@ -719,7 +723,8 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     # References threads replies the way Graph's conversationId does
                     'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
                     'sent_at': sent_at, 'source_name': user}
-                incoming.update(protocol_marks(msg))
+                from .calendar import tz_of
+                incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))
             except Exception as e:
                 raise _UIDFetchFailure(f'uid {uid} headers could not be decoded: {e}') from e
             conv = incoming['conversation_id']

@@ -84,7 +84,7 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all", grou
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <CardGrid>{shown.map((c) => <ConnCard key={c.key} c={c} />)}</CardGrid>
-      {one ? <>{detail}<Box><Button size="small" onClick={onAll} sx={small}>{allLabel}</Button></Box></>
+      {one ? <>{detail}{onAll && <Box><Button size="small" onClick={onAll} sx={small}>{allLabel}</Button></Box>}</>
         : cards.length > FIRST && <Box><Button size="small" onClick={() => setAll((v) => !v)} sx={small}>
           {all ? "Show fewer" : `${more} (${cards.length - FIRST})`}</Button></Box>}
       {!one && group?.cards.length > 0 && <>
@@ -106,6 +106,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const [browse, setBrowse] = useState(false);                              // "Pick a different AI": every card again
   const [url, setUrl] = useState(""), [details, setDetails] = useState(false);   // the login's own link; its terminal, hidden
   const [signing, setSigning] = useState(null);                             // {cid, flow, url}: ChatGPT's browser sign-in under way
+  const [signFail, setSignFail] = useState(null);                           // {cid}: the last ChatGPT sign-in ENDED without signing in
   const [aboutLine, setAboutLine] = useState("");                           // About your work's question, for the Advisor's line
   // THE ONE LIT MOVE (Light, below): the row verb it is, as state so the row has it in the pass the shelf is drawn; and the words of
   // the canvas button it lit, read off that button so the line can only name what the screen shows
@@ -262,6 +263,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // A CLI CARD IS ONE CLICK: connect, test, make it the AI (firstrun.choose_cli) - or install it first when it is not here
   const pick = async (ai) => {
     setErr("");
+    endSignin(); moveOn();                           // another AI picked: the ChatGPT sign-in waiting in a tab is not the move any more
     if (!ai.installed && ai.install && !ai.done) { install(ai); return; }
     setBusy(ai.name); setOpen(null); setBrowse(false);
     setSaid(`Checking that ${ai.title} works - it sorts one test email, up to two minutes…`);
@@ -272,32 +274,52 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // CHATGPT IS A BROWSER SIGN-IN, not a CLI in a terminal (the owner, 2026-10-15: "for chatgpt regular why are you opening a
   // terminal??? no need for that. it's a regular oauth setup"): its card's own sign-in (chatgptauth), then tested and made the AI
   // ONE SIGN-IN AT A TIME, ITS OWN TOKEN: Cancel (or leaving setup) drops it, and the loop checks after every wait - it kept polling
-  // past Cancel, found no sign-in in progress, and put up a red "didn't finish" on the very road the card recommends (2026-10-17)
+  // past Cancel, found no sign-in in progress, and put up a red "didn't finish" on the very road the card offers (2026-10-17)
   const signRef = useRef(null);
   useEffect(() => () => { signRef.current = null; }, []);
+  // A SIGN-IN THAT ENDED IS OVER (the owner, 2026-10-20: the sign-in failed, the card and the Advisor still said "finish signing in",
+  // and pressing ChatGPT again did nothing - "totally broken"): a poll the server answers with an error, a few that do not reach it, a
+  // timeout, Cancel, "Pick a different AI" or another card all end it, and the card keeps the failure with ChatGPT pressable again
+  const endSignin = (why = "") => {
+    const cur = signRef.current;
+    signRef.current = null;
+    if (cur?.flow) api.post(`/api/connectors/${cur.cid}/chatgpt/cancel`, { flow: cur.flow }).catch(() => {});
+    setSigning(null);
+    if (why) { setSignFail({ cid: cur?.cid, focus: true }); setErr(why); }
+  };
   const planSignin = async (c) => {
-    setErr(""); setOpen(null); setBrowse(false);
-    const me = {}; signRef.current = me;
+    endSignin();                                       // pressed again: the old attempt's listener goes, and this one starts afresh
+    setErr(""); setOpen(null); setBrowse(false); setSignFail(null);
+    const me = { cid: c.ConnectorId }; signRef.current = me;
     const gone = () => signRef.current !== me;
+    // ...and read again: the server keeps the failure as setup's fix, so its card is the one that stands with it
+    const failed = (why) => { if (!gone()) { endSignin(`The ChatGPT sign-in didn't finish: ${why}. Pick ChatGPT to try again, or pick another AI.`); reload(); } };
     let flow;
     try { flow = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/signin`)).data; }
-    catch (e) { if (!gone()) setErr(`${errText(e)} Pick ChatGPT to try again, or pick another AI.`); return; }
+    catch (e) { if (!gone()) { signRef.current = null; setSignFail({ cid: c.ConnectorId, focus: true }); setErr(`${errText(e)} Pick ChatGPT to try again, or pick another AI.`); } return; }
     if (gone()) return;
+    me.flow = flow.flow;
     setSigning({ cid: c.ConnectorId, flow: flow.flow, url: flow.url });
     window.open(flow.url, "_blank", "noopener");
+    let lost = 0;
     for (const until = Date.now() + 10 * 60_000; Date.now() < until;) {
       await new Promise((r) => setTimeout(r, 2000));
       if (gone()) return;
       let d;
-      try { d = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/poll`, { flow: flow.flow })).data; } catch { continue; }
+      try { d = (await api.post(`/api/connectors/${c.ConnectorId}/chatgpt/poll`, { flow: flow.flow })).data; lost = 0; }
+      catch (e) {
+        // the server answered, with an error: the attempt is over. Not reached at all: a blip, until it happens three times running
+        if (e?.response) return failed(e.response.data?.detail || `Taskuary could not check it (${e.response.status})`);
+        if (++lost >= 3) return failed("Taskuary could not reach itself to check it");
+        continue;
+      }
       if (gone()) return;
-      if (d.status === "pending") continue;
-      setSigning(null); signRef.current = null;
-      if (d.status !== "ok") { setErr(`The ChatGPT sign-in didn't finish: ${d.detail || "no reason given"}. Pick ChatGPT to try again.`); return; }
+      if (d?.status === "pending") continue;
+      if (d?.status !== "ok") return failed(d?.detail || "no reason given");
+      signRef.current = null; setSigning(null);
       return planCheck(c.ConnectorId);
     }
-    if (gone()) return;
-    signRef.current = null; setSigning(null); setErr("The ChatGPT sign-in took too long. Pick ChatGPT to start it again.");
+    failed("it took longer than ten minutes");
   };
   const planCheck = async (cid) => {
     setErr(""); setBusy(`c${cid}`); setSaid("Checking ChatGPT works - it sorts one test email, up to two minutes…");
@@ -305,11 +327,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     catch (e) { setErr(`${errText(e)} Pick ChatGPT to try again.`); }
     await reload(); setBusy(""); setSaid("");
   };
-  const cancelSignin = () => {
-    signRef.current = null;
-    if (signing) api.post(`/api/connectors/${signing.cid}/chatgpt/cancel`, { flow: signing.flow }).catch(() => {});
-    setSigning(null); setErr("");
-  };
+  const cancelSignin = () => { endSignin(); setErr(""); };
   const install = async (ai, verb = "Installing") => {
     setErr(""); setBusy(ai.name); setSaid(`${verb} ${ai.title}… this takes about a minute.`);
     try {
@@ -337,7 +355,9 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
 
   const byType = (types) => types.flatMap((t) => conns.filter((c) => c.Type === t));
   // plain: the same card, its state in a first-time owner's words (connCardOf) - the Connections page keeps its own
-  const card = (c, simple) => connCardOf(c, sources, () => setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })), true);
+  // ...pressing another card is the person moving on: the failed sign-in keeps its words on its card, but no longer stands alone
+  const moveOn = () => setSignFail((f) => f && { ...f, focus: false });
+  const card = (c, simple) => connCardOf(c, sources, () => { moveOn(); setOpen((o) => (o?.id === c.ConnectorId ? null : { id: c.ConnectorId, simple })); }, true);
   // the CLIs read as cards the catalogue would draw: the AI's name, its maker's logo, and its state in the same plain words
   // ...in words that say what to do: one that can't install here says what to pick instead, one installed needs its sign-in
   const noInstall = "Can't install on this computer - pick ChatGPT or a key instead";
@@ -353,18 +373,21 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     return { key: `cli-${ai.name}`, title: ai.title, channel: CLI_LOGO[ai.name] || "cli", go: busy ? undefined : () => pick(ai),
       state, plain: true, desc: `${words} · ${ai.sub}` };
   });
-  // ChatGPT leads: the plan most people already pay for, signed in through the browser (planSignin) - not the Codex CLI's terminal
+  // ChatGPT: the plan, signed in through the browser (planSignin) - not the Codex CLI's terminal
   const plan = byType(["chatgpt"])[0], planKey = plan && `c${plan.ConnectorId}`;
   const planBusy = busy && busy === planKey;
   // THE AI IN USE BY ITS CONNECTION, never its name: "ChatGPT (your plan)" never matched the card titled ChatGPT, which said
   // "Not set up" under "Your AI is ChatGPT" and started a new sign-in when pressed (2026-10-17)
   const inUseCid = (c) => st.step !== "ai" && st.brain?.pick === `connector:${c.ConnectorId}`;
   const planOn = plan && inUseCid(plan) && fix?.key !== planKey;
+  // a sign-in that ended without signing in - this one, or one the card remembers (its LastError, server.chatgpt_poll)
+  const planFailed = !!plan && (signFail?.cid === plan.ConnectorId || (!!plan.LastError && !plan.HasSecret));
   const planCard = plan && { ...card(plan, true), title: "ChatGPT", channel: "openai", plain: true, pick: `connector:${plan.ConnectorId}`,
-    state: signing || planBusy || planOn ? "on" : fix?.key === planKey ? "failing" : "off",
-    desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : fix?.key === planKey ? "Signed in · not answering"
+    state: signing || planBusy || planOn ? "on" : fix?.key === planKey || planFailed ? "failing" : "off",
+    desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : planFailed ? "Sign-in didn't finish - pick it to try again" : fix?.key === planKey ? "Signed in · not answering"
       : planOn ? "Your AI - it sorts your mail" : "Not set up"}` + " · sign in with your ChatGPT account",
-    go: busy || signing || planOn ? undefined : () => planSignin(plan) };
+    // ...and pressable while a sign-in waits: pressing it again starts a fresh one - it did nothing, and the old one never ended
+    go: busy || planOn ? undefined : () => planSignin(plan) };
   const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), pick: `connector:${c.ConnectorId}` }));
   // WHAT MOST PEOPLE HAVE LEADS (the non-coder audit, 2026-10-17): the first four were ChatGPT and three coding tools, with the
   // organisation's card and the keys under More AI. ChatGPT, the organisation card when there is one, the keys - and the coding
@@ -396,7 +419,11 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
-  const focus = !open && focusOf({ ...st, step: q === "ai" ? "ai" : st.step }, planBusy ? "" : busy, browse, signing ? `c${signing.cid}` : planBusy ? busy : null);
+  // the card JUST tried stands alone with its failure - a failure of an earlier pick (the server's fix) stood there instead, and the
+  // ChatGPT card just pressed was nowhere on the screen (2026-10-20)
+  const justFailed = signFail?.focus && plan && signFail.cid === plan.ConnectorId ? planKey : null;
+  const focus = !open && focusOf({ ...st, step: q === "ai" ? "ai" : st.step }, planBusy ? "" : busy, browse,
+    signing ? `c${signing.cid}` : planBusy ? busy : justFailed);
   const check = () => (fix?.key ? planCheck(Number(fix.key.slice(1))) : fixed && pick(fixed));
   // the login ended: check it, and if it still fails the Sign in button is back rather than a pane that has exited
   const ended = () => { setPane(null); check(); };
@@ -463,7 +490,9 @@ ${fix.detail || ""}`, screen: "Setup",
   // ...Pick a different AI pressed over a failing one: the owner asked for another, so the failing card is not the move, nor its fix the line
   const fixKey = fix && (fix.key || `cli-${fix.name}`);
   const shelfShown = q === "mail" ? mail.slice(0, FIRST) : q === "ai" ? [...ai.slice(0, FIRST), ...coding].filter((c) => !browse || c.key !== fixKey) : [];
-  const litCard = canvas || fixRow.length ? null : cardOf(st, q, shelfShown, !!busy || !!signing || !!open || !!focus);
+  // a card standing alone with nothing of its own to press (a failed sign-in: no Try again, no Sign in) is itself the move - it is lit
+  const alone = focus && !cliDetail ? [...ai, ...coding].find((c) => c.key === focus && c.go) : null;
+  const litCard = canvas || fixRow.length ? null : alone || cardOf(st, q, shelfShown, !!busy || !!signing || !!open || !!focus);
   const oneSignIn = !!litCard && conns.some((c) => `c${c.ConnectorId}` === litCard.key && c.Type === "outlook");
   const onward = nav.find((m) => !m.disabled && m.id === (q === "other" ? "finish" : "next"));
   const litId = canvas || litCard || ["about", "done"].includes(q) ? "" : fixRow[0]?.id || (onward ? `setup:${onward.id}` : "");
@@ -475,6 +504,7 @@ ${fix.detail || ""}`, screen: "Setup",
     ai: (!browse && fix?.why) || (signing ? "Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done." : "") || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? `What AI do you have? ${!litCard
       ? (found.length === 1 ? `${found[0].title} is on this computer - pick it if that is the one you use, or pick any other` : "Pick the one you use")
       : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
+      : litCard.state === "failing" ? `${litCard.title} didn't work last time - pick ${litCard.title} to try again, or pick another`
       : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort your mail.`
       : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
@@ -501,7 +531,7 @@ ${fix.detail || ""}`, screen: "Setup",
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Shelf cards={cards} more={more} opened={(open && `c${open.id}`) || (k === "ai" && focus) || null} group={group}
         detail={<Box data-tq-setup-scope="">{open ? detail : cliDetail}</Box>} allLabel={k === "ai" ? "Pick a different AI" : "Show all"}
-        onAll={() => { setOpen(null); if (k === "ai") setBrowse(true); }} />
+        onAll={k === "ai" && busy ? null : () => { setOpen(null); if (k === "ai") { if (signing) cancelSignin(); setBrowse(true); } }} />
     </Box>
   );
   // About your work saved: Setup complete only once the AI and the mail work too - else the first step still undone

@@ -46,7 +46,7 @@ test("on the setup screen the same cards say their state in plain words; Connect
   assert.match(cv, /export const connCardOf = \(c, sources, go, plain = false\) =>/, "a mode of the shared card, not a copy");
   assert.match(cv, /const connState = \(c\) => \(c\.state \|\|/, "a plain card carries its state, its words are not parsed");
   for (const w of ["Not set up", "Connected", "Needs sign-in", "Not answering"]) assert.match(cv, new RegExp(`"${w}`), w);
-  assert.match(fr, /connCardOf\(c, sources, \(\) => setOpen[^\n]*, true\)/, "every connector card on the setup screen is plain");
+  assert.match(fr, /connCardOf\(c, sources, \(\) => \{ moveOn\(\); setOpen[^\n]*, true\)/,"every connector card on the setup screen is plain");
   assert.doesNotMatch(fr, /last test failed|not set up/, "the CLI cards use the same plain words");
   assert.match(cv, /chanCard = \(c\) => connCardOf\(c, sources, \(\) => setOpen\(\{ kind: "connector", id: c\.ConnectorId \}\)\);/, "Connections is unchanged");
 });
@@ -108,7 +108,8 @@ test("setup reads for someone with no coding tool, and its loops and errors beha
   assert.doesNotMatch(fr, /"Installed - needs sign-in"/, "found on PATH says nothing about a sign-in it never checked");
   assert.doesNotMatch(fr, /below - |Click it below|card below/, "the cards are above the line");
   // Cancel stops the ChatGPT sign-in loop - it is checked after every wait - and so does leaving setup
-  assert.match(fr, /const gone = \(\) => signRef\.current !== me;/); assert.match(fr, /const cancelSignin = \(\) => \{\n\s+signRef\.current = null;/);
+  assert.match(fr, /const gone = \(\) => signRef\.current !== me;/); assert.match(fr, /const cancelSignin = \(\) => \{ endSignin\(\); setErr\(""\); \};/);
+  assert.match(fr, /const endSignin = \(why = ""\) => \{\n\s+const cur = signRef\.current;\n\s+signRef\.current = null;/);
   assert.match(fr, /useEffect\(\(\) => \(\) => \{ signRef\.current = null; \}, \[\]\);/);
   // a background read never clears an error; the first load that failed is tried again, with Try again
   assert.doesNotMatch(fr, /setSources\(s\.data\.data \|\| \[\]\); setErr\(""\)/);

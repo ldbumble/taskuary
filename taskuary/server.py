@@ -5665,8 +5665,9 @@ def _chatgpt_card(cid):
 def chatgpt_signin(cid: int):
     """Start the browser sign-in: the URL the page opens, and a flow id to poll with. The browser comes back to a
     listener on 127.0.0.1 that lives only for this attempt."""
-    from . import chatgptauth
+    from . import chatgptauth, firstrun
     _c, cfg = _chatgpt_card(cid)
+    store.set_setting(firstrun.FIX, '', ACTOR)                  # a new attempt: the last pick's failure is not this one's
     try: return chatgptauth.start(cfg)
     except RuntimeError as e: raise HTTPException(409, str(e))
 
@@ -5674,16 +5675,32 @@ def chatgpt_signin(cid: int):
 def chatgpt_poll(cid: int, body: dict):
     """pending until the browser comes back; then the card is signed in as them - the refresh token is its secret, the
     issued client id and this install's host id its config."""
-    from . import chatgptauth
+    from . import chatgptauth, firstrun
     _c, cfg = _chatgpt_card(cid)
+    # A SIGN-IN THAT FAILED IS SAID ON ITS CARD, and anything that goes wrong ends it (the owner, 2026-10-20: the sign-in failed,
+    # the card still said "finish signing in", and closed and opened again it read "Not set up" as if nothing had happened): the
+    # failure is the card's LastError - its red dot and its words - until a sign-in works
+    # ...and setup's own fix, like a key or a CLI that failed (firstrun.FIX): a failure on another card stood alone over this one,
+    # and the ChatGPT card just pressed was nowhere on the screen
+    def failed(why):
+        said = f"The ChatGPT sign-in didn't finish: {why}"
+        store.touch_connector(cid, said)
+        store.set_setting(firstrun.FIX, json.dumps({'key': f'c{cid}', 'name': 'chatgpt', 'title': 'ChatGPT', 'fix': '', 'setup': '', 'install': '',
+                                                    'why': f'{said.rstrip(".")}. Pick ChatGPT to try again, or pick another AI.', 'detail': ''}), ACTOR)
+        return {'status': 'error', 'detail': why}
     try: t = chatgptauth.poll((body or {}).get('flow') or '')
-    except RuntimeError as e: return {'status': 'error', 'detail': str(e)}
-    except requests.RequestException as e: return {'status': 'error', 'detail': f'could not reach auth.openai.com: {str(e)[:160]}'}
+    except RuntimeError as e: return failed(str(e))
+    except requests.RequestException as e: return failed(f'could not reach auth.openai.com: {str(e)[:160]}')
+    # ...a 500 here (an answer that was not JSON) left the page polling over a sign-in that was already over
+    except Exception as e:
+        logger.warning(f'chatgpt sign-in poll failed: {e!r}')
+        return failed(f'the answer from OpenAI could not be read ({type(e).__name__})')
     if t.get('pending'): return {'status': 'pending'}
     cfg = {**cfg, 'auth': 'user', 'client_id': t['client_id'], 'host_id': t['host_id'], 'account': t['email'], 'name': t['name'],
            'sub': t['sub'], 'granted_scope': t['scope']}
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
     store.audit('connector', cid, 'chatgpt_signin', ACTOR, detail={'account': t['email']})
+    store.touch_connector(cid)                                  # the last failure is over
     # ...and with no brain chosen, the one just signed in IS the brain, now - "Pick it as a brain under Settings" sent a
     # first-time owner off to a page they had never seen, and the mail sat untriaged meanwhile (a first-run log, 2026-10-14)
     adopted = not str(store.get_setting('triage_ai') or '').strip()

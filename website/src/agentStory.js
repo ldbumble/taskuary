@@ -3,9 +3,12 @@
 // agent did so far and was interrupted or it never started").
 
 import { agentWord } from "./kinds.js";
+import { WORD } from "./lanes.js";
 
-// the chip beside "Agent work" - only the two that wait on the owner wear oxblood
-export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started", news: "earlier session" };
+// the chip beside "Agent work" - only the two that wait on the owner wear oxblood. `finished`: its run said it was done - the chip read
+// "not started" over "finished its work" (G7, 2026-10-20); the word is the one the list and the Board give it (lanes.json agentdone)
+export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started", news: "earlier session",
+  finished: WORD.agentdone };
 export const storyAlarm = (kind) => kind === "held" || kind === "interrupted";
 
 // a live session tells its own story, and a queued start already has its card (QueuedStart) with Start now and Cancel

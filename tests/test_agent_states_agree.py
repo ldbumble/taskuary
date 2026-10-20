@@ -58,6 +58,12 @@ class AgentStatesAgreeTests(unittest.TestCase):
             self.assertEqual(concierge.chips_for(self.s, item)[0]['verb'], 'answer_agent')
             self.assertEqual(workerstate.status(self.s, tid)['state'], 'input_needed')
 
+    def test_the_agent_step_tells_how_the_run_ended(self):
+        """The task page's agent step (funnel.agent_story): a finished run read "not started" over "finished its work" (G7)."""
+        from taskuary import funnel
+        story = lambda k: (funnel.agent_story(self.s, self.w[k]) or {}).get('kind')
+        self.assertEqual((story('coding-finished'), story('coding-failed'), story('coding-stopped-saved')), ('finished', 'left', 'left'))
+
     def test_a_stopped_run_offers_no_stop(self):
         """Nothing is live on a stopped run: no Stop and save on its rail row, and its own word says it was stopped (the task page reads
         runEnded to leave the button off - taskLifecycle.endedByStop)."""

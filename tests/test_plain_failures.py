@@ -90,3 +90,34 @@ class NumberSettingTests(unittest.TestCase):
             for good in ('21', '0', ''):
                 self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': good}).status_code, 200, good)
             self.assertEqual(c.patch('/api/settings', json={'name': 'ui_note', 'value': '-5'}).status_code, 200, 'not a number knob')
+
+
+class CardErrorWordsTests(unittest.TestCase):
+    """The 2026-10-19 UI walk: the GitHub card printed "401 Client Error: Unauthorized for url: https://api.github.com/user" under
+    Save, and the Slack card "invalid_auth" - the raw LastError, and the save's own discovery error, drawn as they came."""
+    def test_an_api_that_says_no_in_its_own_word_is_a_refused_key(self):
+        for raw in ('slack auth.test: invalid_auth', 'slack conversations.history: token_revoked', 'not_authed', 'Bad credentials'):
+            self.assertIn('key or password', plain_failure(RuntimeError(raw)), raw)
+        self.assertEqual(channels.plain_error_text(None), ''); self.assertEqual(channels.plain_error_text('no mailbox address set'), 'no mailbox address set')
+
+    def test_the_card_list_carries_the_plain_words_and_keeps_the_raw_error(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from taskuary.store import MemoryStore
+        s = MemoryStore(); cid = s.get_connector_by_type('slack')['ConnectorId']
+        s.touch_connector(cid, 'slack auth.test: invalid_auth')
+        with mock.patch.object(server, 'store', s):
+            row = next(c for c in TestClient(server.app).get('/api/connectors').json()['data'] if c['ConnectorId'] == cid)
+        self.assertEqual(row['LastError'], 'slack auth.test: invalid_auth', 'kept raw: problems.lapsed reads it')
+        self.assertIn('key or password', row['LastErrorPlain']); self.assertNotIn('invalid_auth', row['LastErrorPlain'])
+
+    def test_a_github_token_refused_on_save_says_so_in_words(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from taskuary.store import MemoryStore
+        s = MemoryStore(); cid = s.get_connector_by_type('github')['ConnectorId']
+        with mock.patch.object(server, 'store', s), mock.patch.object(channels, 'github_discover',
+                side_effect=RuntimeError('401 Client Error: Unauthorized for url: https://api.vendor.example/user')), \
+                mock.patch('taskuary.docsync.sync_connections'):
+            d = TestClient(server.app).post('/api/connectors', json={'ConnectorId': cid, 'ConfigJson': '{}', 'Secret': 'not-a-token'}).json()
+        self.assertIn('key or password', d['discovery']['error']); self.assertNotIn('Client Error', d['discovery']['error'])

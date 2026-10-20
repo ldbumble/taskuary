@@ -5284,7 +5284,10 @@ def connectors(request: Request):
     Agents still list cards (they have to pick a tool) but ConfigJson drops credential keys."""
     from . import problems, scopes
     # SignedOut: a stored token is not a sign-in - Microsoft can let it lapse, and the card said "Signed in" over it
-    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c)} for c in store.list_connectors()]
+    # LastErrorPlain: the card's red line in words - LastError stays raw for problems.lapsed and the Advisor's facts
+    from .channels import plain_error_text
+    rows = [c | {'ScopeDefault': scopes.default_scope(c['Type']), 'SignedOut': problems.signed_out(c),
+                 'LastErrorPlain': plain_error_text(c.get('LastError'))} for c in store.list_connectors()]
     # GatewayBuiltIn: this build ships the organisation gateway's address, so its card's address field is optional (llm.gateway_base)
     from .llm import OPENAI_COMPATIBLE
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
@@ -5397,7 +5400,8 @@ def save_connector(body: ConnectorBody):
             from .channels import github_discover
             discovery = github_discover(store, c, ACTOR)
         except Exception as e:
-            discovery = {'error': str(e)[:300]}
+            from .channels import plain_failure
+            discovery = {'error': plain_failure(e)}      # shown under Save: "401 Client Error ... api.github.com" helped nobody
     # an organisation's AI card switched on here: each job still unpointed goes to the model that fits it (firstrun.models_by_job)
     if c.get('Type') == 'hipaa_ai' and c.get('Active') and c.get('Secret') and ('Secret' in fields or fields.get('Active')):
         from . import firstrun

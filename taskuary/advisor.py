@@ -739,6 +739,52 @@ def status(store, key: str) -> dict:
     return {'none': QUIET.get(str(last.get('Dropped') or ''), 'cap' if str(last.get('Dropped') or '').startswith('cap') else 'nothing')}
 
 
+# ── LIT AND PRESSED (the deep dive, 2026-10-20) ─────────────────────────────────────────────────────────────────────────────────
+# Nothing recorded whether the button the Advisor lit was the one pressed, so its record and the owner's habits were the same guess.
+# Every row press and Next while a line is shown sends the advised verb and the revision it was judged at; the row keeps what the
+# item was and whom it was from - the press log the moves in LEARNED.md are learned from (learn.moves). Nothing on screen changes.
+_ROW = {r: v for v, d in buttons.VERBS.items() for r in d.get('row') or []}
+
+
+def pressed_verb(pressed: str) -> str:
+    """A row id or a verb -> the verb: `done` is close, `<rid>:approve` is approve, an old word lands on today's."""
+    p = str(pressed or '').strip()
+    last = p.split(':')[-1]
+    return concierge.canon_verb(_ROW.get(last) or last) or last
+
+
+def who_of(store, item: dict) -> dict:
+    """{sender, domain, scope, thread} for an item: its newest inbound message's address and domain, and its SCOPE - the repository a
+    code item came from (its connection's name), else the sender's domain, else the channel - the grain a move is learned at."""
+    mid = item.get('mid')
+    m = store.get_message(int(mid)) if mid else None
+    if not m and item.get('tid'):
+        ms = [x for x in store.list_messages(int(item['tid'])) if str(x.get('Direction') or 'in') != 'out']
+        m = ms[-1] if ms else None
+    m = m or {}
+    sender = str(m.get('FromEmail') or '').lower()
+    domain = sender.rsplit('@', 1)[1] if '@' in sender and not sender.startswith('@') else ''
+    channel = str(item.get('channel') or m.get('Channel') or '').lower()
+    scope = (m.get('SourceName') if channel in ('github', 'gitlab', 'azdo', 'bitbucket') and m.get('SourceName') else '') or domain or channel
+    return {'sender': sender, 'domain': domain, 'scope': str(scope or '').lower(), 'thread': m.get('ConversationId') or '', 'channel': channel}
+
+
+def press(store, key: str, advised: str, pressed: str, rev: str = None) -> int:
+    """One press while the Advisor's line was shown, judged at `rev`. Returns the row id, or 0 when the key names nothing it advises
+    on. Stale: the item had moved since the line was judged - the press answered an older screen."""
+    tgt = target_of(store, key)
+    if not tgt or not pressed: return 0
+    item = _item(store, *tgt, key=key) or {}
+    w = who_of(store, item)
+    adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
+    try: now = revision(store, *tgt)
+    except Exception: now = None
+    return store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,Scope,Thread,Stale,CreatedAt) '
+                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                       (key, tgt[0], int(tgt[1]), rev or '', adv, got, int(bool(adv) and adv == got), str(item.get('kind') or ''), w['channel'],
+                        w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now()))
+
+
 def notes(store, key: str, limit: int = 10) -> list:
     """The receipt: what it decided and what it dropped, per revision, with the evidence resolved to labels."""
     from .learnedgraph import _resolve

@@ -4719,6 +4719,17 @@ def advice_for(key: str):
     return advisor.status(store, key)
 
 
+class AdvicePressBody(BaseModel): key: str; pressed: str; advised: str | None = None; revision: str | None = None
+
+@app.post('/api/advice/press')
+def advice_press(body: AdvicePressBody):
+    """A press on the row (or Next) while the Advisor's line was shown: what was lit, what was pressed (advisor.press). Never fails the
+    press it rides on - a lost row costs one observation."""
+    from . import advisor
+    try: return {'id': advisor.press(store, body.key, body.advised, body.pressed, body.revision)}
+    except Exception as e: logger.warning(f'advice press on {body.key} not recorded: {e}'); return {'id': 0}
+
+
 @app.get('/api/advice/notes')
 def advice_notes(key: str, limit: int = 10):
     """The Advisor's notes on an item: what it looked at, decided and dropped, per revision (advisor.notes)."""

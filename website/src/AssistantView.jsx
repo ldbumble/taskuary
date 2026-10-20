@@ -29,8 +29,8 @@ import { lazyView } from "./lazyView.jsx";
 import { loadGeneral } from "./lazyGeneral.js";
 // the static demo's guided journey: nothing outside the demo build ever draws it, so nothing there fetches it
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
-import { advisedIn, onPressed, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
-import { hint as btnHint, label as btn, liveVerb } from "./buttons.js";
+import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
+import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
@@ -1325,6 +1325,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const onTableRef = useRef(null);
   useEffect(() => { onTableRef.current = onTable; }, [onTable]);
   useEffect(() => onPressed(() => { if (onTableRef.current) readAdvice(onTableRef.current, true); }), [readAdvice]);
+  // LIT AND PRESSED (the deep dive, 2026-10-20): each press on the row, Next included, while a line is shown says what was lit and the
+  // revision it was judged at (advisor.press) - the evidence the owner's moves are learned from. Nothing on screen changes for it.
+  const shownRef = useRef(null);
+  const notePress = useCallback((pressed) => {
+    const a = shownRef.current;
+    if (!a?.key || !a.verb || !pressed) return;
+    api.post("/api/advice/press", { key: a.key, advised: a.verb, pressed, revision: a.revision || null }).catch(() => {});
+  }, []);
+  useEffect(() => onPressing((id) => notePress(verbOfRow(id) || String(id || "").split(":").pop())), [notePress]);
   // ARRIVING (welcome.arrive): the page opening, or the window coming back into focus, is the owner sitting down - the
   // first time on a new day, or after a long gap, the chat opens with the day in a breath. Leaving is noted too, so "what
   // came in while you were away" counts from when they actually went. Code on the server, never a model; a miss is silent.
@@ -1824,6 +1833,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setChanged(null);
     const real = advisedIn(rowNow().list.filter((v) => !String(v.id).startsWith("advice:")), a);
     if (real) { pressRow(real.id, null, anchor); return null; }
+    notePress(liveVerb(a.verb));                   // a move the row has no button for is pressed here, not through the row
     // a fix is a place (advisor.for_key's href), never a proposal: with no '<rid>:fix' on the row it opens the place itself
     if (liveVerb(a.verb) === "fix" && a.href) { openAppLink(a.href); return null; }
     if (a.verb === "answer_agent") { askAnswer(currentRef.current); return null; }
@@ -2392,6 +2402,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const litNow = litPick(lit, litTable);
   useEffect(() => { setLit((l) => litAfter(l, litTable)); }, [litTable.key, litTable.tid, lit]);   // eslint-disable-line react-hooks/exhaustive-deps
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
+  shownRef.current = shownAdvice?.verb ? { key: shownAdvice.for || shownAdvice.key || table.key, verb: shownAdvice.verb, revision: shownAdvice.revision } : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
   const noAi = table.speaks && !busy && !shownAdvice && !litNow && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
   // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden

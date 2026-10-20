@@ -53,6 +53,7 @@ ALLOWED_WRITES = (
     r'^/api/board/notes',                              # the wall
     r'^/api/(hub|handbook)',                           # durable Hub posts and compatibility route
     r'^/api/settings$',                                # display preferences
+    r'^/api/advice/press$',                            # what was lit and what was pressed: a row in the demo's own database
     # the checklist's "leave me alone", and the scripted walk - a tour of the app that touches
     # nothing real, which is what a visitor is here for. Its writes are two settings in the demo's
     # own database, which is what everything else on this list has in common.

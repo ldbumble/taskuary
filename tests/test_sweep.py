@@ -155,8 +155,16 @@ def test_a_task_the_rail_does_not_draw_gets_a_row_of_its_own(s):
                        sent_at=ago(8), conversation_id='renewal')
     assert not [c for c in rail(s, include_read=True) if c.get('tid') == tid]
     assert check(s)['loose'] == 1
-    row = next(c for c in rail(s) if c.get('idea_kind') == sweep.LOOSE)
-    assert (row['lane'], row['title']) == ('asked', f'{task_ref(tid)} has no next step')
+    row = next(c for c in rail(s) if c.get('loose'))
+    assert (row['kind'], row['lane'], row['tid'], row['title']) == ('todo', 'yours', tid, f'{task_ref(tid)} has no next step')
+    # ...and it is THAT task's row: its own verbs, never an idea's Make a task - pressing it made the same work twice
+    from taskuary import concierge
+    verbs = [c.get('verb') or c.get('id') for c in concierge.chips_for(s, row)]
+    assert concierge.cannot(row, 'mine', s) and not concierge.cannot(row, 'close', s) and not concierge.cannot(row, 'defer', s)
+    assert 'mine' not in verbs and 'close' in verbs, verbs
+    n = len(s.list_tasks())
+    s.update_task(tid, {'Status': 'done'}, 'owner')                                   # closed: the row goes at once
+    assert not [c for c in rail(s) if c.get('loose')] and len(s.list_tasks()) == n
 
 
 def test_remind_me_and_an_agent_are_states(s):

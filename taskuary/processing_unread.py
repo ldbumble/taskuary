@@ -222,6 +222,12 @@ def goal_facts(store, task, tid, now) -> dict:
             'why': ' · '.join(bits), 'back_at': f'{due} 08:00:00' if due else None, 'folded': False}
 
 
+def sweep_task(store, idea: dict, action: dict) -> dict | None:
+    """The open task a standalone loose-end line names (sweep.py's `task`, set where the task has no row of its own)."""
+    if idea.get('Kind') != 'loose' or not action.get('task'): return None
+    return store.get_task(int(action['task']))
+
+
 def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MINUTES, walk_at=None):
     from . import funnel
     from .processing_reads import state
@@ -301,6 +307,14 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                         mid=action.get('mid'), settling=bool(triage.get('pending')), who_email=action.get('who_email') or '', late_days=late,
                         urgent_request=lane == 'asked' and (bool(triage.get('urgent')) or funnel.priority_rank(triage.get('priority')) == 0))
             card = funnel._item('', 'idea', lane, compact['title'], **base)
+            # A LOOSE END ABOUT A TASK THE RAIL DRAWS NO ROW FOR (sweep.loose_tasks: its only mail is your own) is THAT task's row -
+            # its own verbs, Close, Remind me, Send to agent - never an idea's: Make a task on it made the same work twice
+            about = sweep_task(store, idea, action)
+            if about:
+                card = funnel._item('', 'todo', 'yours', compact['title'], **(base | {'tid': about['TaskId'], 'idea': None, 'idea_kind': None,
+                                                                                        'mid': None, 'priority': about.get('Priority')}))
+                card.update(loose=True, loose_at=idea.get('LastSaid'))
+                if about.get('Status') in ('done', 'dropped'): closed = True     # closed is closed: off at once, the check puts it down
         else:
             card = funnel._item('', 'todo' if kind == 'task' else 'action',
                                 # a task with no message is YOUR task, like one with mail (R14, 2026-09-25) - not "asked"

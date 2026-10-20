@@ -67,10 +67,17 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tq-pile-waitrow .why { flex: 0 0 auto; font-size: 10.5px; color: #9aa39d; }
 
-.tq-pile-stack { position: relative; }
+/* ROWS NEVER OVERLAP ON THE WAY (the 2026-10-19 UI walk, G8): only `top` glided, so the row taking the ring grew to 54px at once
+   while the rows under it were still gliding down - 10-30 frames of rows drawn over each other on every Next and rail click. Its
+   height, every top and the stack's own height now move on ONE curve over one time, so each row's bottom meets the next row's top
+   in every frame. */
+.tq-pile-stack { position: relative; transition: height .55s cubic-bezier(.2,.8,.2,1); }
 .tq-pile-row { position: absolute; left: 0; right: 0; height: 30px; display: grid; grid-template-columns: 44px 14px minmax(0, 1fr); align-items: stretch;
-  transition: top .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
+  transition: top .55s cubic-bezier(.2,.8,.2,1), height .55s cubic-bezier(.2,.8,.2,1), opacity .3s ease, transform .3s ease; }
 .tq-pile-row.landing { opacity: 0; transform: translateY(-6px) scale(.98); }
+/* ...and a row that joins a band (AssistantView `entering`) shows once the rows around it have glided clear of its slot */
+@keyframes tq-row-in { from { opacity: 0; } }
+.tq-pile-row.entering { animation: tq-row-in .2s ease .42s backwards; }
 /* HOW LONG IT HAS WAITED, not what o'clock it arrived: the rail is ranked, not dated. No mono -
    at 10px its figures were the hardest thing on the rail to read (the owner, 2026-09-16). */
 .tq-pile-row .when { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #6e685f; text-align: right; padding: 8px 6px 0 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -99,7 +106,8 @@
    holding rather than as ten separate rings or as a single condensed line. */
 /* ...in the same sage as one item on the table: a batch kept the old slate after 2026-09-28, so the rail drew what was ON
    the table in blue and the row after it in green (the owner, 2026-10-01: "the current 4 should be surrounded by green") */
-.tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border-radius: 10px; background: var(--tint, #e5ece2); }
+.tq-pile-batch { position: absolute; left: 66px; right: 0; z-index: 0; border-radius: 10px; background: var(--tint, #e5ece2);
+  transition: top .55s cubic-bezier(.2,.8,.2,1), height .55s cubic-bezier(.2,.8,.2,1); }
 .tq-pile-stack .tq-pile-batch b { color: var(--band, #5f7a5f); background: var(--tint, #e5ece2); }               /* the single item's pill says it in the same green */
 .tq-pile-batch b, .tq-pile-now { position: absolute; top: -8px; right: 10px; background: #fffdfb; padding: 0 6px; border-radius: 99px;
   font: 600 10px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #41525f; white-space: nowrap; }

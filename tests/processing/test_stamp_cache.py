@@ -130,3 +130,53 @@ def test_a_store_without_the_rail_table_keeps_no_book(monkeypatch):
     calls = fetched(monkeypatch)
     a = fp.present(Bare(), {'items': [item]}); b = fp.present(Bare(), {'items': [item]})
     assert calls == [1, 1] and stamps(a) == stamps(b)
+
+
+def test_random_writes_carry_only_untouched_stamps_and_every_stamp_is_the_cold_one(tmp_path, monkeypatch):
+    """A write keeps every stamp whose backing it cannot have reached (2026-10-20) - so after any mix of writes, through
+    this connection or another, every card's stamp is still exactly the one a cold present makes. Rows that JOIN a key a
+    card reads by (a message arriving on its task or its conversation, a review on its message) are the hard case."""
+    import random
+    from datetime import timedelta
+    monkeypatch.setattr(terminal, 'live_sessions', lambda **kwargs: [])
+    monkeypatch.setattr(funnel, 'announce', lambda store: [])
+    s = SQLiteStore(str(tmp_path / 'carry.db'))
+    fp.forget_stamps(); funnel.invalidate()
+    now = datetime.now().replace(microsecond=0)
+    tids = [s.create_task({'Title': f'Task {n}', 'Status': 'open'}, 'fixture') for n in range(4)]
+
+    def mail(n, tid=None, conv=None):
+        return s.add_message({'TaskId': tid, 'Channel': 'email', 'Status': 'filed' if tid is None else 'routed', 'Subject': f'Mail {n}',
+                              'ConversationId': conv or f'conv:{n}', 'BodyText': f'Body {n}', 'FromEmail': f'p{n}@example.test',
+                              'SentAt': (now - timedelta(minutes=n)).isoformat(sep=' ')})
+    mids = [mail(n, tids[n % 4] if n % 3 else None, f'conv:{n % 5}') for n in range(12)]
+    rng, carried, n, kinds = random.Random(20261020), 0, 100, set()
+    other = sqlite3.connect(str(tmp_path / 'carry.db'))
+    real = fp._backings
+    for step in range(60):
+        p = funnel.build(s, keep_surfaced=True)
+        assert p['items']
+        calls = []
+        monkeypatch.setattr(fp, '_backings', lambda cur, items: calls.append(len(items)) or real(cur, items))
+        warm = fp.present(s, p)                          # the book as the app keeps it, carried across the last write
+        monkeypatch.setattr(fp, '_backings', real)
+        book = fp._STAMPS[s]; saved = (book['top'], dict(book['by']), dict(book['deps']))
+        assert stamps(warm) == stamps(cold(s, p)), f'step {step} after {kinds}: a carried stamp is not the cold one'
+        fp._STAMPS[s] = {'top': saved[0], 'by': saved[1], 'deps': saved[2]}      # cold() emptied it: put the app's back
+        carried += bool(calls and calls[0] < len(p['items']))
+        n += 1; mid, tid = rng.choice(mids), rng.choice(tids)
+        w = rng.choice(['body', 'join_task', 'join_conv', 'move', 'comment', 'review', 'state', 'attachment', 'title', 'delete', 'other', 'nothing'])
+        kinds.add(w)
+        if w == 'body': s.update_message_body(mid, f'Edited {n}')
+        elif w == 'join_task': mids.append(mail(n, tid))
+        elif w == 'join_conv': mids.append(mail(n, None, f'conv:{rng.randrange(5)}'))
+        elif w == 'move': s.cx.execute('UPDATE message SET TaskId=? WHERE MessageId=?', (rng.choice([tid, None]), mid)); s.cx.commit()
+        elif w == 'comment': s.add_comment(tid, 'owner', 'user', f'note {n}')
+        elif w == 'review': s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'reply', 'Status': 'pending', 'DraftText': f'draft {n}'})
+        elif w == 'state': s.set_funnel_state(rng.choice(p['items'])['key'], 'surfaced', 'owner')
+        elif w == 'attachment': s.cx.execute('INSERT INTO attachment(MessageId, Name) VALUES (?,?)', (mid, f'{n}.pdf')); s.cx.commit()
+        elif w == 'title': s.update_task(tid, {'Title': f'Retitled {n}'}, 'owner')
+        elif w == 'delete' and len(mids) > 6: mids.remove(mid); s.cx.execute('DELETE FROM message WHERE MessageId=?', (mid,)); s.cx.commit()
+        elif w == 'other': other.execute('UPDATE message SET BodyText=? WHERE MessageId=?', (f'elsewhere {n}', mid)); other.commit()
+    other.close(); s.cx.close(); fp.forget_stamps()
+    assert carried, 'some write left some stamps standing'

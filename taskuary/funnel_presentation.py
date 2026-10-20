@@ -333,8 +333,50 @@ def _backing(cur, item: dict) -> dict:
 # store's dirty-row top stands still, a card whose own fields are unchanged has the same stamp, and
 # its backing is neither fetched nor hashed again. That fetch-and-hash of every card's full backing,
 # message bodies included, was ~300 ms of every rail read - and a press reads the rail several times.
-_STAMPS = weakref.WeakKeyDictionary()      # store -> {'top': dirty-row top, 'by': {card fingerprint: presentation_revision}}
+#
+# ...and a write no longer empties the book (2026-10-20): every press of Next writes, so the rail it carries back
+# fetched and hashed all of its rows again. The dirty rows say WHICH message, task, review, idea and funnel_state
+# key were written, so a stamp is kept while nothing its backing read - or could now read - is among them. What a
+# backing can newly read is a row that JOINED one of its keys: a message that arrives on its task or conversation,
+# found by looking up the written messages' TaskId and ConversationId as they stand. A written connector or
+# setting, rows trimmed away, or anything unreadable empties the book as before.
+_STAMPS = weakref.WeakKeyDictionary()      # store -> {'top': dirty-row top, 'by': {fingerprint: revision}, 'deps': {fingerprint: rows read}}
 _STAMPS_LOCK = threading.Lock()
+_EMPTY_ALL = frozenset({"connector", "setting"})        # read by every reply card: a write here re-stamps everything
+
+
+def _deps(item: dict, backing: dict) -> frozenset:
+    """Every (kind, id) whose write can change this card's backing - what it read, and the keys it read by."""
+    out = {(name, str(v)) for name, vals in _ids(item).items() for v in vals}
+    for row in backing["messages"]:
+        out.update((k, str(row.get(c))) for k, c in (("message", "MessageId"), ("task", "TaskId"), ("conv", "ConversationId")) if row.get(c) is not None)
+    out.update(("task", str(row["TaskId"])) for row in backing["tasks"] if row.get("TaskId") is not None)
+    for row in backing["reviews"]:
+        out.update((k, str(row.get(c))) for k, c in (("review", "ReviewId"), ("message", "MessageId"), ("task", "TaskId")) if row.get(c) is not None)
+    out.update(("idea", str(row["IdeaId"])) for row in backing["ideas"] if row.get("IdeaId") is not None)
+    out.update(("state", str(v.get("key"))) for v in [item, *(item.get("items") or [])] if isinstance(v, dict) and v.get("key"))
+    return frozenset(out)
+
+
+def _written(cur, low: int, top: int):
+    """The (kind, id) pairs written in (low, top], widened by where each written message now sits - or None when
+    that cannot be known (rows trimmed, a table this cannot ask, a connector or setting written)."""
+    try:
+        first = cur.execute("SELECT MIN(Id) FROM processing_dirty_row WHERE Id>?", (low,)).fetchone()[0]
+        if first is None or first > low + 1: return None
+        rows = {(str(k), str(i)) for k, i in cur.execute(
+            "SELECT DISTINCT Kind, LocalId FROM processing_dirty_row WHERE Id>? AND Id<=?", (low, top))}
+        if any(k in _EMPTY_ALL for k, _ in rows): return None
+        if any(k == "message" and not i.isdigit() for k, i in rows): return None
+        mids = sorted({int(i) for k, i in rows if k == "message"})
+        for at in range(0, len(mids), 400):
+            part = mids[at:at + 400]
+            for task, conv in cur.execute(f'SELECT TaskId, ConversationId FROM message WHERE MessageId IN ({",".join("?" * len(part))})', part):
+                if task is not None: rows.add(("task", str(task)))
+                if conv is not None: rows.add(("conv", str(conv)))
+        return rows
+    except Exception:
+        return None
 
 
 def _top(cur):
@@ -345,15 +387,23 @@ def _top(cur):
         return None
 
 
-def _stamps(store, top):
-    """The book of stamps for this store at this top. A write - any table, any process - opens an empty
-    one: every card is fetched and hashed once more, then reused until the next write."""
+def _stamps(store, top, cur=None):
+    """The book of stamps for this store at this top. A write - any table, any process - carries over every
+    stamp whose backing it cannot have touched (_written); when that cannot be known the book starts empty."""
     if store is None or top is None:
         return None
     with _STAMPS_LOCK:
         book = _STAMPS.get(store)
-        if book is None or book["top"] != top:
-            book = {"top": top, "by": {}}
+        if book is not None and book["top"] != top:
+            written = _written(cur, book["top"], top) if cur is not None and top > book["top"] else None
+            if written is None: book = None
+            else:
+                keep = {fp: deps for fp, deps in book["deps"].items() if deps.isdisjoint(written)}
+                book = {"top": top, "by": {fp: book["by"][fp] for fp in keep}, "deps": keep}
+                try: _STAMPS[store] = book
+                except TypeError: return None
+        if book is None:
+            book = {"top": top, "by": {}, "deps": {}}
             try:
                 _STAMPS[store] = book
             except TypeError:
@@ -398,7 +448,7 @@ def present(store, payload: dict) -> dict:
     with _snapshot_cursor(store) as cur:
         for item in targets:
             collect(item)
-        book = _stamps(store, _top(cur) if cur is not None else None)
+        book = _stamps(store, _top(cur) if cur is not None else None, cur)
         # a batch card's stamp covers its children's; it is one card per payload at most and is hashed fresh
         leaves = [item for item in every if not _children(item)] if book is not None else []
         prints = {id(item): _fingerprint(item) for item in leaves}
@@ -407,6 +457,8 @@ def present(store, payload: dict) -> dict:
         for item in targets:
             stamp(item, backings, known)
         for item in leaves:
+            if id(item) in known: continue
+            book["deps"][prints[id(item)]] = _deps(item, backings[id(item)])
             book["by"][prints[id(item)]] = item["presentation_revision"]
     out["display_revision"] = display_revision(out)
     return out

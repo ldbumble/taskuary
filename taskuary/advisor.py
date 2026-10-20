@@ -189,8 +189,138 @@ def pill(label: str, count) -> str:
     return f'{label} · {n} of {m} times' if m >= 2 else str(label or '')
 
 
-def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
+# THE PROMPT IS BOUNDED: every section has its own cap, and past PROMPT_CAP characters whole sections go from the end - the least
+# pointed first (the month's outcomes, the hub's dossier, the owner's documents) - never a cut through a line. The item, its verbs,
+# what failed and what was sent always stay.
+PROMPT_CAP = 9000
+_KEEP = 4                # EVENT, THE ITEM, PREVIEW, VERBS OFFERED
+
+
+def _one(s, n: int) -> str: return ' '.join(str(s or '').split())[:n]
+
+
+def _learned(store) -> str:
+    """LEARNED.md as a prompt reads it - the promoted sections only (learn.injectable), minus every heading with nothing under it
+    but its italic placeholder: three empty headings rode into every judgement as if they were the owner's habits."""
     from .learn import injectable
+    parts = re.split(r'(?m)^(?=## )', injectable(store.doc('learned') or ''))
+    live = [p.strip() for p in parts[1:] if re.sub(r'_\([^)]*\)_', '', p.split('\n', 1)[1] if '\n' in p else '', flags=re.S).strip()]
+    return '\n\n'.join([parts[0].strip(), *live]).strip() if live else ''
+
+
+def _msgs(store, item, target_kind, target_id) -> list:
+    """The item's messages, oldest first: the task's own, else the message's thread - any channel, a chat's as much as a mail's."""
+    if target_kind == 'task': ms = store.list_messages(int(target_id))
+    else:
+        m = store.get_message(int(target_id)) or {}
+        try: ms = store.thread_messages(m['ConversationId'], m.get('Subject'), limit=12) if m.get('ConversationId') else [m]
+        except Exception: ms = [m]
+    return sorted([m for m in ms if m], key=lambda m: str(m.get('SentAt') or m.get('CreatedAt') or ''))
+
+
+def _draft(store, item, target_kind, target_id):
+    """The draft waiting for the owner's yes on this item, or None."""
+    r = store.get_review(int(item['rid'])) if item.get('rid') else None
+    if not r and target_kind == 'task': r = store.pending_review(int(target_id))
+    if not r and target_kind == 'message': r = store._one("SELECT * FROM review WHERE MessageId=? AND Status='pending' ORDER BY ReviewId DESC LIMIT 1", (int(target_id),))
+    return r if r and r.get('Status') in ('pending', 'held') and (r.get('FinalText') or r.get('DraftText')) else None
+
+
+def draft_line(store, item, target_kind, target_id) -> str:
+    """THE DRAFT ITSELF, and what goes with it: the line said "read it, then send it" over a draft it had never seen - one promising a
+    payment date nobody had set, another saying "sending it now" with nothing attached (the Advisor deep dive, 2026-10-20)."""
+    r = _draft(store, item, target_kind, target_id)
+    if not r: return ''
+    try: files = [f.get('name') for f in (json.loads(r.get('Deliver') or '{}') or {}).get('attachments') or [] if isinstance(f, dict)]
+    except (TypeError, ValueError, AttributeError): files = []
+    return (f"THE DRAFT WAITING FOR THE OWNER'S YES: \"{_one(r.get('FinalText') or r.get('DraftText'), 900)}\"\n"
+            f"ATTACHED TO THE DRAFT: {', '.join(filter(None, files)) or 'nothing'}")
+
+
+def thread_line(store, item, target_kind, target_id, n: int = 3) -> str:
+    """The last few messages on it, theirs and the owner's: the preview is one message's first 300 characters, and the ask two
+    messages back - or the owner's own answer - was never seen."""
+    ms = _msgs(store, item, target_kind, target_id)[-n:]
+    if len(ms) < 2: return ''
+    who = lambda m: 'the owner' if str(m.get('Direction') or 'in') == 'out' else (m.get('FromName') or m.get('FromEmail') or 'someone')
+    return f'THE LAST {len(ms)} MESSAGES ON IT, oldest first:\n' + '\n'.join(
+        f"- {who(m)} ({str(m.get('SentAt') or m.get('CreatedAt') or '')[:16]}, {m.get('Channel') or 'email'}): {_one(m.get('Subject'), 80)} - {_one(m.get('BodyText'), 300)}" for m in ms)
+
+
+def related_line(store, item, target_kind, target_id, cap: int = 5) -> str:
+    """OTHER OPEN TASKS on the same sender, thread or subject, flagged as possible duplicates: the same ask filed twice was advised
+    twice, Reply on each, with the agent already working the other one (the deep dive, 2026-10-20)."""
+    from .ingest import topic_hit
+    ms = _msgs(store, item, target_kind, target_id)
+    own = int(target_id) if target_kind == 'task' else next((m.get('TaskId') for m in ms if m.get('TaskId')), None)
+    senders = {str(m.get('FromEmail') or '').lower() for m in ms if m.get('FromEmail') and str(m.get('Direction') or 'in') != 'out'}
+    cids = {m.get('ConversationId') for m in ms if m.get('ConversationId')}
+    subj = str(item.get('title') or next((m.get('Subject') for m in ms if m.get('Subject')), '') or '')
+    hits = {}
+    if senders or cids:
+        q = ' OR '.join(['LOWER(m.FromEmail) IN (%s)' % ','.join('?' * len(senders))] * bool(senders) + ['m.ConversationId IN (%s)' % ','.join('?' * len(cids))] * bool(cids))
+        for r in store._rows(f"SELECT m.TaskId, LOWER(m.FromEmail) AS e, m.ConversationId AS c FROM message m JOIN task t ON t.TaskId=m.TaskId "
+                             f"WHERE t.Status NOT IN ('done','dropped') AND ({q})", (*senders, *cids)):
+            if r['TaskId'] == own: continue
+            hits.setdefault(r['TaskId'], set()).add('same thread' if r['c'] in cids else 'same sender')
+    if subj:
+        for t in store.list_tasks(active_only=True):
+            if t['TaskId'] != own and t.get('Title') and topic_hit(subj, t['Title']) and topic_hit(t['Title'], subj): hits.setdefault(t['TaskId'], set()).add('same subject')
+    out = []
+    for tid, why in sorted(hits.items(), key=lambda kv: (-len(kv[1]), -kv[0]))[:cap]:
+        t = store.get_task(tid) or {}
+        if t.get('Status') in ('done', 'dropped'): continue
+        from .store import task_ref
+        held = ' - an agent is on it' if t.get('Status') == 'in_progress' else ''
+        out.append(f"- {task_ref(tid)} {t.get('Status')}: {_one(t.get('Title'), 100)} ({', '.join(sorted(why))}){held}")
+    return ('POSSIBLE DUPLICATES - other open tasks with its sender, thread or subject (one may already cover this ask):\n' + '\n'.join(out)) if out else ''
+
+
+def notes_line(store, item, target_kind, target_id) -> str:
+    """The owner's standing notes and past verdicts about this sender or topic, and their corrections of triage on it - the same
+    evidence triage is handed (ingest.relevant_notes, operations.evidence_lines), so the Advisor never advises against a "not ours"
+    the owner already gave."""
+    from .ingest import relevant_notes
+    from . import operations
+    ms = [m for m in _msgs(store, item, target_kind, target_id) if str(m.get('Direction') or 'in') != 'out']
+    m = ms[-1] if ms else {}
+    senders = [str(x.get('FromEmail') or '') for x in ms]
+    subj = str(m.get('Subject') or item.get('title') or '')
+    try: notes, _ = relevant_notes(store, senders, f"{subj} {m.get('BodyText') or ''}"[:3000], cap=6, budget=900, subject=subj, source=m.get('SourceName') or '')
+    except Exception: notes = []
+    try: fixes = operations.evidence_lines(store, {'from_email': m.get('FromEmail') or '', 'subject': subj}, cap=3) if m else []
+    except Exception: fixes = []
+    got = [f'- {_one(n, 300)}' for n in notes + fixes]
+    return ('THE OWNER\'S STANDING NOTES AND PAST VERDICTS on this sender or topic:\n' + '\n'.join(got)) if got else ''
+
+
+def owner_line(store) -> str:
+    """The head of SOUL.md and JOB.md: who the owner is and what their job is - the line weighs an ask by whom it serves."""
+    def head(d):
+        t = re.sub(r'<!--.*?-->|_\([^)]*\)_', '', str(store.doc(d) or ''), flags=re.S)       # comments and the template's placeholders
+        t = re.sub(r'\n\s*\n+', '\n', t).strip()
+        return t[:600].rsplit('\n', 1)[0] if len(t) > 600 else t
+    bits = [f"{n} (its opening):\n{h}" for d, n in (('soul', 'SOUL.md'), ('job', 'JOB.md')) if (h := head(d))]
+    return ('WHO THE OWNER IS:\n' + '\n'.join(bits)) if bits else ''
+
+
+def playbook_line(store, target_kind, target_id) -> str:
+    if target_kind != 'task': return ''
+    from . import playbooks
+    try: pb = playbooks.for_task(store.get_task(int(target_id)) or {})
+    except Exception: pb = None
+    if not pb: return ''
+    return f"THE PLAYBOOK FOR THIS KIND OF JOB (\"{pb.get('title') or pb['slug']}\"): " + _one(' '.join(f"{f}: {pb[f]}" for f in playbooks.FIELDS if pb.get(f)), 600)
+
+
+def _bounded(lines: list, cap: int = PROMPT_CAP) -> str:
+    """Whole sections dropped from the end until it fits - the first _KEEP never."""
+    lines = [l for l in lines if l]
+    while len('\n\n'.join(lines)) > cap and len(lines) > _KEEP: lines.pop()
+    return '\n\n'.join(lines)[:cap]
+
+
+def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     from . import outcomes
     from . import funnel
     facts = {k: item.get(k) for k in ('ref', 'title', 'who', 'when', 'why', 'channel') if item.get(k)}
@@ -198,6 +328,11 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
     kinds = {k['key']: k['word'] for k in funnel._VOCAB['kinds']}
     stands = kinds.get(item.get('kind')) or funnel.LANE_WORDS.get(item.get('lane'), ('',))[0]
     if stands: facts['where it stands'] = stands
+    # ...and the task's own dates and weight: "due Friday" and "remind me Thursday" were on the task and never in the prompt
+    t = store.get_task(int(target_id)) if target_kind == 'task' else (store.get_task(int(item['tid'])) if item.get('tid') else None)
+    for k, col in (('due', 'DueAt'), ('priority', 'Priority'), ('remind me on', 'RemindAt'), ('done when', 'DoneWhen')):
+        if (t or {}).get(col): facts[k] = str(t[col])[:160]
+    if item.get('priority') and 'priority' not in facts: facts['priority'] = item['priority']
     lines = [f'EVENT: {event}', 'THE ITEM: ' + json.dumps(facts), f"PREVIEW: {str(item.get('preview') or '')[:300]}",
              'VERBS OFFERED: ' + ', '.join(f"{v['verb']} ({v['label']})" for v in verbs)]
     try: f = failure(store, item)
@@ -238,11 +373,18 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
         # ...and a list with nothing left on it, said: with no line at all the model could not tell it from a task with no list
         elif (ticked := [c for c in _checklist(t) if c.get('done')]): lines.append(f'EVERY TODO ON THE TASK IS TICKED ({len(ticked)} of {len(ticked)})')
-    lrn = injectable(store.doc('learned') or '')
-    if lrn.strip(): lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
+    # THE FULL CONTEXT (the deep dive, 2026-10-20): the draft, the thread, the tasks that may already cover it, the owner's notes on
+    # the sender, the playbook - each bounded, each read the same for a mail, a chat line or anything the chat put on the table
+    for f_ in (draft_line, thread_line, related_line, notes_line):
+        try: lines.append(f_(store, item, target_kind, target_id))
+        except Exception as e: logger.debug(f'advisor: {f_.__name__} skipped for {item.get("key")} - {e}')
+    lrn = _learned(store)
+    if lrn: lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
     led += [f"{v['label']}: {says(v['verb'], c)}" for v in verbs for c in [habit(store, v['verb'], item)] if says(v['verb'], c)]
     if led: lines.append('THE OUTCOME LEDGER (what came of actions like this):\n' + '\n'.join(led))
+    try: lines += [playbook_line(store, target_kind, target_id), owner_line(store)]
+    except Exception as e: logger.debug(f'advisor: no playbook or owner docs for {item.get("key")} - {e}')
     if tier >= 2:                                         # the bigger read, only for the item on the table
         from .counsel import dossier
         m = store.get_message(item.get('mid')) if item.get('mid') else None
@@ -251,7 +393,7 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if dos: lines.append('WHAT THE HUB KNOWS:\n' + dos[:1500])
         more = outcomes.evidence(store, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'), limit=15)
         if more: lines.append('RECENT OUTCOMES:\n' + '\n'.join(more))
-    return '\n\n'.join(lines)
+    return _bounded(lines)
 
 
 def _checklist(t: dict) -> list:
@@ -264,6 +406,10 @@ def sent_line(store, target_kind, target_id) -> str:
     preview is the sender's ask, so with no word of the reply the line still said "Marcus is waiting for your clarifications"
     over a close-out reading Sent (2026-10-19) - the model reads whether anything is still owed; code only says what went."""
     r = store.sent_reply(task_id=int(target_id)) if target_kind == 'task' else store.sent_reply(message_id=int(target_id))
+    # ...and a new message on a task whose reply already went: the reply was on the task, not on this message, and the line read the
+    # new mail with no word of what the owner had already said (the deep dive, 2026-10-20)
+    if not r and target_kind == 'message' and (tid := (store.get_message(int(target_id)) or {}).get('TaskId')):
+        r = store.sent_reply(task_id=int(tid)); target_kind, target_id = ('task', tid) if r else (target_kind, target_id)
     if not r: return ''
     at = r.get('DecidedAt') or r.get('CreatedAt') or ''
     m = store.get_message(r['MessageId']) if r.get('MessageId') else None

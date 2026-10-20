@@ -10,7 +10,7 @@ from html import unescape
 from datetime import datetime, timedelta
 from loguru import logger
 
-from . import net, spawn
+from . import msauth, net, spawn
 from .timewords import plural
 requests = net      # pooled Session + (connect, read) timeouts; the name keeps patches of channels.requests.get biting
 from .github import _h as gh_headers, list_accessible_repos
@@ -48,17 +48,39 @@ def _addrs(rows) -> list:
 
 
 def graph_creds(store, c):
-    """Effective Graph credentials for a connector: its own, else the Outlook connector's
-    saved app (Teams shares it by design), else the AZURE_* env vars (in graph_token).
-    Returns (cfg, secret, borrowed_from_outlook)."""
+    """Effective Graph credentials for a connector: its own (a tenant app, or its own Microsoft sign-in), else the Outlook
+    card of the SAME account (_outlook_for), else the AZURE_* env vars (in graph_token).
+    Returns (cfg, secret, borrowed_from_outlook). `_cid` is whose secret this is, so a rotated refresh token is saved on
+    the right card; `_kind` whose sign-in it is, so a lapse names the card to sign in on."""
     cfg, sec = _cfg(c), c.get('Secret')
-    if c['Type'] != 'outlook' and not (cfg.get('client_id') and sec):
-        o = store.get_connector_by_type('outlook', with_secret=True)
-        ocfg = _cfg(o) if o else {}
-        if o and (ocfg.get('client_id') or o.get('Secret')):
-            # _cid = whose secret this is, so a rotated refresh token is saved on the right card
-            return {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId']}, sec or o.get('Secret'), True
-    return {**cfg, '_cid': c.get('ConnectorId')}, sec, False
+    own = {**cfg, '_cid': c.get('ConnectorId'), '_kind': c['Type']}
+    if c['Type'] == 'outlook' or (sec and (cfg.get('client_id') or cfg.get('auth') == 'user')): return own, sec, False
+    o = _outlook_for(store, c)
+    if not o: return own, sec, False
+    ocfg = _cfg(o)
+    out = {**ocfg, **{k: v for k, v in cfg.items() if v}, '_cid': o['ConnectorId'], '_kind': 'outlook'}
+    # the same person's Outlook sign-in, asked for chats: one sign-in, two tokens (msauth.access_token keys on the scope)
+    if ocfg.get('auth') == 'user': out |= {'auth': 'user', '_scope': msauth.TEAMS_SCOPES, '_for': 'teams'}
+    return out, sec or o.get('Secret'), True
+
+
+def _outlook_for(store, c):
+    """The Outlook card a Teams card with no credentials of its own may read through: the one signed in as the account
+    its sources name, or a tenant app reading mailboxes on that account's domain. Never simply the first Outlook card -
+    with two Microsoft accounts that is another tenant's, and its token reads nobody's chats here. A Teams card naming no
+    account yet - or one on a domain no mailbox shows - borrows only a tenant app that is the ONLY Outlook card: one
+    organisation, nothing to choose between (the install that ran on one tenant app before there could be two)."""
+    cards = [o for o in store.connectors_by_type('outlook', with_secret=True) if _cfg(o).get('client_id') or o.get('Secret')]
+    ups = {str(s['Address']).lower() for s in store.list_sources(active_only=False) if s.get('Channel') == 'teams'
+           and '@' in str(s.get('Address') or '') and s.get('ConnectorId') in (None, c.get('ConnectorId'))}
+    def boxes(o): return {str(s['Address']).lower() for s in store.list_sources(active_only=False)
+                          if s.get('Channel') == 'email' and s.get('ConnectorId') == o['ConnectorId'] and s.get('Address')}
+    dom = lambda a: a.rpartition('@')[2]
+    for o in cards if ups else ():
+        k = _cfg(o)
+        if k.get('auth') == 'user' and str(k.get('account') or '').lower() in ups: return o
+        if k.get('auth') != 'user' and {dom(a) for a in boxes(o)} & {dom(a) for a in ups}: return o
+    return cards[0] if len(cards) == 1 and _cfg(cards[0]).get('auth') != 'user' else None
 
 
 def graph_token(cfg: dict, secret: str = None) -> str:
@@ -194,12 +216,11 @@ def test_connector(store, cid: int) -> dict:
     try:
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, borrowed = graph_creds(store, c)
-            if c['Type'] == 'teams' and gcfg.get('auth') == 'user':
-                # Graph's chat delta (getAllMessages) is app-only; a person's sign-in cannot read it
-                raise RuntimeError('Teams chat reading needs a tenant app registration (application permission '
-                                   'Chat.Read.All) - the Outlook sign-in covers mail, sending and calendar only. '
-                                   'Enter tenant_id + client_id + client secret on this card.')
-            own = bool(cfg.get('client_id') and c.get('Secret'))
+            own = bool(c.get('Secret') and (cfg.get('client_id') or cfg.get('auth') == 'user'))
+            if c['Type'] == 'teams' and not (own or borrowed or os.getenv('AZURE_CLIENT_ID')):
+                raise RuntimeError('not signed in - press Sign in with Microsoft on this Teams card (admins: a tenant app - '
+                                   'tenant_id + client_id + client secret under Admin?), or name your account under Sources '
+                                   'to read through the Outlook card signed in as it')
             tok = graph_token(gcfg, gsec)
             detail = (f"signed in as {gcfg.get('name') or gcfg.get('account')} ({gcfg.get('account')})" if gcfg.get('auth') == 'user'
                       else 'Graph token OK' + ('' if own else
@@ -217,11 +238,15 @@ def test_connector(store, cid: int) -> dict:
                 except Exception as e:
                     detail += f' · calendar: {str(e)[:160]}'
             if c['Type'] == 'teams':
-                src = next((s for s in store.list_sources(active_only=False)
-                            if s['Channel'] == 'teams' and '@' in (s['Address'] or '')), None)
+                # this card's own account first: with two Teams cards the first source anywhere is the other one's
+                srcs = [s for s in store.list_sources(active_only=False) if s['Channel'] == 'teams' and '@' in (s['Address'] or '')
+                        and s.get('ConnectorId') in (None, c['ConnectorId'])]
+                src = next((s for s in srcs if s.get('ConnectorId') == c['ConnectorId']), None) or next(iter(srcs), None)
                 if src:
                     # probe the road the POLLER takes, or a green card means nothing
-                    msgs = _teams_delta(tok, src['Address'], _utc(datetime.now() - timedelta(days=7)), cap=100)
+                    since7 = _utc(datetime.now() - timedelta(days=7))
+                    msgs = (_teams_user_delta(tok, since7, cap=100) if gcfg.get('auth') == 'user'
+                            else _teams_delta(tok, src['Address'], since7, cap=100))
                     people = {(((m.get('from') or {}).get('user') or {}).get('displayName'))
                               for m in msgs if ((m.get('from') or {}).get('user'))}
                     detail = (f"chat read OK for {src['Address']} - {plural(len(msgs), 'message')} in the last 7 days across "
@@ -962,6 +987,32 @@ def _teams_delta(tok, upn, since_iso, cap=200):
     return out[:cap]
 
 
+def _teams_user_delta(tok, since_iso, cap=200):
+    """The same feed for a person's own sign-in (a Teams card's MsSignIn): getAllMessages is app-only, so their chats
+    one by one - the ones whose last message is past the watermark (Graph lists /me/chats newest first), each read since
+    it. Newest first, like the delta, and each message carries its chatId as the delta's do."""
+    h, chats, out = {'Authorization': f'Bearer {tok}'}, [], []
+    url = f'{GRAPH}/me/chats'
+    params = {'$top': 50, '$expand': 'lastMessagePreview', '$orderby': 'lastMessagePreview/createdDateTime desc'}
+    while url and len(chats) < 200:
+        r = requests.get(url, headers=h, params=params, timeout=45)
+        if r.status_code == 403:
+            raise RuntimeError('signed in, but chat read DENIED (403) - sign in again on the Teams card and accept the chat permissions')
+        r.raise_for_status()
+        j = r.json(); page = j.get('value', [])
+        live = [x for x in page if str((x.get('lastMessagePreview') or {}).get('createdDateTime') or x.get('lastUpdatedDateTime') or '') > since_iso]
+        chats += live
+        url, params = (j.get('@odata.nextLink') if len(live) == len(page) else None), None   # the rest are older still
+    for ch in chats:
+        r = requests.get(f'{GRAPH}/chats/{ch["id"]}/messages', headers=h, timeout=45,
+                         params={'$top': 50, '$orderby': 'lastModifiedDateTime desc', '$filter': f'lastModifiedDateTime gt {since_iso}'})
+        if r.status_code in (403, 404):            # one chat refused (a federated thread) must not blind the rest
+            logger.warning(f"teams chat {ch['id'][:24]} not readable ({r.status_code})"); continue
+        r.raise_for_status()
+        out += [{**m, 'chatId': m.get('chatId') or ch['id']} for m in r.json().get('value', [])]
+    return sorted(out, key=lambda m: m.get('lastModifiedDateTime') or m.get('createdDateTime') or '', reverse=True)[:cap]
+
+
 def _chat_meta(tok, chat_id, cache):
     """(topic, kind) for a chat. Readable even for chats whose MESSAGES are refused, so a
     group thread keeps its real name on the timeline."""
@@ -1046,7 +1097,7 @@ def slack_msg(src: dict, m: dict) -> dict:
             **({'mail_meta': {'dm': True}} if str(src.get('Address') or '').startswith('D') else {})}
 
 
-def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False) -> int:
+def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=False, read_it=False, user=False) -> int:
     """Teams as an inbound channel: each chat is a conversation (so a thread keeps building
     ONE task, like a mail thread), each human message an item on the timeline. Bot posts,
     call-started events, deletions and empty bodies are not messages anybody has to act on."""
@@ -1061,7 +1112,8 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
             if me: _TEAMS_ME[upn.lower()] = me
         except requests.RequestException:
             pass
-    for m in reversed(_teams_delta(tok, upn, since_iso)):          # oldest first, so threads read in order
+    feed = _teams_user_delta(tok, since_iso) if user else _teams_delta(tok, upn, since_iso)
+    for m in reversed(feed):                                       # oldest first, so threads read in order
         user = (m.get('from') or {}).get('user') or {}
         body = _clean((m.get('body') or {}).get('content'))
         # Deleted at the source. Teams' delta reports it (mail's plain $top list does not, so
@@ -1604,9 +1656,10 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
     n, errors = 0, []      # errors: folders a mailbox could not finish - the card shows them, the poll goes on
     full = store.get_connector(c['ConnectorId'], with_secret=True)
     try:
+        user = False                                # a person's own sign-in reads Teams chats by another road
         if c['Type'] in ('outlook', 'teams'):
             gcfg, gsec, _ = graph_creds(store, full)
-            tok = graph_token(gcfg, gsec)
+            tok, user = graph_token(gcfg, gsec), gcfg.get('auth') == 'user'
         else:
             tok = full.get('Secret')
         # ── connections whose SOURCE ROW IS ONLY A MARKER poll once per connector, and
@@ -1761,7 +1814,7 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                         except Exception as e: logger.warning(f'chain history for {conv} skipped: {e}')
                 continue                            # exact cutoff above replaces generic touch_source(now)
             elif c['Type'] == 'teams':
-                n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it)
+                n += ingest_teams_chats(store, s['Address'], tok, since, llm, file_only, read_it, user=user)
             elif c['Type'] == 'github':
                 from .store import roles_of
                 if s.get('ConnectorId') != c['ConnectorId']: continue

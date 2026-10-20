@@ -178,5 +178,143 @@ class TwoGithubAccounts(unittest.TestCase):
         self.assertEqual(ci._conn(self.store)['Secret'], 'pat-one')
 
 
+def teams(store, name, account, rt, cid=None):
+    """A Teams card signed in as its own Microsoft account (MsSignIn), its chats under that UPN."""
+    row = {'Active': 1, 'Secret': rt, 'Roles': DEFAULT_ROLES['teams'], 'ConfigJson': json.dumps({'auth': 'user', 'account': account})}
+    cid = store.save_connector({**row, 'ConnectorId': cid} if cid else {**row, 'Type': 'teams', 'Name': name}, 'test')
+    store.save_source({'Channel': 'teams', 'Address': account, 'ConnectorId': cid, 'Active': 1}, 'test')
+    return cid
+
+
+def two_teams():
+    store = SQLiteStore(':memory:')
+    first = teams(store, None, A, 'rt-teams-northwind', cid=store.get_connector_by_type('teams')['ConnectorId'])
+    return store, first, teams(store, 'Contoso Teams', B, 'rt-teams-contoso')
+
+
+class TwoTeamsCards(unittest.TestCase):
+    """Two Teams connections, each signed in like Outlook: each its own token, its own chats, its own replies. Graph is a fake."""
+    def test_each_card_is_polled_with_its_own_sign_in_on_the_person_road(self):
+        store, first, second = two_teams()
+        self.assertTrue({first, second} <= {c['ConnectorId'] for c, _ in channels._poll_jobs(store)}, 'both Teams cards are polled')
+        read = []
+        def feed(tok, since_iso, cap=200):
+            read.append(tok)
+            return [{'id': f'm-{tok}', 'chatId': f'19:{tok}', 'messageType': 'message', 'createdDateTime': '2026-10-20T10:00:00Z',
+                     'from': {'user': {'id': 'u-erin', 'displayName': 'Erin Blake'}}, 'body': {'content': '<p>can you send the deck?</p>'}}]
+        with mock.patch.object(channels, 'graph_token', side_effect=fake_token), \
+             mock.patch.object(channels, '_teams_user_delta', side_effect=feed), \
+             mock.patch.object(channels, '_teams_delta', side_effect=AssertionError('the app-only feed is not this road')), \
+             mock.patch.object(channels, '_chat_meta', return_value=('', 'oneOnOne')), \
+             mock.patch.object(channels, '_graph_user', return_value=('Erin Blake', 'erin@vendor.example')), \
+             mock.patch.object(channels, 'hosted_images', return_value=[]), \
+             mock.patch.object(channels.requests, 'get', return_value=R(200, {'id': 'u-me'})):
+            for cid in (first, second): channels._poll_one(store, store.get_connector(cid), True, 0, None, False)
+        self.assertEqual(sorted(read), ['tok:rt-teams-contoso', 'tok:rt-teams-northwind'])
+        rows = {m['ConversationId']: m['SourceName'] for m in store.feed() if m['Channel'] == 'teams'}
+        self.assertEqual(rows, {'teams:19:tok:rt-teams-northwind': A, 'teams:19:tok:rt-teams-contoso': B})
+
+    def test_a_reply_leaves_through_the_card_that_owns_the_chat(self):
+        store, _first, _second = two_teams()
+        self.assertTrue(outbound.can_reply(store, 'teams'), 'a person signed in may answer in their chats')
+        sent = []
+        with mock.patch.object(channels, 'graph_token', side_effect=fake_token), \
+             mock.patch.object(outbound.requests, 'post', side_effect=lambda url, headers, **k: sent.append((url, headers['Authorization'])) or R(201)):
+            outbound.reply_to_message(store, {'Channel': 'teams', 'ConversationId': 'teams:19:abc@thread.v2', 'SourceName': B}, 'Sending it now.')
+        self.assertEqual(sent, [(f'{outbound.GRAPH}/chats/19:abc@thread.v2/messages', 'Bearer tok:rt-teams-contoso')])
+
+    def test_an_app_only_card_still_cannot_post(self):
+        store = SQLiteStore(':memory:')
+        tm = store.get_connector_by_type('teams')['ConnectorId']
+        store.save_connector({'ConnectorId': tm, 'Active': 1, 'Secret': 'app-secret',
+                              'ConfigJson': json.dumps({'tenant_id': 't', 'client_id': 'c'})}, 'test')
+        self.assertFalse(outbound.can_reply(store, 'teams'))
+        self.assertIn('answer it in Teams', outbound.send_block(store, 'teams'))
+
+    def test_no_sign_in_of_its_own_reads_through_the_same_accounts_outlook_card_never_the_first(self):
+        store = SQLiteStore(':memory:')
+        o_first = store.get_connector_by_type('outlook')['ConnectorId']
+        store.save_connector({'ConnectorId': o_first, 'Active': 1, 'Secret': 'rt-ol-northwind',
+                              'ConfigJson': json.dumps({'auth': 'user', 'account': A})}, 'test')
+        o_two = outlook(store, 'Contoso mailbox', B, 'rt-ol-contoso')
+        tm = store.get_connector_by_type('teams')['ConnectorId']
+        store.save_connector({'ConnectorId': tm, 'Active': 1}, 'test')
+        # naming no account, it borrows nothing: two Microsoft accounts, and the first is not a guess worth making
+        self.assertFalse(channels.graph_creds(store, store.get_connector(tm, with_secret=True))[2])
+        store.save_source({'Channel': 'teams', 'Address': B, 'ConnectorId': tm, 'Active': 1}, 'test')
+        cfg, sec, borrowed = channels.graph_creds(store, store.get_connector(tm, with_secret=True))
+        self.assertEqual((sec, borrowed, cfg['_cid']), ('rt-ol-contoso', True, o_two))
+        self.assertEqual(cfg['_scope'], msauth.TEAMS_SCOPES, 'the same sign-in, asked for chats')
+        # ...and a tenant app on another domain is not borrowed either
+        store2 = SQLiteStore(':memory:')
+        o = store2.get_connector_by_type('outlook')['ConnectorId']
+        store2.save_connector({'ConnectorId': o, 'Active': 1, 'Secret': 's', 'ConfigJson': json.dumps({'tenant_id': 't', 'client_id': 'c'})}, 'test')
+        store2.save_source({'Channel': 'email', 'Address': A, 'ConnectorId': o, 'Active': 1}, 'test')
+        outlook(store2, 'Contoso mailbox', B, 'rt-ol-contoso')
+        t2 = store2.get_connector_by_type('teams')['ConnectorId']
+        store2.save_source({'Channel': 'teams', 'Address': 'paula@fabrikam.example', 'ConnectorId': t2, 'Active': 1}, 'test')
+        self.assertFalse(channels.graph_creds(store2, store2.get_connector(t2, with_secret=True))[2])
+
+    def test_one_sign_in_mints_a_mail_token_and_a_chat_token_apart(self):
+        msauth._CACHE.clear()
+        asked = []
+        def post(url, data, timeout): asked.append(data['scope']); return R(200, {'access_token': f"A:{data['scope'][:30]}", 'expires_in': 3600})
+        try:
+            with mock.patch('requests.post', side_effect=post):
+                mail = msauth.access_token({'auth': 'user', 'granted_scope': msauth.SCOPES}, 'RT')
+                chat = msauth.access_token({'auth': 'user', '_scope': msauth.TEAMS_SCOPES}, 'RT')
+            self.assertNotEqual(mail, chat); self.assertEqual(asked[1], msauth.TEAMS_SCOPES)
+        finally: msauth._CACHE.clear()
+
+
+class TeamsSignsInOnItsOwnCard(unittest.TestCase):
+    """On the suite's shared scratch server: every card made here is signed out again, so no later test meets a Teams
+    card that answers chats or a poller that reaches for Microsoft."""
+    c = TestClient(server.app)
+
+    def setUp(self): self.made = []
+    def tearDown(self):
+        for cid in self.made:
+            self.c.post(f'/api/connectors/{cid}/ms/signout')
+            for s in server.store.list_sources(active_only=False):
+                if s.get('ConnectorId') == cid: server.store.save_source({**s, 'Active': 0}, 'test')
+
+    def _card(self, name, kind='teams'):
+        cid = self.c.post('/api/connectors', json={'Type': kind, 'Name': name}).json()['connectorId']
+        self.made.append(cid); return cid
+
+    def _sign_in(self, cid, account, rt):
+        start = {'device_code': 'D', 'user_code': 'ABCD-1234', 'verification_uri': 'https://microsoft.com/devicelogin', 'expires_in': 900, 'interval': 5}
+        with mock.patch.object(msauth, 'device_start', return_value=start) as ds:
+            flow = self.c.post(f'/api/connectors/{cid}/ms/signin').json()['flow']
+        self.assertEqual(ds.call_args.args[1], msauth.TEAMS_SCOPES, 'a Teams card asks for chats, not mail')
+        with mock.patch.object(msauth, 'device_poll', return_value={'access_token': 'A', 'refresh_token': rt, 'expires_in': 3600}), \
+             mock.patch.object(msauth, 'me', return_value={'account': account, 'name': 'Alex Doyle'}), \
+             mock.patch.object(server, '_poll_reports'):
+            return self.c.post(f'/api/connectors/{cid}/ms/poll', json={'flow': flow}).json()
+
+    def test_two_tenants_two_cards_each_its_own_chats(self):
+        one, two = self._card('Northwind Teams (multi)'), self._card('Contoso Teams (multi)')
+        self.assertEqual(self._sign_in(one, 'teams-one@northwind.example', 'rt-t1')['status'], 'ok')
+        self.assertEqual(self._sign_in(two, 'teams-two@contoso.example', 'rt-t2')['status'], 'ok')
+        st = server.store
+        owner = {s['Address']: s['ConnectorId'] for s in st.list_sources() if s['Channel'] == 'teams'}
+        self.assertEqual((owner['teams-one@northwind.example'], owner['teams-two@contoso.example']), (one, two))
+        self.assertEqual(json.loads(st.get_connector(two)['ConfigJson'])['auth'], 'user')
+
+    def test_the_same_account_on_two_teams_cards_is_refused(self):
+        one, two = self._card('Same Teams A'), self._card('Same Teams B')
+        self.assertEqual(self._sign_in(one, 'same-teams@northwind.example', 'rt-ta')['status'], 'ok')
+        r = self._sign_in(two, 'same-teams@northwind.example', 'rt-tb')
+        self.assertEqual(r['status'], 'error'); self.assertIn('Same Teams A', r['detail'])
+        self.assertFalse(server.store.get_connector(two, with_secret=True).get('Secret'))
+
+    def test_the_same_account_as_an_outlook_card_is_not_refused(self):
+        ol = self._card('Mail beside Teams', 'outlook')
+        server.store.save_connector({'ConnectorId': ol, 'Active': 1, 'Secret': 'rt-o',
+                                     'ConfigJson': json.dumps({'auth': 'user', 'account': 'both@northwind.example'})}, 'test')
+        self.assertEqual(self._sign_in(self._card('Teams beside mail'), 'both@northwind.example', 'rt-tt')['status'], 'ok')
+
+
 if __name__ == '__main__':
     unittest.main()

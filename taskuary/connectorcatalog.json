@@ -17,7 +17,7 @@
       "title": "Microsoft Teams",
       "group": "Messaging",
       "planned": false,
-      "desc": "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
+      "desc": "Your Teams chats, read and answered as you. Sign in with your own Microsoft account, like Outlook - each Teams card is one account.",
       "match": [
         "microsoft teams",
         "microsoft",

@@ -27,7 +27,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, 
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { onceEach, plannedFor } from "./connectorCatalog.js";
+import { onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
@@ -141,13 +141,14 @@ const META = {
     fields: [["tenant_id", "tenant_id"], ["client_id", "client_id"],
       pollSecondsField("teams")],
     secretLabel: "client secret",
-    desc: "Ingest Teams chats via Graph. Leave credentials blank to reuse the Outlook connector's app.",
-    howto: ["Credentials: leave everything blank and Teams automatically reuses the Outlook connector's saved Graph app (or the server's AZURE_* env vars). Only fill these to use a different app registration.",
-      "App-only chat reading is a Microsoft PROTECTED API: the tenant needs Microsoft-approved Chat.Read.All - until that approval is granted, Test shows the 403 telling you so.",
+    desc: "Your Teams chats, read and answered as you. Sign in with your own Microsoft account, like Outlook - each Teams card is one account.",
+    howto: ["Sign in with Microsoft (anyone): the button above, a code on microsoft.com/devicelogin, your own account. That is your chats - read, and answered as you - and nobody registers anything. A second organisation's Teams is a second card: Add another Teams account, and sign that one in.",
+      "No sign-in of its own: a Teams card reads through the Outlook card signed in as the SAME account (the user named under Sources) - never another account's Outlook card.",
+      "Admins - a tenant app instead: tenant_id + client_id + client secret under Admin?. App-only chat reading is a Microsoft PROTECTED API: the tenant needs Microsoft-approved Chat.Read.All - until that approval is granted, Test shows the 403 telling you so - and an app cannot post into a chat, so replies need the sign-in.",
       "Add the user whose chats to ingest as a UPN under Sources. Your UPN (User Principal Name) is your Microsoft 365 sign-in address - usually just your work email. Find it in Teams: click your profile picture, it's the address under your name. Or run `whoami /upn` in a terminal on a work Windows machine, or check Azure Portal → Users → your account → User principal name.",
       "A specific chat id works too (Teams web: open the chat, the 19:...@thread.v2 part of the URL).",
       "Test probes an actual chat read for the first Teams source, not just the token."],
-    agent: ["GET {base}/api/connectors{hdr} and look at the outlook card: Teams reuses its app. If that card has tenant_id and client_id and a secret (a tenant app), leave this card's credentials blank. If it only carries a personal sign-in (auth = user) or nothing, say plainly that Teams chat reading needs a tenant app with the Microsoft-approved Chat.Read.All application permission, ask whether the owner is a Microsoft 365 admin who has one, and stop if not - do not invent a registration.",
+    agent: ["The usual road is the owner's own: Sign in with Microsoft on this card (the button above this terminal) - a code on microsoft.com/devicelogin, their account. Tell them to press it; nothing to register. Only if they are a Microsoft 365 admin who wants a tenant app instead: tenant_id + client_id + secret with the Microsoft-approved Chat.Read.All application permission - do not invent a registration.",
       "Find the owner's UPN yourself when you can: on a domain-joined Windows machine run `whoami /upn`; otherwise ask - it is usually their work email. Add it with POST {base}/api/sources{hdr} and JSON {\"Channel\": \"teams\", \"Address\": \"<upn>\", \"ConnectorId\": {cid}, \"Active\": true}.",
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
@@ -1878,7 +1879,8 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 }
 
 /* Every catalog card is an instance. Its name is the human-facing identity used everywhere
-   Taskuary lists it; Add another creates a clean instance of the same connector type.
+   Taskuary lists it; Add another creates a clean instance of the same connector type, and says what it adds (oneOf: "Add another
+   Outlook mailbox") - a card that is one by nature (WhatsApp's paired phone, this Mac's Messages) draws none.
    `addOnly`: setup's simple card has no name to edit, only the door to a second mailbox of the same kind - a second
    Outlook account had no way in there at all (the owner, 2026-10-20: "I only see a way to connect one"). */
 function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
@@ -1888,6 +1890,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   useEffect(() => setName(conn.Name || ""), [conn.Name]);
+  const one = oneOf(conn.Type);
   const rename = async () => {
     const value = name.trim();
     if (!value || value === conn.Name) return;
@@ -1906,6 +1909,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
     } catch (e) { setErr(e?.response?.data?.detail || "could not add the connector"); }
     setBusy("");
   };
+  if (addOnly && !one) return null;
   return (
     <Box data-tq-add-another={conn.Type} sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: addOnly ? 0 : 1.5, maxWidth: 720 }}>
       {!addOnly && <>
@@ -1914,11 +1918,11 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
         <Button size="small" variant="outlined" disabled={busy === "rename" || !name.trim() || name.trim() === conn.Name}
           onClick={rename}>{busy === "rename" ? "Saving…" : "Save name"}</Button>
       </>}
-      {!adding ? (
-        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another</Button>
+      {!one ? null : !adding ? (
+        <Button size="small" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setAdding(true)}>Add another {one}</Button>
       ) : (
         <>
-          <TextField size="small" autoFocus label={`New ${conn.Type} connection name`} value={newName}
+          <TextField size="small" autoFocus label={`Name of the new ${one}`} value={newName}
             onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }}
             sx={{ bgcolor: "#fff", minWidth: 240 }} />
           <Button size="small" variant="contained" disableElevation disabled={busy === "add" || !newName.trim()}
@@ -2176,7 +2180,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [srcSync, setSrcSync] = useState(false);
   // the Outlook card leads with the sign-in; the tenant-app fields (an admin's road) fold
   // away unless they are already what this card runs on
-  const [adminFields, setAdminFields] = useState(conn.Type !== "outlook" || (!!cfg.client_id && cfg.auth !== "user"));
+  const [adminFields, setAdminFields] = useState(!MS_SIGNIN.includes(conn.Type) || (!!cfg.client_id && cfg.auth !== "user"));
   const syncHere = async () => {
     setSrcSync(true);
     const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
@@ -2191,7 +2195,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     // ticked once a Test has PASSED on them: "saved" ticked a key the service had just refused (the 2026-10-19 UI walk)
     { label: "Credentials", done: !m.secretLabel || (!!conn.HasSecret && !!conn.LastSyncAt && !conn.LastError), body: (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, maxWidth: 460, mt: 1 }}>
-        {conn.Type === "outlook" && !adminFields && (
+        {MS_SIGNIN.includes(conn.Type) && !adminFields && (
           <Button size="small" variant="text" onClick={() => setAdminFields(true)}
             sx={{ alignSelf: "flex-start", fontSize: 12, color: DIM, px: 0.5 }}>
             Admin? Use a tenant app registration instead →
@@ -2378,7 +2382,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       {/* the sign-in lives at the TOP of the card, not inside the Credentials step: a card that already
           runs on a tenant app opens on Sources, and the one button most people need was folded away.
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
-      {conn.Type === "outlook" && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
+      {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
       {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
@@ -3078,6 +3082,8 @@ const GithubCloseout = ({ conn, mine, reload }) => {
 // THE SIGNATURE MAIL FROM THIS MAILBOX CARRIES (outbound.card_signature): two mailboxes are two hats, and one global signature
 // put the first one's name and title under the second one's mail. Blank keeps the one in Settings. Held by the card's draft.
 const MAIL_CARDS = ["outlook", "gmail", "imap"];
+// the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
+const MS_SIGNIN = ["outlook", "teams"];
 function MailSignature({ conn, reload }) {
   const saveConn = useSaveConnector(reload);
   const cfg = parse(conn.ConfigJson);
@@ -3622,6 +3628,8 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   // (problems.signed_out, from the card's last poll)
   const signedOut = cfg.auth === "user" && conn.HasSecret && conn.SignedOut;
   const signedIn = cfg.auth === "user" && conn.HasSecret && !signedOut;
+  // a Teams card signs in the same way for its own account's chats (msauth.TEAMS_SCOPES) - the words say chats, not mail
+  const chats = conn.Type === "teams", what = chats ? "chats" : "mail";
   useEffect(() => {
     if (!flow) return undefined;
     let alive = true;
@@ -3639,7 +3647,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         if (data.status === "pending") { setTimeout(tick, wait); return; }
         setFlow(null);
         if (data.status === "ok") {
-          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under Mailboxes below and the first sync is running; what needs you shows up in the Assistant in a minute.`);
+          setState("ok"); setDetail(`Signed in as ${data.name || data.account} — ${data.account} is under ${chats ? "Users / chat ids" : "Mailboxes"} below and the first sync is running; what needs you shows up in the Assistant in a minute.`);
           reload(); onSignedIn?.();
         }
         else { setState("error"); setDetail(data.detail || "the sign-in did not complete"); if (data.admin_consent_url) setAdminUrl(data.admin_consent_url); }
@@ -3667,15 +3675,17 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
       {/* the first-run card says it for someone who has never heard of a tenant (FirstRun.jsx) */}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         {plain ? "Press the button, then type the code it shows on Microsoft's page and sign in as usual. This page finishes by itself."
+          : chats ? <>Your own work account, your own chats — read here and answered as you. No Azure portal, no tenant id, no secret;
+        each Teams card signs in its own account, so a second organisation is a second card.</>
           : <>Your own account, your own mailbox — mail, sending and calendar. No Azure portal, no tenant id, no secret;
-        work and personal (Outlook.com) accounts both work. Teams chat reading still needs the tenant app.</>}
+        work and personal (Outlook.com) accounts both work.</>}
       </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
           <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
           <Confirm open={askOut} title="Sign out of Microsoft?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
-            text={`Mail and calendar${cfg.account ? ` for ${cfg.account}` : ""} stop syncing until you sign in again. Nothing already here is lost.`} />
+            text={`${chats ? "Teams chats" : "Mail and calendar"}${cfg.account ? ` for ${cfg.account}` : ""} stop syncing until you sign in again. Nothing already here is lost.`} />
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
@@ -3698,7 +3708,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           {signedOut && (
             <Typography variant="body2" sx={{ color: INK, fontWeight: 600, flexBasis: "100%" }}>
-              Microsoft signed you out{cfg.account ? ` of ${cfg.account}` : ""}. I can't see your mail until you sign in again —
+              Microsoft signed you out{cfg.account ? ` of ${cfg.account}` : ""}. I can't see your {what} until you sign in again —
               nothing is lost, and I'll catch up on everything that came in.
             </Typography>
           )}

@@ -218,7 +218,11 @@ def send_email(store, to: list, subject: str, body: str, reply_to_graph_id: str 
 def send_teams(store, chat_id: str, body: str, connector_id=None) -> dict:
     """Post into a chat. App-only posting needs ChatMessage.Send on the app registration,
     which reading does NOT include - say so plainly rather than failing with a 403 blob."""
-    tok = _graph_token(store, 'teams', connector_id)
+    # the card that owns the chat, and only a person's sign-in: an app's token is refused every time (NO_SENDER)
+    c = store.get_connector(int(connector_id)) if connector_id else \
+        next((x for x in store.connectors_by_type('teams') if as_person(store, x)), None)
+    if c and c.get('Active') and not as_person(store, c): raise RuntimeError(NO_SENDER['teams'])
+    tok = _graph_token(store, 'teams', c and c['ConnectorId'])
     r = requests.post(f'{GRAPH}/chats/{chat_id}/messages', timeout=30,
                       headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'},
                       data=json.dumps({'body': {'contentType': 'text', 'content': body}}))
@@ -271,6 +275,21 @@ NO_SENDER = {'slack': 'Slack replies are not wired up yet - copy the draft and a
              'teams': 'Teams does not let an app post into a chat - copy the draft and answer it in Teams'}
 
 
+def as_person(store, c) -> bool:
+    """Does this Teams card read as a person - its own Microsoft sign-in, or the same account's Outlook sign-in?"""
+    from .channels import graph_creds
+    full = store.get_connector(c['ConnectorId'], with_secret=True) if c and c.get('Active') else None
+    if not full: return False
+    cfg, sec, _ = graph_creds(store, full)
+    return bool(sec) and cfg.get('auth') == 'user'
+
+def no_sender(store, ch) -> str:
+    """NO_SENDER's sentence for this channel, or '' where a road out exists after all: a Teams card signed in as a person
+    (its own Microsoft sign-in, MsSignIn) posts into that person's chats as them - only an APP may not."""
+    if ch == 'teams' and any(as_person(store, c) for c in store.connectors_by_type('teams')): return ''
+    return NO_SENDER.get(ch, '')
+
+
 def reply_channels(store) -> set:
     """The channels the owner has replies switched ON for (Settings → Replies)."""
     raw = store.get_setting('reply_channels')
@@ -320,7 +339,7 @@ def can_reply(store, channel) -> bool:
     connector) stays replyable, because silently refusing to answer an unrecognised channel
     is the worse failure. Only NEVER is absolute."""
     ch = (channel or '').lower()
-    if not ch or ch in NEVER or ch in NO_SENDER: return False
+    if not ch or ch in NEVER or no_sender(store, ch): return False
     if ch in SENDABLE and ch not in reply_channels(store): return False
     if ch == 'github': return store.github_replies_ok()
     if ch == 'email' and send_probe(store, ch): return False
@@ -337,7 +356,7 @@ def send_block(store, channel) -> str:
     if ch == 'github': return '' if store.github_replies_ok() else 'GitHub replies are off (GitHub card)'
     if ch in SENDABLE and ch not in reply_channels(store):
         return f"replies are off for {ch} ({words.name('replies')})"
-    if ch in NO_SENDER: return NO_SENDER[ch]                 # switched on, and still no road out of here
+    if no_sender(store, ch): return no_sender(store, ch)     # switched on, and still no road out of here
     if ch == 'email': return send_probe(store, ch)
     return ''
 
@@ -435,7 +454,7 @@ def send_out(store, channel: str, to, subject: str, body: str, cc: list = None, 
     if attachments and ch != 'email':
         raise RuntimeError(f'{ch} cannot carry the attached files from here - remove them, or send this one by email')
     # a channel with no sender at all falls through to the line below that names what DOES work - not "switched off"
-    if ch not in NO_SENDER and not can_reply(store, ch):
+    if not no_sender(store, ch) and not can_reply(store, ch):
         raise Fixable(f'sending on {ch} is switched off - the reply settings decide which channels '
                       'Taskuary may write to, and they govern outbound reports too', *REPLIES)
     if ch == 'email':

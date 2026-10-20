@@ -14,8 +14,9 @@ as before, and graph_token asks here when the card says auth=user.
 
 Caveats the card states: a tenant that forbids user consent ends the sign-in at "Need admin
 approval" - the admin approves ONCE for everyone (a consent grant, not an app registration).
-Teams chat reading (getAllMessages) is app-only in Graph, so the sign-in covers mail, send
-and calendar (reading it, and answering invites - Calendars.ReadWrite); Teams still needs the tenant app.
+Teams chat reading (getAllMessages) is app-only in Graph, so the Outlook sign-in covers mail, send and calendar (reading
+it, and answering invites - Calendars.ReadWrite). A TEAMS card signs in the same way with chat scopes of its own
+(TEAMS_SCOPES): its chats are read one by one (channels._teams_user_delta) and a reply is posted as the person.
 """
 import os, time, threading
 from urllib.parse import quote
@@ -29,6 +30,10 @@ GRAPH = 'https://graph.microsoft.com/v1.0'
 # so it keeps reading as it always did, and the next sign-in asks for the rest.
 SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite'
 LEGACY_SCOPES = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.Read'
+# a Teams card's own sign-in: its chats, their senders' names, marking a chat read, and answering in it - none needs an admin
+TEAMS_SCOPES = 'offline_access User.Read User.ReadBasic.All Chat.ReadWrite ChatMessage.Send'
+def scopes_for(kind) -> str: return TEAMS_SCOPES if kind == 'teams' else SCOPES
+def card_of(cfg) -> str: return 'Teams' if (cfg or {}).get('_kind') == 'teams' else 'Outlook'   # whose sign-in this is, said
 # Taskuary's own registration (multi-tenant + personal accounts, public client, device code
 # on). Overridable per install with TASKUARY_MS_CLIENT_ID, or per card with client_id.
 PUBLIC_CLIENT_ID = os.getenv('TASKUARY_MS_CLIENT_ID', 'd32e53c9-f00d-49fc-8b93-227b3e0190f0')
@@ -46,13 +51,13 @@ class AdminConsent(RuntimeError):
     """The tenant wants an admin to approve Taskuary before its people may sign in."""
 
 
-def admin_consent_url(cfg: dict) -> str:
+def admin_consent_url(cfg: dict, scope: str = SCOPES) -> str:
     """The link the user forwards to their Microsoft 365 admin. One click + Accept grants the
     delegated scopes for the whole organisation - a consent grant on OUR app id, so nobody on
     their side registers anything. The redirect is the public-client stock URI every such
     registration carries; the admin lands on a blank page saying admin_consent=True."""
     t = tenant(cfg); t = 'organizations' if t == 'common' else t     # personal accounts have no admin
-    return (f'{AUTH}/{t}/v2.0/adminconsent?client_id={_need_client(cfg)}&scope={quote(SCOPES)}'
+    return (f'{AUTH}/{t}/v2.0/adminconsent?client_id={_need_client(cfg)}&scope={quote(scope)}'
             f'&redirect_uri={quote(f"{AUTH}/common/oauth2/nativeclient", safe="")}')
 
 
@@ -64,10 +69,10 @@ def _need_client(cfg):
     return cid
 
 
-def device_start(cfg: dict) -> dict:
+def device_start(cfg: dict, scope: str = SCOPES) -> dict:
     """Begin the device-code flow: what to show the user (code + URL) and what to poll with."""
     r = requests.post(f'{AUTH}/{tenant(cfg)}/oauth2/v2.0/devicecode', timeout=20,
-                      data={'client_id': _need_client(cfg), 'scope': SCOPES})
+                      data={'client_id': _need_client(cfg), 'scope': scope})
     if r.status_code != 200: raise RuntimeError(f'Microsoft refused to start sign-in ({r.status_code}): {_err(r)}')
     j = r.json()
     return {'device_code': j['device_code'], 'user_code': j['user_code'], 'verification_uri': j['verification_uri'],
@@ -91,7 +96,9 @@ def device_poll(cfg: dict, device_code: str) -> dict:
 
 def refresh_scope(cfg: dict) -> str:
     """What a refresh asks for: what this sign-in was granted. Asking an older sign-in for Calendars.ReadWrite it never
-    consented to is refused (AADSTS65001) - and a refusal reads as the sign-in lapsing, for every read it used to make."""
+    consented to is refused (AADSTS65001) - and a refusal reads as the sign-in lapsing, for every read it used to make.
+    `_scope`: a Teams card reading through the SAME account's Outlook sign-in asks that sign-in for the chat scopes."""
+    if (cfg or {}).get('_scope'): return cfg['_scope']
     granted = [s for s in str((cfg or {}).get('granted_scope') or '').split() if s.lower() not in ('openid', 'profile', 'email')]
     return ' '.join(dict.fromkeys(['offline_access', *granted])) if granted else LEGACY_SCOPES
 
@@ -103,7 +110,11 @@ def refresh(cfg: dict, refresh_token: str) -> dict:
     # only Microsoft REFUSING the token is a lapse: a 5xx or a throttle is their service having a bad minute, and
     # calling it "signed out" would send the owner to sign in again for nothing (problems.py reads LAPSED)
     if r.status_code in (400, 401):
-        raise RuntimeError(f'{LAPSED} - sign in again on the Outlook card ({_friendly(_err(r))})')
+        # ...but an Outlook sign-in never asked for Teams is not lapsed: the Teams card signs in for its chats itself
+        if cfg.get('_for') == 'teams' and _needs_admin(_err(r)):
+            raise RuntimeError(f"the Outlook sign-in for {cfg.get('account') or 'this account'} was not given Teams access - "
+                               'press Sign in with Microsoft on the Teams card')
+        raise RuntimeError(f'{LAPSED} - sign in again on the {card_of(cfg)} card ({_friendly(_err(r))})')
     if r.status_code != 200: raise RuntimeError(f'Microsoft did not answer the sign-in check ({r.status_code}) - trying again next time')
     return _tokens(r.json())
 
@@ -123,14 +134,15 @@ def access_token(cfg: dict, refresh_token: str) -> str:
     The mint itself sits inside the lock: Outlook and Teams can share one refresh token,
     and a parallel poll that minted twice would rotate the first token out from under the
     second. Waiters reuse the cache entry the first thread just wrote."""
-    if not refresh_token: raise RuntimeError('not signed in - click "Sign in with Microsoft" on the Outlook card')
+    if not refresh_token: raise RuntimeError(f'not signed in - click "Sign in with Microsoft" on the {card_of(cfg)} card')
+    key = (refresh_token, refresh_scope(cfg))       # one sign-in asked for mail and, by a Teams card, for chats: two tokens
     with _LOCK:
-        hit = _CACHE.get(refresh_token)
+        hit = _CACHE.get(key)
         if hit and hit[1] > time.time() + 60: return hit[0]
         rt_now = hit[2] if hit else refresh_token
         t = refresh(cfg, rt_now)
         new_rt = t.get('refresh_token') or rt_now
-        _CACHE[refresh_token] = (t['access_token'], time.time() + int(t.get('expires_in') or 3600), new_rt)
+        _CACHE[key] = (t['access_token'], time.time() + int(t.get('expires_in') or 3600), new_rt)
     if new_rt != refresh_token and on_rotate and cfg.get('_cid'):
         try: on_rotate(cfg['_cid'], new_rt)
         except Exception as e: logger.warning(f'could not persist the rotated Microsoft refresh token: {e}')

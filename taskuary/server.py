@@ -5738,17 +5738,26 @@ def ms_signin(cid: int):
     """Start the device-code sign-in: the code and URL to show, and a flow id to poll with."""
     import secrets as _secrets
     from . import msauth
-    c = store.get_connector(cid)
-    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
+    c = _ms_card(cid)
     cfg = json.loads(c.get('ConfigJson') or '{}')
-    try: d = msauth.device_start(cfg)
+    try: d = msauth.device_start(cfg, msauth.scopes_for(c['Type']))
     except RuntimeError as e: raise HTTPException(409, str(e))
     except requests.RequestException as e: raise HTTPException(502, f'could not reach login.microsoftonline.com: {str(e)[:160]}')
     flow = _secrets.token_urlsafe(12)
     for k, v in list(_MSFLOWS.items()):
         if time.time() - v['at'] > 1800: _MSFLOWS.pop(k, None)
-    _MSFLOWS[flow] = {'cid': cid, 'device_code': d.pop('device_code'), 'cfg': cfg, 'at': time.time()}
+    _MSFLOWS[flow] = {'cid': cid, 'kind': c['Type'], 'device_code': d.pop('device_code'), 'cfg': cfg, 'at': time.time()}
     return {'flow': flow, **d}
+
+def _reads(cid):
+    c = store.get_connector(cid) if cid else None
+    return bool(c and c.get('Active') and c.get('HasSecret'))
+
+def _ms_card(cid):
+    """Outlook and Teams both sign in with Microsoft, each card its own account (a Teams card asks for chat scopes)."""
+    c = store.get_connector(cid)
+    if not c or c['Type'] not in ('outlook', 'teams'): raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook and Teams cards')
+    return c
 
 @app.post('/api/connectors/{cid}/ms/poll')
 def ms_poll(cid: int, body: dict):
@@ -5761,7 +5770,7 @@ def ms_poll(cid: int, body: dict):
     try: t = msauth.device_poll(f['cfg'], f['device_code'])
     except msauth.AdminConsent as e:
         _MSFLOWS.pop(flow, None)
-        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'])}
+        return {'status': 'error', 'detail': str(e), 'admin_consent_url': msauth.admin_consent_url(f['cfg'], msauth.scopes_for(f.get('kind')))}
     except RuntimeError as e:
         _MSFLOWS.pop(flow, None)
         return {'status': 'error', 'detail': str(e)}
@@ -5771,8 +5780,10 @@ def ms_poll(cid: int, body: dict):
         return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
     who = msauth.me(t['access_token'])
     # THE SAME ACCOUNT ON A SECOND CARD is two pollers on one mailbox: the card that already reads it says so, and this one
-    # stays as it was - "Add another" is for another account, and the sign-in page picks whichever one the browser has open
-    other = next((x for x in store.connectors_by_type('outlook') if x['ConnectorId'] != cid and x.get('Active') and x.get('HasSecret')
+    # stays as it was - "Add another" is for another account, and the sign-in page picks whichever one the browser has open.
+    # Asked of cards of ONE kind: the same account on an Outlook and a Teams card is one mailbox and one set of chats
+    kind = f.get('kind') or 'outlook'
+    other = next((x for x in store.connectors_by_type(kind) if x['ConnectorId'] != cid and x.get('Active') and x.get('HasSecret')
                   and str(json.loads(x.get('ConfigJson') or '{}').get('account') or '').lower() == (who['account'] or '').lower()),
                  None) if who['account'] else None
     if other:
@@ -5781,13 +5792,16 @@ def ms_poll(cid: int, body: dict):
     cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
            **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
-    had = next((s for s in store.list_sources(active_only=False) if s['Channel'] == 'email'
+    # the account signed in is what the card reads: its mailbox, or for a Teams card its chats (the UPN a source names)
+    chan = 'teams' if kind == 'teams' else 'email'
+    had = next((s for s in store.list_sources(active_only=False) if s['Channel'] == chan
                 and (s['Address'] or '').lower() == (who['account'] or '').lower()), None) if who['account'] else None
     if who['account'] and not had:
-        store.save_source({'Channel': 'email', 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
+        store.save_source({'Channel': chan, 'Address': who['account'], 'ConnectorId': cid, 'Active': 1}, ACTOR)
     # ...and one that exists but was SWITCHED OFF comes back on: signing in is asking for this mailbox to be read, and a stale
     # inactive row left it unread while the card said signed in (setup trace, 2026-10-14)
-    elif had and not had.get('Active'):
+    # ...and so does one held by a card that reads nothing (the catalogue's first Teams card, no sign-in): it comes here
+    elif had and (not had.get('Active') or (had.get('ConnectorId') != cid and not _reads(had.get('ConnectorId')))):
         store.save_source({**had, 'Active': 1, 'ConnectorId': cid}, ACTOR)
     # WHO YOU ARE, from the account you just signed in with - one step less for a first-time owner, never over a name they set
     if who.get('name') or who.get('account'):
@@ -5807,9 +5821,8 @@ def ms_poll(cid: int, body: dict):
 def ms_adminlink(cid: int):
     """The admin-approval link on demand - for the person who knows in advance that IT has to say yes."""
     from . import msauth
-    c = store.get_connector(cid)
-    if not c or c['Type'] != 'outlook': raise HTTPException(404, 'Sign in with Microsoft lives on the Outlook card')
-    try: return {'url': msauth.admin_consent_url(json.loads(c.get('ConfigJson') or '{}'))}
+    c = _ms_card(cid)
+    try: return {'url': msauth.admin_consent_url(json.loads(c.get('ConfigJson') or '{}'), msauth.scopes_for(c['Type']))}
     except RuntimeError as e: raise HTTPException(409, str(e))
 
 @app.post('/api/connectors/{cid}/ms/signout')

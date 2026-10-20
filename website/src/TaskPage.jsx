@@ -1318,7 +1318,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           {err && <Alert severity="error" onClose={() => { setErr(""); setStartFail(null); }} sx={{ mb: 1, flexShrink: 0 }}>{err}
             {startFail && startFail.text === err && <FailWays fail={startFail} onRetry={() => { const go = startFail.again; setErr(""); setStartFail(null); go?.(); }} />}</Alert>}
           {!t ? (
-            <Box data-tq-task-loading={selected ? "" : undefined} sx={{ height: "100%", display: "grid", placeItems: "center" }}>
+            // ...AND ON THE TABLE IT HOLDS THE VIEW'S ROOM (G8): a view with no pane is only as tall as what it draws (CanvasItem), so the
+            // shell was 22px - the dead-end walk's SEEN "only 22px of the card on the table is in view" after Remove (CI, 2026-10-20) was a
+            // next view still waiting for its read - and the view then grew to 400 under the owner's eyes. The canvas's own floor, 340
+            <Box data-tq-task-loading={selected ? "" : undefined} sx={{ height: "100%", minHeight: canvas && selected ? 340 : undefined, display: "grid", placeItems: "center" }}>
               {selected ? <CircularProgress size={20} /> : <Empty>{"The task you open will show here — its messages, its session, its history."}</Empty>}
             </Box>
           ) : (

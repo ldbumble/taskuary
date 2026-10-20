@@ -106,14 +106,53 @@ def since_line(store, tid, agent: str = 'the agent') -> str:
     return f"{who_wrote(mail)} wrote again after {agent}'s conversation of {_day(at)} - continue it and it reads the new mail first"
 
 
+# ── a reply that already went ────────────────────────────────────────────────────────────────────────────────────────
+# The agent drafted the reply, the owner sent it, the owner pressed Continue - and the agent, remembering only "I saved a reply
+# for approval", saved ANOTHER one to the same sender, though nothing had come from them since (the owner, 2026-10-20: "I replied
+# with what the agent created, then reran the agent and it recreated some reply???"). Its conversation is from before the send;
+# nothing told it the send happened. One reading of it, for every door that wakes an agent up again.
+
+def clock(at) -> str:
+    """'05:33 PM', with the day when it is not today."""
+    from datetime import datetime
+    try: d = datetime.strptime(str(at)[:16], '%Y-%m-%d %H:%M')
+    except ValueError: return str(at or '')
+    return d.strftime('%I:%M %p') + ('' if d.date() == datetime.now().date() else f' on {_day(at)}')
+
+
+def sent_since(store, tid) -> tuple:
+    """(the newest reply that went out on this task, the mail that reached the thread after it) - (None, []) when none went."""
+    rv = store.sent_reply(task_id=tid)
+    return (rv, mail_since(store, tid, str(rv.get('DecidedAt') or rv.get('CreatedAt') or ''))) if rv else (None, [])
+
+
+def sent_to(store, rv) -> str:
+    m = store.get_message((rv or {}).get('MessageId')) or {}
+    return str(m.get('FromName') or m.get('FromEmail') or 'them').strip()
+
+
+def sent_block(store, tid, quote: int = 300, cmd: str = '') -> str:
+    """The line a woken agent hears when its reply already went and nobody wrote since: it is sent, not pending. '' otherwise.
+    `quote` caps the sent words (a terminal's seed is a ~1 KB command line, so it quotes less); `cmd` names the follow-up road."""
+    rv, mail = sent_since(store, tid)
+    if not rv or mail: return ''
+    said = ' '.join(str(rv.get('FinalText') or rv.get('DraftText') or '').split())
+    said = f' ("{said[:quote]}{"..." if len(said) > quote else ""}")' if quote and said else ''
+    return (f'YOUR REPLY WENT OUT: the reply to {sent_to(store, rv)} was SENT at {clock(rv.get("DecidedAt"))}{said}, and nothing new '
+            'has come from them since - it is not waiting on anyone. Do not draft another reply unless the owner asks you for one'
+            + (f' (then: {cmd})' if cmd else '') + '.')
+
+
 def news_block(store, tid) -> str:
-    """What a Continue tells the agent before anything else, when the thread moved after its last turn. '' when it did not."""
+    """What a Continue tells the agent before anything else, when the thread moved after its last turn - or, when it did not, that
+    the reply it remembers drafting already went. '' when neither."""
     at = last_agent_turn(store, tid)
     mail = mail_since(store, tid, at) if at else []
-    if not mail: return ''
+    if not mail: return sent_block(store, tid)
     def one(m):
         body = ' '.join(str(m.get('BodyText') or '').split())[:1500]
         return f"- {m.get('FromName') or ''} <{m.get('FromEmail') or ''}> at {m.get('SentAt') or m.get('CreatedAt')}: {m.get('Subject') or ''}\n  {body}"
     return (f"NEW SINCE YOUR LAST TURN ({at}): {plural(len(mail), 'message')} came in on this task's thread after "
             "the conversation you remember - it is from BEFORE them, and the task was reopened because of them. Read them first; "
-            "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-5:]))
+            "what they ask is the work now, not what you finished last time.\n" + '\n'.join(one(m) for m in mail[-5:])
+            + (f'\n{s}' if (s := sent_block(store, tid)) else ''))     # ...unless the owner already answered them

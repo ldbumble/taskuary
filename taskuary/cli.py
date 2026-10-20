@@ -254,6 +254,9 @@ def main():
                          "task's pending reply for the owner to approve (you are not sending it), and "
                          "finishing keeps it instead of redrafting. Use - to read it from stdin.")
     ap.add_argument('--reply-file', metavar='PATH', help='--reply, read from a file (for a long or multi-line reply)')
+    ap.add_argument('--follow-up', action='store_true',
+                    help='with --reply: the owner asked you for ANOTHER message after your reply already went - it is saved as a '
+                         'follow-up to it. Without this, a second reply to a message already answered (nothing new from them) is refused.')
     ap.add_argument('--attach', action='append', default=[], metavar='PATH',
                     help='a file that goes with --reply or --draft (repeat for more). If your words say "attached", attach it - '
                          'otherwise the mail goes out without it. Alone, it adds the file to the reply already saved.')
@@ -306,7 +309,7 @@ def main():
         who = os.environ.get('TASKUARY_AGENT') or 'agent'
         got = (_post('/api/agent/draft', {'task_id': int(tid), 'text': text, 'to': args.to, 'subject': args.subject, 'slot': args.slot,
                                           'agent': who, 'files': files}, stranger) if drafting
-               else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files}, stranger))
+               else _post('/api/agent/reply', {'task_id': int(tid), 'text': text, 'agent': who, 'files': files, 'follow_up': args.follow_up}, stranger))
         if not got: return
         r, out = got
         if text or not out.get('ok'): print("saved on the task as its result - nobody is waiting on a reply, so nothing will be sent." if out.get('saved') == 'result'

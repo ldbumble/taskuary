@@ -2068,7 +2068,10 @@ def continue_work(task_id: int, body: ContinueBody = None):
     # the conversation, else the one that last worked the task - never whatever the default happens to be today
     last = row or store.last_transcript(task_id) or {}
     brain = (last.get('Brain') or None) if isinstance(last, dict) else None
-    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT))   # their words lead
+    # ...and a reply the owner has since SENT is said too: a fresh session told nothing drafted it again (2026-10-20)
+    sent = continuity.sent_block(store, task_id, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
+    fresh = lambda: continue_task(task_id, CodeBody(brain=brain, instruction=(f'FROM THE OWNER: {note}\n\n' if note else '') + continuity.RESUME_PROMPT
+                                                                       + (f'\n\n{sent}' if sent else '')))   # their words lead
     if row:
         # the conversation belongs to the CLI that made it; when THAT CLI cannot open now (out of sessions, signed out), a fresh
         # session seeded with the handover is the way on - not an error (the owner, 2026-09-30, TQ-0887: codex made it, codex was
@@ -2108,8 +2111,9 @@ _RESUME_LOCK = threading.Lock()
 def _resume_assistant(task_id):
     from . import continuity, general
     try:
+        news = continuity.news_block(store, task_id)     # the mail since, or that its reply already went (2026-10-20)
         general.start_session(store, task_id, actor=ACTOR).send_prompt(
-            continuity.RESUME_PROMPT, as_owner=False, echo=False)
+            continuity.RESUME_PROMPT, as_owner=False, echo=False, **({'delivery_instructions': news} if news else {}))
     except Exception as e:
         _walk_cannot(task_id, f'The session could not resume: {e}. Your saved conversation is still here.')
     finally:
@@ -2138,7 +2142,8 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
     if general.handles(task):
         background.add_task(_resume_assistant, task_id)
     else:
-        try: continue_task(task_id, CodeBody(instruction=continuity.RESUME_PROMPT))
+        sent = continuity.sent_block(store, task_id, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')
+        try: continue_task(task_id, CodeBody(instruction=continuity.RESUME_PROMPT + (f'\n\n{sent}' if sent else '')))
         finally: general.OPENING.discard(task_id)
     return {'action': 'open', 'taskId': task_id}
 
@@ -4034,7 +4039,7 @@ def agent_done(body: AgentDoneBody, request: Request):
     return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply)
 
 class AgentFile(BaseModel): name: str; data: str                  # data is base64: the CLI reads the file, the server never opens a path it is handed
-class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
+class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False
 
 def _agent_files(files):
     import base64, binascii
@@ -4049,7 +4054,7 @@ def agent_reply(body: AgentReplyBody, request: Request):
     from . import wrapup
     _own_task_only(request, body.task_id)
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
-    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files))
+    return wrapup.agent_reply(store, body.task_id, body.text, body.agent, files=_agent_files(body.files), follow_up=body.follow_up)
 
 class AgentDraftBody(BaseModel): task_id: int; text: str; to: str = ''; subject: str = ''; slot: str = ''; agent: str = 'agent'; files: list[AgentFile] = []
 

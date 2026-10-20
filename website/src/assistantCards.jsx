@@ -67,6 +67,8 @@ export function SourceMark({ item, size = 14 }) {
   if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return <TerminalIcon sx={{ fontSize: size, color: "#41525f" }} />;
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return <TaskuaryMark size={size} />;
   if (item.kind === "fyis" && !item.channel) return <TaskuaryMark size={size} />;
+  // a proposal is the assistant's own act (Remind me, Mark done...), not a mail: it wore the envelope every unsourced card falls to
+  if (item.kind === "proposal" && !item.channel) return <TaskuaryMark size={size} />;
   return <ChannelIcon channel={item.channel || "email"} sx={{ fontSize: size }} />;
 }
 
@@ -80,6 +82,7 @@ export function sourceColor(item) {
   if ((item.kind === "agent" || item.kind === "agentdone") && !item.channel) return "#41525f";
   if (item.kind === "setup" || item.kind === "brief" || item.kind === "walk" || (item.kind === "idea" && !item.channel)) return ASSISTANT.solid;
   if (item.kind === "fyis" && !item.channel) return ASSISTANT.solid;
+  if (item.kind === "proposal" && !item.channel) return ASSISTANT.solid;
   return channelColor(item.channel || "email");
 }
 

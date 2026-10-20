@@ -20,6 +20,18 @@ test("a row joining a band waits for the glide, a reordered row starts from wher
   const view = src("AssistantView.jsx");
   assert.match(view, /falls\(i\.key\) \? "landing" : entering\.has\(i\.key\) \? "entering" : ""/);
   assert.match(view, /style=\{\{ top: falls\(i\.key\) \? -ROW_H : top \}\}/);
-  assert.match(view, /el\.style\.transition = "none"; el\.style\.top = `\$\{p\.top\}px`;/, "a moved node is sent back to where it stood");
+  assert.match(view, /Math\.abs\(at - top\) < 0\.5 \? \[el, p\.top, p\.h\]/, "a moved node is sent back to where it stood");
   assert.match(view, /const arrivalsOf = \(was\) => \(was\?\.size \? arrivals\(was, items\) : new Set\(\)\);/, "after an empty rail nothing falls at once");
+});
+
+// ...AND A GLIDE THAT CHANGES COURSE (a close rings the next row at once, then the pile's answer lands mid-glide) restarts every row
+// from where it is drawn, top and height together: the rows whose top changed again began a fresh glide while the ringed row's height
+// kept its old one, and it grew into the row under it on CI's slow runner (the walk's SWAP, 2026-10-20)
+test("a change of course mid-glide restarts every row's top and height from one frame", () => {
+  const view = src("AssistantView.jsx");
+  assert.match(view, /if \(!moved \|\| !was\.size\) return;/, "only when a row's rest changed - a re-render alone must not restart the glide");
+  assert.match(view, /: \[el, at, parseFloat\(cs\.height\)\]/, "every row, read before any is written");
+  assert.match(view, /el\.style\.transitionProperty = "opacity, transform"; el\.style\.top = `\$\{top\}px`; el\.style\.height = `\$\{h\}px`;/,
+    "top and height held where drawn, a fade left running");
+  assert.match(view, /el\.style\.transitionProperty = ""; el\.style\.top = `\$\{top\}px`; el\.style\.height = "";/);
 });

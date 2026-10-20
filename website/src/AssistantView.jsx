@@ -46,7 +46,7 @@ const AssistantMark = () => <TaskuaryMark size={24} />;
 import { BORDER, DIM, FAINT, INK, LEVEL_COLOR, LEVEL_TINT, ROLES } from "./theme.jsx";
 import { railShort } from "./batchItems.js";
 import ProposalCard from "./ProposalCard.jsx";
-import { adviceRead, tableOf } from "./tableState.js";
+import { adviceRead, tableOf, tableWords } from "./tableState.js";
 import { ReportLink } from "./BugReportDialog.jsx";
 import { openBugReport, shownError } from "./bugReportOpen.js";
 import { RemindPicker } from "./RemindMe.jsx";
@@ -258,7 +258,7 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, tag = "on the table" }) {
   const items = pile?.items || [];
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
   const tail = fyiTail(pile).length;
@@ -581,7 +581,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                         (the owner, 2026-09-17: "isn't there a current word on the border around
                         chosen task by the assistant?"). It is a sibling of the card, not a child:
                         the card clips its overflow so the title can ellipse. */}
-                    {isCur && <b className="tq-pile-now">on the table</b>}
+                    {isCur && <b className="tq-pile-now" data-tq-now={tag}>{tag}</b>}
                   </div>
                 );
               })}
@@ -2396,6 +2396,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
   const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current });
+  // ...and what the rail's tag and the box say of it: a page over it is not it in view (tableWords)
+  const tableSays = tableWords(table, currentItem?.ref || (/^task:(\d+)$/.test(table.key || "") ? `TQ-${table.key.slice(5).padStart(4, "0")}` : ""));
   // THE ASSISTANT'S LIGHT OUTRANKS THE ADVISOR'S while its item is on the table: the owner asked for that act in words, and the Advisor's line
   // over it would name another button (assistantLight.js); it goes out at the next press or when the table moves on
   const litTable = { key: table.key, tid: currentItem?.tid ?? Number(/^task:(\d+)$/.exec(table.key || "")?.[1] || 0) };
@@ -2700,8 +2702,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
             {/* a phone's composer is one line tall and the long hint wrapped under its own edge, cut
                 mid-word ("name or a subject pulls it in" lost its tail, 2026-09-20): the short hint there */}
             <textarea ref={composeRef} rows={1} value={text} disabled={resetting}
-              placeholder={(phone ? (current ? "Ask about this one…" : "Ask Taskuary anything…")
-                : current ? "Ask about this one, tell me what to do with it, or name something else…" : "Ask Taskuary anything — a name or a subject pulls it in…")}
+              placeholder={phone ? tableSays.phone : tableSays.box}
               onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
             <button type="button" className="tq-send" aria-label="Send" disabled={busy || resetting || pics.busy || !(text.trim() || pics.imgs.length)} onClick={() => send()}><SendIcon fontSize="small" /></button>
           </div>
@@ -2747,7 +2748,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
-        onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
+        onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

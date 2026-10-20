@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { adviceRead, sameTarget, tableOf } from "../src/tableState.js";
+import { adviceRead, sameTarget, tableOf, tableWords } from "../src/tableState.js";
 import { adviceKeyFor } from "../src/advice.js";
 
 const src = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
@@ -14,6 +14,21 @@ test("folded by its X or under a page, the item stays on the table and the Advis
   assert.equal(tableOf({ cardKey: "task:9", browsing: "b123" }).speaks, false, "a page opened over it: no strip, no button acting on it");
   assert.equal(tableOf({ current: "task:7", setup: true }).speaks, false);
   assert.equal(tableOf({}).key, null);
+});
+
+// G5 (2026-10-19 UI walk): Connections opened over TQ-0003 and the rail still said "on the table", the box "Ask about this one"
+test("a page over the item: the rail's tag and the box say it is under the page, not in view", () => {
+  const under = tableWords(tableOf({ current: "task:3", browsing: "b1" }), "TQ-0003");
+  assert.equal(under.tag, "under this page");
+  assert.match(under.box, /^Ask about this page or TQ-0003/);
+  assert.equal(under.phone, "Ask about this page…");
+  const shown = tableWords(tableOf({ current: "task:3" }), "TQ-0003");
+  assert.equal(shown.tag, "on the table");
+  assert.match(shown.box, /^Ask about this one/);
+  assert.match(tableWords(tableOf({ cardKey: "task:9" })).box, /^Ask about this one/, "a task opened by name is on the table too");
+  assert.match(tableWords(tableOf({ browsing: "b1" })).box, /^Ask Taskuary anything/, "a page with nothing under it");
+  assert.match(src, /tag=\{tableSays\.tag\}/, "the rail draws the tag tableWords chose");
+  assert.match(src, /placeholder=\{phone \? tableSays\.phone : tableSays\.box\}/, "and the box its words");
 });
 
 test("Thinking shows only while the server says a judgement is in flight", () => {

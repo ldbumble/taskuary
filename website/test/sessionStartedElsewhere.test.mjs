@@ -36,8 +36,10 @@ test("the open task is reloaded on task-changed, not just the list", () => {
 test("the session the detail already carries is adopted", () => {
   assert.match(src, /const live = detail\?\.session;/,
     "the detail carries the live session - sessionAlive is read off it - so the page must take it");
-  assert.match(src, /live\?\.alive && live\.taskId === selected && live\.sid !== term\?\.sid/,
-    "adopt only a LIVE session of THIS task, and only when it is one we do not already hold");
+  assert.match(src, /if \(!live\?\.alive \|\| live\.taskId !== selected\) return;\s*\n\s*if \(live\.sid !== term\?\.sid\) setTerm\(live\);/,
+    "adopt only a LIVE session of THIS task, and a new one whole when it is not the one we hold");
+  // ...and the one we hold takes its own new word - waiting, its question - merged in, never another session's (G7)
+  assert.match(src, /else if \(liveWord !== sessionWord\(term\)\) setTerm\(\(was\) => \(was\?\.sid === live\.sid \? \{ \.\.\.was, \.\.\.live \} : was\)\)/);
 });
 
 test("a switch never adopts the task it is leaving's session", () => {
@@ -47,14 +49,14 @@ test("a switch never adopts the task it is leaving's session", () => {
   // session" and composer acted on THAT task's agent (2026-09-24).
   const effect = /const live = detail\?\.session;[\s\S]*?\}, \[([^\]]*)\]\);/.exec(src);
   assert.ok(effect, "the adopting effect is where it was");
-  assert.match(effect[0], /live\.taskId === selected/, "the session must belong to the selected task");
+  assert.match(effect[0], /live\.taskId !== selected\) return/, "the session must belong to the selected task");
   assert.match(effect[1], /\bselected\b/, "and the effect must re-run when the selection changes");
 });
 
 test("a session that has ENDED is not adopted over the one findTerm kept", () => {
   // findTerm deliberately keeps a dead session: its scrollback is what Done and Pause read, and
   // for_task only ever returns a live one, so adopting unconditionally would drop the transcript.
-  const guard = /const live = detail\?\.session;\s*\n\s*if \(live\?\.alive/;
+  const guard = /const live = detail\?\.session;\s*\n\s*if \(!live\?\.alive \|\|/;
   assert.match(src, guard, "the adoption must be gated on alive");
   assert.equal(agentPhase({ session: { alive: false }, transcript: "scrollback" }), "agent stopped");
 });

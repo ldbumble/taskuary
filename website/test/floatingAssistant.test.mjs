@@ -34,7 +34,7 @@ test("add shortcuts open the native new-task and new-report surfaces", () => {
 // on the very first render, so the requested card opens without a detour through another page
 test("deep links open their card in the canvas from the first render", () => {
   const page = read("TaskHubPage.jsx");
-  assert.match(page, /useState\(\(\) => \{ const r = canvasRequestFromHash\(window\.location\.hash \|\| "", 1\); return r && \{ \.\.\.r, fromUrl: true \}; \}\)/);
+  assert.match(page, /useState\(\(\) => \{ const r = canvasRequestFromHash\(window\.location\.hash \|\| "", 1\); readAhead\(r\); return r && \{ \.\.\.r, fromUrl: true \}; \}\)/);
   assert.match(page, /request=\{canvasReq\}/);
   assert.match(page, /useState\(tab === "Assistant"\)/);
   assert.match(page, /\{everAssistant && \(/);

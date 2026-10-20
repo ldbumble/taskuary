@@ -31,6 +31,7 @@ import { loadGeneral } from "./lazyGeneral.js";
 const DemoJourney = DEMO ? lazyView(() => import("./DemoJourney.jsx")) : () => null;
 import { advisedIn, onPressed, onPressing, press as pressRow, rowNow, useHosted, useRowVerbs, useVerbs } from "./actionRow.js";
 import { forgetTasks, heldTask, heldTerm, prefetchTask } from "./taskDetail.js";
+import { readLists } from "./connectorLists.js";
 import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js";
 import { readNdjson, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
@@ -2344,6 +2345,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // A SIDEBAR BUTTON POSTS ITS BROWSE CARD into the conversation - no AI, no tab: the newest one is the live one, and an
   // earlier one folds to its line, so only one detail is ever mounted (the canvas redesign, 2026-09-29)
   const browse = (area, state = {}) => {
+    if (area === "connections") readLists(api);        // its lists asked for now, beside its chunk (connectorLists.js)
     navHow.current = "push";
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false);
     const id = `b${Date.now()}`;

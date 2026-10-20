@@ -19,8 +19,12 @@ test("first-run read waits for completion, displays five results and preserves s
   });
   await page.goto(harness.ui, { waitUntil: "domcontentloaded" });
   await page.evaluate(async () => {
+    // React exactly as the app imports it: the harness keeps Vite's dep cache outside node_modules/.vite (harness.mjs),
+    // so the pre-bundled files are wherever main.jsx's own imports say
+    const main = await (await fetch("/src/main.jsx")).text();
+    const dep = (name) => main.match(new RegExp(`["']([^"']*/deps/${name}\\.js[^"']*)["']`))[1];
     const [{ FirstSync }, React, client] = await Promise.all([
-      import("/src/SetupWizard.jsx"), import("/node_modules/.vite/deps/react.js"), import("/node_modules/.vite/deps/react-dom_client.js"),
+      import("/src/SetupWizard.jsx"), import(dep("react")), import(dep("react-dom_client")),
     ]);
     const createRoot = client.createRoot || client.default.createRoot;
     const createElement = React.createElement || React.default.createElement;

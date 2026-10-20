@@ -143,10 +143,11 @@ def _graph_mail(store, days):
         common = {'$top': 50, '$orderby': 'receivedDateTime desc',
                   '$filter': f'receivedDateTime gt {since}'}
         try:
-            sent += _page(tok, f'{GRAPH}/users/{upn}/mailFolders/sentitems/messages',
-                          {**common, '$select': 'id,subject,toRecipients,receivedDateTime,conversationId,body'}, SENT_CAP)
-            inbox += _page(tok, f'{GRAPH}/users/{upn}/mailFolders/inbox/messages',
-                           {**common, '$select': 'id,subject,from,receivedDateTime,conversationId'}, INBOX_CAP)
+            # each message knows its mailbox: with mailboxes at more than one organisation the job is read per organisation (gen_job)
+            sent += [{**m, 'mailbox': upn} for m in _page(tok, f'{GRAPH}/users/{upn}/mailFolders/sentitems/messages',
+                     {**common, '$select': 'id,subject,toRecipients,receivedDateTime,conversationId,body'}, SENT_CAP)]
+            inbox += [{**m, 'mailbox': upn} for m in _page(tok, f'{GRAPH}/users/{upn}/mailFolders/inbox/messages',
+                      {**common, '$select': 'id,subject,from,receivedDateTime,conversationId'}, INBOX_CAP)]
         except Exception as e:
             logger.warning(f'history read failed for {upn}: {e}')
     return sent, inbox, n
@@ -164,17 +165,20 @@ def _imap_sent(store, days):
         return []
     # shaped like a Graph message so one reader serves both
     return [{'subject': m.get('subject'), 'receivedDateTime': (m.get('sent_at') or '').replace(' ', 'T'),
-             'conversationId': m.get('conversation_id'),
+             'conversationId': m.get('conversation_id'), 'mailbox': m.get('from_email') or '',
+             'toRecipients': [{'emailAddress': {'address': a}} for a in m.get('to') or []],
              'body': {'contentType': 'text', 'content': m.get('body') or ''}} for m in rows]
 
 
 def sent_mail(store, days):
-    """(messages, mailboxes, where they came from). Graph first because it can also pair the
-    inbox; IMAP when Outlook is not the mailbox on this install."""
+    """(sent, inbox, mailboxes, where they came from) across EVERY mailbox: Graph's, which also pairs the inbox, and each Gmail and
+    IMAP card's Sent folder. An Outlook card used to end the read there, so a second mailbox on IMAP never reached the job (the
+    owner, 2026-10-20: JOB.md is written from every connected mailbox, not only the first)."""
     sent, inbox, n = _graph_mail(store, days)
-    if sent or inbox: return sent, inbox, n, 'Graph'
-    rows = _imap_sent(store, days)
-    return rows, [], (1 if rows else 0), 'IMAP'
+    rows = _imap_sent(store, days) if not (sent or inbox) or any(
+        c.get('Active') and c.get('Type') in ('imap', 'gmail') for c in store.list_connectors()) else []
+    how = ' and '.join(x for x, on in (('Graph', sent or inbox), ('IMAP', rows)) if on) or ('Graph' if n else 'IMAP')
+    return sent + rows, inbox, n + len({m.get('mailbox') or '?' for m in rows}), how
 
 
 def _db_window(store, days):
@@ -311,19 +315,54 @@ JOB_SYSTEM = (
 def _addr(p): return ((p or {}).get('emailAddress') or {}).get('address') or ''
 
 
+# ONE JOB PER ORGANISATION (the owner, 2026-10-20: "if the mailboxes point at different organisations/roles, JOB.md gets a section per
+# organisation/role"): mailboxes at two organisations are two jobs, and one description over both blends them into neither
+JOB_PART = ('\n- THIS IS ONE OF SEVERAL JOBS: the owner works for more than one organisation, and this mail is only what reaches their '
+            'mailboxes at the one THE OWNER names. Write that job alone - never a responsibility, a person or a cadence of another one.')
+
+
+def org_groups(store) -> list:
+    """[(organisation, [addresses])] - the connected mailboxes by the organisation their address belongs to, the owner's own first and
+    named as setup was told it; any other by its domain. One group is one job."""
+    own = (store.owner().get('owner_email') or '').rsplit('@', 1)[-1].lower()
+    company, by = (store.get_setting('owner_company') or '').strip(), {}
+    for b in mailboxes(store): by.setdefault(b['address'].rsplit('@', 1)[-1].lower(), []).append(b['address'])
+    return [(company if d == own and company else d, boxes) for d, boxes in sorted(by.items(), key=lambda x: (x[0] != own, x[0]))]
+
+
 def gen_job(store, llm, days):
-    """Both directions of the mailbox -> what the job is (job_evidence), written as JOB.md's learned block."""
-    user, src, ev = job_evidence(store, days)
-    return llm(JOB_SYSTEM, user, max_tokens=GUIDE_TOKENS), src, ev
+    """Both directions of the mailbox -> what the job is (job_evidence), written as JOB.md's learned block - every mailbox read, and
+    with mailboxes at more than one organisation, a section per organisation, each from its own mailboxes' mail."""
+    groups = org_groups(store)
+    if len(groups) < 2:
+        user, src, ev = job_evidence(store, days)
+        return llm(JOB_SYSTEM, user, max_tokens=GUIDE_TOKENS), src, ev
+    mail, parts, srcs, ev = sent_mail(store, days), [], [], []
+    for org, boxes in groups:
+        try: user, src, e = job_evidence(store, days, mail=mail, only=boxes, part=org)
+        except RuntimeError as x: logger.info(f'job: no mail to read at {org} yet - {x}'); continue
+        body = (llm(JOB_SYSTEM + JOB_PART, user, max_tokens=GUIDE_TOKENS) or '').strip()
+        if body: parts.append(f"## At {org} ({', '.join(boxes)})\n\n{body}"); srcs.append(f'{org}: {src}'); ev += [f'at {org}:'] + e
+    if not parts: raise RuntimeError('no mail history to learn the job from - connect a mailbox (Outlook, Gmail or IMAP) and let a '
+                                     'few syncs run first')
+    return '\n\n'.join(parts), '; '.join(srcs), ev
 
 
-def job_evidence(store, days):
+def job_evidence(store, days, mail=None, only=None, part=''):
     """(the roll-ups as the model reads them, what was read, the evidence lines) - both directions of the mailbox. Who writes in (and whether they are answered), who the
     owner writes to, which subjects recur and on what rhythm, which threads the owner opens. STYLE reads the
     sent folder for the voice and TRIAGE pairs inbox with sent for what matters; this reads the same two for
-    the shape of the work itself. Falls back to Taskuary's own record like the others."""
+    the shape of the work itself. Falls back to Taskuary's own record like the others.
+    `only`: the mailboxes to read (one organisation's, `part`), out of `mail` read once for all of them."""
     from .routing import subject_topic
-    sent, inbox, n, how = sent_mail(store, days)
+    sent, inbox, n, how = mail or sent_mail(store, days)
+    box = lambda m: (m.get('mailbox') or '').lower()
+    keep = {a.lower() for a in only or ()}
+    if only: sent, inbox, n = [m for m in sent if box(m) in keep], [m for m in inbox if box(m) in keep], len(keep)
+    # what Taskuary ingested, by the mailbox it came in on: one organisation's own, and - beside a Graph inbox - every mailbox Graph
+    # does not read (a Gmail or IMAP card's inbound lives only here)
+    db = _db_window(store, days)
+    if only: db = [m for m in db if (m.get('SourceName') or '').lower() in keep]
     inn, out, doms, tops, started = Counter(), Counter(), {}, {}, Counter()
     names = {_addr(p).lower(): ((p or {}).get('emailAddress') or {}).get('name') or ''
              for m in inbox for p in [m.get('from')]} | {_addr(p).lower(): ((p or {}).get('emailAddress') or {}).get('name') or ''
@@ -333,12 +372,16 @@ def job_evidence(store, days):
     if inbox:
         rows = [(_addr(m.get('from')).lower() or '?', str(m.get('receivedDateTime') or '')[:10], (m.get('subject') or '')[:70],
                  m.get('conversationId') in answered, m.get('conversationId')) for m in inbox]
+        others = {b['address'].lower() for b in mailboxes(store) if b['type'] != 'outlook'} - {box(m) for m in inbox}
+        rows += [((m.get('FromEmail') or '?').lower(), str(m.get('SentAt') or '')[:10], (m.get('Subject') or '')[:70],
+                  m.get('ConversationId') in answered, m.get('ConversationId'))
+                 for m in db if m.get('Status') != 'context' and (m.get('SourceName') or '').lower() in others]
         for m in sent:
             for p in m.get('toRecipients') or []:
                 if _addr(p): out[_addr(p).lower()] += 1
-        src = f'{len(inbox)} inbound + {len(sent)} sent from the last {days} days across {n} mailbox(es), read over {how}'
+        src = f'{len(rows)} inbound + {len(sent)} sent from the last {days} days across {n} mailbox(es), read over {how}'
     else:
-        msgs = _db_window(store, days)
+        msgs = db
         names.update({(m.get('FromEmail') or '').lower(): m.get('FromName') or '' for m in msgs if m.get('FromName')})
         rows = [((m.get('FromEmail') or '?').lower(), str(m.get('SentAt') or '')[:10], (m.get('Subject') or '')[:70],
                  (m.get('ConversationId') in answered) if answered else (m['Status'] == 'routed' and bool(m.get('TaskId'))),
@@ -385,17 +428,25 @@ def job_evidence(store, days):
         ('THREADS THE OWNER STARTED (subject: times)', sroll)) if l)
     # ...and what people actually ask, in their words: off subjects and counts alone the job said "I approve no spending" over a
     # mailbox asking for the payment run's approval (a fresh-install walk, 2026-10-16)
-    asks = [m for m in _db_window(store, days) if m.get('Status') != 'context' and m.get('BodyText')][-JOB_ASKS:]
+    asks = [m for m in db if m.get('Status') != 'context' and m.get('BodyText')][-JOB_ASKS:]
     if asks: user += '\n\nWHAT PEOPLE WRITE TO THE OWNER (sender, subject: how it starts):\n' + '\n'.join(
         f"  {m.get('FromName') or m.get('FromEmail') or '?'} \"{(m.get('Subject') or '')[:70]}\": {' '.join(str(m['BodyText']).split())[:200]}" for m in asks)
     if soul: user += f"\n\nSOUL.md (the owner's own description of their work, systems and people):\n{soul}"
-    return owner_block(store) + user, src, ev
+    return owner_block(store, part, only) + user, src, ev
 
 
-def owner_block(store) -> str:
+def owner_block(store, part: str = '', boxes=None) -> str:
     """THE OWNER, as setup asked it: name, title, organisation, and the domain that is their own - "inbound mail comes mainly from one
-    partner organisation" was the owner's own colleagues (a fresh-install walk, 2026-10-16)."""
+    partner organisation" was the owner's own colleagues (a fresh-install walk, 2026-10-16). `part`: one of several organisations,
+    read through `boxes` - its people are the colleagues there, and the title setup was told is for the owner's own one only."""
     o = store.owner()
+    if part:
+        own = (o.get('owner_email') or '').rsplit('@', 1)[-1].lower()
+        doms = sorted({a.rsplit('@', 1)[-1].lower() for a in boxes or ()})
+        title = (store.get_setting('owner_title') or '').strip() if own in doms else ''
+        name = o['owner'] if o['owner'] != 'the owner' else 'unnamed'
+        return (f"THE OWNER: {name}{f', {title}' if title else ''} - this is their work at {part}, read through {', '.join(boxes or ())}; "
+                f"people at {', '.join(doms)} are their colleagues there, never a partner\n\n")
     title, org = (store.get_setting('owner_title') or '').strip(), (store.get_setting('owner_company') or '').strip()
     who = ', '.join(x for x in (o['owner'] if o['owner'] != 'the owner' else '', ' at '.join(x for x in (title, org) if x)) if x)
     dom = o['owner_email'].rsplit('@', 1)[-1].lower() if '@' in (o.get('owner_email') or '') else ''
@@ -513,7 +564,8 @@ def generate(store, name: str, days: int = DAYS) -> str:
         if name in SINKS: src = SINKS[name](store, body, src)
         else:
             # a broken answer never lands in the doc - a marker inside it would corrupt the splice
-            if not body or '<!--' in body or len(body) < 100 or len(body) > 8000:
+            # ...a job in a section per organisation is that many answers long
+            if not body or '<!--' in body or len(body) < 100 or len(body) > 8000 * max(1, len(re.findall(r'^## ', body, re.M))):
                 raise RuntimeError('the model returned nothing usable - try again, or a different triage brain')
             stamp = datetime.now().strftime('%Y-%m-%d %H:%M')
             store.save_doc(name, _splice(store.get_doc(name) or '', f'_generated {stamp} — {src}_\n\n{body}', TITLES[name]), 'histgen')

@@ -23,6 +23,8 @@ class RefusedTests(_Rail):
         for i in funnel.pile(s)['items']:
             if not i['key'].startswith('review:'): continue
             r = s.get_review(int(i['key'][7:]))
+            # ...one whose words are ready to send: a draft promising a payment date is redrafted, not sent (the deep dive, 2026-10-20)
+            if demo._PROMISE.search(str(r.get('DraftText') or '')): continue
             if (s.get_message(r['MessageId']) or {}).get('Channel') == channel: return i['key'], r
         self.fail(f'the demo has no {channel} draft on its rail')
 
@@ -50,12 +52,20 @@ class RefusedTests(_Rail):
         self.assertEqual(s.get_operation('op9')['Status'], 'proposed', 'the proposal itself is left as it was')
         self.assertEqual(demo.refused(s, '/api/connectors/3', demo.OFF), '')
 
-    def test_a_send_the_mail_server_refused_is_redrafted_not_sent_again(self):
+    def test_a_send_the_mail_server_refused_for_its_address_fixes_the_address_never_redrafts(self):
+        # the address is what is wrong, not the words: Redraft wrote the same mail to the same dead address (the deep dive, 2026-10-20)
         s = self._world(); key, r = self._draft(s)
         s._exec("UPDATE review SET DeliveryState='failed', Reason=? WHERE ReviewId=?",
                 ('Not sent: the mail server refused erin.blake@northwind.example (5.1.1 no such user)', r['ReviewId']))
         got = self._advise(s, key)
-        self.assertEqual(got.get('verb'), 'redraft', got)
+        self.assertIn(got.get('verb'), ('fix', 'new_task'), got)
+        self.assertIn('address', got.get('line', ''))
+
+    def test_a_send_refused_for_another_reason_is_still_redrafted_not_sent_again(self):
+        s = self._world(); key, r = self._draft(s)
+        s._exec("UPDATE review SET DeliveryState='failed', Reason=? WHERE ReviewId=?",
+                ('Not sent: the mail server said no (552 message too large)', r['ReviewId']))
+        self.assertEqual(self._advise(s, key).get('verb'), 'redraft')
 
     def test_the_scripted_advisor_reads_what_failed(self):
         ask = lambda verbs, extra='': json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nVERBS OFFERED: {verbs}{extra}'))

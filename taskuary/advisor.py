@@ -131,7 +131,21 @@ SYSTEM = (
     "WHEN SOMETHING FAILED (a WHAT FAILED line below), the owner is owed the way past it, at any event: say in plain words what went "
     "wrong, and pick the move that fixes it - the fix offered when there is one (it opens the place that fixes it); else a verb offered "
     "that gets round it; else, when nothing here can fix it, the one that makes a task to fix it. Never advise the act that failed again "
-    "unchanged - unless the failure says the cause has passed - and never Send again when nobody knows whether the first send went.")
+    "unchanged - unless the failure says the cause has passed - and never Send again when nobody knows whether the first send went. "
+    # THE RULES THE DEEP DIVE FOUND MISSING (2026-10-20), each about a moment it got wrong
+    "AN AGENT'S RUN THAT FAILED is a failure like any other (a WHAT FAILED line names it): Continue only when something here says "
+    "the cause has passed; else say what stopped it and pick the fix offered, else the one that makes a task to fix it. "
+    "A SEND THE MAIL SERVER REFUSED FOR ITS ADDRESS (no such user, unknown or refused recipient, a bounce): the address is what "
+    "is wrong, not the words - pick the fix offered, else the one that makes a task to fix the address; never Redraft. "
+    "A DRAFT THAT PROMISES WHAT NOTHING HERE SHOWS - a payment date nobody set, a file the ATTACHED line does not list, \"sending "
+    "it now\" with nothing attached - is not ready: say what it promises, and pick Redraft (or Reply to write it again) - never "
+    "Send. "
+    f"WORK AN AGENT CAN DO - an issue or bug report with a traceback or steps to reproduce, a reconciliation, a lookup - is "
+    f"{L('regular_agent')} when it is offered and nobody needs the owner's own words; an answer the person waits on is still "
+    f"{L('reply')}. "
+    f"SOMEONE THE OWNER WAITS ON IS QUIET PAST THEIR DAY (the item says how long, and {L('chase')} is offered): {L('chase')} - a short "
+    f"nudge for the owner's yes - unless the item says they answered or are away. "
+    "A POSSIBLE DUPLICATE with an agent already on it is said in the line, so the owner does not answer the same ask twice.")
 def _system(store) -> str:
     """SYSTEM plus the owner's own Voice section of COUNSEL: the Advisor's line sits in the same box as the chat's, so it
     speaks by the same rules - it never had them, and said "lane" and "session" to a finance user (2026-10-17 audit)."""
@@ -528,6 +542,9 @@ def failure(store, item: dict) -> dict | None:
     # ...and a report's card or a connection's row has no task: its failure lives on the report or the connector (failures.standing)
     from . import failures
     if (on := failures.target_of(item)) and (f := failures.standing(store, *on)): return f
+    # ...and AN AGENT'S RUN THAT FAILED (the deep dive, 2026-10-20): it reached the prompt only as "run ended (failed)", so the line said
+    # "it stopped partway - pick it up" and lit Continue into the same unreachable database. An act that failed since outranks it.
+    if last.get('Status') not in ('error', 'refused') and (ran := agent_failed(store, item)): return ran
     # ...and an act the demo refused (demo.refused): it went nowhere, so the Send just refused is not advised again (2026-10-19)
     if last.get('Status') not in ('error', 'refused'): return None
     if out.get('source') == 'draft': return None          # a draft written since cleared it
@@ -542,6 +559,18 @@ def failure(store, item: dict) -> dict | None:
     return {'what': what, 'why': str(last.get('Error') or ''), 'fix': ok(out.get('fix')) or area_fix(out.get('area')),
             'unknown': out.get('delivery') == 'unknown', 'kind': last.get('Kind'), 'source': out.get('source') or 'app',
             'cause': out.get('cause') or 'taskuary'}
+
+
+def agent_failed(store, item: dict) -> dict | None:
+    """The task's agent run, when its last state is failed: {what, why, ...} in failure()'s shape, its why the run's own last words."""
+    if not item.get('tid'): return None
+    from . import workerstate
+    try: st = workerstate.status(store, int(item['tid']))
+    except Exception: return None
+    if st.get('state') != 'failed': return None
+    last = next((e for e in reversed(workerstate.events(store, int(item['tid']), st.get('sid'))) if e['Kind'] == 'failed'), {})
+    return {'what': "the agent's run failed", 'why': _one(st.get('result') or last.get('Text'), 300), 'fix': None, 'unknown': False,
+            'kind': 'agent', 'source': 'agent', 'cause': 'taskuary'}
 
 
 def fix_task(store, item: dict, f: dict) -> dict:

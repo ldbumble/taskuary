@@ -227,6 +227,20 @@ COPIED = {'close': 'The reply is drafted - copy it to where the question came fr
 # waits on a reply (the advisor matrix, 2026-10-19: both stood under "No suggestion")
 DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done - read what it says, then mark it done.'}
 
+# ...and like the real one (advisor.SYSTEM's rules, the deep dive 2026-10-20): an agent's failed run is made a task, never continued
+# blind; a send refused for its ADDRESS is fixed at the address, never redrafted; a draft promising what nothing shows is written again,
+# never sent; an issue with a traceback goes to an agent; someone quiet past their day is chased. The script reads the prompt's own
+# lines for these - the real Advisor reads their meaning.
+AGENT_RAN = {'fix': "{what} - {label} is the way past it.", 'new_task': "{what}: {why}. Make it a task to fix that first."}
+BOUNCED = {'fix': 'The address was refused - {label} is the way past it.', 'new_task': 'The address was refused - fix the address, not the words.'}
+_BOUNCE = re.compile(r'no such user|unknown recipient|recipient\w* refused|refused [^\s]+@|bounced', re.I)
+_PROMISE = re.compile(r"\b(?:sending\b[^.]*\bnow|attached|goes out in|payment run|paid on)\b", re.I)
+PROMISED = {'redraft': 'The draft promises what nothing here shows - check it, then redraft.',
+            'reply': 'The draft promises what nothing here shows - write it again.'}
+AGENT_WORK = {'regular_agent': 'An agent can take this - it is an issue with a traceback in it.'}
+CHASED = {'chase': 'They are quiet past their day - send a short nudge.'}
+
+
 def _advice(text: str) -> str:
     from . import buttons
     offered = dict(re.findall(r'([a-z_]+) \(([^)]*)\)', _VERBS.search(text).group(1)))
@@ -234,6 +248,23 @@ def _advice(text: str) -> str:
     try: item = json.loads((re.search(r'^THE ITEM: (.*)$', text, re.M) or [None, '{}'])[1]) or {}
     except ValueError: item = {}
     chat = str(item.get('channel') or 'email').lower() != 'email'
+    draft = (re.search(r"^THE DRAFT WAITING FOR THE OWNER'S YES: (.*)$", text, re.M) or [None, ''])[1]
+    bare = 'ATTACHED TO THE DRAFT: nothing' in text
+    preview = (re.search(r'^PREVIEW: (.*)$', text, re.M) or [None, ''])[1]
+    said = (None if 'This is the demo' in failed
+            else AGENT_RAN if failed.startswith("the agent's run failed")
+            else BOUNCED if failed and _BOUNCE.search(failed)
+            else None if failed
+            else CHASED if 'chase' in offered
+            else PROMISED if draft and bare and _PROMISE.search(draft) and 'approve' in offered
+            else AGENT_WORK if 'regular_agent' in offered and re.search(r'traceback|steps to reproduce', preview, re.I)
+            else None)
+    if said:
+        verb = next((v for v in said if v in offered), None)
+        why = failed.split(' - ', 1)[1].rstrip('.') if ' - ' in failed else 'no reason was given'
+        what = failed.split(' - ')[0].strip() or 'That did not go through'
+        return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:], why=why) if verb else '',
+                           'evidence': []})
     said = (REFUSED if 'This is the demo' in failed
             else CHECK if 'nobody knows whether it went' in failed else FAILED if failed
             else SENT if 'A REPLY WAS ALREADY SENT' in text and 'NOTHING HAS COME IN SINCE IT WENT' in text

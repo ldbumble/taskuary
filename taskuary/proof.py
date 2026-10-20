@@ -355,7 +355,7 @@ def review(store, task_id: int, scope: str = 'task') -> dict:
         repo_, n = pr
         try:
             from .github import pr_diff
-            c = store.get_connector_by_type('github', with_secret=True) or {}
+            c = store.github_for(repo_, with_secret=True) or {}
             if not c.get('Secret'): raise RuntimeError('no GitHub token on the card')
             files = split_files(pr_diff(c['Secret'], repo_, n))
             for f in files:

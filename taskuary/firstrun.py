@@ -418,19 +418,21 @@ def choose_connector(store, cid: int) -> dict:
 MAIL_ERR = 'first_run_mail_error'
 
 
-def connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:
-    """Gmail or any IMAP mailbox: address + password, switched on, tested, read. Microsoft 365 signs in instead (ms/signin)."""
-    out = _connect_mail(store, typ, address, secret, host)
+def connect_mail(store, typ: str, address: str, secret: str, host: str = '', cid: int = None) -> dict:
+    """Gmail or any IMAP mailbox: address + password, switched on, tested, read. Microsoft 365 signs in instead (ms/signin).
+    `cid` is the card that was pressed: a second Gmail card's Connect wrote its password over the first card's."""
+    out = _connect_mail(store, typ, address, secret, host, cid)
     # EVERY ANSWER IS THE LINE'S: a missing "@" returned early, and the line kept the last address's "turned the connection away"
     # under the card's "Type your full email address" (a live walk, 2026-10-17)
     store.set_setting(MAIL_ERR, '' if out['ok'] else out['why'], 'owner')
     return out
 
 
-def _connect_mail(store, typ: str, address: str, secret: str, host: str = '') -> dict:
+def _connect_mail(store, typ: str, address: str, secret: str, host: str = '', cid: int = None) -> dict:
     from .channels import test_connector
     if typ not in ('gmail', 'imap'): return {'ok': False, 'why': 'Microsoft 365 signs in with its own button.'}
-    c = store.get_connector_by_type(typ)
+    c = store.get_connector(int(cid)) if cid else store.get_connector_by_type(typ)
+    if c and c['Type'] != typ: c = None
     address, secret, host = str(address or '').strip(), str(secret or '').strip(), str(host or '').strip()
     if not c: return {'ok': False, 'why': f'There is no {typ} card here.'}
     if '@' not in address: return {'ok': False, 'why': 'Type your full email address, like you@example.com.'}

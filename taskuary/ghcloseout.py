@@ -41,7 +41,7 @@ def clean(d: dict) -> dict:
 
 def cfg(store, repo: str = None) -> dict:
     """The close-out settings in force for `repo`: defaults, then the connection's, then the repo's own override."""
-    conn = store.get_connector_by_type('github') or {}
+    conn = store.github_for(repo) or {}
     out = {**DEFAULTS, **clean(_json(conn.get('ConfigJson')).get('closeout'))}
     if repo:
         src = next((s for s in store.list_sources(active_only=False)

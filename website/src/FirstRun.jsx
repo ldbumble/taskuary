@@ -381,7 +381,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
       <ChannelDetail key={conn.ConnectorId} conn={conn} sources={sources} reload={reload} simple={open.simple}
-        onBack={() => { setOpen(null); reload(); }} onConnected={reload} />
+        onBack={() => { setOpen(null); reload(); }} onConnected={reload}
+        onCreated={(id) => { setOpen({ id, simple: open.simple }); reload(); }} />
     </Box>
   );
   const q = view || frontierOf(st);
@@ -475,7 +476,7 @@ ${fix.detail || ""}`, screen: "Setup",
       : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
     // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
-    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way - or press ${VERB.next.label}.`
+    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way - a second one of the same kind is Add another on its card - or press ${VERB.next.label}.`
       // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
       // ...and once that card is shut (a reload), the card to open again is the one lit, by its title
       : st.mail_error ? (litCard ? `${st.mail_error} Pick ${litCard.title} to fix it - or pick a different email.`

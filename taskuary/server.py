@@ -2684,8 +2684,11 @@ def fetch_attachments(mid: int):
     ext = str(m.get('ExternalId') or '')
     if m.get('Channel') != 'email' or not ext.startswith('graph:'):
         raise HTTPException(422, 'only Outlook mail can be re-fetched')
-    c = store.get_connector_by_type('outlook', with_secret=True)
-    if not c: raise HTTPException(422, 'no Outlook connection')
+    # the card that reads this mailbox: with two Outlook accounts the first card's token cannot open the second one's mail
+    from .outbound import _source_connector_id
+    own = _source_connector_id(store, 'email', m.get('SourceName'))
+    c = store.get_connector(own, with_secret=True) if own else store.get_connector_by_type('outlook', with_secret=True)
+    if not c or c.get('Type') != 'outlook': raise HTTPException(422, 'no Outlook connection')
     from .channels import fetch_mail_attachments, graph_creds, graph_token
     try:
         gcfg, gsec, _ = graph_creds(store, c)
@@ -5688,6 +5691,14 @@ def ms_poll(cid: int, body: dict):
     if not t.get('refresh_token'):
         return {'status': 'error', 'detail': 'Microsoft returned no refresh token - the offline_access scope was not granted'}
     who = msauth.me(t['access_token'])
+    # THE SAME ACCOUNT ON A SECOND CARD is two pollers on one mailbox: the card that already reads it says so, and this one
+    # stays as it was - "Add another" is for another account, and the sign-in page picks whichever one the browser has open
+    other = next((x for x in store.connectors_by_type('outlook') if x['ConnectorId'] != cid and x.get('Active') and x.get('HasSecret')
+                  and str(json.loads(x.get('ConfigJson') or '{}').get('account') or '').lower() == (who['account'] or '').lower()),
+                 None) if who['account'] else None
+    if other:
+        return {'status': 'error', 'detail': f"{who['account']} is already signed in on the {other['Name']} card - sign in here "
+                                             "with a different Microsoft account (choose Use another account on Microsoft's page)"}
     cfg = {**f['cfg'], 'auth': 'user', 'account': who['account'], 'name': who['name'],
            **({'granted_scope': t['scope']} if t.get('scope') else {})}      # what was granted, for the send probe (PW-143)
     store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': t['refresh_token'], 'Active': 1}, ACTOR)
@@ -6342,7 +6353,7 @@ def setup_adopt_brain(body: SetupAdoptBrainBody):
 # ── first run: three questions on the assistant canvas (firstrun.py, FirstRun.jsx) ──────────────────────────────────────
 class FirstRunAiBody(BaseModel): name: str
 class FirstRunKeyBody(BaseModel): type: str; key: str; cid: int | None = None; config: dict | None = None
-class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host: str = ''
+class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host: str = ''; cid: int | None = None
 
 @app.get('/api/setup/first-run')
 def first_run_state():
@@ -6451,7 +6462,7 @@ def first_run_connector(body: FirstRunConnBody):
 def first_run_mail(body: FirstRunMailBody):
     """Gmail or any IMAP mailbox, switched on and read at once - Microsoft 365 signs in through /ms/signin instead."""
     from . import firstrun
-    out = firstrun.connect_mail(store, body.type, body.address, body.password, body.host)
+    out = firstrun.connect_mail(store, body.type, body.address, body.password, body.host, body.cid)
     if out.get('ok'):
         from .docsync import sync_connections
         try: sync_connections(store, ACTOR)

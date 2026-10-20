@@ -109,14 +109,20 @@ def _graph_mail(store, days):
     """(sent, inbox, mailboxes) across every active Graph mailbox; empty when Outlook is not
     connected. Filter and orderby ride the SAME property - Graph rejects a mixed pair."""
     from .channels import graph_creds, graph_token, GRAPH
-    c = store.get_connector_by_type('outlook', with_secret=True)
-    if not c or not c.get('Active'): return [], [], 0
-    cfg, sec, _ = graph_creds(store, c)
-    tok = graph_token(cfg, sec)
+    cards = [c for c in store.connectors_by_type('outlook', with_secret=True) if c.get('Active')]
+    if not cards: return [], [], 0
     since = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
     sent, inbox, n = [], [], 0
+    toks = {}                    # one token per card: a second Microsoft account reads its own mailboxes with its own sign-in
     for s in store.list_sources():
-        if s['Channel'] != 'email' or s.get('ConnectorId') != c['ConnectorId']: continue
+        c = next((x for x in cards if x['ConnectorId'] == s.get('ConnectorId')), None)
+        if s['Channel'] != 'email' or not c: continue
+        if c['ConnectorId'] not in toks:
+            try: cfg, sec, _ = graph_creds(store, c); toks[c['ConnectorId']] = graph_token(cfg, sec)
+            except Exception as e:
+                logger.warning(f"history read failed for {c.get('Name') or 'an Outlook card'}: {e}"); toks[c['ConnectorId']] = None
+        tok = toks[c['ConnectorId']]
+        if not tok: continue
         upn, n = s['Address'], n + 1
         _status('running', f'reading {upn} — {len(sent)} sent / {len(inbox)} inbound so far…')
         common = {'$top': 50, '$orderby': 'receivedDateTime desc',

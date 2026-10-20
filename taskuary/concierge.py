@@ -3340,6 +3340,14 @@ def away_line(o: dict) -> str:
 def op_label(kind: str, p: dict) -> str:
     """The button's words for an operation, in the owner's terms. toolcatalog.PURPOSE is written for the
     MODEL ("start an agent from a brief when there is no message behind it - `kind`, `text`"); read as a
+def _day_said(until) -> str:
+    """A Remind me day the way the page says it ("Tue 20 Oct"), not the model's 2026-10-20 - as written when it is no day remind reads."""
+    from . import remind
+    try: at = remind.parse(until)
+    except ValueError: return str(until)
+    return remind.when(at) if at else str(until)
+
+
     label it put that sentence on the button of a plain to-do, and said an agent had started when none had."""
     by_kind = {kind_: [PROPOSALS[v][1] for v in PROPOSALS if PROPOSALS[v][0] == kind_][0] for kind_ in {PROPOSALS[v][0] for v in PROPOSALS}}
     label = by_kind.get(kind) or toolcatalog.PURPOSE.get(kind, kind).split(' - ')[0].strip()
@@ -3365,7 +3373,7 @@ def op_label(kind: str, p: dict) -> str:
     if kind == 'dispatch.prepare' and str(p.get('kind')) == 'coding': label = L('coding_agent')
     if kind == 'idea.act': label = {'task': L('mine'), 'agent': L('regular_agent'), 'dismiss': L('not_ours'),
                                     'dismiss_kind': L('not_ours_kind')}.get(str(p.get('verb')), label)
-    if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"{L('defer')}: {p.get('until')}"
+    if kind == 'task.defer': label = 'Bring it back now' if str(p.get('until') or '').lower() in ('none', '') else f"{L('defer')}: {_day_said(p.get('until'))}"
     return label[0].upper() + label[1:] if label else kind
 
 

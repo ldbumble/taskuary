@@ -19,7 +19,7 @@ import SetupDone from "./SetupDone.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { writeSetupLine } from "./setupLine.js";
 import { useVerbs } from "./actionRow.js";
-import { buttonOf, cardOf, doneOf, frontierOf, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
+import { buttonOf, cardOf, doneOf, frontierOf, landOn, navMoves, nextOf, openAt, prevOf, reachable, requiredDone } from "./setupSteps.js";
 import { openBugReport } from "./bugReportOpen.js";
 import { SETUP_AI } from "./aiShelf.js";
 import { label as btnLabel } from "./buttons.js";
@@ -115,10 +115,11 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // (the owner, 2026-10-15: "always have next/back button if possible and move to next step once one is complete"). Going back to
   // change the AI used to leave no way forward but the rail.
   const [view, setView] = useState(null);
-  const go = useCallback((v) => { setView(v); setOpen(null); setBrowse(false); }, []);
   // a step on the rail opens only once the steps before it are done (SetupSteps disables the rest): About your work pressed from Your
-  // AI, then saved, put Setup complete over a day with no AI and no mail (the non-coder audit, 2026-10-17)
+  // AI, then saved, put Setup complete over a day with no AI and no mail (the non-coder audit, 2026-10-17). go() lands every move -
+  // Back, Next, a fix's link - on an open step (setupSteps.landOn), so the guard is not the rail's alone
   const stRef = useRef(null);
+  const go = useCallback((v) => { setView(landOn(stRef.current, v)); setOpen(null); setBrowse(false); }, []);
   useEffect(() => {
     const on = (e) => { const v = e.detail === "finish" ? "other" : e.detail; if (!stRef.current || reachable(stRef.current, v)) go(v); };
     window.addEventListener("tq-setup-go", on);
@@ -167,7 +168,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const fixed = fix && (st.ais.find((a) => a.name === fix.name) || { name: fix.name, title: fix.title, installed: true });
   const nav = navMoves(st, view, reopened);
   const VERB = {
-    back: { label: "Back", tone: "s", run: () => go(prevOf(view)), title: "The step before" },
+    back: { label: "Back", tone: "s", run: () => go(prevOf(view, st)), title: "The step before" },
     next: { label: "Next", tone: "p", run: () => go(nextOf(view)), title: "The next step" },
     walk: { label: "Walk me through my tasks", tone: "p", run: finishThen(onWalk), title: "Everything waiting, most important first" },
     finish: { label: reopened ? "Back to my day" : "Finish setup", tone: "p", run: finishThen(onFinish),

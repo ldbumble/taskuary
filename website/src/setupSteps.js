@@ -20,7 +20,14 @@ export const stepsOf = (st, shown = "") => {
 // step once one is complete"): the setup's steps in order, where to open, whether a step is done, and the row's moves for one.
 export const ORDER = ["ai", "mail", "about", "other"];
 export const nextOf = (v) => ORDER[Math.min(ORDER.indexOf(v) + 1, ORDER.length - 1)];
-export const prevOf = (v) => ORDER[Math.max(ORDER.indexOf(v) - 1, 0)];
+// ...and BACK NEVER LANDS ON A LOCKED STEP (the 2026-10-19 UI walk): Back from More connections opened About your work while the
+// email was not in, and the Advisor talked about answers never given. With the server's state it steps over what is not open yet.
+export const prevOf = (v, st = null) => {
+  for (let i = ORDER.indexOf(v) - 1; i > 0; i--) if (reachable(st, ORDER[i])) return ORDER[i];
+  return ORDER[0];
+};
+// where a move to `v` lands: `v` when it is open, else the nearest open step before it - every road onto the canvas goes through it
+export const landOn = (st, v) => (!st || reachable(st, v) ? v : prevOf(v, st));
 export const frontierOf = (st) => st?.frontier || "ai";
 // REOPENED, it opens where the work is (the owner, 2026-10-16: the survey sat two Nexts past Your AI, unseen); with every step done,
 // on Your AI - reopening is how the AI or the mailbox gets changed

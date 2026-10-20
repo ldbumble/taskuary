@@ -130,3 +130,19 @@ test("a rail row past what is done waits and says for what; Finish ticks only wh
   // ...and the server refuses Finish while there is no AI or no mail; the canvas says why instead of moving on
   assert.match(fr, /if \(e\?\.response\?\.status === 409\) \{ setErr\(errText\(e\)\); return; \}/);
 });
+
+// the 2026-10-19 UI walk: Back from More connections opened About your work while the email was not in yet - a locked step the rail
+// itself refuses - and the Advisor spoke about answers never given. Back steps over a locked step; every go() lands on an open one.
+test("Back never lands on a locked step, and no move does", async () => {
+  const { prevOf, landOn } = await import("../src/setupSteps.js");
+  assert.equal(prevOf("other", EMAIL), "mail", "About your work waits for the email: Back from More connections is the email");
+  assert.equal(prevOf("other", AI), "ai", "...and with no AI, the AI");
+  assert.equal(prevOf("other", READING), "about", "an open step is still the step before");
+  assert.equal(prevOf("about", EMAIL), "mail");
+  assert.equal(landOn(EMAIL, "about"), "mail"); assert.equal(landOn(READING, "about"), "about");
+  assert.equal(landOn(AI, "done"), "done", "Setup complete is not a rail step");
+  assert.equal(landOn(null, "about"), "about", "before the state is read nothing is refused");
+  const fr = read("FirstRun.jsx");
+  assert.match(fr, /const go = useCallback\(\(v\) => \{ setView\(landOn\(stRef\.current, v\)\);/, "go() is the one road onto the canvas");
+  assert.match(fr, /run: \(\) => go\(prevOf\(view, st\)\)/);
+});

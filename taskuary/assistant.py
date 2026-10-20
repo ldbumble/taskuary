@@ -50,6 +50,8 @@ DAYS = 30                  # how far back followups and promises are read
 CHASE_STEPS = (2, 5, 9, 14, 21)   # days of silence at which an open follow-up or promise is said again
 FORCED_CHASES = 2                 # of those, said per run even when the model let them go
 MAX_LINES = 5              # lines per post by default - a post nobody reads to the end is a post that failed
+COLD_PER_DAY = 3           # "gone quiet" lines a day, across every check: after a quiet spell every open task went quiet at once,
+                           # five a check, check after check (the owner, 2026-10-20)
 POST_TOKENS = 900
 WATCH_SOURCE_CHARS = 6_000
 WATCH_TOTAL_CHARS = 18_000
@@ -673,6 +675,19 @@ def fresh(state: dict, cand: dict, now: datetime) -> bool:
     was, now_sig = str(i.get('Sig') or ''), str(cand.get('sig') or '')
     if i.get('Status') in ('dismissed', 'done') and was.split('|')[0] == now_sig.split('|')[0]: return False
     return not is_model_idea(cand['key']) and was != now_sig
+
+
+def _cold_cap(state: dict, say: list, now: datetime) -> list:
+    """At most COLD_PER_DAY "gone quiet" lines said today, counting the ones earlier checks said; the rest wait for tomorrow."""
+    day = now.strftime('%Y-%m-%d')
+    room = COLD_PER_DAY - sum(1 for i in state.values() if i.get('Kind') == 'cold' and str(i.get('LastSaid') or '')[:10] == day)
+    out = []
+    for s in say:
+        if s.get('kind') == 'cold':
+            if room <= 0: continue
+            room -= 1
+        out.append(s)
+    return out
 
 
 def again(state: dict, cand: dict) -> dict:
@@ -1814,6 +1829,7 @@ def _run(store, llm, instruction, watch_source_ids, watch_sources, systems_only=
     state = {i['Key']: i for i in store.list_ideas()}
     say = [s | {'why': s.get('why') or s.get('plain') or s.get('facts') or ''} for s in say
            if fresh(state, s, now) and (systems_only or not contradicts_sent_reply(store, s))]
+    say = _cold_cap(state, say, now)
     # A CHASE THAT GREW IS SAID, whatever the model chose: told "be useful, not busy" and reading its own "nothing new" note,
     # it let a vendor's twelve days of silence go twice in a row, the owner's ask still open (2026-10-06). Only one it
     # raised before and the owner left open - once per step of silence (followups), the longest silence first.

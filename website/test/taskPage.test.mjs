@@ -66,12 +66,31 @@ test("the header says what triage made of it in one plain line, and the kind hin
 });
 
 // the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone
-test("an agent waiting on you keeps its terminal in view, and Answer it puts the cursor there", () => {
+// ...and NO "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button"): the question is answered in the pane
+// right above it. Stop and save stands in its place on a LIVE session - working, idle after its turn, or asking - and leads the row,
+// unless a reply waits on the owner's approval: then the reply's Send leads and Stop and save waits in the agent's group, after
+// Review changes. An ENDED session has neither (G7).
+test("an agent waiting on you keeps its terminal in view; its row has no Answer it, and Stop and save leads a live session", () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /\{ id: "answer_agent", group: "agent", lead: true, label: labelOfRow\("answer_agent"\), run: answerAgent/);
-  assert.match(page, /const answerAgent = \(\) => setTimeout\(\(\) => termBox\.current\?\.querySelector\("textarea"\)\?\.focus\(\), 0\);/);
+  assert.doesNotMatch(page, /id: "answer_agent"|answerAgent|askKey/);
   assert.doesNotMatch(page, /data-tq-agent-asks|seenAsk|>Show details</);
-  assert.match(page, /subState\(term\) !== "stalled"/, "a stuck agent asks nothing - it keeps its screen and Run another agent");
+  assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview,/);
+  assert.match(page, /\.\.\.\(liveSession \? \[\s+(\/\/[^\n]*\n\s+)*\.\.\.\(!pendingReview \? \[stopSave\] : \[\]\),\s+\.\.\.\(liveCodingSession \? \[\{ id: "diff"[^\n]*\n\s+\.\.\.\(pendingReview \? \[stopSave\] : \[\]\),/,
+    "first on the row while nothing waits on approval; after Review changes when a reply does");
+});
+
+test("the row puts a leading agent verb first and Mark done beside it (actionRow.rowOf)", async () => {
+  const { rowOf, clustersOf } = await import("../src/actionRow.js");
+  const v = (id, group, extra = {}) => ({ id, group, label: id, tone: "s", promote: true, ...extra });
+  // a live session, nothing waiting on approval: Stop and save leads, Mark done does not take the lead from it
+  const live = rowOf({ ref: "", list: [v("save-end", "agent", { lead: true }), v("diff", "agent"), v("done", "more"), v("next", "next")] });
+  assert.deepEqual(live.agent.map((x) => x.id), ["save-end", "diff", "done"]);
+  assert.equal(live.decide.length, 0);
+  assert.equal(clustersOf(live).find((c) => c.type === "agent").shown[0].id, "save-end");
+  // ...a reply waiting: its Send leads (a decision), and Stop and save waits after Review changes
+  const waiting = rowOf({ ref: "", list: [v("r1:approve", "decide", { tone: "p" }), v("diff", "agent"), v("save-end", "agent"), v("done", "more", { promote: false }), v("next", "next")] });
+  assert.equal(waiting.decide[0].id, "r1:approve");
+  assert.deepEqual(waiting.agent.slice(0, 2).map((x) => x.id), ["diff", "save-end"]);
 });
 
 test("the Advisor's suggestion reaches the Tasks tab and a phone's own row (U12)", () => {

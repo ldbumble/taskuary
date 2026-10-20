@@ -58,14 +58,16 @@ class AgentStatesAgreeTests(unittest.TestCase):
                 self.assertTrue(t['HadAgent'], f'{kind}-{st}')
                 self.assertIsNotNone(taskstate.column(t['State']), f'{kind}-{st}')
 
-    def test_an_asking_agent_carries_its_question_and_answer_it_everywhere(self):
+    def test_an_asking_agent_carries_its_question_everywhere(self):
         for kind in ('coding', 'general'):
             tid = self.w[f'{kind}-asking']
             sess, item = self.live[tid], self.pile[tid]
             self.assertEqual((sess['waiting'], sess['state']), (True, 'asking'), kind)
             self.assertIn('inter-company rows', sess['request']['text'])
             self.assertEqual(item['request_kind'], 'input_needed')
-            self.assertEqual(concierge.chips_for(self.s, item)[0]['verb'], 'answer_agent')
+            # ...answered in its own pane: its row leads with Stop and save, and has no Answer it (owner-approved, 2026-10-20)
+            self.assertEqual(concierge.chips_for(self.s, item)[0]['verb'], 'stop_agent')
+            self.assertNotIn('answer_agent', [c['verb'] for c in concierge.row_buttons(self.s, item)])
             self.assertEqual(workerstate.status(self.s, tid)['state'], 'input_needed')
 
     def test_the_agent_step_tells_how_the_run_ended(self):

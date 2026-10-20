@@ -15,7 +15,7 @@
     "regular_agent":   {"label": "Send to agent", "hint": "Hand the work to an agent - the answer comes back here, and the card lets you change which agent", "row": ["start-agent", "send-general"]},
     "coding_agent":    {"label": "Send to coding agent", "hint": "Hand a change to code or a system to the coding agent", "row": [], "needs": "coding"},
     "stop_agent":      {"label": "Stop and save", "hint": "Writes up what was done, stops the work, and drafts the reply to whoever asked - the task stays open", "row": ["save-end"]},
-    "answer_agent":    {"label": "Answer it", "hint": "Type your answer in the box below - it goes straight to the agent that is waiting", "row": ["answer_agent"]},
+    "answer_agent":    {"label": "Answer it", "hint": "Type your answer in the box below - it goes straight to the agent that is waiting", "row": []},
     "continue":        {"label": "Continue", "hint": "Pick the work up where it left off - say what to add, or continue as is", "row": ["continue"]},
     "make_report":     {"label": "Make it a report", "hint": "This only reads and sums up - it is drafted as a report from the same reads, nothing saved until you save it", "row": []},
     "rerun":           {"label": "Run it again", "hint": "Runs the report again in the background - its result goes where the report sends it, and if it fails the bell says why", "row": []},

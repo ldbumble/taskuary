@@ -1051,14 +1051,17 @@ class NonCoderWordsTests(unittest.TestCase):
         self.assertNotEqual(concierge.chips_for(MemoryStore(), fine)[0]['verb'], 'rerun')
         self.assertNotIn('make it a task', concierge.fallback(fine, False, store=MemoryStore()).lower())     # U11: read and passed
 
-    def test_an_agent_asking_is_answered_first_and_a_stall_is_not(self):
-        """U7: "Stop and save" led a card whose agent was waiting on an answer."""
+    def test_an_agent_asking_is_answered_in_its_pane_and_its_row_leads_with_stop_and_save(self):
+        """U7 put "Answer it" first on an asking agent's card; the owner took the button away (2026-10-20: "we don't need that
+        button") - the question is answered in the agent's own pane, and the live agent's row leads with Stop and save."""
         it = {'key': 'agent:7', 'kind': 'agent', 'lane': 'blocked', 'tid': 7, 'title': 'Totals', 'asking': True, 'agent': 'the assistant', 'tail': ['Which month?']}
-        chips = concierge.chips_for(None, it)
-        self.assertEqual((chips[0]['verb'], chips[0]['label']), ('answer_agent', 'Answer it'))
-        self.assertIn('Stop and save', [c['label'] for c in chips])
-        stalled = {**it, 'asking': False, 'request_kind': 'stalled'}
-        self.assertNotIn('answer_agent', [c['verb'] for c in concierge.chips_for(None, stalled)])
+        for item in (it, {**it, 'asking': False, 'request_kind': 'stalled'}, {**it, 'lane': 'working', 'asking': False}):
+            chips = concierge.chips_for(None, item)
+            self.assertNotIn('answer_agent', [c['verb'] for c in chips])
+            self.assertEqual((chips[0]['verb'], chips[0]['label']), ('stop_agent', 'Stop and save'))
+        # ...and its line still says where the answer goes: a typed answer in the box below reaches it (decide), a stopped one has nobody
+        self.assertIn('answer it below', concierge.fallback(it, False))
+        self.assertNotIn('answer it below', concierge.fallback({**it, 'lane': 'stopped'}, False))
 
     def test_the_waiting_count_says_goals_in_words_and_it_follows_the_count(self):
         """B14: "1 goal_slipped" and "them" over one thing."""

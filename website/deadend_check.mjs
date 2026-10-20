@@ -90,6 +90,7 @@ const WALK_SKIP = {
   "not_ours_kind": "an answer inside an idea's Not ours question",
   "coding_agent": "an answer inside Send to agent's question; the faults pass starts one through it",
   "stop_agent": "Stop and save ends a live session - the demo's agents are recordings with no session to save",
+  "answer_agent": "no button on any row (the owner, 2026-10-20: \"we don't need that button\") - an agent's question is answered in its own pane",
   "continue": "Continue resumes a stopped agent's session - none in the demo world has one",
   "make_report": "offered only on a workflow whose steps all read - every demo workflow acts, and describing a new one asks the AI, which neither world has",
   "rerun": "runs a report - the demo refuses it (\"running reports are switched off\"), the faults world has no report source",

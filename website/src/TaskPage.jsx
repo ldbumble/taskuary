@@ -1104,12 +1104,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // THESE handlers, unchanged: the row calls the latest closure, so a press costs what the old button cost. The Tasks tab
   // (canvas=false) keeps its bars.
   const inRow = !!canvas;
-  // AN AGENT WAITING ON YOU: Answer it puts the cursor in its terminal - the owner talks to the coding CLI directly. Its question is
-  // never drawn OVER the screen (the owner, 2026-10-19: "never get between a coder and their coding cli ... you have to click show
-  // details anyway to move on"); the Advisor line says what it asked. A stuck agent is not asking anything.
+  // AN AGENT WAITING ON YOU is answered in its own terminal - the owner talks to the coding CLI directly. Its question is never drawn
+  // OVER the screen (the owner, 2026-10-19: "never get between a coder and their coding cli ... you have to click show details anyway
+  // to move on"), and there is no "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button") - the pane is right
+  // above it, and the button was the lit one over a finished agent whose reply waited on the owner's approval.
   const termBox = useRef(null);
-  const askKey = term?.alive && !isGeneral && agentState === AGENT.waiting && subState(term) !== "stalled" ? `${term.sid}:${term.line || subState(term)}` : "";
-  const answerAgent = () => setTimeout(() => termBox.current?.querySelector("textarea")?.focus(), 0);
   // THE AGENT'S CHAT OPENS PUSHED UP (the owner, 2026-10-18: "you can almost never see the full output text ... push it up higher
   // on screen"): on the canvas the folded Task strip scrolls above the view, so "2 Agent work" sits under the title and the chat
   // fills the rest (its box is sized for exactly that, below). Task is one scroll up, Close out one scroll down.
@@ -1185,6 +1184,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
       title: heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo") }] : []),
   ];
+  const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
     : [
@@ -1197,10 +1197,12 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ...(noteable && !liveSession ? [{ id: "close-note", group: "more", label: labelOfRow("close-note"), run: (e, a) => setNoteAt(a || e?.currentTarget),
         title: hintOfRow("close-note") }] : []),
       ...(liveSession ? [
-        // the Advisor's answer_agent is this verb: an agent waiting on you has the one filled move on the row
-        ...(askKey ? [{ id: "answer_agent", group: "agent", lead: true, label: labelOfRow("answer_agent"), run: answerAgent, title: hintOfRow("answer_agent") }] : []),
+        // STOP AND SAVE LEADS A LIVE SESSION'S ROW (owner-approved, 2026-10-20) - working, or idle after its turn, or asking: it stands
+        // where Answer it stood. A reply waiting on the owner's approval leads instead (its Send, under the draft), and this one stays
+        // in the agent's group beside Review changes
+        ...(!pendingReview ? [stopSave] : []),
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
-        { id: "save-end", group: "agent", label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") },
+        ...(pendingReview ? [stopSave] : []),
         ...(notDone ? [runAnother] : []),
       ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : labelOfRow("continue"), disabled: !!startingAgent,
         run: (e, a) => setContinueAt(a || e?.currentTarget), title: hintOfRow("continue") }]

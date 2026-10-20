@@ -32,8 +32,9 @@ CASES = [
     ('Vendor portal maintenance', {None, 'not_ours'}, {'mine', 'regular_agent'}, []),
     ('importers#215', {None, 'regular_agent', 'mine'}, {'not_ours'}, []),
     ('Reconcile the August GL export', {'reply', 'regular_agent', 'close'}, {'not_ours'}, []),
-    ('agent asking (general)', {'answer_agent'}, {'stop_agent'}, ['THE AGENT IS ASKING']),
-    ('agent asking (coding)', {'answer_agent'}, {'stop_agent'}, ['THE AGENT IS ASKING']),
+    # an asking agent is answered in its own pane - no button lights for it (the owner, 2026-10-20: "we don't need that button")
+    ('agent asking (general)', {None}, {'stop_agent', 'answer_agent'}, ['THE AGENT IS ASKING']),
+    ('agent asking (coding)', {None}, {'stop_agent', 'answer_agent'}, ['THE AGENT IS ASKING']),
     ('agent finished (general)', {'close'}, set(), ["RUN ENDED (finished)"]),
     ('agent finished (coding)', {'close'}, set(), ["RUN ENDED (finished)"]),
     ('agent failed (general)', {'new_task'}, {'continue', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),

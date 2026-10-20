@@ -47,3 +47,4 @@ docs/break-test/probe_out.json
 # Claude Code: the project SKILLS are shared, the local settings are NOT - settings.local.json
 # holds this machine's hooks and a live owner token.
 .claude/settings.local.json
+website/browser/walk-pressed-*.json

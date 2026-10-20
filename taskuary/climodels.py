@@ -10,6 +10,7 @@ claude's --effort <effort>.
 """
 import json, os, re, shutil, subprocess
 from functools import lru_cache
+from . import pathcache
 from pathlib import Path
 try:
     import tomllib
@@ -105,7 +106,7 @@ def _devin_models(exe: str) -> list:
 
 def devin_models() -> list:
     """The models this signed-in Devin account says it can use, cached for this server run."""
-    return _devin_models(shutil.which('devin') or '') or _items(DEVIN_FALLBACK)
+    return _devin_models(pathcache.which('devin') or '') or _items(DEVIN_FALLBACK)
 
 
 def parse_copilot_models(text: str) -> list:
@@ -133,7 +134,7 @@ def _copilot_models(exe: str) -> list:
 
 def copilot_models() -> list:
     """Models understood by this installed Copilot CLI build (account policy is enforced by it)."""
-    return _copilot_models(shutil.which('copilot') or '')
+    return _copilot_models(pathcache.which('copilot') or '')
 
 
 def claude_home() -> Path: return Path(os.getenv('CLAUDE_CONFIG_DIR') or Path.home() / '.claude')

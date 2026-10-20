@@ -89,7 +89,8 @@ TOOLS = [
 
 def tools() -> list:
     """Every optional tool, with whether it resolves on PATH - the install hint is for the ones that do not."""
-    return [{**t, 'installed': bool(shutil.which(t['cmd'])), 'path': shutil.which(t['cmd']) or ''} for t in TOOLS]
+    from .pathcache import which as w
+    return [{**t, 'installed': bool(w(t['cmd'])), 'path': w(t['cmd']) or ''} for t in TOOLS]
 
 
 # The classifier is not the coding agent. When a CLI reads mail as the triage brain (llm.make_cli_llm) the
@@ -216,9 +217,10 @@ def which(cmd: str) -> str:
     every agent session on the owner's machine while Connections > AI CLI agents offered to
     install it and hid the Update button (2026-09-11)."""
     from .agents import _fresh_path
-    found = shutil.which(cmd)
+    from .pathcache import which as w
+    found = w(cmd)
     if found: return found
-    try: return shutil.which(cmd, path=_fresh_path()) or ''
+    try: return w(cmd, path=_fresh_path()) or ''
     except OSError: return ''            # a registry we cannot read is not an error worth raising
 
 

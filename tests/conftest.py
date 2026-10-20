@@ -497,6 +497,14 @@ def no_advisor_in_the_background():
 
 
 @pytest.fixture(autouse=True)
+def no_path_lookup_carryover():
+    """pathcache remembers where a CLI was found while the PATH directories read the same - and a test that writes a fake
+    CLI into one, or patches os.access or os.path.exists under the real which(), must not inherit the test before it (perf 2.7)."""
+    from taskuary import pathcache
+    pathcache.forget(); yield; pathcache.forget()
+
+
+@pytest.fixture(autouse=True)
 def no_wa_filter_carryover():
     """messengers._WA_FILTERED remembers the /filter a bridge was last sent, per bridge url - and every test's
     fake bridge has the same url, so one test's sent filter would skip the next test's (P13)."""

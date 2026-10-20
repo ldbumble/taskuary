@@ -17,7 +17,7 @@ from .store import SQLiteStore, is_goal, task_ref
 from .ingest import ingest_message, split_message, task_from_message
 from .reports import (PLANNED, REGISTRY, note_app_up, render_report, resolve_cfg, run_due_reports, run_one)
 from . import agents as hub_agents
-from . import cli_connections
+from . import cli_connections, pathcache
 from . import blackboard
 from . import taskstate
 from . import search
@@ -6529,7 +6529,7 @@ def put_cli_connection(name: str, body: dict):
     if duplicate: raise HTTPException(409, f'This CLI already has a connection: {duplicate}. Edit that connection instead.')
     connection = cli_connections.with_defaults({k: v for k, v in body.items() if k in cli_connections.COMMAND_FIELDS})
     cfg.setdefault('cli_connections', {})[name] = connection
-    config.save(cfg)
+    config.save(cfg); pathcache.forget()     # a (re)connected CLI is looked up afresh by every page after it
     cli_connections.sync(cfg, store)
     store.audit('cli_connection', 0, 'save', ACTOR, detail=name)
     return {'ok': True}
@@ -6548,7 +6548,7 @@ def delete_cli_connection(name: str, detach: bool = False):
         prof.pop('provider', None)
         for f in cli_connections.COMMAND_FIELDS: prof.pop(f, None)
     cfg['cli_connections'].pop(name)
-    config.save(cfg)
+    config.save(cfg); pathcache.forget()
     cli_connections.sync(cfg, store)
     store.audit('cli_connection', 0, 'delete', ACTOR, detail={'name': name, 'detached': users})
     return {'ok': True, 'detached': users}
@@ -6558,6 +6558,7 @@ def delete_cli_connection(name: str, detach: bool = False):
 def test_cli_connection(name: str):
     connection = cfg.get('cli_connections', {}).get(name)
     if not connection: raise HTTPException(404, 'Configure the CLI connection first')
+    pathcache.forget()     # Test is the owner's "look again": it, and every page after it, sees PATH as it is now
     try:
         result, _, _ = hub_agents.run_cli({**connection, 'timeout': 30}, 'Reply with exactly: ok', lambda *a: None)
         return {'ok': True, 'result': str(result or '')[:300]}

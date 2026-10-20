@@ -1477,7 +1477,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     const atEnd = () => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 4) stuck.current = true; };
     el.addEventListener("wheel", own, { passive: true }); el.addEventListener("touchmove", own, { passive: true });
     el.addEventListener("scroll", atEnd, { passive: true });
-    return () => { ro.disconnect(); el.removeEventListener("wheel", own); el.removeEventListener("touchmove", own); el.removeEventListener("scroll", atEnd); };
+    // ...and so is the owner's KEYBOARD (the 2026-10-19 UI walk): a card filled in by Tab and Enter snapped back to its top on Save -
+    // 588px up, the button just pressed gone - because only a wheel or a finger let go of the pin. A key pressed in the thread, or
+    // focus the keyboard moved into it (a Tab from the box below), is the owner working there; focus the app moves itself is not.
+    let keyAt = 0;
+    const key = () => { keyAt = Date.now(); }, typed = () => { pin.current = false; };
+    const tabbed = () => { if (Date.now() - keyAt < 800) pin.current = false; };
+    const bar = (e) => { if (e.target === el) own(); };             // the scrollbar: a press on the body itself, not on a line in it
+    document.addEventListener("keydown", key, true); el.addEventListener("keydown", typed); el.addEventListener("focusin", tabbed);
+    el.addEventListener("pointerdown", bar);
+    return () => {
+      ro.disconnect(); el.removeEventListener("wheel", own); el.removeEventListener("touchmove", own); el.removeEventListener("scroll", atEnd);
+      document.removeEventListener("keydown", key, true); el.removeEventListener("keydown", typed); el.removeEventListener("focusin", tabbed);
+      el.removeEventListener("pointerdown", bar);
+    };
   }, [walk, keepTable]);
   useEffect(() => { keepTable(); }, [msgs, keepTable]);
   // a box opened under the card (Continue's note, Close with a note) is where the owner is now: the pin lets go before the

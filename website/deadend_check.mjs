@@ -43,6 +43,8 @@
 //   ADDRESS   the address names a task the table has moved past - a reload would open it again
 //   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
+//   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
+//             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
 //
 //   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links,search]
 //
@@ -729,6 +731,22 @@ async function links() {
   }
   walked.push("links: the address through four Nexts");
   await page.close(); srv.stop();
+  // OVER: + New playbook asks over the list it was pressed on, and Cancel leaves that list - never SOUL.md, open under the dialog
+  page.step = "links new playbook";
+  await page.goto(`${srv.base}/#settings`, { waitUntil: "load" }); await wait(5000);
+  await clickText(page, "Playbooks"); await wait(1500);
+  const pb = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-browse='settings'] button")].find((x) => x.innerText.trim().startsWith("+ New playbook"));
+    e?.click(); return !!e; });
+  if (!pb) note("OVER", page.step, "Settings → Playbooks drew no + New playbook to press");
+  else {
+    await wait(1500);
+    const under = () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => t.getBoundingClientRect().width > 0 && !t.closest("[role=dialog]") && t.value.trim()));
+    if (!(await page.$("[role=dialog]"))) note("NOTHING", page.step, "+ New playbook opened no dialog");
+    if (await under()) note("OVER", page.step, "+ New playbook drew a document under its dialog");
+    await clickText(page, "Cancel"); await wait(1500);
+    if (await under()) note("OVER", page.step, "Cancel on + New playbook left a document open to edit");
+    walked.push("links: + New playbook asked over its list, and cancelled back to it");
+  }
 }
 
 // THE ONE SEARCH (the 2026-10-19 UI walk, G9): what Enter opens is what was typed, the count is the whole count, a setting or a

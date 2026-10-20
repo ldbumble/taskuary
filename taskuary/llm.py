@@ -245,8 +245,12 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             from .clis import preset_args
             base = list(prof.get('args') or preset_args(prof.get('cmd') or 'claude') or ['-p'])
             run_prof, prompt = {**prof, 'args': base + [flag, str(path)]}, user
+        # A KEPT conversation goes on with the session its last call was on, not the id this brain was built with: a new
+        # chat's second round (a look-up, the gate's retry) went out with no id, which clipool reads as New chat - so it
+        # killed the live CLI and started another, 15 s against 2.6 s warm, and the round lost the turn it was answering.
+        # A chat already under way did this all along: its rounds resume one session. One-shot brains keep their own id.
         out, sid, _diff = run_cli(run_prof, prompt, trace or (lambda *a: None),
-                                  resume=resume, **kwargs)
+                                  resume=llm.session_id if keep else resume, **kwargs)
         # what the caller needs to CONTINUE this conversation instead of starting another one
         llm.session_id = sid or resume
         if stranger_mode in ('auto', 'look') and sid: store.set_setting(f'stranger_sid:{task_id}', sid, 'router')   # born in the stranger's folder

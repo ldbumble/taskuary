@@ -2570,8 +2570,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (request.kind === "browse") browseRef.current?.(request.area, { ...(request.state || {}), at: request.n });
     // ...a reload of the address the canvas wrote itself (#task=N, recordPlace) names the task the server already has on the table:
     // opening it again was a pull - a write, and the walk's place taken again (PW-118, 0.3.9.9 CI)
+    // ...read off the table NOW, not the boot's answer: a link to the task the page loaded with, pressed in the chat after Next had moved
+    // on, was taken for that reload and opened nothing (the dead-end walk's RING, 2026-10-20)
     else if (request.kind === "task" && request.fromUrl && !request.start && !request.act
-      && Number(state.current?.tid ?? /^task:(\d+)$/.exec(state.current?.key || "")?.[1] ?? 0) === Number(request.tid)) navHow.current = "replace";
+      && Number(currentRef.current?.tid ?? /^task:(\d+)$/.exec(currentRef.current?.key || cardRef.current || "")?.[1] ?? 0) === Number(request.tid)) navHow.current = "replace";
     else if (request.kind === "task") openTaskRef.current?.(request);
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)

@@ -120,7 +120,7 @@ class HistgenTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): histgen.generate(s, 'style')
         with mock.patch('taskuary.llm.build_llm', return_value=None):
             with self.assertRaises(RuntimeError): histgen.generate(s, 'triage')
-        with self.assertRaises(ValueError): histgen.generate(s, 'soul')
+        with self.assertRaises(ValueError): histgen.generate(s, 'agent')     # a doc with no history generator
 
     def test_broken_answer_never_lands(self):
         s = MemoryStore()
@@ -333,3 +333,55 @@ class FirstPersonTests(unittest.TestCase):
 
     def test_the_style_is_written_as_the_owner_too(self):
         self.assertIn('first person', histgen.STYLE_SYSTEM); self.assertIn('### How I push back or say no', histgen.STYLE_SYSTEM)
+
+SOUL = ('### How I like to work\n- I settle a question the same day and say so in one line.\n'
+        '### What matters to me\n- The close going out on the right numbers.\n'
+        '### What I want handled for me\n- (nothing clear from my mail yet)')
+
+
+class SetupDraftTests(unittest.TestCase):
+    """How you write and who you are, drafted at setup from the mail with fake brains (the owner, 2026-10-20)."""
+    IMAP = [{'subject': 'Re: rota', 'sent_at': '2026-10-02 08:00:00', 'conversation_id': 'r1', 'from_email': 'alex@riverside.example',
+             'to': ['ray@riverside.example'], 'body': 'Done - the rota is in the shared folder now.\n\nBest,\nAlex'}]
+
+    def test_style_reads_every_mailbox_not_only_the_outlook_one(self):
+        """An Outlook card ended the read: the IMAP mailbox's sent mail never reached the style (2026-10-20)."""
+        s = MemoryStore()
+        cid = s.get_connector_by_type('imap')['ConnectorId']; s.save_connector({'ConnectorId': cid, 'Active': 1}, 't')
+        seen = {}
+        def llm(system, user, max_tokens=0): seen['u'] = user; return STYLE
+        with graph(SENT, INBOX), mock.patch('taskuary.imapmail.sent_history', return_value=self.IMAP), \
+             mock.patch('taskuary.llm.build_llm', return_value=llm):
+            src = histgen.generate(s, 'style')
+        self.assertIn('Fixed - rerunning tonight.', seen['u']); self.assertIn('the rota is in the shared folder', seen['u'])
+        self.assertIn('across 2 mailbox(es), read over Graph and IMAP', src)
+        self.assertIn('two sentences, answer first', s.get_doc('style'))
+
+    def test_who_you_are_is_drafted_from_the_sent_mail_and_the_answers_beside_the_systems_block(self):
+        from taskuary import firstrun
+        s = MemoryStore()
+        firstrun.save_about(s, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance lead', 'systems': ['Payworth']})
+        seen = {}
+        def llm(system, user, max_tokens=0): seen.update(s=system, u=user); return SOUL
+        with mock.patch.object(histgen, 'sent_mail', return_value=(SENT, [], 1, 'Graph')), mock.patch('taskuary.llm.build_llm', return_value=llm):
+            histgen.generate(s, 'soul')
+        soul = s.get_doc('soul')
+        self.assertIn('I settle a question the same day', soul)
+        self.assertIn('- Payworth', soul)                                             # the systems answered stay the owner's block
+        self.assertLess(soul.index('## How I work'), soul.index('## Systems I work in'))
+        self.assertEqual(soul.count(histgen.HIST_START), 1)
+        for x in ('Payworth', 'Finance lead', 'Fixed - rerunning tonight.'): self.assertIn(x, seen['u'])
+        self.assertIn('Never invent a fact', seen['s']); self.assertIn('first person', seen['s'])
+        with mock.patch.object(histgen, 'sent_mail', return_value=(SENT, [], 1, 'Graph')), \
+             mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: SOUL.replace('same day', 'same hour')):
+            histgen.generate(s, 'soul')                                               # written again: replaced in place
+        soul = s.get_doc('soul')
+        self.assertIn('same hour', soul); self.assertNotIn('same day', soul); self.assertEqual(soul.count('## How I work'), 1)
+        self.assertIn('- Payworth', soul)
+
+    def test_who_you_are_with_nothing_the_owner_wrote_says_so(self):
+        s = MemoryStore()
+        with mock.patch.object(histgen, 'sent_mail', return_value=([], [], 0, 'IMAP')), \
+             mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: SOUL):
+            with self.assertRaisesRegex(RuntimeError, 'no sent mail to learn from'): histgen.generate(s, 'soul')
+        self.assertEqual(histgen.STATUS['state'], 'failed')

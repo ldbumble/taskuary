@@ -528,10 +528,10 @@ def _saved(store) -> dict:
     return a if isinstance(a, dict) else {}
 
 
-def learned_job(store) -> str:
-    """JOB.md's learned block as the owner reads it - the provenance line off the top."""
+def learned_job(store, name: str = 'job') -> str:
+    """A doc's learned block as the owner reads it - JOB.md's by default - the provenance line off the top."""
     from .histgen import HIST_START, HIST_END
-    doc = store.get_doc('job') or ''
+    doc = store.get_doc(name) or ''
     if HIST_START not in doc or HIST_END not in doc: return ''
     # the provenance line, or the template's "not generated yet" standing alone
     return re.sub(r'^_[^\n]*_[ \t]*(\n+|$)', '', doc.split(HIST_START, 1)[1].split(HIST_END, 1)[0].strip()).strip()
@@ -543,7 +543,8 @@ def about(store) -> dict:
     a, o = _saved(store), store.owner()
     return {'name': a.get('name') or ('' if o['owner'] in ('the owner', '') else o['owner']), 'email': o.get('owner_email') or '',
             'org': a.get('org') or store.get_setting('owner_company') or '', 'role': a.get('role') or store.get_setting('owner_title') or '',
-            'systems': list(a.get('systems') or []), 'job': learned_job(store), 'done': bool(a.get('done')), 'offered': _offered(),
+            'systems': list(a.get('systems') or []), 'job': learned_job(store), 'style': learned_job(store, 'style'),
+            'soul': learned_job(store, 'soul'), 'done': bool(a.get('done')), 'offered': _offered(),
             'signature': str(store.get_setting('email_signature') or ''),
             # the name read off the address when the mail connected is a guess the mail's own signature may correct; an answer is not
             'guessed': [] if a.get('name') else ['name']}
@@ -623,36 +624,70 @@ def _who(store, ans: dict):
     store.set_setting(ABOUT_KEY, json.dumps({**_saved(store), **{k: v for k, v in a.items() if v}}), 'owner')
 
 
-# THE JOB BEING WRITTEN, per store (a test's store is not the app's): the job screen waits on it, then shows what came back
-_JOB = {}
+# THE DRAFTS BEING WRITTEN, per store (a test's store is not the app's): JOB.md, STYLE.md and SOUL.md, each its own setup screen that
+# waits on it and shows what came back. STYLE.md was written silently behind the job and its failure only logged (the owner,
+# 2026-10-20: "make it visible here"). One queue, one at a time, in this order - who you are reads the job written before it.
+DRAFTS = ('job', 'style', 'soul')
+_JOB, _LOCK = {}, threading.Lock()
 
 
-def learn(store, ans: dict, wait: bool = False):
-    """The title answered: save who they are, then write JOB.md (and STYLE.md behind it) from the mail with that in hand - a minute or
-    two, off the request. Asked again while it runs (Back, a new title), it writes once more when it ends, with the newest answers."""
+def _drafts(store) -> dict:
+    return _JOB.setdefault(id(store), {**{d: {'state': 'none', 'why': '', 'again': False} for d in DRAFTS}, '_q': [], '_on': False})
+
+
+def learn(store, ans: dict, wait: bool = False, docs=DRAFTS):
+    """Who they are saved, then each of `docs` written from the mail with that in hand - a minute or two each, off the request. Asked
+    again while one is written (Back, a new title, a mailbox added), it is written once more when it ends, with the newest answers."""
     _who(store, ans)
-    st = _JOB.setdefault(id(store), {'state': 'none', 'why': '', 'again': False})
-    if st['state'] == 'running': st['again'] = True; return
-    st.update(state='running', why='', again=False)
+    # the systems answered so far, for who you are - saved for good with the rest at the end (save_about)
+    if ans.get('systems'):
+        store.set_setting(ABOUT_KEY, json.dumps({**_saved(store), 'systems': [str(x).strip() for x in ans['systems'] if str(x).strip()]}), 'owner')
+    ds = _drafts(store)
+    with _LOCK:
+        for d in (d for d in DRAFTS if d in docs):
+            if d in ds['_q']: continue                                   # waiting its turn: it reads the newest answers anyway
+            if ds[d]['state'] == 'running': ds[d]['again'] = True
+            else: ds[d].update(state='running', why='', again=False); ds['_q'].append(d)
+        if ds['_on']: return
+        ds['_on'] = True
     def go():
         from . import histgen
         while True:
-            try: histgen.generate(store, 'job'); st.update(state='ready', why='')
-            except Exception as e: st.update(state='failed', why=str(e)[:240])
-            if not st['again']: break
-            st.update(state='running', again=False)
-        try: histgen.generate(store, 'style')
-        except Exception as e: logger.info(f'setup: STYLE.md not learned from the mail yet - {e}')
+            with _LOCK:
+                if not ds['_q']: ds['_on'] = False; return
+                d = ds['_q'].pop(0)
+            st = ds[d]
+            try: histgen.generate(store, d); st.update(state='ready', why='')
+            except Exception as e:
+                logger.info(f'setup: {d} not learned from the mail - {e}'); st.update(state='failed', why=str(e)[:240])
+            with _LOCK:
+                if st['again']: st.update(state='running', again=False); ds['_q'].append(d)
     if wait: go()
     else: threading.Thread(target=go, daemon=True, name='setup-learn').start()
 
 
-def job_state(store) -> dict:
-    """{state: none|running|ready|failed, why, text} - the job description as the setup screen shows it."""
-    st = _JOB.get(id(store)) or {}
+def job_state(store, name: str = 'job') -> dict:
+    """{state: none|running|ready|failed, why, text} - one draft as its setup screen shows it."""
+    st = (_JOB.get(id(store)) or {}).get(name) or {}
     if st.get('state') in ('running', 'failed'): return {'state': st['state'], 'why': st.get('why') or '', 'text': ''}
-    text = learned_job(store)
+    text = learned_job(store, name)
     return {'state': 'ready' if text else 'none', 'why': '', 'text': text}
+
+
+def drafts(store) -> dict:
+    """Every draft's state: {job, style, soul}."""
+    return {d: job_state(store, d) for d in DRAFTS}
+
+
+def accept(store, name: str, text: str) -> dict:
+    """A draft as the owner left it at setup, into its doc's learned block - only when they changed it: the one written stays as it is."""
+    from . import histgen
+    from datetime import datetime
+    if name not in DRAFTS: raise ValueError(f'no setup draft called {name}')
+    said = str(text or '').strip()
+    if said and said != learned_job(store, name):
+        histgen.put_learned(store, name, f"_from your mail history, corrected by you at setup {datetime.now().strftime('%Y-%m-%d %H:%M')}_\n\n{said}", 'owner')
+    return job_state(store, name)
 
 
 def save_about(store, ans: dict) -> dict:
@@ -677,6 +712,8 @@ def save_about(store, ans: dict) -> dict:
         job = histgen._splice(job, f"_from your mail history, corrected by you at setup {datetime.now().strftime('%Y-%m-%d %H:%M')}_\n\n{said}",
                               histgen.TITLES['job'])
     store.save_doc('job', job, 'owner')
+    for d in ('style', 'soul'):
+        if str(ans.get(d) or '').strip(): accept(store, d, ans[d])
     store.set_setting(ABOUT_KEY, json.dumps({**a, 'done': True}), 'owner')
     return about(store)
 

@@ -107,6 +107,12 @@ then counts only your presses from then on.
 **How it is tested.** `tests/advisor_cases.py` is the eval: every state the demo and the advisor
 matrix hold, plus a few they lack, each with the moves that are right there, the ones that never
 are, and what its prompt must carry. It runs in the suite against the demo's scripted Advisor.
+`tests/rail_advisor_cases.py` is the clock's: every kind of idea it puts on the rail (a follow-up, a
+promise, work gone quiet, the app's health, a system worth connecting, its own idea, a rule worth
+making), each in a world where it should fire and in worlds where it should not, plus the demo
+world five days on, checked twice with every line put down between. A line that fires where it
+should not, or fires and is not useful - about automated mail, back after a No, too early, the
+wrong person, stale, over an agent at work - fails the suite with its reason.
 
 **Seeing what it did.** The clock menu on the stage opens the Advisor's notes for the item on the
 table: a receipt, not a transcript. Each entry says the event, what it decided (the pill and the

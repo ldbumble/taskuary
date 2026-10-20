@@ -52,9 +52,11 @@
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
 //             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
+//   BASED     an idea's "Based on <name>'s message" (or a #msg= link) left anything but that message's own card on the table, named
+//             the Advisor for the person, or drew the old row panel ("CLEAR FROM TIMELINE", "Talk it through", "undefined in chat")
 //   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
 //
-//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search]
+//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--throttle 4] [--only walk,sweep,faults,cards,links,search,table,based]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
@@ -73,7 +75,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 // on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
 const throttle = Number(arg("--throttle", 1));
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
-const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table")).split(","));
+const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table,based")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -162,7 +164,7 @@ async function serve(n, opts = {}) {
     catch (e) { if (fixed || tries >= 1) throw e; }
   }
 }
-async function serveOn(p, { faults = false, linking = false } = {}) {
+async function serveOn(p, { faults = false, linking = false, plant = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
   const launchPy = `
 import sys, pathlib
@@ -189,7 +191,29 @@ if ${linking ? "True" : "False"}:
             return f'Here it is: {m.group(1)}.' if m else f(system, user, **kw)
         return llm
     demo.brain = _linking
-sys.argv = ['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
+if ${plant ? "True" : "False"}:
+    # AN AGED ASK, the way the daily sweep raises one (sweep.aged_asks): a person's mail with no task, its line on the rail as an idea
+    # whose "Based on" names that mail - planted once the demo has seeded, on the server's own store
+    import threading, time
+    from datetime import datetime
+    def _plant():
+        from taskuary import sweep, funnel
+        st = server.store
+        for _ in range(120):
+            m = st._one("SELECT MessageId, FromName, Subject FROM message WHERE TaskId IS NULL AND Channel='email' AND COALESCE(FromName,'')<>'' "
+                        "AND COALESCE(Direction,'in')<>'out' ORDER BY MessageId LIMIT 1")
+            if m: break
+            time.sleep(0.5)
+        if not m: return
+        stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        sweep._say_once(st, [{'key': f"{sweep.ASK}:plant{m['MessageId']}", 'kind': sweep.ASK, 'sig': stamp,
+                              'text': sweep.SAY['unanswered'].format(who=m['FromName'], gist=m['Subject'] or 'a question', ago='15 days ago'),
+                              'action': {'type': 'message', 'mid': m['MessageId'], 'tid': None, 'who': m['FromName'], 'by': 'sweep',
+                                         'why': sweep.SAY['unanswered_why'].format(days=5)}}], stamp)
+        funnel.invalidate()
+        st.set_setting('deadend_planted_mid', str(m['MessageId']), 'walk')
+    threading.Thread(target=_plant, daemon=True).start()
+sys.argv =['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
   const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", ...(faults ? { TASKUARY_FAULTS: "1" } : { TASKUARY_DEMO: "1" }) };
   delete env[faults ? "TASKUARY_DEMO" : "TASKUARY_FAULTS"];
   const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
@@ -1092,8 +1116,70 @@ async function searchPass() {
   await page.close(); srv.stop();
 }
 
+// BASED: an Advisor idea's "Based on <name>'s message ↗" opens THAT person's mail as its own card on the canvas - the card the walk
+// shows for it - and never the old row panel (Summary / Message / Triage / Agent, "CLEAR FROM TIMELINE", "Talk it through", titled
+// "undefined in chat"), which the owner had taken for gone (2026-10-20: "it should not take you there regardless"). And no road draws
+// that panel: a #msg= link, fresh and over the walk, lands the same card.
+const LEGACY = ["CLEAR FROM TIMELINE", "Talk it through", "undefined in chat", "No message preview available", "Dismiss once", "WORK ON IT"];
+async function based() {
+  const srv = await serve(0, { plant: true });
+  let idea = null;
+  for (let i = 0; i < 40 && !idea; i++) {
+    const items = (await srv.api("GET", "/api/funnel/pile")).items || [];
+    idea = items.find((x) => x.kind === "idea" && x.idea_kind === "unanswered" && x.mid);
+    if (!idea) await wait(1000);
+  }
+  if (!idea) { note("BASED", "based", "the planted aged ask never reached the rail - the Based on link was not walked"); srv.stop(); return; }
+  const mid = idea.mid, page = await pageOn(srv, "based");
+  const legacy = () => page.evaluate((words) => {
+    const text = document.body.innerText;
+    return [...words.filter((w) => text.includes(w)), ...(document.querySelector("[data-processing-generic-detail]") ? ["the item pane"] : [])];
+  }, LEGACY);
+  // the card on the table, and whether it is the source mail's - its key, or a link in it back to that message
+  const table = () => page.evaluate(() => {
+    const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    // the newest card the chat drew: an item's live card, or a task's view when the mail has a task
+    const v = [...document.querySelectorAll(".tq-chat-body .tq-msg.tq-live-card .tq-card, .tq-chat-body [data-tq-task-page]")].filter(vis).pop();
+    const ring = document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") || "";
+    return v ? { key: ring, text: v.innerText.replace(/\s+/g, " ").slice(0, 600) } : null;
+  });
+  // that person's own mail: their name on it, and not the idea's line about it
+  const who = idea.action?.who || "";
+  const isSource = (t) => !!t && !!who && t.text.includes(who) && t.key !== idea.key && !/no answer yet/i.test(t.text);
+  page.step = "based rail";
+  const row = await openItem(page, idea.key);
+  if (!row) note("BASED", page.step, `the aged ask ${idea.key} has no rail row to open`);
+  else {
+    const link = await page.evaluateHandle((mid) => [...document.querySelectorAll(`a.tq-card-link[href="#msg=${mid}"]`)]
+      .filter((a) => a.getBoundingClientRect().width > 0).pop() || null, mid);
+    const words = link.asElement() ? await link.evaluate((a) => a.innerText.trim()) : "";
+    if (!link.asElement()) note("BASED", page.step, `the idea's card drew no "Based on" link to message ${mid}`);
+    else {
+      if (/^Advisor's/.test(words)) note("BASED", page.step, `the link names the Advisor ("${words}"), not the person who asked`);
+      page.step = "based link";
+      await link.asElement().click(); await wait(4500);
+      const t = await table(), old = await legacy();
+      if (old.length) note("BASED", page.step, `the Based on link drew the old row panel: ${old.join(", ")}`);
+      if (!isSource(t)) note("BASED", page.step, `the Based on link left ${t ? `${t.key}: "${t.text.slice(0, 80)}"` : "nothing"} on the table, not message ${mid}'s card`);
+      walked.push("based: an idea's Based on link, to the source mail's card");
+    }
+  }
+  // ...and the same message by its address: over the walk, then on a fresh page
+  for (const [step, go] of [["based hash", () => page.evaluate((h) => { window.location.hash = h; }, `#msg=${mid}`)],
+    ["based fresh", () => page.goto(`${srv.base}/#msg=${mid}`, { waitUntil: "load" })]]) {
+    page.step = step;
+    if (step === "based hash") { await clickText(page, "Walk me through my tasks"); await wait(2000); await pressNext(page); await wait(3500); }
+    await go(); await wait(step === "based fresh" ? 8000 : 4500);
+    const t = await table(), old = await legacy();
+    if (old.length) note("BASED", page.step, `#msg=${mid} drew the old row panel: ${old.join(", ")}`);
+    if (!isSource(t)) note("BASED", page.step, `#msg=${mid} left ${t ? `${t.key}: "${t.text.slice(0, 80)}"` : "nothing"} on the table, not that message's card`);
+  }
+  walked.push("based: #msg= over the walk and on a fresh page");
+  await page.close(); srv.stop();
+}
+
 browser = await launch();
-const phases = { walk, sweep, faults, cards, links, search: searchPass, table };
+const phases = { walk, sweep, faults, cards, links, search: searchPass, table, based };
 for (const [name, run] of Object.entries(phases)) {
   if (!only.has(name)) continue;
   try { await run(); } catch (e) { note("CRASH", name, `the ${name} pass did not finish: ${e.message.split("\n")[0]}`); }

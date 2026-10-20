@@ -339,13 +339,12 @@ export default function TaskHubPage() {
     if (import.meta.env.VITE_DEMO === "1") return false;
     try { return localStorage.getItem("taskuary.assistantMode") === "game"; } catch { return false; }
   });
-  const [stageMode, setStageMode] = useState("chat");   // what a click on a sidebar row does (chat | task)
   const pickAsstGame = (on) => { setAsstGame(on); try { localStorage.setItem("taskuary.assistantMode", on ? "game" : "chat"); } catch { /* private window */ } };
   // SEARCH FROM ANY VIEW (the owner, 2026-10-15: "search doesn't work in game or in board, it reroutes you to the chat"): the
   // dialog opens over the Board or the Game where you are; a PICK is what brings Chat up, since that is where it is drawn.
   // Ctrl+K works there too - Chat's own rail listens for it only while Chat is on screen.
   const toChat = useRef(null);
-  toChat.current = () => { pickAsstGame(false); setStageMode("chat"); go("Assistant"); };
+  toChat.current = () => { pickAsstGame(false); go("Assistant"); };
   useEffect(() => {
     const picked = () => toChat.current?.();
     window.addEventListener(SEARCH_PICKED, picked);
@@ -375,7 +374,7 @@ export default function TaskHubPage() {
   useEffect(() => onLive(["feed-changed", "task-changed"], refreshPending, { wait: 250, max: 1500 }), [refreshPending]);
 
   // EVERY OLD LINK STILL LANDS - in the canvas (canvasLinks.js): #task=123 opens that task's view, #connector=,
-  // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= the rail's own row
+  // #settings=, #report=, #playbook= open their browse card, #new-task the New sheet, #msg= that message's card
   // ...and the browser's Back and Forward come the same road (appLinks.onPlace): a step back to the address with no place is the walk's
   // own table, the page put down (the 2026-10-19 UI walk: Back left the app). `fromUrl`: the address already says it - the canvas
   // writes it more exactly, never as a new step
@@ -383,7 +382,6 @@ export default function TaskHubPage() {
     const req = canvasRequestFromHash(h, 0);
     readAhead(req);
     if (req || (back && !h)) { ask({ ...(req || { kind: "home" }), fromUrl: true }); setTab("Assistant"); tabRef.current = "Assistant"; }
-    else if (/^#msg=\d+/.test(h)) go("Assistant");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
   // A terminal belongs to the task it is working. Opening a task with start=true means "and put your CLI on it now";
@@ -433,7 +431,7 @@ export default function TaskHubPage() {
               it a little bigger so they are more obvious"). The Board button beside a Chat | Task | Game switch was two controls
               for one question, and Task - rows opening on their own - is what a click in Chat already does. */}
           <ViewSwitch view={tab === "Board" ? "board" : asstGame ? "game" : "chat"}
-            onView={(v) => { if (v === "board") { go("Board"); return; } pickAsstGame(v === "game"); setStageMode("chat"); go("Assistant"); }} />
+            onView={(v) => { if (v === "board") { go("Board"); return; } pickAsstGame(v === "game"); go("Assistant"); }} />
           {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
           {/* ...on a phone too, as its icon at the line's end (SearchBar): it was display:none there (the 2026-10-19 UI walk) */}
           <Box sx={{ flex: 1, display: "flex", justifyContent: { xs: "flex-end", sm: "center" }, minWidth: 0, px: { xs: 0, md: 2 } }}>
@@ -477,7 +475,7 @@ export default function TaskHubPage() {
               {/* Game is the same Assistant, walked: the chat stays mounted behind it so its conversation survives the switch */}
               <Box sx={{ display: asstGame ? "none" : "block" }}>
                 <AssistantView key={`a${tick}`} onOpenTask={openTask} onNavigate={go} onChanged={refreshPending}
-                  mode={stageMode} onMode={setStageMode} active={tab === "Assistant" && !asstGame} request={canvasReq} />
+                  active={tab === "Assistant" && !asstGame} request={canvasReq} />
               </Box>
               {asstGame && (
                 <React.Suspense fallback={<CircularProgress size={22} sx={{ m: 4 }} />}>

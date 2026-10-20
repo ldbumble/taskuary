@@ -939,7 +939,7 @@ function AdvisorNotes({ keyOnTable }) {
   );
 }
 
-export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode, onMode, active = true, request = null }) {
+export default function AssistantView({ onOpenTask, onNavigate, onChanged, active = true, request = null }) {
   const [state, setState] = useState(null);           // /api/concierge: the dock task, its turns, the AI choices
   const handoff = state?.handoff || null;             // the walk is in a phone chat: this tab is locked behind it
   // A set-up walk-through, running HERE. The conversation binds to that task's own session - which
@@ -1051,7 +1051,6 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   }, [current, continueOn]);
   const [emojiEl, setEmojiEl] = useState(null);
   const [speakOnState, setSpeak] = useState(speakOn);
-  const [modeIn, setModeIn] = useState("chat"), stageMode = mode ?? modeIn, setStageMode = onMode ?? setModeIn;   // what a click on a row does: chat (default) or task view
   const [railOpen, setRailOpen] = useState(false);      // on a phone: the rail instead of the chat
   const bodyRef = useRef(null);
   // Polls and state loads can already be in flight when New chat is pressed. Epoching the
@@ -1084,7 +1083,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const [foldedKey, setFoldedKey] = useState(null);
   // the card browsed open, in words - what "this" means to the next turn (concierge.say open_card)
   const openCardRef = useRef(null);
-  const browseRef = useRef(null), openTaskRef = useRef(null), browseDownRef = useRef(null);
+  const browseRef = useRef(null), openTaskRef = useRef(null), openMsgRef = useRef(null), browseDownRef = useRef(null);
   const openCard = useCallback((label) => { openCardRef.current = label || null; }, []);
   // the table changed: the next item opens un-expanded and unfolded - a NEW item only. advance() empties the table on the way to
   // the next one, and resetting the fold then drew the task just closed again until the next landed (the owner, 2026-10-05:
@@ -2343,9 +2342,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     setAiEl(null);
   };
   const toggleSpeak = () => { const v = !speakOnState; setSpeak(v); try { localStorage.setItem("taskuary_speak", v ? "1" : "0"); } catch { /* private mode */ } if (!v) window.speechSynthesis?.cancel(); };
-  // a card's link to its message: it opens on the stage, over the chat, right here - the rail reads the
-  // hash and pins it (FeedView.openHash); its close comes back to the conversation
-  const timeline = (mid) => { openAppLink(`msg=${mid}`); };
+  // a card's link to its message ("<name>'s message ↗", an idea's Based on): that message's own card, on the table (openMsgCard)
+  const timeline = (mid) => openMsgRef.current?.(mid);
   // The walk, taken to a chat you already have connected (WhatsApp, Telegram). This is not a way to
   // CONNECT one - a chat with no Assistant card offers nothing here (the owner, 2026-09-07: "point is
   // to talk to assistant through it not connect it"). While it is there the tab locks itself: two
@@ -2384,7 +2382,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const browse = (area, state = {}) => {
     if (area === "connections") readLists(api);        // its lists asked for now, beside its chunk (connectorLists.js)
     navHow.current = "push";
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); setExpanded(false);
+    setRailOpen(false); if (old) setOld(null); setExpanded(false);
     const id = `b${Date.now()}`;
     // THE SAME AREA MOVES ITS CARD: a link or a button for the area already open re-places that card, never posts a second
     // one - a second unmounted the first mid-dialog (a #playbook link opening New playbook), and old links posted two
@@ -2419,7 +2417,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       pull(`task:${req.tid}`); return;
     }
     if (!handoff) { openLater.current = req; return; }
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown();
+    setRailOpen(false); if (old) setOld(null); browseDown();
     const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
     // the task from the Board is what is on the table now: the rail kept marking the item before it "on the table"
     const card = { kind: "task", key: `task:${req.tid}`, tid: req.tid, title: ref, ref, autostart: req.start || null, act: req.act || null };
@@ -2429,42 +2427,25 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
-    const req = openLater.current; openLater.current = null; openTaskRef.current?.(req);
+    const req = openLater.current; openLater.current = null;
+    if (req.kind === "msg") openMsgRef.current?.(req.mid); else openTaskRef.current?.(req);
   }, [busy, resetting]);
   // a pull lands through surface() -> landed() -> putOnTable; one refused as busy lands nothing, so nothing waits for it
   const pull = (key, asUser) => {
     navHow.current = "push";
-    setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown(); surface(key, asUser || null);
+    setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
   };
 
-  // What the Chat/Task toggle MEANS on the pipe rail: chat pulls the row into the conversation,
-  // task opens it on the stage the way a feed row does. Only a row with a message behind it can be
-  // opened - a meeting, a wrapup or an agent has no message, so those still answer in the chat,
-  // and pull() switches the stage there so the answer is not written somewhere invisible.
-  const pullOrOpen = (key, asUser, openByMid, openByItem) => {
-    browseDown();
-    // ...and an entry of the batch on the table, which is drawn on the rail but is not a pile row
-    const it = (pile?.items || []).find((i) => i.key === key)
-      || (currentItem?.items || []).find((i) => i.key === key);
-    if (stageMode === "task") {
-      // A MESSAGE opens on the stage. Anything else with a TASK behind it opens the task: an agent
-      // row, a meeting's prep, a proposal - none of them carry a mid (funnel.from_agents,
-      // from_calendar, from_proposals build items without one), so Task mode fell straight through
-      // to the chat and the owner got a conversation about the very thing they had just asked to
-      // open (the owner, 2026-09-16: "task button on the assistant, if i click it then hit a item
-      // the chat pops up not the actual task"). Only a row with neither - a bare meeting - has
-      // nothing to open, and talking about it is the right answer there.
-      if (it?.mid && openByMid?.(it.mid)) { setRailOpen(false); return; }
-      // no message, but the canonical item can still be asked about itself - a task, an idea, a
-      // review - and that is what the stage draws. It is the same pane the Timeline gives these.
-      const pid = it?.processing_id || (key.startsWith("processing:") ? key.slice("processing:".length) : "");
-      const target = it?.tid ? { kind: "task", id: it.tid } : it?.rid ? { kind: "review", id: it.rid } : null;
-      if (pid && target && openByItem?.(pid, target)) { setRailOpen(false); return; }
-      // ...and on a legacy install, where there is no canonical item to ask, the task itself
-      if (it?.tid && onOpenTask) { onOpenTask(it.tid); setRailOpen(false); return; }
-    }
-    pull(key, asUser);
+  // A MESSAGE ASKED FOR BY ID - a card's "<name>'s message ↗", an idea's "Based on", a #msg= link - is put on the table as ITS card, the
+  // one the walk shows for it (funnel.item_for_key answers msg:N for any message, through its task's row when it has one). It opened a
+  // second view of the row on the stage - Summary / Message / Triage / Agent, titled "undefined in chat" - which the owner had taken
+  // for gone (2026-10-20: "it should not take you there regardless"). Asked for mid-turn, it waits for the turn as a task does.
+  const openMsgCard = (mid) => {
+    if (!mid) return;
+    if (busy || resetting || turnFlight.current) { openLater.current = { kind: "msg", mid }; return; }
+    pull(`msg:${mid}`);
   };
+  openMsgRef.current = openMsgCard;
 
   // THE DAY'S OPENER, one drawing: the empty chat's welcome, and the "Today" card the chat records when the owner sits down
   // (welcome.arrive) - that card drew a row list of its own, which was not the opener (the owner, 2026-10-08)
@@ -2614,6 +2595,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     else if (request.kind === "task" && request.fromUrl && !request.start && !request.act
       && Number(currentRef.current?.tid ?? /^task:(\d+)$/.exec(currentRef.current?.key || cardRef.current || "")?.[1] ?? 0) === Number(request.tid)) navHow.current = "replace";
     else if (request.kind === "task") openTaskRef.current?.(request);
+    else if (request.kind === "msg") openMsgRef.current?.(request.mid);   // #msg=N: that message's card (canvasLinks)
     else if (request.kind === "new") browseRef.current?.("new", {});     // #new-task: the New card in the conversation
     // Back to the address with no place: the walk's own table, the page over it put down (appLinks.onPlace)
     else if (request.kind === "home") { setRailOpen(false); setFoldedKey(null); browseDownRef.current?.(); putOnTable(null, "view"); }
@@ -2899,28 +2881,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     </div>
   );
 
-  // the task view's resting stage: what the rail is for in this mode, and the way back to the chat
-  const placeholder = (
-    <Box sx={{ height: "100%", border: `1px dashed ${BORDER}`, borderRadius: 2, display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", gap: 1, px: 4, textAlign: "center" }}>
-      <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: DIM }}>Pick anything on the left</Typography>
-      <Typography variant="caption" sx={{ color: FAINT, maxWidth: 380, lineHeight: 1.6 }}>
-        Hovering a row opens it here; clicking pins it. You get the message that arrived, why Taskuary sorted it
-        where it did, what the agent is doing about it, and the reply waiting to go — each on its own tab.
-      </Typography>
-    </Box>
-  );
 
   return (
     <>
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+      top={<Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
-        onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
+        onPull={(key, asUser) => { sectionRef.current = null; pull(key, asUser); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
-      stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
+      stage={chat}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />
     </>

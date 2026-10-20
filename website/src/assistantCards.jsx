@@ -833,8 +833,10 @@ export function IdeaCard({ card, onOpenTask, onTimeline, onNavigate, onDone }) {
   const go = (tab, hash) => { if (hash) openAppLink(hash); onNavigate?.(tab); };
   // THE FINDING, THEN WHOSE MOVE, THEN ANY SUGGESTION, apart (the owner, 2026-10-10): the chip is triage's verdict, the rows are
   // the Advisor's own parts, and the evidence links to the mail it came from instead of sitting in a raw box
-  const mid = a.mid || card.mid, why = a.why || card.why;
-  const from = mid ? <a className="tq-card-link" href={`#msg=${mid}`} onClick={(e) => { e.preventDefault(); onTimeline?.(mid); }}>{card.who ? `${card.who}'s message` : "the message"} ↗</a>
+  // ...named for WHOSE mail it is - the person who asked (the action's own `who`), never the idea's speaker: an aged ask read
+  // "Advisor's message", and opened as a row panel instead of that person's mail (2026-10-20). onTimeline puts that mail's card up.
+  const mid = a.mid || card.mid, why = a.why || card.why, who = a.who || (card.who !== "Advisor" ? card.who : "");
+  const from = mid ? <a className="tq-card-link" href={`#msg=${mid}`} onClick={(e) => { e.preventDefault(); onTimeline?.(mid); }}>{who ? `${who}'s message` : "the message"} ↗</a>
     : a.source?.label ? <span>{a.source.label}</span> : null;
   const facts = [["Whose move", a.whose], ["Suggestion", a.suggest], ["Based on", why && <>{from}{from && ": "}{why}</>]].filter(([, v]) => v);
   const chip = card.lane === "asked" ? "on you" : "not on you";

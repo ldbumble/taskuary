@@ -31,7 +31,7 @@ test("the rail's own catches read the structure, not the flattened copy", () => 
   const src = readFileSync(fileURLToPath(new URL("../src/FeedView.jsx", import.meta.url)), "utf8");
   assert.doesNotMatch(src, /response\?\.data\?\.detail\?\.code/);
   assert.doesNotMatch(src, /response\.data\.detail\.message/);
-  assert.match(src, /processingErrorCode\(e\) === "processing_target_moved"/);
+  assert.match(src, /processingErrorMessage\(e, "Failed to load the feed"\)/);
 });
 
 test("the rendered copy is still a plain string, which every setErr site relies on", () => {

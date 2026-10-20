@@ -29,7 +29,9 @@ test("the filter takes the freed row and says on its face what the rail is narro
   assert.match(button, /\{label\}<\/Box>/);
 });
 
-test("a card's link to a message opens it on the stage even when no Work row holds it", () => {
-  // it used to be left to the Timeline - a dead click once the Timeline was gone
-  assert.match(feed, /drillRef\.current\(row \|\| \{ MessageId: mid \}/);
+test("a card's link to a message opens that message's card on the canvas even when no Work row holds it", () => {
+  // it used to be left to the Timeline - a dead click once the Timeline was gone - and then to the rail's own row panel, which is gone too
+  // (2026-10-20): the server answers msg:N for any message (funnel.item_for_key), so a pull lands it whatever the rail holds
+  assert.doesNotMatch(feed, /drillRef|openHash/);
+  assert.match(readFileSync(src("AssistantView.jsx"), "utf8"), /pull\(`msg:\$\{mid\}`\);/);
 });

@@ -35,13 +35,6 @@ test("the timeline's SendToAgent handles the repository decision instead of call
   assert.doesNotMatch(handoff, /setSent\(data\);\s*setPrompt\(""\);\s*onOpenTask/);   // the old unconditional "it started"
 });
 
-test("All detail offers Send to agent for fyi and reply rows too, like the chat cards do", () => {
-  const feed = src("FeedView.jsx");
-  const tray = feed.slice(feed.indexOf("{onIt && sel.TaskId && <TellAgentButton"), feed.indexOf("<TalkItThrough messageId"));
-  assert.doesNotMatch(tray, /!codeless/);
-  assert.match(tray, /<SendToAgent messageId=\{sel\.MessageId\}/);
-});
-
 test("the task page's non-coding start goes through the shared dispatch, whatever the task's kind was", () => {
   const tasks = taskSource();
   const fn = tasks.slice(tasks.indexOf("const startGeneralAgent = async"), tasks.indexOf("useEffect(() => { if (!liveCodingSession)"));

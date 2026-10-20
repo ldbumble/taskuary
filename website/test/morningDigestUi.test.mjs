@@ -5,13 +5,9 @@ import { fileURLToPath } from "node:url";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
 
-test("Timeline and Assistant share the meeting rail for today's digest", () => {
-  const feed = read("FeedView.jsx");
+test("the Assistant draws the meeting rail for today's digest", () => {
   const cards = read("assistantCards.jsx");
   const strip = read("TodayMeetingsStrip.jsx");
-  assert.match(feed, /import TodayMeetingsStrip/);
-  assert.match(feed, /<TodayMeetingsStrip \/>/);
-  assert.doesNotMatch(feed, /const TodayStrip/);
   assert.match(cards, /card\.brief_today && <TodayMeetingsStrip \/>/);
   // ...and the screen the day opens on draws the day too - as the opener's agenda column now, not the grey strip (mock-up A, 2026-10-08)
   const view = read("AssistantView.jsx");

@@ -66,7 +66,9 @@ test("the address of a place reads back as the same place", () => {
   assert.equal(placeOf("#connector="), placeOf("#connections"));
   assert.equal(placeOf("#playbook=weekly-close"), "#settings=playbooks");
   assert.equal(placeOf("#report=17&fix=9"), "#report=17");
-  assert.equal(placeOf("#msg=4"), "", "the rail's own link is no place of the canvas");
+  // a message link is a place until the canvas writes the table's own address over it (a reload then lands on that table)
+  assert.equal(placeOf("#msg=4"), "#msg=4");
+  assert.equal(placeOf("#message=4"), "#msg=4", "two spellings of one message are one place");
 });
 
 // a window with a history: what recordPlace wrote, and what onPlace heard

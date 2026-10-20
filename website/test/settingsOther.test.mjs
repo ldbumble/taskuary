@@ -96,29 +96,6 @@ test("every row the page offers is a knob somebody reads", () => {
   }
 });
 
-// ── a quiet assistant post promises only what it renders ─────────────────────────────────
-test("the quiet post does not point at a block it has not got", () => {
-  const feed = fs.readFileSync(path.join(process.cwd(), "src", "FeedView.jsx"), "utf8");
-  const at = feed.indexOf("Nothing worth saying this time");
-  assert.notEqual(at, -1);
-  const line = feed.slice(at - 60, at + 220);
-  assert.ok(/\{rv \? " What it read is below\." : ""\}/.test(line),
-    "the promise must be conditional on the `what it reviewed` block actually being there");
-});
-
-test("an assistant post shows what the assistant said, even with no structured ideas", () => {
-  // Every line of the post is drawn from brief.ideas, so a post whose brief did not reach the
-  // page rendered empty - while the sentence it actually wrote sat unused in sel.Preview.
-  const feed = fs.readFileSync(path.join(process.cwd(), "src", "FeedView.jsx"), "utf8");
-  const at = feed.indexOf("THE ASSISTANT'S OWN WORDS");
-  assert.notEqual(at, -1, "the fallback must be there and say why");
-  const block = feed.slice(at, at + 1100);
-  assert.ok(/\{!ideas\.length && cleanText\(sel\.Preview\) &&/.test(block),
-    "with no ideas but a body, the body is what the post shows");
-  assert.ok(/\{!ideas\.length && !cleanText\(sel\.Preview\) &&/.test(block),
-    "the 'nothing worth saying' line is only for a post that truly said nothing");
-});
-
 
 // ── the browser pane says when there is nothing to show ──────────────────────────────────
 test("a browser with no page open says so instead of painting black", () => {

@@ -65,8 +65,6 @@ test("whether a draft can leave is asked of capabilities.js, with the row's own 
   assert.equal(caps.channelCanSend(live, "email", false), true);
   assert.match(read("ReviewDecision.jsx"), /const canSendIt = draftCanSend\(caps, r\);/);
   assert.doesNotMatch(read("ReviewDecision.jsx"), /r\.CanSend [!=]==/);
-  assert.match(read("FeedView.jsx"), /const sendable = channelCanSend\(useCapabilities\(\), sel\.Channel, sel\.CanSend\);/);
-  assert.doesNotMatch(read("FeedView.jsx"), /canSend=\{sel\.CanSend\}/);
   assert.match(read("GeneralWorkspace.jsx"), /\{!draftCanSend\(caps, review\) \? null : \(/);
   assert.doesNotMatch(read("assistantCards.jsx"), /CanSend [!=]== false/);
 });

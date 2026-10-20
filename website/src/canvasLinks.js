@@ -11,6 +11,10 @@ export function canvasRequestFromHash(hash, n = 0) {
   const h = String(hash || "");
   let m;
   if ((m = /^#task=(\d+)/.exec(h))) return { kind: "task", tid: Number(m[1]), n };
+  // a message by id - a card's "<name>'s message", a bell, the setup list, a digest line: ITS card on the table, the one the walk shows
+  // for it (AssistantView.openMsgCard pulls msg:N). It opened a second view of the row - Summary / Message / Triage / Agent - that the
+  // owner had taken for gone (2026-10-20: "it should not take you there regardless"); there is no other place a message opens.
+  if ((m = /^#(?:msg|message)=(\d+)/.exec(h))) return { kind: "msg", mid: Number(m[1]), n };
   if (/^#new-task/.test(h)) return { kind: "new", n };
   if ((m = /^#report=([^&]+)/.exec(h))) {
     const v = decodeURIComponent(m[1]);
@@ -81,5 +85,5 @@ export function hashFor(area, s = {}) {
 // so two spellings of the same place are never two steps of history; "" for an address that is no place of the canvas
 export function placeOf(hash) {
   const r = canvasRequestFromHash(hash);
-  return !r ? "" : r.kind === "task" ? `#task=${r.tid}` : r.kind === "new" ? "#new-task" : hashFor(r.area, r.state);
+  return !r ? "" : r.kind === "task" ? `#task=${r.tid}` : r.kind === "msg" ? `#msg=${r.mid}` : r.kind === "new" ? "#new-task" : hashFor(r.area, r.state);
 }

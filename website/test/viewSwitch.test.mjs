@@ -17,7 +17,7 @@ test("the top bar is Chat | Board | Game, in that order, with no Board button an
 
 test("Board opens the Board; Chat and Game are the Assistant, walked or not", () => {
   const page = read("TaskHubPage.jsx");
-  assert.match(page, /onView=\{\(v\) => \{ if \(v === "board"\) \{ go\("Board"\); return; \} pickAsstGame\(v === "game"\); setStageMode\("chat"\); go\("Assistant"\); \}\}/);
+  assert.match(page, /onView=\{\(v\) => \{ if \(v === "board"\) \{ go\("Board"\); return; \} pickAsstGame\(v === "game"\); go\("Assistant"\); \}\}/);
 });
 
 test("the Board's New task opens on New's agent tab", () => {

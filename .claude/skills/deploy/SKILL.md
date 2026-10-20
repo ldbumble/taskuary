@@ -169,7 +169,6 @@ server when the change touches the rail, the pipe or the stage:
 
 ```bash
 TASKUARY_HOME=<a scratch dir> python -m taskuary.cli --demo --port 7911 --no-browser &
-node website/task_mode_check.mjs   http://127.0.0.1:7911/     # Chat/Task on the unread rail
 node website/pipe_geometry_check.mjs http://127.0.0.1:7911/   # pile rows on the Timeline's edges
 ```
 

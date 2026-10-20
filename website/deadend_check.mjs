@@ -511,7 +511,11 @@ async function faults() {
     const op = await srv.api("POST", "/api/operations", { kind: "task.complete", target: Number(ref), params: {} });
     if (op?.id) await srv.api("POST", `/api/operations/${op.id}/execute`, { version: op.version });
     page.expect.add("/remind"); page.expect.add("/execute");
-    if (await pressVerb(page, "defer")) {
+    // wait for the close to reach the screen before pressing: pressed at once, Remind me was clicked as the row swapped it for
+    // Reopen task, so no day picker opened - a race in this check, and which task it raced on turned on the date (CI, 2026-10-20)
+    for (let i = 0; i < 20 && !(await outs(await look(page))).some((x) => /reopen/i.test(x.word)); i++) await wait(500);
+    if (!(await rowHandle(page, "defer")).asElement()) await wayOut(page.step, [aFix, (x) => /reopen/i.test(x.word)]);
+    else if (await pressVerb(page, "defer")) {
       await wait(1500);
       const day = (await page.$$(".MuiPopover-paper button"))[0];
       if (day) { await day.click(); await wait(4500); await wayOut(page.step, [aFix, (x) => /reopen/i.test(x.word)]); }

@@ -157,7 +157,7 @@ test("Mark done and Remind me put the task down AT THE PRESS, as Next does, and 
   // ...and off the RAIL at the press as well, a live session's Mark done included: it waited on an 18-second write-up
   // first, sitting under For later the whole time (the owner, 2026-10-01: "it first went to Later ... did not disappear")
   const stop = task.slice(task.indexOf("const stopAndFinish = async"), task.indexOf("const markDoneHint"));
-  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("writeUpSession("), "put down before the write-up");
+  assert.ok(stop.indexOf("onLeave?.()") > -1 && stop.indexOf("onLeave?.()") < stop.indexOf("writeUpThenClose("), "put down before the write-up");
   assert.match(view, /onLeave=\{\(\) => canvas\.putDown\(c\.key, c\.tid\)\}/);
   assert.match(view, /items: asPressed\(pile\.items, \{ leaving: leavingTid/, "the rail drops it (funnelPile.asPressed)");
   assert.match(view, /!pile\.items\.some\(\(i\) => i\.tid === leavingTid\)\) setLeavingTid\(null\)/, "until the server's pile has let it go - a reopened task is never hidden");

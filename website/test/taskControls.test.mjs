@@ -143,7 +143,7 @@ test("complete, reopen, coding start and stop run the shared operations road, ne
 });
 
 test("saving a result never completes the task, drafts never send, a question waits on the task", () => {
-  assert.match(tasks, /\/wrap`, \{ close: false \}/);
+  assert.match(tasks, /\/wrap`, \{ close: false, background: true \}/);     // written up behind the press (writeup.py)
   // the box opens at once and the AI's draft is written behind it (replyDraft.js, 2026-10-01) - neither sends
   assert.match(tasks, /generate \? draftReply\(api, replyMessage\.MessageId\) : api\.post\(`[^`]*\/reply`, \{ draft: false \}\)/);
   // ...the question for the sender down the task tools' road (Stream B, 2026-10-18): a draft for the yes, the message it answers named
@@ -196,10 +196,12 @@ test("Mark done on a live session ends it the way Stop and save does", () => {
   assert.ok(tasks.includes("liveSession ? stopAndFinish()"), "the press takes the write-up road");
   const at = tasks.indexOf("const stopAndFinish = async");
   const body = tasks.slice(at, tasks.indexOf("\n  };", at));
-  assert.ok(body.indexOf('setWrapping("done")') < body.indexOf("writeUpSession("), "the terminal gives way before the request");
+  // ...as ONE job the server owns since 2026-10-20 (writeup.py): written up, then closed; the page walks on once it is harvested
+  assert.ok(body.indexOf("writeUpThenClose(") > -1 && body.indexOf("writeUpThenClose(") < body.indexOf("setTerm(null)"), "the terminal gives way once harvested");
+  assert.ok(body.indexOf("setTerm(null)") < body.indexOf('closedHere("done")'), "the page walks on - the job closes the task");
   assert.match(fs.readFileSync(new URL("../src/closeAgent.jsx", import.meta.url), "utf8"), /no_reply: true/,
     "the close dismisses drafts, so none is written (the shared write-up, closeAgent.jsx)");
-  assert.ok(body.indexOf("writeUpSession(") < body.indexOf('finish("done")'), "the result is filed before the task closes");
+  assert.ok(body.indexOf("writeUpThenClose(") < body.indexOf('finish("done")'), "a write-up that cannot start closes the task here, as before");
 });
 
 // RUN ANOTHER AGENT (the owner, 2026-10-05: "don't see run another agent under more? it should be not in more"): it was behind

@@ -678,6 +678,15 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # browser in another zone reading the stamps correctly.
                     'timezone': ''}
 
+# BLANK MEANS THE DEFAULT, in one place (the 2026-10-19 UI walk): the page says "blank = default" for a number knob, and each
+# reader picked its own fallback for '' - `int(get_setting('poll_minutes') or 0)` read a cleared box as 0 and turned background
+# sync off. A number knob stored blank reads back as what it ships with, through get_setting and get_settings alike.
+def _blank_defaults():
+    from . import settings_schema
+    return {k: DEFAULT_SETTINGS[k] for k, m in settings_schema.knobs().items() if m.get('type') == 'number' and k in DEFAULT_SETTINGS}
+BLANK_DEFAULTS = _blank_defaults()
+
+
 # What a connection IS to the hub, independent of what it can technically do:
 #   trigger - polled for inbound items; they land on the Timeline and go through triage,
 #             which can open tasks and draft replies
@@ -4859,13 +4868,16 @@ class SQLiteStore:
                             AND NOT (LastError IS NULL AND LastErrorAt IS NULL AND COALESCE(LastSyncAt, '') BETWEEN ? AND ?)''',
                          (now, cid, since, now))
         self._processing_ignored_writes += 1
-    def get_settings(self): return {r['Name']: r['Value'] for r in self._rows('SELECT * FROM setting')}
+    def get_settings(self):
+        return {r['Name']: (BLANK_DEFAULTS[r['Name']] if r['Name'] in BLANK_DEFAULTS and not str(r['Value'] or '').strip() else r['Value'])
+                for r in self._rows('SELECT * FROM setting')}
     def get_setting(self, name, default=None):
-        """ONE setting, as `get_setting(name, default)` answers it (a stored NULL or '' is returned as stored).
-        Reading the whole table to pick one key was ~35% of the app's busy time (2026-09-25 profile): the table
-        carries 400 rows, one of them a 35k-character run record, and it was read per rail card."""
+        """ONE setting, as `get_setting(name, default)` answers it (a stored NULL or '' is returned as stored - except a number
+        knob's, which reads back its shipped default: BLANK_DEFAULTS). Reading the whole table to pick one key was ~35% of the
+        app's busy time (2026-09-25 profile): the table carries 400 rows, one of them a 35k-character run record."""
         r = self._one('SELECT Value FROM setting WHERE Name=?', (name,))
-        return default if r is None else r['Value']
+        if r is None: return default
+        return BLANK_DEFAULTS[name] if name in BLANK_DEFAULTS and not str(r['Value'] or '').strip() else r['Value']
     def list_settings(self): return self._rows('SELECT * FROM setting ORDER BY Name')
     def setting_writer(self, name):
         """Who last wrote one setting ('owner', 'migration', ...) - the line between a choice and a default."""

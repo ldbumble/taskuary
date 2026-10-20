@@ -13,6 +13,8 @@
 //   cards     a proposal card cancelled, then pressed; a task folded by its X, then opened again from its line and the rail
 //   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
 //   search    the demo: Enter typed over an earlier answer and before any, the count past the cap, a connection by name, a phone
+//   table     the demo, its brain linking a task it is asked to show: a task opened by the rail, Next, the Board, a deep link, search,
+//             a typed ref, a link in a reply and the walk's end chip - each, and each reloaded
 //
 // The rules, checked at every step:
 //   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
@@ -41,6 +43,8 @@
 //             2026-10-19 UI walk: #connector= did nothing over an open Connections, a search hit opened its group at the top)
 //   BACK      the browser's Back after two opens is not the first, or leaves the app (it left it: no step was ever written)
 //   ADDRESS   the address names a task the table has moved past - a reload would open it again
+//   RING      a task opened by any road and not the one rail row ringed for it, or the box not asking about it - and a reload that
+//             puts another on the table (the 2026-10-19 UI walk, G1: a Board, link or typed open left the rail ringing the item before)
 //   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
@@ -65,7 +69,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
 // on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
-const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search")).split(","));
+const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search,table")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -154,7 +158,7 @@ async function serve(n, opts = {}) {
     catch (e) { if (fixed || tries >= 1) throw e; }
   }
 }
-async function serveOn(p, { faults = false } = {}) {
+async function serveOn(p, { faults = false, linking = false } = {}) {
   const home = mkdtempSync(join(tmpdir(), "tq-deadend-"));
   const launchPy = `
 import sys, pathlib
@@ -169,6 +173,18 @@ if ${faults ? "True" : "False"}:
     from taskuary import faults, demo, firstrun
     assert faults.install(server.app), 'the faults module refused to install'
     demo.seed(server.store); server.store.set_setting(firstrun.DISMISSED, '1', 'walk')
+if ${linking ? "True" : "False"}:
+    # a brain that links the task it is asked to show, as the prompt's evidence tells it to (concierge.named_now) - else the demo's own
+    import re
+    from taskuary import demo
+    _canned = demo.brain
+    def _linking(seed=0, store=None):
+        f = _canned(seed, store)
+        def llm(system, user, **kw):
+            m = re.search(r'TO SHOW IT: link it in your answer as (\\[TQ-\\d+\\]\\(#task=\\d+\\))', str(user or ''))
+            return f'Here it is: {m.group(1)}.' if m else f(system, user, **kw)
+        return llm
+    demo.brain = _linking
 sys.argv = ['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '${p}']; cli.main()`;
   const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", ...(faults ? { TASKUARY_FAULTS: "1" } : { TASKUARY_DEMO: "1" }) };
   delete env[faults ? "TASKUARY_DEMO" : "TASKUARY_FAULTS"];
@@ -759,6 +775,111 @@ const phoneLook = (page) => page.evaluate(() => ({ wide: document.scrollingEleme
 const phoneNote = async (page, where) => { const l = await phoneLook(page);
   if (l.wide > 0) note("PHONE", page.step, `${where}: the page runs ${l.wide}px off a 390px screen`);
   for (const x of l.stacked.slice(0, 3)) note("PHONE", page.step, `${where}: ${x} - a letter a line`); };
+// ── TABLE: one task, one identity (the 2026-10-19 UI walk, G1) - however a task is opened, its one rail row is ringed, the box asks
+// about it, and a reload keeps it ─────────────────────────────────────────────────────────────────────────────────────────────────
+const tqOf = (tid) => `TQ-${String(tid).padStart(4, "0")}`;
+const ringOf = (page) => page.evaluate(() => {
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const cards = [...document.querySelectorAll("[data-tq-canvas-item] [data-tq-task-page]")].filter(vis);
+  return { tid: cards.length ? cards[cards.length - 1].getAttribute("data-tq-task-page") : "",
+    rows: [...document.querySelectorAll("[data-tq-rail] .tq-pile-row.current")].map((e) => ({ key: e.getAttribute("data-tq-key"), ref: (e.innerText.match(/TQ-\d+/) || [])[0] || "" })),
+    box: document.querySelector(".tq-compose-box textarea")?.getAttribute("placeholder") || "",
+    seen: [...document.querySelectorAll("[data-tq-task-page]")].map((e) => e.getAttribute("data-tq-task-page") + (vis(e) ? "" : "-")).join(",") };
+});
+// RING: the task opened (or whatever task landed) on the table, exactly one row ringed and it is that task's, the box about it - up to
+// 8 s, as the card lands when its pull answers
+async function ringed(page, at, tid = "") {
+  let r = null;
+  for (let t = 0; t < 8000; t += 500) { r = await ringOf(page); if (r.tid && (!tid || r.tid === String(tid)) && r.rows.length === 1) break; await wait(500); }
+  if (!r.tid) { note("RING", at, `nothing on the table${tid ? ` - ${tqOf(tid)} was opened` : ""}`); return ""; }
+  if (tid && r.tid !== String(tid)) note("RING", at, `${tqOf(tid)} was opened and the table shows ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
+  if (r.rows.length !== 1) note("RING", at, `${r.rows.length} rail rows ringed with ${tqOf(r.tid)} on the table: ${JSON.stringify(r.rows.map((x) => x.ref || x.key))}`);
+  else if (r.rows[0].ref !== tqOf(r.tid)) note("RING", at, `the ringed row is ${r.rows[0].ref || r.rows[0].key}, the card ${tqOf(r.tid)} (task views drawn: ${r.seen})`);
+  if (!/^Ask about this one/.test(r.box)) note("RING", at, `${tqOf(r.tid)} is on the table and the box says "${r.box}"`);
+  return r.tid;
+}
+async function table() {
+  const srv = await serve(4, { linking: true }), page = await pageOn(srv, "table");
+  const tasks = ((await srv.api("GET", "/api/search?q=status:open")).hits || []).filter((h) => h.tid && h.ref);
+  const onNow = async () => (await ringOf(page)).tid;
+  const used = [];
+  // a task not on the table, and not one an earlier road opened
+  const other = async () => { const cur = await onNow(); return tasks.find((t) => String(t.tid) !== cur && !used.includes(t.tid)) || null; };
+  const road = async (name, open) => {
+    page.step = `table ${name}`;
+    const tid = await open();
+    if (tid === null) return;                                  // the road was not there to walk: open() said why
+    const got = await ringed(page, page.step, tid);
+    // ...and a reload keeps it
+    if (got) { used.push(Number(got)); await page.reload({ waitUntil: "load" }); await wait(6000); await ringed(page, `${page.step} reload`, got); }
+    walked.push(`table: ${name}, and reloaded`);
+  };
+  const railKey = (n) => page.evaluate((n) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row")]
+    .find((e) => (e.querySelector(".card")?.title.match(/TQ-0*(\d+)/) || [])[1] === n)?.getAttribute("data-tq-key") || "", String(n));
+  await road("rail", async () => {
+    const cur = await onNow();
+    const n = await page.evaluate((cur) => [...document.querySelectorAll("[data-tq-rail] .tq-pile-row:not(.current)")]
+      .map((e) => (e.querySelector(".card")?.title.match(/TQ-0*(\d+)/) || [])[1]).find((n) => n && n !== cur) || "", cur);
+    if (!n) { note("RING", page.step, "no task row on the rail to open - the rail road was not walked"); return null; }
+    await page.click(`[data-tq-rail] .tq-pile-row[data-tq-key="${await railKey(n)}"] .card`);
+    return Number(n);
+  });
+  await road("Next", async () => {
+    // Next lands what the walk has next: the first task it lands is checked
+    for (let n = 0; n < 4; n++) { const was = await onNow(); if (!(await pressNext(page))) break; await wait(4500); const now = await onNow(); if (now && now !== was) return Number(now); }
+    note("RING", page.step, "four Nexts put no task on the table - the Next road was not walked"); return null;
+  });
+  await road("Board open", async () => {
+    await page.click('[data-tq-view="board"]'); await wait(3500);
+    const n = await page.evaluate((cur) => [...document.querySelectorAll("[data-tq-board-task]")].map((e) => e.getAttribute("data-tq-board-task"))
+      .find((n) => n !== cur) || "", await onNow());
+    if (!n) { note("RING", page.step, "the Board drew no task to open - the Board road was not walked"); await page.click('[data-tq-view="chat"]'); return null; }
+    await page.click(`[data-tq-board-task="${n}"]`);
+    return Number(n);
+  });
+  await road("deep link", async () => {
+    const t = await other(); if (!t) return null;
+    await page.goto(`${srv.base}/#task=${t.tid}`, { waitUntil: "load" }); await wait(6000);
+    return t.tid;
+  });
+  await road("search", async () => {
+    const t = await other(); if (!t) return null;
+    await page.click("[data-tq-search-open]"); await page.waitForSelector("[data-tq-search-input]"); await wait(300);
+    await page.keyboard.type(t.ref);
+    await page.waitForSelector("[data-tq-search-settled='true']", { timeout: 8000 }).catch(() => {});
+    await page.keyboard.press("Enter");
+    return t.tid;
+  });
+  let typed = null;
+  await road("typed ref", async () => {
+    typed = await other(); if (!typed) return null;
+    const box = await page.$(".tq-compose-box textarea");
+    if (!box) { note("RING", page.step, "no box to type in - the typed road was not walked"); return null; }
+    await box.type(`show me ${typed.ref}`); await page.keyboard.press("Enter"); await wait(6000);
+    return typed.tid;
+  });
+  await road("reply link", async () => {
+    // the link the answer above drew, pressed once the table has moved on
+    if (!typed) return null;
+    await pressNext(page); await wait(4500);
+    const a = await page.$(`.tq-chat-body a[href="#task=${typed.tid}"]`);
+    if (!a) { note("RING", page.step, `the answer to "show me ${typed.ref}" drew no link to it - the reply-link road was not walked`); return null; }
+    await a.click();
+    return typed.tid;
+  });
+  await road("end chip", async () => {
+    for (let n = 0; n < 40; n++) {
+      const words = (await look(page)).verbs.map((v) => v.word), w = words.find((x) => x.startsWith("Open TQ"));
+      if (w) { await clickText(page, w, "[data-tq-row]"); return Number(w.match(/TQ-0*(\d+)/)[1]); }
+      // ...a run of notices read together moves on by its own word, as the walk pass presses it
+      if (words.includes(label("next", "batch"))) await clickText(page, label("next", "batch"), "[data-tq-row]");
+      else if (!(await pressNext(page))) break;
+      await wait(3500);
+    }
+    note("RING", page.step, "Next never reached the walk's end chips - the end-chip road was not walked"); return null;
+  });
+  await page.close(); srv.stop();
+}
 
 // THE ONE SEARCH (the 2026-10-19 UI walk, G9): what Enter opens is what was typed, the count is the whole count, a setting or a
 // connection is found and opened, focus goes to what opened, and a phone has the box
@@ -903,7 +1024,7 @@ async function searchPass() {
 }
 
 browser = await launch();
-const phases = { walk, sweep, faults, cards, links, search: searchPass };
+const phases = { walk, sweep, faults, cards, links, search: searchPass, table };
 for (const [name, run] of Object.entries(phases)) {
   if (!only.has(name)) continue;
   try { await run(); } catch (e) { note("CRASH", name, `the ${name} pass did not finish: ${e.message.split("\n")[0]}`); }

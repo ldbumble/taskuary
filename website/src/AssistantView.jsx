@@ -52,7 +52,7 @@ import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
-import { coveredByReload, heldSince, sentChips } from "./funnelPile.js";
+import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
 import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
@@ -229,8 +229,10 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, settingUp = false }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false }) {
   const items = pile?.items || [];
+  // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
+  const tail = fyiTail(pile).length;
   // A full account can return dozens of canonical rows together. Painting that entire stack in
   // one React commit leaves the rail blank until the browser has laid out every card. On the
   // first successful load, put the first row down immediately and admit a small batch per
@@ -305,7 +307,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
   const nextKey = nextMarkerKey(pile, items, current);
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
-  const left = items.filter((i) => !i.settling && i.lane !== "working").length;
+  const left = items.filter((i) => !i.settling && i.lane !== "working").length + tail;
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
     : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
 
@@ -349,6 +351,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
   else if (pin.current?.key !== tableRow.key) pin.current = { key: tableRow.key, level: lastLevel.current[tableRow.key] || null };
   const bands = bandsOf(drawn.map((i) => (i.surfaced && atTable(i) ? { ...i, surfaced: false } : i)), pin.current);
   lastLevel.current = Object.fromEntries(bands.flatMap((b) => b.items.map((i) => [i.key, b.level])));
+  // the FYI band is costed whole: its "N more fyi" stays while any of it is not here (fillCaps reads `total`)
+  if (tail) for (const b of bands) if (b.level === "fyi") b.total = b.items.length + tail;
   const sig = bands.map((b) => `${b.level}:${b.items.length}`).join(",");
   const wrapRef = useRef(null);
   const [room, setRoom] = useState(0);
@@ -370,6 +374,17 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
     return () => ro.disconnect();
   }, [sig]);
   const [opened, setOpened] = useState(() => new Set());        // bands the owner opened by hand
+  // ...and an OPEN fyi band asks for its next page as its "N more fyi" scrolls into view - more as the owner scrolls
+  const moreRef = useRef(null);
+  const fyiOpen = opened.has("fyi") && tail > 0;
+  useEffect(() => {
+    const el = moreRef.current;
+    if (!fyiOpen || !el || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) onMoreFyi?.(); },
+      { root: el.closest("[data-tq-rail]"), rootMargin: "0px 0px 200px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [fyiOpen, displayRevision(pile)]);                           // eslint-disable-line react-hooks/exhaustive-deps
   // WHAT THE ESTIMATE MISSED. fillCaps costs what it expects the browser to paint; this is the
   // overflow it actually painted, measured once per change and given back in rows. Bounded by the
   // guard below so a band that cannot shrink any further can never spin.
@@ -410,13 +425,14 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
+        const extra = level === "fyi" ? tail : 0;           // the band's rows not here yet - counted, never dropped
         const cap = open ? rows.length : (caps[level] ?? rows.length);
         // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
         // working are never hidden, so a chevron on them would offer nothing
         const folds = CAPPED.includes(level) && rows.length > FLOOR;
         // what is on the table is never capped away, wherever in its band it sits
         const shown = rows.filter((i, n) => n < cap || i.key === curKey || batchKeys.has(i.key));
-        const hidden = rows.length - shown.length;
+        const hidden = rows.length - shown.length + extra;
         let stackHeight = 0;
         // BULK PROCESSING: the "250 more" pill hangs off the LAST ranked row, where reading stopped -
         // not off the band, which is what the fyi pill means. It takes real height, so the rows under
@@ -465,13 +481,13 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
               {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
                   different") - light red for your task, never the loud one; urgent alone keeps its colour */}
               <span className={`lvl-${level}`}>{levelLabel(level)}</span>
-              {folds && <i className="fold" role="button" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length}`}
-                onClick={(e) => { e.stopPropagation(); setOpened((cur) => {
+              {folds && <i className="fold" role="button" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length + extra}`}
+                onClick={(e) => { e.stopPropagation(); if (!open && extra) onMoreFyi?.(); setOpened((cur) => {
                   const next = new Set(cur);
                   if (next.has(level)) next.delete(level); else next.add(level);
                   return next;
                 }); }}>{open ? "▾" : "▸"}</i>}
-              <hr /><em>{rows.length}</em>
+              <hr /><em>{rows.length + extra}</em>
             </div>
             <div className="tq-pile-stack" style={{ height: stackHeight }}>
               {bracket && (
@@ -567,8 +583,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, set
               </div>
             )}
             {hidden > 0 && (
-              <button type="button" className="tq-pile-more"
-                onClick={() => setOpened((cur) => new Set(cur).add(level))}>
+              <button type="button" className="tq-pile-more" ref={open && extra ? moreRef : undefined}
+                onClick={() => { if (extra) onMoreFyi?.(); setOpened((cur) => new Set(cur).add(level)); }}>
                 {hidden} more {level === "reports" ? "report" : level === "ideas" ? "idea" : "fyi"}{hidden > 1 && level !== "fyi" ? "s" : ""}
               </button>
             )}
@@ -941,6 +957,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   const currentRef = useRef(null); const surfaceRef = useRef(null); const speakRef = useRef(null);
   const noticedRef = useRef(null);      // the context notice the stream already showed this turn
   const only = useRef(null);                                       // "mail" once the owner chose to start with the mail
+  const fyiWant = useRef(FYI_PAGE);                                // how many plain FYI the rail asks for whole (funnel.page_fyi)
   const selectionRef = useRef(null);
   const sectionRef = useRef(null);                                 // {level, seen}: a section walk, from its heading
   // THE CANVAS (2026-09-29): the task view takes the chat body's height, Expand hides the conversation around it, and
@@ -1002,12 +1019,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
 
   // one turn of the assistant, streamed: tool calls show under the dots as they happen, `done` is the answer
   const turnOnce = useCallback(async (body) => {
+    if (body.mode === "next") body = { ...body, fyi: fyiWant.current };
     setWork([]);
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
       return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
-        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members }
+        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members, fyi: body.fyi }
         : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid, images: body.images || [] } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
@@ -1130,7 +1148,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       const { data } = await api.get("/api/funnel/pile", { params: {
         ...(requestedCurrentKey ? { current: requestedCurrentKey } : {}),
         only: requestedScope.only, include_surfaced: requestedScope.include_surfaced,
-        exclude: requestedScope.exclude,
+        exclude: requestedScope.exclude, fyi: fyiWant.current,
         ...(force ? { force: 1 } : {}),
       } });
       const activeScope = nextSelectionScope(only.current, currentRef.current?.key || null);
@@ -1141,6 +1159,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       const captured = captureNextSelection(data, requestedScope);
       if (hasNextSelection(data)) selectionContractSeen.current = true;
       selectionRef.current = captured;
+      pileRef.current = refreshPilePresentation(pileRef.current, data);
       setPile((p) => refreshPilePresentation(p, data));
       if (!(await readChat(epoch))) return;
       if (data.events?.length) {
@@ -1201,6 +1220,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     return request;
   }, [readChat, putOnTable]);
   useEffect(() => { loadPileRef.current = loadPile; }, [loadPile]);
+  // the FYI band asks for its next page - opened, or its "N more fyi" scrolled into view. One ask at a time; the cached rail
+  // answers it (no force), and a read already in flight is followed by one that carries the bigger page.
+  const morePending = useRef(false);
+  const moreFyi = useCallback(() => {
+    if (morePending.current || !fyiTail(pileRef.current).length) return;
+    morePending.current = true;
+    fyiWant.current += 4 * FYI_PAGE;
+    Promise.resolve(pileFlight.current).catch(() => {}).then(() => loadPileRef.current?.()).finally(() => { morePending.current = false; });
+  }, []);
   // FeedView's initial filter is the unfiltered JSON object below. Treat that as the
   // starting state instead of a change: otherwise mount starts the normal cached read,
   // then immediately queues a forced second rebuild for the exact same scope.
@@ -1436,7 +1464,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     if (!key && sectionRef.current) {
       const sec = sectionRef.current;
       if (currentRef.current?.key) sec.seen.add(currentRef.current.key);
-      const nxt = sectionNext(pileRef.current?.items, sec.level, sec.seen);
+      let nxt = sectionNext(pileRef.current?.items, sec.level, sec.seen);
+      if (!nxt && sec.level === "fyi" && fyiTail(pileRef.current).length) {
+        fyiWant.current += 4 * FYI_PAGE;
+        await loadPileRef.current?.();
+        nxt = sectionNext(pileRef.current?.items, sec.level, sec.seen);
+      }
       if (nxt) { sec.seen.add(nxt.key); key = nxt.key; }
       else {
         sectionRef.current = null;
@@ -1881,7 +1914,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
     if (current) {
-      try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current })).data?.pile || null; }
+      try { pile = (await api.post("/api/funnel/settle", { key: current, verb: "done", only: only.current, fyi: fyiWant.current })).data?.pile || null; }
       catch (e) {
         // A receipt means the act already landed (a close, a sent reply) and only the settle after it failed - often with
         // the 422 "unavailable" that closing a task causes: walk on. Without one, gone already (404/422) is done too;
@@ -2120,7 +2153,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     seen.add(first.key);
     sectionRef.current = { level, seen };
     // the assistant SAYS what is in the section, then walks it - the whole list once, before the first item (the owner, 2026-09-30)
-    const rows = (bandsOf(pile.items).find((b) => b.level === level)?.items || []).filter((i) => !i.settling);
+    const rows = (bandsOf(pileRows(pile)).find((b) => b.level === level)?.items || []).filter((i) => !i.settling);
     const said = rows.slice(0, 8).map((i) => `${i.who ? i.who + " - " : ""}${i.title}`).join("; ") + (rows.length > 8 ? `; and ${rows.length - 8} more` : "");
     if (rows.length) setMsgs((m) => [...m, { id: `s${Date.now()}`, role: "receipt", text: `${levelLabel(level)}: ${rows.length} to go through. ${said}. Starting with the first.` }]);
     pull(first.key, null);
@@ -2221,7 +2254,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       {/* no card.away line here: SinceBlock below already says what came in, and the two counts read as a contradiction (U6) */}
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}
-      <DayOpener groups={items.length ? summarize(railPile?.items || items).groups : []} onSection={walkSection}
+      <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
       {!items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
       {/* greyed with no reason read as broken: say why, and where the rows are */}
@@ -2261,7 +2294,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   };
   // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
-  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items, pressAdvice,
+  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref),
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),
@@ -2629,7 +2662,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       top={({ openByMid, openByItem }) => <Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pullOrOpen(key, asUser, openByMid, openByItem); }}
-        onSection={walkSection} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
+        onSection={walkSection} onMoreFyi={moreFyi} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}
       stage={stageMode === "chat" ? chat : placeholder} rowMode={stageMode}
       onPull={(r, o) => pull(keyForRow(r), o?.quiet ? null : `Tell me about “${r.Subject || r.Title || "this"}”`)}
       railOnNarrow={railOpen} setupMode={firstRun} setupRail={firstRun ? <SetupSteps /> : null} />

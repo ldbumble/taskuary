@@ -4206,7 +4206,7 @@ def funnel_waiting():
 def funnel_rerank(): return {'updated': rank.rerank(store, force=True)}
 
 # ── the pipe and the concierge (funnel.py, concierge.py): what comes next, said out loud ──────
-class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; put_down: bool = False
+class SettleBody(BaseModel): key: str; verb: str = 'done'; hours: float | None = None; only: str | None = None; read: bool = False; shown: dict | None = None; put_down: bool = False; fyi: int | None = None
 class SurfaceBody(BaseModel):
     key: str | None = None
     only: str | None = None
@@ -4216,6 +4216,7 @@ class SurfaceBody(BaseModel):
     expected_next_key: str | None = None
     leaving: str | None = None          # the item Next is walking away from: read on the way out (concierge.move_on)
     expected_next_members: list[str] | None = None
+    fyi: int | None = None              # how many plain FYI rows the page wants whole in the rail that rides along (funnel.page_fyi)
 class ConciergeSayBody(BaseModel): text: str; key: str | None = None; context_mid: int | None = None; open_card: str | None = None; images: list[str] = []
 class ConciergeActBody(BaseModel): key: str; verb: str; hours: float | None = None
 
@@ -4230,7 +4231,7 @@ def _encoded(content) -> Response:
 
 
 def _pile_payload(force: bool = False, current: str = None, only: str = None,
-                  include_surfaced: bool = False, exclude: str = None) -> dict:
+                  include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict:
     """The pile as the page draws it, with the selection token Next echoes. One road for the GET,
     for the turn that carries the rail in its answer, and for the settle that does the same."""
     from . import funnel
@@ -4256,24 +4257,28 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     if current: p = {**p, 'current': funnel.next_item(store, current, items=funnel.full_items(store) if cached is not None else None)}
     # Current is query-specific and may be absent from the ordinary pile. Include
     # its complete presentation in the revision after attaching it to the response.
+    # `fyi`: the page's own rail pages its plain FYI tail (funnel.page_fyi) - AFTER the selection was captured from the whole
+    # pile, so the token Next echoes is the one a full read gives. Whatever is on the table or picked next is sent whole.
+    if fyi is not None:
+        p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, p.get('expected_next_key'), *(p.get('expected_next_members') or ())))
     return funnel.present(store, p)
 
-def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None) -> dict | None:
+def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:
     """The rail read once after a write and carried in that write's answer, so the page holds it
     instead of asking for the same rows again (design B, 2026-09-17: a press of Next was two of these
     reloads at 1.5-2 s each). Scoped the way the page will hold it. Never the answer's failure: the
     page falls back to its own load when nothing rides along."""
-    try: return _pile_payload(force=True, only=only, include_surfaced=include_surfaced, exclude=exclude)
+    try: return _pile_payload(force=True, only=only, include_surfaced=include_surfaced, exclude=exclude, fyi=fyi)
     except Exception as e:
         logger.debug(f'the pile did not ride along: {e}'); return None
 
 @app.get('/api/funnel/pile')
 def funnel_pile(force: bool = False, current: str = None, only: str = None,
-                include_surfaced: bool = False, exclude: str = None):
+                include_surfaced: bool = False, exclude: str = None, fyi: int = None):
     """The ranked pile the Assistant page draws: next-first, every item with the words it rests
     on, plus the alerts that interrupt. Cached a few seconds - it is polled while the page is open."""
     from .funnel_selection import SelectionUnavailable
-    try: return _encoded(_pile_payload(force, current, only, include_surfaced, exclude))
+    try: return _encoded(_pile_payload(force, current, only, include_surfaced, exclude, fyi))
     except SelectionUnavailable as error:
         raise HTTPException(503, error.detail) from error
     except processing_all.AllError as error:
@@ -4292,7 +4297,7 @@ def funnel_settle(body: SettleBody):
         dock = general.dock_task(store, ACTOR)[0]['TaskId']
         if concierge.current_key(store, dock) == body.key: concierge.set_current(store, dock, None, ACTOR)
         # the table is empty now, so the page's next scope excludes nothing: the rail comes back captured that way
-        out = {**out, 'pile': _pile_along(only=body.only)}
+        out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
     return _encoded(out)
 
 @app.get('/api/concierge')
@@ -4419,7 +4424,8 @@ def _with_pile(out: dict, body) -> dict:
     the rail with everything but it - that is the scope it is captured under. The walk running out
     (no item) leaves the page to its own load; a named pull (`key`) is not a walk."""
     if body.key or not (out.get('item') or {}).get('key'): return out
-    return {**out, 'pile': _pile_along(only=body.only, include_surfaced=body.include_surfaced, exclude=out['item']['key'])}
+    return {**out, 'pile': _pile_along(only=body.only, include_surfaced=body.include_surfaced, exclude=out['item']['key'],
+                                       fyi=getattr(body, 'fyi', None))}
 
 @app.post('/api/concierge/open')
 def concierge_open():
@@ -4455,6 +4461,7 @@ class ConciergeStreamBody(BaseModel):
     selection_revision: str | None = None
     expected_next_key: str | None = None
     expected_next_members: list[str] | None = None
+    fyi: int | None = None
 
 
 def _navigation_reservation(body):

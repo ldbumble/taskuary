@@ -69,6 +69,7 @@ import {
   processingRowId, processingSelectionKey, processingTarget, processingTransportLimit, rowOwnsMessage, unreadProcessingRows,
 } from "./processingAll.js";
 import { plural } from "./timeWords.js";
+import { fyiTail, pileRows } from "./funnelPile.js";
 import { openAppLink } from "./appLinks.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // guarded: a stale chunk reloads once (lazyGeneral.js)
@@ -818,13 +819,16 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   // only offer channels that actually have a connection behind them. With no category
   // picked, EVERY connected channel is offered - a hardcoded five-channel list here
   // silently hid telegram/whatsapp/jira/... sources from the picker as connectors grew
-  const availableChannels = [...new Set([...Object.keys(srcByChannel), ...(rows || []).map((r) => r.Channel)])];
+  // ...and the FYI the rail has not been sent whole yet (funnel.page_fyi) have their channels all the same
+  const availableChannels = [...new Set([...Object.keys(srcByChannel), ...(rows || []).map((r) => r.Channel),
+    ...(unreadInventory?.canonical ? fyiTail(unreadInventory).map((i) => i.channel || "") : [])])];
   const pickerChannels = availablePickerChannels(cat, availableChannels);
 
   const today = new Date().toLocaleDateString("sv-SE");
   // localDay over every row on every render (each key, each poll) was seconds on a large home; the set only changes with the
   // rows, the day, or the zone the settings load in (2026-10-19)
-  const canon = !!unreadInventory?.canonical, canonItems = unreadInventory?.items, tz = tzNow();
+  // every row is counted, the FYI tail the page has not asked for whole included (pileRows)
+  const canon = !!unreadInventory?.canonical, canonItems = useMemo(() => pileRows(unreadInventory), [unreadInventory]), tz = tzNow();
   const todays = useMemo(() => (canon
     ? (canonItems || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
     : (rows || [])).filter((r) => localDay(r.SentAt) === today), [canon, canonItems, rows, today, tz]);

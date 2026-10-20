@@ -1395,6 +1395,36 @@ def pile(store, force: bool = False, quiet: bool = False, observed=_OBSERVE) -> 
         return p
 
 
+# THE FYI TAIL IS PAGED FOR THE PAGE (the owner approved, 2026-10-20: "first page at once, more as the owner scrolls or asks;
+# same rows, same order, same counts shown"). Six months of FYI was 2,487 of a big mailbox's 2,876 rows and 3 MB of every
+# answer, while the rail draws a handful of them under "N more fyi". The page asks for `fyi` plain FYI rows; the rest go as
+# `fyi_tail`, the few fields the page COUNTS by (its headings, the day's opener, "in today", the channel picker), one short
+# list per row. A plain FYI row is one in the fyi lane and band with nothing else about it - the row on the table, the
+# walk's next pick and its batch are always sent whole, wherever they sit.
+FYI_PAGE = 50
+TAIL_FIELDS = ('key', 'kind', 'title', 'who', 'agent', 'shows_who', 'ref', 'tid', 'when', 'category', 'status', 'channel')
+
+
+def _plain_fyi(i) -> bool:
+    return (i.get('lane') == 'fyi' and i.get('order_band') == 4 and i.get('kind') != 'idea' and not str(i.get('kind') or '').startswith('goal')
+            and not any(i.get(k) for k in ('settling', 'put_down', 'deferred', 'surfaced', 'news')))
+
+
+def page_fyi(payload: dict, n: int, keep=()) -> dict:
+    """The payload with its plain FYI rows past the first `n` (in the pile's own order) folded into `fyi_tail`. Every other
+    row, every count the server made and the selection are untouched; `keep` names rows that are sent whole regardless."""
+    keep = {k for k in keep if k}
+    keep |= {m for k in list(keep) if str(k).startswith('fyis:') for m in str(k)[5:].split(',')}
+    items, tail, sent = [], [], 0
+    for i in payload.get('items') or []:
+        if _plain_fyi(i) and i.get('key') not in keep and keep.isdisjoint(i.get('aliases') or ()):
+            if sent >= n:
+                tail.append([(i.get('shows') or {}).get('who') if f == 'shows_who' else i.get(f) for f in TAIL_FIELDS]); continue
+            sent += 1
+        items.append(i)
+    return {**payload, 'items': items, 'fyi_tail': {'fields': list(TAIL_FIELDS), 'lane': 'fyi', 'order_band': 4, 'rows': tail}}
+
+
 def full_items(store) -> list | None:
     """The cached build with read items kept, for a same-request lookup of the item on the table."""
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None

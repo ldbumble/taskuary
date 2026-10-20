@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
@@ -104,6 +105,42 @@ async function waitHttp(url, child, headers = {}) {
   }, child);
 }
 
+// Every module the page will ask for, transformed once before any test starts its clock. A cold Vite answers the first
+// page load by pre-bundling every dependency and transforming ~500 modules, and on a busy box that alone outran
+// page.goto's 20 s and P0's first-visible budget - which are about the app, not the dev server. The crawl follows the
+// import graph the browser would (static and dynamic imports) and takes another pass while Vite answers 504 - it
+// re-optimized mid-crawl, so the URLs the page will use are the next pass's - or a request fails outright. The bound is
+// only a safety net.
+const importsOf = (source) => [...source.matchAll(/(?:\bimport|\bexport)\s*(?:[\w*{}\s,$]*?\bfrom\s*)?["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)|<script[^>]*\bsrc=["']([^"']+)["']/g)]
+  .map((m) => m[1] || m[2] || m[3]).filter((spec) => spec.startsWith("/") || spec.startsWith("."));
+async function warmVite(ui, timeout = 240000) {
+  const end = Date.now() + timeout;
+  let last = "";
+  while (Date.now() < end) {
+    const seen = new Set([`${ui}/`]);
+    let level = [`${ui}/`], unsettled = 0;
+    const read = async (url) => {
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(Math.max(1000, end - Date.now())) });
+        // a 404 is a string inside a bundled dependency that only looks like an import - nothing the page asks for
+        if (response.status === 404) return [];
+        if (!response.ok) { unsettled += 1; last = `${url}: ${response.status}`; return []; }
+        return importsOf(await response.text()).map((spec) => new URL(spec, url).href)
+          .filter((target) => target.startsWith(`${ui}/`) && !seen.has(target) && seen.add(target));
+      } catch (error) { unsettled += 1; last = `${url}: ${error.message}`; return []; }
+    };
+    while (level.length && Date.now() < end) {
+      // eight readers at a time, like a browser's connections: hundreds at once reset sockets on a busy box
+      const next = [];
+      let i = 0;
+      await Promise.all(Array.from({ length: 8 }, async () => { while (i < level.length) next.push(...await read(level[i++])); }));
+      level = next;
+    }
+    if (!level.length && !unsettled) return seen.size;
+  }
+  throw new Error(`the Vite dev server did not finish transforming the app within ${timeout} ms (last: ${last})`);
+}
+
 // `fresh`: a first start on a machine with nothing set up instead of the demo world - its PATH holds only the system's own
 // folders and `bin` (a folder of fake CLIs, or none), so no AI tool of the machine running the test can be seen
 export async function startHarness({ fresh = false, bin = "" } = {}) {
@@ -137,6 +174,8 @@ export async function startHarness({ fresh = false, bin = "" } = {}) {
     TASKUARY_PORT: String(backendPort),
     TASKUARY_API: fixtureApi,
     TASKUARY_TOKEN: "phase0-browser-owner-token",
+    // one dep cache per checkout, outside the node_modules junction worktrees share (vite.config.js)
+    TASKUARY_VITE_CACHE: path.join(os.tmpdir(), `taskuary-vite-${createHash("sha1").update(website).digest("hex").slice(0, 12)}`),
     APPDATA: appData,
     LOCALAPPDATA: localAppData,
     HOME: userHome,
@@ -185,6 +224,7 @@ export async function startHarness({ fresh = false, bin = "" } = {}) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     await waitHttp(ui, frontend);
+    await warmVite(ui);
 
     browser = await puppeteer.launch({
       executablePath: executable(),

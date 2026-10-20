@@ -376,7 +376,9 @@ export const placed = (row, card) => {
 // ...but an AGENT on the table says what the agent is doing: the walk's shown mark takes a row it is showing out of the pile, and
 // the agent that asked a question while it stood there read "on you" on the rail under a header saying it waited on you (G7)
 const AGENT_LANES = ["blocked", "working", "stopped", "saved"];
-export const pulledRow = (card) => (card?.tid && card.kind === "agent" && AGENT_LANES.includes(card.lane) ? { ...card, put_down: false, deferred: false }
+// ...and so does any task whose agent is WORKING, whatever kind of card it came as: it is under Agents working, never on you (2026-10-20)
+export const pulledRow = (card) => (card?.tid && ((card.kind === "agent" && AGENT_LANES.includes(card.lane)) || card.lane === "working")
+  ? { ...card, put_down: false, deferred: false }
   : card?.tid ? { ...card, lane: "yours", order_band: 2, put_down: false, deferred: false } : { ...card });
 // THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
 // task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn under Agents
@@ -419,13 +421,28 @@ export const CAPPED = ["reports", "ideas", "fyi"];
 export const FLOOR = 2;
 // For later is sorted by when each comes back, soonest first (no time known sorts last); every other band keeps the server's order
 const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
+// the walk's clock for a row (funnel._order): oldest first inside a band, reports newest first
+const walkAt = (i) => Date.parse(String(i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
 // `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile)
-export const bandsOf = (items, pin = null) => LEVEL_ORDER
-  .map((level) => {
-    const rows = (items || []).filter((i) => (pin?.level && i.key === pin.key ? pin.level : levelOf(i)) === level);
-    return { level, items: level === "later" ? [...rows].sort(soonest) : rows };
-  })
-  .filter((b) => b.items.length);
+// ...but never a row an AGENT HAS TAKEN UP (an owner screenshot, 2026-10-20): the task whose coding agent was working stayed pinned
+// under On you - counted there, worded "an agent is working on this; nothing needs you" - while Agents working listed another. A
+// working agent's task is under Agents working, on the table or not; the ring goes with it.
+// ...and a pinned row sits in its band WHERE THE WALK'S ORDER PUTS IT: it kept its own lane's place in the server's order, so a row
+// from a later band was drawn under every row of the band it was pinned to - a day-old task at the bottom of On you, below 1h
+export const bandsOf = (items, pin = null) => {
+  const held = (i) => !!pin?.level && i.key === pin.key && levelOf(i) !== "agents";
+  return LEVEL_ORDER
+    .map((level) => {
+      const rows = (items || []).filter((i) => (held(i) ? pin.level : levelOf(i)) === level);
+      if (level === "later") return { level, items: [...rows].sort(soonest) };
+      const moved = rows.find((i) => held(i) && levelOf(i) !== level);
+      if (!moved) return { level, items: rows };
+      const rest = rows.filter((i) => i !== moved), t = walkAt(moved), newest = level === "reports";
+      const at = rest.findIndex((i) => (newest ? walkAt(i) < t : walkAt(i) > t));
+      return { level, items: at < 0 ? [...rest, moved] : [...rest.slice(0, at), moved, ...rest.slice(at)] };
+    })
+    .filter((b) => b.items.length);
+};
 
 // avail: pixels the rail can paint without scrolling. Returns {level: rows to draw} for the capped
 // bands only; everything else draws in full. Pure, so test/funnelPile.test.mjs can pin the rule.

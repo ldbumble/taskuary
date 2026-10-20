@@ -81,6 +81,26 @@ test("the row on the table stays in the band it was opened from", async () => {
   assert.equal(where(null).a, levelOf(rows[0]));
 });
 
+// AN OWNER SCREENSHOT, 2026-10-20: the task on the table whose coding agent was working was drawn under On you - counted there, at the
+// bottom of it, below rows a day younger - while Agents working listed another task
+test("a working agent's task on the table is under Agents working, and a pinned row sits where the walk's order puts it", async () => {
+  const { bandsOf } = await import("../src/funnelPile.js");
+  const rows = [{ key: "a", lane: "yours", order_band: 2, since: "2026-10-19 20:00:00" }, { key: "b", lane: "yours", order_band: 2, since: "2026-10-20 09:00:00" },
+    { key: "t", tid: 7, lane: "working", order_band: 5, since: "2026-10-19 08:00:00", why: "An agent is working on this; nothing needs you" }];
+  const bands = (pin) => Object.fromEntries(bandsOf(rows, pin).map((b) => [b.level, b.items.map((i) => i.key)]));
+  // it was opened from On you, then its agent took it up: the pin no longer holds it there
+  assert.deepEqual(bands({ key: "t", level: "task" }), { task: ["a", "b"], agents: ["t"] }, "On you counts only what is on you");
+  // a row pinned from For later sits in On you by its age - first here, a day older than both - never appended at the end
+  const later = [...rows.slice(0, 2), { key: "l", lane: "yours", order_band: 2, put_down: true, since: "2026-10-19 07:00:00" }];
+  assert.deepEqual(bandsOf(later, { key: "l", level: "task" }).find((b) => b.level === "task").items.map((i) => i.key), ["l", "a", "b"]);
+  const mid = [...rows.slice(0, 2), { key: "m", lane: "yours", order_band: 2, put_down: true, since: "2026-10-20 01:00:00" }];
+  assert.deepEqual(bandsOf(mid, { key: "m", level: "task" }).find((b) => b.level === "task").items.map((i) => i.key), ["a", "m", "b"]);
+  // ...and a task pulled onto the table by name with its agent working keeps the agent's lane
+  const { pulledRow, levelOf } = await import("../src/funnelPile.js");
+  assert.equal(levelOf(pulledRow({ key: "task:7", tid: 7, kind: "task", lane: "working", order_band: 5 })), "agents");
+  assert.equal(levelOf(pulledRow({ key: "task:8", tid: 8, kind: "task", lane: "fyi", order_band: 4 })), "task", "anything else opened is on you");
+});
+
 // the owner, 2026-09-28: "the work rail still read agents working for a split second into your task, then goes back"
 test("the card on the table never moves its row: the rail's lane and shown mark win", async () => {
   const { placed, levelOf } = await import("../src/funnelPile.js");

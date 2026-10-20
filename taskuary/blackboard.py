@@ -5,7 +5,7 @@ tracks do not). A new agent in the SAME checkout gets that picture in its seed p
 peer in another repo is none of its business, and its tokens); a task LIKELY to collide
 queues behind the one already working - first agent in has control.
 """
-import json, os, re, threading, time
+import contextlib, json, os, re, threading, time
 from loguru import logger
 
 from .store import task_ref
@@ -16,10 +16,30 @@ from .store import task_ref
 def norm(p): return os.path.normcase(os.path.normpath(p)) if str(p or '').strip() else ''
 
 
+_READ = threading.local()
+
+@contextlib.contextmanager
+def one_status():
+    """One git status per checkout for the length of a read. The listing and a new agent's peer list asked git once per
+    SESSION, one after another, though every session in a checkout reads the same tree: six sessions were six serial
+    spawns of 0.1-4.9 s each on Windows (the perf pass, 2026-10-19) for six copies of one answer. Inside this block
+    the first ask runs git and the rest of the same read share it; nothing outlives the block. Nested blocks share
+    the outer one."""
+    if getattr(_READ, 'memo', None) is not None:
+        yield; return
+    _READ.memo = {}
+    try: yield
+    finally: _READ.memo = None
+
+
 def dirty(cwd) -> set:
     """Uncommitted paths in a checkout, per git itself."""
+    memo = getattr(_READ, 'memo', None)
+    if memo is not None and cwd in memo: return set(memo[cwd])
     from .agents import _git
-    return {l[3:].strip().strip('"') for l in _git(cwd, 'status', '--porcelain').splitlines() if len(l) > 3}
+    got = {l[3:].strip().strip('"') for l in _git(cwd, 'status', '--porcelain').splitlines() if len(l) > 3}
+    if memo is not None: memo[cwd] = got
+    return set(got)
 
 
 # what a headless run touched, read off its own live trace ("→ Edit: path" lines)
@@ -53,11 +73,12 @@ def peers(store, cwd, exclude_tid=None) -> list:
     [{tid, ref, title, agent, files, started}]."""
     from . import terminal as term
     out, me = [], norm(cwd)
-    for t in list(term.SESSIONS.values()):
-        if t.alive and t.task_id and t.task_id != exclude_tid and norm(t.cwd) == me:
-            task = store.get_task(t.task_id) or {}
-            out.append({'tid': t.task_id, 'ref': task_ref(t.task_id), 'title': task.get('Title') or '',
-                        'agent': t.agent or t.label, 'files': t.files(), 'started': t.started})
+    with one_status():
+        for t in list(term.SESSIONS.values()):
+            if t.alive and t.task_id and t.task_id != exclude_tid and norm(t.cwd) == me:
+                task = store.get_task(t.task_id) or {}
+                out.append({'tid': t.task_id, 'ref': task_ref(t.task_id), 'title': task.get('Title') or '',
+                            'agent': t.agent or t.label, 'files': t.files(), 'started': t.started})
     for r in store.running_runs():
         if not r.get('TaskId') or r['TaskId'] == exclude_tid or any(p['tid'] == r['TaskId'] for p in out): continue
         prof = json.loads((store.get_agent(r['AgentName']) or {}).get('Config') or '{}')

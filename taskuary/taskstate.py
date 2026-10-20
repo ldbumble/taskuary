@@ -9,9 +9,9 @@ words (lanes.json), and both pages draw what it says.
 
 The keys are lanes.json's own: a lane where the rail has one (blocked, working, approve, queued, saved, stopped,
 yours), `theirs` for a task waiting on somebody else, and for a closed task `agentdone` (the agent finished
-it) or `closed` (you did).
+it) or `closed` (you did) - `agentdone` as well for an open task whose last run said it finished (workerstate.ended).
 """
-from . import funnel
+from . import funnel, workerstate
 from .processing_unread import OWNER_ACTORS, finish_evidence
 
 # the Board's columns, left to right: what each holds (T2, T3)
@@ -45,6 +45,11 @@ def state(store, t: dict, session=None, queued=None) -> str:
     # still waiting to start, a failed start included - the row carries the error and the page offers Start now / Cancel (T10)
     if queued: return 'queued'
     left = funnel.left_by_facts(t.get('Tags'), [{'Status': t.get('RunStatus')}] if t.get('RunStatus') else [])
+    # ...and HOW ITS LAST RUN ENDED, in the run's own word (workerstate.ended) - the reading the rail takes too: a run that failed
+    # or was stopped read "on you", and one that finished read "waiting to start", while the worker said what happened (G7)
+    end = None if left else workerstate.ended(store, t['TaskId'])
+    if end == 'finished': return 'agentdone'
+    if end: left = 'stopped'
     if not left and str(t.get('Assignee') or '').startswith('agent:') and store.last_transcript(t['TaskId']): left = 'stopped'
     if left: return left
     if str(t.get('Assignee') or '').startswith('agent:') or _general_waiting(store, t): return 'queued'

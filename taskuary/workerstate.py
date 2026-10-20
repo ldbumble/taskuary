@@ -205,6 +205,25 @@ def status(store, tid: int) -> dict:
     return out
 
 
+ENDINGS = ('finished', *TERMINAL)
+
+
+def ended(store, tid) -> str | None:
+    """How the task's last run ENDED, by its own word, with nothing live on it: 'finished' (an explicit result no prompt has
+    followed, as status reads it), 'failed', 'stopped' or 'disconnected' - else None: live, never reported, or silent on how it
+    ended. Silence is never an ending here: a general conversation that answered and closed is a saved conversation, not a failure.
+
+    THE ONE READING every surface takes of a run that is over (G7, 2026-10-20): the task list and the Board said "on you" or
+    "waiting to start" over a run that failed, finished or was stopped, while the worker said so - taskstate and the rail read it here."""
+    if not tid or _live(tid): return None
+    last = store.last_worker_event(tid, skip=NOTES)
+    if not last: return None
+    if last['Kind'] in TERMINAL: return last['Kind']
+    fin = store.last_worker_event(tid, kinds=('finished',))
+    work = fin and store.last_worker_event(tid, kinds=('working',))
+    return 'finished' if fin and (not work or work['Id'] < fin['Id']) else None
+
+
 # QUESTIONS ASKED TOGETHER (the owner, 2026-09-28: a coding agent's three questions showed as one, and the answer was
 # typed into the wrong question). One ask's questions share a stem - q:<group>:<n> - so every surface reads the group
 # and answers it whole. The group is keyed on the questions themselves (hooks._group), so the three hooks that see the

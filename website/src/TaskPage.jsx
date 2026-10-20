@@ -222,9 +222,13 @@ function Part({ label, sub, subTitle, children, ...rest }) {
 }
 
 function GoalSteps({ task, onOpenTask, onChanged }) {
-  const [steps, setSteps] = useState([]);
+  // NULL UNTIL READ, AND A FAILED READ IS NOT AN EMPTY GOAL (G8): this started as [] and a failure set [] too, so every goal said
+  // "no steps yet" while its steps loaded, and for good when they did not. Read ahead with the goal itself when it could be (taskDetail.js)
+  const [steps, setSteps] = useState(() => heldSteps(task.TaskId));
+  const [stepsFailed, setStepsFailed] = useState(false);
   const [draft, setDraft] = useState("");
-  const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => setSteps(r.data.steps || [])).catch(() => setSteps([])), [task.TaskId]);
+  const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => { setSteps(r.data.steps || []); setStepsFailed(false); })
+    .catch(() => setStepsFailed(true)), [task.TaskId]);
   useEffect(() => { load(); }, [load, task.UpdatedAt]);
   const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
   // EVERY PRESS LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the step doors are the task tools' own road (taskOps.runOperation) -
@@ -247,26 +251,29 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   };
   const add = async () => {
     const text = draft.trim(); if (!text) return;
-    if (await op("task.checklist", { items: [...steps.map((s) => s.text), text] }, "The step wasn't added - it is still in the box; add it again.")) setDraft("");
+    if (await op("task.checklist", { items: [...(steps || []).map((s) => s.text), text] }, "The step wasn't added - it is still in the box; add it again.")) setDraft("");
     load(); onChanged?.();
   };
   // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
   const [replanning, setReplanning] = useState(false);
   const replan = async () => { setReplanning(true); try { await api.post(`/api/tasks/${task.TaskId}/read-ask`, { goal: true }); } finally { setTimeout(() => { setReplanning(false); load(); onChanged?.(); }, 4000); } };
-  const done = steps.filter((s) => s.done).length;
+  const list = steps || [], done = list.filter((s) => s.done).length;
   return (
     <Box sx={{ mt: 0.85, maxWidth: 900 }}>
       <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Done when</Typography>
       <Typography variant="body2" sx={{ color: INK, lineHeight: 1.55 }}>{task.DoneWhen}</Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mt: 0.6, flexWrap: "wrap" }}>
-        <Typography variant="caption" sx={{ color: FAINT }}>{steps.length ? `${done} of ${steps.length} steps done` : "no steps yet"}</Typography>
+        {/* while they are read the line says nothing rather than something untrue; a failed read says so, with its way past it */}
+        {stepsFailed && !steps ? <Typography variant="caption" role="alert" sx={{ color: "#7a2f3c" }}>{"The steps didn't load. "}
+            <Button size="small" variant="text" onClick={load} sx={{ fontSize: 11, textTransform: "none", minWidth: 0, p: 0, verticalAlign: "baseline" }}>{btn("try_again")}</Button></Typography>
+          : <Typography variant="caption" data-tq-steps={steps ? list.length : "reading"} sx={{ color: FAINT, minWidth: 90 }}>{!steps ? "" : list.length ? `${done} of ${list.length} steps done` : "no steps yet"}</Typography>}
         <Typography variant="caption" sx={{ color: FAINT }}>by</Typography>
         <TextField type="date" size="small" defaultValue={String(task.DueAt || "").slice(0, 10)} onBlur={moveDate}
           inputProps={{ "aria-label": "Move the date" }} sx={{ "& .MuiInputBase-root": { fontSize: 12, height: 26 } }} />
         <Button size="small" variant="text" onClick={replan} disabled={replanning} sx={{ fontSize: 11, textTransform: "none", ml: "auto" }}
           title="The AI writes the steps again from what done looks like; a step already started keeps its place">{replanning ? "Planning…" : "Re-plan"}</Button>
       </Box>
-      {steps.map((s, k) => (
+      {list.map((s, k) => (
         <Box key={s.id} sx={{ borderBottom: `1px solid ${BORDER}` }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, py: 0.35 }}>
           <Typography variant="caption" sx={{ color: FAINT, width: 16, fontVariantNumeric: "tabular-nums" }}>{k + 1}</Typography>

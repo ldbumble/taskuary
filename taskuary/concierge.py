@@ -393,7 +393,18 @@ def named_now(store, text: str, item: dict | None = None) -> str:
     TQ-n ..." was answered blind about TQ-n, and a coding agent proposed for a task with no session on it (real-AI walk, 2026-10-18)."""
     own = int((item or {}).get('tid') or 0)
     refs = [int(n) for n in dict.fromkeys(_TQ_REF.findall(text or '')) if int(n) != own][:4]
-    return '\n'.join(x for x in (task_now(store, n) for n in refs) if x)
+    # ...and HOW TO SHOW ONE (2026-10-19 UI walk, G4): "open TQ-0004" was answered "drafted and waiting under my message" and nothing
+    # opened - a task comes up beside the answer only when the answer links it, and the model was never told so of the task it was
+    # asked about. A phone has no canvas: its link is not a door
+    show = lambda n: (f"\n  TO SHOW IT: link it in your answer as [{task_ref(n)}](#task={n}) - that link alone opens it beside your answer "
+                      "and rings its row on the rail; without it nothing opens and nothing is drawn under your answer") if DELIVERY.get() != PHONE else ''
+    return '\n'.join(x + show(n) for n in refs if (x := task_now(store, n)))
+
+
+def under_page(item: dict | None) -> str:
+    """How the model brings the item on the table back over the page opened beside it: its link - the one road that puts the page down."""
+    tid = int((item or {}).get('tid') or 0)
+    return (f"; to show the item again, link it as [{task_ref(tid)}](#task={tid}) - that puts the page down" if tid and DELIVERY.get() != PHONE else '')
 
 
 def _task_whole(store, tid: int) -> str:
@@ -3724,7 +3735,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + (f"ON SCREEN NOW: {_cut(open_card, 300)} - 'this' and 'here' mean what is on screen: answer about it first; its own operations set it up\n\n" if open_card and not item else '')
                       # ...and a page opened BESIDE the item keeps the item on the table: the Assistant's own "turn off background sync" opened
                       # Settings, and the next "mark this done" went out about nothing (verify, 2026-10-19). Both are said; their words say which
-                      + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table; 'this' is whichever of the two their words fit\n\n" if open_card and item else '')
+                      # ...under that page, out of sight: "show me TQ-0003" over Connections answered and left it covered (2026-10-19 UI walk, G5)
+                      + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table, under that page; 'this' is whichever of the two "
+                         f"their words fit{under_page(item)}\n\n" if open_card and item else '')
                       + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
                       + f"The owner says: {text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names

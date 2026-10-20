@@ -141,6 +141,30 @@ class DeskRoutes(unittest.TestCase):
         self.assertIn('OPEN BESIDE IT: Settings - Sync & startup', seen[0])
         self.assertEqual(out['light']['verb'], 'close')
 
+    def test_a_task_named_to_open_comes_with_the_link_that_opens_it(self):
+        # "open TQ-0004" was answered "drafted and waiting under my message" and nothing opened: the model was never told that only its
+        # link brings a task up (2026-10-19 UI walk, G4) - the evidence is in the prompt, no code reads "open" out of the words
+        s = store(); _, item = on_table(s)
+        tid2 = arrive(s, subject='Badge for the new starter', who='Dana Pike', email='dana@vendor.example')['task_id']
+        seen = []
+        def llm(system, user, **kw): seen.append(user); return f'Here it is: [TQ-{tid2:04d}](#task={tid2}).'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            concierge.say(s, f'open TQ-{tid2:04d}', key=item['key'], llm=llm)
+        self.assertIn(f'TO SHOW IT: link it in your answer as [TQ-{tid2:04d}](#task={tid2})', seen[0])
+        tok = concierge.DELIVERY.set(concierge.PHONE)
+        try: self.assertNotIn('TO SHOW IT', concierge.named_now(s, f'open TQ-{tid2:04d}', item), 'a phone has no canvas to open it on')
+        finally: concierge.DELIVERY.reset(tok)
+
+    def test_the_item_under_a_page_comes_with_the_link_that_shows_it_again(self):
+        # "show me TQ-0003" over Connections answered about it and left it covered (2026-10-19 UI walk, G5)
+        s = store(); tid, item = on_table(s)
+        seen = []
+        def llm(system, user, **kw): seen.append(user); return 'It is the May close numbers.'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            concierge.say(s, f'show me TQ-{tid:04d}', key=item['key'], llm=llm, open_card='Connections')
+        self.assertIn('under that page', seen[0])
+        self.assertIn(f'to show the item again, link it as [TQ-{tid:04d}](#task={tid})', seen[0])
+
     def test_page_lines_say_the_page_never_beside_this(self):
         s = store(); _, item = on_table(s)
         out, _ = say(s, 'turn off background sync', item['key'], 'CALL: {"kind": "setting.set", "params": {"setting": "poll_minutes", "value": "0"}}')

@@ -26,7 +26,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, 
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { plannedFor } from "./connectorCatalog.js";
+import { onceEach, plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
@@ -1410,7 +1410,7 @@ export const connCardOf = (c, sources, go, plain = false) => {
   const [state, said] = plain ? plainState(c, srcs) : [undefined, status];
   // the product's own logo wins over the channel glyph: five AI cards sharing one sparkle,
   // or Jira and Linear both wearing 'boards', tells you nothing about which is which
-  return { key: `c${c.ConnectorId}`, title: c.Name, desc: said, state, plain,
+  return { key: `c${c.ConnectorId}`, type: c.Type, title: c.Name, desc: said, state, plain,
     channel: hasLogo(c.Type) ? c.Type : (m.channel || c.Type),
     haystack: `${c.Name} ${c.Type} ${m.desc || ""} ${(m.howto || []).join(" ")}`, go };
 };
@@ -1708,7 +1708,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     haystack: `${c.type} ${c.title} ${c.desc} planned`, planned: true,
   }));
 
-  const groups = [
+  const groups = onceEach([
     { title: "AI — agents & models", cards: [
       { key: "agents", title: "AI CLI agents", desc: `Claude / Codex / Qwen Code / OpenCode / Kimi / Gemini — connect a coding CLI. Choose the default and model in ${placeName("sorting")}`,
         channel: "cli", haystack: "ai cli agents claude codex qwen 通义千问 opencode deepseek 深度求索 kimi moonshot 月之暗面 glm 智谱 minimax gemini command args resume", go: () => setOpen({ kind: "agents" }),
@@ -1794,7 +1794,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     { title: "Files & sheets", cards: [...dataCards(["knowledge", "handbook", "sharepoint", "google_sheets", "smb_file", "sftp"]),
       ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
-  ];
+ ]);
   // several names at once, comma-separated: setup types the Advisor's picks here (FirstRun) - "Sage Intacct, QuickBooks Online"
   const terms = q.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
   const hits = terms.length ? groups.flatMap((g) => g.cards.filter((c) => terms.some((x) => c.haystack.toLowerCase().includes(x)))

@@ -14,3 +14,14 @@ for (const c of catalogue.cards) {
 export const PLANNED_CONNECTORS = Object.freeze(grouped);
 export const CATALOGUE = Object.freeze(catalogue.cards);
 export const plannedFor = (category) => PLANNED_CONNECTORS[category] || [];
+// ONE CARD PER SYSTEM: a planned card is dropped where a card for the same type is already on the page - a live one anywhere, or
+// the same planned type earlier. The server's planned list (reports.PLANNED) and this catalogue are kept apart, and PointClickCare
+// drew twice: once by its catalogue name under Corporate systems, once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)
+export const onceEach = (groups) => {
+  const live = new Set(groups.flatMap((g) => g.cards.filter((c) => !c.planned).map((c) => c.type || c.channel))), seen = new Set();
+  return groups.map((g) => ({ ...g, cards: g.cards.filter((c) => {
+    const t = c.type || c.channel;
+    if (!c.planned) return true;
+    if (live.has(t) || seen.has(t)) return false;
+    seen.add(t); return true; }) }));
+};

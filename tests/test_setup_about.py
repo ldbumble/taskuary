@@ -243,6 +243,62 @@ class AboutTests(unittest.TestCase):
         self.assertIn('corrected by you at setup', s.get_doc('style'))
         with self.assertRaises(ValueError): firstrun.accept(s, 'triage', 'x')
 
+    def roles_world(self, roles):
+        """One organisation, a personal mailbox and a shared payroll one; the brain answers `roles` when asked for them."""
+        s = mailboxes(MemoryStore(), ('outlook', 'alex@northwind.example'), ('imap', 'payroll@northwind.example'))
+        s.set_setting('owner_email', 'alex@northwind.example', 'owner'); s.set_setting('owner_company', 'Northwind', 'owner')
+        sent = [{'subject': 'Re: laptop', 'receivedDateTime': '2026-10-01T10:00:00Z', 'conversationId': 'a1', 'mailbox': 'alex@northwind.example',
+                 'toRecipients': [{'emailAddress': {'address': 'erin@northwind.example'}}],
+                 'body': {'content': 'Reset it for you.\n\nAlex Doyle\nIT lead | Northwind'}},
+                {'subject': 'Re: missing overtime', 'receivedDateTime': '2026-10-02T10:00:00Z', 'conversationId': 'p1',
+                 'mailbox': 'payroll@northwind.example', 'toRecipients': [{'emailAddress': {'address': 'gail@northwind.example'}}],
+                 'body': {'content': 'Added to this run.\n\nNorthwind Payroll'}}]
+        inbox = [{'subject': 'Laptop will not start', 'receivedDateTime': '2026-10-01T09:00:00Z', 'conversationId': 'a1',
+                  'mailbox': 'alex@northwind.example', 'from': {'emailAddress': {'address': 'erin@northwind.example'}}},
+                 {'subject': 'Missing overtime on my payslip', 'receivedDateTime': '2026-10-02T09:00:00Z', 'conversationId': 'p1',
+                  'mailbox': 'payroll@northwind.example', 'from': {'emailAddress': {'address': 'gail@northwind.example'}}}]
+        asked = []
+        def brain(system, user, **kw):
+            if 'distinct ROLES' in system: asked.append(('roles', user)); return json.dumps({'roles': roles})
+            if 'JOB IS' not in system: return STYLE_GUIDE
+            role = 'Payroll' if 'as Payroll at' in user else 'IT' if 'as IT at' in user else 'all'
+            asked.append((role, system, user))
+            return f'### What my job is\n- I do the {role} work here, every week, for the people who depend on it being done right.'
+        with mock.patch('taskuary.histgen._graph_mail', return_value=(sent, inbox, 1)), mock.patch('taskuary.imapmail.sent_history', return_value=[]), \
+             mock.patch('taskuary.histgen._db_window', return_value=[]), mock.patch('taskuary.llm.build_llm', return_value=brain):
+            firstrun.learn(s, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'IT lead'}, wait=True, docs=('job',))
+        return s, asked
+
+    def test_one_organisation_with_two_roles_is_a_sub_section_per_role(self):
+        """AN ORGANISATION CAN BE MORE THAN ONE ROLE (the owner, 2026-10-20): a personal mailbox and a shared payroll one at the same
+        organisation are two roles - "## At Northwind" with "### IT" and "### Payroll" under it, each from its own mailbox's mail."""
+        s, asked = self.roles_world([{'role': 'IT', 'mailboxes': ['alex@northwind.example']},
+                                     {'role': 'Payroll', 'mailboxes': ['payroll@northwind.example']}])
+        roles = asked[0][1]
+        for x in ('MAILBOX alex@northwind.example', 'IT lead | Northwind', 'MAILBOX payroll@northwind.example', 'Missing overtime'):
+            self.assertIn(x, roles)                                                  # read off the address, the signature, the asks
+        job = firstrun.about(s)['job']
+        self.assertEqual(job.count('## At Northwind'), 1, job)
+        self.assertLess(job.index('## At Northwind'), job.index('### IT'))
+        self.assertLess(job.index('### IT'), job.index('### Payroll'))
+        self.assertIn('#### What my job is\n- I do the IT work', job); self.assertIn('I do the Payroll work', job)
+        (_r, it_sys, it), (_p, _ps, pay) = [a for a in asked if a[0] in ('IT', 'Payroll')]
+        self.assertIn('ONE ROLE OF SEVERAL', it_sys)
+        self.assertIn('erin@northwind.example', it); self.assertNotIn('gail@northwind.example', it)       # each role its own mailbox's people
+        self.assertIn('gail@northwind.example', pay); self.assertNotIn('erin@northwind.example', pay)
+
+    def test_one_role_across_two_mailboxes_stays_one_section(self):
+        s, asked = self.roles_world([{'role': 'IT lead', 'mailboxes': ['alex@northwind.example', 'payroll@northwind.example']}])
+        job = firstrun.about(s)['job']
+        self.assertNotIn('## At', job); self.assertNotIn('#### ', job)
+        self.assertTrue(job.startswith('### What my job is\n- I do the all work'), job)
+        self.assertEqual([a[0] for a in asked], ['roles', 'all'])
+
+    def test_a_role_answer_naming_no_mailbox_of_this_organisation_is_one_role(self):
+        s, _asked = self.roles_world([{'role': 'IT', 'mailboxes': ['alex@northwind.example']},
+                                      {'role': 'Board', 'mailboxes': ['someone@elsewhere.example']}])
+        self.assertNotIn('### Board', firstrun.about(s)['job'])
+
     def test_one_organisation_is_one_job_as_before(self):
         s = mailboxes(MemoryStore(), ('gmail', 'alex@northwind.example'), ('imap', 'ap@northwind.example'))
         from taskuary import histgen

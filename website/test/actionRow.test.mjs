@@ -169,7 +169,10 @@ test("a row, a task or an fyi puts the open browse view down AT THE CLICK, as on
   const view = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(view, /if \(shown\[i\]\.role === "browse"\) return shown\[i\]\.down \? null : shown\[i\]\.id;/, "a put-down view is no longer the live one");
   // a task opened by name goes the rail's road (pull, below) - only a busy walk lands the bare card, and that puts the view down too
-  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`\); return;\n\s+\}\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
+  assert.match(view, /const openTaskCard = \(req\) => \{[\s\S]{0,400}?pull\(`task:\$\{req\.tid\}`\); return;\n\s+\}\n\s+if \(!handoff\) \{ openLater\.current = req; return; \}\n\s+setRailOpen\(false\);[^\n]*browseDown\(\);/);
+  // ...and a task asked for while a turn is in flight (the Assistant's own link to it, a Board press during Next) waits for that turn and
+  // then goes the same road - the bare card it landed as rang no rail row (the dead-end walk's RING, 2026-10-20)
+  assert.match(view, /if \(busy \|\| resetting \|\| !openLater\.current\) return;\n\s+const req = openLater\.current; openLater\.current = null; openTaskRef\.current\?\.\(req\);\n\s+\}, \[busy, resetting\]\);/);
   assert.match(view, /setStageMode\("chat"\); browseDown\(\); surface\(key, asUser \|\| null\);/, "pull");
   assert.match(view, /const pullOrOpen = \(key, asUser, openByMid, openByItem\) => \{\n\s+browseDown\(\);/);
   assert.match(view, /\{ \.\.\.x, state, down: false \}/, "opening the same area again picks it back up");

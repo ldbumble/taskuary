@@ -37,6 +37,11 @@
     "no_ai":      {"line": "Connect an AI to get a suggestion on each item", "move": "ai"}
   },
   "local": "on this computer",
+  "loose_ends": {
+    "_": "WHAT FELL THROUGH, SAID ON ITS ROW (sweep.py, 2026-10-20): the daily check's one sentence for each way an item can sit where nothing will move it, and the reason under it (`_why`). {ref} is the task's TQ number, {who} the person, {gist} their words, {ago} how long ago.",
+    "unanswered": "{who} asked \"{gist}\" {ago} - no answer, no task, nothing decided",
+    "unanswered_why": "a person asked you this over {days} days ago and nothing has happened to it since"
+  },
   "jargon": ["CLI", "repo", "repository", "PR", "pull request", "token", "lane", "brain", "triage", "harness", "session", "JSON",
              "worktree", "terminal", "by triage", "regular agent", "coder", "claude-", "gpt-", "gemini-", "sonnet", "opus", "haiku"]
 }

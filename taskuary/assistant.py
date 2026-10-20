@@ -398,15 +398,15 @@ def cold(store, days: int) -> list:
         # An agent that finished, failed or stopped is its own row too - "agent stopped" says it, a second line is a copy
         if _agent_row(store, t['TaskId']): continue
         age = max(days, (datetime.now() - (_dt(last) or datetime.now())).days)
-        # a draft waiting is the owner's move; a task WAITING with no draft waits on THEM - it was told as "a reply waiting on you"
-        # (the rail Advisor's eval), which sent the owner looking for a draft that was never there
-        wait, theirs = t.get('ReviewStatus') == 'pending', t.get('Status') == 'waiting' and t.get('ReviewStatus') != 'pending'
+        # a draft waiting is the owner's move; a task WAITING with no draft waits on THEM, and is no line at all: the slipped
+        # lane chases a person past their day (the owner, 2026-10-20). It was told as "a reply waiting on you" before (the eval)
+        wait = t.get('ReviewStatus') == 'pending'
+        if t.get('Status') == 'waiting' and not wait: continue
         ref = task_ref(t['TaskId'])
         out.append({'key': f'cold:{ref}', 'kind': 'cold', 'sig': last,
                     'facts': f"{ref} \"{_short(t.get('Title'), 80)}\" [{t['Status']}, kind {t.get('Kind')}] - nothing has happened on it for {age} days"
-                             + (' and a draft waits for you on the task' if wait else '; it waits on someone else, not on you' if theirs else ''),
+                             + (' and a draft waits for you on the task' if wait else ''),
                     'text': (f"{ref} has a reply waiting on you for {age} days - \"{_short(t.get('Title'), 60)}\"" if wait
-                             else f"{ref} has waited on someone else for {age} days - \"{_short(t.get('Title'), 60)}\". Chase it or drop it?" if theirs
                              else f"{ref} has sat quiet for {age} days - \"{_short(t.get('Title'), 60)}\". Push it or drop it?"),
                     'action': {'type': 'task', 'tid': t['TaskId']}})
     return out

@@ -110,10 +110,14 @@ def _selection_facts(item: dict) -> dict:
     return facts
 
 
-def _batch(first: dict, ready: list[dict], size: int) -> tuple[dict, tuple[str, ...]]:
+def _members(first: dict, ready: list[dict], size: int) -> list[dict]:
     from . import funnel
-    members = ([first] + [item for item in ready
-                          if funnel.batchable(item) and item.get("key") != first.get("key")])[:size]
+    return ([first] + [item for item in ready
+                       if funnel.batchable(item) and item.get("key") != first.get("key")])[:size]
+
+
+def _batch(first: dict, ready: list[dict], size: int) -> tuple[dict, tuple[str, ...]]:
+    members = _members(first, ready, size)
     keys = tuple(item["key"] for item in members)
     card = {
         "key": "fyis:" + ",".join(keys),
@@ -150,6 +154,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
 
     captured_now = now or datetime.now()
     scope = _scope(only=only, include_surfaced=include_surfaced, exclude=exclude)
+    lazy = pile is not None
     if pile is None:
         try:
             live_state = copy.deepcopy(terminal.live_sessions(tail=6))
@@ -183,13 +188,21 @@ def capture_selection(store, *, only=None, include_surfaced=False,
         # Capture selection from that exact pile instead of rebuilding canonical membership a
         # second time. A detached presentation keeps cache callers from mutating one another:
         # present() detaches its own copy and never writes to what it is handed.
-        pile = funnel.present(store, pile)
+        # ...and only what the selection RESTS ON is stamped here: the selected row and its batch. Stamping the whole
+        # rail was the first of three whole-pile fingerprints every press paid (3,770 rows, 2026-10-20), and no reader
+        # of this capture uses another row's stamp - the revision covers the selected stamps alone, and the pile
+        # payload stamps every row it sends in its own final present().
+        pile = detach(pile)
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     # waiting on the owner first (funnel.leads), then unread, then anything ready: the same order as the legacy walk, and
     # the reason a pending reply is not buried under an inbox of unread fyi.
     first = next((item for item in ready if funnel.leads(item)),
                  ready[0] if ready else None)
+    if lazy and first is not None:
+        want = _members(first, ready, funnel.fyi_batch_size(store)) if funnel.batchable(first) else [first]
+        for row, stamped in zip(want, funnel.present(store, {"items": want})["items"]):
+            row.clear(); row.update(stamped)          # in place: `items` and `ready` hold the same row; nested cards come stamped too
     if first is not None and funnel.batchable(first):
         selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))
     else:

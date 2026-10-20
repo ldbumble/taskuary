@@ -9,6 +9,7 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 import { Attachments } from "./Attachments.jsx";
 import { cleanText, tsMs } from "./ui.jsx";
+import { fmtDate, fmtTime } from "./dates.js";
 import { BORDER, DIM, FAINT, INK } from "./theme.jsx";
 
 // the channels whose messages are a conversation, not letters
@@ -38,9 +39,9 @@ const dayLabel = (at) => {
   const today = new Date(); const yest = new Date(); yest.setDate(today.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
   if (d.toDateString() === yest.toDateString()) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return fmtDate(d, undefined, { weekday: "short", month: "short", day: "numeric" });
 };
-const timeOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); };
+const timeOf = (at) => { const d = new Date(tsMs(at)); return Number.isNaN(d.getTime()) ? "" : fmtTime(d, undefined, { hour: "numeric", minute: "2-digit" }); };
 
 export default function ChatThread({ messages = [], maxHeight = 460 }) {
   // newest first, like the rest of the app: the box opens at its top, which is the latest line

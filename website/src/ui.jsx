@@ -48,6 +48,7 @@ import { place, placeName } from "./words.js";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
+import { asUtc, setTz, fmtTime } from "./dates.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -1127,54 +1128,10 @@ export const splitQuoted = (text) => {
   return { latest: t.slice(0, at).trim(), quoted: t.slice(at).trim() };
 };
 
-// Times are stamped in the SERVER's local time (store.norm_stamp makes every channel land
-// there). The `timezone` setting names that zone: with it set, every time wears its short
-// label (2:44 PM EDT) and a browser in another zone still reads the stamps correctly -
-// naive local strings would otherwise be silently reinterpreted in the viewer's zone.
-let TZ = "";
-export const loadTz = (settings) => { TZ = (settings.find((s) => s.Name === "timezone") || {}).Value || ""; };
+// The time helpers live in dates.js, where each formatter is built once (2026-10-19); these are the names every screen imports.
+export { asUtc, tzLabel, fmtTime12, tsMs, fmtDateTime, localDay, tzNow } from "./dates.js";
+export const loadTz = (settings) => { setTz((settings.find((s) => s.Name === "timezone") || {}).Value || ""); };
 api.get("/api/settings").then(({ data }) => loadTz(data.data || [])).catch(() => {});   // once per page load
-const tzOffsetMin = (d) => {
-  // what the configured zone's UTC offset was AT that moment (DST-correct), via Intl
-  const part = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "shortOffset" })
-    .formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "GMT+0";
-  const m = part.replace("GMT", "").match(/([+-]?)(\d+)(?::(\d+))?/) || [0, "+", "0"];
-  return (m[1] === "-" ? -1 : 1) * (parseInt(m[2] || 0) * 60 + parseInt(m[3] || 0));
-};
-export const asUtc = (s) => {
-  const iso = String(s || "").replace(" ", "T");
-  if (!TZ) return new Date(iso);                       // blank = this browser IS the server's zone
-  try { return new Date(Date.parse(iso + "Z") - tzOffsetMin(new Date(iso + "Z")) * 60000); }
-  catch { return new Date(iso); }
-};
-export const tzLabel = () => {
-  if (!TZ) return "";
-  try {
-    return new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "short" })
-      .formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || "";
-  } catch { return ""; }
-};
-const tzOpt = () => (TZ ? { timeZone: TZ } : {});   // format in the configured zone, so digits match the label
-export const fmtTime12 = (s) => {
-  const d = s ? asUtc(s) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...tzOpt() }) : "";
-};
-export const tsMs = (s) => {
-  const n = s ? asUtc(s).getTime() : 0;
-  return Number.isFinite(n) ? n : 0;
-};      // one clock for everything the Timeline orders (messages, meetings)
-export const fmtDateTime = (s) => {
-  if (!s) return "";
-  const d = asUtc(s);
-  if (!Number.isFinite(d.getTime())) return "";
-  const base = d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...tzOpt() });
-  const z = tzLabel();
-  return z ? `${base} ${z}` : base;
-};
-export const localDay = (s) => {
-  const d = s ? asUtc(s) : null;
-  return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString("sv-SE", tzOpt()) : "";
-};   // YYYY-MM-DD in that zone
 
 // ── Stripe-style two-level navigation atoms (Settings/Docs/Connectors share these) ──
 export const Crumb = ({ section, onBack, title }) => (
@@ -1651,7 +1608,7 @@ export const WorkLine = ({ work, who = "agent", waiting = false, asking = false,
    inferred). Provenance pills say where the task came from and who worked it - facts the audit
    chain already held and the card never showed. Polls only while the session is alive. */
 const pillSx = (r) => ({ height: 16, fontSize: 9, fontWeight: 600, bgcolor: ROLES[r].tint, color: ROLES[r].ink, border: `1px solid ${ROLES[r].bd}`, "& .MuiChip-label": { px: 0.75 } });
-const hhmm = (s) => s ? new Date(String(s).replace(" ", "T")).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+const hhmm = (s) => s ? fmtTime(new Date(String(s).replace(" ", "T")), "en-US", { hour: "numeric", minute: "2-digit" }) : "";
 export const WorkStrip = ({ taskId, live, session, provenance, defaultCollapsed = false }) => {
   // The terminal list already carries current witness/provenance data. Paint that immediately;
   // the richer /work response (diff counts, exact audit provenance) replaces it in the background.

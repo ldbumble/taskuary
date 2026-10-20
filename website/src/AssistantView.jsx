@@ -75,6 +75,7 @@ import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
+import { fmtDate, fmtTime } from "./dates.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -2187,7 +2188,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
           the left column, never inline with the greeting (the owner, 2026-09-23: "it should be the
           person talking"), and the whole day fits one screen without scrolling */}
       <div className="tq-welcome-head"><b>{greeting()}</b>
-        <span>{new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" })} · {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
+        <span>{fmtDate(new Date(), "en-US", { weekday: "short", day: "numeric", month: "short" })} · {fmtTime(new Date(), "en-US", { hour: "numeric", minute: "2-digit" })}</span></div>
       {/* no card.away line here: SinceBlock below already says what came in, and the two counts read as a contradiction (U6) */}
       {/* the start of the walk: the day's meetings, then who wants what - the best of the Morning
           digest, on the screen the day opens on (2026-09-23) */}

@@ -2,7 +2,7 @@
 // ranked pipe AssistantView draws), and beside it the stage where a row opens whole - the message, why triage
 // sent it where it did, the agent's work and the reply. A live socket pushes new rows in; the list is not on a
 // timer. (The Timeline - every message in date order, a tab beside Work - was removed 2026-10-15.)
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Box, Button, Chip, CircularProgress, Drawer, IconButton, ListSubheader, MenuItem, Popover, TextField, Tooltip, Typography, useMediaQuery,
 } from "@mui/material";
@@ -43,7 +43,7 @@ import { SIDE_NAV } from "./sideNav.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
 import { Attachments } from "./Attachments.jsx";
-import { AgentPicker, ChannelIcon, RefChip, CcRow, ChoiceRow, AgentReport, Confirm, DiffBlock, ProofCard, SendToAgent, NotMine, fmtDateTime, localDay, tsMs, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
+import { AgentPicker, ChannelIcon, RefChip, CcRow, ChoiceRow, AgentReport, Confirm, DiffBlock, ProofCard, SendToAgent, NotMine, fmtDateTime, localDay, tsMs, tzNow, cleanText, splitQuoted, IDLE_WAITING, TellAgent, TellAgentButton, LiveConsole, useAgents, useVoiceReady, TaskuaryMark } from "./ui.jsx";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import { Md, looksMd } from "./md.jsx";
@@ -816,9 +816,12 @@ export default function FeedView({ onOpenTask, onChanged, active = true, top = n
   const pickerChannels = availablePickerChannels(cat, availableChannels);
 
   const today = new Date().toLocaleDateString("sv-SE");
-  const todays = (unreadInventory?.canonical
-    ? (unreadInventory.items || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
-    : (rows || [])).filter((r) => localDay(r.SentAt) === today);
+  // localDay over every row on every render (each key, each poll) was seconds on a large home; the set only changes with the
+  // rows, the day, or the zone the settings load in (2026-10-19)
+  const canon = !!unreadInventory?.canonical, canonItems = unreadInventory?.items, tz = tzNow();
+  const todays = useMemo(() => (canon
+    ? (canonItems || []).map(i => ({ SentAt: i.when, Category: i.category, MsgStatus: i.status }))
+    : (rows || [])).filter((r) => localDay(r.SentAt) === today), [canon, canonItems, rows, today, tz]);
   // meetings are rows too. Counting only messages meant the rail showed three lines under a
   // heading that said two - the invite was on screen and in no total.
   const todayMeetings = splitTimelineMeetings(calEvents, Date.now(), tsMs).started.filter((e) => localDay(e.start) === today).length;

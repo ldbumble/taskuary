@@ -23,6 +23,7 @@ import RoleStart from "./RoleStart.jsx";
 import { FAINT, INK, ROLES, mono } from "./theme.jsx";
 import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
 import { plural } from "./timeWords.js";
+import { fmtDate } from "./dates.js";
 
 const DOCS = {
   soul: { label: "SOUL.md", icon: <AutoStoriesIcon sx={{ fontSize: 19, color: "#55697a" }} />,
@@ -60,7 +61,7 @@ function LearnedChanges() {
   }, []);
   if (rows === null) return <Box sx={{ display: "grid", placeItems: "center", py: 6 }}><CircularProgress size={20} /></Box>;
   if (!rows.length) return <Typography sx={{ color: FAINT, fontSize: 13, py: 3 }}>Nothing changed in the last 30 days.</Typography>;
-  const day = (at) => new Date(String(at).replace(" ", "T")).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const day = (at) => fmtDate(new Date(String(at).replace(" ", "T")), undefined, { month: "short", day: "numeric" });
   return (
     <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }} data-tq-learned-changes="">
       <Typography sx={{ color: FAINT, fontSize: 12, mb: 1 }}>The last 30 days. Lines fade when nothing confirms them for a while; ones that say the same thing are merged.</Typography>

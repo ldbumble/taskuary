@@ -1,3 +1,4 @@
+import { fmtTime } from "./dates.js";
 // The server's scheduler wakes every 30 seconds. Far from the next scheduled sync the Timeline
 // can check quietly; near (and just after) the due time it must watch closely or a short refresh
 // can start and finish between UI checks and the sync glyph never moves.
@@ -17,7 +18,7 @@ export const syncPhaseLabel = phase => ({ fetching: 'Reading sources', triaging:
 export const syncFace = ({ busy = false, what = "", every = 10, lastAt = null, nextIn = null, terse = false, checked = false, started = false, failed = [] } = {}) => {
   if (busy) return what && !terse ? what : "syncing…";
   if (!every) return terse ? "sync off" : "background sync off";
-  const at = lastAt ? lastAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—";
+  const at = lastAt ? fmtTime(lastAt, "en-US", { hour: "numeric", minute: "2-digit" }) : "—";
   const verb = started ? 'check started' : checked ? 'checked' : 'synced';
   // terse is the narrowed sidebar's one line (2026-09-29): the whole time must fit, so a started check says just that
   if (terse) return `${started ? 'started' : verb} ${at}`;

@@ -2604,4 +2604,5 @@ def reap():
 
 def listing(details=True):
     reap()
-    return [_info(t, 0, details) for t in list(SESSIONS.values())]
+    from . import blackboard as bb
+    with bb.one_status(): return [_info(t, 0, details) for t in list(SESSIONS.values())]

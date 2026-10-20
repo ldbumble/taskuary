@@ -319,3 +319,38 @@ def test_unconsumed_stream_response_does_not_release_running_worker(nav_api, mon
         time.sleep(.01)
     assert navigation._state(db).active is None
     assert navigation._state(db).consumed[payload['selection_revision']] == 'already_completed'
+
+
+def test_the_prepared_next_is_the_answer_the_press_gives(nav_api):
+    """PREPARED NEXT (2026-10-20): the pile carries the answer Next will give for the selection it hands out, tied to that
+    selection_revision; the press's own answer says by answer_hash whether it is that one. Nothing written in between: it is."""
+    db, client, mid, rid = nav_api
+    _another(db)
+    for _ in range(2):
+        pile = client.get('/api/funnel/pile', params={'force': True}).json()
+        prep = pile['prepared_next']
+        assert prep['selection_revision'] == pile['selection_revision']
+        body = {k: pile[k] for k in ('selection_revision', 'expected_next_key', 'expected_next_members')}
+        done = done_of(client.post('/api/concierge/stream', json={'mode': 'next', **body}).text)
+        assert done['answer_hash'] == prep['answer_hash'] == concierge.answer_hash(done)
+        assert {k: done[k] for k in prep['answer']} == prep['answer'], 'drawn ahead, it is byte for byte the answer'
+        assert done['pile']['prepared_next'] is None or done['pile']['prepared_next']['selection_revision'] == done['pile']['selection_revision']
+
+
+def test_a_prepared_next_that_went_stale_is_told_apart_by_its_hash(nav_api):
+    """Something written between the rail and the press changes the answer: the hashes differ, so the page replaces the card."""
+    db, client, mid, rid = nav_api
+    pile = client.get('/api/funnel/pile', params={'force': True}).json()
+    prep = pile['prepared_next']
+    db.save_review_draft(rid, 'A draft rewritten after the rail was read')
+    body = {k: pile[k] for k in ('selection_revision', 'expected_next_key', 'expected_next_members')}
+    done = done_of(client.post('/api/concierge/stream', json={'mode': 'next', **body}).text)
+    assert done['item']['key'] == prep['answer']['item']['key']
+    if {k: done[k] for k in prep['answer']} != prep['answer']: assert done['answer_hash'] != prep['answer_hash']
+    else: assert done['answer_hash'] == prep['answer_hash']
+
+
+def test_nothing_is_prepared_where_the_answer_cannot_be_known_ahead(nav_api, monkeypatch):
+    db, client, mid, rid = nav_api
+    monkeypatch.setattr(concierge, 'INTRO_AI', True)          # a model introduces the item: its words are not known ahead
+    assert client.get('/api/funnel/pile', params={'force': True}).json()['prepared_next'] is None

@@ -154,7 +154,8 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
     await cdp.send("Fetch.continueRequest", { requestId: releaseId });
     const response = await done;
     await cdp.send("Fetch.disable");
-    const result = JSON.parse((await response.text()).trim().split("\n").at(-1));
+    // the answer is the `done` line - the rail follows it on the same stream as a `pile` event (2026-10-20)
+    const result = (await response.text()).trim().split("\n").map(l => JSON.parse(l)).find(e => e.type === "done" || e.type === "error");
     assert.equal(result.type, "done", JSON.stringify(result));
     const first = result.item.kind === "fyis" ? result.item.items[0] : result.item;
     assert.equal(first.title, shownNext, "the turn consumed the displayed Next");

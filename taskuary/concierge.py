@@ -2560,6 +2560,56 @@ def move_on(store, key: str, actor: str = 'owner') -> dict:
     return {'key': key, 'read': True, 'reviews_ended': []}
 
 
+def _fyi_card(item: dict, batch: list, gists: dict) -> tuple:
+    """(the batch with each entry's gist, the line, the card) for an FYI batch - one road for the walk (surface) and for the
+    answer prepared ahead of it (prepare_next)."""
+    say = (f"{plural(len(batch), 'thing')} people told you, nothing to do: "
+           + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
+    batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
+    card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
+            'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
+            'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
+            'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
+            # ...and the keys themselves, so the work rail can draw ONE bracket round the very
+            # rows that are on the table. card_for is a whitelist and never carried them, so the
+            # batch went up with nothing the rail could match and the rows simply vanished from
+            # it (the owner, 2026-09-16: "it does not highlight the ones in the feed but removes
+            # them ... just show them all as current as we normally do").
+            'members': [i['key'] for i in batch],
+            'presentation_revision': item.get('presentation_revision')}
+    return batch, say, card
+
+
+ANSWER_FIELDS = ('item', 'say', 'options', 'chips', 'left', 'exhausted', 'over')
+
+
+def answer_hash(out: dict) -> str:
+    """What a Next answer puts on the screen, hashed: the prepared answer and the committed one are compared by it."""
+    import hashlib
+    shown = {k: out[k] for k in ANSWER_FIELDS if k in out}
+    return hashlib.sha256(json.dumps(shown, ensure_ascii=False, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
+
+
+def prepare_next(store, selection, token: str) -> dict | None:
+    """PREPARED NEXT (the owner, 2026-10-20): the answer a press of Next would give for this captured selection, worked out
+    ahead of the press with no write, so the page can draw it the moment Next is pressed. The press still commits and
+    answers as it always did; the page compares the two by answer_hash and the committed answer replaces the card when
+    they differ. None where the answer cannot be known ahead: nothing selected, a model introducing the item (INTRO_AI),
+    an agent holding the row (the walk moves past it), a batch assembled from the cached pile."""
+    item, p = selection.selected, selection.pile
+    if item is None or INTRO_AI: return None
+    if item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action')): return None
+    if funnel.batchable(item):
+        if item.get('kind') != 'fyis': return None
+        batch, say, card = _fyi_card(item, item.get('items'), {})
+        card['chips'] = chips_for(store, card)
+        out = {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
+    else:
+        chips = chips_for(store, item, '')
+        out = {'item': item | {'chips': chips}, 'say': fallback(item, True, store=store), 'options': [], 'chips': chips, 'left': len(p['items']) - 1}
+    return {'selection_revision': token, 'answer': out, 'answer_hash': answer_hash(out)}     # the token the page echoes (navigation.fields)
+
+
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
             include_surfaced: bool = False, exclude: str = None, selection=None, commit_guard=None,
             bound_dock: dict = None, leaving: str = None) -> dict:
@@ -2667,20 +2717,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # present next ones"). The sentence below was already the fallback for a failed call; it is
         # the whole of it now, and each entry keeps its own gist (fyiRow.gistFor).
         gists, remember_llm = {}, False
-        say = (f"{plural(len(batch), 'thing')} people told you, nothing to do: "
-               + '; '.join(f"{i.get('who') or 'someone'} - {i['title']}" for i in batch) + '.')
-        batch = [i | {'summary': gists.get(n) or i.get('summary') or i.get('preview') or ''} for n, i in enumerate(batch, 1)]
-        card = {'key': 'fyis:' + ','.join(i['key'] for i in batch), 'kind': 'fyis', 'lane': 'fyi',
-                'title': f"{len(batch)} fyi", 'who': '', 'when': batch[0].get('when'),
-                'since': batch[0].get('since'), 'channel': batch[0].get('channel'),
-                'why': 'people told you things; nothing to do', 'items': [card_for(i) for i in batch],
-                # ...and the keys themselves, so the work rail can draw ONE bracket round the very
-                # rows that are on the table. card_for is a whitelist and never carried them, so the
-                # batch went up with nothing the rail could match and the rows simply vanished from
-                # it (the owner, 2026-09-16: "it does not highlight the ones in the feed but removes
-                # them ... just show them all as current as we normally do").
-                'members': [i['key'] for i in batch],
-                'presentation_revision': item.get('presentation_revision')}
+        batch, say, card = _fyi_card(item, batch, gists)
         with guarded():
             put_down()
             if remember_llm:

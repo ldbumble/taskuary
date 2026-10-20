@@ -80,3 +80,26 @@ def test_a_write_since_the_rail_was_built_is_the_lookup_again(two, monkeypatch):
     calls = keyed_builds(monkeypatch)
     concierge.move_on(a, key)
     assert calls, 'a rail built before a write is not the store as of now'
+
+
+def test_mark_done_asks_whether_its_task_is_on_the_table_from_the_rail_as_the_lookup_answered(two, monkeypatch):
+    """concierge.on_table, read before every Mark done: is the act about the item on the Assistant's table? It built the
+    table's row by key only to compare one task id (0.06-4.4 s on a big home, 2026-10-20) - now from the rail's own build."""
+    a, _ = two
+    a.set_setting('assistant_dock_task_id', '1', 'test')
+    keys = [i['key'] for i in funnel.pile(a, quiet=True, observed=[])['items']]
+    ops = [{'kind': 'task.complete', 'target': t} for t in [t['TaskId'] for t in a.list_tasks()] + [999]]
+
+    def answers(cached):
+        out = []
+        for key in keys:
+            monkeypatch.setattr(concierge, 'current_key', lambda store, dock, key=key: key)
+            for op in ops:
+                if cached: funnel.pile(a, quiet=True, observed=[])
+                else: funnel.invalidate()
+                out.append(concierge.on_table(a, op))
+        return out
+    looked_up = answers(False)
+    calls = keyed_builds(monkeypatch)
+    assert answers(True) == looked_up and any(looked_up)
+    assert calls == [], 'answered from the rail it already holds'

@@ -1440,6 +1440,13 @@ def unwritten_full_items(store) -> list | None:
     return full_items(store) if top is not None and _CACHE.get('mark') == top else None
 
 
+def rail_item(store, key: str) -> dict | None:
+    """The row answering to `key` in the rail's own build, while nothing has been written since it began - or None, and the
+    caller looks it up as it always did (next_item). A batch key is no row."""
+    full = unwritten_full_items(store) if key and not str(key).startswith('fyis:') else None
+    return next((i for i in full or () if i['key'] == key or key in i.get('aliases', [])), None)
+
+
 def cached_pile(store) -> dict | None:
     """The rail as last built, or None - never a build (the Tasks list asks, and must not pay for one)."""
     return _CACHE['pile'] if _CACHE.get('store') is store else None

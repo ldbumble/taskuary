@@ -7,6 +7,8 @@ import { needsLink, UNLINKED_LINE, UNLINKED_EVENT } from "./unlinked.js";
 import { record } from "./lastError.js";
 import BugReportDialog from "./BugReportDialog.jsx";
 import { label as btnLabel } from "./buttons.js";
+import { installOneLine } from "./oneLine.js";
+installOneLine();
 
 // a crash that draws no Assistant line still leaves its report ready behind the Help icon
 window.addEventListener("error", (e) => record(e.error || e.message));

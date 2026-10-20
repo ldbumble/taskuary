@@ -73,6 +73,14 @@ ok(await press("Send") || await page.evaluate(() => { const b = [...document.que
 await wait(2500);
 ok(/This is the demo - nothing is sent/.test(await page.evaluate(() => document.body.innerText)), "the demo refuses the send in its own words");
 await page.screenshot({ path: join(out, "3-accept-drafted.png") });
+// the other answers stay on the row, and pressing one REPLACES the drafted answer
+words = [...await rowWords(), ...await menuWords()];
+ok(["Accept", "Decline", "Propose a new time"].every((w) => words.includes(w)), `the answers stay beside the draft: ${JSON.stringify(words)}`);
+ok(await press("Decline"), "Decline pressed over the drafted Accept");
+await wait(4500);
+const now = await page.evaluate(() => [...document.querySelectorAll("[data-tq-calendar]")].map((e) => e.innerText));
+ok(now.length === 1 && /^Decline · AP cutover dry run/.test(now[0]), `the drafted answer is replaced: ${JSON.stringify(now)}`);
+await page.screenshot({ path: join(out, "3b-decline-replaces.png") });
 
 // 2. the thread asking for half an hour
 ok(await open("Half an hour"), "the thread asking to meet is on the rail");

@@ -110,8 +110,6 @@ const WALK_SKIP = {
   "pick_repo:set": "shows once a task has a repository - neither world has one chosen",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
-  "decline_invite": "the demo's one invite is answered once: the sweep's Accept drafts its answer and the other answers step aside for that draft - Decline drafts by the same road (calwrite.draft, tests/test_calendar_write.py)",
-  "propose_time": "as Decline: the invite's answers step aside once Accept has drafted one - its free times are walked by website/calendar_check.mjs",
 };
 
 // --cover a.json,b.json: COVER over the presses of a walk run in parts (CI runs its passes as four jobs, 2026-10-20) - no browser,
@@ -499,7 +497,14 @@ async function sweep() {
           if (!it.asElement()) { await closePops(page); continue; }
           await it.asElement().click();
         } else {
-          const h = await page.$(`[data-tq-row] [data-tq-verb="${o.id}"]`);
+          let h = await page.$(`[data-tq-row] [data-tq-verb="${o.id}"]`);
+          // ...a press before it can move a button into ▾ (a drafted answer's Send takes a slot): it is found there, by its id
+          if (!h) for (const m of await page.$$("[data-tq-row] [data-tq-more]")) {
+            await m.click(); await wait(600);
+            h = await page.$(`[role="menuitem"][data-tq-verb="${o.id}"]`);
+            if (h) break;
+            await closePops(page);
+          }
           if (!h) continue;
           await h.click();
         }

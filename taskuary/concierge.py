@@ -2547,8 +2547,7 @@ def move_on(store, key: str, actor: str = 'owner') -> dict:
     # (on Next the commit guard has just re-read the rail - recheck_selection -> funnel.pile, rebuilt if anything moved).
     # A keyed build only to read back the same row's sig was 0.2-1 s of every Next on a big home (2026-10-20). Not
     # there (older than the rail, a batch key) or written since - the lookup it always was.
-    full = funnel.unwritten_full_items(store) if not key.startswith('fyis:') else None
-    held = next((i for i in full or () if i['key'] == key or key in i.get('aliases', [])), None)
+    held = funnel.rail_item(store, key)
     if held is not None:
         funnel.settle(store, key, 'surfaced', actor, note=held.get('sig'), read=True, put_down=True)
         return {'key': key, 'read': True, 'reviews_ended': []}
@@ -3668,6 +3667,10 @@ def on_table(store, op: dict) -> bool:
     except (TypeError, ValueError): tid = 0
     if not key or not tid: return False
     if key == f'task:{tid}': return True
+    # ...from the rail's own build while nothing has been written since it began: the keyed build this asked for was 0.06-4.4 s
+    # of every Mark done on a big home, only to read one row's task (2026-10-20). Otherwise the lookup it always was.
+    held = funnel.rail_item(store, key)
+    if held is not None: return held.get('tid') == tid
     try: item = funnel.next_item(store, key, include_surfaced=True)
     except Exception as e:
         logger.debug(f'on_table: {key} did not resolve - {e}'); return False

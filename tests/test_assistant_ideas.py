@@ -30,7 +30,10 @@ class HealthTests(unittest.TestCase):
         wf = s.save_source({'Channel': 'report', 'Address': 'wf2', 'Active': 1, 'ConfigJson': json.dumps({'title': 'Nightly sync', 'type': 'agent', 'access': 'write', 'cron': '0 1 * * *'})}, 't')
         cid = s.save_connector({'Type': 'teams', 'Name': 'Teams live', 'Active': 1, 'ConfigJson': '{}', 'Secret': 'x'}, 't')
         s._exec('UPDATE connector SET LastError=? WHERE ConnectorId=?', ('token expired', cid))
-        ideas = {i['key']: i for i in assistant.health_ideas(s)}
+        # a workflow is not "never run" the minute it is saved: it waits a day from when the Advisor first saw it
+        self.assertNotIn(f'health:workflow:{wf}', {i['key'] for i in assistant.health_ideas(s)})
+        from datetime import timedelta
+        ideas = {i['key']: i for i in assistant.health_ideas(s, datetime.now() + timedelta(days=1, minutes=1))}
         self.assertIn('failed its last three runs', ideas[f"health:report:{A.AR['sid']}"]['text'])
         self.assertEqual(ideas[f"health:report:{A.AR['sid']}"]['action']['tab'], 'Reports')
         self.assertIn('never run', ideas[f'health:workflow:{wf}']['text'])

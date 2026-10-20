@@ -1434,6 +1434,12 @@ def full_items(store) -> list | None:
     return _CACHE['full'] if _CACHE.get('store') is store and _CACHE['pile'] else None
 
 
+def built_as_of_now(store) -> bool:
+    """Has nothing been written since the cached rail's build began? (Unknowable - no dirty-row top - counts as yes.)"""
+    top = _rail_top(store)
+    return top is None or _CACHE.get('store') is not store or _CACHE.get('mark') == top
+
+
 def unwritten_full_items(store) -> list | None:
     """full_items, only while nothing at all has been written since that build began (the dirty-row top it was built at)."""
     top = _rail_top(store)

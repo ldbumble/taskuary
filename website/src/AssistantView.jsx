@@ -737,6 +737,10 @@ function RetryVerbs({ item, failed, onSaid, onDone }) {
 }
 
 function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [], barHolds = false, canvas = null }) {
+  // a PREPARED answer's line (drawAhead, `held`) says its words at once and draws its card once the press has answered: a card's
+  // first reads write (a task's origin filed on its first detail read, the Advisor asked), and a write under a press between
+  // its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
+  if (m.held) m = { ...m, card: null };
   if (m.role === "user") return <div className="tq-msg you"><div className="body">{m.text}
     {!!m.shots?.length && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>{m.shots.map((s) => (
       <img key={s.path} src={s.url} alt={s.name} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: "1px solid #ddd6cb" }} />))}</div>}</div></div>;
@@ -1370,6 +1374,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // item answers {} and the pill goes with it - nothing on the rail moves for it (spec 2026-10-12, mechanics 3-5)
   // ...stamped with the key it was read FOR, and a read that comes back after the table moved on is dropped
   const adviceAsk = useRef(0);
+  const unconfirmedRef = useRef(null), adviceHeld = useRef(null);   // the key drawn ahead of its press's answer, until it lands (readAdvice)
   // `asking`: the key a read is out for - the strip says "Thinking about this one…" while the table waits on it, so the row with
   // nothing dark is never read as having nothing to do
   const [asking, setAsking] = useState(null);
@@ -1378,6 +1383,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (!keep) setAdvice(null);                     // a new item starts with no line, never the last item's
     setAsking(key || null);
     if (!key) return;
+    // ...and not while the card is one drawn ahead of its press's answer (drawAhead): the Advisor reads the rail, and
+    // a rail rebuilt under the press between its admission and its commit check refused the press as stale (PW-118). The
+    // read is made once the answer has landed (landed), exactly as it was when the card only came with the answer.
+    if (unconfirmedRef.current === key) { adviceHeld.current = key; return; }
     let got = null;
     // ...and {"none":"no_ai"}: no AI connected is said once, with the way to connect one, instead of a strip that stays empty (U3)
     let read = { advice: null, asking: null };
@@ -1602,11 +1611,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const drawAhead = useCallback((line, hash = null) => {
     aheadRef.current = { id: line.id, key: line.card?.key || null, hash, say: line.text,
       table: { item: currentRef.current, cardKey: cardRef.current, openCard: openCardRef.current, pin: pin.current } };
+    // ...and the Advisor is not asked about it until the answer lands (readAdvice): the Advisor reads the rail, and a rail rebuilt under
+    // the press between its admission and its commit check refused the press as stale (PW-118, 2026-10-20)
+    unconfirmedRef.current = line.card?.key || null; adviceHeld.current = null;
     setMsgs((m) => [...m, { ...line, ahead: true }]);
     putOnTable(line.card);
     if (line.text) say(line.text);
   }, [putOnTable, say]);
   const unshow = useCallback(() => {
+    unconfirmedRef.current = null; adviceHeld.current = null;
     const ahead = aheadRef.current; aheadRef.current = null;
     if (!ahead) return;
     setMsgs((m) => m.filter((x) => x.id !== ahead.id));
@@ -1622,14 +1635,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the end of the walk's "Open TQ-12" words come as `chips`: dropped here, its only button was a Next that said it again
     // ONE COPY PER ITEM (2026-10-19 UI walk): an item opened again - from search, the Board, the rail - moves its line to the end, never a second
     // ...and the line drawn ahead of this answer (drawAhead) IS this line when it named the same item - its id kept, so the view in it
-    // stays mounted - and comes down when the answer brought something else. The prepared answer it drew, confirmed by answer_hash,
-    // is not drawn twice: nothing is put on the table or said again.
+    // stays mounted, its card drawn now if it was held (Line) - and comes down when the answer brought something else. The prepared
+    // answer it drew, confirmed by answer_hash, is not drawn twice: nothing is put on the table or said again.
     const ahead = aheadRef.current; aheadRef.current = null;
+    const heldAdvice = ahead ? adviceHeld.current : null;
+    unconfirmedRef.current = null; adviceHeld.current = null;
     const same = !!ahead?.hash && ahead.hash === data.answer_hash && !extra, keep = !!ahead && card?.key === ahead.key;
     const id = keep ? ahead.id : `a${Date.now()}`;
     setMsgs((m) => placeLine(ahead ? m.filter((x) => x.id !== ahead.id) : m, { id, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [], card }));
     if (!same) putOnTable(card);
     if (!ahead || ahead.say !== data.say) say(data.say);
+    if (heldAdvice) readAdvice(card?.key || heldAdvice);     // the Advisor's read the line drawn ahead held back (readAdvice)
     // the turn brought the rail as it left it: hold that, with the new table excluded. Nothing along
     // (the walk ran out, an older server, the demo) is the page's own load, as before.
     if (card && data.pile) holdPile(data.pile, nextSelectionScope(only.current, card.key));
@@ -1645,7 +1661,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       });
     }
     else { selectionRef.current = null; loadPile(true); }
-  }, [holdPile, loadPile, putOnTable, say]);
+  }, [holdPile, loadPile, putOnTable, readAdvice, say]);
 
   const ensureNextSelection = useCallback(async (scope) => {
     if (pendingPile.current) await pendingPile.current;        // the rail riding behind the last card carries the next token
@@ -1728,10 +1744,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...never an item an agent is working: the server answers "it is with the agent right now" and puts nothing on the table
     const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling && i.lane !== "working") : null;
     const line = { id: `a${Date.now()}`, role: "assistant", options: [], chips: [] };
-    if (prep) drawAhead({ ...line, text: prep.answer.say, options: prep.answer.options || [], chips: prep.answer.chips || [], card: prep.answer.item || null }, prep.answer_hash);
+    // ...its CARD drawn at the answer, the words at once (`held`, Line): a card's first reads write - a task's origin is filed on its
+    // first detail read - and a write under the press between its admission and its commit check refused it as stale (PW-118). A task
+    // whose read is held already had that first read (taskDetail.js prefetchTask): its view draws at once, as the rail's row does.
+    const drawsNow = (c) => !!c && showsTask(c, cardFor(c)) && !!heldTask(c.tid) && heldTerm(c.tid) !== undefined;
+    if (prep) drawAhead({ ...line, text: prep.answer.say, options: prep.answer.options || [], chips: prep.answer.chips || [], card: prep.answer.item || null,
+                          ...(drawsNow(prep.answer.item) ? {} : { held: true }) }, prep.answer_hash);
     // ...only when its task is read already (and whether an agent holds it, which half its row turns on): an empty view put up ahead
     // of its own read is the shell this is here to end, so a row clicked cold keeps the view it has until the answer, as before
-    else if (aheadItem && showsTask(aheadItem, cardFor(aheadItem)) && heldTask(aheadItem.tid) && heldTerm(aheadItem.tid) !== undefined)
+    else if (aheadItem && drawsNow(aheadItem))
       drawAhead({ ...line, text: "", card: aheadItem });
     try {
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact

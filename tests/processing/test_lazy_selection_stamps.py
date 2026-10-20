@@ -74,3 +74,21 @@ def test_every_row_the_payload_sends_is_stamped_as_a_whole_present_stamps_it(db,
         fp.forget_stamps(); was = funnel.present(db, full.pile)
         assert list(sent) == list(was) and sent == was
         fp.forget_stamps(); assert sent['items'] == fp.present(db, cached)['items']
+
+
+def test_a_write_during_the_capture_build_is_in_the_capture_and_the_commit_check_agrees(db, monkeypatch):
+    """PW-118 (2026-10-20): a write that landed while the rail was being built for a press's admission (the Advisor filing its
+    line) left the capture a step behind the store; the commit check built again, saw it, and refused the press as stale
+    though the pick had not moved. The capture is taken only from a build that holds every write so far."""
+    funnel.invalidate()
+    tid = db.list_tasks()[0]['TaskId']
+    real, calls = funnel.build, []
+    def build_then_write(store, *a, **k):
+        out = real(store, *a, **k)
+        calls.append(1)
+        if len(calls) == 1: store.add_comment(tid, 'owner', 'user', 'landed while the rail was being built')
+        return out
+    monkeypatch.setattr(funnel, 'build', build_then_write)
+    cap = fs.capture_from_rail(db, now=NOW)
+    assert len(calls) == 2 and funnel.built_as_of_now(db), 'built again, with the write'
+    assert fs.recheck_selection(db, cap, now=NOW).revision == cap.revision

@@ -82,6 +82,9 @@ REFLECT_SYSTEM = (
     '- Lines from the outcome ledger (out123) are evidence of HABITS and of what WORKED: a move the owner makes every '
     'time an agent stops the same way is a rule about the owner; a reply that always gets more rounds is a fact about '
     'what works. Cite their ids like any other.\n'
+    '- Lines whose evidence is pr ids (presses: what the owner pressed while the Advisor\'s line was shown) are counted by the app '
+    'from the press log - under "## Moves" and among the hypotheses. Keep them byte-for-byte; the MOVES events are evidence for '
+    'other lines too (a habit about the owner, never a rule about one sender).\n'
     "- Keep each line's k: byte-for-byte - it is how a line is recognised across rewrites, and a "
     'changed one orphans its evidence and its history. A line you add fresh needs none.\n'
     '- Keep the section headers, all four <!-- --> marker lines, and every {{owner}}-style '
@@ -248,6 +251,15 @@ def gather(store, since: str) -> str:
     if aud:
         out.append('OWNER CORRECTIONS (audit trail):')
         out += [f"  {a['Action']} {a['EntityType']}{a['EntityId']} {str(a.get('Detail') or '')[:120]}" for a in aud[:20]]
+    # ...and what the owner PRESSED while the Advisor's line was shown (advisor.press): each moment's count, the line it lit against
+    # the one pressed - the moves this document's "## Moves" is counted from
+    try:
+        rs = [r for r in store._rows('SELECT * FROM advice_press WHERE CreatedAt>=? AND IFNULL(Stale,0)=0 ORDER BY Id', (since,))]
+    except Exception: rs = []
+    if rs:
+        out.append(f"MOVES (what the owner pressed while the Advisor's line was shown: {sum(r['Match'] or 0 for r in rs)} of {len(rs)} were the lit one):")
+        out += [f"  pr{r['Id']} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}: lit {r.get('Advised') or '-'}, pressed {r['Pressed']}"
+                for r in rs[-20:]]
     from . import outcomes
     led = outcomes.evidence(store, since)
     if led:
@@ -330,6 +342,7 @@ def reflect(store, llm=None) -> bool:
     learnedgraph.record(store, doc, new, 'reflect')            # what the reflection itself did to the lines
     learnedgraph.record(store, new, settled, 'decay')          # and what the clock did to the ones it left alone
     auto_adopt(store)                              # what the owner already said does not wait for a click
+    moves(store, restore=True)                     # ...and the press log's counts, as written, whatever the rewrite did to them
     store.set_setting('learn_pending', '0', 'reflect')
     store.set_setting('learn_reflect_failed', '', 'reflect')
     store.set_setting('learn_last_reflect', datetime.now().isoformat(sep=' ', timespec='seconds'), 'reflect')
@@ -407,3 +420,120 @@ def reflect_if_due(store) -> bool:
     if n <= 0 or _failed_today(store): return False
     if n < REFLECT_AT and (cfg.get('learn_last_reflect') or '').startswith(_today()): return False
     return reflect(store)
+
+
+# ── MOVES: what the owner presses, learned from the press log (the deep dive, 2026-10-20) ─────────────────────────────────────────────
+# The Advisor lit a button and nothing remembered which one the owner pressed (advisor.press keeps it now). The owner expects what is
+# learned to land HERE, where they can read it and delete a line to undo it - so the press log becomes lines in this document's own
+# grammar: a hypothesis under test, then "## Moves" once it holds by the same bar the reflection promotes at (learnedgraph.PROMOTE_AT,
+# evidence from 3+ episodes across 2+ people or threads). The counts are the log's, never a model's: one line per moment - a kind of
+# item from one sender's domain, or one repository - and the verb pressed most there. A line the owner deletes is undone: its moment
+# counts again only from presses made after the delete. The reflection reads the same log (gather) and keeps these lines as written.
+MOVES_HEADER = '## Moves'
+MOVES_INTRO = ("_(what you press on each kind of item, learned from your own presses while the Advisor's line was shown - the "
+               'Advisor reads these; delete a line to undo it)_')
+MOVES_CUT = 'learn_moves_cut'        # {key: the last press id when the owner deleted that line} - presses up to it no longer count
+MOVES_MINE = 'learn_moves_written'   # {key: the last press it counted} for each line this pass wrote - one gone from the doc was deleted
+MOVE_SHARE = 0.6                     # the verb must be this share of the presses on the moment to be a habit at all
+MOMENTS = {'review': 'drafts to', 'todo': 'asks from', 'asked': 'asks from', 'agent': "agents' stops on work from", 'agentdone': 'finished agent work for',
+           'idea': "the Advisor's ideas about", 'fyi': 'notices from', 'report': 'reports from', 'wrapup': 'sent replies to', 'task': 'tasks from'}
+CODE_CHANNELS = ('github', 'gitlab', 'azdo', 'bitbucket')
+
+
+def moment(kind: str, channel: str, scope: str) -> str:
+    """A press's moment in words: "GitHub items from northwind/ledger", "drafts to vendor.example"."""
+    if channel in CODE_CHANNELS: return f"{'GitHub' if channel == 'github' else channel.title()} items from {scope}"
+    if str(kind or '').startswith('goal'): return f'goals with {scope}'
+    return f"{MOMENTS.get(kind, 'items from')} {scope}"
+
+
+def _move_key(kind, channel, scope) -> str: return f"move {kind or 'item'} {channel or '-'} {scope}"
+
+
+def _json_setting(store, key, empty):
+    import json
+    try: return json.loads(store.get_setting(key) or 'null') or empty
+    except ValueError: return empty
+
+
+def move_rows(store) -> dict:
+    """{(kind, channel, scope): [press rows]} - presses on a line still true of the item (not stale), with a scope to learn at, made
+    after the owner last deleted that moment's line."""
+    cut, out = _json_setting(store, MOVES_CUT, {}), {}
+    for r in store._rows("SELECT * FROM advice_press WHERE IFNULL(Stale,0)=0 AND IFNULL(Scope,'')<>'' AND IFNULL(Pressed,'')<>'' ORDER BY Id"):
+        g = (str(r.get('ItemKind') or ''), str(r.get('Channel') or ''), str(r['Scope']))
+        if int(r['Id']) > int(cut.get(_move_key(*g)) or 0): out.setdefault(g, []).append(r)
+    return out
+
+
+def move_lines(store) -> list:
+    """Every moment with a habit: [{key, text, score, ev, seen, live}]. One episode is one item (its last press); the score is 1 + the
+    episodes that pressed the verb - the episodes that pressed another, so a habit is born at s:2 as LESSON_SYSTEM's are; live once it
+    clears the reflection's promotion bar."""
+    from .learnedgraph import PROMOTE_AT
+    from . import buttons
+    out = []
+    for (kind, channel, scope), rs in move_rows(store).items():
+        last = {}
+        for r in rs: last[(r['TargetKind'], r['TargetId'])] = r
+        votes = {}
+        for r in last.values(): votes.setdefault(r['Pressed'], []).append(r)
+        verb, mine = max(votes.items(), key=lambda kv: (len(kv[1]), kv[1][-1]['Id']))
+        n, m = len(mine), len(last)
+        score = 1 + n - (m - n)
+        if n / m < MOVE_SHARE or score < 2: continue
+        who = {r.get('Sender') or r.get('Thread') or f"{r['TargetKind']}{r['TargetId']}" for r in mine}
+        out.append({'key': _move_key(kind, channel, scope), 'score': score, 'upto': max(int(r['Id']) for r in rs), 'ev': [f"pr{r['Id']}" for r in mine][-8:],
+                    'live': score >= PROMOTE_AT and n >= 3 and len(who) >= 2, 'seen': max(str(r['CreatedAt'])[:10] for r in mine),
+                    'verb': verb, 'n': n, 'm': m, 'moment': moment(kind, channel, scope),
+                    'text': f"On {moment(kind, channel, scope)}, {{{{owner_first}}}} presses {buttons.label(verb) or verb} ({n} of {m})"})
+    return out
+
+
+def moves(store, restore: bool = False) -> bool:
+    """Write the press log's habits into LEARNED.md: each moment's line in the Hypotheses block until it holds, then under "## Moves".
+    A key this pass wrote that is gone from the doc was deleted by the owner: it is cut, and counts only presses after now - unless
+    `restore` (after a reflection, whose rewrite may have dropped it: the count is the log's, not the model's). Lines are rewritten in
+    place by key; nothing else in the doc is touched. Never raises. Returns whether it saved."""
+    import json
+    from . import learnedgraph as lg
+    try:
+        if (store.get_settings() or {}).get('learn_enabled', '1') != '1': return False
+        doc = store.get_doc(DOC) or ''
+        if HYP_START not in doc or HYP_END not in doc: return False
+        have = {l['key']: l for l in lg.lines(doc)}
+        mine = _json_setting(store, MOVES_MINE, {})
+        mine = mine if isinstance(mine, dict) else {}
+        if not restore and (gone := {k: n for k, n in mine.items() if k not in have}):
+            store.set_setting(MOVES_CUT, json.dumps({**_json_setting(store, MOVES_CUT, {}), **gone}), 'learn')
+        want = {m['key']: m for m in move_lines(store)}
+        new = doc
+        def drop(d, k):
+            raw = next((r for r, l in lg.walk(d) if l and l['key'] == k), None)
+            return d if raw is None else d.replace(raw + '\n', '', 1).replace(raw, '', 1)
+        for k, m in want.items():
+            line = lg.fmt({'text': m['text'], 'score': m['score'], 'ev': m['ev'], 'seen': m['seen'], 'key': k})
+            if any(raw.strip() == line for raw, l in lg.walk(new) if l and l['key'] == k): continue
+            # a line the owner moved into a live section stays live; otherwise its strength says where it lives
+            live = m['live'] or (k in have and have[k]['status'] == 'live')
+            new = drop(new, k)
+            new = _under_moves(new, line) if live else _put_block(new, HYP_START, HYP_END, '\n'.join(filter(None, [_block(new, HYP_START, HYP_END), line])))
+        for k in set(mine) & set(have) - set(want): new = drop(new, k)        # a habit that no longer holds goes; the history says so
+        store.set_setting(MOVES_MINE, json.dumps({k: m['upto'] for k, m in want.items()}), 'learn')
+        if new == doc: return False
+        store.save_doc(DOC, new, 'moves')
+        lg.record(store, doc, new, 'moves')
+        return True
+    except Exception as e:
+        logger.warning(f'moves not learned: {e}'); return False
+
+
+def _under_moves(doc: str, line: str) -> str:
+    """`line` at the end of the "## Moves" section, which is made (above Proposed rules, else at the end) the first time a move holds."""
+    if MOVES_HEADER not in doc:
+        at, sect = doc.find('\n## Proposed rules'), f'{MOVES_HEADER}\n{MOVES_INTRO}\n'
+        doc = doc[:at] + '\n\n' + sect + doc[at:] if at >= 0 else doc.rstrip('\n') + '\n\n' + sect
+    head, tail = doc.split(MOVES_HEADER, 1)
+    nxt = tail.find('\n## ')
+    body, after = (tail, '') if nxt < 0 else (tail[:nxt], tail[nxt:])
+    return head + MOVES_HEADER + body.rstrip('\n') + '\n' + line + '\n' + after

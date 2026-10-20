@@ -21,6 +21,10 @@ _(learned refinements to SOUL.md's triage rules — the places triage tends to g
 ## Voice & style
 _(how you actually write, learned from the diffs between drafts and what you sent)_
 
+## Moves
+_(what you press on each kind of item, learned from your own presses while the Advisor's line was shown - the
+Advisor reads these; delete a line to undo it)_
+
 ## Proposed rules — your call
 <!-- proposed:start -->
 _(rules whose effect is to HIDE things — treat as fyi, never open a task — wait here for

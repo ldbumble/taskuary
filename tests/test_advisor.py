@@ -105,7 +105,7 @@ class JudgeTests(_Rail):
         llm = brain_saying({'verb': 'continue', 'line': 'You usually continue it here.', 'evidence': ['out1']})
         rid = advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)
         r = s._one('SELECT * FROM advice WHERE Id=?', (rid,))
-        self.assertEqual((r['Verb'], r['Line'], json.loads(r['CountJson']), r['Dropped']), ('continue', 'You usually continue it here.', [3, 3], None))
+        self.assertEqual((r['Verb'], r['Line'], json.loads(r['CountJson']), r['Dropped']), ('continue', 'You usually continue it here.', [3, 3, 'with northwind.example'], None))
         self.assertIn('CONTINUE', llm.calls[0][1].upper()); self.assertIn('out1', llm.calls[0][1])
         self.assertEqual(advisor.pill(r['Label'], json.loads(r['CountJson'])), f"{r['Label']} · 3 of 3 times")
 
@@ -169,15 +169,22 @@ class JudgeTests(_Rail):
         llm = brain_saying({'verb': 'continue', 'line': 'x', 'evidence': []})
         self.assertIsNone(advisor.notice(s, 'agent.stopped', 'task', t, wait=True, llm=llm)); self.assertEqual(llm.calls, [])
 
-    def test_habit_counts_come_from_the_ledger(self):
+    def test_habit_counts_come_from_the_ledger_for_this_sender_never_over_everything(self):
+        # one global count stood under every item (the deep dive, 2026-10-20): it is the sender's domain's now, or nothing
         s = MemoryStore(); t = s.create_task({'Title': 'x'}, 'owner')
+        s.add_message({'Channel': 'email', 'Subject': 'x', 'FromEmail': 'gail@northwind.example', 'BodyText': 'x', 'Status': 'routed', 'TaskId': t})
+        o = s.create_task({'Title': 'y'}, 'owner')
+        s.add_message({'Channel': 'email', 'Subject': 'y', 'FromEmail': 'tom@vendor.example', 'BodyText': 'y', 'Status': 'routed', 'TaskId': o})
         for v in ('held', 'held', 'reopened'):
             i = outcomes.record(s, 'task.closed', 'task', t); outcomes.settle(s, i, v, v)
-        self.assertEqual(advisor.habit(s, 'close', {'tid': t}), (2, 3))
+        i = outcomes.record(s, 'task.closed', 'task', o); outcomes.settle(s, i, 'reopened', 'reopened')
+        self.assertEqual(advisor.habit(s, 'close', {'tid': t}), (2, 3, 'with northwind.example'))
         for v in ('approve', 'edit', 'approve'):
-            i = outcomes.record(s, 'reply.sent', 'task', t, facts={'verb': v}); outcomes.settle(s, i, 'settled', 'settled')
-        self.assertEqual(advisor.habit(s, 'approve', {'tid': t}), (2, 3))
-        self.assertEqual(advisor.habit(s, 'defer', {'tid': t}), (0, 0))
+            i = outcomes.record(s, 'reply.sent', 'task', t, facts={'verb': v, 'who': 'gail@northwind.example'}); outcomes.settle(s, i, 'settled', 'settled')
+        i = outcomes.record(s, 'reply.sent', 'task', o, facts={'verb': 'approve', 'who': 'tom@vendor.example'}); outcomes.settle(s, i, 'settled', 'settled')
+        self.assertEqual(advisor.habit(s, 'approve', {'tid': t}), (2, 3, 'with northwind.example'))
+        self.assertEqual(advisor.habit(s, 'defer', {'tid': t}), (0, 0, ''))
+        self.assertEqual(advisor.habit(s, 'close', {'tid': s.create_task({'Title': 'z'}, 'owner')}), (0, 0, ''), 'nobody to count it for')
 
 
 class DoorTests(unittest.TestCase):
@@ -445,8 +452,12 @@ class AuditFixTests(_Rail):
         self.assertIn('"where it stands": "asked you"', p); self.assertNotIn('"lane"', p); self.assertNotIn('"kind"', p)
 
     def test_why_says_what_each_count_measures(self):
-        self.assertEqual(advisor.says('close', (2, 3)), '2 of the last 3 tasks you closed stayed closed.')
-        self.assertEqual(advisor.says('chase', (1, 4)), '1 of your last 4 nudges got an answer.')
+        # ...and WHOSE count it is: the owner's habit, never the Advisor's record (the deep dive, 2026-10-20)
+        self.assertEqual(advisor.says('close', (2, 3)), "Your own habit, not the Advisor's record: 2 of the last 3 tasks you closed stayed closed.")
+        self.assertEqual(advisor.says('chase', (1, 4, 'with northwind.example')),
+                         "Your own habit, not the Advisor's record: 1 of your last 4 nudges got an answer with northwind.example.")
+        self.assertEqual(advisor.says('defer', (3, 4, 'press:drafts to vendor.example')),
+                         "Your own habit, not the Advisor's record: you pressed Remind me 3 of the last 4 times on drafts to vendor.example.")
         self.assertEqual((advisor.says('defer', (3, 3)), advisor.says('close', (1, 1))), ('', ''))
         self.assertTrue(all('moment like this' not in m for m in advisor.MEASURES.values()))
 

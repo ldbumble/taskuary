@@ -26,7 +26,7 @@ PROMOTE_AT = 4          # mirrors learn.REFLECT_SYSTEM: s:4 with evidence from 3
 DECAY_EVERY = 10        # reflections that read the evidence and left a line alone, per point off it
 DECAYS = ('hypothesis', 'proposed')   # only what is still a guess: a promoted rule earned its s, an adopted one is the owner's
 LOG, LOG_KEEP = 'learn_reflect_log', 200   # the dates reflections ran on; 200 is 20 points of decay, past any live score
-_EV = re.compile(r'^(mem|rv|task|out)(\d+)$')
+_EV = re.compile(r'^(mem|rv|task|out|pr)(\d+)$')
 
 
 def _today(): return datetime.now().strftime('%Y-%m-%d')
@@ -137,6 +137,12 @@ def _resolve(store, ev_id: str) -> dict:
         r = store.get_review(n) or {}
         return {'id': ev_id, 'kind': 'review', 'date': r.get('DecidedAt') or r.get('CreatedAt'),
                 'label': f"{r.get('Status') or 'review'}: {(r.get('Subject') or r.get('Title') or '')[:90]}" if r else ev_id}
+    if kind == 'pr':                       # a press while the Advisor's line was shown (advisor.press): what was lit, what was pressed
+        r = store._one('SELECT * FROM advice_press WHERE Id=?', (n,)) or {}
+        from .learn import moment
+        return {'id': ev_id, 'kind': 'press', 'date': r.get('CreatedAt'),
+                'label': f"pressed {r.get('Pressed')} on {moment(r.get('ItemKind'), r.get('Channel'), r.get('Scope') or '?')}"
+                         + (f" (the Advisor lit {r['Advised']})" if r.get('Advised') and r.get('Advised') != r.get('Pressed') else '') if r else ev_id}
     if kind == 'out':
         r = store._one('SELECT * FROM outcome WHERE Id=?', (n,)) or {}
         return {'id': ev_id, 'kind': 'outcome', 'date': r.get('ResolvedAt') or r.get('At'),

@@ -179,25 +179,43 @@ def _item(store, target_kind, target_id, key: str = None):
 
 
 def habit(store, verb: str, item: dict) -> tuple:
-    """(n, m): how often the owner's next move after THIS kind of moment was this verb - read from the ledger, never from the model.
-    continue: stops that ended in a continue, over every stop that resolved; approve: replies sent as drafted, over every reply;
-    close: closes that held, over every close that resolved. Any other verb has no count yet."""
-    q = {'continue': ("SELECT Verdict AS v FROM outcome WHERE Kind='agent.stopped' AND ResolvedAt IS NOT NULL", lambda r: r['v'] == 'continued'),
-         'approve': ("SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL", lambda r: json.loads(r['f'] or '{}').get('verb') == 'approve'),
-         'close': ("SELECT Verdict AS v FROM outcome WHERE Kind='task.closed' AND ResolvedAt IS NOT NULL", lambda r: r['v'] == 'held'),
-         'chase': ("SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL AND json_extract(FactsJson, '$.chase')=1",
+    """(n, m, where): how often the owner's move in THIS kind of moment was this verb - read from the press log and the ledger,
+    never from the model, and never counted over everything (the deep dive, 2026-10-20: one global count stood under every item).
+    First the presses (advisor.press) on this kind of item from this sender's domain or repository: n of m pressed this verb. Else
+    the ledger, scoped to the same sender's domain - continue: stops that ended in a continue; approve: replies sent as drafted;
+    close: closes that held; chase: nudges answered. `where` names the moment; (0, 0, '') when nothing is counted there."""
+    from .learn import moment
+    w = who_of(store, item or {})
+    if w['scope']:
+        rs = store._rows("SELECT TargetKind, TargetId, Pressed FROM advice_press WHERE IFNULL(Stale,0)=0 AND Scope=? AND ItemKind=? ORDER BY Id",
+                         (w['scope'], str((item or {}).get('kind') or '')))
+        last = {(r['TargetKind'], r['TargetId']): r['Pressed'] for r in rs}          # one item, one vote: its last press
+        if len(last) >= 2:
+            return (sum(1 for p in last.values() if p == verb), len(last), 'press:' + moment(str(item.get('kind') or ''), w['channel'], w['scope']))
+    if not w['domain']: return (0, 0, '')
+    on = "IFNULL(json_extract(FactsJson,'$.who'),'') LIKE ?"
+    by_task = "EXISTS (SELECT 1 FROM message m WHERE m.TaskId=outcome.TargetId AND LOWER(IFNULL(m.FromEmail,'')) LIKE ?)"
+    q = {'continue': (f"SELECT Verdict AS v FROM outcome WHERE Kind='agent.stopped' AND ResolvedAt IS NOT NULL AND {by_task}", lambda r: r['v'] == 'continued'),
+         'approve': (f"SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL AND {on}", lambda r: json.loads(r['f'] or '{}').get('verb') == 'approve'),
+         'close': (f"SELECT Verdict AS v FROM outcome WHERE Kind='task.closed' AND ResolvedAt IS NOT NULL AND {by_task}", lambda r: r['v'] == 'held'),
+         'chase': (f"SELECT FactsJson AS f FROM outcome WHERE Kind='reply.sent' AND ResolvedAt IS NOT NULL AND json_extract(FactsJson, '$.chase')=1 AND {on}",
                    lambda r: json.loads(r['f'] or '{}').get('answer_days') is not None)}.get(verb)
-    if not q: return (0, 0)
-    rs = store._rows(q[0]); return (sum(1 for r in rs if q[1](r)), len(rs))
+    if not q: return (0, 0, '')
+    rs = store._rows(q[0], (f"%@{w['domain']}",))
+    return (sum(1 for r in rs if q[1](r)), len(rs), f"with {w['domain']}")
 # ...and what each count MEASURES, said so: "You chose Mark done 2 of 3 times in a moment like this" was read off closes that
-# held and answers to nudges, counted over every item, not this kind of moment (2026-10-17 audit)
-MEASURES = {'continue': 'You picked the work back up {n} of the last {m} times an agent stopped',
-            'approve': 'You sent {n} of your last {m} drafts as written',
+# held and answers to nudges, counted over every item, not this kind of moment (2026-10-17 audit) - and WHOSE it is: the owner's own
+# habit, never the Advisor's record of being right (the deep dive, 2026-10-20)
+MEASURES = {'continue': 'you picked the work back up {n} of the last {m} times an agent stopped',
+            'approve': 'you sent {n} of your last {m} drafts as written',
             'close': '{n} of the last {m} tasks you closed stayed closed',
             'chase': '{n} of your last {m} nudges got an answer'}
+HABIT = "Your own habit, not the Advisor's record: "
 def says(verb: str, count) -> str:
-    n, m = (list(count) + [0, 0])[:2]
-    return MEASURES[verb].format(n=n, m=m) + '.' if verb in MEASURES and m >= 2 else ''
+    n, m, where = (list(count) + [0, 0, ''])[:3]
+    if m < 2: return ''
+    if str(where or '').startswith('press:'): return f"{HABIT}you pressed {L(verb) or verb} {n} of the last {m} times on {where[6:]}."
+    return f"{HABIT}{MEASURES[verb].format(n=n, m=m)}" + (f' {where}' if where else '') + '.' if verb in MEASURES else ''
 def pill(label: str, count) -> str:
     n, m = (list(count) + [0, 0])[:2]
     return f'{label} · {n} of {m} times' if m >= 2 else str(label or '')
@@ -673,7 +691,7 @@ def _payload(r: dict) -> dict:
     if r.get('Verb') and not verb: r = {**r, 'Line': ''}                  # its button is gone (Prep me): the line pointed at nothing
     # a fix is named by the place it opens ("Connect a mailbox"), never the generic button word
     lbl = r['Label'] if r.get('Label') in buttons.labels() or (verb == 'fix' and r.get('Label')) else buttons.label(verb or '') or r.get('Label')
-    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': pill(lbl, count), 'count': count,
+    return {'key': r['Key'], 'line': plain(r['Line'] or '', r['Verb'] or '', lbl or '') if r.get('Line') else r.get('Line'), 'verb': verb, 'label': lbl, 'pill': pill(lbl, count), 'count': count[:2],
             'says': says(r['Verb'] or '', count), 'evidence': json.loads(r.get('EvidenceJson') or '[]'), 'revision': r['Revision'], 'tier': r['Tier'], 'at': r['CreatedAt']}
 
 
@@ -762,7 +780,7 @@ def who_of(store, item: dict) -> dict:
         ms = [x for x in store.list_messages(int(item['tid'])) if str(x.get('Direction') or 'in') != 'out']
         m = ms[-1] if ms else None
     m = m or {}
-    sender = str(m.get('FromEmail') or '').lower()
+    sender = str(m.get('FromEmail') or m.get('FromName') or '').lower()          # a chat or an issue has a name, not an address
     domain = sender.rsplit('@', 1)[1] if '@' in sender and not sender.startswith('@') else ''
     channel = str(item.get('channel') or m.get('Channel') or '').lower()
     scope = (m.get('SourceName') if channel in ('github', 'gitlab', 'azdo', 'bitbucket') and m.get('SourceName') else '') or domain or channel
@@ -779,10 +797,17 @@ def press(store, key: str, advised: str, pressed: str, rev: str = None) -> int:
     adv, got = pressed_verb(advised) if advised else None, pressed_verb(pressed)
     try: now = revision(store, *tgt)
     except Exception: now = None
-    return store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,Scope,Thread,Stale,CreatedAt) '
+    rid = store._exec('INSERT INTO advice_press (Key,TargetKind,TargetId,Revision,Advised,Pressed,Match,ItemKind,Channel,Sender,SenderDomain,Scope,Thread,Stale,CreatedAt) '
                        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (key, tgt[0], int(tgt[1]), rev or '', adv, got, int(bool(adv) and adv == got), str(item.get('kind') or ''), w['channel'],
                         w['sender'], w['domain'], w['scope'], w['thread'], int(bool(rev) and bool(now) and rev != now), _now()))
+    from . import learn
+    learn.moves(store)                      # ...and what it teaches lands in LEARNED.md at once, where the owner can read it (never raises)
+    # a press against the lit move is the owner correcting the Advisor: it counts toward the next reflection like any correction
+    if adv and got not in (adv, 'next'):
+        try: store.set_setting('learn_pending', str(int(store.get_setting('learn_pending') or 0) + 1), 'learn')
+        except (TypeError, ValueError): pass
+    return rid
 
 
 def notes(store, key: str, limit: int = 10) -> list:

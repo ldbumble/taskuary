@@ -79,7 +79,7 @@ import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -602,10 +602,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and only THIS task's. Switching tasks clears `term` while `detail` still holds the previous
   // task until its reload lands, so this adopted that task's live session - and nothing cleared it
   // once the new detail arrived without one: a done task showed another task's agent working.
+  // ...and the SAME session's new word too: the detail reloads on every task-changed, but only a new sid was adopted, so an agent
+  // that asked while the page was open kept its header on "working" and its row without Answer it until the task was opened again (G7)
+  const liveWord = sessionWord(detail?.session);
   useEffect(() => {
     const live = detail?.session;
-    if (live?.alive && live.taskId === selected && live.sid !== term?.sid) setTerm(live);
-  }, [detail?.session, term?.sid, selected]);
+    if (!live?.alive || live.taskId !== selected) return;
+    if (live.sid !== term?.sid) setTerm(live);
+    else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
+  }, [detail?.session, term?.sid, selected, liveWord]);   // eslint-disable-line react-hooks/exhaustive-deps
   const openTerm = useCallback(async (body) => {
     try {
       const { data } = await api.post("/api/terminals", body); setTerm(data);

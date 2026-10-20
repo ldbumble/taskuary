@@ -72,6 +72,14 @@ def install(app) -> bool:
         from . import server
         return world(server.store)
     app.add_api_route('/api/test/world', seed_world, methods=['POST'])
+    # ...and a world agent's next word, as its hook would send it: how fast "it asked you" reaches every surface is measured from here
+    def agent_says(body: dict):
+        from . import server, terminal, workerstate
+        tid, kind = int((body or {}).get('tid') or 0), str((body or {}).get('kind') or '')
+        s = next((x for x in list(terminal.SESSIONS.values()) if getattr(x, 'task_id', None) == tid and getattr(x, 'alive', False)), None)
+        if not s or kind not in workerstate.KINDS: raise HTTPException(422, 'a live world agent and a worker event kind')
+        return {'recorded': workerstate.record(server.store, tid, s.sid, kind, text=str(body.get('text') or ''), source='hook')}
+    app.add_api_route('/api/test/agent', agent_says, methods=['POST'])
     return True
 
 

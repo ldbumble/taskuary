@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  AGENT, agentPhase, focusStage, ownerControlsCompletion, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
+  AGENT, agentPhase, focusStage, ownerControlsCompletion, sessionWord, wentOut, pendingProposals, pendingReplyReview, replyPhase, sentReplyReview, taskPhase, timelinePhases,
 } from "../src/taskLifecycle.js";
 
 test("task, agent and reply phases remain independent", () => {
@@ -209,4 +209,13 @@ test("after a merge, a closed issue or an owed email went out, the page stays on
     assert.equal(focusStage({ kind: "coding", task: "open", agent, reply: "not drafted", out: true, record: true }), "reply", `agent ${agent}`);
   assert.equal(focusStage({ kind: "coding", task: "open", agent: AGENT.working, reply: "not drafted", out: true }), "agent");
   assert.equal(focusStage({ kind: "coding", task: "done", agent: AGENT.finished, reply: "not drafted", out: true, record: true }), "reply");
+});
+
+test("a session's new word is a change the task page takes, and the same word is not (G7)", () => {
+  const working = { sid: "a1", alive: true, waiting: false, state: null, tail: ["Reading the export job."] };
+  const asking = { ...working, waiting: true, state: "asking", line: "coding asked you: Keep the rows?", request: { request_id: "r1" } };
+  assert.notEqual(sessionWord(working), sessionWord(asking));
+  assert.equal(sessionWord(working), sessionWord({ ...working, tail: ["more output"], idle: 3 }));   // output alone is not a new word
+  assert.equal(agentPhase({ session: asking }), AGENT.waiting);
+  assert.equal(sessionWord(null), "");
 });

@@ -34,6 +34,7 @@ import { useSaveNote } from "./SaveNote.jsx";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
 import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
+import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import DocsView, { OPERATOR_DOCS } from "./DocsView.jsx";
@@ -421,12 +422,14 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const [profileNames, setProfileNames] = useState([]);   // the general workers default_profile may name
   const [agentModels, setAgentModels] = useState({});
   const [connectors, setConnectors] = useState([]);
+  const [mailboxes, setMailboxes] = useState([]);           // the sending mailboxes a rule can be scoped to (ruleMailbox.js)
 
   const load = useCallback(async () => {
     try {
       const [p, s, m] = await Promise.all([api.get("/api/policies"), api.get("/api/settings"), api.get("/api/memory")]);
       setPolicies(p.data.data || []); setSettings(s.data.data || []); setMemory(m.data.data || []);
       api.get("/api/brains").then(({ data }) => setBrains(data.data || [])).catch(() => {});
+      api.get("/api/mailboxes").then(({ data }) => setMailboxes(data.data || [])).catch(() => setMailboxes([]));
       api.get("/api/agents").then(({ data }) => {
         const rows = data.data || [], models = data.models || {}, seen = new Set();
         setAgentNames(rows.map((a) => a.Name));
@@ -819,6 +822,16 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
                 <TextField label={PATTERN_LABEL[draft.Kind] || "What to match"}
                   value={draft.Pattern || ""} onChange={(e) => setDraft({ ...draft, Pattern: e.target.value })} />
               )}
+              {(() => {
+                const boxes = mailboxChoices(mailboxes, draft.Mailbox);
+                return boxes.length > 0 && (
+                  <TextField select label="Applies to" value={mailboxValue(boxes, draft.Mailbox)} data-tq-rule-mailbox
+                    SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}
+                    onChange={(e) => setDraft({ ...draft, Mailbox: e.target.value })}>
+                    {boxes.map((o) => <MenuItem key={o.value || "all"} value={o.value}>{o.label}</MenuItem>)}
+                  </TextField>
+                );
+              })()}
               <TextField label="Reason (shown to the reviewer)" value={draft.Reason} onChange={(e) => setDraft({ ...draft, Reason: e.target.value })} />
               <Box sx={{ display: "flex", gap: 0.75 }}>
                 <Button size="small" variant="contained" disabled={!draft.Name || !draft.Reason || !ACTIONS.includes(draft.Action)}

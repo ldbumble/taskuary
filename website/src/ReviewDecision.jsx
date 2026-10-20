@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
+import { holdInView } from "./inView.js";
 import { promisesFiles } from "./replyFiles.js";
 import { proposalPresentation, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
@@ -158,7 +159,9 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
       else if (data.send_error) setSendErr(replySendFailure(data));
       // Send / Approve is not put down at the press: it waits for the send so an error shows HERE, then the task page reads the
       // task again - still open, its Mark done the move now (the owner, 2026-10-02; 2026-10-18: a send never closes it)
-      else if (data.ok && verb === "approve" && onSent) { await onSent(); setBusy(false); return; }
+      // ...and a close without sending (a chat's Mark done, which copies the draft) is a close: the task page reads it the same way,
+      // finds it done and walks on - it stood on the table as "task · done" with no line over it (the matrix's verify, 2026-10-20)
+      else if (data.ok && (verb === "approve" || (verb === "close_unsent" && r.Kind !== "slot")) && onSent) { await onSent(); setBusy(false); return; }
       onChanged?.();
     } catch (e) { setErr(e?.response?.data?.detail || "That didn't go through - nothing was sent. Try the button again."); }
     finally { acted(no(verb)); }
@@ -192,7 +195,16 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // ...AND IN VIEW: after a refused send the line said "redraft it" over a Redraft a scroll below the card's edge, under the strip
   // (the Advisor group's verify, 2026-10-19) - a lit move the owner cannot see is no move. It is brought into view once, when it lights.
   const movesRef = useRef(null);
-  useEffect(() => { if (lit.startsWith(`${r.ReviewId}:`)) movesRef.current?.querySelector(".MuiButton-contained")?.scrollIntoView?.({ block: "nearest" }); }, [lit, r.ReviewId]);
+  // ...and UNCOVERED (the matrix's phone pass, 2026-10-20): at 390px "nearest" left it under the docked strip and row - inView.js
+  // reads what stands over it and scrolls it clear, and holds it there while the dock's line and row fill in; marked
+  // [data-tq-lit] so the conversation's pin (AssistantView keepTable) holds it clear too, instead of pulling the card's top back.
+  useEffect(() => {
+    if (!lit.startsWith(`${r.ReviewId}:`)) return undefined;
+    const el = movesRef.current?.querySelector(".MuiButton-contained");
+    el?.setAttribute("data-tq-lit", "");
+    const stop = holdInView(el);
+    return () => { stop(); el?.removeAttribute("data-tq-lit"); };
+  }, [lit, r.ReviewId]);
   const solid = toRow && lit !== no("approve") ? "outlined" : "contained";
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
@@ -229,7 +241,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
         title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
     ] : !canSendIt ? [
+      // ...and with the box emptied it copies nothing: the line judged over the draft said "copy it to where the question came from"
+      // over an empty box (the matrix's verify, 2026-10-20) - `blank` is what the strip says instead, the move still the one advised
       { id: no("approve"), label: busy ? "Closing…" : btn("close"), tone: "p", disabled: busy, run: copyClose,
+        blank: value.trim() ? "" : `The draft box is empty - ${btn("close")} closes it with nothing copied`,
         title: `No reply will be sent - ${r.SendBlock || (r.Channel === "github" ? "GitHub replies are off (GitHub card)" : "this channel cannot be replied to from here")}. The draft is copied for you and kept; the task is marked done (PW-145).` },
     ] : r.Stale ? [
       { id: no("approve"), label: busy ? "Drafting…" : btn("redraft"), tone: "p", disabled: busy, run: redraft, title: btnHint("redraft") },

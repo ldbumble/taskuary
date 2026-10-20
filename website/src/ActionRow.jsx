@@ -49,6 +49,9 @@ export function AdvisorNext({ advice, onPropose }) {
       </div>
     );
   }
+  // ...and a move whose text is gone (`blank`: a chat's Mark done copies the draft, and the box was emptied) says what it does now,
+  // in place of the line judged over the draft as filed - still the advised move, still lit (the matrix's verify, 2026-10-20)
+  if (onRow.blank) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">{`${onRow.blank}.`}</div></div>;
   const word = onRow.label;
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);

@@ -358,9 +358,18 @@ def failure(store, item: dict) -> dict | None:
     newest act on it that ended in an error. The Advisor was never told, so it advised the Send that had just failed (2026-10-18)."""
     ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
     r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid'])) if item.get('tid') else None) or {}
+    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
+    except Exception: ops = []
+    last = ops[-1] if ops else {}
+    try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
+    except (TypeError, ValueError): out = {}
+    out = out if isinstance(out, dict) else {}
+    drafted_wrong = r.get('Status') == 'pending' and r.get('DraftError')
+    # ...WHICHEVER FAILED LAST (the matrix, 2026-10-20): a failure newer than the draft's error is what the screen shows now
+    newer = last.get('Status') in ('error', 'refused') and out.get('source') != 'draft'
     # A DRAFT THAT COULD NOT BE WRITTEN is what failed (2026-10-19): with no AI to write it, Reply left an empty box and an error, and
     # the Advisor - never told - read the box with no Send as a chat's draft and said "copy it ... then mark it done" over an email
-    if r.get('Status') == 'pending' and r.get('DraftError'):
+    if drafted_wrong and not newer:
         from .failures import classify
         c = classify(str(r['DraftError']))
         return {'what': 'the reply could not be drafted', 'why': c['sentence'], 'fix': ok(c['fix']), 'unknown': False, 'kind': 'draft'}
@@ -373,14 +382,9 @@ def failure(store, item: dict) -> dict | None:
     # ...and a report's card or a connection's row has no task: its failure lives on the report or the connector (failures.standing)
     from . import failures
     if (on := failures.target_of(item)) and (f := failures.standing(store, *on)): return f
-    try: ops = store.operations_for(item.get('tid'), [item['mid']] if item.get('mid') else [])
-    except Exception: ops = []
-    last = ops[-1] if ops else {}
     # ...and an act the demo refused (demo.refused): it went nowhere, so the Send just refused is not advised again (2026-10-19)
     if last.get('Status') not in ('error', 'refused'): return None
-    try: out = json.loads(last.get('OutcomeJson') or '{}') or {}
-    except (TypeError, ValueError): out = {}
-    out = out if isinstance(out, dict) else {}
+    if out.get('source') == 'draft': return None          # a draft written since cleared it
     # the record's own words lead (failures.record - the workflow runner's step says which step stopped); else the act, described
     if out.get('what'): what = str(out['what'])
     else:

@@ -4607,6 +4607,14 @@ class SQLiteStore:
     def set_review_draft_error(self, rid, error: str):
         """The draft could not be written: keep the review pending and say why (PW-046)."""
         self._exec('UPDATE review SET DraftError=? WHERE ReviewId=?', ((error or '')[:300] or None, rid))
+        # ...and WHEN, as an act on its task: the error had no time, so the Advisor read it as the newest failure whatever failed after
+        # it - Send to agent failed with its error on the card, and the line still said the reply could not be drafted (the matrix,
+        # 2026-10-20). advisor.failure reads the draft's error only while nothing newer failed.
+        rv = self.get_review(rid) or {}
+        if error and rv.get('TaskId'):
+            self.add_operation({'OpId': uuid.uuid4().hex[:12], 'Kind': 'message.reply', 'TargetKind': 'task', 'TargetId': int(rv['TaskId']), 'ParamsJson': '{}',
+                                'Version': 1, 'Status': 'error', 'Error': (error or '')[:300],
+                                'OutcomeJson': json.dumps({'what': 'the reply could not be drafted', 'source': 'draft'})})
         self._review_changed(rid)
     def review_envelope(self, rid) -> dict:
         try: d = json.loads((self.get_review(rid) or {}).get('Deliver') or '{}') or {}

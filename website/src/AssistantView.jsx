@@ -73,6 +73,7 @@ import { age, ago, band, bandUntil, plural } from "./timeWords.js";
 import GeneralWorkspace from "./GeneralWorkspace.jsx";
 import CanvasItem, { CANVAS_ITEM_HEIGHT, showsTask } from "./CanvasItem.jsx";
 import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
+import { floorOf } from "./inView.js";
 import CanvasBrowse from "./CanvasBrowse.jsx";
 import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
@@ -709,7 +710,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
       <CanvasItem card={c} height={canvas.height} expanded={canvas.expanded} onExpand={canvas.toggle} phone={canvas.phone}
         onNext={() => actions.next()} busy={actions.busy} onFold={() => canvas.fold(c.key)} onAfter={() => actions.advance(null, true)}
         onLeave={() => canvas.putDown(c.key, c.tid)} onStay={(why) => canvas.pickUp(c.key, why)} onReminded={(out) => actions.reminded(out, c)}
-        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} lit={canvas.lit} />
+        onListChanged={actions.reload} onChanged={actions.changed} onGoReports={actions.goReports} onOpenTask={actions.openTask} lit={canvas.lit}
+        onPropose={actions.pressAdvice} />
     </div>
   );
   // THE WORDS RIDE IN THE CARD (2026-09-23): Next beside the card's verb, every other word on its
@@ -1345,7 +1347,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     // ...UNLESS A LINK NAMED SOMETHING IN IT (appLinks.focusPlace marks it [data-tq-held]): then that is what is held, in the middle.
     // Two holds on one scroll fought - the card's top pulled back over a setting a search hit had brought up (verify, 2026-10-19)
     const held = el.querySelector("[data-tq-held]"), b = body.getBoundingClientRect(), r = (held || el).getBoundingClientRect();
-    const off = held ? r.top + r.height / 2 - (b.top + body.clientHeight / 2) : r.top - b.top;
+    // ...and A MOVE LIT ON THE CARD stays clear of a phone's docked strip and row (inView.floorOf): held by the card's top, the refused
+    // send's Redraft was pulled back under the dock the moment it was scrolled clear (the matrix's phone pass, 2026-10-20)
+    const lit = !held && el.querySelector("[data-tq-lit]")?.getBoundingClientRect();
+    const off = held ? r.top + r.height / 2 - (b.top + body.clientHeight / 2) : Math.max(r.top - b.top, lit?.height ? lit.bottom + 8 - floorOf(body, el) : -Infinity);
     if (Math.abs(off) > 2) body.scrollTop += off;      // the body alone scrolls - scrollIntoView moved the whole page as well
     return true;
   }, []);
@@ -2249,7 +2254,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
       // ...in the server's own words when it recorded the line (server.remind_task), so its read finds the same turn and draws it once
       text: out?.receipt || (out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now.") }]);
   };
-  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items,
+  // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
+  // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
+  const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items, pressAdvice,
     reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref),
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     goReports: () => onNavigate?.("Reports"),

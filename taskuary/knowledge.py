@@ -63,7 +63,9 @@ def _pptx(data: bytes) -> str:
                         key=lambda n: int(re.search(r'(\d+)', n.rsplit('/', 1)[-1]).group(1)))
         return '\n\n'.join(_xml_text(z.read(n), r'</a:p>', 'a:t') for n in slides)
 
-def _xlsx(data: bytes) -> str:
+def _xlsx(data: bytes, sheets: int = None, rows: int = None) -> str:
+    """Every sheet as `## title` and one ` | `-joined line per non-empty row - or only the first `sheets`, `rows` lines each
+    (an attachment is read for its gist; the knowledge base reads the whole book)."""
     try:
         from openpyxl import load_workbook
     except ImportError:
@@ -72,34 +74,51 @@ def _xlsx(data: bytes) -> str:
         except KeyError: return ''
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     out = []
-    for ws in wb.worksheets:
-        out.append(f'## {ws.title}')
-        for row in ws.iter_rows(values_only=True):
-            cells = [str(c) for c in row if c not in (None, '')]
-            if cells: out.append(' | '.join(cells))
+    try:
+        for ws in wb.worksheets[:sheets]:
+            out.append(f'## {ws.title}')
+            n = 0
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(c) for c in row if c not in (None, '')]
+                if not cells: continue
+                if rows is not None and n >= rows: out.append(f'(more rows not read - the first {rows} are above)'); break
+                out.append(' | '.join(cells)); n += 1
+        if sheets is not None and len(wb.worksheets) > sheets: out.append(f'({len(wb.worksheets) - sheets} more sheet(s) not read)')
+    finally: wb.close()
     return '\n'.join(out)
 
-def _pdf(data: bytes) -> str:
+class Encrypted(Unsupported): pass
+
+def _pdf(data: bytes, pages: int = None) -> str:
     try:
         from pypdf import PdfReader
     except ImportError:
         raise Unsupported('reading .pdf needs pypdf - run: pip install pypdf (docx, pptx, xlsx and text need nothing)')
-    return '\n\n'.join((p.extract_text() or '') for p in PdfReader(io.BytesIO(data)).pages)
+    r = PdfReader(io.BytesIO(data))
+    # an owner-password-only pdf opens with the empty user password; anything else is locked, and says so
+    if r.is_encrypted:
+        try: ok = r.decrypt('')
+        except Exception: ok = 0
+        if not ok: raise Encrypted('encrypted')
+    ps = r.pages if pages is None else r.pages[:pages]
+    text = '\n\n'.join((p.extract_text() or '') for p in ps)
+    return text + (f'\n\n(pages {pages + 1}-{len(r.pages)} not read)' if pages is not None and len(r.pages) > pages else '')
 
 def _html(data: bytes) -> str:
     s = re.sub(r'(?is)<(script|style)[^>]*>.*?</\1>', ' ', data.decode('utf-8', errors='replace'))
     s = re.sub(r'(?i)<(br|/p|/div|/li|/h\d|/tr)[^>]*>', '\n', s)
     return html.unescape(_TAG.sub(' ', s))
 
-def extract(name: str, data: bytes) -> str:
-    """The text of one file, by extension. Raises Unsupported for a kind we do not read."""
+def extract(name: str, data: bytes, pages: int = None, sheets: int = None, rows: int = None) -> str:
+    """The text of one file, by extension. Raises Unsupported for a kind we do not read. `pages` (pdf), `sheets` and `rows`
+    (xlsx) bound the read for a caller that wants the gist (attachtext); left None the whole file is read."""
     ext = name.lower().rsplit('.', 1)[-1] if '.' in name else ''
     if ext in ('txt', 'md', 'csv', 'tsv', 'json'): text = data.decode('utf-8', errors='replace')
     elif ext in ('html', 'htm'): text = _html(data)
     elif ext == 'docx': text = _docx(data)
     elif ext == 'pptx': text = _pptx(data)
-    elif ext == 'xlsx': text = _xlsx(data)
-    elif ext == 'pdf': text = _pdf(data)
+    elif ext == 'xlsx': text = _xlsx(data, sheets, rows)
+    elif ext == 'pdf': text = _pdf(data, pages)
     else: raise Unsupported(f'.{ext or "?"} is not a document kind the knowledge base reads ({", ".join(EXTS)})')
     text = _WS.sub(' ', text.replace('\x00', ''))
     return re.sub(r'\n{3,}', '\n\n', '\n'.join(l.strip() for l in text.splitlines())).strip()

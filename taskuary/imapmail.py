@@ -642,7 +642,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
     it oldest-first in batches, saving the watermark plus retry holes as each batch lands
     (PW-007/PW-008); the SINCE window applies to the first import only. The 25-highest-then-jump
     of before skipped the lower pending UIDs for good, and the date window hid a long absence."""
-    from .channels import images_for_triage, save_attachments, wants_read
+    from .channels import files_for_triage, images_for_triage, save_attachments, wants_read
     from .ingest import ingest_message
     M, user = _login(c)
     n = 0
@@ -726,6 +726,8 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
             from . import chains
             fresh_thread = bool(conv) and chains.needs_history(store, conv, user)
             incoming['images'] = images_for_triage(store, atts)
+            # the documents' text too - but not for a re-read mail ingest is about to drop as a duplicate
+            if atts and not store.message_exists(ext_id): incoming.update(files_for_triage(atts))
             out = ingest_message(store, file_only=file_only, msg=incoming, llm=llm)
             existing = store.message_by_external(ext_id) if not out.get('message_id') else None
             message_id = out.get('message_id') or (existing or {}).get('MessageId')

@@ -301,6 +301,15 @@ def replies_block(store, task_id: int) -> str:
     return '\n\n--- REPLIES ON THIS TASK (facts from the hub - they outrank anything above about what was or was not sent)\n' + '\n'.join(f'- {x}' for x in lines)
 
 
+def files_block(store, mids) -> str:
+    """WHAT THE FILES THEY SENT SAY, newest message first, so a draft can quote the clause or the total instead of promising
+    to look at the attachment. One budget for the thread (attachtext.MESSAGE_CHARS): the oldest files are the ones cut."""
+    from . import attachtext
+    try: got = [e for mid in mids for e in attachtext.of_message(store, mid)]
+    except Exception as e: logger.debug(f'responder: attachment text skipped - {e}'); return ''
+    b = attachtext.block(got, '--- THE FILES ATTACHED on this thread, newest first')
+    return f'\n\n{b}' if b else ''
+
 def _ask(llm, system, user, max_tokens, images=None):
     """The writer's call, with the thread's pictures when there are any. A brain that takes no images (a CLI that reads text
     only) is asked without them rather than failing the draft - the line in the prompt still says they were sent."""
@@ -374,6 +383,7 @@ def draft_reply(store, task_id: int, llm=None, resolution: str = None, nudge: st
     images = readable_images(store, [m['MessageId'] for m in reversed(msgs)])
     if images: user += (f'\n\n--- THE PICTURES THEY SENT on this thread ({len(images)}, newest first) are attached: look at them, '
                         'answer about what they show, and never ask for one they already sent.')
+    user += files_block(store, [m['MessageId'] for m in reversed(msgs)])
     if resolution: user += f'\n\n--- WHAT WAS DONE (your source of truth; the sender has not seen it)\n{resolution}'
     user += replies_block(store, task_id)
     if nudge: user += f'\n\n--- WHAT THE OWNER WANTS THIS REPLY TO SAY (it outranks everything above)\n{nudge}'
@@ -527,6 +537,7 @@ def draft_for_message(store, m: dict, review_id: int, llm=None, instruction: str
     from .llm import readable_images
     images = readable_images(store, [m['MessageId']]) if m.get('MessageId') else []
     if images: user += f"\n\n--- The picture{'s' if len(images) > 1 else ''} they sent with it {'are' if len(images) > 1 else 'is'} attached: look at {'them' if len(images) > 1 else 'it'}."
+    if m.get('MessageId'): user += files_block(store, [m['MessageId']])
     out = (_ask(llm, system, user, REPLY_TOKENS, images) or '').strip()
     if not out: raise RuntimeError('the AI returned an empty reply')
     out = (strip_signoff(out) or out) if chat else signed(out, signature_for(store, mailbox_in(m)))

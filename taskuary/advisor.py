@@ -237,6 +237,19 @@ def pill(label: str, count) -> str:
     return f'{label} · {n} of {m} times' if m >= 2 else str(label or '')
 
 
+ADVISOR_FILE_CHARS = (600, 1200)     # per file, per item - the Advisor writes one line, so it reads the gist
+
+
+def attached(store, target_kind, target_id) -> str:
+    "ATTACHED FILES for the item: the newest three inbound messages' documents, scrubbed and fenced (attachtext)."
+    from . import attachtext
+    mids = ([m['MessageId'] for m in store.list_messages(int(target_id)) if m.get('Status') != 'context' and m.get('Direction') != 'out'][-3:][::-1]
+            if target_kind == 'task' else [int(target_id)])
+    got = [e for mid in mids for e in attachtext.of_message(store, mid)]
+    return attachtext.block(got, 'ATTACHED FILES', cap=ADVISOR_FILE_CHARS[1], file_cap=ADVISOR_FILE_CHARS[0])
+
+
+
 # THE PROMPT IS BOUNDED: every section has its own cap, and past PROMPT_CAP characters whole sections go from the end - the least
 # pointed first (the month's outcomes, the hub's dossier, the owner's documents) - never a cut through a line. The item, its verbs,
 # what failed and what was sent always stay.
@@ -390,6 +403,10 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         target_kind, target_id = ('task', int(item['tid'])) if item.get('tid') else ('message', int(item['mid'])) if item.get('mid') else ('none', 0)
     try: lines.append(goal_line(store, t) if t and is_goal(t) else '')
     except Exception as e: logger.debug(f'advisor: no goal read for {item.get("key")} - {e}')
+    # what the files on it SAY, small (ADVISOR_FILE_CHARS): the preview is the mail's words, and "see attached" weighed blind
+    try: att = attached(store, target_kind, target_id)
+    except Exception as e: logger.debug(f'advisor: no attachment text for {item.get("key")} - {e}'); att = ''
+    if att: lines.append(att)
     try: f = failure(store, item)
     except Exception as e: logger.debug(f'advisor: no failure read for {item.get("key")} - {e}'); f = None
     if f: lines.append(f"WHAT FAILED: {f['what']} - {f['why'] or 'no reason was given'}"

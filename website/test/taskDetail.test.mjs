@@ -66,9 +66,10 @@ test("a task's session is held with it: unknown until read, null for a task no a
 test("Next draws what its capture names in the same frame as the fold, and the answer fills that line in place", () => {
   const view = src("AssistantView.jsx"), turns = src("assistantTurns.js");
   assert.match(view, /heldTask\(aheadItem\.tid\) && heldTerm\(aheadItem\.tid\) !== undefined/, "only from a read already held - never an empty view");
-  assert.match(view, /aheadRef\.current = \{ id: line\.id, key: aheadItem\.key \};\s+setMsgs\(\(m\) => \[\.\.\.m, line\]\);\s+putOnTable\(aheadItem\);/);
-  assert.match(view, /const id = ahead && card\?\.key === ahead\.key \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
-  assert.match(view, /if \(ahead\) \{ setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== ahead\.id\)\); putOnTable\(was\); \}/, "a failure puts the table back");
+  assert.match(view, /drawAhead\(\{ \.\.\.line, text: "", card: aheadItem \}\)/);
+  assert.match(view, /setMsgs\(\(m\) => \[\.\.\.m, \{ \.\.\.line, ahead: true \}\]\);\s+putOnTable\(line\.card\);/);
+  assert.match(view, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
+  assert.match(view, /setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== ahead\.id\)\);\s+const t = ahead\.table;/, "a failure puts the table back");
   assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
   assert.match(view, /i\.key === aheadKey && !i\.settling && i\.lane !== "working"/, "never an item an agent has: the server puts nothing up for it");
 });

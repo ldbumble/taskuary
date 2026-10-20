@@ -4371,7 +4371,13 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # pile, so the token Next echoes is the one a full read gives. Whatever is on the table or picked next is sent whole.
     if fyi is not None:
         p = funnel.page_fyi(p, max(0, int(fyi)), keep=(current, exclude, p.get('expected_next_key'), *(p.get('expected_next_members') or ())))
-    return funnel.present(store, p)
+    p = funnel.present(store, p)
+    # PREPARED NEXT (2026-10-20): the answer a press would give for THIS selection, so the page draws it at the press and the
+    # press's own answer only confirms it (concierge.prepare_next). Outside the display revision: it is made of rows it covers.
+    from . import concierge
+    try: p['prepared_next'] = concierge.prepare_next(store, capture, p.get('selection_revision'))
+    except Exception as e: logger.debug(f'no prepared Next: {e}'); p['prepared_next'] = None
+    return p
 
 def _pile_along(only: str = None, include_surfaced: bool = False, exclude: str = None, fyi: int = None) -> dict | None:
     """The rail read once after a write and carried in that write's answer, so the page holds it
@@ -4678,6 +4684,8 @@ async def concierge_stream(body: ConciergeStreamBody):
             # THE CARD FIRST, THE RAIL AFTER IT (the owner, 2026-10-20): the rail that rides along (design B) is read after the
             # turn's writes, and that read was most of a press - the card waited on it. `done` goes now and says the rail
             # follows; the rail comes as its own `pile` event, and the page keeps the rail it has until that one lands.
+            # the page drew the prepared answer at the press: this says whether the committed one is the same (prepare_next)
+            if body.mode == 'next' and not body.key: out['answer_hash'] = concierge.answer_hash(out)
             if body.mode == 'next' and _pile_rides(out, body):
                 rides[0] = True
                 put({'type': 'done', **out, 'pile_follows': True})

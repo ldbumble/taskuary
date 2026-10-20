@@ -21,7 +21,7 @@ from .timewords import back_in   # noqa: F401 - when a For later row comes back 
 _ITEM_SCHEMA = "taskuary.funnel.presentation.v1"
 _PILE_SCHEMA = "taskuary.funnel.display.v1"
 _SELF_FIELDS = {"presentation_revision"}
-_TRANSIENT_PILE_FIELDS = {"rev", "display_revision", "events", "captured_at", "generated_at"}
+_TRANSIENT_PILE_FIELDS = {"rev", "display_revision", "events", "captured_at", "generated_at", "prepared_next"}
 
 
 _ATOMIC = frozenset({str, int, float, bool, type(None), bytes})

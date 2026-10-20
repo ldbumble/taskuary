@@ -32,7 +32,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from . import spawn
+from . import pathcache, spawn
 
 WINDOWS = os.name == 'nt'
 MARK = '# added by Taskuary'                       # the rc line's fingerprint, so we append once
@@ -204,6 +204,7 @@ def reset() -> None:
     _STATE.clear()
     _STATE.update(phase='idle', name='', verb='install', detail='', path='', at=0.0)
 def _set(phase, name='', detail='', path='', verb='install'):
+    pathcache.forget()      # an install/update starts or ends: the next look at PATH is a fresh scan, whoever asks
     _STATE.update(phase=phase, name=name, verb=verb, detail=str(detail)[-400:], path=path, at=time.time())
 
 
@@ -233,7 +234,9 @@ def update(name: str, runner=None) -> dict:
             cmd = [exe] + list(r['args']) if r['how'] == 'self' else npm_install(r['pkg'])
             rc, out = (runner or _run)(cmd, timeout=r.get('timeout', 900))
         except Exception as e:
+            pathcache.forget()
             last = str(e); logger.warning(f'{name}: {r["how"]} update raised - {e}'); continue
+        pathcache.forget()              # the updater just ran: find() below must see what it left, not what was there
         if rc != 0:
             last = (f'{r["how"]} exited {rc}. See the installation terminal for full output.' if runner
                     else out or f'{r["how"]} exited {rc}')
@@ -267,12 +270,13 @@ NODE_WINGET = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Comma
                'winget install -e --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements']
 
 
-def can_get_node() -> bool: return WINDOWS and bool(shutil.which('winget'))
+def can_get_node() -> bool: return WINDOWS and bool(pathcache.which('winget'))
 
 
 def get_node(runner=None) -> str:
     """Install Node with winget and put it on this process's PATH. '' when npm answers after, else what went wrong."""
     rc, out = (runner or _run)(NODE_WINGET, timeout=600)
+    pathcache.forget()
     for d in (os.path.join(os.environ.get('ProgramFiles', r'C:\Program Files'), 'nodejs'),
               os.path.join(os.environ.get('APPDATA', ''), 'npm')):
         if os.path.isdir(d): ensure_on_path(d)
@@ -283,7 +287,7 @@ def get_node(runner=None) -> str:
 def npm() -> str:
     """The npm launcher, or ''. `npm` on Windows is npm.cmd, which which() finds only with the
     extension on some PATHs."""
-    return shutil.which('npm') or (shutil.which('npm.cmd') if WINDOWS else '') or ''
+    return pathcache.which('npm') or (pathcache.which('npm.cmd') if WINDOWS else '') or ''
 
 
 def bin_dir() -> Path:
@@ -412,6 +416,7 @@ def ensure_on_path(d, persist: bool = True) -> bool:
     here = os.environ.get('PATH', '').split(os.pathsep)
     changed = str(d) not in here
     if changed: os.environ['PATH'] = os.pathsep.join([*here, str(d)]) if here != [''] else str(d)
+    pathcache.forget()
     if persist:
         try: (persist_windows(d) if WINDOWS else persist_posix(d, Path.home()))
         except Exception as e: logger.warning(f'could not put {d} on the durable PATH: {e}')
@@ -481,6 +486,7 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
                     logger.warning(f'{name}: {r["how"]} failed - {last[-200:]}'); continue
                 last = out
         except Exception as e:
+            pathcache.forget()
             last = str(e); logger.warning(f'{name}: {r["how"]} raised - {e}')
             # A TIMEOUT IS NOT PROOF OF FAILURE. An installer that ends by starting the CLI's own
             # interactive wizard (devin's does) never returns when it is spawned with no terminal
@@ -488,6 +494,7 @@ def install(name: str, has_npm: bool = None, system: str = None, runner=None) ->
             # timeout gets this second look: any other exception left the install where it fell.
             if not (isinstance(e, subprocess.TimeoutExpired) and find(name)): continue
             last = 'the installer finished but its setup wizard needed a terminal'
+        pathcache.forget()              # the installer just ran: find() below must see what it left, not what was there
         # rc 0 proves the installer ran, not that anything is runnable: only a binary that starts does
         # that. The archive road names its own file - PATH's first copy may be the broken one it replaces.
         found = got or find(name)

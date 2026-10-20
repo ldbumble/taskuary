@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from loguru import logger
 
-from . import acp as acp_mod, redact, spawn
+from . import acp as acp_mod, pathcache, redact, spawn
 from .store import task_ref
 from .clis import preset_args
 
@@ -105,7 +105,7 @@ def _shim_target(path: str) -> list:
     if exe and js: return [exe, js]          # node.exe + the cli script
     if exe: return [exe]
     if js:
-        node = shutil.which('node')
+        node = pathcache.which('node')
         return [node, js] if node else []
     return []
 
@@ -127,14 +127,14 @@ def _resolve_cmd(name: str) -> list:
     """Windows can't CreateProcess a bare 'claude': npm installs it as claude.cmd, which only
     PATH-resolves via which(). Reaching THROUGH the shim beats running it under cmd /c - see
     _shim_target for why that difference decides whether a prompt arrives whole."""
-    path = shutil.which(name) or shutil.which(name, path=_fresh_path())
+    path = pathcache.which(name) or pathcache.which(name, path=_fresh_path())
     if not path and re.search(r'[\\/]', str(name)):
         # A saved ABSOLUTE path that has moved. codex installs itself into
         # ...\Codex\bin\<version hash>\codex.exe, so a profile pinned to one of those breaks on
         # the next update and reads as "the CLI is gone". The NAME is the durable half: ask PATH
         # again for it, which is what the owner would have done by hand.
         base = re.split(r'[\\/]', str(name))[-1]
-        path = shutil.which(base) or shutil.which(base, path=_fresh_path())
+        path = pathcache.which(base) or pathcache.which(base, path=_fresh_path())
         if path: logger.info(f'{name} has moved; using {path} instead')
     if not path:
         raise FileNotFoundError(f"'{name}' not found on PATH - is the CLI installed?")

@@ -252,6 +252,11 @@ _DECIDE = {
     # the slipped card's answers (spec 2026-10-12, build step 4): each is an outcome the ledger keeps
     'chase':           "chase the person who has gone quiet on the item - a short nudge in the owner's voice is drafted on the thread, copying whoever the ledger says moves them; nothing is sent",
     'let_go':          'let the quiet item go - the step somebody owed is dropped, or the follow-up is put down; three on one person and the Advisor stops raising them',
+    # the calendar's answers (calwrite.py): each DRAFTS for the owner's Send - nothing reaches a calendar before it
+    'accept_invite':   "accept the invite waiting on the owner - the yes is drafted, with a line they can change, for their Send",
+    'decline_invite':  "decline the invite waiting on the owner - the no is drafted for their Send",
+    'propose_time':    "propose another time for the invite - its free times are offered, and the pick is drafted for their Send",
+    'find_time':       "find a time for the meeting a thread asks for - free times that fit are offered, the pick drafted as an invite for their Send",
     'elsewhere':       "they answered elsewhere - `text`: where (a call, a meeting); the step somebody owed closes as done, or the follow-up is put down",
 }
 # ...each decision that IS a button says the button's name, read from buttons.json, so the model is told exactly today's buttons
@@ -278,9 +283,7 @@ PAGE_ONLY = {'new_task': "the page's own New task - the model makes one with tas
              'change_kind': 'a picker on the task page; the model changes it with task.set_kind', 'priority': 'a picker; the model uses task.update',
              'assign': 'a picker; the model uses task.update', 'pick_repo': 'a picker; the model uses task.set_repo',
              'make_report': 'turns the workflow being written on the page into a report draft - nothing saved, so the page alone holds it',
-             # an invite's answers and a thread's Find a time (calwrite.py): each drafts into the approval queue from the row
-             'accept_invite': "the invite's yes, drafted for the owner's Send", 'decline_invite': "the invite's no, drafted for the owner's Send",
-             'propose_time': 'a free time picked on the row, drafted as a counter-proposal', 'find_time': 'a free time picked on the row, drafted as an invite'}
+}
 def _has(store, v: str) -> bool:
     """A button that `needs` something (buttons.json: coding) is named only where it exists - no coding tool, no coding agent."""
     if store is None or buttons.VERBS.get(v, {}).get('needs') != 'coding': return True

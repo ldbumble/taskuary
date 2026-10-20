@@ -64,6 +64,7 @@ _CALL = re.compile(r'\n?\s*CALL:\s*(\{.*\})\s*$', re.I | re.S)
 # what the owner can decide about the thing on the table - each is a button the card already has
 VERBS = ('reply', 'approve', 'not_ours', 'not_ours_sender', 'block_sender', 'remember', 'coding_agent', 'regular_agent', 'mine', 'close', 'stop_agent',
          'chase', 'let_go', 'elsewhere',                 # the slipped card's answers (spec 2026-10-12)
+         'accept_invite', 'decline_invite', 'propose_time', 'find_time',    # the calendar's answers (calwrite.py)
          'rerun', 'setup', 'next', 'answer_agent', 'redraft', 'not_ours_kind',
          'confirm', 'cancel', 'none')
 # The coding hand-off had an old name (the key below), as if it were a profile or a brain - it is neither, a coding agent is any
@@ -741,6 +742,11 @@ def cannot(item: dict | None, verb: str, store=None) -> str:
         # approving an empty draft SENT NOTHING and closed the task anyway (2026-09-03); the card's button is Draft with AI (redraft needs a rid)
         how = f"Press {buttons.label('redraft', 'none')}, or say what to tell them" if item.get('rid') else 'Say what to tell them'
         return f"There is nothing to approve yet - no reply has been drafted on {what}. {how}, and it lands here for your yes."
+    # the calendar's answers belong to an invite still waiting on the owner, Find a time to a thread asking for one
+    if verb in CAL_ACT:
+        inv, meet = calendar_asks(store, item)
+        if not (meet if verb == 'find_time' else inv):
+            return f"There's no {'ask for a time' if verb == 'find_time' else 'invite waiting on your answer'} on {what}."
     # a calendar answer's note is the owner's line - no AI redrafts an RSVP (calwrite.py)
     if verb == 'redraft' and item.get('rid') and store is not None:
         from . import calwrite
@@ -828,21 +834,19 @@ def _general(store, item: dict) -> bool:
 
 
 CAL_KINDS = ('asked', 'todo', 'fyi', 'task', 'review')
+CAL_ACT = {'accept_invite': 'accept', 'decline_invite': 'decline', 'propose_time': 'propose', 'find_time': 'schedule'}
 
 def calendar_asks(store, item: dict | None) -> tuple:
     """(an invite waiting on the owner's answer, a thread asking to find a time) for the message behind this item - read off the
-    message itself (MailMetaJson 'cal', MeetJson), never its words. Neither while a calendar answer already waits on it; a reply
-    drafted on the thread (a review) still offers Find a time beside it."""
+    message itself (MailMetaJson 'cal', MeetJson), never its words. A drafted answer keeps them all on the row - pressing another
+    REPLACES it (the owner, 2026-10-20); one the calendar has taken ends them (calwrite.open_on)."""
     if store is None or not item or not item.get('mid') or item.get('kind') not in CAL_KINDS: return False, False
     from . import calwrite
     try: m = store.get_message(int(item['mid'])) or {}
     except (TypeError, ValueError): return False, False
-    if not m: return False, False
-    if any(r.get('Status') == 'pending' and calwrite.env_of(r).get('kind') == 'calendar' for r in store.reviews_for_message(m['MessageId'])):
-        return False, False
     t = (store.get_task(int(item['tid'])) or {}) if item.get('tid') else {}
-    if t.get('Status') in ('done', 'dropped'): return False, False
-    return item.get('kind') != 'review' and calwrite.needs_answer(calwrite.invite_of(m)), bool(calwrite.meet_of(m))
+    if not m or t.get('Status') in ('done', 'dropped'): return False, False
+    return calwrite.open_on(store, m)
 
 
 def chips_for(store, item: dict | None, first: str = None) -> list:
@@ -862,7 +866,10 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
     # thread asking to meet offers Find a time beside Reply (calwrite.py, the owner, 2026-10-20). An email reply is not how an
     # invite is answered, nor is it an agent's or a list's.
     inv, meet = calendar_asks(store, item)
-    if inv: verbs = ['accept_invite', 'decline_invite', 'propose_time'] + [v for v in verbs if v not in ('reply', 'mine', 'regular_agent')]
+    if inv:
+        rest = [v for v in verbs if v not in ('reply', 'mine', 'regular_agent')]
+        lead = [v for v in rest if v == 'approve']               # a drafted answer's Send leads; the other answers replace it
+        verbs = lead + ['accept_invite', 'decline_invite', 'propose_time'] + [v for v in rest if v not in lead]
     elif meet:
         at = next((verbs.index(v) + 1 for v in ('reply', 'redraft') if v in verbs), 0)
         verbs = verbs[:at] + ['find_time'] + verbs[at:]
@@ -2750,6 +2757,8 @@ _OPS = {'coding_agent': ('task.create_from_message', True), 'regular_agent': ('t
         # ...a send is NOT a settle (the owner, 2026-10-18: "sending and closing are two steps"): the item stays on the table with
         # its receipt, and Mark done or Next moves it - Approve on an agent's proposal runs that act alone, the same way
         'approve': ('review.approve', False),
+        # the calendar's answers DRAFT for the owner's Send (calwrite.draft) - on the desk the words only light the row's button
+        **{v: ('calendar.answer', False) for v in ('accept_invite', 'decline_invite', 'propose_time', 'find_time')},
         'answer_agent': ('agent.answer', True),
         # ...ending the session SETTLES the table, as AUTO below already says it does: it stayed False, so the walk held the same
         # item with the same button after it ran and the owner was stuck on it (2026-09-28: "it should just move to next")
@@ -2955,6 +2964,9 @@ def propose_for(store, dock_tid: int, decision: dict, item: dict | None, text: s
     elif verb in ('not_ours_remember', 'not_ours_sender'): target, params = it.get('mid'), {'scope': 'subject' if verb == 'not_ours_remember' else 'sender'}
     elif verb == 'block_sender': target = it.get('mid')      # the rule is keyed on the sender of THIS message
     elif verb == 'close': target = it.get('tid')        # an agent parked on it is stopped by the same close (close_task)
+    elif verb in CAL_ACT:
+        if not it.get('mid'): raise ValueError('nothing is on the table')
+        target, params = it['mid'], {'act': CAL_ACT[verb]}
     elif verb in ('chase', 'let_go', 'elsewhere'):
         if not it.get('key'): raise ValueError('nothing is on the table')
         target, params = it.get('tid') or it.get('idea') or it.get('mid') or 0, {'key': it['key'], 'text': d_text or text or None}

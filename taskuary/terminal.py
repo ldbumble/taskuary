@@ -816,6 +816,9 @@ def resume_seed(instruction: str = '', store=None, tid: int = None) -> str:
                 n = len(new)
                 parts.append(f'NEW SINCE YOUR LAST RUN: {plural(n, "message")} - read {"it" if n == 1 else "them"} '
                              f'and any attachments in {cpath} (the thread section) before you answer.')
+            # ...and a reply it drafted that the owner has since SENT: told nothing, it saved the same answer again (2026-10-20)
+            from .continuity import sent_block
+            if (sent := sent_block(store, tid, quote=0, cmd='`taskuary --follow-up --reply "<text>"`')): parts.append(sent)
         except Exception as e: logger.debug(f'resume seed: the new messages could not be named - {e}')
     return '\n\n'.join(parts)
 

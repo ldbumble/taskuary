@@ -168,11 +168,39 @@ def already_sent(store, task_id: int, text: str):
                  if w and w in (_words(r.get('FinalText')), _words(r.get('DraftText')))), None)
 
 
-def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None) -> dict:
+# ── one answer per message ──────────────────────────────────────────────────────────────
+# The agent drafted the reply, the owner sent it, the owner pressed Continue, and the agent drafted ANOTHER reply to the same
+# sender - nothing had come from them since, so it sat in Close out as if the first message were still unanswered (the owner,
+# 2026-10-20: "I replied with what the agent created, then reran the agent and it recreated some reply???"). A message the
+# work's answer already went to is answered; a second letter to it is a follow-up, said so, and only when the owner asked.
+FOLLOW_UP = 'a follow-up to your '
+def is_follow_up(rv) -> bool: return str((rv or {}).get('Reason') or '').startswith(FOLLOW_UP)
+
+
+def answered_by_work(store, task_id: int, mid):
+    """The reply already sent to `mid` that carried the work's answer - the agent wrote it, or it went after the agent had
+    reported - else None. An acknowledgement the owner sent BEFORE any work ("looking into it") answers nothing yet."""
+    rv = store.sent_reply(message_id=mid) if mid else None
+    if not rv: return None
+    if agent_drafted(rv): return rv
+    at = str(rv.get('DecidedAt') or rv.get('CreatedAt') or '')
+    worked = lambda c: c.get('ActorType') == 'assistant_agent' or str(c.get('Body') or '').startswith((*REPORTS, PAUSE_MARKER))
+    return rv if any(worked(c) and str(c.get('CreatedAt') or '') <= at for c in store.list_comments(task_id)) else None
+
+
+def owner_asked_since(store, task_id: int, at: str) -> bool:
+    """Did the owner write to this task's agent after `at` - their own words in its conversation, never a canned prompt?"""
+    from .general import USER_TYPE
+    return any(c.get('ActorType') == USER_TYPE and str(c.get('CreatedAt') or '') > str(at or '') for c in store.list_comments(task_id))
+
+
+def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: int = None, files=None, follow_up: bool = False) -> dict:
     """Put the agent's reply on the task as the pending draft - the same review the responder would
     write into (held, live or new; one per answer, PW-236), marked as the agent's. Nothing is sent:
     the owner approves it like every other reply. `files` are (name, bytes) pairs to attach; with no
-    text they go on the reply already pending - an agent that forgot the file adds it afterwards."""
+    text they go on the reply already pending - an agent that forgot the file adds it afterwards.
+    A message the work's answer already went to takes another only as a follow-up: `follow_up` (the agent says the owner
+    asked for it) or the owner's own words in the conversation since the send."""
     text = str(text or '').strip()
     if not text and files:
         rv = store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False)
@@ -196,8 +224,20 @@ def agent_reply(store, task_id: int, text: str, agent: str = 'agent', run_id: in
         store.add_comment(task_id, agent, 'agent', f'{agent} saved its answer on the task as the result - nobody is waiting on a reply, so nothing will be sent.')
         return {'ok': True, 'saved': 'result', 'artifact_id': art.get('ArtifactId'),
                 'not_attached': [f'{n}: nobody is waiting on a reply, so there is nothing to attach it to' for n, _ in files or []]}
+    sent = answered_by_work(store, task_id, mid)
+    if sent and not (follow_up or owner_asked_since(store, task_id, sent.get('DecidedAt'))):
+        from .continuity import clock, sent_to
+        to, at = sent_to(store, sent), clock(sent.get('DecidedAt'))
+        store.add_comment(task_id, agent, 'agent', f'{agent} tried to save another reply to {to}, but yours went at {at} and nothing new came from them since - '
+                                                   'nothing was put on the table.')
+        return {'ok': False, 'already_answered': True, 'review_id': sent['ReviewId'],
+                'why': f'a reply to {to} already went at {at}, and nothing new has come from them since - nothing was saved. '
+                       'Draft another only if the owner asked you to, and then say so: `taskuary --follow-up --reply "<text>"`.'}
     live = None if held else (store.pending_review(task_id, 'draft_reply', live_only=False) or store.pending_review(task_id, 'draft', live_only=False))
     why = f'{agent} wrote this reply in its session - approve to send'
+    if sent:
+        from .continuity import clock
+        why = f'{FOLLOW_UP}{clock(sent.get("DecidedAt"))} reply - {agent} wrote it in its session; approve to send'
     if held:
         rid = held['ReviewId']; store.unhold_review(rid, why)
     elif live:
@@ -358,6 +398,13 @@ def finish(store, task_id: int, rep: dict, run_id: int = None, actor: str = 'age
         if held: store.decide_review(held['ReviewId'], 'no_reply', None, actor, 'answered from the mail client before the work finished')
         mid = None
     elif fresh['state'] == 'changed': mid = fresh['mid']
+    # ...and a message the work's answer already WENT to, with nothing new from them since, is owed nothing more: a Continue
+    # after the owner sent the agent's reply ended with a second reply to the same sender waiting in Close out (2026-10-20)
+    if mid and not held and not own_draft(store, task_id) and (sent := answered_by_work(store, task_id, mid)):
+        from .continuity import clock, sent_to
+        store.add_comment(task_id, actor, 'agent', f'Your reply to {sent_to(store, sent)} already went at {clock(sent.get("DecidedAt"))} and nothing '
+                                                   'new came from them since - the result is filed with the report, no second reply drafted.')
+        mid = None
     # The terminal and report are already closed at this point. Publish that truth BEFORE the
     # reply-writing AI call: it can take seconds (or fail), and during that time the task used to
     # remain `in_progress` with no live agent. A pending review is already durable, so `waiting`
@@ -634,7 +681,8 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         store.update_review_reason(rid, why, run_id)
     elif live:
         rid = live['ReviewId']
-        store.update_review_reason(rid, why, run_id)
+        # ...a follow-up keeps saying it is one (agent_reply): these lines would make it the answer to the message again
+        if not is_follow_up(live): store.update_review_reason(rid, why, run_id)
     else:
         rid = store.add_review({'TaskId': task_id, 'MessageId': mid, 'RunId': run_id, 'Kind': 'draft_reply', 'Status': 'pending',
                                 'Reason': why if fresh.get('state') in ('changed', 'unresolved') else 'the agent finished the work - reply awaiting approval'})
@@ -644,8 +692,9 @@ def raise_reply(store, task_id: int, mid: int, run_id: int, rep: dict,
         # the agent that did the work wrote this reply itself (agent_reply): its words stand and no second
         # model rewrites them - only a thread that moved on (or could not be checked) is flagged for a reread
         who = str(rv.get('DraftBy'))[len(AGENT_DRAFT):] or 'the agent'
-        store.update_review_reason(rid, f"{who}'s own reply from the session - approve to send"
-                                   + (' (the thread moved on after it was written - reread it)' if fresh.get('state') == 'changed' else ''), run_id)
+        if not is_follow_up(rv):
+            store.update_review_reason(rid, f"{who}'s own reply from the session - approve to send"
+                                       + (' (the thread moved on after it was written - reread it)' if fresh.get('state') == 'changed' else ''), run_id)
         if fresh.get('state') in ('changed', 'unresolved'): store.mark_review_stale(rid)
         return
     src = complete_result or resolution_text(rep)

@@ -29,7 +29,7 @@ to whoever asked is yours to write when you know the answer best: save it with
 **`taskuary --reply "<text>"`** (or `--reply-file <path>`) and it is the reply waiting on John's
 approval, in your words. A reply written only in this chat is kept nowhere - Close out shows what
 `--reply` saved and nothing else, so "the reply above is ready" leaves John with no reply. A file the reply sends (a workbook you built, an export) goes with it: add **`--attach <path>`**, once per file -
-words that say "attached" carry nothing on their own. If you do not write the reply, Taskuary drafts one from the session. Keep the session readable: say what you determined, what you changed (files, commands,
+words that say "attached" carry nothing on their own. If you do not write the reply, Taskuary drafts one from the session. A reply already SENT is answered: draft no second one unless the owner asks for another message, and then say so with **`taskuary --follow-up --reply "<text>"`**. Keep the session readable: say what you determined, what you changed (files, commands,
 records, ids), and what is left - as you go, in plain lines. When the work is over, say so:
 **`taskuary --done "<one sentence>"`** (AGENT.md: progress and completion).
 

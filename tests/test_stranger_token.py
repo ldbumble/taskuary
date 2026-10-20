@@ -89,7 +89,7 @@ def test_a_stranger_token_uses_its_own_task_s_doors(monkeypatch):
     monkeypatch.setattr(floor, 'check', lambda p, tid, store=None: {})
     assert c.post(f'/api/hooks/claude/floor?task={t}', json={}, headers=ST(t)).status_code == 200
     assert c.post(f'/api/hooks/claude/floor?task={other}', json={}, headers=ST(t)).status_code == 403
-    monkeypatch.setattr(wrapup, 'agent_reply', lambda s, tid, text, agent, files=(): {'ok': True, 'tid': tid})
+    monkeypatch.setattr(wrapup, 'agent_reply', lambda s, tid, text, agent, files=(), follow_up=False: {'ok': True, 'tid': tid})
     assert c.post('/api/agent/reply', json={'task_id': t, 'text': 'hi'}, headers=ST(t)).json() == {'ok': True, 'tid': t}
     assert c.post('/api/agent/reply', json={'task_id': other, 'text': 'hi'}, headers=ST(t)).status_code == 403
     assert c.post('/api/hooks/claude', json={}, headers=ST(t)).status_code == 200

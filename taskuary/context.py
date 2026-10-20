@@ -282,6 +282,14 @@ def build(store, tid: int, msgs: list = None, repo: str = None) -> str:
     from . import playbooks
     pbs = playbooks.context_section(t)
     if pbs: parts.append(pbs)
+    # WHAT ALREADY WENT BACK: a sent reply reaches the thread only once its copy is read back in, and an agent that did not see its
+    # own draft go out wrote the same answer again (2026-10-20)
+    from .continuity import clock, sent_to
+    sent = store._rows("SELECT * FROM review WHERE TaskId=? AND Kind NOT IN ('action','slot') AND (DeliveryState='sent' OR (DeliveryState IS NULL "
+                       "AND Status IN ('approved','edited','sent'))) AND COALESCE(NULLIF(FinalText,''), DraftText, '')<>'' "
+                       'ORDER BY IFNULL(DecidedAt, CreatedAt) DESC LIMIT 3', (tid,))
+    if sent: parts.append('## Replies already SENT on this task (newest first - these went out; none of them is waiting)\n' + '\n\n'.join(
+        f"--- to {sent_to(store, r)} · sent {clock(r.get('DecidedAt'))}\n{_short(r.get('FinalText') or r.get('DraftText'), 1500)}" for r in sent))
     allm = store.list_messages(tid)
     if len(allm) > 1:
         # NEWEST FIRST, and what came after the agent's last run is never the part cut. Oldest-first under the cap kept the three

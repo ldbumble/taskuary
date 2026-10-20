@@ -12,9 +12,9 @@ rule silences the very corrections that would revoke it (learned.md's "Proposed 
   - skip a sender:     the same at SKIP_AT, and only for mail the headers call automated or bulk - skip hides it from the timeline
   - a whole domain:    DOMAIN_SENDERS automated senders on it, DOMAIN_AT put-downs between them, none taken up by anyone there
   - escalate a sender: ESCALATE_AT tasks from them the owner marked urgent by hand, and none of theirs ever put down
-NEVER for a colleague (the owner's own or team domains). Never an ignore or a skip for anyone the owner has written to - an
-escalate rule is for exactly the people one answers, so it may be (the owner, 2026-10-20). Never when an active rule already
-covers them. One rule question open at a time, the strongest first."""
+NEVER an ignore or a skip for a colleague (the owner's own or team domains) or for anyone the owner has written to. An
+escalate rule is for exactly those people - the boss whose every mail is marked urgent is on the owner's own domain and is
+answered - so it may be asked for them (the owner, 2026-10-20). Never when an active rule already covers them. One rule question open at a time, the strongest first."""
 import json, re
 from datetime import datetime, timedelta
 from loguru import logger
@@ -139,10 +139,12 @@ def candidates(store, state: dict = None, days: int = DAYS) -> list:
     state = state if state is not None else {i['Key']: i for i in store.list_ideas()}
     mine, me = _who(store)
     ev, out = evidence(store, days), []
-    ok = {em: r for em, r in ev.items() if _dom(em) and _dom(em) not in mine and em not in me}
+    ok = {em: r for em, r in ev.items() if _dom(em) and em not in me}
     for em, r in ok.items():
         down, up, urgent = len(r['down'] - r['up']), len(r['up']), len(r['urgent'])
-        if up == 0 and down >= IGNORE_AT and not covered(store, em, ('skip', 'ignore')) and not written_to(store, em):
+        # hiding mail is never for a colleague or anyone answered; escalating it may be (the module's head)
+        if (up == 0 and down >= IGNORE_AT and _dom(em) not in mine and not covered(store, em, ('skip', 'ignore'))
+                and not written_to(store, em)):
             act = 'skip' if r['auto'] and down >= SKIP_AT else 'ignore'
             seen = len(r['threads'])
             lead = f"all {plural(down, 'mail')}" if seen <= down else f"{down} of the {plural(seen, 'mail')}"

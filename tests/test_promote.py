@@ -98,7 +98,8 @@ class Promotion(unittest.TestCase):
                        'BodyText': 'on it', 'Status': 'context', 'Direction': 'out'})
         self.assertEqual(promote.ideas(s)[0]['action']['policy']['Action'], 'escalate')
         s2 = _store(); urgent(s2, 'erin@northwind.example', promote.ESCALATE_AT)
-        self.assertEqual(promote.ideas(s2), [], 'still never a colleague')
+        self.assertEqual(promote.ideas(s2)[0]['action']['policy'], {**promote.ideas(s2)[0]['action']['policy'], 'Action': 'escalate',
+                                                                    'Pattern': 'erin@northwind.example'}, 'the boss case: a colleague may be escalated')
 
     def test_a_domain_of_machines_is_one_question(self):
         s = _store()

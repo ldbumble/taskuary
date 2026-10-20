@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import asyncio
 import copy
+import functools
 import hashlib
 import json
 import threading
@@ -30,11 +31,18 @@ def _preview(body, n: int) -> str:
 
     Only the head of the body is scanned: a banner sits at the top, and running the stripper over
     every full body would put that work on every row of a 400-row feed.
+
+    Remembered: the answer is a pure function of the scanned head and n, and every rail build asked it again for
+    every row - the regexes were about half of the rebuild that rides along each Next (3,770 rows, 2026-10-20).
     """
-    from .triage import own_words, strip_footer
     text = str(body or '')
-    if not text: return ''
-    return (strip_footer(own_words(text[:n * 4])) or text)[:n]     # a preview is shown: the legal footer goes (2026-10-11)
+    return _preview_of(text[:n * 4], n) if text else ''
+
+
+@functools.lru_cache(maxsize=8192)
+def _preview_of(head: str, n: int) -> str:
+    from .triage import own_words, strip_footer
+    return (strip_footer(own_words(head)) or head)[:n]     # a preview is shown: the legal footer goes (2026-10-11)
 
 
 # THE MARK SAYS WHERE THE WORK CAME FROM (the owner, 2026-09-25), not which message is newest. A report run that joined

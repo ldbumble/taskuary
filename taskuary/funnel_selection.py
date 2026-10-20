@@ -13,7 +13,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from .funnel_presentation import item_revision
+from .funnel_presentation import detach, item_revision
 
 
 _SCHEMA = "taskuary.funnel.selection.v1"
@@ -103,7 +103,7 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
 def _selection_facts(item: dict) -> dict:
     from . import funnel
 
-    facts = {name: copy.deepcopy(item.get(name)) for name in (
+    facts = {name: detach(item.get(name)) for name in (
         "key", "lane", "settling", "surfaced", "surfaced_at", "actionable", "unread", "deferred",
     )}
     facts["not_yet"] = funnel._not_yet(item)
@@ -125,7 +125,7 @@ def _batch(first: dict, ready: list[dict], size: int) -> tuple[dict, tuple[str, 
         "since": members[0].get("since"),
         "channel": members[0].get("channel"),
         "why": "people told you things; nothing to do",
-        "items": copy.deepcopy(members),
+        "items": detach(members),
         "members": list(keys),
     }
     # The children were stamped together with the displayed pile.  Re-reading
@@ -181,8 +181,9 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     else:
         # The HTTP read path already owns funnel.pile's invalidation-aware single-flight cache.
         # Capture selection from that exact pile instead of rebuilding canonical membership a
-        # second time. A detached presentation keeps cache callers from mutating one another.
-        pile = funnel.present(store, copy.deepcopy(pile))
+        # second time. A detached presentation keeps cache callers from mutating one another:
+        # present() detaches its own copy and never writes to what it is handed.
+        pile = funnel.present(store, pile)
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     # waiting on the owner first (funnel.leads), then unread, then anything ready: the same order as the legacy walk, and
@@ -192,7 +193,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     if first is not None and funnel.batchable(first):
         selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))
     else:
-        selected = copy.deepcopy(first) if first is not None else None
+        selected = detach(first) if first is not None else None
         member_keys = (selected["key"],) if selected is not None else ()
 
     pending = {
@@ -222,8 +223,8 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     return SelectionCapture(
         revision=_digest(stable),
         scope=copy.deepcopy(scope),
-        pile=copy.deepcopy(pile),
-        selected=copy.deepcopy(selected),
+        pile=pile,                   # present()'s own fresh copy: nothing else holds it
+        selected=detach(selected),
         member_keys=member_keys,
         pending=copy.deepcopy(pending),
     )

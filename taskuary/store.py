@@ -1937,7 +1937,7 @@ class SQLiteStore:
         t = _fold(term).replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         return f'%{t}%'
 
-    def _search_where(self, q):
+    def _search_where(self, q, shown=False):
         """AND of the typed words; each word may match the task OR any of its messages.
 
         Taken from PR #49, which had the field list right - the same eighteen the Tasks tab used to
@@ -1945,16 +1945,20 @@ class SQLiteStore:
         change is tq_fold on both sides: #49 lowered the pattern in Python (Unicode) and the column
         in SQL (ASCII), so a task titled "MULLER invoice" with an umlaut was findable by no
         spelling of the word at all.
+
+        `shown`: only what a hit can show it matched on (search.py) - Status and Priority are the
+        Tasks tab's columns, and in the one search box "open" listed every open task, ahead of the
+        one that said it (the 2026-10-19 UI walk). That box asks for a status as `status:open`.
         """
         where, p = [], []
+        hide = '' if shown else "OR tq_fold(t.Status) LIKE ? ESCAPE '\\' OR tq_fold(t.Priority) LIKE ? ESCAPE '\\'"
         for term in str(q or '').split():
             pat = self._like_pat(term)
-            where.append("""(
+            where.append(f"""(
                 tq_fold(t.Title) LIKE ? ESCAPE '\\'
                 OR tq_fold(t.Summary) LIKE ? ESCAPE '\\'
                 OR tq_fold(t.Kind) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Status) LIKE ? ESCAPE '\\'
-                OR tq_fold(t.Priority) LIKE ? ESCAPE '\\'
+                {hide}
                 OR tq_fold(t.Assignee) LIKE ? ESCAPE '\\'
                 OR tq_fold(t.Source) LIKE ? ESCAPE '\\'
                 OR tq_fold(t.SourceRef) LIKE ? ESCAPE '\\'
@@ -1976,7 +1980,7 @@ class SQLiteStore:
             )""")
             # "TQ-796" finds TQ-0796: the ref is matched with its padding zeros read as none
             ref = re.sub(r'^tq-?0*(?=\d)', 'tq-', _fold(term))
-            p.extend([pat] * 11 + [self._like_pat(ref)] + [pat] * 7)
+            p.extend([pat] * (9 if shown else 11) + [self._like_pat(ref)] + [pat] * 7)
         return where, p
 
     def worked_today_task_ids(self) -> set:
@@ -1987,7 +1991,7 @@ class SQLiteStore:
             "SELECT DISTINCT m.LocalId FROM funnel_state f JOIN processing_member m ON f.Key='processing:'||m.ItemId "
             "WHERE m.EntityKind='task' AND m.RetiredAt IS NULL AND f.By IN ('owner','you') "
             "AND f.At >= date('now','localtime')") if str(r['LocalId']).isdigit()}
-    def list_tasks(self, status=None, active_only=False, q=None, also=()):
+    def list_tasks(self, status=None, active_only=False, q=None, also=(), shown=False):
         """Task rows, each carrying its latest review, run and handover note.
 
         `q` searches HERE rather than in the browser. It used to be six more GROUP_CONCAT(DISTINCT)
@@ -2033,7 +2037,7 @@ class SQLiteStore:
             where.append("(t.Status IN ('open','in_progress','waiting') "
                          "OR (t.Status='done' AND IFNULL(t.ClosedAt, t.UpdatedAt) >= date('now','localtime'))"
                          + ''.join(f" OR t.TaskId={int(i)}" for i in also) + ")")
-        qw, qp = self._search_where(q)
+        qw, qp = self._search_where(q, shown)
         where += qw; p += qp
         if where:
             query += ' WHERE ' + ' AND '.join(where)

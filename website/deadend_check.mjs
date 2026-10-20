@@ -12,6 +12,7 @@
 //   faults    a seeded world with a mocked mailbox: each failure failures.classify knows, forced, then its way out pressed
 //   cards     a proposal card cancelled, then pressed; a task folded by its X, then opened again from its line and the rail
 //   links     the demo: links to a connector and a setting, from a fresh page and over their open page, Back, and Next's address
+//   search    the demo: Enter typed over an earlier answer and before any, the count past the cap, a connection by name, a phone
 //
 // The rules, checked at every step:
 //   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
@@ -40,8 +41,10 @@
 //             2026-10-19 UI walk: #connector= did nothing over an open Connections, a search hit opened its group at the top)
 //   BACK      the browser's Back after two opens is not the first, or leaves the app (it left it: no step was ever written)
 //   ADDRESS   the address names a task the table has moved past - a reload would open it again
+//   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
+//             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //
-//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links]
+//   node website/deadend_check.mjs [--port 7799] [--keep] [--no-build] [--json] [--only walk,sweep,faults,cards,links,search]
 //
 // It builds the page from THIS checkout's source into a scratch folder (--no-build: the committed bundle) and starts its own servers
 // on throwaway homes (never the owner's 7787).
@@ -59,7 +62,7 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
 // on the fixed 7799..7802 and one of them "never came up" (2026-10-18). --port N pins N, N+1, N+2, N+3 as before.
 const fixed = process.argv.includes("--port"), port = Number(arg("--port", 7799)), keep = process.argv.includes("--keep"), build = !process.argv.includes("--no-build");
-const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links")).split(","));
+const only = new Set(String(arg("--only", "walk,sweep,faults,cards,links,search")).split(","));
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -719,8 +722,83 @@ async function links() {
   await page.close(); srv.stop();
 }
 
+// THE ONE SEARCH (the 2026-10-19 UI walk, G9): what Enter opens is what was typed, the count is the whole count, a setting or a
+// connection is found and opened, focus goes to what opened, and a phone has the box
+async function searchPass() {
+  const srv = await serve(0), page = await pageOn(srv, "search");
+  const find = async (q) => (await srv.api("GET", `/api/search?q=${encodeURIComponent(q)}`)) || {};
+  const tasks = ((await find("status:open")).hits || []).concat((await find("status:done")).hits || []);
+  const box = async () => { await page.click("[data-tq-search-open]"); await page.waitForSelector("[data-tq-search-input]"); return wait(300); };
+  const settledOn = () => page.waitForSelector("[data-tq-search-settled='true']", { timeout: 8000 }).then(() => true, () => false);
+  // the task on the table, and focus in its box (its terminal's own box counts) - not on the search bar, nor on the box before
+  const opened = (tid, ms = 8000) => page.waitForFunction((t) => {
+    const e = document.querySelector(`[data-tq-canvas-item] [data-tq-task-page="${t}"]`)?.closest("[data-tq-canvas-item]");
+    return e && !document.querySelector("[data-tq-search-input]") && e.contains(document.activeElement);
+  }, { timeout: ms }, tid).then(() => "", async () => page.evaluate((t) => {
+    const e = document.querySelector(`[data-tq-canvas-item] [data-tq-task-page="${t}"]`), a = document.activeElement;
+    return document.querySelector("[data-tq-search-input]") ? "the search stayed open" : !e ? `nothing put task ${t} on the table`
+      : `focus is on ${a?.getAttribute("aria-label") || a?.className || a?.tagName}, not in task ${t}'s box`;
+  }, tid));
+  // the race: one word typed and answered, then another task's id typed over it and Enter at once - its task opens, not the first's
+  const [a, b, c] = tasks.filter((t) => /\w{4,}/.test(t.title)).slice(-3);
+  if (!c) note("SEARCH", page.step, `the demo has ${tasks.length} tasks to search for - the Enter race was not walked`);
+  else {
+    page.step = "search enter race";
+    await box();
+    await page.type("[data-tq-search-input]", a.title.match(/\w{4,}/)[0]);
+    if (!(await settledOn())) note("SEARCH", page.step, `"${a.title}" was never answered`);
+    await page.keyboard.down("Control"); await page.keyboard.press("a"); await page.keyboard.up("Control");     // a triple click selects nothing here
+    await page.keyboard.type(b.ref); await page.keyboard.press("Enter");
+    const why = await opened(b.tid);
+    if (why) note("SEARCH", page.step, `${b.ref} typed over an answered word and Enter pressed at once: ${why}`);
+    // ...and Enter before any answer came back at all: held, then spent on the answer
+    page.step = "search enter early";
+    await box();
+    await page.keyboard.type(c.ref); await page.keyboard.press("Enter");
+    const early = await opened(c.tid);
+    if (early) note("SEARCH", page.step, `${c.ref} typed and Enter pressed before any answer: ${early}`);
+    walked.push("search: Enter over an earlier answer and before any");
+  }
+  // the count: a word on more tasks than the list holds says how many there were, never "8 of 8"
+  page.step = "search totals";
+  const words = [...new Set(tasks.flatMap((t) => t.title.toLowerCase().match(/[a-z]{3,}/g) || []))];
+  let big = null;
+  for (const w of words) { const r = await find(w); if ((r.totals?.task || 0) > r.hits.filter((h) => h.type === "task").length) { big = { w, r }; break; } }
+  if (!big) walked.push("search: no word in the demo is on more tasks than the list holds - the count past the cap is the unit tests'");
+  else {
+    await page.keyboard.press("Escape"); await wait(300); await box();
+    await page.type("[data-tq-search-input]", big.w); await settledOn();
+    const foot = await page.$eval("[data-tq-search-count]", (e) => e.innerText).catch(() => "");
+    const [shown, of] = (foot.match(/(\d+) of (\d+)/) || []).slice(1).map(Number);
+    if (!(of > shown)) note("SEARCH", page.step, `"${big.w}" is on ${big.r.totals.task} tasks and the list says "${foot}"`);
+    walked.push("search: the count past the cap");
+  }
+  // a connection by its name: found, and Enter opens its card on the canvas
+  page.step = "search connection";
+  await page.keyboard.press("Escape"); await wait(300); await box();
+  await page.type("[data-tq-search-input]", "Gmail"); await settledOn();
+  if (!(await page.$("[data-tq-search-hit='con:gmail']"))) note("SEARCH", page.step, `"Gmail" did not find the Gmail connection`);
+  else {
+    await page.keyboard.press("Enter"); await wait(4000);
+    const card = await page.evaluate(() => {
+      const e = [...document.querySelectorAll("[data-tq-browse-one]")].find((x) => x.getBoundingClientRect().height > 0), r = e?.getBoundingClientRect();
+      return e ? { text: e.innerText.slice(0, 200), inView: r.top < innerHeight - 40 && r.bottom > 40 } : null;
+    });
+    if (!card?.inView || !/gmail/i.test(card.text)) note("SEARCH", page.step, `Enter on the Gmail hit left ${card ? `"${card.text.slice(0, 60)}"` : "no card"} on the canvas`);
+    walked.push("search: a connection found by name and opened");
+  }
+  // a phone: the box is there, as its icon, and opens
+  page.step = "search phone";
+  await page.setViewport({ width: 390, height: 844 }); await wait(1500);
+  const trig = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-search-open]")].find((x) => x.getBoundingClientRect().width > 0), r = e?.getBoundingClientRect();
+    return e ? r.right <= innerWidth && r.bottom > 0 : false; });
+  if (!trig) note("SEARCH", page.step, "at 390px wide there is no search to press");
+  else { await box(); if (!(await page.$("[data-tq-search-input]"))) note("SEARCH", page.step, "at 390px the search did not open"); walked.push("search: at a phone's width"); }
+  await page.close(); srv.stop();
+}
+
 browser = await launch();
-const phases = { walk, sweep, faults, cards, links };
+const phases = { walk, sweep, faults, cards, links, search: searchPass };
 for (const [name, run] of Object.entries(phases)) {
   if (!only.has(name)) continue;
   try { await run(); } catch (e) { note("CRASH", name, `the ${name} pass did not finish: ${e.message.split("\n")[0]}`); }

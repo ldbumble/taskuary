@@ -428,8 +428,9 @@ export default function TaskHubPage() {
           <ViewSwitch view={tab === "Board" ? "board" : asstGame ? "game" : "chat"}
             onView={(v) => { if (v === "board") { go("Board"); return; } pickAsstGame(v === "game"); setStageMode("chat"); go("Assistant"); }} />
           {/* SEARCH, on the top line (the owner, 2026-10-14) - from the Board it goes to the Assistant, whose rail owns the hits */}
-          <Box sx={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0, px: { xs: 0, md: 2 } }}>
-            <Box sx={{ width: "100%", maxWidth: 420, display: { xs: "none", sm: "block" } }}>
+          {/* ...on a phone too, as its icon at the line's end (SearchBar): it was display:none there (the 2026-10-19 UI walk) */}
+          <Box sx={{ flex: 1, display: "flex", justifyContent: { xs: "flex-end", sm: "center" }, minWidth: 0, px: { xs: 0, md: 2 } }}>
+            <Box sx={{ width: { xs: "auto", sm: "100%" }, maxWidth: 420 }}>
               <SearchBar onOpen={openSearch} />
             </Box>
           </Box>

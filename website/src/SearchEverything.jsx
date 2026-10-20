@@ -14,9 +14,11 @@ import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PowerOutlinedIcon from "@mui/icons-material/PowerOutlined";
+import TuneIcon from "@mui/icons-material/Tune";
 import api from "./api";
+import { openAppLink } from "./appLinks.js";
 import { ago } from "./timeWords.js";
-import { arrange, filters, kindOf, marks, meta, terms } from "./searchHits.js";
+import { arrange, asks, countWords, filters, kindOf, marks, meta, nothingMatches, terms, totalOf } from "./searchHits.js";
 import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS, ACCENT, mono } from "./theme.jsx";
 
 // colour identifies, it never shouts: each pill is a pale tint with its own ink, from the five colours - never the
@@ -24,7 +26,7 @@ import { ASSISTANT, BORDER, DIM, FAINT, INK, PANEL, PANEL2, PALETTE, PILL_COLORS
 const TONES = { slate: [PALETTE.slate, "#e6ebef"], sage: [PALETTE.sage, "#e5ece2"], brass: [PALETTE.brass, "#ede7da"],
   oat: [PALETTE.oat, "#ece8e1"], advisor: [ASSISTANT.ink, "#e8eee4"], pick: [PILL_COLORS.pick.fg, PILL_COLORS.pick.bg] };
 const ICONS = { task: TaskAltIcon, email: MailOutlineIcon, chat: ChatBubbleOutlineIcon, pr: CallMergeIcon, issue: AdjustIcon,
-  advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon };
+  advisor: PsychologyOutlinedIcon, report: BarChartIcon, source: PowerOutlinedIcon, setting: TuneIcon, connector: PowerOutlinedIcon };
 const MARK = "#efe3bf";            // the matched words: a highlighter's wash, not a colour that means anything
 
 export function Pill({ hit, sx }) {
@@ -54,17 +56,20 @@ export const openSearch = () => window.dispatchEvent(new Event(OPEN_SEARCH));
 // a hit was picked: the page around the search (TaskHubPage) brings Chat up, which is where a pick is drawn
 export const SEARCH_PICKED = "tq-search-picked";
 export const searchPicked = () => window.dispatchEvent(new Event(SEARCH_PICKED));
+// ...and AT A PHONE'S WIDTH THE SAME BUTTON, as its icon (the 2026-10-19 UI walk, G13): the bar was display:none there, so a
+// phone had no search at all
 export function SearchBar({ onOpen }) {
   return (
     <Box component="button" type="button" onClick={onOpen} data-tq-search-open="true" aria-label="Search everything (Ctrl+K)"
-      sx={{ display: "flex", alignItems: "center", gap: 0.9, width: "100%", height: 32, px: 1.1, cursor: "text",
+      sx={{ display: "flex", alignItems: "center", justifyContent: { xs: "center", sm: "flex-start" }, gap: 0.9,
+        width: { xs: 32, sm: "100%" }, height: 32, px: { xs: 0, sm: 1.1 }, cursor: "text",
         border: `1px solid ${BORDER}`, borderRadius: "9px", bgcolor: PANEL, fontFamily: "inherit", textAlign: "left",
         transition: "border-color .15s, box-shadow .15s",
         "&:hover": { borderColor: "#cfc7bb", boxShadow: "0 1px 3px rgba(30,50,38,.06)" } }}>
       <SearchIcon sx={{ fontSize: 16, color: FAINT }} />
-      <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        Search tasks, mail, chats, PRs…</Box>
-      <Kbd>Ctrl K</Kbd>
+      <Box component="span" sx={{ flex: 1, fontSize: 12.5, color: FAINT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        display: { xs: "none", sm: "block" } }}>Search tasks, mail, chats, PRs…</Box>
+      <Box component="span" sx={{ display: { xs: "none", sm: "inline-flex" } }}><Kbd>Ctrl K</Kbd></Box>
     </Box>
   );
 }
@@ -85,9 +90,10 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Marked text={hit.title} words={words} /></Box>
           {hit.more > 0 && <Box component="span" sx={{ fontSize: 10.5, color: FAINT, flexShrink: 0 }}>+{hit.more} in thread</Box>}
         </Box>
-        {(m.length > 0 || hit.when) && (
+        {/* the sender and the place are marked too, and a match nothing on the row shows is said (search.py `why`) */}
+        {(m.length > 0 || hit.when || hit.why) && (
           <Box sx={{ fontSize: 11.5, color: FAINT, mt: 0.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {[...m, hit.when ? ago(hit.when) : ""].filter(Boolean).join(" · ")}</Box>
+            <Marked text={[...m, hit.when ? ago(hit.when) : "", hit.why || ""].filter(Boolean).join(" · ")} words={words} /></Box>
         )}
         {hit.snippet && (
           <Box sx={{ fontSize: 11.5, color: DIM, mt: 0.35, lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2,
@@ -107,22 +113,43 @@ function Row({ hit, words, on, onPick, onTask, onHover }) {
   );
 }
 
+// FOCUS GOES TO WHAT WAS OPENED (the 2026-10-19 UI walk): the dialog gave it back to the search bar, a screen away from the task.
+// The canvas draws the pick a moment later, under its own key: its box is focused once it is there - the one holding the task, or
+// for a mail no task holds, the one that was not on the table before
+const ITEM = "[data-tq-canvas-item]";
+const focusDrawn = (tid) => {
+  if (typeof window === "undefined" || !window.requestAnimationFrame) return;
+  const t0 = Date.now(), before = new Set(document.querySelectorAll(ITEM));
+  const tick = () => {
+    const el = tid ? document.querySelector(`${ITEM} [data-tq-task-page="${Number(tid)}"]`)?.closest(ITEM)
+      : [...document.querySelectorAll(ITEM)].find((e) => !before.has(e));
+    if (el) { if (!el.contains(document.activeElement)) el.focus({ preventScroll: true }); }    // its own terminal keeps the keys
+    else if (Date.now() - t0 < 5000) window.requestAnimationFrame(tick);
+  };
+  window.requestAnimationFrame(tick);
+};
+
 export default function SearchEverything({ open, onClose, onOpenTask, onOpenMessage, onPickSource }) {
   const [q, setQ] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false);
   const [only, setOnly] = useState(""), [at, setAt] = useState(0);
-  useEffect(() => { if (!open) { setQ(""); setRes(null); setOnly(""); setAt(0); } }, [open]);
+  // ENTER OPENS WHAT WAS TYPED (the 2026-10-19 UI walk, G9): Enter straight after typing opened the LAST query's top hit - the rows
+  // on screen were still the old words' - or, before any answer, did nothing. The rows count only when they answer the words in
+  // the box (`settled`); an Enter before that is held for these words and spent on their answer's first row
+  const typed = useRef(""), held = useRef("");
+  const settled = !!res && res.q === q.trim() && !busy;
+  useEffect(() => { if (!open) { setQ(""); setRes(null); setOnly(""); setAt(0); typed.current = held.current = ""; } }, [open]);
   useEffect(() => {
     const t = q.trim();
-    if (terms(t).length === 0) { setRes(null); setBusy(false); return undefined; }
+    if (!asks(t)) { setRes(null); setBusy(false); held.current = ""; return undefined; }
     let alive = true; setBusy(true);
     const h = setTimeout(() => api.get("/api/search", { params: { q: t } })
-      .then(({ data }) => { if (alive) { setRes(data); setAt(0); } })
+      .then(({ data }) => { if (alive) { setRes({ ...data, q: t }); setAt(0); } })
       .catch(() => { if (alive) setRes({ q: t, hits: [], failed: true }); })
       .finally(() => { if (alive) setBusy(false); }), 180);
     return () => { alive = false; clearTimeout(h); };
   }, [q]);
   const hits = res?.hits || [];
-  const strip = useMemo(() => filters(hits), [hits]);
+  const strip = useMemo(() => filters(hits, res), [hits, res]);
   const shown = useMemo(() => arrange(hits, only), [hits, only]);
   const words = useMemo(() => terms(res?.q || ""), [res]);
   useEffect(() => { if (only && !strip.some((f) => f.key === only)) setOnly(""); }, [strip, only]);
@@ -130,31 +157,47 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
   const pick = (h) => {
     if (!h) return;
     onClose();
-    if (h.type === "task") onOpenTask?.(h.tid, h);
+    // a setting or a connection: the page that holds it, by its link - the road every in-app link takes, which brings it to view
+    if (h.href) { searchPicked(); openAppLink(h.href); }
+    else if (h.type === "task") { onOpenTask?.(h.tid, h); focusDrawn(h.tid); }
     else if (h.type === "source") onPickSource?.(h.pick);
-    else if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h);
+    else { if (!onOpenMessage?.(h.mid, h) && h.tid) onOpenTask?.(h.tid, h); focusDrawn(h.tid); }
   };
+  // the held Enter, spent when its words' answer lands - on nothing, when they found nothing (the empty line says so)
+  useEffect(() => {
+    if (!held.current || !settled || held.current !== res.q) return;
+    held.current = ""; pick(shown.flat[0]);
+  });
   const key = (e) => {
     const n = shown.flat.length;
     if (e.key === "ArrowDown") { e.preventDefault(); setAt((i) => (n ? (i + 1) % n : 0)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setAt((i) => (n ? (i - 1 + n) % n : 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); pick(shown.flat[at]); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const t = typed.current.trim();
+      if (settled && res.q === t) pick(shown.flat[at]);
+      else if (asks(t)) held.current = t;
+    }
     else if (e.key === "Tab" && strip.length > 1) {
       e.preventDefault();
       const i = strip.findIndex((f) => f.key === only), next = strip[(i + (e.shiftKey ? -1 : 1) + strip.length) % strip.length];
       setOnly(next.key); setAt(0);
     }
   };
+  // "8 of 23" where the list is cut, and the way to see the rest: more words
+  const all = totalOf(res, only), groupCount = (g) => { const t = totalOf(res, g.group); return t.n > g.hits.length || t.more ? `${g.hits.length} of ${countWords(t)}` : g.hits.length; };
+  const footer = all.n > shown.flat.length || all.more ? `${shown.flat.length} of ${countWords(all)} · add a word to narrow` : `${shown.flat.length} of ${all.n}`;
   let i = -1;
   return (
-    <Dialog open={open} onClose={onClose} data-tq-search="true"
+    <Dialog open={open} onClose={onClose} data-tq-search="true" disableRestoreFocus
       slotProps={{ backdrop: { sx: { bgcolor: "rgba(38,37,33,.28)", backdropFilter: "blur(2px)" } } }}
       sx={{ "& .MuiDialog-container": { alignItems: "flex-start" } }}
       PaperProps={{ sx: { mt: "9vh", width: 680, maxWidth: "calc(100vw - 32px)", borderRadius: "14px", bgcolor: PANEL,
         border: `1px solid #dad4cb`, boxShadow: "0 24px 64px rgba(30,50,38,.22)", overflow: "hidden", m: 2 } }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 2, height: 56, borderBottom: `1px solid ${BORDER}` }}>
         <SearchIcon sx={{ fontSize: 21, color: q ? INK : FAINT }} />
-        <InputBase autoFocus fullWidth value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={key}
+        <InputBase autoFocus fullWidth value={q} onKeyDown={key}
+          onChange={(e) => { typed.current = e.target.value; if (held.current !== e.target.value.trim()) held.current = ""; setQ(e.target.value); }}
           placeholder="Search tasks, mail, chats, pull requests, the Advisor…" inputProps={{ "aria-label": "Search everything", "data-tq-search-input": "true" }}
           sx={{ fontSize: 16, color: INK, "& input::placeholder": { color: FAINT, opacity: 1 } }} />
         <Kbd>Esc</Kbd>
@@ -174,7 +217,9 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
           ))}
         </Box>
       )}
-      <Box role="listbox" sx={{ maxHeight: "min(60vh, 560px)", overflowY: "auto", py: 0.75 }}>
+      {/* rows that answer earlier words are drawn faint until the answer for these lands: they are not what Enter opens */}
+      <Box role="listbox" data-tq-search-settled={settled ? "true" : "false"}
+        sx={{ maxHeight: "min(60vh, 560px)", overflowY: "auto", py: 0.75, opacity: res && !settled ? 0.5 : 1, transition: "opacity .12s" }}>
         {!res && (
           <Box sx={{ px: 2.5, py: 3, textAlign: "center" }}>
             <Box sx={{ display: "flex", justifyContent: "center", gap: 0.6, flexWrap: "wrap", mb: 1.25 }}>
@@ -185,15 +230,15 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
         )}
         {res && !hits.length && !busy && (
           <Box sx={{ px: 2.5, py: 3, textAlign: "center", fontSize: 12.5, color: DIM }}>
-            {res.failed ? "Search didn't answer - try again in a moment." : <>Nothing matches “{res.q}”.</>}</Box>
+            {res.failed ? "Search didn't answer - try again in a moment." : nothingMatches(res.q)}</Box>
         )}
         {shown.groups.map((g) => (
           <Box key={g.group} sx={{ mb: 0.5 }}>
             <Box sx={{ px: 2.25, pt: 1, pb: 0.4, fontSize: 11.5, fontWeight: 600, color: FAINT, display: "flex", gap: 0.6 }}>
-              {g.group}<Box component="span" sx={{ fontWeight: 500 }}>{g.hits.length}</Box></Box>
+              {g.group}<Box component="span" sx={{ fontWeight: 500 }}>{groupCount(g)}</Box></Box>
             {g.hits.map((h) => { i += 1; const n = i; return (
               <Row key={h.id} hit={h} words={words} on={n === at} onPick={pick} onHover={() => n !== at && setAt(n)}
-                onTask={(tid) => { onClose(); onOpenTask?.(tid); }} />); })}
+                onTask={(tid) => { onClose(); onOpenTask?.(tid); focusDrawn(tid); }} />); })}
           </Box>
         ))}
       </Box>
@@ -203,7 +248,7 @@ export default function SearchEverything({ open, onClose, onOpenTask, onOpenMess
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Enter</Kbd>open</Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}><Kbd>Tab</Kbd>kind</Box>
         <Box sx={{ flex: 1 }} />
-        {res && hits.length > 0 && <Box>{shown.flat.length} of {hits.length}</Box>}
+        {res && hits.length > 0 && <Box data-tq-search-count="">{footer}</Box>}
       </Box>
     </Dialog>
   );

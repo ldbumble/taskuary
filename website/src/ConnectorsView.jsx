@@ -20,6 +20,7 @@ import TerminalIcon from "@mui/icons-material/Terminal";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
+import { nothingMatches } from "./searchHits.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
 import { hasLogo } from "./logos.jsx";
@@ -1823,7 +1824,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
       ),
-      empty: q ? `Nothing matches “${q}”.` : "Nothing in this section yet.",
+      empty: q ? nothingMatches(q, "Connections") : "Nothing in this section yet.",
     });
   }
 
@@ -1846,7 +1847,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
 
       {q ? (
         <Box>
-          {!hits.length ? <Empty>Nothing matches “{q}”. Try a product, channel, or connection name.</Empty> : (
+          {!hits.length ? <Empty>{nothingMatches(q, "Connections")}</Empty> : (
             <>
               <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
                 {hits.length} {hits.length === 1 ? "result" : "results"}

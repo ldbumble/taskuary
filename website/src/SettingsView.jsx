@@ -5,6 +5,7 @@
 // and lands you on the same anchor, under the same path the rail shows.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
+import { nothingMatches } from "./searchHits.js";
 import { placeName } from "./words.js";
 import { focusPlace, openAppLink, ownerHref } from "./appLinks.js";
 import {
@@ -946,7 +947,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
     <Box>
       {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5 }}>{err}</Alert>}
       {note}
-      {!results.length ? <Empty>Nothing matches “{q}”. Try a setting, rule, or memory keyword.</Empty> : (
+      {!results.length ? <Empty>{nothingMatches(q, "Settings")}</Empty> : (
         <>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1 }}>
             {results.length} {results.length === 1 ? "result" : "results"}

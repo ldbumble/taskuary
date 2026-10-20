@@ -1427,9 +1427,15 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // THE END OF THE THREAD, WHEN A TASK VIEW ENDS IT, IS THAT VIEW'S TOP (the owner, 2026-10-18: "top is not high enough ... should it
   // not fill the entire screen"): the view is the body's height, so scrolled to the bottom it stood ~30px low under a strip of the
   // line before it. Its top meets the body's top instead - the same place the pin puts it.
+  // STUCK: the thread was put at its end and nobody has scrolled it since. The thread growing then keeps it there however much it
+  // grows - a reload drew the chat, then the task view, 285px at once, and the observer's "within 240px of the end" let go of it, so
+  // the answer the reload was for sat under the fold (the 2026-10-19 UI walk)
+  const stuck = useRef(false);
   const toEnd = (el) => {
     const live = [...el.querySelectorAll(".tq-canvas-live")].pop(), box = el.getBoundingClientRect(), r = live?.getBoundingClientRect();
-    el.scrollTop = r && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48 ? el.scrollTop + r.top - box.top : el.scrollHeight;
+    const top = r && box.bottom + (el.scrollHeight - el.scrollTop - el.clientHeight) - r.bottom < 48;
+    el.scrollTop = top ? el.scrollTop + r.top - box.top : el.scrollHeight;
+    stuck.current = !top;
   };
   // THE CARD ON THE TABLE STAYS IN VIEW (B15; the walk's SEEN, 2026-10-17): putOnTable pins it, and the pin brings its top to the
   // top of the view once it mounts and KEEPS it there while it loads and grows - a receipt or a failure under it, a draft filling
@@ -1464,12 +1470,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   useEffect(() => {
     const el = bodyRef.current, inner = el?.firstElementChild;
     if (!el || !inner || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(() => { if (keepTable()) return; if (!holdBottom.current && el.scrollHeight - el.scrollTop - el.clientHeight < 240 && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el); });
+    const ro = new ResizeObserver(() => { if (keepTable()) return; if (!holdBottom.current && (stuck.current || el.scrollHeight - el.scrollTop - el.clientHeight < 240) && el.querySelector(".tq-msg:not(.tq-welcome-msg)")) toEnd(el); });
     ro.observe(inner);
-    // the owner's own scroll is theirs: the pin lets go
-    const own = () => { pin.current = false; };
+    // the owner's own scroll is theirs: the pin lets go, and so does the end - until they scroll back down to it
+    const own = () => { pin.current = false; stuck.current = false; };
+    const atEnd = () => { if (el.scrollHeight - el.scrollTop - el.clientHeight < 4) stuck.current = true; };
     el.addEventListener("wheel", own, { passive: true }); el.addEventListener("touchmove", own, { passive: true });
-    return () => { ro.disconnect(); el.removeEventListener("wheel", own); el.removeEventListener("touchmove", own); };
+    el.addEventListener("scroll", atEnd, { passive: true });
+    return () => { ro.disconnect(); el.removeEventListener("wheel", own); el.removeEventListener("touchmove", own); el.removeEventListener("scroll", atEnd); };
   }, [walk, keepTable]);
   useEffect(() => { keepTable(); }, [msgs, keepTable]);
   // a box opened under the card (Continue's note, Close with a note) is where the owner is now: the pin lets go before the

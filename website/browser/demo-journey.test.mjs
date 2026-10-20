@@ -83,7 +83,11 @@ test("the default static demo completes one reviewed request and never calls a l
     assert.equal(finished.journey.review.FinalText, edited, "approval keeps the visitor's edit");
     await page.reload({ waitUntil: "networkidle0" });
     await page.waitForSelector('[data-tq-demo-journey="request"]');
-    await page.click('button[title^="Setup - your AI, your email"]');
+    // the top bar's Setup, as the installed app has it - the chat has no setup choice (the owner, 2026-10-19)
+    assert.equal(await page.$('button[title^="Setup - your AI, your email"]'), null, "the chat offers no setup button");
+    const setupPill = await page.waitForSelector("[data-tq-setup-open]");
+    assert.equal(await setupPill.evaluate(node => node.innerText.trim()), "Setup");
+    await setupPill.click();
     await page.waitForFunction(() => document.body.innerText.includes("Set up Taskuary on your own machine"));
     assert.ok(await page.$('a[href="https://taskuary.com/docs/"]'), "the setup action provides a working installation destination");
     await page.goto(`${origin}/?demo=explore`, { waitUntil: "networkidle0" });

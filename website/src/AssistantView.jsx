@@ -1296,7 +1296,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   setupOn.current = firstRun;
   const setupRef = useRef(null);
   useEffect(() => {
-    if (DEMO) return;
+    // the static demo has no first run: its top-bar Setup says how to install Taskuary (setup() below), and nothing more
+    if (DEMO) {
+      const show = () => setupRef.current?.();
+      window.addEventListener("tq-first-run", show);
+      return () => window.removeEventListener("tq-first-run", show);
+    }
     // ...only an install with nothing sorted yet opens ON it: one already reading mail opens on its day, and the cards are a press away
     // ...until the owner FINISHES it (Finish setup / Walk me through my tasks): it used to end itself on the first sorted email and
     // leave a half-made day under a lone button (the owner, 2026-10-15). An install that was working before is finished (settle_existing),

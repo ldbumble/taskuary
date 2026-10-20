@@ -5,11 +5,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
+const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
+const view = src("AssistantView.jsx");
 
 test("unread is its own state, drawn in the empty line's place", () => {
   assert.match(view, /const pileLoading = pile === null && !pileRead;/);
-  assert.match(view, /\{pileLoading \? <span data-tq-pile-loading="">Loading\.\.\.<\/span>\s*: !items\.length && <span>Nothing is waiting on you/);
+  assert.match(view, /\{counting \? <span data-tq-pile-loading="">Loading\.\.\.<\/span>\s*: !items\.length && <span>Nothing is waiting on you/);
+});
+
+// STILL COUNTING IS NOT "NOTHING TO WALK" (an owner screenshot, 2026-10-20): the card said "Counting…" over On you rows while the line
+// under it said "Nothing to walk through right now" and Walk was greyed - and pointed "on the left" at rows on the right
+test("while the day is counted the opener says Loading..., and Nothing to walk only once it is counted and nothing is on you", () => {
+  assert.match(view, /const counting = pileLoading \|\| mailReading \|\| \(!canAdvance && items\.some\(\(i\) => i\.settling\)\);/);
+  assert.match(view, /const onYou = useMemo\(\(\) => onYouCount\(items\.length \? summarize\(items\)\.groups : \[\]\), \[items\]\);/);
+  assert.match(view, /\{!counting && !!items\.length && !canAdvance && !onYou && !busy && !starting && <span className="tq-welcome-why" data-tq-nothing-to-walk="">/);
+  assert.doesNotMatch(view, /on the left to open it/, "the rows are not on the left of this line");
+  assert.match(view, /Click any row to open it\./);
+  assert.match(src("assistantCards.jsx"), /const onYou = onYouCount\(groups\)/, "the card's headline and the line read one count");
 });
 
 test("the first read, landed or failed, ends the loading - a coverage retry does not", () => {
@@ -18,9 +30,8 @@ test("the first read, landed or failed, ends the loading - a coverage retry does
 });
 
 test("Walk is pressable while loading, and the press is kept until the rows are in", () => {
-  assert.match(view, /disabled=\{walkOff \|\| walkQueued \|\| \(!pileLoading && !canAdvance\)\}/);   // walkOff: walkGuard.test
-  assert.match(view, /onPointerDown=\{pileLoading \? \(\) => setWalkQueued\(true\) : undefined\}/);
-  assert.match(view, /onClick=\{\(\) => \(pileLoading \? setWalkQueued\(true\) : start\(null\)\)\}/);
-  assert.match(view, /if \(!walkQueued \|\| pileLoading \|\| walkOff\) return;\s*setWalkQueued\(false\);\s*if \(canAdvance\) start\(null\);/);
+  assert.match(view, /disabled=\{walkQueued \|\| starting \|\| resetting \|\| !!handoff \|\| \(!counting && !canAdvance && !onYou\)\}/);   // walkGuard.test
+  assert.match(view, /onPointerDown=\{counting \? \(\) => setWalkQueued\(true\) : undefined\}/);
+  assert.match(view, /onClick=\{\(\) => \(counting \|\| walkOff \? setWalkQueued\(true\) : start\(null\)\)\}/);
   assert.match(view, /\{starting \|\| walkQueued \? "Getting your first one\.\.\." : "Walk me through my tasks"\}/);
 });

@@ -72,7 +72,7 @@ import { place } from "./words.js";
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
 import SetupSteps from "./SetupSteps.jsx";
 import SetupLine from "./SetupLine.jsx";
-import { BriefCard, CardNav, DayOpener, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
+import { BriefCard, CardNav, DayOpener, onYouCount, FyisCard, IdeaCard, MeetingCard, MessageCard, ReplyCard, ReportCard, SetupCard, SourceMark, WalkCard, sourceColor } from "./assistantCards.jsx";
 import { summarize } from "./walkSummary.js";
 import { refreshToday, useCalendarToday } from "./calendarToday.js";
 import FeedView from "./FeedView.jsx";
@@ -1589,6 +1589,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const ready = items.filter((i) => !i.settling);
   const canAdvance = canAdvanceSelection(pile, ready, only.current);
   const pileLoading = pile === null && !pileRead;
+  // THE DAY IS STILL BEING COUNTED - the first read, the launch's mail read ("Counting…" on the card), or rows still settling with
+  // nothing the walk can pick yet. The opener said "Nothing to walk through" and greyed Walk under On you rows the card was still
+  // counting (an owner screenshot, 2026-10-20): while it counts it says Loading..., and a Walk press is held until it lands (walkQueued)
+  const onYou = useMemo(() => onYouCount(items.length ? summarize(items).groups : []), [items]);
+  const counting = pileLoading || mailReading || (!canAdvance && items.some((i) => i.settling));
   const say = useCallback((line) => { if (speakOnState) speak(line); }, [speakOnState]);
   useEffect(() => { speakRef.current = say; }, [say]);
   // The rail came WITH an answer - a turn's or a settle's - read on the server after that write. The
@@ -1845,7 +1850,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // press could look taken and do nothing. Both read walkOff; the refs only close same-tick double presses the state has not caught.
   const walkOff = busy || resetting || !!handoff || starting;
   const start = async (what) => {
-    if (walkOff || turnFlight.current || startFlight.current) return;
+    // A WALK PRESSED WHILE THE WALK IS BUSY IS HELD (owner-approved, 2026-10-20), as the opener's early press is (74861f7d): a turn
+    // or a Next in flight dropped it and the button looked taken. Its button says "Getting your first one..." until it runs.
+    if (walkOff || turnFlight.current || startFlight.current) { if (!starting && !startFlight.current) setWalkQueued(true); return; }
     startFlight.current = true;
     const epoch = chatEpoch.current;
     const said = "Walk me through my tasks.";
@@ -1876,11 +1883,13 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // the Walk press kept while the pile loaded: run once the rows are in - and only if there is a walk to start, which is
   // exactly when the button would have been pressable had the rows been there
   // ...and kept while anything else holds the walk (walkOff): run then, never dropped by start()'s own refusal
+  // ...and kept while the day is still counted: run the moment the walk can pick one, or once the count lands - then only if there
+  // is something on you to walk (the button's own rule), never a press dropped because the rows were still settling
   useEffect(() => {
-    if (!walkQueued || pileLoading || walkOff) return;
+    if (!walkQueued || walkOff || turnFlight.current || (counting && !canAdvance) || pileLoading) return;
     setWalkQueued(false);
-    if (canAdvance) start(null);
-  }, [walkQueued, pileLoading, canAdvance, walkOff]);   // eslint-disable-line react-hooks/exhaustive-deps
+    if (canAdvance || onYou) start(null);
+  }, [walkQueued, pileLoading, counting, canAdvance, onYou, walkOff]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // The day used to write itself the moment the page opened - a model call nobody asked for, which
   // also landed UNDER a "Set something up" the owner had already pressed (2026-09-03: "I hit new chat
@@ -2583,18 +2592,20 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       <DayHold loading={pileLoading || mailReading}>
       <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
-      {pileLoading ? <span data-tq-pile-loading="">Loading...</span>
+      {counting ? <span data-tq-pile-loading="">Loading...</span>
         : !items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
-      {/* greyed with no reason read as broken: say why, and where the rows are */}
-      {!!items.length && !canAdvance && !busy && !starting && <span className="tq-welcome-why">
-        Nothing to walk through right now - what's left is with an agent or put away for later. Click a row on the left to open it.</span>}
+      {/* greyed with no reason read as broken: say why, and where the rows are - only once the day is counted, and only when
+          nothing is on you: it stood under an On you row the card had just listed */}
+      {!counting && !!items.length && !canAdvance && !onYou && !busy && !starting && <span className="tq-welcome-why" data-tq-nothing-to-walk="">
+        Nothing to walk through right now - what's left is with an agent or put away for later. Click any row to open it.</span>}
       </DayHold>
       <div className="tq-modes">
-        <button type="button" className="tq-chip primary" disabled={walkOff || walkQueued || (!pileLoading && !canAdvance)}
+        {/* pressable while the day counts or the walk is busy: the press is held (walkQueued) and runs once it can */}
+        <button type="button" className="tq-chip primary" disabled={walkQueued || starting || resetting || !!handoff || (!counting && !canAdvance && !onYou)}
           // ...kept on the press itself while loading: the day fills in above this row as it lands and moves it, and a click
           // whose release lands after the move never reaches the button
-          onPointerDown={pileLoading ? () => setWalkQueued(true) : undefined}
-          onClick={() => (pileLoading ? setWalkQueued(true) : start(null))}
+          onPointerDown={counting ? () => setWalkQueued(true) : undefined}
+          onClick={() => (counting || walkOff ? setWalkQueued(true) : start(null))}
           title="Everything waiting, most important first - mail, reports, agents, meetings">{starting || walkQueued ? "Getting your first one..." : "Walk me through my tasks"}</button>
         {/* NO "Set up Taskuary" HERE: setup is the Setup button on the top bar, never a choice in the chat (the owner, 2026-10-19) */}
         {/* RUN, not set up: setting things up is the top bar's Setup; this door goes where the reports and workflows ARE

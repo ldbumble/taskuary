@@ -2081,6 +2081,13 @@ def resume_previous_work(task_id: int, background: BackgroundTasks):
 NEEDS_REPO = re.compile(r'could not tell which checkout|no local path|does not exist|choose one', re.I)
 
 
+def _start_failed(task_id: int, e):
+    """A START THAT FAILED IS LEFT ON THE TASK, where the Advisor reads what failed: said only in the answer, the line over it still
+    advised the move from before the press, as if the agent had started (the advisor matrix, 2026-10-19)."""
+    from . import failures
+    try: failures.record(store, task_id=task_id, kind='dispatch.prepare', error=e, what='the agent did not start')
+    except Exception as x: logger.debug(f'task {task_id}: the failed start was not kept - {x}')
+
 @app.post('/api/tasks/{task_id}/dispatch')
 def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks):
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
@@ -2095,6 +2102,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
             from . import funnel; funnel.hold_for_repo(store, task_id, str(e.detail or ''))    # ...and the task keeps saying so after the answer is gone
             return {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'agent': body.agent or hub_agents.default_agent(store), 'taskId': task_id,
                     'ref': task_ref(task_id), 'reason': str(e.detail or '')}
+        if e.status_code >= 422: _start_failed(task_id, str(e.detail or 'the agent did not start'))
         raise
     except Exception as e:
         # A START THAT FAILED is said once, with its fix (failures.classify): a missing coding tool answered 500 with the raw
@@ -2102,6 +2110,7 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
         from . import failures
         logger.warning(f'dispatch of task {task_id} failed: {e}')
         c = failures.classify(e, act='dispatch.prepare')
+        _start_failed(task_id, e)
         return JSONResponse(status_code=422, content={'detail': c['sentence'], 'fix': c['fix'], 'retry': c['retry']})
 
 class RepoBody(BaseModel):

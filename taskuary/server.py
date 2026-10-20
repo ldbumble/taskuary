@@ -411,6 +411,7 @@ class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
     SortOrder: int | None = None; Active: bool | None = None
+    Mailbox: str | None = None       # the mailboxes it is for, '|'-separated; '' is every mailbox (policy.on_mailbox)
 class MemoryBody(BaseModel):
     note: str; scope: str = 'global'; scope_key: str | None = None
     source: str = 'manual'          # 'writing' = an instruction about how to write, read by the drafter only (PW-060)

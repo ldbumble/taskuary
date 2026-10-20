@@ -20,8 +20,17 @@ _NOREPLY = re.compile(r'(no-?reply|do-?not-?reply|donotreply|notifications?@|aut
 def _split(pattern): return [p.strip().lower() for p in (pattern or '').split('|') if p.strip()]
 
 
+def on_mailbox(policy: dict, msg: dict) -> bool:
+    """Is this message in the rule's reach? A rule may name the mailboxes (or chats) it is FOR - `Mailbox`, '|'-separated
+    like a pattern - matched against the source the message came in on. Blank is every mailbox, as every rule was before:
+    a rule written for one mailbox no longer files another mailbox's mail."""
+    want = _split(policy.get('Mailbox'))
+    return not want or str(msg.get('source_name') or '').strip().lower() in want
+
+
 def matches(policy: dict, msg: dict, known_sender: bool = True) -> bool:
-    """Does one policy rule hit this message? msg keys: subject, body, from_email."""
+    """Does one policy rule hit this message? msg keys: subject, body, from_email, source_name."""
+    if not on_mailbox(policy, msg): return False
     kind, addr = policy['Kind'], (msg.get('from_email') or '').lower()
     text = f"{msg.get('subject') or ''} {msg.get('body') or ''}".lower()
     if kind == 'keyword': return any(t in text for t in _split(policy.get('Pattern')))
@@ -68,7 +77,8 @@ def apply_retroactively(store, policy: dict) -> int:
     if kind in BODYLESS: scan['include_body'] = False      # judged on the envelope: never pay for the body
     n = 0
     for m in store.scan_messages(**scan):
-        if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText')}):
+        if not matches(policy, {'from_email': m.get('FromEmail'), 'subject': m.get('Subject'), 'body': m.get('BodyText'),
+                                'source_name': m.get('SourceName')}):
             continue
         store.set_message_status(m['MessageId'], 'skipped' if on else ('routed' if m.get('TaskId') else 'ignored'))
         n += 1

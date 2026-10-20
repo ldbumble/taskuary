@@ -786,7 +786,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
                 sx={{ bgcolor: ACTION_COLORS[p.Action]?.bg, color: ACTION_COLORS[p.Action]?.fg, height: 21, fontSize: 10.5, width: 100, justifyContent: "center" }} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }} noWrap>{p.Name}</Typography>
-                <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>{KIND_LABEL[p.Kind] || p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}</Typography>
+                <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>{KIND_LABEL[p.Kind] || p.Kind}{p.Pattern ? `: ${p.Pattern}` : ""}{p.Mailbox ? ` · only mail to ${p.Mailbox.split("|").join(", ")}` : ""}</Typography>
               </Box>
               <Typography variant="caption" sx={{ color: FAINT, whiteSpace: "nowrap" }}
                 title="When two rules with the same action match, the lower number wins">priority {p.SortOrder}</Typography>

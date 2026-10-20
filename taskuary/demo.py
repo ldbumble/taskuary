@@ -776,6 +776,7 @@ class Replay:
         # the Board and the task card show a TAIL of this as text, not as a terminal - the dim
         # escape rode along with it and printed as a literal [2m on every card
         self._emit('\r\nthe agent is waiting for you - this is a demo, so it waits forever\r\n')
+        self._moved()                                # working -> waiting on you
 
     def _emit(self, text):
         self.buf.append(text)
@@ -806,11 +807,25 @@ class Replay:
     def tail(self, n=3): return [l.strip() for l in ''.join(self.buf).splitlines() if l.strip()][-n:]
     def close(self):
         self.alive, self.busy, self.ended = False, False, time.time()
+        self._moved()
+    def _moved(self):
+        """A recording that stops typing, or is closed, is a session that changed state - and every surface hears it at once, as
+        they hear a real run's events (workerstate.record): the Board and the task page waited for their next poll (G7, 2026-10-20)."""
+        try:
+            from . import funnel, live
+            funnel.invalidate(); live.emit('task-changed', task_id=self.task_id)
+        except Exception: pass
     def info(self, tail=0):
+        # THE RUN'S OWN WORD FIRST, as a real session's (terminal.worker_fields): a replay with a question recorded on it read only its
+        # screen, so it said "waiting" with no request - the rail had no question to show and the chat none to answer (G7)
+        from . import terminal
+        word = terminal.worker_fields(self.store, self)
         return {'sid': self.sid, 'label': self.label, 'cwd': '~/northwind/importers', 'taskId': self.task_id,
                 'agent': self.agent, 'cli': self.cli, 'mode': self.mode, 'alive': self.alive,
                 'started': self.started, 'idle': self.idle(), 'phase': self.phase(),
-                'waiting': self.waiting(), 'cmd': 'claude (demo replay)', 'files': self.files(),
+                'waiting': word['waiting'], 'request': word['request'], 'state': word.get('state'), 'line': word.get('line'),
+                'questions': word.get('questions') or [], 'held': bool(word.get('held')),
+                'cmd': 'claude (demo replay)', 'files': self.files(),
                 'browser': {'open': False, 'url': '', 'port': 0}, 'work': None,
                 **({'tail': self.tail(tail)} if tail else {})}
 

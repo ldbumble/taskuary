@@ -54,6 +54,13 @@ def binding(client, **scope):
     return {key: data[key] for key in ('selection_revision', 'expected_next_key', 'expected_next_members')}
 
 
+def done_of(text):
+    """The stream's answer: `done` - the rail follows it as its own `pile` event (2026-10-20), merged back here."""
+    events = [json.loads(l) for l in text.splitlines() if l.strip()]
+    done = next(e for e in events if e['type'] == 'done')
+    return {**done, **{'pile': e['pile'] for e in events if e['type'] == 'pile'}}
+
+
 def dump(db):
     return list(db.cx.iterdump())
 
@@ -105,7 +112,7 @@ def test_what_moved_around_the_same_pick_is_taken_fresh_not_refused(nav_api, rou
     elif change == 'chat': general.dock_task(db)
     response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
     assert response.status_code == 200, response.text
-    data = response.json() if route == 'next' else json.loads(response.text.splitlines()[-1])
+    data = response.json() if route == 'next' else done_of(response.text)
     assert data['item']['key'] == f'review:{rid}'
     if change == 'body': assert data['item']['preview'] == 'Changed full source'
     states = db.funnel_states()
@@ -128,7 +135,7 @@ def test_accepted_selection_consumes_exact_capture_once(nav_api, monkeypatch, ro
         monkeypatch.setattr(funnel, name, forbidden)
     response = client.post(f'/api/concierge/{route}', json={'mode': 'next', **payload})
     assert response.status_code == 200, response.text
-    data = response.json() if route == 'next' else json.loads(response.text.splitlines()[-1])
+    data = response.json() if route == 'next' else done_of(response.text)
     assert data['item']['key'] == payload['expected_next_key']
     # ...and the rail as the turn left it rides along, captured with the surfaced item excluded, so
     # the page holds it instead of fetching the same rows again

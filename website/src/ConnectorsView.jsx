@@ -1641,7 +1641,11 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const agents = want === "cli-agents";
     const direct = agents ? null : /^\d+$/.test(want) ? connectors.find((c) => c.ConnectorId === Number(want)) : byType[want];
     // ...and a link to one that has since been removed says so, rather than landing on the catalogue unexplained
-    if (!agents && !direct) { setErr(`That connection (${want}) is not here any more - pick another, or add it again from its section.`); return; }
+    // ...over the list, not over the card that was open before it: that read as the missing one, under a crumb that named neither (verify, 2026-10-19)
+    if (!agents && !direct) {
+      setErr(`That connection (${want}) is not here any more - pick another, or add it again from its section.`);
+      setOpen(null); onBrowseState?.({ ...browseState, open: null }); return;
+    }
     const keys = agents ? ["agents"] : ["c", "d", "s"].map((p) => `${p}${direct.ConnectorId}`);
     const g = groupsRef.current.find((x) => x.cards.some((c) => keys.includes(c.key)));
     setErr(""); setOpen(agents ? { kind: "agents" } : { kind: "connector", id: direct.ConnectorId });

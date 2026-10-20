@@ -38,6 +38,11 @@ test("where a setting is saved opens that card - never the Profiles shelf", () =
     assert.equal(req?.area, "connections", `${l} -> ${ownerHref(l)}`);
     assert.ok(req.state.connector, `${l} names no card`);
   }
+  // ...and every place the panel names in its own words: its "still Connections" was onGo("connectors"), a place words.json does not
+  // have, so ownerHref gave "" and the click did nothing (verify, 2026-10-19)
+  const named = [...src("../src/AiDefaults.jsx").matchAll(/onGo\("([^"]*)"\)/g)].map((m) => m[1]);
+  assert.ok(named.length, "the panel names no place of its own any more - this check reads nothing");
+  for (const l of named) assert.ok(canvasRequestFromHash(ownerHref(l)), `AiDefaults' onGo("${l}") -> "${ownerHref(l)}" opens nothing`);
   assert.equal(ownerHref("connector:7"), "#connector=7");
   assert.equal(ownerHref(""), "");
 });

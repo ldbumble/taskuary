@@ -68,7 +68,8 @@ test("a link to a report or a connection that is gone says so, and opens nothing
   const reports = src("ReportsView.jsx"), conns = src("ConnectorsView.jsx");
   assert.match(reports, /const missing = typeof browseState\.open === "number" && !sources\.some\(\(x\) => x\.SourceId === browseState\.open\);/);
   assert.match(reports, /detail: browseState\.open != null && !missing \?/);
-  assert.match(conns, /if \(!agents && !direct\) \{ setErr\(`That connection \(\$\{want\}\) is not here any more/);
+  assert.match(conns, /if \(!agents && !direct\) \{\s*setErr\(`That connection \(\$\{want\}\) is not here any more.*\s*setOpen\(null\); onBrowseState\?\.\(\{ \.\.\.browseState, open: null \}\); return;/,
+    "...said over the list, not over the card that was open before (verify, 2026-10-19)");
   assert.match(conns, /note: err \|\| \(q \?/);
 });
 

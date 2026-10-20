@@ -55,7 +55,8 @@ const Slot = ({ slot, brains, agents, judgeOptions, onSave, onGo }) => {
   // the judge names no model of its own, so RUNS is the thing itself rather than "· the provider default"
   const runs = isJudge ? (slot.default_hint || "") : (slot.model || slot.default_hint || "the provider default");
   return (
-    <Box sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
+    // ...the place a link to its settings lands (SettingsView's knob, by the same word list: `~=` matches any one of them)
+    <Box data-tq-knob={(slot.settings || [slot.key]).join(" ")} sx={{ ...card, p: 2, mb: 1.5, bgcolor: "#fff" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
         <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: ACCENT2, flexShrink: 0 }} />
         <Typography sx={{ color: INK, fontWeight: 600, fontSize: 14 }}>{slot.label}</Typography>
@@ -180,7 +181,7 @@ export default function AiDefaults({ brains, agents, onGo, onLoaded }) {
     <Box sx={{ mb: 1 }}>
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Which AI does what, and on which model. Adding or signing into a CLI or an API key is
-        still <Typography component="button" type="button" variant="body2" onClick={() => onGo("connectors")}
+        still <Typography component="button" type="button" variant="body2" onClick={() => onGo("connections")}
           sx={{ border: 0, background: "none", p: 0, font: "inherit", textAlign: "inherit", color: "#55697a", cursor: "pointer", "&:hover": { textDecoration: "underline" } }}>Connections</Typography>;
         this page only chooses between what you have connected.
       </Typography>

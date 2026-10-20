@@ -96,3 +96,36 @@ def test_run_cli_takes_the_live_road_only_when_asked(cli, monkeypatch):
     prof = {'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose'], 'keep_alive': 'concierge:7'}
     assert agents.run_cli(prof, 'hello', lambda *a: None, resume='s1') == ('hi', 's1', None)
     assert calls == ['concierge:7']
+
+
+def _kept_brain(monkeypatch, keep, resume=None):
+    """The Assistant's brain as make_cli_llm builds it, on the fake stream CLI: a kept conversation, tools off."""
+    import json
+    from taskuary import agents, llm
+    from taskuary.store import MemoryStore
+    s = MemoryStore()
+    s.upsert_agent('claude', 'coding', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose']}))
+    monkeypatch.setattr(agents, '_resolve_cmd', lambda name: [sys.executable, FAKE])
+    return llm.make_cli_llm(s, 'claude', keep=keep, resume=resume)
+
+
+def test_a_new_chats_second_round_stays_on_its_live_process(cli, monkeypatch):
+    """A look-up's second round of a NEW chat went out with the brain's build-time id - none - which clipool reads as
+    New chat: it killed the live CLI and spawned another (15 s against 2.6 s warm), and the round lost its own turn."""
+    brain = _kept_brain(monkeypatch, 'concierge:41')
+    one, two = (brain('SYS', q).split(':', 2) for q in ('what is waiting', 'you looked it up'))
+    assert one[0] == two[0] and two[1] == '2'                  # one process, one conversation
+    assert brain.session_id == f'sid-{one[0]}'
+    # ...and a chat already under way is unchanged: its rounds resume the session it names
+    later = _kept_brain(monkeypatch, 'concierge:41', resume=brain.session_id)
+    assert later('SYS', 'and now').split(':', 2)[:2] == [one[0], '3']
+
+
+def test_a_one_shot_brain_never_carries_its_calls_into_one_conversation(cli, monkeypatch):
+    """Triage and the drafter call one brain per message; only a KEPT conversation follows its session."""
+    from taskuary import agents
+    seen = []
+    monkeypatch.setattr(agents, 'run_cli', lambda prof, prompt, trace, resume=None, **kw: (seen.append(resume), ('ok', 'sid-x', None))[1])
+    brain = _kept_brain(monkeypatch, None)
+    brain('SYS', 'one'); brain('SYS', 'two')
+    assert seen == [None, None]

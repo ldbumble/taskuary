@@ -13,7 +13,7 @@ jobs:
   ci-required:
     name: ci-required
     if: always()
-    needs: [test, build-web, browser, walk, docker]
+    needs: [test, build-web, browser, walk, walk-cover, docker]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every CI job to pass
@@ -33,8 +33,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # the newest Python on every OS, and the oldest supported one on Linux: six runners were twice the random
+        # failures for little more coverage (2026-10-20)
         os: [ubuntu-24.04, windows-latest, macos-latest]
-        python: ["3.10", "3.12"]
+        python: ["3.12"]
+        include: [{ os: ubuntu-24.04, python: "3.10" }]
     runs-on: ${{ matrix.os }}
     # a hung test fails the job in minutes, with its logs, instead of holding a runner for six hours (2026-10-16)
     timeout-minutes: 25
@@ -122,6 +125,12 @@ jobs:
   walk:
     # The dead-end walk on its own: it presses every button on the list and forces each failure (2026-10-18), which takes
     # longer than the rest of the browser suite together - inside the 10-minute browser job it was cancelled, not failed.
+    # ...and in four parts at once (2026-10-20): one 15-minute walk held every run; its passes share nothing but the build
+    strategy:
+      fail-fast: false
+      matrix:
+        passes: ["walk", "sweep", "faults", "cards,links,search"]
+    name: walk (${{ matrix.passes }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -135,6 +144,31 @@ jobs:
         working-directory: website
       - run: npm run test:walk
         working-directory: website
+        env: { WALK_ONLY: "${{ matrix.passes }}" }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with: { name: "walk-pressed-${{ strategy.job-index }}", path: website/browser/walk-pressed-*.json, if-no-files-found: ignore }
+
+  walk-cover:
+    # COVER - every button on the list pressed at least once - needs every part's presses: checked here, over all four
+    needs: walk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with: { node-version: "22" }
+      - run: npm ci
+        working-directory: website
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with: { pattern: walk-pressed-*, path: pressed, merge-multiple: true }
+      - name: Every button pressed somewhere in the walk
+        working-directory: website
+        run: |
+          out=$(node deadend_check.mjs --cover "$(ls ../pressed/*.json | paste -sd, -)" | tail -1)
+          echo "$out"
+          node -e 'const o=JSON.parse(process.argv[1]); if (o.found.length) { console.error(o.found.join(String.fromCharCode(10))); process.exit(1) }' "$out"
+
 
   docker:
     # proves the image builds, serves the UI, persists across restart, and the

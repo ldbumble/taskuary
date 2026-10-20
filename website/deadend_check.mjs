@@ -102,6 +102,15 @@ const WALK_SKIP = {
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
 };
 
+// --cover a.json,b.json: COVER over the presses of a walk run in parts (CI runs its passes as four jobs, 2026-10-20) - no browser,
+// the same rule as below over every part's `pressed`
+if (process.argv.includes("--cover")) {
+  const pressedAll = new Set(arg("--cover", "").split(",").filter(Boolean).flatMap((f) => JSON.parse(readFileSync(f, "utf8")).pressed || []));
+  const miss = Object.entries(VERBS).flatMap(([v, d]) => [v, ...Object.keys(d.states || {}).map((s) => `${v}:${s}`)]).filter((k) => !pressedAll.has(k) && !WALK_SKIP[k]);
+  const found = miss.map((k) => `COVER   ${k}: "${label(...k.split(":"))}" was never pressed, and WALK_SKIP gives no reason`);
+  console.log(JSON.stringify({ counts: found.length ? { COVER: found.length } : {}, found })); process.exit(0);
+}
+
 // words the owner should never have to read: the one list the server's sentences are held to (taskuary/words.json) - and what only a
 // crash or a raw provider error leaves on a screen, which is no word anyone chose
 const JARGON = [...JARGON_RES, /\bnull\b/, /\bundefined\b/, /Traceback/, /\b[45]\d\d(?= \()/, /\[Errno \d+\]/, /\bb'[^']{3,}'/, /\(\d{3}, b['"]/,

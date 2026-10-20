@@ -1148,7 +1148,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
       return (await api.post(endpoint, body.mode === "next" ? { key: body.key, only: body.only, include_surfaced: body.include_surfaced, exclude: body.exclude,
-        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members, fyi: body.fyi }
+        selection_revision: body.selection_revision, expected_next_key: body.expected_next_key, expected_next_members: body.expected_next_members, fyi: body.fyi, ...(body.blind ? { blind: true } : {}) }
         : body.mode === "say" ? { text: body.text, key: body.key, context_mid: body.context_mid, images: body.images || [] } : {})).data;
     };
     // The public demo is intentionally a local script. Do not even attempt the streaming AI
@@ -1758,6 +1758,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // A named Timeline/pile row remains an explicit pull. Automatic Walk/Next echoes the exact
       // server capture; demo/old-server payloads alone retain the legacy tokenless fallback.
       const navigation = capture ? nextSelectionBody(capture) : scope;
+      // ...and a press made with nothing on the table says so: the server then takes a pick that moved fresh rather than refusing
+      // it - the walk's first press, made while the opener still reads what came in (the owner, 2026-10-20)
+      if (blind && capture) navigation.blind = true;
       let data;
       try { data = await turn({ mode: "next", key, leaving, ...navigation }); }
       catch (e) {
@@ -1768,7 +1771,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (!fresh || epoch !== chatEpoch.current) throw e;
         selectionRef.current = fresh;
         setPile((p) => replaceSelectionToken(p, g));
-        data = await turn({ mode: "next", key, leaving, ...nextSelectionBody(fresh) });
+        data = await turn({ mode: "next", key, leaving, ...nextSelectionBody(fresh), ...(blind ? { blind: true } : {}) });
       }
       landed(data);
     } catch (e) {

@@ -53,8 +53,23 @@ class NavigationStale(ValueError):
         self.detail['message'] = message
 
 
+class NavigationRebind(ValueError):
+    """The commit check found the rail moved under a press it may take FRESH: nothing has been committed, so the turn is made
+    again from this capture (Reservation.run)."""
+
+    def __init__(self, capture):
+        self.capture = capture
+        super().__init__('the rail moved before the press committed; taken fresh')
+
+
+REBINDS = 2              # a rail still settling (startup's catch-up writing) moves under a press more than once
+
+
 def reserve(store, *, selection_revision, expected_next_key, expected_next_members,
-            only=None, include_surfaced=False, exclude=None):
+            only=None, include_surfaced=False, exclude=None, blind=False):
+    """`blind`: nothing was on the table - the walk's start, a Next over an empty table. The owner saw no item the press could
+    skip past, so a pick that moved is taken fresh rather than refused (the owner, 2026-10-20: the first Walk press, made while
+    the opener was still reading what came in, said "The list changed while you pressed Next")."""
     from .funnel_selection import capture_from_rail
     state = _state(store)
     with state.lock:
@@ -68,23 +83,23 @@ def reserve(store, *, selection_revision, expected_next_key, expected_next_membe
         # chat renewed) is taken FRESH: the turn speaks from this capture, not the page's, so the
         # answer is about what is there now. Refusing on the whole revision meant a press failed
         # with "the next item changed" when the next item had not (design B, 2026-09-17).
-        if (expected_next_key != fresh['expected_next_key']
-                or expected_next_members != fresh['expected_next_members']):
+        if (not blind and (expected_next_key != fresh['expected_next_key']
+                           or expected_next_members != fresh['expected_next_members'])):
             raise NavigationStale(fresh)
         if state.active is not None:
             raise NavigationStale({**fresh, 'reason': 'navigation_in_progress'})
         if selection_revision in state.consumed:
             raise NavigationStale({**fresh, 'reason': state.consumed[selection_revision],
                                    'retryable': False})
-        reservation = Reservation(store, state, capture, selection_revision, _chat(store))
+        reservation = Reservation(store, state, capture, selection_revision, _chat(store), blind=blind)
         state.active = reservation
         return reservation
 
 
 class Reservation:
-    def __init__(self, store, state, capture, token, chat):
+    def __init__(self, store, state, capture, token, chat, blind=False):
         self.store, self.state, self.capture = store, state, capture
-        self.token, self.chat = token, chat
+        self.token, self.chat, self.blind = token, chat, blind
         self.attempted_commit = False
         self.completed = False
         self.closed = False
@@ -100,9 +115,15 @@ class Reservation:
                 # may create an empty dock before model work; bind its identity now.
                 dock, _ = general.dock_task(self.store, actor)
                 self.chat = _chat(self.store)
-            result = action(self.capture, self.commit_guard, dock)
-            self.completed = True
-            return result
+            for attempt in range(REBINDS + 1):
+                try: result = action(self.capture, self.commit_guard, dock)
+                except NavigationRebind as moved:
+                    # nothing was committed (the guard refused before its yield): the turn is made again from the fresh rail
+                    if attempt == REBINDS: raise NavigationStale({'reason': str(moved)}) from moved
+                    self.capture = moved.capture
+                    continue
+                self.completed = True
+                return result
         finally:
             self.close()
 
@@ -115,6 +136,10 @@ class Reservation:
             try:
                 recheck_selection(self.store, self.capture)
             except SelectionStale as error:
+                # ...but a press made with nothing on the table (reserve's `blind`: the walk's start) showed the owner no item
+                # it could skip past: the rail moving under it - startup's catch-up still writing - is taken fresh, and the
+                # turn is made again from the rail as it is now, before anything is committed
+                if self.blind: raise NavigationRebind(error.capture) from error
                 raise NavigationStale({'reason': str(error)}) from error
             # A failed store call can have partially committed. Do not reopen that
             # token merely because response generation or delivery subsequently fails.

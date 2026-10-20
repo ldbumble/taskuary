@@ -2369,12 +2369,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
   // never heard of, so the rail marked nothing, Next served it again and a reload put back the walk's last item. The server answers
   // `task:N` for any task (funnel.item_for_key), through the task's own row when the rail has one. Only a busy walk, which refuses
   // a pull, still lands the bare card - opening must never do nothing.
+  // ...and A TASK ASKED FOR WHILE A TURN IS IN FLIGHT waits for that turn, then goes the rail's road (the dead-end walk's RING, 2026-10-20):
+  // the Assistant's own answer linking it is followed before its turn has closed, and a Board press during a slow Next is too - each landed
+  // the bare card, so the rail ringed nothing and only the address told the server. Only a walk handed to a phone keeps the bare card.
+  const openLater = useRef(null);
   const openTaskCard = (req) => {
     setExpanded(false); setFoldedKey(null);
     if (!(busy || resetting || handoff || turnFlight.current)) {
       openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
       pull(`task:${req.tid}`); return;
     }
+    if (!handoff) { openLater.current = req; return; }
     setRailOpen(false); if (old) setOld(null); setStageMode("chat"); browseDown();
     const ref = `TQ-${String(req.tid).padStart(4, "0")}`;
     // the task from the Board is what is on the table now: the rail kept marking the item before it "on the table"
@@ -2383,6 +2388,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, mode,
     putOnTable(card, "card");
   };
   browseRef.current = browse; openTaskRef.current = openTaskCard; browseDownRef.current = browseDown;
+  useEffect(() => {
+    if (busy || resetting || !openLater.current) return;
+    const req = openLater.current; openLater.current = null; openTaskRef.current?.(req);
+  }, [busy, resetting]);
   // a pull lands through surface() -> landed() -> putOnTable; one refused as busy lands nothing, so nothing waits for it
   const pull = (key, asUser) => {
     navHow.current = "push";

@@ -38,7 +38,17 @@ export function AdvisorNext({ advice, onPropose }) {
   // a move the row cannot make NOW is not advice: "Stop the agent" over a greyed Stop and save left Next the filled
   // button under it (the owner, 2026-10-13: "it said stop agent but highlighted button was next?")
   const onRow = advisedIn(verbs.list, advice);
-  if (!onRow) return null;
+  if (!onRow) {
+    // ...but A MOVE THE ROW HAS AND HAS GREYED says why it is off, in the row's own words: the draft's text cleared, Send greyed, and
+    // the strip went blank with nothing lit (the advisor matrix, 2026-10-19) - the line it was judged with is not true of this screen
+    const off = advisedAny(theirs, advice);
+    if (!off?.disabled) return null;
+    return (
+      <div className="tq-next" role="status" data-tq-advice="off">
+        <div className="tq-next-txt">{`${off.label} is off - ${off.why || "it cannot be pressed right now"}.`}</div>
+      </div>
+    );
+  }
   const word = onRow.label;
   const why = (e) => {
     setAt(e.currentTarget); setNote(null);

@@ -207,9 +207,11 @@ SENT = {'close': 'Your reply went and nothing has come back since - mark it done
 # ...and like the real one, WHEN SOMETHING FAILED (a WHAT FAILED line) it offers the way past it and never the act that just failed: after
 # a refused send the scripted line still said "read it, then send it" over "Not sent", with Send lit (2026-10-19). The fix the failure
 # names leads, then the draft written again, then a task to fix it.
-FAILED = {'fix': 'That did not go through - {label} is the way past it.', 'redraft': 'That did not go through - redraft it, then send it again.',
-          'new_task': 'That did not go through and nothing here fixes it - make it a task.', 'report_bug': 'That step stopped - report it so it gets fixed.',
-          'close': 'That cannot be fixed from here - mark it done if nothing more is owed.'}
+# ...each line naming WHAT failed: "That did not go through" stood over a card whose error had gone, saying nothing of which act it meant
+# (the advisor matrix, 2026-10-19)
+FAILED = {'fix': '{what} - {label} is the way past it.', 'redraft': '{what} - redraft it, then send it again.',
+          'new_task': '{what}, and nothing here fixes it - make it a task.', 'report_bug': 'That step stopped - report it so it gets fixed.',
+          'close': '{what}, and it cannot be fixed from here - mark it done if nothing more is owed.'}
 # ...a send nobody can confirm is checked first, never sent again blind
 CHECK = {'approve': 'Nobody can say whether it went - check delivery before sending it again.', **FAILED}
 # ...and what the demo itself refused goes nowhere here, whatever is pressed: "redraft it" would loop the visitor through a canned brain
@@ -217,21 +219,34 @@ CHECK = {'approve': 'Nobody can say whether it went - check delivery before send
 REFUSED = {'close': 'This is the demo, so that goes nowhere - mark it done to move on.',
            'defer': 'This is the demo, so that goes nowhere - set a day to see it come back.'}
 # ...and A DRAFT ITS CHANNEL ANSWERS WHERE IT CAME FROM (a chat: no Send offered) is copied there and closed - with no line the strip
-# said "nothing needs a move" over a question nobody had answered (2026-10-19)
+# said "nothing needs a move" over a question nobody had answered (2026-10-19). Read off the item's channel, never the verbs alone: an
+# email whose draft could not be written offers no Send either, and was told to copy it (the advisor matrix, 2026-10-19)
 COPIED = {'close': 'The reply is drafted - copy it to where the question came from, then mark it done.'}
+
+# ...and like the real one it reads what is over: an agent whose run finished, a task with every todo ticked, is closed once nobody
+# waits on a reply (the advisor matrix, 2026-10-19: both stood under "No suggestion")
+DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The work on it is done - read what it says, then mark it done.'}
 
 def _advice(text: str) -> str:
     from . import buttons
     offered = dict(re.findall(r'([a-z_]+) \(([^)]*)\)', _VERBS.search(text).group(1)))
     failed = (re.search(r'^WHAT FAILED: (.*)$', text, re.M) or [None, ''])[1]
+    try: item = json.loads((re.search(r'^THE ITEM: (.*)$', text, re.M) or [None, '{}'])[1]) or {}
+    except ValueError: item = {}
+    chat = str(item.get('channel') or 'email').lower() != 'email'
     said = (REFUSED if 'This is the demo' in failed
             else CHECK if 'nobody knows whether it went' in failed else FAILED if failed
             else SENT if 'A REPLY WAS ALREADY SENT' in text and 'NOTHING HAS COME IN SINCE IT WENT' in text
-            else COPIED if 'redraft' in offered and 'approve' not in offered else ADVICE)
+            else COPIED if chat and 'redraft' in offered and 'approve' not in offered
+            else DONE if "THE AGENT'S RUN ENDED (finished)" in text or 'EVERY TODO ON THE TASK IS TICKED' in text else ADVICE)
     # Send is offered as Check delivery only on a send nobody can confirm: the scripted line never says "check" over a plain Send
-    fits = lambda v: v in offered and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
+    # ...and Redraft only gets past a failed REPLY: after Send to agent failed on a chat with a draft, the line said "redraft it, then send
+    # it again" over an agent that had not started (the advisor matrix, 2026-10-19)
+    redo = not failed or failed.startswith('the reply')
+    fits = lambda v: v in offered and (redo or v != 'redraft') and (said is not CHECK or v != 'approve' or offered[v] == buttons.label('approve', 'check'))
     verb = next((v for v in said if fits(v)), None)
-    return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb]) if verb else '', 'evidence': []})
+    what = failed.split(' - ')[0].strip() or 'That did not go through'
+    return json.dumps({'verb': verb, 'line': said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:]) if verb else '', 'evidence': []})
 
 
 def brain(seed: int = 0, store=None):

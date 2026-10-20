@@ -3,7 +3,7 @@
 // sending you to another tab to make it (2026-09-22). A proposal (a playbook, a setting, an
 // action) renders through the same card: proposalPresentation() gives it its own title, its
 // destination and its own labels, and nothing is sent to a sender.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Typography } from "@mui/material";
 import api from "./api";
 import ReplyFiles from "./ReplyFiles.jsx";
@@ -189,6 +189,10 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
   // with the row carrying the item, the dark button is the Advisor's pick on the bar (actionRow.rowOf): the draft's own stay outlined
   // ...and the Advisor's pick of this card's own move is lit HERE, where the button stands (rowOf's `lit`) - never a second one on the bar
   const lit = useLit();
+  // ...AND IN VIEW: after a refused send the line said "redraft it" over a Redraft a scroll below the card's edge, under the strip
+  // (the Advisor group's verify, 2026-10-19) - a lit move the owner cannot see is no move. It is brought into view once, when it lights.
+  const movesRef = useRef(null);
+  useEffect(() => { if (lit.startsWith(`${r.ReviewId}:`)) movesRef.current?.querySelector(".MuiButton-contained")?.scrollIntoView?.({ block: "nearest" }); }, [lit, r.ReviewId]);
   const solid = toRow && lit !== no("approve") ? "outlined" : "contained";
   const rejectTitle = "Dismisses it - nothing runs and nothing is sent";
   const remindTitle = `${btnHint("defer")} - nothing is merged, closed or sent`;
@@ -367,7 +371,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           </Box>
         </Box>
       )}
-      <Box sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
+      <Box ref={movesRef} sx={{ display: "flex", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
         {/* ONE approve: it sends whatever is in the box above, edited or not. Two buttons
             asked you to declare something the text already shows. */}
         {/* a channel that cannot carry the reply must SAY so: github with replies

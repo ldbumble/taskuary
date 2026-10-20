@@ -43,3 +43,33 @@ def test_a_scratch_home_and_the_flag_install_the_switch():
         faults.NOW['fault'] = ''
         for n, f in keep.items(): setattr(outbound, n, f)
         for m, n, f in saved: setattr(m, n, f)
+
+
+def test_the_matrix_world_and_its_scripted_advisor_are_inert_outside_a_walk():
+    """faults.world seeds the advisor matrix's states and faults.scripted wires the demo's Advisor in - never in a real install."""
+    from taskuary import advisor
+    from taskuary.store import MemoryStore
+    s, brain = MemoryStore(), advisor.build_llm
+    with mock.patch.dict(os.environ, {faults.ENV: ''}):
+        assert faults.world(s) == {} and faults.scripted() is False
+    assert not s.list_tasks() and advisor.build_llm is brain
+
+
+def test_the_matrix_world_holds_every_state_it_names():
+    from taskuary import advisor, demo, terminal, workerstate
+    from taskuary.store import MemoryStore
+    s, sessions = MemoryStore(), dict(terminal.SESSIONS)
+    try:
+        with mock.patch.dict(os.environ, {faults.ENV: '1', 'TASKUARY_HOME': tempfile.mkdtemp()}):
+            demo.seed(s); w = faults.world(s)
+        st = lambda k: workerstate.status(s, w[k])['state']
+        assert (st('coding-working'), st('coding-asking'), st('general-finished'), st('coding-failed'), st('general-stopped-saved')) == \
+               ('working', 'input_needed', 'finished', 'failed', 'stopped')
+        assert s.resumable_session(w['coding-stopped-saved'])
+        assert advisor.sent_line(s, 'task', w['sent-quiet']).endswith('NOTHING HAS COME IN SINCE IT WENT.')
+        assert 'WRITTEN TO THE OWNER SINCE' in advisor.sent_line(s, 'task', w['sent-then-new'])
+        assert s.get_review(s.pending_review(w['send-failed'])['ReviewId'])['DeliveryState'] == 'failed'
+    finally:
+        from taskuary import assistant
+        assistant._AGENDA.clear()                          # the world holds its meetings fresh for the walk: none for the next test
+        for k in set(terminal.SESSIONS) - set(sessions): terminal.SESSIONS.pop(k).close()

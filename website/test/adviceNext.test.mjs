@@ -87,12 +87,14 @@ test("the clock menu offers the Advisor's notes for the item on the table", () =
   assert.match(src, /api\.get\("\/api\/advice\/notes", \{ params: \{ key/);
 });
 
-test("a move the row cannot make is no advice: a greyed or missing button draws no strip", () => {
+// ...and a greyed one says why it is off rather than drawing nothing: the strip went blank with nothing lit when the draft was cleared
+// (the advisor matrix, 2026-10-19)
+test("a move the row cannot make lights nothing: a greyed button says why it is off, a missing one draws no strip", () => {
   const strip = row.slice(row.indexOf("export function AdvisorNext"), row.indexOf("function Cluster"));
-  assert.match(strip, /const onRow = advisedIn\(verbs\.list, advice\);\s*if \(!onRow\) return null;/, "a greyed button: no line");
+  assert.match(strip, /const onRow = advisedIn\(verbs\.list, advice\);\s*if \(!onRow\) \{[\s\S]{0,400}if \(!off\?\.disabled\) return null;/, "a greyed button: why it is off");
   assert.match(strip, /!advisedAny\(theirs, advice\)/, "a greyed button is not lacking: nothing joins the row for it");
   const list = [v("stop_agent", "agent", { label: "Stop and save", disabled: true }), v("next", "next")];
-  assert.equal(advisedIn(list, { verb: "stop_agent", label: "Stop and save" }), null, "greyed: nothing to fill, so nothing to say");
+  assert.equal(advisedIn(list, { verb: "stop_agent", label: "Stop and save" }), null, "greyed: nothing to fill");
 });
 
 test("advised Send fills only a button that sends, and the card's other words for an act still match", () => {

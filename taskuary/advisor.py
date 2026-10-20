@@ -64,7 +64,8 @@ def _acted(store, target_kind, target_id) -> str:
     operation that ran on it, done, failed or declined (a proposal still waiting for its yes is no act yet). DeliveryState alone
     skipped every NULL, so a reply sent with no delivery receipt (Status approved, DeliveryState NULL) changed nothing it saw."""
     col = 'TaskId' if target_kind == 'task' else 'MessageId'
-    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,''), ',') AS d FROM "
+    # ...and whether its draft could not be written: a Reply whose draft failed left the line it was judged before standing (2026-10-19)
+    rv = store._one(f"SELECT GROUP_CONCAT(ReviewId || ':' || IFNULL(Status,'') || ':' || IFNULL(DeliveryState,'') || ':' || (IFNULL(DraftError,'')<>''), ',') AS d FROM "
                     f"(SELECT * FROM review WHERE {col}=? ORDER BY ReviewId)", (int(target_id),)) or {}
     op = store._one("SELECT OpId, Status FROM operation WHERE TargetKind=? AND TargetId=? AND Status<>'proposed' ORDER BY rowid DESC LIMIT 1",
                     (target_kind, int(target_id))) or {}
@@ -216,6 +217,12 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         if st.get('said'): lines.append('THE AGENT LAST SAID: ' + ' '.join(str(st['said']).split())[:600])
         asks = [r.get('text') for r in st.get('requests') or [] if r.get('text')]
         if asks: lines.append('THE AGENT IS ASKING: ' + ' | '.join(' '.join(str(q).split())[:200] for q in asks[:3]))
+        # ...and WHETHER ITS RUN IS OVER, and how: a finished agent's result came only as a 'finished' event, which the prompt never
+        # carried - the line over "the agent finished" had nothing to say (the advisor matrix, 2026-10-19)
+        if st.get('state') in ('finished', 'failed', 'stopped'):
+            last = next((e for e in reversed(workerstate.events(store, int(target_id), st.get('sid'))) if e['Kind'] == st['state']), {})
+            said = ' '.join(str(st.get('result') or last.get('Text') or '').split())[:400]
+            lines.append(f"THE AGENT'S RUN ENDED ({st['state']})" + (f': {said}' if said else ' - it left no words'))
         # THE WHOLE STORY of a task that came back: the agent finished, the reply went, then new mail reopened it. Read from the card
         # alone ("paused ... ready to resume") it advised Continue for a reason that was not true, and never said what the new mail
         # wanted (the owner, 2026-10-14: "the advisor should just realize what's going on ... as long as it has full context")
@@ -227,9 +234,10 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
                          "them to it first:\n" + '\n'.join(f"- {m.get('FromName') or m.get('FromEmail')} ({m.get('CreatedAt')}): {m.get('Subject') or ''}"
                                                              f" - {' '.join(str(m.get('BodyText') or '').split())[:500]}" for m in mail[-3:]))
         t = store.get_task(int(target_id)) or {}
-        try: todo = [c.get('text') for c in json.loads(t.get('Checklist') or '[]') if isinstance(c, dict) and not c.get('done') and c.get('text')]
-        except ValueError: todo = []
+        todo = [c.get('text') for c in _checklist(t) if not c.get('done') and c.get('text')]
         if todo: lines.append('STILL TO DO ON THE TASK: ' + ' | '.join(' '.join(str(x).split())[:160] for x in todo[:6]))
+        # ...and a list with nothing left on it, said: with no line at all the model could not tell it from a task with no list
+        elif (ticked := [c for c in _checklist(t) if c.get('done')]): lines.append(f'EVERY TODO ON THE TASK IS TICKED ({len(ticked)} of {len(ticked)})')
     lrn = injectable(store.doc('learned') or '')
     if lrn.strip(): lines.append('LEARNED (the owner, from their own verdicts):\n' + lrn[:2000])
     led = [f"out{r['Id']}: {outcomes._sentence(store, r)}" for r in outcomes.rows_for(store, target_kind, target_id) if r.get('ResolvedAt')][:5]
@@ -244,6 +252,11 @@ def _prompt(store, event, item, verbs, tier, target_kind, target_id) -> str:
         more = outcomes.evidence(store, (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'), limit=15)
         if more: lines.append('RECENT OUTCOMES:\n' + '\n'.join(more))
     return '\n\n'.join(lines)
+
+
+def _checklist(t: dict) -> list:
+    try: return [c for c in json.loads((t or {}).get('Checklist') or '[]') if isinstance(c, dict)]
+    except (TypeError, ValueError): return []
 
 
 def sent_line(store, target_kind, target_id) -> str:
@@ -344,7 +357,13 @@ def failure(store, item: dict) -> dict | None:
     """What last failed on the item - {what, why, fix, unknown, kind} - or None: a draft whose send failed or never answered, else the
     newest act on it that ended in an error. The Advisor was never told, so it advised the Send that had just failed (2026-10-18)."""
     ok = lambda f: f if isinstance(f, dict) and f.get('label') and f.get('href') else None
-    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or {}
+    r = (store.get_review(int(item['rid'])) if item.get('rid') else None) or (store.pending_review(int(item['tid'])) if item.get('tid') else None) or {}
+    # A DRAFT THAT COULD NOT BE WRITTEN is what failed (2026-10-19): with no AI to write it, Reply left an empty box and an error, and
+    # the Advisor - never told - read the box with no Send as a chat's draft and said "copy it ... then mark it done" over an email
+    if r.get('Status') == 'pending' and r.get('DraftError'):
+        from .failures import classify
+        c = classify(str(r['DraftError']))
+        return {'what': 'the reply could not be drafted', 'why': c['sentence'], 'fix': ok(c['fix']), 'unknown': False, 'kind': 'draft'}
     if r.get('DeliveryState') in ('failed', 'unknown'):
         try: env = json.loads(r.get('Deliver') or '{}') or {}
         except (TypeError, ValueError): env = {}
@@ -503,7 +522,7 @@ def for_key(store, key: str) -> dict:
         # a fix is a place, not a proposal: the page opens its href where the row has no '<rid>:fix' of its own to press (a failed
         # act with no draft on the table) - read live, so a fix already made carries no stale link
         if out.get('verb') == 'fix':
-            try: f = delivery_fix(store, _item(store, *tgt, key=key) or {})
+            try: it = _item(store, *tgt, key=key) or {}; f = delivery_fix(store, it) or (failure(store, it) or {}).get('fix')
             except Exception: f = None
             if f: out['href'] = f['href']
         # ...and the task "New task to fix this" makes, read live the same way

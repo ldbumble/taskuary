@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { acted, clustersOf, onPressed, press, put, rowOf } from "../src/actionRow.js";
+import { acted, advisedAny, advisedIn, clustersOf, onPressed, press, put, rowOf } from "../src/actionRow.js";
 import { ADVICE_NONE, adviceNone } from "../src/words.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
@@ -57,4 +57,17 @@ test("no line is still an answer: every reason is a sentence and lights one move
   const walk = fs.readFileSync(path.join(process.cwd(), "deadend_check.mjs"), "utf8");
   for (const rule of ["STILL", "STRIP", "REREAD", "LIT"]) assert.ok(walk.includes(`note("${rule}"`), rule);
   assert.match(read("assistantView.css"), /\.tq-dock \.tq-strip \{ min-height: 40px;/);
+});
+
+// THE ADVISOR MATRIX (2026-10-19): every moment the Advisor speaks must match the screen. Two it caught: the draft's text cleared, Send
+// greyed, and the strip went blank with nothing lit; after a refused send the lit Redraft stood a scroll below the card's edge.
+test("an advised move the row has greyed says why it is off, and a move lit on the card is brought into view", () => {
+  const list = [v("12:approve", "decide", { label: "Send", card: true, tone: "p", disabled: true, why: "write the reply first" }), v("next", "next")];
+  const pick = { verb: "approve", label: "Send" };
+  assert.equal(advisedIn(list, pick), null, "a greyed button is never lit");
+  assert.equal(advisedAny(list, pick)?.why, "write the reply first", "...but the row still has it, and says why it is off");
+  const src = read("ActionRow.jsx");
+  assert.match(src, /const off = advisedAny\(theirs, advice\);\s*if \(!off\?\.disabled\) return null;/);
+  assert.match(src, /data-tq-advice="off"[\s\S]{0,120}\$\{off\.label\} is off - \$\{off\.why/);
+  assert.match(read("ReviewDecision.jsx"), /if \(lit\.startsWith\(`\$\{r\.ReviewId\}:`\)\) movesRef\.current\?\.querySelector\("\.MuiButton-contained"\)\?\.scrollIntoView/);
 });

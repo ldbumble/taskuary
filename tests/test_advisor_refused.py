@@ -73,3 +73,59 @@ class RefusedTests(_Rail):
         got = self._advise(s, key)
         self.assertEqual(got.get('verb'), 'close', got)
         self.assertIn('copy', got.get('line', '').lower())
+
+    def test_a_draft_that_could_not_be_written_is_what_failed_and_an_email_is_never_copied(self):
+        """The advisor matrix (2026-10-19): Reply with no AI left an empty box and "no AI connector is set up to write replies" - and the
+        line, never told, read the email's box with no Send as a chat's draft: "copy it ... then mark it done", Mark done lit."""
+        s = self._world(); key, r = self._draft(s)
+        before = advisor.revision(s, 'task', r['TaskId'])
+        s._exec("UPDATE review SET DraftText='' WHERE ReviewId=?", (r['ReviewId'],))
+        s.set_review_draft_error(r['ReviewId'], 'no AI connector is set up to write replies')
+        self.assertNotEqual(before, advisor.revision(s, 'task', r['TaskId']), 'a draft that failed moves the revision')
+        it = advisor._item(s, 'task', r['TaskId'], key)
+        f = advisor.failure(s, it)
+        self.assertEqual(f['what'], 'the reply could not be drafted'); self.assertEqual(f['fix']['label'], 'Connect an AI')
+        self.assertEqual(advisor.offered(s, it)[0]['label'], 'Connect an AI', 'its fix leads the verbs offered')
+        got = self._advise(s, key)
+        self.assertEqual((got.get('verb'), got.get('label')), ('fix', 'Connect an AI'), got)
+        self.assertTrue(got.get('href'), 'the fix opens its place')
+        self.assertNotIn('copy', got.get('line', '').lower())
+        # ...and an email's empty box with no failure is not a chat's draft either
+        ask = lambda item: json.loads(demo.brain()('Answer with JSON only', f'EVENT: item.shown\n\nTHE ITEM: {json.dumps(item)}\n\nVERBS OFFERED: redraft (Redraft), close (Mark done)'))
+        self.assertNotIn('copy', ask({'channel': 'email'})['line'].lower())
+        self.assertIn('copy', ask({'channel': 'teams'})['line'].lower())
+
+    def test_an_agent_start_that_failed_is_left_on_the_task_for_the_advisor(self):
+        """The advisor matrix (2026-10-19): Send to agent failed with its error on the card, and the line over it still said the reply
+        had gone and to mark it done - the failure was said only in the answer, never kept where the Advisor reads it."""
+        from unittest import mock
+        from fastapi.testclient import TestClient
+        from taskuary import general, server
+        s = self._world(); key, r = self._draft(s)
+        s._exec("UPDATE task SET Kind='general' WHERE TaskId=?", (r['TaskId'],))
+        with mock.patch.object(server, 'store', s), mock.patch.object(general, 'start_session', side_effect=RuntimeError('the assistant could not start')):
+            got = TestClient(server.app).post(f"/api/tasks/{r['TaskId']}/dispatch", json={})
+        self.assertEqual(got.status_code, 422, got.text)
+        f = advisor.failure(s, advisor._item(s, 'task', r['TaskId'], key))
+        self.assertEqual(f['what'], 'the agent did not start'); self.assertIn('could not start', f['why'])
+
+    def test_the_prompt_says_an_agent_run_is_over_and_a_list_has_nothing_left(self):
+        """The advisor matrix (2026-10-19): a finished agent and a task with every todo ticked stood under "No suggestion" - the prompt
+        carried neither the agent's finish nor an empty list, so nothing told the model the work was done."""
+        from taskuary import workerstate
+        s = MemoryStore()
+        t = s.create_task({'Title': 'Fix the export', 'Status': 'in_progress', 'Kind': 'coding'}, 'owner')
+        workerstate.record(s, t, 'r1', 'working'); workerstate.record(s, t, 'r1', 'finished', text='Done - the export keeps the rows now.')
+        p = advisor._prompt(s, advisor.SHOWN, {'key': f'task:{t}', 'tid': t}, [{'verb': 'close', 'label': 'Mark done'}], 1, 'task', t)
+        self.assertIn("THE AGENT'S RUN ENDED (finished): Done - the export keeps the rows now.", p)
+        u = s.create_task({'Title': 'Close the August books', 'Status': 'open'}, 'owner')
+        s.set_task_checklist(u, ['Bank reconciliation', 'Accruals posted'], 'owner')
+        for x in ('Bank reconciliation', 'Accruals posted'): s.tick_checklist_item(u, s.checklist_id(x), True, 'owner')
+        p = advisor._prompt(s, advisor.SHOWN, {'key': f'task:{u}', 'tid': u}, [{'verb': 'close', 'label': 'Mark done'}], 1, 'task', u)
+        self.assertIn('EVERY TODO ON THE TASK IS TICKED (2 of 2)', p); self.assertNotIn('STILL TO DO', p)
+        self.assertEqual(json.loads(demo.brain()('JSON', p))['verb'], 'close', 'the scripted Advisor reads it the same way')
+
+    def test_the_scripted_advisor_redrafts_only_past_a_failed_reply(self):
+        ask = lambda failed: json.loads(demo.brain()('JSON', f'EVENT: item.shown\n\nVERBS OFFERED: new_task (New task to fix this), redraft (Redraft), close (Mark done)\n\nWHAT FAILED: {failed}'))
+        self.assertEqual(ask('the reply was not sent - refused')['verb'], 'redraft')
+        self.assertEqual(ask('the agent did not start - no coding tool')['verb'], 'new_task', 'an agent that did not start is not redrafted')

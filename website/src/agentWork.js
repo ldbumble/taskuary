@@ -83,3 +83,7 @@ export const elapsedText = (ms) => {
   const s = Math.max(0, Math.round((ms || 0) / 1000));
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 };
+
+// The Assistant's answer being written: a real brain took 4-51 s behind three silent dots, which read as hung (the owner, 2026-10-20:
+// "working... Ns"). Nothing in the first second - most answers are back by then - and whole seconds after it, floored so it never jumps ahead.
+export const workingLine = (ms) => (ms >= 1000 ? `Working… ${elapsedText(Math.floor(ms / 1000) * 1000)}` : "");

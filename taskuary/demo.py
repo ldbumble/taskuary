@@ -182,15 +182,15 @@ def _n(k: int, one: str, many: str) -> str: return f"{k} {one if k == 1 else man
 
 def _list_line(store) -> str:
     """The count the rail shows, read from the rail: a line that said "Three things are waiting" beside a rail of nine
-    read as the assistant not looking (B23, 2026-10-17)."""
-    from . import funnel
+    read as the assistant not looking (B23, 2026-10-17). ...and counted as the rail's ON YOU band counts (lanes.on_you, the greeting's
+    own count): "25 things are on it, and 5 are waiting" stood beside an ON YOU of 9 (2026-10-19 UI walk)."""
+    from . import funnel, lanes
     try: items = funnel.pile(store)['items'] if store is not None else None
     except Exception: items = None
     if items is None: return 'Everything on it is in front of you on the left.'
-    if not items: return 'Nothing is waiting on you right now.'
-    yours = sum(1 for i in items if funnel.waits_on_you(i))
-    return (f"{_n(len(items), 'thing is', 'things are')} on it"
-            + (f", and {_n(yours, 'is', 'are')} waiting on your answer or your yes." if yours else '.'))
+    yours = sum(map(lanes.on_you, items))
+    if not yours: return 'Nothing is on you right now.'
+    return f"{_n(yours, 'thing is', 'things are')} on you - they lead your rail, under ON YOU."
 
 
 # THE ADVISOR, SCRIPTED (B17, 2026-10-17): its prompt says JSON, so it got triage's {"intent": "fyi"} and dropped every answer as
@@ -294,22 +294,50 @@ def _advice(text: str) -> str:
     return json.dumps({'verb': verb, 'line': line, 'evidence': []})
 
 
+# THE ANSWER FITS THE ASK (2026-10-19 UI walk): one random line answered "what is on my plate", "draft a reply" and "what's the
+# weather" alike. Each scripted line is picked by what was asked; anything else is said to be beyond a script
+ANSWERS = ((re.compile(r'\b(draft|reply|respond|answer|write)\b', re.I),
+            'Open the item and press Reply - the draft lands on the task, and nothing goes out until you say yes. In the demo the drafts '
+            'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
+           (re.compile(r'\b(report|every (morning|day|week)|schedule|weekly|daily)\b', re.I), CANNED[2]),
+           (re.compile(r"\b(list|plate|today|waiting|on me|on you|next|todo|to do|tasks?)\b", re.I), 'I looked at your list. {list}'))
+OUT_OF_SCRIPT = ('In the demo I answer from a script, so that one is beyond me - in your own Taskuary your own AI answers it. '
+                 'Ask me what is on your list, or to draft a reply.')
+
+def _answer(asked: str, store) -> str:
+    said = next((a for rx, a in ANSWERS if rx.search(asked)), None)
+    if said is None: return OUT_OF_SCRIPT + f'\n\n(You asked: "{asked[:160]}" - and this is a scripted answer.)'
+    return said.format(list=_list_line(store if store is not None else _store())) if '{list}' in said else said
+
+
+# A DRAFT IS A REPLY, never the assistant's chat line (2026-10-19 UI walk): the responder's prompt was answered from CANNED, and TQ-0001's
+# draft read "I looked at your list. 25 things are on it...". A thread the world wrote a draft for gets it; any other gets a holding line
+def _draft(user: str) -> str:
+    subject = (re.search(r'^Subject: (.*)$', user, re.M) or [None, ''])[1].strip()
+    if subject in DRAFTS: return DRAFTS[subject]
+    if hit := next((d for k, d in DRAFTS.items() if k in user), None): return hit
+    who = (re.search(r'^From: ([^<\n]*)', user, re.M) or [None, ''])[1].strip().split(' ')[0]
+    return f"Thanks{' ' + who if who and '@' not in who else ''} - I have this, and I will come back to you on it today."
+
+
 def brain(seed: int = 0, store=None):
     """A model that never leaves the process. Deterministic per conversation, so the demo reads
     the same for everyone who clicks the same thing."""
+    from .concierge import OWNER_SAYS
     pick = random.Random(seed)
     def llm(system, user, max_tokens=None, images=None, **kw):
         text = str(user or '')
         if _VERBS.search(text): return _advice(text)
+        if str(system or '').startswith('You ARE '): return _draft(text)       # responder.SYSTEM: the owner's own reply
         if 'JSON' in str(system or '') or 'intent' in str(system or '').lower():
             return json.dumps({'intent': 'fyi', 'why': 'the demo files everything it is not sure about'})
         # what the person actually typed, out of a prompt that also carries the task, the
         # documents and the conversation - quoting the whole thing back reads as a bug
-        asked = [l[6:].strip() for l in text.splitlines() if l.startswith('USER: ')]
+        asked = [l[len(OWNER_SAYS):].strip() for l in text.splitlines() if l.startswith(OWNER_SAYS)] \
+            or [l[6:].strip() for l in text.splitlines() if l.startswith('USER: ')]
+        if asked: return _answer(asked[-1], store)
         said = pick.choice(CANNED)
-        if '{list}' in said: said = said.format(list=_list_line(store if store is not None else _store()))
-        if not asked: return said
-        return said + f'\n\n(You asked: "{asked[-1][:160]}" - and this is a scripted answer.)'
+        return said.format(list=_list_line(store if store is not None else _store())) if '{list}' in said else said
     return llm
 
 

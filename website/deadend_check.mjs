@@ -99,7 +99,9 @@ const JARGON = [...JARGON_RES, /\bnull\b/, /\bundefined\b/, /Traceback/, /\b[45]
   /\w+Error: /];
 const NAMED = new Set(ALL_LABELS.map((l) => l.trim()));
 // a failed send's fix ('<rid>:fix') and a failure's own fix wear the fix's own words ("Connect a mailbox") - buttons.json says so of `fix`
-const named = (w, id = "") => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w) || /:fix$/.test(id);
+// ...and so does a failure's fix chip in the chat: concierge.recover makes `go` chips only of a failure's fix, with the fix's own words
+const isFix = (id = "") => /:fix$|^chat:(.+:)?go$/.test(id);
+const named = (w, id = "") => !w || NAMED.has(w) || /…$/.test(w) || w === "▾" || /^Open TQ-\d+/.test(w) || isFix(id);
 // the cover key of a button: its verb, and the state its words are ("approve:unknown" for Send anyway)
 const coverOf = (verb, word) => {
   const v = VERBS[verb]; if (!v) return null;
@@ -452,7 +454,7 @@ async function faults() {
     await closePops(page);
     return hit;
   };
-  const aFix = (x) => /:fix$/.test(x.id || "");
+  const aFix = (x) => isFix(x.id);
   // a refused recipient is fixed by changing the draft, not by sending it again - Redraft is its way, or the bug report
   const plan = [["auth", [aFix, "Sign in again"]], ["reject", [aFix, label("redraft"), label("report_bug")]],
                 ["nomailbox", [aFix, "Connect a mailbox"]], ["unknown", [label("approve", "unknown")]]];

@@ -150,7 +150,7 @@ class AboutTests(unittest.TestCase):
             if name == 'job': learned(store)
         with mock.patch('taskuary.histgen.generate', side_effect=gen):
             firstrun.learn(s, {'name': 'Alex Doyle', 'org': 'Northwind', 'role': 'Finance systems lead'}, wait=True)
-        self.assertEqual(names, ['job', 'style'])
+        self.assertEqual(names, ['job', 'style', 'soul'])                    # every draft, in order: who you are reads the job
         self.assertEqual((s.owner()['owner'], s.get_setting('owner_company')), ('Alex Doyle', 'Northwind'))
         st = firstrun.job_state(s)
         self.assertEqual(st['state'], 'ready'); self.assertTrue(st['text'].startswith('### What my job is')); self.assertNotIn('_generated', st['text'])
@@ -214,6 +214,34 @@ class AboutTests(unittest.TestCase):
         self.assertIn('erin@northwind.example', north); self.assertNotIn('ray@riverside.example', north)
         self.assertIn('ray@riverside.example', river); self.assertNotIn('erin@northwind.example', river)
         self.assertIn('Finance lead', north); self.assertNotIn('Finance lead', river)     # the title setup was told is the owner's own org's
+
+    def test_how_you_write_and_who_you_are_are_drafts_with_a_state_and_a_failure_said(self):
+        """Two drafts after the job (the owner, 2026-10-20): STYLE.md was written silently behind the job and its failure only logged -
+        now each draft says running, ready or failed with why, and only the docs asked for are written."""
+        s = MemoryStore()
+        def gen(store, name, days=90):
+            if name == 'style': raise RuntimeError('no sent mail to learn from - connect a mailbox')
+            from taskuary import histgen
+            histgen.put_learned(store, name, f'_generated now_\n\n### What matters to me\n- {name} written', 'histgen')
+        with mock.patch('taskuary.histgen.generate', side_effect=gen):
+            firstrun.learn(s, {'name': 'Alex Doyle'}, wait=True, docs=('style', 'soul'))
+        d = firstrun.drafts(s)
+        self.assertEqual((d['job']['state'], d['style']['state'], d['soul']['state']), ('none', 'failed', 'ready'))
+        self.assertIn('no sent mail', d['style']['why'])
+        self.assertEqual(d['soul']['text'], '### What matters to me\n- soul written')
+        self.assertEqual(firstrun.about(s)['soul'], '### What matters to me\n- soul written')
+
+    def test_a_draft_accepted_as_edited_is_kept_and_one_left_alone_stays_as_written(self):
+        s = MemoryStore()
+        from taskuary import histgen
+        histgen.put_learned(s, 'style', '_generated now_\n\n### Tone & length\n- short', 'histgen')
+        before = s.get_doc('style')
+        firstrun.accept(s, 'style', '### Tone & length\n- short')                       # Looks right on the draft as written
+        self.assertEqual(s.get_doc('style'), before)
+        firstrun.accept(s, 'style', '### Tone & length\n- short, and never on a Friday')
+        self.assertEqual(firstrun.learned_job(s, 'style'), '### Tone & length\n- short, and never on a Friday')
+        self.assertIn('corrected by you at setup', s.get_doc('style'))
+        with self.assertRaises(ValueError): firstrun.accept(s, 'triage', 'x')
 
     def test_one_organisation_is_one_job_as_before(self):
         s = mailboxes(MemoryStore(), ('gmail', 'alex@northwind.example'), ('imap', 'ap@northwind.example'))

@@ -16,13 +16,28 @@ test("the questions come one at a time: name, organisation, title, signature, sy
 
 test("the job is written once the title is answered, and the last press saves what the owner left", () => {
   const src = read("FirstRunAbout.jsx");
-  assert.match(src, /if \(step === "role" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\);/);
-  // ...and again as the mailbox step is passed, when a mailbox came in since: the job is read from every one of them
-  assert.match(src, /if \(step === "mailboxes" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\);/);
+  assert.match(src, /if \(step === "role" && who\(a, mailboxes\) !== learnedFor\.current\) learn\(\["job"\]\);/);
+  // ...and all three drafts as the mailbox step is passed - the job again when a mailbox came in since: it is read from every one
+  assert.match(src, /if \(step === "mailboxes"\) learn\(who\(a, mailboxes\) !== learnedFor\.current \? DRAFTS : DRAFTS\.filter\(\(k\) => k !== "job" && drafts\[k\]\.state === "none"\)\);/);
   assert.match(src, /\.\.\.boxes\.map\(\(b\) => b\.address\.toLowerCase\(\)\)\.sort\(\)/);
-  assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", x\)/);
-  assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/job"\)/);
-  assert.match(src, /const nextLabel = last \? \(busy === "save" \? "Saving…" : job\.state === "ready" \? "Looks right" : "Save"\) : step === "mailboxes" \? "That's all my mail" : "Next"/);
+  assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/learn", \{ \.\.\.x, docs \}\)/);
+  assert.match(src, /api\.get\("\/api\/setup\/first-run\/about\/drafts"\)/);
+  assert.match(src, /const nextLabel = busy === "save" \? "Saving…" : draft \? \(draft\.state === "ready" \? "Looks right" : last \? "Save" : "Next"\)/);
+  assert.match(src, /if \(step === "soul"\) return save\(\);/);
+});
+
+// HOW YOU WRITE AND WHO YOU ARE (the owner, 2026-10-20): two more drafts after the job, the job's own pattern - written from the mail,
+// edited, accepted - each with its state said, a failure said plainly with Write it again
+test("the job, how you write and who you are are three drafts in a row, each accepted as the owner leaves it", () => {
+  const src = read("FirstRunAbout.jsx");
+  assert.match(src, /export const STEPS = \[[^\]]*"mailboxes", "job", "style", "soul"\];/);
+  assert.match(src, /export const DRAFTS = \["job", "style", "soul"\];/);
+  assert.match(src, /style: "How you write", soul: "Who you are"/);
+  assert.match(src, /About your work · \{at \+ 1\} of \{STEPS\.length\}/);
+  for (const k of ["job", "style", "soul"]) assert.match(src, new RegExp(`\\n  ${k}: \\{ running: "[^"]+",\\n    failed: \\(why\\) =>`), `${k} says each state`);
+  assert.match(src, /\{draft\.state === "failed" && <Typography data-tq-draft-failed=""/);
+  assert.match(src, /api\.post\("\/api\/setup\/first-run\/about\/accept", \{ doc: k, text: texts\[k\] \}\)/);
+  assert.match(src, /\{draft\.state === "none" \? "Write it" : "Write it again"\}/);
 });
 
 // EVERY MAILBOX BEFORE THE JOB (the owner, 2026-10-20): never skipped - Skip before it lands on it - and it moves on once one is in
@@ -57,9 +72,9 @@ test("while About your work is on the canvas setup's own Back and Next stand asi
 
 test("the job reads as a document, and Edit opens its text", () => {
   const src = read("FirstRunAbout.jsx");
-  assert.match(src, /\{editing \|\| !jobText\.trim\(\)\s*\? <TextField multiline/);
-  assert.match(src, /<Md text=\{jobText\} \/>/);
-  assert.match(src, /\{editing \? "Done editing" : "Edit"\}/);
+  assert.match(src, /\{editing === step \|\| !text\.trim\(\)\s*\? <TextField key=\{step\} multiline/);
+  assert.match(src, /<Md text=\{text\} \/>/);
+  assert.match(src, /\{editing === step \? "Done editing" : "Edit"\}/);
 });
 
 test("the first time About your work is saved, setup is complete: confetti and one big button into the day", () => {

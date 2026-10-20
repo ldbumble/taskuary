@@ -6473,6 +6473,9 @@ class FirstRunConnBody(BaseModel): cid: int
 
 class FirstRunAboutBody(BaseModel):
     name: str = ''; org: str = ''; role: str = ''; systems: list = []; job: str = ''; signature: str | None = None
+    docs: list[str] = []            # learn: which drafts to write (job, style, soul) - all three when none is named
+
+class FirstRunDraftBody(BaseModel): doc: str; text: str = ''
 
 # ABOUT YOUR WORK: one question a screen - name, organisation, title, systems, suggested from the mail - then the job description
 # written from the mail with those in hand, for the owner to correct (firstrun.about / suggest_about / learn / job_state / save_about)
@@ -6502,15 +6505,30 @@ def signature_learn():
 
 @app.post('/api/setup/first-run/about/learn')
 def first_run_about_learn(body: FirstRunAboutBody):
-    """The title answered: who they are saved, and JOB.md written from the mail with it in the background (Write it again, too)."""
+    """The title answered or the mailboxes in: who they are saved, and the drafts named - JOB.md, STYLE.md, SOUL.md - written from the
+    mail with it in the background (Write it again, too)."""
     from . import firstrun
-    firstrun.learn(store, body.model_dump())
-    return firstrun.job_state(store)
+    docs = [d for d in body.docs if d in firstrun.DRAFTS] or list(firstrun.DRAFTS)
+    firstrun.learn(store, body.model_dump(exclude={'docs'}), docs=docs)
+    return {**firstrun.job_state(store), 'drafts': firstrun.drafts(store)}
 
 @app.get('/api/setup/first-run/about/job')
 def first_run_about_job():
     from . import firstrun
     return firstrun.job_state(store)
+
+@app.get('/api/setup/first-run/about/drafts')
+def first_run_about_drafts():
+    """Each setup draft's state - {job, style, soul}: none, running, ready (with its text) or failed (with why)."""
+    from . import firstrun
+    return firstrun.drafts(store)
+
+@app.post('/api/setup/first-run/about/accept')
+def first_run_about_accept(body: FirstRunDraftBody):
+    """A draft's Looks right: the text as the owner left it, kept in its doc."""
+    from . import firstrun
+    try: return firstrun.accept(store, body.doc, body.text)
+    except ValueError as e: raise HTTPException(404, str(e))
 
 @app.post('/api/setup/first-run/about')
 def first_run_about_save(body: FirstRunAboutBody):

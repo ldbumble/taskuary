@@ -47,8 +47,12 @@ async function open(harness, world) {
           rail: st.rail.map((x) => ({ ...x, done: ["ai", "mail"].includes(x.key) || x.done, open: true })) });
       }
       if (p === "/api/setup/first-run/about/suggest") return json(r, 200, { name: "Alex Doyle", org: "Northwind", role: "Finance lead", signature: "", systems: [] });
-      if (p === "/api/setup/first-run/about/learn") { world.learned = JSON.parse(r.postData() || "{}"); return json(r, 200, world.drafts.job); }
-      if (p === "/api/setup/first-run/about/job") return json(r, 200, world.drafts.job);
+      if (p === "/api/setup/first-run/about/learn") {
+        world.learned = JSON.parse(r.postData() || "{}"); (world.asked ||= []).push(world.learned.docs);
+        return json(r, 200, { ...world.drafts.job, drafts: world.drafts });
+      }
+      if (p === "/api/setup/first-run/about/drafts") return json(r, 200, world.drafts);
+      if (p === "/api/setup/first-run/about/accept") { (world.accepted ||= []).push(JSON.parse(r.postData()).doc); return json(r, 200, { state: "ready" }); }
     } catch (e) { errors.push(`fixture: ${e.message}`); return r.abort(); }
     page.fixtureRequestGuard(r);
   });
@@ -58,10 +62,11 @@ async function open(harness, world) {
 }
 
 const DRAFT = (text) => ({ state: "ready", why: "", text });
+const NONE = { state: "none", why: "", text: "" };
 
 test("About your work: Skip lands on the mailbox step, which cannot be skipped and moves on once a mailbox is in", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
-  const world = { boxes: [], drafts: { job: DRAFT("### What my job is\n- I run the month-end close.") } };
+  const world = { boxes: [], drafts: { job: DRAFT("### What my job is\n- I run the month-end close."), style: NONE, soul: NONE } };
   const { page, errors, sent } = await open(harness, world);
   assert.match(await page.evaluate(() => document.body.innerText), /About your work · 1 of \d+/);
   assert.ok(await press(page, "Skip these questions"));
@@ -85,5 +90,53 @@ test("About your work: Skip lands on the mailbox step, which cannot be skipped a
   for (const s of ["mailboxes", "systems", "signature"]) { assert.ok(await press(page, "Back")); await onStep(page, s); }
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
+  assert.deepEqual(errors, []);
+});
+
+test("About your work: the job, how you write and who you are are drafts to accept, and a failed one says why with Write it again", { timeout: 240000 }, async (t) => {
+  const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
+  const world = { boxes: [{ address: "alex@northwind.example", type: "outlook" }, { address: "alex@riverside.example", type: "imap" }],
+    drafts: { job: DRAFT("## At Northwind (alex@northwind.example)\n\n### What my job is\n- I run the month-end close.\n\n"
+      + "## At riverside.example (alex@riverside.example)\n\n### What my job is\n- I keep the volunteer rota."),
+    style: { state: "failed", why: "no sent mail to learn from - connect a mailbox", text: "" },
+    soul: { state: "running", why: "", text: "" } } };
+  const { page, errors, sent } = await open(harness, world);
+  assert.ok(await press(page, "Skip these questions"));
+  await onStep(page, "mailboxes");
+  assert.match(await line(page), /2 mailboxes are connected\./);
+  assert.ok(await press(page, "That's all my mail"));
+  await onStep(page, "job");
+  assert.deepEqual(world.asked, [["job", "style", "soul"]], "all three drafts are written once every mailbox is in");
+  // the job: read as a document, a section per organisation, and accepted as it is
+  await until(page, () => document.querySelectorAll("[data-tq-job-read] h2").length === 2);
+  assert.match(await page.evaluate(() => document.body.innerText), /About your work · 7 of 9/);
+  assert.match(await line(page), /This is your job as your email describes it/);
+  await shot(page, "about-job");
+  assert.ok(await press(page, "Looks right"));
+  await onStep(page, "style");
+  assert.deepEqual(world.accepted, ["job"]);
+  // how you write failed: said plainly on the canvas and on the line, with Write it again lit - Next never pretends it worked
+  assert.match(await page.evaluate(() => document.querySelector("[data-tq-draft-failed]")?.innerText || ""), /I couldn't write it: no sent mail to learn from/);
+  assert.match(await line(page), /I couldn't write it from your sent mail \(no sent mail to learn from - connect a mailbox\)\. Press Write it again/);
+  assert.equal(await page.evaluate(() => document.querySelector('[data-tq-setup-lit="about"]')?.innerText), "Write it again");
+  assert.ok(await button(page, "Next"), "past it without a draft is still Next");
+  await shot(page, "about-style-failed");
+  world.drafts.style = DRAFT("### Tone & length\n- Two or three sentences, the answer first.");
+  assert.ok(await press(page, "Write it again"));
+  await until(page, () => /answer first/.test(document.querySelector("[data-tq-job-read]")?.innerText || ""));
+  assert.deepEqual(world.asked.at(-1), ["style"], "only that draft is written again");
+  assert.ok(await press(page, "Looks right"));
+  await onStep(page, "soul");
+  // who you are, still being written: said, and the step waits for it; then it arrives on the next read
+  assert.match(await page.evaluate(() => document.body.innerText), /Describing how you like to work…/);
+  assert.deepEqual(await button(page, "Save"), { off: true }, "the last step waits on its draft");
+  world.drafts.soul = DRAFT("### How I like to work\n- I settle a question the same day.");
+  await until(page, () => /same day/.test(document.querySelector("[data-tq-job-read]")?.innerText || ""), null, 20000);
+  assert.match(await line(page), /This is how you like to work, from your mail and your answers/);
+  await shot(page, "about-soul");
+  assert.ok(await press(page, "Looks right"));
+  for (let i = 0; i < 100 && !sent["/api/setup/first-run/about"]; i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(sent["/api/setup/first-run/about"], 1, "the last Looks right saves the answers");
+  assert.deepEqual(world.accepted, ["job", "style", "soul"]);
   assert.deepEqual(errors, []);
 });

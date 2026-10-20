@@ -35,6 +35,9 @@ from . import asks, buttons, lanes, operations, timewords, workerstate as ws, wo
 from .store import task_ref
 
 MAX_TOKENS, TURNS, FACT_CHARS = 380, 10, 1_600
+# where the owner's own words start in the prompt - the demo's scripted brain reads them by this same constant (demo.brain), and grepped
+# for "USER: " while this said "The owner says:", so it never saw the question and gave every ask one line (2026-10-19 UI walk)
+OWNER_SAYS = 'The owner says: '
 READ_ROUNDS = 3          # a bucket, then a look-up, then one more - never an open-ended crawl (tools are disclosed on demand)
 LAST_READ = ('That was your last look-up for this turn - there is no other. Answer now with what you have. If nothing '
              'written down here answers it and it needs somebody to go and find out - research, a repository, a website - '
@@ -3747,7 +3750,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                       + (f"OPEN BESIDE IT: {_cut(open_card, 300)} - the item is still on the table, under that page; 'this' is whichever of the two "
                          f"their words fit{under_page(item)}\n\n" if open_card and item else '')
                       + (f"{table_actions(store, item)}\n\n" + (f"{adv}\n\n" if (adv := _advice_block(store, item)) else '') + f"{WHAT_ABOUT}\n\n" if item else '')
-                      + f"The owner says: {text}\n"
+                      + f"{OWNER_SAYS}{text}\n"
                       # A PICTURE WITH THE LINE (the owner, 2026-09-30): an API brain sees it, a CLI brain reads the file it names
                       + ("ATTACHED IMAGES (read these files - they are what the owner is showing you)\n" + "\n".join(images) + "\n" if images else '')
                       + f"Answer them, briefly. If a look-up would answer it, CALL it now instead of saying you will. "
@@ -3859,7 +3862,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # which row its words meant (2026-10-08)
     if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:
         try:
-            again = str(llm(_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\nThe owner says: {text}\nYou chose {decision.get('verb')} "
+            again = str(llm(_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
                                                 f"with `on`: {str(decision['on'])[:80]!r}, which names no row. Put the row's handle in `on` - the "
                                                 'TQ ref or m-number that starts its line above, or one a look-up gave you - and CALL it again. '
                                                 'If none of them is it, say so in plain words.', max_tokens=MAX_TOKENS) or '')

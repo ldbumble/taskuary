@@ -179,14 +179,36 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertEqual(ask('mine (Make a task), regular_agent (Send to agent), not_ours (Not ours)')['verb'], None)
 
     def test_the_canned_count_is_the_rails_own(self):
-        """B23: "Three things are waiting on you" stood beside a rail of nine."""
-        from taskuary import funnel
+        """B23: "Three things are waiting on you" stood beside a rail of nine - and "25 things are on it, and 5 are waiting" beside an
+        ON YOU of 9 (2026-10-19 UI walk): the count is the ON YOU band's, the greeting's own (lanes.on_you)."""
+        from taskuary import funnel, lanes
         s = MemoryStore(); demo.seed(s)
         with mock.patch('taskuary.terminal.live_sessions', lambda tail=0: []):
-            funnel.invalidate(); n = len(funnel.pile(s, force=True)['items'])
-            self.assertTrue(demo._list_line(s).startswith(f'{n} things are on it'), demo._list_line(s))
+            funnel.invalidate(); n = sum(map(lanes.on_you, funnel.pile(s, force=True)['items']))
+            self.assertTrue(demo._list_line(s).startswith(f'{n} things are on you'), demo._list_line(s))
         funnel.invalidate()
         self.assertNotIn('Three', ' '.join(demo.CANNED))
+
+    def test_the_answer_fits_the_ask_read_by_the_concierges_own_words(self):
+        """2026-10-19 UI walk: it grepped for "USER: " while the concierge writes concierge.OWNER_SAYS, so every ask got one random line."""
+        from taskuary import concierge
+        ask = lambda q: demo.brain(store=MemoryStore())('You are the assistant.', f'THE RAIL\n\n{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
+        plate, draft, weather = ask('what is on my plate today'), ask('draft a reply to the invoice'), ask("what's the weather")
+        self.assertEqual(len({plate, draft, weather}), 3, (plate, draft, weather))
+        self.assertTrue(plate.startswith('I looked at your list.'), plate)
+        self.assertIn('Reply', draft)
+        self.assertTrue(weather.startswith(demo.OUT_OF_SCRIPT) and "what's the weather" in weather, weather)
+
+    def test_a_draft_is_a_reply_never_a_canned_chat_line(self):
+        """2026-10-19 UI walk: TQ-0001's demo draft read "I looked at your list. 25 things are on it..." - the responder's prompt
+        was answered from CANNED."""
+        from taskuary import responder
+        write = lambda subject, frm: demo.brain()(responder.SYSTEM.format(owner='Dana'), f'Subject: {subject}\nFrom: {frm}\n\nthe thread')
+        self.assertEqual(write('Invoice 88213 - past due', 'Tom Alvarez <talvarez@vendor.example>'), demo.DRAFTS['Invoice 88213 - past due'])
+        other = write('Month-end close is short by 4,180', 'Marcus Reed <mreed@northwind.example>')
+        self.assertTrue(other.startswith('Thanks Marcus'), other)
+        canned = {c.split('{')[0] for c in demo.CANNED}
+        for d in (other, *demo.DRAFTS.values()): self.assertFalse(any(d.startswith(c) for c in canned), d)
 
 
 class TheAdvisorSpeaksInTheDemoTests(unittest.TestCase):

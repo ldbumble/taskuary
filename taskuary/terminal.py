@@ -1271,6 +1271,22 @@ def render_visible(raw: str, cols: int = 110, rows: int = 32) -> str:
         return render(raw, cols, rows)
 
 
+_HIST = []
+
+def _history_screen(pyte):
+    """pyte's HistoryScreen without its per-attribute hook. HistoryScreen overrides __getattribute__ so every event
+    runs before_event/after_event, which exist for paging (prev_page/next_page) and the cursor's hidden flag. Nothing
+    here pages or reads that flag, yet the hook ran on every attribute read of every character fed: 60% of a pane's
+    replay (0.7 s of a 200 KB scrollback, on the event loop). Same screen, same history, same cursor without it -
+    tests/test_terminal_render_fast.py holds the two to the same output. A pyte that drew history differently keeps
+    its own class."""
+    if not _HIST:
+        H = pyte.HistoryScreen
+        ok = '__getattribute__' in H.__dict__ and all(hasattr(H, a) for a in ('before_event', 'after_event', 'prev_page', 'next_page'))
+        _HIST.append(type('FastHistoryScreen', (H,), {'__getattribute__': object.__getattribute__}) if ok else H)
+    return _HIST[0]
+
+
 def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
     """render(), and WHERE THE CURSOR IS: (text, the cursor's line index in that text, its column) - (text, None,
     None) when there is no emulator to ask. A reopened pane needs the cursor back where the CLI left it."""
@@ -1281,12 +1297,16 @@ def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
         logger.warning('pyte is not installed - transcripts will be rendered with the fallback')
         return plain(raw), None, None
     try:
-        sc = pyte.HistoryScreen(max(40, int(cols or 110)), max(4, int(rows or 32)),
-                                history=HISTORY_LINES, ratio=1.0)
+        sc = _history_screen(pyte)(max(40, int(cols or 110)), max(4, int(rows or 32)), history=HISTORY_LINES, ratio=1.0)
         pyte.Stream(sc).feed(raw)
-        # history rows are sparse Char maps; display rows are already strings
+        # history rows are sparse Char maps (a missing cell is a blank); display rows are already strings
+        n = sc.columns
         def line(r):
-            return r.rstrip() if isinstance(r, str) else ''.join(r[x].data for x in range(sc.columns)).rstrip()
+            if isinstance(r, str): return r.rstrip()
+            a = [' '] * n
+            for x, ch in r.items():
+                if 0 <= x < n: a[x] = ch.data
+            return ''.join(a).rstrip()
         top = list(sc.history.top)
         return '\n'.join(line(r) for r in top + list(sc.display)), len(top) + sc.cursor.y, sc.cursor.x
     except Exception as e:

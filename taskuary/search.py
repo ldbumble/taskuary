@@ -5,14 +5,24 @@ a source by its name; a mail no task holds - filed, fyi, a thread between other 
 Three readers, one answer: tasks by their own words (store.list_tasks, the same match the Tasks tab makes), every
 arrived message by the full-text index (store.message_search: subject, sender and body, best match first), and the
 connected sources by name. Each hit says what it IS (`type`, the pill) and how to open it - a task by its id, a message
-by its own id (with the task holding it, when one does), a source as the rail's filter."""
+by its own id (with the task holding it, when one does), a source as the rail's filter.
+
+...and THE APP'S OWN PLACES (the 2026-10-19 UI walk, G9): "Gmail" and "model" found nothing, though a Connections card and four
+settings are called that. The setting schema and the connector catalogue are the registry - the same files those pages draw
+from - and a hit carries the link (`href`) that opens the page at it, the road every in-app link takes (appLinks.js).
+
+Each answer says how much there was (`totals` by type, past the caps; `capped` when the mail index stopped counting) - the
+footer said "15 of 15" over a list cut at eight tasks - and a hit says WHY it matched (`why`) when nothing it shows does:
+"Ruth Bennett" listed six tasks with no Ruth anywhere on them."""
 import json, re
-from .store import task_ref
+from urllib.parse import quote
+from . import connectorcatalog, settings_schema
+from .store import _fold, task_ref
 
 CHAT = {'teams', 'slack', 'whatsapp', 'telegram', 'imessage', 'discord'}
 TICKET = {'jira', 'asana', 'monday', 'linear', 'clickup', 'todoist', 'trello', 'notion', 'azdo', 'sentry', 'pagerduty'}
 CLOSED = ('done', 'dropped')
-N_TASKS, N_MSGS, N_SRCS = 8, 30, 6
+N_TASKS, N_MSGS, N_SRCS, N_PLACES = 8, 30, 6, 6
 
 
 def kind_of(m: dict) -> str:
@@ -58,15 +68,45 @@ def _where(m: dict) -> str:
     return m.get('SourceName') or ch
 
 
-def _tasks(store, q: str, words) -> list:
-    ts = store.list_tasks(None, q=q)
-    lw = [w.lower() for w in words]
-    # open before closed, a title naming every word before one matched only through its mail, newest first
+def _in(text, w) -> bool: return _fold(w) in _fold(text)          # the store's own match: a LIKE %word%, folded
+
+
+def _ids(words) -> set:
+    """The task ids typed outright - TQ-0004, tq-4, or a bare 4 - which put that task first: "4" listed TQ-0004 fourth."""
+    return {int(m[1] or m[2]) for w in words if (m := re.fullmatch(r'(?i)tq-?0*(\d+)|0*(\d+)', w))}
+
+
+def _task_why(t: dict, words, mail: list) -> str:
+    """Where the words matched that the row does not show: the title, summary, kind, source and ref are on it already."""
+    seen = ' '.join(str(t.get(k) or '') for k in ('Title', 'Summary', 'Kind', 'Source')) + f" {task_ref(t['TaskId'])} {t['TaskId']}"
+    out = []
+    for w in (w for w in words if not _in(seen, w)):
+        said = (f"tagged {t['Tags']}" if _in(t.get('Tags'), w) else f"assigned to {t['Assignee']}" if _in(t.get('Assignee'), w) else
+                next((f"a mail on it is from {m.get('FromName') or m.get('FromEmail')}" for m in mail
+                      if _in(m.get('FromName'), w) or _in(m.get('FromEmail'), w)), '') or
+                next((f"a mail on it: {m['Subject'][:70]}" for m in mail if _in(m.get('Subject'), w)), '') or
+                next((f"it came in on {m.get('SourceName') or m.get('Channel')}" for m in mail
+                      if _in(m.get('SourceName'), w) or _in(m.get('Channel'), w)), '') or
+                ('its source reference' if _in(t.get('SourceRef'), w) else 'a link on its mail'))
+        if said not in out: out.append(said)
+    return '; '.join(out)
+
+
+def _tasks(store, q: str, words, status: str = '') -> tuple:
+    ts = store.list_tasks(None, q=q, shown=True)
+    if status: ts = [t for t in ts if _fold(t.get('Status')).startswith(status)]
+    lw, ids = [w.lower() for w in words], _ids(words)
+    # the id typed first, then open before closed, a title naming every word before one matched only through its mail, newest first
     ts.sort(key=lambda t: str(t.get('UpdatedAt') or t.get('CreatedAt') or ''), reverse=True)
-    ts.sort(key=lambda t: (t.get('Status') in CLOSED, not all(w in (t.get('Title') or '').lower() for w in lw)))
+    ts.sort(key=lambda t: (t['TaskId'] not in ids, t.get('Status') in CLOSED, not all(w in (t.get('Title') or '').lower() for w in lw)))
+    top, mail = ts[:N_TASKS], {}
+    for r in store._rows(f"SELECT TaskId, Channel, SourceName, Subject, FromName, FromEmail FROM message WHERE TaskId IN "
+                         f"({','.join('?' * len(top))})", [t['TaskId'] for t in top]) if top else []:
+        mail.setdefault(r['TaskId'], []).append(r)
     return [{'type': 'task', 'id': f"task:{t['TaskId']}", 'tid': t['TaskId'], 'ref': task_ref(t['TaskId']), 'title': t.get('Title') or '',
              'sub': ' · '.join(x for x in (t.get('Kind'), t.get('Source')) if x), 'when': t.get('ClosedAt') or t.get('UpdatedAt') or t.get('CreatedAt'),
-             'status': t.get('Status'), 'snippet': snippet(t.get('Summary'), words, 120)} for t in ts[:N_TASKS]]
+             'status': t.get('Status'), 'snippet': snippet(t.get('Summary'), words, 120),
+             'why': _task_why(t, words, mail.get(t['TaskId'], []))} for t in top], len(ts)
 
 
 def _message_ids(store, words) -> list:
@@ -78,22 +118,34 @@ def _message_ids(store, words) -> list:
     return [r['MessageId'] for r in store._rows(f'SELECT MessageId FROM message WHERE {cond} ORDER BY SentAt DESC LIMIT ?', (*pat, N_MSGS * 6))]
 
 
-def _messages(store, words) -> list:
-    out, seen = [], {}
-    for mid in _message_ids(store, words):
-        m = store.get_message(mid)
-        if not m: continue
-        conv = m.get('ConversationId') or f'mid:{mid}'
+def _messages(store, words) -> tuple:
+    ids = _message_ids(store, words)
+    # every match is counted, by thread and kind, from one light read - only the rows shown are read whole
+    rows = {r['MessageId']: r for r in store._rows(
+        f"SELECT MessageId, ConversationId, Channel, SourceLink FROM message WHERE MessageId IN ({','.join('?' * len(ids))})", ids)} if ids else {}
+    out, seen, totals = [], {}, {}
+    for mid in ids:
+        r = rows.get(mid)
+        if not r: continue
+        conv = r.get('ConversationId') or f'mid:{mid}'
         # one row per thread - its best-matching message - with how many more in it matched
-        if conv in seen: seen[conv]['more'] += 1; continue
+        if conv in seen:
+            if seen[conv]: seen[conv]['more'] += 1
+            continue
+        seen[conv] = None
+        m = store.get_message(mid) if len(out) < N_MSGS else None
+        k = kind_of(m or r); totals[k] = totals.get(k, 0) + 1
+        if not m: continue
         t = store.get_task(m['TaskId']) if m.get('TaskId') else None
-        hit = {'type': kind_of(m), 'id': f'msg:{mid}', 'mid': mid, 'title': _title(m), 'who': m.get('FromName') or m.get('FromEmail') or '',
+        hit = {'type': k, 'id': f'msg:{mid}', 'mid': mid, 'title': _title(m), 'who': m.get('FromName') or m.get('FromEmail') or '',
                'where': _where(m), 'channel': m.get('Channel'), 'when': m.get('SentAt') or m.get('CreatedAt'), 'link': m.get('SourceLink'),
                'snippet': snippet(m.get('OwnText') or m.get('BodyText'), words), 'more': 0,
                'tid': t['TaskId'] if t else None, 'ref': task_ref(t['TaskId']) if t else None, 'status': t.get('Status') if t else None}
+        shows = f"{hit['title']} {hit['who']} {hit['where']} {hit['snippet']}"
+        hit['why'] = next((f"from {m['FromEmail']}" for w in words if not _in(shows, w) and _in(m.get('FromEmail'), w)), '')
         seen[conv] = hit; out.append(hit)
-        if len(out) >= N_MSGS: break
-    return out
+    # the index was asked for so many: a list that filled it may have more behind it
+    return out, totals, len(ids) >= N_MSGS * 6
 
 
 def _sources(store, words) -> list:
@@ -108,10 +160,52 @@ def _sources(store, words) -> list:
         name = (cfg.get('title') or s.get('Address') or '') if s.get('Channel') == 'report' else s.get('Address') or ''
         if all(w in f'{name} {ch}'.lower() for w in lw):
             out.append({'type': 'source', 'id': f"src:{ch}:{name}", 'title': name, 'channel': ch, 'pick': f'src:{ch}:{name}'})
-    return out[:N_SRCS]
+    return out
+
+
+# the Settings page keeps these two rows hidden (SettingsView HIDDEN): the values are kept, nothing reads them
+_UNSHOWN = {'funnel_hours', 'funnel_max'}
+
+
+def _words_in(text: str, words) -> bool:
+    """Every word starts a word of the text - the mail index's own prefix match, so "mail" is not found inside "Gmail"."""
+    t = _fold(text)
+    return all(re.search(r'(?<![^\W_])' + re.escape(_fold(w)), t) for w in words)
+
+
+def _settings(words) -> list:
+    out = []
+    for k, m in settings_schema.knobs().items():
+        if k in _UNSHOWN or not _words_in(f"{m['label']} {m['group']} {m.get('desc') or ''} {m.get('help') or ''}", words): continue
+        out.append({'type': 'setting', 'id': f'set:{k}', 'title': m['label'], 'where': f"Settings · {m['group']}",
+                    'snippet': snippet(m.get('desc') or m.get('help'), words, 120), 'rank': not _words_in(m['label'], words),
+                    'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"})
+    return sorted(out, key=lambda h: h.pop('rank'))
+
+
+def _connectors(store, words) -> list:
+    on = {str(c.get('Type') or '') for c in store.list_connectors() if c.get('Active')}
+    out = []
+    for c in connectorcatalog.cards():
+        title = c.get('title') or c['type']
+        if not _words_in(' '.join([c['type'], title, c.get('group') or '', c.get('desc') or '', *(c.get('match') or [])]), words): continue
+        out.append({'type': 'connector', 'id': f"con:{c['type']}", 'title': title, 'where': ' · '.join(x for x in ('Connections', c.get('group')) if x),
+                    'sub': 'connected' if c['type'] in on else 'planned' if c.get('planned') else 'not connected',
+                    'snippet': snippet(c.get('desc'), words, 120), 'href': f"#connector={quote(c['type'], safe='')}",
+                    'rank': (not _words_in(f"{title} {c['type']}", words), c['type'] not in on, bool(c.get('planned')))})
+    return sorted(out, key=lambda h: h.pop('rank'))
 
 
 def everything(store, q: str) -> dict:
-    words = [w for w in re.findall(r'[\w@.\-]+', str(q or '')) if len(w) > 1 or w.isdigit()]
-    if not words: return {'q': q, 'hits': []}
-    return {'q': q, 'hits': _tasks(store, q, words) + _messages(store, words) + _sources(store, words)}
+    toks = str(q or '').split()
+    # a task's status is asked for by name - `status:open` - and never matched as a word (store._search_where `shown`)
+    status = next((_fold(t[7:]) for t in toks if _fold(t).startswith('status:') and len(t) > 7), '')
+    rest = ' '.join(t for t in toks if not _fold(t).startswith('status:'))
+    words = [w for w in re.findall(r'[\w@.\-]+', rest) if len(w) > 1 or w.isdigit()]
+    if not words and not status: return {'q': q, 'hits': [], 'totals': {}, 'capped': False}
+    tasks, n_tasks = _tasks(store, rest, words, status)
+    if status: return {'q': q, 'hits': tasks, 'totals': {'task': n_tasks}, 'capped': False}
+    msgs, totals, capped = _messages(store, words)
+    srcs, sets, cons = _sources(store, words), _settings(words), _connectors(store, words)
+    totals.update(task=n_tasks, source=len(srcs), setting=len(sets), connector=len(cons))
+    return {'q': q, 'hits': tasks + msgs + srcs[:N_SRCS] + sets[:N_PLACES] + cons[:N_PLACES], 'totals': totals, 'capped': capped}

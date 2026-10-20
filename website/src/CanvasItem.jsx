@@ -83,8 +83,9 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
-    <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined}
-      sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px",
+    {/* focusable, not in the Tab order: a search pick hands focus here, to what it opened (SearchEverything focusDrawn) */}
+    <Box ref={box} data-tq-canvas-item={card.key} data-tq-pinned={pin ? "" : undefined} tabIndex={-1}
+      sx={{ height: h, display: "flex", flexDirection: "column", minWidth: 0, scrollMarginTop: "8px", outline: "none",
         // ...but a view with NO PANE in it (a stopped agent, a note, a closed task) is only as tall as what it says: the full
         // height left a screen of blank canvas under three short bars (the owner, 2026-09-30: "what's with extra space???").
         // A pane - terminal, agent chat, browser - still gets the one height it is sized for, so the pty is never grown.

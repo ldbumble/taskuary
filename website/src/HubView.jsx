@@ -22,6 +22,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
+import { nothingMatches } from "./searchHits.js";
 import { ago, plural } from "./timeWords.js";
 import { Md } from "./md.jsx";
 import { looksMd } from "./mdText.js";
@@ -315,7 +316,7 @@ export default function HubView({ onOpenTask, browse = null, browseState = {}, o
       detail: one ? <Post key={`open-${one.LoreId}`} p={one} onChanged={load} onOpenTask={onOpenTask} onRemoved={onRemoved} defaultOpen /> : null,
       onBack: () => onBrowseState?.({ ...browseState, open: null }),
       openLabel: one ? `the Hub post "${one.Title}" (${one.Topic || "Hub"})` : "",
-      empty: q ? "Nothing here matches that." : removed ? "Nothing has been voted off." : "Nothing posted yet.",
+      empty: q ? nothingMatches(q, "the Hub") : removed ? "Nothing has been voted off." : "Nothing posted yet.",
       // the tab's own controls: which order, which tag, the shelf the vote took things off, and writing one
       tools: (
         <Box sx={{ mt: 1.25, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>

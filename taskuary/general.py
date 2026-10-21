@@ -539,7 +539,8 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
-    repos = '' if outsider else repos_block(store)
+    # ...and none on a connector card's walk: it edits no code and has no repository to look in (aisetup.WALK_REF)
+    repos = '' if outsider or task.get('SourceRef') == 'connector:setup' else repos_block(store)
     if repos: system += f'\n\n{repos}'
     # The role triage named owns the INSTRUCTIONS for general work - which is what stops it being
     # "only a label on the task". Which brain runs them is a separate question, answered from
@@ -622,8 +623,11 @@ def _prompt(store, tid: int) -> tuple[str, str]:
     # think out loud in has nobody waiting, so it stays open until they say otherwise.
     # ...and never on a task the owner keeps to complete themselves (stay:open, A14): the close would be refused, so the
     # chat is not told it may make one
-    if sources and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
-    if sources: system = system + '\n\n' + selfclose.REPLY_LINE
+    # ...and a connector card's walk owes nobody an answer: it ends when the card's Test passes (aisetup.CARD_TOOLS), never by
+    # closing the task and drafting a reply to a sender there is not
+    owed = sources and task.get('SourceRef') != 'connector:setup'
+    if owed and selfclose.mode(store) != 'off' and not selfclose.stays_open(store, tid): system = system + '\n\n' + selfclose.CHAT_LINE
+    if owed: system = system + '\n\n' + selfclose.REPLY_LINE
     from . import slots
     if slots.all_(store, tid): system = system + '\n\n' + selfclose.DRAFT_LINE
     md = store.checklist_markdown(tid) if hasattr(store, 'checklist_markdown') else ''
@@ -1101,6 +1105,9 @@ class GeneralSession:
             if not reply: raise RuntimeError('the model returned an empty response')
             from . import playbooks
             reply = playbooks.collect_setup_draft(self.store, self.task_id, reply)
+            # a connector card's walk: the card's tools (save a field, run Test, ask for one step) out of the reply (aisetup.collect)
+            from . import aisetup
+            reply = aisetup.collect(self.store, self.task_id, reply)
             # An API-backed assistant has no shell, so Hub publishing rides as a private response
             # envelope. Consume it before the response enters history or reaches the browser.
             from . import handbook as hub

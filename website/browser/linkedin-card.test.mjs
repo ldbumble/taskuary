@@ -32,7 +32,7 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   page.on("pageerror", (e) => errors.push(e.message));
   const list = await (await fetch(`${harness.fixtureApi}/api/connectors`, { headers: { "X-Taskuary-Token": harness.token } })).json();
   const li = list.data.find((c) => c.Type === "linkedin");
-  let saved = null, tested = 0;
+  let saved = null, tested = 0, walk = null, said = null;
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (r) => {
     const u = new URL(r.url()), p = u.pathname, json = (body) => r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -43,6 +43,21 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
         ConfigJson: JSON.stringify({ client_id: JSON.parse(saved.ConfigJson).client_id }) } : c) });
     if (p === `/api/connectors/${li.ConnectorId}/linkedin/status`)
       return json({ redirect_uri: "http://localhost:7999/api/linkedin/callback", connected: false, has_app: !!saved?.ConfigJson, member: "", days_left: null });
+    // the walk (aisetup.walk_view's shape): started, answered by a Save, closed
+    if (p === `/api/connectors/${li.ConnectorId}/ai-setup` && r.method() === "GET") return json(walk ? { ...walk, ready: true, why: "" } : { session: null, steps: [], busy: false, ask: null, done: false, ready: true, why: "" });
+    if (p === `/api/connectors/${li.ConnectorId}/ai-setup` && r.method() === "POST") {
+      walk = { session: { taskId: 11, ref: "TQ-0011", sid: "g1" }, busy: false, now: "", done: false,
+        steps: [{ kind: "agent", text: "This needs a LinkedIn app of yours, and its two keys.\nOpen developer.linkedin.com/apps, create an app, then paste its Client ID here." }],
+        ask: { field: "client_id", label: "Client ID", text: "Open developer.linkedin.com/apps, create an app, then paste its Client ID here." } };
+      return json({ ...walk, existing: false });
+    }
+    if (p === `/api/connectors/${li.ConnectorId}/ai-setup/say`) {
+      said = JSON.parse(r.postData() || "{}");
+      walk = { ...walk, ask: { field: "client_secret", label: "Client Secret", text: "Now the Primary Client Secret, from the same Auth tab." },
+        steps: [...walk.steps, { kind: "done", text: `You saved on the card: ${said.saved.join(", ")}` }, { kind: "agent", text: "Now the Primary Client Secret, from the same Auth tab." }] };
+      return json(walk);
+    }
+    if (p === `/api/connectors/${li.ConnectorId}/ai-setup/done`) { walk = null; return json({ wrap: "done", taskId: 11 }); }
     if (p === `/api/connectors/${li.ConnectorId}/test`) { tested++; return json({ ok: false, ms: 3, detail: "LinkedIn is not signed in yet - save the app's Client ID and Client Secret on the LinkedIn card, then press Sign in with LinkedIn" }); }
     page.fixtureRequestGuard(r);
   });
@@ -70,7 +85,7 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   // 3. the card: plain fields that say where each comes from, Sign in held until the keys are saved, AI setup only a helper
   const text = await page.evaluate(() => document.querySelector("[data-tq-browse-one]").innerText);
   for (const want of ["Client ID", "developer.linkedin.com/apps → your app → Auth tab → Client ID", "Client Secret", "Sign in with LinkedIn",
-    "Nothing to paste here", "Optional - the card below connects without it", "Add another LinkedIn account"]) assert.ok(text.includes(want), `the card says "${want}"`);
+    "Nothing to paste here", "Get AI to set it up", "Add another LinkedIn account"]) assert.ok(text.includes(want), `the card says "${want}"`);
   assert.equal(await signIn(page), "disabled", "Sign in waits for the app's keys");
   const aiFilled = await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Get AI to set it up")?.className.includes("contained"));
   assert.equal(aiFilled, false, "Get AI to set it up is not the card's filled button");
@@ -90,6 +105,27 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Test").click());
   await until(page, () => /press Sign in with LinkedIn/.test(document.querySelector("[data-tq-browse-one]").innerText));
   assert.equal(tested, 1);
+
+  // 5. Get AI to set it up: a button in the card's own row; the general agent's walk drawn on the card, the field it asks for lit -
+  //    no terminal. The walk's server answers (aisetup.walk_view) are stood in for: the demo refuses connector writes.
+  const row = await page.evaluate(() => {
+    const bs = [...document.querySelectorAll("[data-tq-browse-one] button")];
+    const save = bs.find((b) => b.innerText.trim() === "Save"), ai = document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="start"]');
+    return { same: !!ai && ai.parentElement === save?.parentElement, outlined: ai?.className.includes("outlined") };
+  });
+  assert.deepEqual(row, { same: true, outlined: true }, "Get AI to set it up sits beside Save and Test, outlined");
+  await page.evaluate(() => document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="start"]').click());
+  await page.waitForSelector("[data-tq-ai-walk]");
+  await until(page, () => /Your step:.*Client ID/.test(document.querySelector("[data-tq-ai-walk]")?.innerText || ""));
+  await until(page, () => [...document.querySelectorAll("[data-tq-browse-one] [data-tq-setup-lit]")].some((e) => /Client ID/.test(e.closest(".MuiFormControl-root")?.innerText || "")));
+  assert.equal(await page.$("[data-tq-browse-one] .xterm"), null, "no terminal on the card");
+  assert.match(await page.evaluate(() => document.querySelector("[data-tq-ai-walk]").innerText), /This needs a LinkedIn app of yours/);
+  assert.ok(await field(page, "Client ID", "test-client-id-0002"));
+  await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Save").click());
+  await until(page, () => /You saved on the card: Client ID/.test(document.querySelector("[data-tq-ai-walk]")?.innerText || ""));
+  assert.deepEqual(said.saved, ["Client ID"], "Save tells the walk what was put on the card - by name, never the value");
   if (process.env.TASKUARY_SHOTS) await page.screenshot({ path: `${process.env.TASKUARY_SHOTS}/linkedin-card-after.png` });
+  await page.evaluate(() => document.querySelector('[data-tq-browse-one] [data-tq-ai-setup="done"]').click());
+  await until(page, () => !document.querySelector("[data-tq-ai-walk]"));
   assert.deepEqual(errors, []);
 });

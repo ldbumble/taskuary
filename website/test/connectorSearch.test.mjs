@@ -50,9 +50,18 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
   assert.match(li, /label: "Sign in with LinkedIn"/);
   assert.match(li, /secretHelp: "Nothing to paste here/);
   assert.match(src, /\) : \(\s*<TextField key=\{key\} label=\{label\} placeholder=\{ph\} helperText=\{help\}/);
-  const ai = src.slice(src.indexOf("const AiSetup ="), src.indexOf("const GATEWAY_HINT"));
-  assert.match(ai, /Optional - the card below connects without it/);
-  assert.match(ai, /<Button variant="outlined" disabled=\{busy\} onClick=\{start\}/, "not the page's one filled button");
+});
+
+test("Get AI to set it up is a button in the card's own row, and its walk is drawn on the card - no terminal", () => {
+  const ai = src.slice(src.indexOf("function useAiWalk("), src.indexOf("const GATEWAY_HINT"));
+  assert.match(ai, /<Button variant="outlined" disabled=\{ai\.busy \|\| !ai\.ready\.ok\} onClick=\{ai\.start\} data-tq-ai-setup="start"/, "outlined, never the card's filled button");
+  assert.doesNotMatch(ai, /TerminalPane/, "the walk is the general agent's, not a terminal");
+  for (const path of ['post("", ctx', 'post("/say", { ...ctx, saved: labels }', 'post("/say", { ...ctx, text }', 'post("/done"']) assert.ok(ai.includes(path), path);
+  assert.match(ai, /stop = lightField\(root, label\)/, "the field it asks for is lit");
+  const data = src.slice(src.indexOf("function DataDetail("), src.indexOf("const ROLE_META"));
+  assert.match(data, /<AiWalkButton ai=\{ai\} \/>\s*\{msg && /, "beside Save and Test");
+  assert.match(data, /await api\.post\("\/api\/connectors", body\);\s*ai\.saved\(put\);/, "what Save put on the card is told to the walk");
+  assert.doesNotMatch(data.slice(0, data.indexOf("<UnderTabs")), /<AiSetup|<AiWalk/, "nothing above the form");
 });
 
 test("an app's client secret is a masked, write-only box that says it is saved (guard.WRITE_ONLY_CONFIG)", () => {

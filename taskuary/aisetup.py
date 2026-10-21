@@ -1,4 +1,7 @@
-"""Get AI to set it up: a connector card's own guide, handed to the coding CLI as its prompt.
+"""Get AI to set it up: a connector card's own guide, handed to an agent as its brief.
+
+A CONNECTOR CARD'S walk is the GENERAL agent now (start_walk, below - the owner, 2026-10-21); what follows first is the
+terminal road the CLI-install setup (clisetup.py) still takes, and what this file was before.
 
 Every card has a Guide tab - "go to api.slack.com/apps, create an app, copy the token" - and a
 form the owner fills by hand after reading it. This is the other way round: the agent reads the
@@ -12,7 +15,7 @@ task: the owner types tokens into this terminal, and a task record is not where 
 And "Done" is a plain close - no report, no proposals, no reply draft; the connector's Test
 result is the report.
 """
-import json
+import json, re
 from . import config, words
 
 
@@ -142,4 +145,225 @@ def finish(store, tid: int, actor: str = 'owner') -> dict:
     store.add_comment(tid, actor, 'human', 'Setup session closed.')
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': live and live['sid'], 'setup': True})
+    return {'wrap': 'done', 'taskId': tid}
+# ── A CONNECTOR'S WALK, AS A GENERAL AGENT (the owner, 2026-10-21: "it should look like general agent working, not code one,
+# for AI setup") ──
+# Setting up a connector edits no code. It was a coding CLI in a terminal in Taskuary's folder: the owner pressed it on the LinkedIn
+# card, got a session on the Board, and read "LinkedIn is not working". Now it is the general agent - the brain the owner's AI
+# settings name, API or CLI, never a vendor picked here - on a general task, with the card's Guide as its brief and the card's
+# own tools as its hands: put a value it knows onto the card, run the card's Test, ask the person for one step. Its words and its
+# steps show on the card (walk); the task is on the Board behind it. The CLI-install setup (clisetup.py) is still a terminal.
+WALK_REF = 'connector:setup'
+_TOOL = re.compile(r'^[ \t]*\[\[TASKUARY-CARD-(ASK|SAVE|TEST|DONE)(?::([^\]]*))?\]\][ \t]*(.*)$', re.M)
+WALKS = {}                       # task id -> {'ask': {'field', 'text'}, 'test': bool, 'done': bool, 'ctx': the card's guide and form}
+SETUP_ACTOR = 'setup'            # the card's own notes on the walk ("Saved on the card", "Test passed") - shown as its steps
+
+CARD_TOOLS = (
+    "THE CARD'S TOOLS - the only way you act here. Each is a line of its own at the end of your reply; Taskuary carries it out "
+    "and takes it out of what the person reads.\n"
+    "[[TASKUARY-CARD-ASK: <field key>]] <the one step only the person can do> - an account, a portal, a browser, a phone. The card "
+    "shows this step and lights that field. Say exactly where to go, what to click and what to paste into which field. "
+    "Use - as the key for a step with no field. One step per reply; then stop and wait.\n"
+    "[[TASKUARY-CARD-SAVE: <field key> = <value>]] - put a value YOU know onto the card (an address or a version the guide gives). "
+    "Never a secret: client secrets, keys, tokens and passwords are pasted by the person into the card's own masked field, never "
+    "into this chat. If they paste one here, tell them to paste it into the field instead, and never repeat it.\n"
+    "[[TASKUARY-CARD-TEST]] - run the card's Test. Its answer comes back to you as the next message.\n"
+    "[[TASKUARY-CARD-DONE]] - only after a Test passed: the card is connected. Say in one line what now works.\n"
+    "You edit no code, open no repository and run nothing on this machine for this walk unless a step in MACHINE NOTES needs it. "
+    "When the person presses Save on the card you are told which fields they saved.")
+
+
+def _secretish(key: str) -> bool:
+    from .guard import WRITE_ONLY_CONFIG, _CONFIG_SECRETS
+    k = str(key or '').lower()
+    return (k == 'secret' or k in _CONFIG_SECRETS or k.endswith(('_secret', '_password', '_token', '_key'))
+            or any(k in keys for keys in WRITE_ONLY_CONFIG.values()))
+
+
+def card_state(store, cid: int, ctx: dict) -> str:
+    """What the card holds NOW, as keys - never a value. Read fresh for every turn: the person saves between turns."""
+    c = store.get_connector(cid, with_secret=True) or {}
+    try: cfg = json.loads(c.get('ConfigJson') or '{}')
+    except ValueError: cfg = {}
+    keys = [str(f[1]) for f in ctx.get('fields') or [] if len(f) > 1]
+    have = [k for k in keys if cfg.get(k) not in (None, '', [], {})]
+    secret = ctx.get('secret_label') or ''
+    last = c.get('LastError') and f"failing - {c['LastError']}" or ('passed' if c.get('LastSyncAt') else 'not run yet')
+    return (f"THE CARD NOW: set: {', '.join(have) or 'nothing'}; empty: {', '.join(k for k in keys if k not in have) or 'nothing'}"
+            + (f"; {secret} (key Secret): {'saved' if c.get('Secret') else 'not saved'}" if secret else '')
+            + f"; last Test: {last}.")
+
+
+def walk_brief(store, cid: int, ctx: dict) -> str:
+    c = store.get_connector(cid) or {}
+    fields = [f for f in ctx.get('fields') or [] if len(f) > 1]
+    notes = [str(s).replace('{base}', 'Taskuary').replace('{cid}', str(cid)).replace('{hdr}', '') for s in ctx.get('agent_steps') or [] if str(s).strip()]
+    return '\n'.join(p for p in [
+        f"CONNECTING A CARD: you are walking the person through connecting {c.get('Name') or c.get('Type')} (a {c.get('Type')} "
+        "connection in Taskuary) on its own card, where they are looking. Guide them one step at a time, put onto the card what you "
+        "know, and run its Test until it passes. Start with two lines on what this needs from them, then the first step.",
+        'GUIDE (Taskuary\'s own, written for a person): ' + ' '.join(f'{i + 1}. {s}' for i, s in enumerate(ctx.get('guide') or [])),
+        'FIELDS on the card: ' + ('; '.join(f'{f[0]} (key {f[1]})' for f in fields) or 'none')
+        + (f"; {ctx['secret_label']} (key Secret, write-only)" if ctx.get('secret_label') else '') + '.',
+        ('MACHINE NOTES (the card\'s Agent tab - for reference): ' + ' '.join(notes)) if notes else '',
+        card_state(store, cid, ctx), CARD_TOOLS] if p)
+
+
+def walk_task(store, cid: int):
+    """The open walk on this card, or None."""
+    for t in store.list_tasks(active_only=True):
+        if t.get('SourceRef') == WALK_REF and str(t.get('Tags') or '') == tag(cid) and t.get('Status') not in ('done', 'dropped'):
+            return t
+    return None
+
+
+def _cid_of(task: dict):
+    tags = str((task or {}).get('Tags') or '')
+    return int(tags.split(':', 1)[1]) if tags.startswith('connector:') and tags.split(':', 1)[1].isdigit() else None
+
+
+def note(store, tid: int, text: str): store.add_comment(tid, SETUP_ACTOR, 'agent', text)
+
+
+def collect(store, tid: int, reply: str) -> str:
+    """The card's tools out of a walk's reply (general.send_prompt hands every reply here): a SAVE is made, an ASK is the step the
+    card shows and lights, a TEST runs once the turn is over (walk_turn), DONE ends the walk. Any other task's reply is untouched."""
+    task = store.get_task(tid) or {}
+    if task.get('SourceRef') != WALK_REF or '[[TASKUARY-CARD-' not in str(reply or ''): return reply
+    cid, st = _cid_of(task), WALKS.setdefault(tid, {})
+    labels = {str(f[1]): str(f[0]) for f in (st.get('ctx') or {}).get('fields') or [] if len(f) > 1}
+    for verb, arg, rest in _TOOL.findall(reply):
+        verb, arg = verb.upper(), (arg or '').strip()
+        if verb == 'ASK':
+            field = '' if arg in ('', '-') else arg
+            st['ask'] = {'field': field, 'label': labels.get(field) or ('' if field != 'Secret' else (st.get('ctx') or {}).get('secret_label') or ''),
+                         'text': rest.strip()}
+        elif verb == 'SAVE':
+            key, _, value = arg.partition('=')
+            key, value = key.strip(), value.strip()
+            if not key or cid is None: continue
+            if _secretish(key):
+                note(store, tid, f'✗ Not saved by the agent: {labels.get(key) or key} is yours to paste into its field on the card.')
+                continue
+            row = store.get_connector(cid) or {}
+            try: cfg = json.loads(row.get('ConfigJson') or '{}')
+            except ValueError: cfg = {}
+            store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps({**cfg, key: value})}, SETUP_ACTOR)
+            note(store, tid, f'✓ Saved on the card: {labels.get(key) or key}')
+        elif verb == 'TEST': st['test'] = True
+        elif verb == 'DONE': st['done'] = True
+    kept = _TOOL.sub(lambda m: m.group(3) if m.group(1).upper() == 'ASK' else '', reply)
+    return '\n'.join(line for line in kept.splitlines()).strip() or (st.get('ask') or {}).get('text') or 'Working on the card.'
+
+
+def _spawn(fn, store, cid, tid, *args):
+    """A turn on its own thread - the card's press returns at once and the card follows the walk. `turning` says so from the
+    press on, before the brain has started: a card polled in that gap read idle with nothing asked."""
+    import threading
+    WALKS.setdefault(tid, {})['turning'] = True
+    def run():
+        try: fn(store, cid, tid, *args)
+        finally: WALKS.setdefault(tid, {})['turning'] = False
+    threading.Thread(target=run, daemon=True).start()
+
+
+def walk_turn(store, cid: int, tid: int, text: str, as_owner: bool = False, depth: int = 0):
+    """One turn of the walk, and the Test it asked for: its answer goes back to the agent as the next turn (three at most - a card
+    that keeps failing is said, not retried for ever)."""
+    from . import channels, general
+    st = WALKS.setdefault(tid, {})
+    st.pop('ask', None); st['test'] = False
+    try:
+        sess = general.session_for(tid) or general.start_session(store, tid, actor='owner')
+        sess.send_prompt(text, as_owner=as_owner, echo=as_owner, delivery_instructions=walk_brief(store, cid, st.get('ctx') or {}))
+    except Exception as e:
+        note(store, tid, f"✗ The agent could not answer: {str(e)[:300]}")
+        return
+    if st.pop('test', False):
+        out = channels.test_connector(store, cid)
+        note(store, tid, ('✓ Test passed: ' if out.get('ok') else '✗ Test failed: ') + str(out.get('detail') or '')[:400])
+        if depth < 3:
+            walk_turn(store, cid, tid, f"The card's Test {'passed' if out.get('ok') else 'failed'}: {out.get('detail')}. Continue the walk.",
+                      False, depth + 1)
+
+
+def walk_view(store, cid: int) -> dict:
+    """What the card draws: the walk's steps (what the agent said, what was saved and tested, what you said), what it is doing
+    now, the one step it needs from the person - with the field to light - and whether it is done."""
+    from . import general
+    t = walk_task(store, cid)
+    if not t: return {'session': None, 'steps': [], 'busy': False, 'now': '', 'ask': None, 'done': False}
+    tid, st = t['TaskId'], WALKS.get(t['TaskId'], {})
+    sess = general.session_for(tid)
+    steps = []
+    for c in store.list_comments(tid):
+        body = str(c.get('Body') or '').strip()
+        if not body: continue
+        if c.get('ActorType') == general.ASSISTANT_TYPE: steps.append({'kind': 'agent', 'text': body})
+        elif c.get('ActorType') == general.USER_TYPE: steps.append({'kind': 'you', 'text': body})
+        elif c.get('Actor') == SETUP_ACTOR: steps.append({'kind': 'failed' if body.startswith('✗') else 'done', 'text': body.lstrip('✓✗ ').strip()})
+    busy = bool((sess and sess.busy) or st.get('turning'))
+    now = ''
+    if busy:
+        last = next((e for e in reversed(sess.trace if sess else []) if e.get('type') in ('progress', 'live', 'tool_call')), None)
+        now = (str(last.get('detail') if isinstance(last.get('detail'), str) else last.get('name') or '') if last else '')[:200] or 'Thinking about the next step…'
+    from .store import task_ref
+    return {'session': {'taskId': tid, 'ref': task_ref(tid), 'sid': sess.sid if sess else None},
+            'steps': steps[-14:], 'busy': busy, 'now': now, 'ask': None if busy else st.get('ask'), 'done': bool(st.get('done'))}
+
+
+def ready_why(store) -> str:
+    """'' when a brain can take a walk - any CLI or API the owner connected, the general agent's own choice among them."""
+    from . import general
+    return '' if general.provider_options(store) else NO_AI
+
+
+def start_walk(store, cid: int, ctx: dict, actor: str = 'owner') -> dict:
+    from . import general
+    c = store.get_connector(cid)
+    if not c: raise ValueError('connector not found')
+    t = walk_task(store, cid)
+    if t:
+        WALKS.setdefault(t['TaskId'], {})['ctx'] = ctx
+        if not general.session_for(t['TaskId']): general.start_session(store, t['TaskId'], actor=actor)
+        return {**walk_view(store, cid), 'existing': True}
+    why = ready_why(store)
+    if why: raise ValueError(why)
+    name = c.get('Name') or c.get('Type')
+    tid = store.create_task({'Title': f'Set up {name}', 'Kind': 'general', 'Status': 'in_progress', 'Tags': tag(cid),
+                             'Source': 'connector', 'SourceRef': WALK_REF,
+                             'Summary': f"The general agent walks the owner through connecting {name} on its card: a step at a time, "
+                                        "what it knows put onto the card, and the card's Test until it passes."}, actor)
+    WALKS[tid] = {'ctx': ctx}
+    try: general.start_session(store, tid, actor=actor)
+    except Exception:
+        store.delete_task(tid); WALKS.pop(tid, None); raise
+    store.audit('connector', cid, 'ai_setup', actor, detail={'task': tid, 'agent': 'general'})
+    _spawn(walk_turn, store, cid, tid, 'Begin the walk: say what this needs from the person, then the first step.')
+    return {**walk_view(store, cid), 'existing': False}
+
+
+def walk_said(store, cid: int, ctx: dict, text: str = '', saved: list = None) -> dict:
+    """The person answered - in words on the card, or by saving fields on it. Either goes to the agent as its next turn."""
+    t = walk_task(store, cid)
+    if not t: raise ValueError('no walk is open on this card - press Get AI to set it up')
+    tid = t['TaskId']
+    WALKS.setdefault(tid, {})['ctx'] = ctx or WALKS[tid].get('ctx') or {}
+    text = str(text or '').strip()
+    if text: _spawn(walk_turn, store, cid, tid, text, True)
+    elif saved:
+        names = ', '.join(str(s) for s in saved)
+        note(store, tid, f'✓ You saved on the card: {names}')
+        _spawn(walk_turn, store, cid, tid, f'The person saved these on the card: {names}. Continue the walk.')
+    return walk_view(store, cid)
+
+
+def finish_walk(store, tid: int, actor: str = 'owner') -> dict:
+    """Done: the agent goes and the task closes - the card's Test said the rest."""
+    from . import general
+    sess = general.session_for(tid)
+    if sess: sess.close(learn=False)
+    WALKS.pop(tid, None)
+    note(store, tid, 'Setup closed.')
+    if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'): store.update_task(tid, {'Status': 'done'}, actor)
     return {'wrap': 'done', 'taskId': tid}

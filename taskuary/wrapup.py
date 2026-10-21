@@ -476,6 +476,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     if not task: raise ValueError('this session is not on a task')
     # a setup session kept no transcript on purpose (secrets were typed into it) and has no report to write
     if task.get('Kind') == aisetup.KIND: return aisetup.finish(store, tid, actor)
+    if task.get('SourceRef') == aisetup.WALK_REF: return aisetup.finish_walk(store, tid, actor)      # a card's walk: its Test was the report
     # General work already has a durable, turn-by-turn record in task comments. It does not need a
     # coding-transcript summarizer or a synthetic AGENT REPORT; close the shared session and the
     # task, leaving that conversation intact.

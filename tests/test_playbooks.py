@@ -227,12 +227,19 @@ class DraftedOnClose(unittest.TestCase):
         self.assertIn('write_playbook', [p['action'] for p in out['proposed']])
 
     def _chat(self, s, **task):
-        """A general-work conversation long enough to be a job: what a non-code playbook is drafted from."""
+        """A general-work job as it really arrives: a mail, triage's one-line title as the opening turn, and a crisp answer - the
+        chat alone is under playbooks.MIN_SESSION, so the mail has to be read with it."""
         from taskuary import general
+        from taskuary.testing import Factory
         tid = s.create_task({'Title': 'Reconcile the October cash shortfall', 'Kind': 'general', **task}, 't')
-        s.add_comment(tid, 'owner', general.USER_TYPE, 'The October bank balance does not tie to the ledger - we are $412.50 short. ' * 4)
+        Factory(s).message(task_id=tid, subject='October cash shortfall - bank does not tie', from_name='Erin Blake',
+                           body='The October bank balance does not tie to the ledger - we are $412.50 short. Can you reconcile it and '
+                                'tell me what the adjusting entries are? We close the month on Friday and the auditors ask for this. '
+                                'Last quarter the same gap turned out to be card fees, so start there. Thanks, Erin')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Reconcile the October cash shortfall.')
         s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Matched every statement line to the register: two card fees sat in '
-                      'the wrong period and one deposit is in transit. Three adjusting entries are listed for your yes. ' * 4)
+                      'the wrong period and one deposit is in transit. Three adjusting entries are listed for your yes: '
+                      'move the two September card fees ($37.50) into October, and hold the $375.00 deposit until it clears.')
         return tid
 
     def test_a_general_conversation_is_asked_too(self):
@@ -245,7 +252,8 @@ class DraftedOnClose(unittest.TestCase):
         with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
             out = wrapup.wrap(s, tid, close=True, actor='assistant')
         self.assertEqual([p['action'] for p in out['proposed']], ['write_playbook'])
-        self.assertIn('two card fees', seen['user'])                       # drafted from the conversation itself
+        self.assertIn('two card fees', seen['user'])                       # drafted from the conversation itself...
+        self.assertIn('does not tie to the ledger', seen['user'])          # ...and the mail that started it - the playbook's `when`
         self.assertIsNotNone(proposals.playbook_pending(s, tid))
 
     def test_a_playbook_setup_conversation_is_not_asked_again(self):

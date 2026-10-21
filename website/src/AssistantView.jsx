@@ -1044,6 +1044,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and a write anywhere - an agent, another tab, a sync - makes that task's held read old (all of them, when it names none)
   useEffect(() => onLive("task-changed", (ev) => forgetTasks(ev?.task_id ?? null)), []);
   const [continueOn, setContinueOn] = useState(null);  // the walk's Continue: { task, anchor, ref }
+  // ...and the owner's notes the Assistant lit it with ("rerun it with these notes: ..."): its box opens holding them, for that task
+  const continueNote = useRef(null);
+  const noteFor = (tid) => (continueNote.current && Number(continueNote.current.tid) === Number(tid) ? continueNote.current.note : "");
   const pics = usePromptImages();                        // pictures sent with the chat line
   // ...and the task view's own Continue on the canvas (TaskPage) asks for the same card
   useEffect(() => {
@@ -1970,6 +1973,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         const l = lightOf(data.light);
         if (l) {
           setLit(l);
+          continueNote.current = data.light?.note ? { tid: data.light.tid, note: String(data.light.note) } : null;
           // ...its item brought up the rail's road when it is not the one on the table, so the rail rings it
           const key = litPull(l, { key: tableKey || current, tid: currentItem?.tid });
           if (key) deferInChat(() => { browseDown(); surfaceRef.current?.(key); }, 300);
@@ -2906,7 +2910,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}
           {!old && continueOn && (
             <div className="tq-browse-line" ref={(el) => { if (el && !el.dataset.seen) { el.dataset.seen = "1"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); } }}>
-              <ContinueBox inline task={continueOn.task} taskRef={continueOn.ref} onClose={() => setContinueOn(null)}
+              <ContinueBox inline task={continueOn.task} taskRef={continueOn.ref} initial={noteFor(continueOn.task.TaskId)}
+                onClose={() => { continueNote.current = null; setContinueOn(null); }}
                 onPress={() => setContinuingTid(continueOn.task.TaskId)} onFail={() => setContinuingTid(null)}
                 onDone={() => {
                   // NO RECEIPT: the session on the table shows it working - "Continuing with your note..." under it was clutter

@@ -1037,7 +1037,7 @@ def row_buttons(store, it: dict) -> list:
     return [b for b in out if not (b['verb'] in seen or seen.add(b['verb']))]
 
 
-def _lit(store, tid: int, table: dict | None, it: dict, verb: str) -> dict:
+def _lit(store, tid: int, table: dict | None, it: dict, verb: str, note: str = '') -> dict:
     """The item's own button for `verb`, lit - the item brought up first when it is not the one on the table (the page pulls `light.key`,
     the rail's road). Nothing runs. A button the row does not draw is a miss the model answers in words (CallMiss), never a line naming it.
     `light.line` is what the strip over the row says while it is lit; `say` is the chat's record of it - past, so a reload never shows
@@ -1049,11 +1049,12 @@ def _lit(store, tid: int, table: dict | None, it: dict, verb: str) -> dict:
         raise CallMiss(f"{_where(it) or 'This item'} has no {buttons.label(b) or b} button - its row has "
                        f"{', '.join(x['label'] for x in have) or 'only Next'}. Say in plain words that it is not done from this row, or name "
                        "the one of its buttons that does it. Nothing was changed.")
-    said = f"Lit {label} on {it.get('ref') or _where(it) or 'it'}."
+    # `note`: the owner's words for the press to carry - Continue's box opens holding them
+    said = f"Lit {label} on {it.get('ref') or _where(it) or 'it'}" + (f" with your notes: {_cut(note, 200)}" if note else '.')
     record(store, tid, 'assistant', said)          # the chat's line; the task's notes keep no "press it"
     return {'say': said, 'options': [], 'chips': [], 'decision': None,
-            'light': {'verb': b, 'label': label, 'line': f"Press {label} when you're sure.", 'key': it.get('key') or '', 'tid': it.get('tid'),
-                      'ref': it.get('ref') or ''}}
+            'light': {'verb': b, 'label': label, 'line': f"Press {label} when you're sure" + (' - your notes are in its box.' if note else '.'),
+                      'key': it.get('key') or '', 'tid': it.get('tid'), 'ref': it.get('ref') or '', **({'note': note} if note else {})}}
 
 
 def _did(store, tid: int, said: str, kind: str) -> dict:
@@ -2512,7 +2513,10 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if on and b:
         why = cannot(on, b, store)
         if why: raise CallMiss(f"{why} Say so in plain words. Nothing was changed.")
-        return _lit(store, tid, table, on, b)
+        # THE NOTES GO WITH IT: "rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI
+        # walk, 2026-10-20) - they are in Continue's box when it is pressed, and the line says so
+        note = str(params.get('note') or params.get('text') or '').strip() if b == 'continue' else ''
+        return _lit(store, tid, table, on, b, note=note)
     if on and kind in ON_TASK:
         said = f"Brought up {_where(on) or 'it'} - {ON_TASK[kind]}."
         record(store, tid, 'assistant', said)
@@ -4335,7 +4339,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if verb in ('coding_agent', 'regular_agent') and (own_job or not target_item):
             return _new(store, tid, item, 'coding' if verb == 'coding_agent' else 'general', decision.get('text') or text)
         if target_item:
-            try: return _lit(store, tid, item, target_item, verb)
+            try: return _lit(store, tid, item, target_item, verb, note=str(decision.get('text') or '').strip() if verb == 'continue' else '')
             except CallMiss:                                           # no such button on its row: the model says so in words
                 # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
                 # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)

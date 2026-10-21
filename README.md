@@ -37,7 +37,7 @@ numbers through the real app, using fictional demo data.
 ### 1. Everything lands in one place
 
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
-**Urgent**, **On you**, **Goals**, **Agents working**, **For later**, **Reports**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
+**Urgent**, **Tasks** (every open task - a spinning ring on the one an agent is working), **For later**, **Reports**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
 what waits in each section - so you never open each system in turn. A goal is a task whose steps
 are tasks: triage opens one for an open-ended ask, and files later mail under the step it serves.
@@ -130,7 +130,7 @@ delivered late. Reflection reads those rows as evidence, so a lesson can say "gr
 coding agent: you merge it, 8 of 8". A learned line never acts on its own; it changes which button comes
 first. It also keeps a page per person it deals with, compiled from the same ledger: how fast they
 answer, whether a chase is needed, who on copy moves them - and a thread gone quiet past that
-person's own day is *slipped*, on your rail under On you, with Chase, Let it go, They answered elsewhere
+person's own day is *slipped*, on your rail under Tasks, with Chase, Let it go, They answered elsewhere
 and Remind me under it. See [The Advisor](https://taskuary.com/docs/advisor).
 
 ![LEARNED.md open in the document editor, with evidence-backed preferences, hypotheses still being tested, and proposed rules awaiting the owner.](https://raw.githubusercontent.com/ldbumble/taskuary/master/docs/readme/11-learned-memory.png?v=cards)

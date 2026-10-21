@@ -105,8 +105,10 @@ class WatcherTests(unittest.TestCase):
     def test_a_walk_on_is_the_owners_move_never_the_watchers(self):
         s = store(); t = task(s)
         other = task(s, 'Refund for Mrs Garnett'); s.update_task(other, {'Status': 'open'}, 'o')
+        # ...the OTHER task on the table: the walk takes the in-progress one too now, in its place (2026-10-21), and this one closes below
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
-            first = concierge.surface(s, llm=lambda *a, **k: 'never asked')['item']          # something on the table
+            key = next(i['key'] for i in funnel.build(s)['items'] if i.get('tid') == other)
+            first = concierge.surface(s, key=key, llm=lambda *a, **k: 'never asked')['item']   # something on the table
         dock = general.dock_task(s)[0]['TaskId']
         n = len(concierge.history(s, dock))
         self._events(s, live(t)); s.update_task(t, {'Status': 'done'}, 'o')

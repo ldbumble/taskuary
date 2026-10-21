@@ -1047,7 +1047,7 @@
      "→ Edit: tools/gl_export.py  (keep inter-company rows, flagged)"
     ],
     "mode": "demo",
-    "order_band": 5,
+    "order_band": 2,
     "presentation_revision": "f154008e36bbc7f0d38dfd5b08a6cbca85a1932f9f802ad258d9ac56adecec04"
    },
    {
@@ -1086,7 +1086,7 @@
      "→ Edit: tools/gl_export.py  (keep inter-company rows, flagged)"
     ],
     "mode": "demo",
-    "order_band": 5,
+    "order_band": 2,
     "presentation_revision": "78d5a7d4f79d951efc7cf62b2cb4103ad41f7863a2f1e777ab8270328fed95d7"
    }
   ],

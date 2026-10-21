@@ -86,14 +86,14 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
         item for item in items
         if item.get('actionable', True)
         and not item.get("settling")
-        and item.get("lane") != "working"
+        # ...a task an agent is WORKING is walked like every other task, in the rail's order (the owner, 2026-10-21)
         and not funnel._not_yet(item)
         and item.get("key") not in excluded_keys
         and not excluded_keys.intersection(item.get('aliases', []))
         # the mark IS the return clock (processing_unread: task_return_minutes) - no second cooldown
         # here, or the walk would take a waving agent back while the rail still showed it as passed.
         # ...and only a PUT-DOWN mark holds it: Next or Remind me. Shown is not acted on - four open tasks sat
-        # under On you, each merely shown once, and the walk said there was nothing to walk through (the
+        # under Tasks, each merely shown once, and the walk said there was nothing to walk through (the
         # owner, 2026-10-13: "before you hit next it should not be counted as read no? until it's acted on?")
         and (scope["include_surfaced"] or not item.get("put_down"))
     ]

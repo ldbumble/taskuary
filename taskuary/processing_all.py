@@ -129,8 +129,10 @@ def row_lane(row: dict) -> str:
         # owner, 2026-09-11: "can't see the hand waving"). Both stay band 2, so the rail files
         # them together under "your task"; only the word on the row changes.
         if row.get('AgentWaiting'): return 'blocked'
-        return 'approve' if row.get('ReviewStatus') == 'pending' else 'asked'
-    return {1: 'time', 3: 'report', 4: 'fyi', 5: 'working'}[band]
+        if row.get('ReviewStatus') == 'pending': return 'approve'
+        # ...and an agent WORKING it is in the same level now (the owner, 2026-10-21): the lane says so, the band does not
+        return 'working' if row.get('Working') else 'asked'
+    return {1: 'time', 3: 'report', 4: 'fyi'}[band]
 
 
 MEMBERSHIP_RULES = 'skipped-or-autoreply-without-task-ungrouped-2'   # bump when reconcile_membership groups entities differently -

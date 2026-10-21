@@ -304,7 +304,8 @@ const itemFromTimeline = (key) => {
 };
 
 const scriptedNext = (key = null, only = null) => {
-  const candidates = scriptedAssistant.pile.items.filter((i) => !i.settling && i.lane !== "working"
+  // ...a task an agent is working is walked like any task (the owner, 2026-10-21)
+  const candidates = scriptedAssistant.pile.items.filter((i) => !i.settling
     && (!only || only !== "mail" || (i.mid && !["report", "assistant"].includes(i.channel))));
   const item = (key ? scriptedAssistant.pile.items.find((i) => i.key === key) || itemFromTimeline(key) : null)
     || candidates.find((i) => !i.surfaced) || candidates[0] || null;

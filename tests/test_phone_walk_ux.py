@@ -338,28 +338,33 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
 
     def test_the_rails_bands_and_the_lead(self):
         items = [{'key': 'a', 'lane': 'approve', 'kind': 'review', 'who': 'Erin Blake', 'title': 'Q3 numbers', 'order_band': 2},
-                 {'key': 'c', 'lane': 'working', 'kind': 'agent', 'agent': 'coding', 'title': 'Reconcile the GL', 'order_band': 5},
+                 {'key': 'c', 'lane': 'working', 'kind': 'agent', 'agent': 'coding', 'title': 'Reconcile the GL', 'order_band': 2},
                  {'key': 'd', 'lane': 'report', 'kind': 'report', 'who': 'Spend report', 'title': 'Spend report - 3 over', 'order_band': 3},
                  {'key': 'f', 'lane': 'fyi', 'kind': 'fyi', 'who': 'Omar Keller', 'title': 'Portal is back', 'order_band': 4}]
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('4 things: 1 on you, 1 agents working, 1 reports, 1 FYI.'), text)
+        # every open task under Tasks, the one an agent is working included (the owner, 2026-10-21)
+        self.assertTrue(text.startswith('4 things: 2 tasks, 1 reports, 1 FYI.'), text)
         # a drafted reply says its lane's word, as the desktop row does (funnel_presentation.state_of) - not "draft ready"
-        self.assertIn('ON YOU · 1\n· Erin Blake - Q3 numbers (ready to send)', text)
-        self.assertIn('AGENTS WORKING · 1', text); self.assertIn('· Report - Spend report - 3 over', text)
-        self.assertLess(text.index('ON YOU'), text.index('AGENTS WORKING')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
+        self.assertIn('TASKS · 2\n· Erin Blake - Q3 numbers (ready to send)', text)
+        self.assertNotIn('AGENTS WORKING', text); self.assertIn('· Report - Spend report - 3 over', text)
+        self.assertLess(text.index('TASKS'), text.index('REPORTS ·')); self.assertLess(text.index('REPORTS ·'), text.index('FYI ·'))
         self.assertEqual(remote_assistant.who_wants_what([]), 'Nothing is waiting on you.')
 
     def test_a_finished_agents_task_is_on_you_as_on_the_rail(self):
         # the owner's screenshot, 2026-10-02: the rail had it On you, the opener said "Agents waiting" - no agent was working
         done = {'key': 'agentdone:9', 'lane': 'report', 'kind': 'agentdone', 'agent': 'coding', 'title': 'Investigate the export'}
         self.assertEqual(remote_assistant.group_of(done), 'task')
-        self.assertIn('ON YOU · 1', remote_assistant.who_wants_what([done]))
+        self.assertIn('TASKS · 1', remote_assistant.who_wants_what([done]))
 
-    def test_what_you_passed_is_for_later_as_on_the_rail(self):
+    def test_what_you_passed_stays_in_tasks_and_remind_me_is_for_later_as_on_the_rail(self):
+        # Next moves on and the task stays under Tasks; Remind me puts it in For later (the owner, 2026-10-21)
         items = [{'key': 'a', 'lane': 'stopped', 'kind': 'agent', 'who': 'Erin Blake', 'title': 'Budget tab', 'surfaced': True, 'put_down': True, 'order_band': 2},
                  {'key': 'b', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Q3 numbers', 'order_band': 2}]
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('2 things: 1 on you, 1 for later.'), text)
+        self.assertTrue(text.startswith('2 things: 2 tasks.'), text)
+        items[0] = items[0] | {'put_down': False, 'surfaced': False, 'deferred': True}
+        text = remote_assistant.who_wants_what(items)
+        self.assertTrue(text.startswith('2 things: 1 tasks, 1 for later.'), text)
 
     def test_it_names_the_bands_exactly_as_the_rail_does(self):
         # both sides read lanes.json's `sections`: the page's lanes.js builds LEVEL_ORDER and SECTION_WORDS from it, as this does

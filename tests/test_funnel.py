@@ -504,7 +504,7 @@ class LanesTests(unittest.TestCase):
         wide = {'kind': 'idea', 'lane': 'forgotten', 'when': (now - timedelta(hours=40)).strftime('%Y-%m-%d %H:%M:%S')}
         self.assertFalse(funnel._aged_out(wide, now, 48))
 
-    def test_an_agent_waiting_on_you_comes_out_first_and_a_working_agent_is_not_on_you(self):
+    def test_a_working_agents_task_is_walked_in_its_place_and_is_not_on_you(self):
         s = store()
         t1 = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'Export still broken', hours=1, tid=t1)
@@ -515,9 +515,12 @@ class LanesTests(unittest.TestCase):
                 {'taskId': t2, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5), 'idle': 2, 'waiting': False, 'tail': ['working…']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             items = funnel.build(s)['items']
-            self.assertEqual(funnel.next_item(s)['tid'], t1)                            # the worked one is never pulled
-        # the worked task rides at the TOP of the pipe, in hand, and is never what comes out next
-        self.assertEqual([(i['lane'], i['kind'], i['tid']) for i in items], [('blocked', 'agent', t1), ('working', 'todo', t2)])
+            # a task an agent is working is a task under Tasks, walked in the rail's order - oldest first (the owner, 2026-10-21)
+            self.assertEqual(funnel.next_item(s)['tid'], t2)
+        self.assertEqual([(i['lane'], i['kind'], i['tid']) for i in items], [('working', 'todo', t2), ('blocked', 'agent', t1)])
+        self.assertEqual([funnel.level_of(i) for i in items], ['task', 'task'])
+        self.assertFalse(funnel.on_you(items[0])); self.assertTrue(funnel.on_you(items[1]))   # ...but only the asking one is on you
+        items = items[::-1]
         self.assertTrue(items[0]['asking']); self.assertIn('asked you something', items[0]['why']); self.assertIn('codex has it', items[1]['why'])
         self.assertEqual((items[0].get('sid'), items[0]['mode']), (None, 'terminal'))           # the card embeds the screen when a sid is known
         # the mail that started t1 is not a second line: answering the agent answers the mail
@@ -861,7 +864,7 @@ class FeedUnreadTests(unittest.TestCase):
         funnel.settle(s, f"idea:{idea['IdeaId']}", 'surfaced')
         self.assertEqual(next(r for r in s.feed() if r['MessageId'] == new)['Unread'], 0)
 
-    def test_work_an_agent_has_stays_in_unread_but_never_becomes_the_next_chat_item(self):
+    def test_work_an_agent_has_stays_in_unread_and_is_walked_like_any_task(self):
         s = store()
         task = s.create_task({'Title': 'Import the files', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mid = mail(s, 'Import the files', tid=task)
@@ -869,9 +872,10 @@ class FeedUnreadTests(unittest.TestCase):
                  'idle': 2, 'waiting': False, 'tail': ['working']}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
-            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 5, 'codex'))
+            # the same level as any task, and the walk's item in its place (the owner, 2026-10-21)
+            self.assertEqual((row['Unread'], row['UnreadRank'], row['Working']), (1, 2, 'codex'))
             self.assertEqual(row['FunnelKey'], f'agent:{task}')
-            self.assertIsNone(funnel.next_item(s))
+            self.assertEqual(funnel.next_item(s)['tid'], task)
         waving = [dict(live[0], idle=200, waiting=True, tail=['Which region should I use?'])]
         with mock.patch('taskuary.terminal.live_sessions', return_value=waving):
             row = next(r for r in s.feed() if r['MessageId'] == mid)
@@ -940,23 +944,23 @@ class MemoryTests(unittest.TestCase):
         s.set_setting('funnel_max', '2', 't')
         p = funnel.build(s)
         self.assertEqual(([i['title'] for i in p['items']], p['hidden']), (['note 5', 'note 4'], 4))
-        # ...and what an agent has rides above the cap: the shelf is not the queue
+        # ...and what an agent has rides above the cap - in its place among the tasks, ahead of the fyi (2026-10-21)
         w = s.create_task({'Title': 'In hand', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         mail(s, 'In hand', hours=1, tid=w)
         live = [{'taskId': w, 'agent': 'codex', 'label': 'codex', 'started': ago(minutes=5), 'idle': 2, 'waiting': False, 'tail': []}]
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
             p = funnel.build(s)
-        self.assertEqual(([(i['title'], i['lane']) for i in p['items']], p['hidden']), ([('note 5', 'fyi'), ('note 4', 'fyi'), ('In hand', 'working')], 4))
+        self.assertEqual(([(i['title'], i['lane']) for i in p['items']], p['hidden']), ([('In hand', 'working'), ('note 5', 'fyi'), ('note 4', 'fyi')], 4))
         self.assertTrue(p['rev'].endswith(':4:0'), p['rev'])          # hidden by the cap, none held by a rule
         # a draft waiting for a yes ignores the window
         s.set_setting('funnel_hours', '1', 't'); s.set_setting('funnel_max', '25', 't')
         t = s.create_task({'Title': 'old ask', 'Kind': 'coding', 'Status': 'waiting'}, 'o')
         m = mail(s, 'old ask', hours=90, tid=t)
         s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'ok', 'Status': 'pending'})
-        # note 0 is from just now; 'In hand' is on the shelf whether or not a session is alive - a task
-        # whose status says in_progress is being worked (the owner, 2026-09-03)
+        # note 0 is from just now; 'In hand' is working whether or not a session is alive - a task
+        # whose status says in_progress is being worked (the owner, 2026-09-03) - and is a task, among the tasks
         self.assertEqual([(i['title'], i['lane']) for i in funnel.build(s)['items']],
-                         [('old ask', 'approve'), ('note 0', 'fyi'), ('In hand', 'working')])
+                         [('old ask', 'approve'), ('In hand', 'working'), ('note 0', 'fyi')])
 
     def test_one_line_per_thread_no_auto_replies_and_nothing_an_agent_is_working(self):
         s = store()
@@ -973,7 +977,7 @@ class MemoryTests(unittest.TestCase):
             items = funnel.build(s)['items']
         # the row reads triage's own title ("Fix the import") rather than the mail header it arrived
         # under ("Import broken") - funnel.says prefers Title now (the owner, 2026-09-16)
-        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Re: budget 0', 'fyi', 'fyi'), ('Fix the import', 'todo', 'working')])
+        self.assertEqual([(i['title'], i['kind'], i['lane']) for i in items], [('Fix the import', 'todo', 'working'), ('Re: budget 0', 'fyi', 'fyi')])
 
     def test_an_open_task_is_on_you_whatever_the_last_message_said(self):
         """TQ-0626 (the owner, 2026-09-18): a Teams ask became a task, the owner answered "done",
@@ -1023,7 +1027,8 @@ class MemoryTests(unittest.TestCase):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('queued', t))
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
-            self.assertIsNone(again['item']); self.assertIn('is under For later', again['say'])   # put down: read, waiting in Passed (2026-09-23)
+            # put down: read, and still under Tasks - Next moves on, the task stays (the owner, 2026-10-21)
+            self.assertIsNone(again['item']); self.assertIn('you already saw still waits on you', again['say'])
             later = datetime.now() + timedelta(hours=4)
             on_rail = [(i['lane'], bool(i.get('why_open')), bool(i.get('surfaced'))) for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
             self.assertEqual(on_rail, [('queued', True, False)])                                # the hour brought it back, and the mark went with it

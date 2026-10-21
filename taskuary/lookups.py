@@ -171,7 +171,7 @@ def pipe_list(store, p: dict) -> str:
     # ...and each row in the words the rail and the phone give it (funnel_presentation.shows)
     from .funnel_presentation import back_in, shows
     out = []
-    for sec in ('urgent', 'task', 'agents', 'later', 'reports', 'ideas', 'fyi'):
+    for sec in funnel.lanes.LEVEL_ORDER:
         xs = [i for i in items if funnel.level_of(i) == sec]
         if not xs: continue
         out.append(f"{funnel.SECTION_WORDS[sec].upper()} ({len(xs)}):")

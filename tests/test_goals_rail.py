@@ -1,5 +1,5 @@
-"""One row per goal: Goals when it has news, For later when quiet, never gone; children fold into it unless they are the
-owner's move (spec 2026-10-12, build step 1)."""
+"""One row per goal: under Tasks when it has news, For later when quiet, never gone (spec 2026-10-12, build step 1); its steps
+are task rows of their own whoever holds them - they folded into it while an agent or a person had them (the owner, 2026-10-21)."""
 import unittest
 from datetime import datetime, timedelta
 from unittest import mock
@@ -49,10 +49,10 @@ class GoalRowTests(unittest.TestCase):
         self.assertEqual(c['kind'], 'goal'); self.assertEqual(funnel.level_of(c), 'later')
         self.assertTrue(c['why'].startswith('1 of 3'), c['why'])
 
-    def test_a_goal_past_its_date_is_slipped_and_in_goals(self):
+    def test_a_goal_past_its_date_is_slipped_and_in_tasks(self):
         s, settle = settled(); g = goal(s, due=day(-4)); settle()
         c = card(s, g)
-        self.assertEqual((c['kind'], c['news']), ('goal_slipped', True)); self.assertEqual(funnel.level_of(c), 'goals')
+        self.assertEqual((c['kind'], c['news']), ('goal_slipped', True)); self.assertEqual(funnel.level_of(c), 'task')
         self.assertIn('slipped 4d', c['why'])
 
     def test_a_goal_with_every_box_done_is_not_slipped(self):
@@ -65,16 +65,17 @@ class GoalRowTests(unittest.TestCase):
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'general', 'ParentId': g}, 'owner'); s.link_step(g, checklist_id('Map the schema'), c, 'owner')
         s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()
         k = card(s, g)
-        self.assertTrue(k['news']); self.assertEqual(funnel.level_of(k), 'goals')
+        self.assertTrue(k['news']); self.assertEqual(funnel.level_of(k), 'task')
 
 
-class FoldTests(unittest.TestCase):
-    def test_a_child_waiting_on_them_folds_into_the_goal_and_names_who(self):
+class StepRowTests(unittest.TestCase):
+    def test_a_child_waiting_on_them_is_its_own_row_and_the_goal_names_who(self):
         s, settle = settled(); g = goal(s)
         c = s.create_task({'Title': 'Schema sign-off', 'Kind': 'task', 'Status': 'waiting', 'Assignee': 'person:ray@northwind.example', 'ParentId': g}, 'owner')
         s.link_step(g, checklist_id('Schema sign-off'), c, 'owner'); settle()
         items = rail(s, include_read=True)
-        self.assertNotIn(c, [i.get('tid') for i in items])                      # folded: not a row of its own
+        self.assertEqual(card(s, c)['goal'], funnel.task_ref(g))                # a row of its own, naming its goal
+        self.assertNotIn(c, [i.get('tid') for i in items if i.get('folded')])
         k = card(s, g)
         self.assertIn('Ray owes step 3', k['why']); self.assertEqual(k['who'], 'Ray')   # the holder, named, is the row's who
 
@@ -105,14 +106,14 @@ class DemoTests(unittest.TestCase):
 
 
 class FixPassTests(unittest.TestCase):
-    """The whole-branch review's findings (2026-10-12): a running child escaped the fold; a goal came back on the quiet
-    hours instead of on news."""
-    def test_a_child_an_agent_is_running_folds_into_the_goal(self):
+    """The whole-branch review's findings (2026-10-12): a goal came back on the quiet hours instead of on news. A running
+    child is a row of its own under Tasks, its icon ringed, since 2026-10-21 - it was folded into the goal's row."""
+    def test_a_child_an_agent_is_running_is_its_own_row_under_tasks(self):
         s, settle = settled(); g = goal(s)
         c = s.create_task({'Title': 'Map the schema', 'Kind': 'coding', 'Status': 'in_progress', 'ParentId': g}, 'owner')
         s.link_step(g, checklist_id('Map the schema'), c, 'owner'); s.start_run(c, 'coding', 'map it', 'owner'); settle()
-        items = rail(s, include_read=True)
-        self.assertNotIn(c, [i.get('tid') for i in items])
+        row = card(s, c)
+        self.assertEqual((row['lane'], funnel.level_of(row), row['goal']), ('working', 'task', funnel.task_ref(g)))
         k = card(s, g); self.assertIn('coding on step 2', k['why']); self.assertEqual(k['who'], 'coding')
 
     def test_a_read_goal_comes_back_on_a_childs_close_and_not_on_the_quiet_hours(self):
@@ -125,4 +126,4 @@ class FixPassTests(unittest.TestCase):
         k = next(i for i in rail(s, include_read=True, now=later) if i.get('tid') == g)
         self.assertTrue(k['surfaced']); self.assertFalse(k['actionable']); self.assertEqual(funnel.level_of(k), 'later')
         s.update_task(c, {'Status': 'done'}, 'agent:coding'); settle()      # news: a step closed since you read it
-        k = card(s, g); self.assertFalse(k.get('surfaced')); self.assertTrue(k['actionable']); self.assertEqual(funnel.level_of(k), 'goals')
+        k = card(s, g); self.assertFalse(k.get('surfaced')); self.assertTrue(k['actionable']); self.assertEqual(funnel.level_of(k), 'task')

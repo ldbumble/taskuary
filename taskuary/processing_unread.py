@@ -65,11 +65,11 @@ def _arrived_after_close(task, view) -> bool:
 # the lanes that are the OWNER's move (processing_order band 2): what Next leaves in Passed for the quiet hours
 # ...and URGENT work too (R3; the owner, 2026-09-25: "i hit next on urgent task and it's gone now but it should be in passed
 # at least"). Only a row with an open task behind it is ever Passed, so a meeting with no task still leaves on Next (R2).
-# Read off lanes.json: every lane whose section is Urgent or On you.
+# Read off lanes.json: every lane whose section is Urgent or Tasks - a task an agent is working included (2026-10-21).
 OWNER_LANES = lanes.OWNER_LANES
-# a goal's CHILD in one of these lanes is told by the goal's row ("coding on step 5 · Ray owes step 4"), not by a row of its
-# own; in any other lane it is the owner's move and stays a row (spec 2026-10-12, "many steps, one row")
-FOLD_LANES = ('working', 'queued', 'theirs', 'fyi')
+# A goal's CHILD is a task row of its own, whoever holds it (the owner, 2026-10-21): it was folded into the goal's row while
+# an agent, a person or a hand-off had it, and a step being worked was nowhere on the rail. The goal's row still names who
+# holds which step ("coding on step 5 · Ray owes step 4").
 # what a new walk raises again whatever the old one did with it: work that blocks on the owner (funnel.reset_walk)
 RAISED_BY_NEW_WALK = lanes.WAITS
 WALK_KEY = 'walk_started_at'
@@ -386,10 +386,10 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                 card.update(lane=slip, who_email=a.get('who_email') or '', late_days=late, idea=card.get('idea') or i['IdeaId'], action=a,
                             idea_kind=card.get('idea_kind') or i.get('Kind'), why=funnel.slipped_why(a.get('who_email'), quiet, day)); break
     # A GOAL IS ONE ROW (spec 2026-10-12): its kind says its state, its sub line says the count and who is holding it, its
-    # date sits where the age goes, and it is never gone while open. Its children fold into it unless they are your move.
+    # date sits where the age goes, and it is never gone while open. Its children are rows of their own, naming it.
     from .store import is_goal
     if is_goal(task) and active and not review and not worker: card.update(**goal_facts(store, task, tid, now))
-    elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)   # folded below, once the lane is final
+    elif task.get('ParentId') and active: card.update(goal=funnel.task_ref(task['ParentId']), folded=False)
     if news:
         who = agent_word(task.get('Kind'))                 # what it IS - a profile's name is not a worker
         frm = str(news.get('FromName') or news.get('FromEmail') or 'they').split(' at ')[0]
@@ -453,8 +453,6 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # made a task handed to an agent the one row Done could not shift - the same question answered two
     # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
     # like the rest now, and the quiet hours (task_return_minutes) bring it back. A Remind me date outranks it.
-    # ...a goal's CHILD is folded here, once its lane is final: the worker relabel above is where `working` comes from, so
-    # a fold decided earlier let a running child escape as a row beside its goal (the review, 2026-10-12)
     # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
     # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow
@@ -463,13 +461,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         loose = sweep.loose_on(store, view.get('ideas'), task, card, deferred=bool(read.get('deferred')), now=now,
                                mids=[m['MessageId'] for m in view.get('messages') or []])
         if loose: card.update(lane_was=card['lane'], lane='yours', why=loose['Text'], loose=True, loose_at=loose.get('LastSaid'))
-    if task.get('ParentId') and active: card['folded'] = card['lane'] in FOLD_LANES
     read_at = processing_all._stamp(read.get('read_at'))
     back = bool(tid and active and not read.get('deferred') and read_at
                 and read_at <= now - timedelta(minutes=quiet))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
     # A GOAL COMES BACK ON NEWS, never on the quiet hours (the review, 2026-10-12): a step closed or a day slipped since you
-    # last read it is what puts it in Goals; a quiet goal stays in For later however long it has been quiet
+    # last read it is what puts it under Tasks; a quiet goal stays in For later however long it has been quiet
     if str(card.get('kind') or '').startswith('goal'):
         back = bool(card.get('news_at') and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
         card.pop('why_open', None)
@@ -574,7 +571,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # The mark is the timer now - task_return_minutes, three hours by default - and Remind me is the silence.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
-    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved'):
+    # ...and 'working': a task an agent is working is forced unread like these, and the walk takes it now (2026-10-21) - without
+    # the mark Next would put the same working task straight back on the table
+    if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved', 'working'):
         shown_at = processing_all._stamp(shown.get('At'))
         if since and shown_at and shown_at < since: shown = None                  # passed before the agent stopped
         elif shown_at is None or shown_at > now - timedelta(minutes=quiet):
@@ -604,12 +603,12 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                      and r.get('Key') in [card['key'], *card['aliases']]]
         if summaries:
             card['summary'] = next((r for r in summaries if r['Key'] == card['key']), summaries[-1])['Summary']
-    # ...and the walk takes what the rail puts on you: a READ open task without a Next mark sits under On you, so `passed` alone
+    # ...and the walk takes what the rail puts on you: a READ open task without a Next mark sits under Tasks, so `passed` alone
     # (any read - opening it from the rail is one) let the walk start on the second row (the owner, 2026-10-14: "it skipped the
     # first task again in walk through"). Only Next, Done or Remind me puts it down - shown-is-not-acted-on.
     done = any(st and st.get('Status') == 'done' for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)])
     card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
-                              and card['lane'] != 'working' and not funnel._not_yet(card))
+                              and not funnel._not_yet(card))     # ...a task an agent is WORKING is walked like the rest (2026-10-21)
     return card
 
 

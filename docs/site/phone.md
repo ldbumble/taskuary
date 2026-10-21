@@ -109,7 +109,7 @@ bot API and has no such caveat.
 
 ## Sections, For later and browsing, on the phone
 
-The morning line and the walk offer the rail's sections as choices - **Walk On you**, **Walk For later**, **Walk Reports**,
+The morning line and the walk offer the rail's sections as choices - **Walk Tasks**, **Walk For later**, **Walk Reports**,
 **Walk FYI** - and you stay inside the one you picked until it is empty, whether you press **Next** or act on the item
 (Make a task, Send to agent, Remind me). When the section runs out it says so, and the walk carries on. Rows under For
 later say when they come back ("back in 3h").

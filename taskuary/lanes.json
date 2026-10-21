@@ -130,8 +130,9 @@
       "word": "agent working",
       "role": "working",
       "mark": "⚙️",
-      "section": "agents", "on_you": false,
-      "hint": "an agent has it — nothing for you until it stops or asks; it moves up when it needs your input"
+      "_section": "a task an agent is working is a task like any other, under Tasks where the walk's order puts it, its icon ringed while the agent works (the owner, 2026-10-21) - it never moves between sections as the agent starts, asks, finishes or stops",
+      "section": "task", "on_you": false,
+      "hint": "an agent is working on it — its icon spins until it finishes, asks, fails or is stopped"
     }
   ],
   "kinds": [
@@ -236,18 +237,14 @@
       "hint": "the task was dropped - nobody works it any more, and search still finds it"
     }
   ],
-  "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: Goals by a goal's news, For later by Next or Remind me, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. `minutes` on Urgent is how close a meeting comes before it moves there (funnel.ALERT_MIN).",
+  "_sections": "THE RAIL'S SECTIONS, in the rail's order: the heading (`word`; a sentence says it in lower case), the attention band whose rows it holds (null for a section placed by more than its band: For later by Remind me or a goal scheduled to come back, Advisor ideas by an fyi-band idea), what its heading's tip says (`{button:<id>}` is that button's name), `on_you` - what the opener's headline, the greeting and the header count as on you - and `to_read` - the reading that sits apart. `minutes` on Urgent is how close a meeting comes before it moves there (funnel.ALERT_MIN).",
   "sections": [
     { "key": "urgent", "word": "Urgent", "band": 1, "on_you": true, "minutes": 15,
       "hint": "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
-    { "key": "task", "word": "On you", "band": 2, "on_you": true,
-      "hint": "an open task with no agent, a reply waiting for your yes, an agent waiting on your answer, a hand-off that has not started, a check that failed, a task an agent finished" },
-    { "key": "goals", "word": "Goals", "band": null,
-      "hint": "an outcome with a date, its steps tasks of their own - here while it has news, in For later while it is quiet" },
-    { "key": "agents", "word": "Agents working", "band": 5,
-      "hint": "an agent has these; nothing for you until one stops or asks" },
+    { "key": "task", "word": "Tasks", "band": 2, "on_you": true,
+      "hint": "every open task, whether an agent is working on it or not - a spinning ring is an agent at work, a goal with news is here and its steps are rows of their own. Next moves on; the task stays here" },
     { "key": "later", "word": "For later", "band": null,
-      "hint": "still yours - you pressed Next on these, or put them away with Remind me; each comes back when its time says" },
+      "hint": "still yours - put away with Remind me, or a goal waiting for its next news; each comes back when its time says" },
     { "key": "reports", "word": "Reports", "band": 3, "to_read": true,
       "hint": "a report you set up landed - information, never a task" },
     { "key": "ideas", "word": "Advisor ideas", "band": null,

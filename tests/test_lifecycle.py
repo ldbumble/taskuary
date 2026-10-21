@@ -63,7 +63,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertFalse(concierge.INTRO_AI)     # the introduction is the facts, instant (2026-09-07)
         self.assertIn(concierge.WAITS, said['say'])                                            # the proposal says what WILL happen
         self.assertIn(f"Done - {buttons.label('coding_agent')}", self.chat()[-1][1])                       # ...and the receipt what did
-        # 5. the coding agent works: the item rides at the top, in hand, under the agent's key; the watcher says so.
+        # 5. the coding agent works: the item is a task under Tasks like any other, under the agent's key, and the walk takes it
+        # in its place (the owner, 2026-10-21); the watcher says so.
         # The watcher only believes a state that HOLDS (funnel.DWELL, so a moment of quiet is not "it
         # stopped") - this walk changes state on purpose, line by line, so it opts out of the wait.
         dwell = mock.patch.object(funnel, 'DWELL', 0); dwell.start(); self.addCleanup(dwell.stop)
@@ -72,7 +73,7 @@ class LifecycleTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=working):
             funnel.announce(s)                                                   # first look remembers
             p = funnel.pile(s, force=True)
-            self.assertIsNone(funnel.next_item(s))
+            self.assertEqual(funnel.next_item(s)['key'], f'agent:{t}')
         self.assertEqual([(i['key'], i['lane']) for i in p['items']], [(f'agent:{t}', 'working')])
         # 6. it stops to ask: front of the pipe, a line in the chat with the card
         parked = [dict(working[0], idle=120, waiting=True, state='asking', tail=['Remove Bulk Deny as well? (y/n)'])]

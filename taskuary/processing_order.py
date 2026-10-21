@@ -8,25 +8,22 @@ def priority_rank(value):
 
 
 def attention_band(*, urgent=False, owner_wait=False, working=False, actionable=False, result=False):
-    """The five levels, and they are TRIAGE's verdict rather than a second opinion on top of it
+    """The four levels, and they are TRIAGE's verdict rather than a second opinion on top of it
     (the owner, 2026-09-07: "Sort should just take what the triage does instead of adding more").
 
     1 urgent - a meeting inside fifteen minutes, or a sender on the owner's escalate list.
-    2 your task - what triage called work, whoever is waiting: an open task with no agent, a reply
+    2 tasks - what triage called work, whoever is on it: an open task with no agent, one an agent is WORKING, a reply
       drafted and waiting for a yes, an agent parked on a question, a hand-off that never started,
       a check that failed, a task an agent finished and closed (until it is read). Owner-input and actionable were two levels for a split triage never
       made, and nothing needed the difference: inside a level the oldest comes first.
     3 reports - a report you set up landed. Information, never a task.
     4 fyi - what triage called fyi, and anything it has not judged yet - while it is still being retried. A row
       the retry GAVE UP on is level 2 (gave_up): nobody will judge it now, so it is the owner's.
-    5 agents working - an agent has it; nothing here is for the owner until it stops or asks."""
+    A working agent's task was a fifth level below fyi, and the row jumped between sections each time its agent started,
+    asked or stopped (the owner, 2026-10-21): it is a task like the rest now, in the same place whatever its agent does."""
     if urgent:
         return 1
-    if owner_wait:                     # a question or a draft waiting on the owner outranks a session
-        return 2
-    if working:
-        return 5
-    if actionable:                     # ...and everything else the owner has to do is the same level
+    if owner_wait or working or actionable:
         return 2
     return 3 if result else 4
 

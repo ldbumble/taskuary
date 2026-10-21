@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, attentionBand, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
 import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
@@ -105,11 +105,11 @@ const NOTE_KINDS = new Set(["setup_questions", "words"]);
 // is still mail, and the walk that skipped it said "0 of them are mail" with five in the pipe
 
 // WHAT THE HEADING ALREADY SAID. A row speaks only when its own word ADDS something: "slipped"
-// under fyi does, "fyi" under fyi does not, and "agent finished" under agents working does -
-// because the band says they are still going (the owner, 2026-09-16: "show emoji if it says
+// under fyi does, "fyi" under fyi does not (the owner, 2026-09-16: "show emoji if it says
 // something besides for what lane it's in"). Compared on the WORD, not the lane, so a kind that
 // overrides its lane's word - agentdone, wrapup - is judged on the word it actually shows.
-const BAND_SAYS = { reports: "report", fyi: "fyi", agents: "agent working" };
+// An agent WORKING says so with the ring spinning round its icon, not a word (the owner, 2026-10-21), and a GOAL says its steps.
+const BAND_SAYS = { reports: "report", fyi: "fyi" };
 const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";   // a ranked row's place in its batch (HEAD_RANGE tops out at 20)
 const ROW_H = 33, CUR_H = 57;   // a Timeline row (30px + its 3px gap); the current one opens up to two lines
 const BATCH_TAIL = 13;          // the gap a bracket leaves under itself for its own label
@@ -361,7 +361,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useEffect(() => { if (nextTid) prefetchTask(api, nextTid); }, [nextTid, displayRevision(pile)]);   // eslint-disable-line react-hooks/exhaustive-deps
   // how close to empty, once that is worth saying (the owner asked for it at "halfway down the
   // funnel", so from fifteen: the count is the encouragement - no header, no total)
-  const left = items.filter((i) => !i.settling && i.lane !== "working").length + tail;
+  const left = items.filter((i) => !i.settling).length + tail;
   const cheer = !left || left > 15 ? "" : left === 1 ? "One more and you're clear."
     : left <= 5 ? `${left} to go, then you're clear.` : `${left} away from clear.`;
 
@@ -390,7 +390,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useEffect(() => { if (!markers.length) setOpenChannel(""); }, [markers.length]);
 
   // ── how much of each band fits ──────────────────────────────────────────────────────────────
-  // urgent, your task and agents working draw in full; reports and fyi divide what is left of the
+  // urgent and tasks draw in full; reports and fyi divide what is left of the
   // rail's height, floor of two (funnelPile.fillCaps). It is MEASURED from the scroller, so the
   // answer follows the window instead of being a number somebody picked.
   // PASSED means you moved ON from it: the card on the table has been shown (the walk marks it at once)
@@ -398,7 +398,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // "it started in your task and moved to passed without touching anything")
   const atTable = (i) => !!current && (i.key === current.key || (current.aliases || []).includes(i.key) || (i.aliases || []).includes(current.key));
   // ...and the row on the table stays in the band it was clicked in (2026-10-19 UI walk): a For later row clicked was taken up by the
-  // server (no longer put down) and jumped to On you under the pointer. It moves when the owner moves on, never while they look.
+  // server (no longer put down) and jumped to Tasks under the pointer. It moves when the owner moves on, never while they look.
   const lastLevel = useRef({}), pin = useRef(null);
   const tableRow = current ? drawn.find(atTable) : null;
   if (!tableRow) pin.current = null;
@@ -454,7 +454,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // the row on the table is 24px taller than the rest, and it is drawn inside one of these bands
   const base = fillCaps(room - (curKey ? CUR_H - ROW_H : 0), bands);
   // how many rows the capped bands could still give back before they are at their floor. Past that
-  // the rail genuinely does not fit and scrolls: your task and agents working are never trimmed.
+  // the rail genuinely does not fit and scrolls: urgent and tasks are never trimmed.
   const headroom = CAPPED.reduce((n, level) => n + Math.max(0, (base[level] ?? 0) - FLOOR), 0);
   const caps = trimCaps(base, bands, trim);
   // what a band draws: its cap's worth, and whatever is on the table wherever in the band it sits
@@ -569,8 +569,8 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
       ) : bands.map(({ level, items: rows }) => {
         const open = opened.has(level);
         const extra = level === "fyi" ? tail : 0;           // the band's rows not here yet - counted, never dropped
-        // only the two bands the rail is allowed to cap can be folded; urgent, your task and agents
-        // working are never hidden, so a chevron on them would offer nothing
+        // only the bands the rail is allowed to cap can be folded; urgent and tasks are never hidden, so a
+        // chevron on them would offer nothing
         const folds = CAPPED.includes(level) && rows.length > FLOOR;
         // what is on the table is never capped away, wherever in its band it sits
         const shown = shownIn(level, rows);
@@ -654,9 +654,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // owner, 2026-09-16: "for calendar invite you need to say the actual time of the
                 // meeting"). It goes on the card rather than in the gutter, which is an age column
                 // for every row and too narrow for a time.
+                const goal = String(i.kind || "").startsWith("goal"), spins = i.lane === "working" && !i.settling;
                 const word = i.settling ? ""
                   : i.kind === "meeting" ? `invite · ${fmtTime12(i.when)}`
-                    : meta.word !== BAND_SAYS[level] ? meta.word : "";
+                    // a goal says only that it SLIPPED (red); on track or not started, its steps say enough (the owner, 2026-10-21)
+                    : goal ? (i.kind === "goal_slipped" ? meta.word : "")
+                      : spins ? "" : meta.word !== BAND_SAYS[level] ? meta.word : "";
                 return (
                   <div key={i.key} className={cls} data-tq-key={i.key} style={{ top: falls(i.key) ? -ROW_H : top }}>
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
@@ -673,22 +676,28 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                       onPointerEnter={() => { if (!isCur && i.tid) prefetchTask(api, i.tid); }}
                       title={[i.who, meta.word, i.ref, i.promoted ? 'moved up - it looked urgent' : '', i.why].filter(Boolean).join(" · ")}>
                       <div className="t">
-                        <span className="logo"><SourceMark item={i} size={15} /></span>
+                        {/* AN AGENT AT WORK is a ring spinning round the row's icon (the owner, 2026-10-21) - it stops when the agent
+                            finishes, asks, fails or is stopped; the highlighted border stays the table's alone. A goal wears its mark. */}
+                        <span className={`logo${spins ? " spins" : ""}`} data-tq-working={spins ? "" : undefined}
+                          role={spins ? "img" : undefined} aria-label={spins ? `${i.working || i.agent || "an agent"} is working on this` : undefined}>
+                          {goal ? <span className="goal">{meta.mark}</span> : <SourceMark item={i} size={15} />}</span>
                         {!!rankNo[i.key] && <span className="tq-pile-rank" title={`#${rankNo[i.key]} of this batch, by importance`}>
                           {CIRCLED[rankNo[i.key] - 1] || rankNo[i.key]}</span>}
-                        <b>{i.title}</b>
+                        <b className={goal ? "goal-t" : undefined}>{i.title}</b>
+                        {/* a goal's row is "🎯 title · 2 of 5 steps" - its count, never its TQ number (the owner, 2026-10-21) */}
+                        {goal && Number.isInteger(i.steps) && i.steps > 0 && <span className="tq-pile-steps">· {i.steps_done || 0} of {i.steps} steps</span>}
                         {/* which task this IS. It is how you say "TQ-0588" to the assistant, how you
                             match a row to the Tasks tab, and it was only ever in the tooltip.
                             ...on the row you are looking at: on every row it cut each subject at a laptop's 334px rail to ~14
                             characters (the walk click-through, 2026-10-17) - the others carry it in the hover */}
-                        {!!i.ref && isCur && <span className="tq-pile-ref">{i.ref}</span>}
+                        {!!i.ref && isCur && !goal && <span className="tq-pile-ref">{i.ref}</span>}
                         {/* a BATCH says how far it got in the row's own height - "1/4"; the whole line on hover and on the table */}
                         {!!batchNo[i.key] && <span className="tq-pile-ref" title={batchNo[i.key].line}>{railShort(batchNo[i.key].states)}</span>}
                         {i.settling && <span className="tq-pile-tag">reading…</span>}
                         {!!word && (
-                          <span className="tq-pile-word"
+                          <span className={`tq-pile-word${goal ? " keep" : ""}`}
                             style={meta.role === "bad" ? { color: ROLES.bad.ink } : undefined}>
-                            <i>{meta.mark}</i><span className="w">{word}</span></span>
+                            {!goal && <i>{meta.mark}</i>}<span className="w">{word}</span></span>
                         )}
                       </div>
                       {isCur && <div className="sub">{batchNo[i.key]?.line || [i.why, i.kind === "meeting" ? age(i.when) : ago(i.since || i.when)].filter(Boolean).join(" · ")}</div>}
@@ -1021,8 +1030,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // sat on the rail as an open task already seen: under For later (the owner, 2026-10-01: "it first went to Later ... and
   // did not disappear right away"). Held until the pile no longer carries it, so a reopened task is never hidden.
   const [leavingTid, setLeavingTid] = useState(null);
-  // A TASK BEING CONTINUED moves to Agents working at the press the same way: "Continuing" said so at 0.3 s while its row
-  // sat under On you until the next pile, two seconds on (press audit, 2026-10-01). Held until the pile has it working.
+  // A TASK BEING CONTINUED rings at the press the same way: "Continuing" said so at 0.3 s while its row sat still until the next
+  // pile, two seconds on (press audit, 2026-10-01). Held until the pile has it working; it stays where it is, under Tasks.
   const [continuingTid, setContinuingTid] = useState(null);
   // the walk validates Current against the pile before it can say anything, and that read was
   // 5-47s (2026-09-09). busy is the TURN's interlock and surface() refuses to run while it is
@@ -1818,8 +1827,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // ...ELSE the rail's row for it: a rail row pulled by name (the server answers with the row that was pressed), or the single item
     // the capture names - after a close that already put the table down too (Mark done, Remove, Remind me: advance), and at the walk's start
     const aheadKey = prep ? null : key || (capture?.expected_next_key && (capture.expected_next_members || []).length <= 1 ? capture.expected_next_key : null);
-    // ...never an item an agent is working: the server answers "it is with the agent right now" and puts nothing on the table
-    const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling && i.lane !== "working") : null;
+    // ...an item an agent is working included: it is a task like the rest, and its card is the agent's pane (the owner, 2026-10-21)
+    const aheadItem = aheadKey && aheadKey !== was?.key ? rows.find((i) => i.key === aheadKey && !i.settling) : null;
     const line = { id: `a${Date.now()}`, role: "assistant", options: [], chips: [] };
     // ...its CARD drawn at the answer, the words at once (`held`, Line): a card's first reads write - a task's origin is filed on its
     // first detail read - and a write under the press between its admission and its commit check refused it as stale (PW-118). A task
@@ -1887,7 +1896,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (earlyRef.current || sectionRef.current || turnFlight.current) return;
     const cap = selectionRef.current, nk = cap?.expected_next_key;
     if (!nk || nk === leaving || (cap.expected_next_members || []).length > 1) return;
-    const it = (pileRef.current?.items || []).find((i) => i.key === nk && !i.settling && i.lane !== "working");
+    const it = (pileRef.current?.items || []).find((i) => i.key === nk && !i.settling);
     if (!it || !showsTask(it, cardFor(it)) || !heldTask(it.tid) || heldTerm(it.tid) === undefined) return;
     earlyRef.current = drawAhead({ id: `a${Date.now()}`, role: "assistant", text: "", options: [], chips: [], card: it });
   };
@@ -2821,7 +2830,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   }, [pile, leavingTid]);
   useEffect(() => {                                   // ...and the continue has: the server's pile has it working (or not at all)
     const row = continuingTid && pile?.items ? pile.items.find((i) => i.tid === continuingTid) : undefined;
-    if (continuingTid && pile?.items && (!row || attentionBand(row) === 5)) setContinuingTid(null);
+    if (continuingTid && pile?.items && (!row || row.lane === "working")) setContinuingTid(null);
   }, [pile, continuingTid]);
   // ...and never for long on the page's word alone: a session that ended at once is the server's to say
   useEffect(() => {

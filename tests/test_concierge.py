@@ -212,7 +212,8 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         first = concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
-        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing is under For later - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
+        # ...walked past, it is still under Tasks - Next moves on, the task stays (the owner, 2026-10-21)
+        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you already saw still waits on you - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
         self.assertEqual([c['verb'] for c in again['chips']], ['open'])
         self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))
@@ -852,15 +853,16 @@ class OpeningTests(unittest.TestCase):
 
 
 class AgentGotThereFirstTests(unittest.TestCase):
-    def test_an_item_an_agent_now_holds_is_put_back_with_a_word_and_the_walk_moves_on(self):
+    def test_an_item_an_agent_now_holds_stays_a_task_in_its_place(self):
         s = store()
         t = s.create_task({'Title': 'Pto', 'Kind': 'coding', 'Status': 'in_progress'}, 'o')
         m = s.add_message({'TaskId': t, 'ExternalId': 'x:pto', 'ConversationId': 'c:pto', 'Channel': 'email', 'Subject': 'PTO', 'FromName': 'Erin',
                            'FromEmail': 'c@ours.com', 'SentAt': ago(3), 'BodyText': 'Can you import PTO for Aug 9-22?', 'Status': 'routed'})
         t2, m2, r2 = drafted(s, 'second', hours=1)
-        first = funnel.build(s)['items'][0]
-        self.assertEqual(first['key'], f'review:{r2}')                    # the draft outranks the todo
-        todo = funnel.build(s)['items'][1]
+        # one level for every task, oldest first: the in-progress todo (3h) is ahead of the draft (1h) - it was below it, in a
+        # band of its own, while its status said an agent had it (the owner, 2026-10-21)
+        todo, first = funnel.build(s)['items']
+        self.assertEqual(first['key'], f'review:{r2}')
         self.assertEqual((todo['kind'], todo['coding']), ('todo', True))
         # codex starts on TQ-0001 between the pile being built and the pull
         live = [{'taskId': t, 'agent': 'codex', 'label': 'codex', 'started': ago(0), 'idle': 3, 'waiting': False, 'tail': []}]
@@ -869,8 +871,10 @@ class AgentGotThereFirstTests(unittest.TestCase):
         # PICKED BY NAME it goes on the table, agent and all - the owner wants to see it (2026-09-30: "task should pull up")
         self.assertEqual((out['item']['tid'], out['item']['lane']), (t, 'working'))
         with mock.patch('taskuary.terminal.live_sessions', return_value=live):
-            self.assertEqual([(i['key'], i['lane']) for i in funnel.build(s)['items']], [(f'review:{r2}', 'approve'), (f'agent:{t}', 'working')])   # in hand, at the top, under the agent's key
-            self.assertEqual(funnel.next_item(s)['key'], f'review:{r2}')   # ...and NEXT still lets a working agent be
+            # a task, under the agent's key, in its place among the tasks - the older first (the owner, 2026-10-21)
+            self.assertEqual([(i['key'], i['lane']) for i in funnel.build(s)['items']], [(f'agent:{t}', 'working'), (f'review:{r2}', 'approve')])
+            self.assertEqual([funnel.level_of(i) for i in funnel.build(s)['items']], ['task', 'task'])
+            self.assertEqual(funnel.next_item(s)['key'], f'review:{r2}')   # ...and NEXT from it, on the table, takes the next row
 
 
     def test_an_agent_that_is_asking_is_not_shown_as_working(self):
@@ -1021,7 +1025,8 @@ class ForLaterLine(unittest.TestCase):
         line said "1 thing you've already seen" (the owner, 2026-10-01: "why does it say one thing when there are 2?")."""
         from unittest import mock
         soon, tomorrow = [(datetime.now() + timedelta(hours=h, minutes=5)).strftime('%Y-%m-%d %H:%M:%S') for h in (2, 19)]
-        rows = [{'key': 'task:14', 'ref': 'TQ-0014', 'title': 'Compliance follow-up', 'lane': 'asked', 'surfaced': True, 'put_down': True, 'back_at': soon},
+        # For later is Remind me's since 2026-10-21 - a row Next walked past stays under Tasks (below)
+        rows = [{'key': 'task:14', 'ref': 'TQ-0014', 'title': 'Compliance follow-up', 'lane': 'asked', 'deferred': True, 'back_at': soon},
                 {'key': 'task:8', 'ref': 'TQ-0008', 'title': 'Raise approval', 'lane': 'asked', 'deferred': True, 'back_at': tomorrow}]
         s = MemoryStore()
         with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
@@ -1030,6 +1035,11 @@ class ForLaterLine(unittest.TestCase):
         self.assertEqual(out['say'], "That's everything for now. 2 things are under For later - TQ-0014 back in 2h, TQ-0008 back in 19h. "
                                      "Open one now if you want it sooner.")
         self.assertEqual(concierge._back_words('not a time'), 'back in a while')
+        rows[0] = rows[0] | {'deferred': False, 'surfaced': True, 'put_down': True}       # ...walked past with Next: still a task
+        with mock.patch.object(concierge.funnel, 'pile', return_value={'items': rows}), \
+             mock.patch.object(concierge.funnel, 'next_item', return_value=None):
+            out = concierge.surface(s, llm=lambda *a, **k: 'never')
+        self.assertTrue(out['say'].startswith("That's everything for now. 2 things you already saw still wait on you - TQ-0014"), out['say'])
 
     def test_the_line_and_its_buttons_keep_the_rails_order(self):
         """A sort of the line's own named TQ-0001, TQ-0003, TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is

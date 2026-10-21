@@ -424,7 +424,7 @@ test('an agent on the table keeps its own lane on the rail when the walk has tak
   const { pulledRow } = await import("../src/funnelPile.js");
   // it asked while it stood there: the rail said "on you" under a header saying the agent waited on you
   assert.equal(pulledRow({ key: 'processing:p2', kind: 'agent', lane: 'blocked', order_band: 2, tid: 37 }).lane, 'blocked');
-  assert.equal(pulledRow({ key: 'processing:p2', kind: 'agent', lane: 'working', order_band: 5, tid: 37 }).lane, 'working');
+  assert.equal(pulledRow({ key: 'processing:p2', kind: 'agent', lane: 'working', order_band: 2, tid: 37 }).lane, 'working');
   // ...a task's own card is still on you while it is open
   assert.equal(pulledRow({ key: 'processing:p3', kind: 'todo', lane: 'queued', order_band: 2, tid: 38 }).lane, 'yours');
 });

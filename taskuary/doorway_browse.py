@@ -13,7 +13,7 @@ from pathlib import Path
 from . import funnel
 
 SECTION_KEY = 'remote_section'          # {section, seen} while a section is being walked in one chat
-WALKED = ('task', 'later', 'reports', 'ideas', 'fyi')   # the sections a chat offers to walk - agents working are not walked
+WALKED = ('task', 'later', 'reports', 'ideas', 'fyi')   # the sections a chat offers to walk - Tasks holds every open task (2026-10-21)
 
 
 def section_rows(items: list) -> list:

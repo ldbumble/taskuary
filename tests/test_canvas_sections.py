@@ -1,6 +1,7 @@
 """The canvas redesign's rail sections, server side (docs/superpowers/specs/2026-09-29-assistant-canvas-redesign-design.md).
 
-For later holds what Next walked past AND what Remind me put away, each with the time it comes back; the level an
+For later holds what Remind me put away and a goal waiting for its next news, each with the time it comes back - what Next
+walks past stays under Tasks (the owner, 2026-10-21); the level an
 item is in is one rule shared with the page (website/src/funnelPile.js levelOf), pinned by tests/fixtures/rail_levels.json
 from both sides, so the phone doorway's section walk and the rail agree on membership.
 """
@@ -32,13 +33,14 @@ class LevelOfTests(unittest.TestCase):
             self.assertEqual(funnel.level_of(item), level, item)
 
     def test_every_section_has_its_heading_word(self):
-        self.assertEqual(list(funnel.SECTION_WORDS), ['urgent', 'task', 'goals', 'agents', 'later', 'reports', 'ideas', 'fyi'])
+        # no Agents working and no Goals: every open task is under Tasks (the owner, 2026-10-21)
+        self.assertEqual(list(funnel.SECTION_WORDS), ['urgent', 'task', 'later', 'reports', 'ideas', 'fyi'])
         self.assertEqual(funnel.SECTION_WORDS['later'], 'For later')
-        self.assertEqual(funnel.SECTION_WORDS['goals'], 'Goals')
+        self.assertEqual(funnel.SECTION_WORDS['task'], 'Tasks')
 
 
 class ForLaterTests(unittest.TestCase):
-    def test_a_passed_task_says_when_it_comes_back(self):
+    def test_a_passed_task_stays_in_tasks_and_says_when_it_comes_back(self):
         from taskuary import concierge
         s, settle = settled()
         t = s.create_task({'Title': 'Send the August financials', 'Kind': 'task', 'Status': 'open'}, 'triage')
@@ -49,7 +51,8 @@ class ForLaterTests(unittest.TestCase):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
             card = next(i for i in rail(s) if i.get('tid') == t)
-        self.assertEqual(funnel.level_of(card), 'later')
+        self.assertEqual(funnel.level_of(card), 'task')                 # Next moves on; the task stays (2026-10-21)
+        self.assertTrue(card['put_down']); self.assertFalse(card['actionable'])
         back = datetime.strptime(card['back_at'], '%Y-%m-%d %H:%M:%S')
         want = datetime.now() + timedelta(minutes=processing_unread.return_minutes(s))
         self.assertLess(abs((back - want).total_seconds()), 120, card['back_at'])
@@ -81,8 +84,9 @@ class SectionWalkTests(unittest.TestCase):
 
 
 class LegacyPileForLaterTests(unittest.TestCase):
-    """The demo world runs the legacy pile (funnel.build): walked-past open work waits in For later there too."""
-    def test_walked_past_open_work_waits_in_for_later_then_later_says_its_day(self):
+    """The demo world runs the legacy pile (funnel.build): walked-past open work stays under Tasks there too, and Remind me
+    puts it in For later."""
+    def test_walked_past_open_work_stays_in_tasks_and_later_says_its_day(self):
         now = datetime.now()
         at = (now - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
         until = (now + timedelta(days=2)).strftime('%Y-%m-%d %H:%M:%S')
@@ -98,8 +102,8 @@ class LegacyPileForLaterTests(unittest.TestCase):
         self.assertEqual(out['msg:1']['back_at'], (now - timedelta(minutes=10) + timedelta(minutes=180)).strftime('%Y-%m-%d %H:%M:%S'))
         self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
         self.assertEqual({k: funnel.level_of(i | {'order_band': 2}) for k, i in out.items()},
-                         {'msg:1': 'later', 'msg:3': 'later', 'msg:4': 'task'},
-                         'shown and clicked away from stays On you (2026-10-08: "it moved 1003 automatically to later?")')
+                         {'msg:1': 'task', 'msg:3': 'later', 'msg:4': 'task'},
+                         'walked past or clicked away from stays under Tasks (2026-10-08, 2026-10-21); Remind me is For later')
         self.assertNotIn('back_at', out['msg:4'])
 
 

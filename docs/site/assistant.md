@@ -12,7 +12,7 @@ and whatever part of the app is in use opens inside it.
 | Top of the sidebar | **New** (a task, a report or a workflow), then **Reports**, **Connections**, **Hub** and **Settings** |
 | Under the buttons | **Search** (or Ctrl+K anywhere), then the **filter** - the row's one control, saying what the rail is narrowed to (*All items*, *Email*, one mailbox) - then the day's count and **Sync now** |
 | Search | One box over everything, open or closed: tasks, mail, chats, pull requests and issues, Advisor posts, reports and your sources. Each result wears a pill saying what it is; the strip above them narrows to one kind (**Tab** steps through it). **Enter** opens the result - a task on the canvas, a message in full, a source as the rail's filter - and the task number on a message opens the task it is on |
-| The rail | **On you**, **Agents working**, **For later**, **Reports**, **Advisor ideas**, **FYI** - click a heading to walk that section |
+| The rail | **Tasks** (every open task; a ring spins round the icon of one an agent is working), **For later**, **Reports**, **Advisor ideas**, **FYI** - click a heading to walk that section |
 | The canvas | The item on the table: a task opens as its full task view - Task, Agent work, Close out - with **Next** under it |
 | The top bar | **Board** - every agent and its session, full screen - and back to the Assistant |
 
@@ -72,7 +72,7 @@ add a picture, or continue as is. Moving on with **Next** puts the card away wit
 
 Every open task has **Remind me** on its page: tomorrow, next week, in 2 weeks, in a month, or any day
 from the calendar. Until that day the task waits under **For later** on your rail, saying when it comes back. That
-morning a note goes on the task and it is back under **On you**, however long ago it arrived. Ask the
+morning a note goes on the task and it is back under **Tasks**, however long ago it arrived. Ask the
 Assistant the same thing — "bring TQ-0123 back in two weeks" — and it brings TQ-0123 up with **Remind me** lit; you pick the day.
 
 ## Everything the task page can do
@@ -117,6 +117,6 @@ These have no button. Say them, in the app or on your phone.
 | "set up a report that…" | **New** opens on Report with your words in it | you press Build it |
 | "stop hiding auto-replies" | The setting opens beside the answer, its knob outlined | you change it |
 | "what's waiting on me?" | Looked up and answered — tasks, reports, mail, calendar, settings | at once |
-| "what's in For later?" | The rail read by its own sections - On you, Agents working, For later (with when each comes back), Reports, FYI | at once |
+| "what's in For later?" | The rail read by its own sections - Tasks, For later (with when each comes back), Reports, FYI | at once |
 
 Later and Tomorrow are gone: **Next** is the "not now", and **Remind me** puts a task away until a day.

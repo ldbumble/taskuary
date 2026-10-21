@@ -12,7 +12,7 @@ export const WORD = Object.fromEntries([...vocab.lanes, ...vocab.kinds, ...vocab
 export const SECTIONS = vocab.sections;
 export const SECTION = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
 export const LEVEL_ORDER = SECTIONS.map((s) => s.key);
-// the heading, and the same word inside a sentence ("Agents working" / "agents working")
+// the heading, and the same word inside a sentence ("For later" / "for later")
 export const SECTION_WORDS = Object.fromEntries(SECTIONS.map((s) => [s.key, s.word]));
 const fill = (hint) => hint.replace(/\{button:(\w+)\}/g, (_, id) => label(id));
 export const LEVEL_META = Object.fromEntries(SECTIONS.map((s) => [s.key, { word: s.word.toLowerCase(), hint: fill(s.hint) }]));
@@ -24,22 +24,25 @@ export const laneSection = (lane) => LANE[lane]?.section || "task";   // a lane 
 export const notYet = (item) => item?.kind === "meeting"
   && ("calendar_ready" in item ? !item.calendar_ready : item.mins != null && item.mins > ALERT_MIN);
 // processing_order.attention_band: the first flag that holds decides
-const band = ({ urgent, wait, working, actionable, result }) => urgent ? 1 : wait ? 2 : working ? 5 : actionable ? 2 : result ? 3 : 4;
+// ...a task an agent is WORKING is a task, level 2 like the rest - it was a fifth level, "Agents working" (the owner, 2026-10-21)
+const band = ({ urgent, wait, actionable, result }) => urgent ? 1 : wait || actionable ? 2 : result ? 3 : 4;
 // The server stamps every row with its band; a row without one (an old persisted card) gets the server's own rule (lanes.band_of)
 export const attentionBand = (item) => {
-  if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 5) return item.order_band;
+  // ...a stamp from before (band 5) is read again, never taken as fyi
+  if (Number.isInteger(item?.order_band) && item.order_band >= 1 && item.order_band <= 4) return item.order_band;
   if (item?.kind === "meeting") return band({ urgent: !notYet(item), actionable: true });
   const l = LANE[item?.lane] || {}, sec = laneSection(item?.lane);
   // a task its agent finished rides the report lane but is On you; an unjudged row the retry gave up on is the owner's
-  return band({ urgent: sec === "urgent" || !!(l.urgent_request && item?.urgent_request), wait: !!l.waits, working: sec === "agents",
+  return band({ urgent: sec === "urgent" || !!(l.urgent_request && item?.urgent_request), wait: !!l.waits,
     actionable: sec === "task" || item?.kind === "agentdone" || (item?.lane === "unjudged" && !!item?.held), result: sec === "reports" });
 };
 export const levelOf = (item) => {
   const b = attentionBand(item);
-  // A GOAL is one row and never gone: Goals while it has news you have not read, For later otherwise (spec 2026-10-12)
-  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "goals" : "later";
-  // For later is what you PUT there - Next or Remind me - never a card merely shown and clicked away from (2026-10-08)
-  if (b === 2 && (item?.put_down || item?.deferred)) return "later";
+  // A GOAL is one row and never gone: Tasks while it has news you have not read, For later - scheduled to come back - otherwise
+  if (String(item?.kind || "").startsWith("goal")) return item?.news && !item?.surfaced ? "task" : "later";
+  // For later is what you PUT there with a date - Remind me - never a card merely shown (2026-10-08), and no longer Next: Next
+  // moves the walk on and the task stays in Tasks (the owner, 2026-10-21)
+  if (b === 2 && item?.deferred) return "later";
   if (b === 4 && item?.kind === "idea") return "ideas";
   return LEVEL_OF_BAND[b] || "fyi";
 };
@@ -47,8 +50,8 @@ export const levelOf = (item) => {
 // blocked on the owner's answer or yes - an agent asked, a reply waits
 export const waitsOnYou = (item) => !!LANE[item?.lane]?.waits;
 export const isOwnersMove = (item) => LANE[item?.lane]?.on_you !== false;
-// ON YOU, the one count the opener's headline, the greeting and the header give: under Urgent or On you, in a lane that is the
-// owner's move - waiting on THEM sits under On you as the owner's task, but it is on somebody else
+// ON YOU, the one count the opener's headline, the greeting and the header give: under Urgent or Tasks, in a lane that is the
+// owner's move - waiting on THEM, or an agent working, sits under Tasks as the owner's task, but it is on somebody else
 export const onYou = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.on_you && isOwnersMove(item);
 export const toRead = (item, level = levelOf(item)) => !item?.settling && !!SECTION[level]?.to_read;
 

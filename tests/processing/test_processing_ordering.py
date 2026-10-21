@@ -54,12 +54,12 @@ def item(key, lane, *, kind=None, priority="normal", at=None, **extra):
             "priority": priority, "when": at or stamp(-5), **extra}
 
 
-# The five levels are triage's verdict, not a second opinion on top of it (2026-09-07): everything
-# the owner has to do is ONE level whoever is waiting on it, a landed result is its own, and a row
-# an agent has sits at the BOTTOM until it asks - then owner input promotes it back to level 2.
+# The four levels are triage's verdict, not a second opinion on top of it (2026-09-07): every task is ONE level whoever is
+# waiting on it - an agent working it included, which sat at the bottom as a fifth level until the owner folded it into Tasks
+# (2026-10-21) - and a landed result is its own.
 @pytest.mark.parametrize(("facts", "expected"), [
     ({}, 4), ({"actionable": True}, 2), ({"result": True}, 3),
-    ({"working": True, "actionable": True}, 5), ({"working": True, "result": True}, 5),
+    ({"working": True, "actionable": True}, 2), ({"working": True, "result": True}, 2),
     ({"owner_wait": True, "working": True}, 2),
     ({"urgent": True, "owner_wait": True, "working": True}, 1),
 ])
@@ -169,7 +169,8 @@ def test_both_workers_move_between_working_and_owner_wait_with_feed_band_parity(
     worker = {"taskId": tid, "agent": kind, "sid": "synthetic", "started": stamp(-30),
               "idle": 0, "waiting": False, "tail": ["Still working"]}
     frozen = list(store.cx.iterdump())
-    for waiting, expected in ((False, 5), (True, 2), (False, 5)):
+    # ...the same level working, waiting and working again: the row never moves between sections (2026-10-21)
+    for waiting, expected in ((False, 2), (True, 2), (False, 2)):
         observed = {**worker, "waiting": waiting}
         if waiting:
             observed["request"] = {"kind": request_kind, "request_id": "fixed-request", "text": "Which file?",

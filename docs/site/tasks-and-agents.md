@@ -251,19 +251,17 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 | Heading | What lands there | Comes back to it |
 |---|---|---|
 | **Urgent** | A meeting starting within 15 minutes; an ask triage called urgent (a deadline today or tomorrow, someone blocked now); a sender on your escalate list | - |
-| **On you** | A person's ask, a task ready to send, an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished | For later work when its time comes |
-| **Goals** | A goal - an outcome with a date whose steps are tasks - while it has news: it slipped, a step finished, somebody it is waiting on is late. One row per goal; its steps fold into the row ("3 of 7 · coding agent on step 5 · Ray owes step 4") unless one is your move, which is a row of its own under On you | For later while it is quiet, with its date in the time column; never gone until it is done |
-| **Agents working** | An agent busy on a task - nothing for you until it stops or asks | - |
-| **For later** | Your work you pressed **Next** on, and tasks put away with **Remind me** - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first | - |
+| **Tasks** | Every open task, whoever is on it: a person's ask, a task ready to send, an agent working on it (a ring spins round the row's icon until the agent finishes, asks, fails or is stopped), an agent waiting on you, an agent waiting to start, an agent stopped or a session saved, a task waiting on somebody else (📤 waiting on them), a thread or a step gone quiet past that person's usual day (🧵 slipped - Chase, Let it go, They answered elsewhere, Remind me), a check that failed, a task an agent finished. A task stays here whatever its agent does; **Next** moves the walk on and leaves it here. A goal with news is here too - "🎯 Migrate the census export · 2 of 5 steps", *slipped* in red when it is late - and each of its steps is a task row of its own | For later work when its time comes |
+| **For later** | Tasks put away with **Remind me**, and a goal waiting for its next news - still yours, not offered by the walk. The time column counts down to when each comes back, soonest first; a goal's says its date | - |
 | **Reports** | A report run that landed | - |
-| **Advisor ideas** | Something the Advisor noticed, while it is still only an idea - made a task it moves to On you or Agents working; dismissed it leaves | - |
+| **Advisor ideas** | Something the Advisor noticed, while it is still only an idea - made a task it moves to Tasks; dismissed it leaves | - |
 | **FYI** | People told you things; rows whose triage failed | - |
 
 ![Every way off the rail and what brings it back](img/rail-off.svg "Nothing leaves for good while it is still yours.")
 
 | You or it does | It goes | Back when |
 |---|---|---|
-| **Next** on your open work | For later | after 3 hours (Settings → Passed work comes back after), or a new message |
+| **Next** on your open work | stays under Tasks; the walk skips it | after 3 hours (Settings → Passed work comes back after), or a new message |
 | **Next** on anything else | off | a new message, note or edit on it |
 | **Mark done** | off | THEY write after the close - your own reply does not count |
 | **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |

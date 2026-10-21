@@ -22,7 +22,7 @@ ON_YOU_SECTIONS = tuple(s['key'] for s in SECTIONS if s.get('on_you'))
 TO_READ_SECTIONS = tuple(s['key'] for s in SECTIONS if s.get('to_read'))
 # blocked on the owner's answer or yes: what leads the walk, and what a new walk raises again
 WAITS = tuple(k for k, l in LANE.items() if l.get('waits'))
-# the owner's move on the rail - Urgent or On you by its lane - which Next leaves in For later rather than dropping
+# the owner's move on the rail - Urgent or Tasks by its lane - which Next leaves on the rail rather than dropping
 OWNER_LANES = tuple(k for k, l in LANE.items() if l.get('section') in ('urgent', 'task'))
 KIND = VOCAB['item_kinds']
 MAIL_KINDS = tuple(k for k, v in KIND.items() if v.get('mail'))
@@ -53,7 +53,7 @@ def band_of(item: dict) -> int:
     # a task an agent FINISHED is still a task - On you until Next reads it, never a report (the owner, 2026-09-24); an unjudged
     # row the retry gave up on is nobody's to judge now, so it is the owner's
     return attention_band(urgent=sec == 'urgent' or bool(l.get('urgent_request') and item.get('urgent_request')),
-                          owner_wait=bool(l.get('waits')), working=sec == 'agents',
+                          owner_wait=bool(l.get('waits')),
                           actionable=sec == 'task' or kind == 'agentdone' or (lane == 'unjudged' and bool(item.get('held'))),
                           result=sec == 'reports')
 
@@ -62,13 +62,16 @@ def level_of(item: dict) -> str:
     """The rail section a row is drawn in - website/src/lanes.js levelOf is the same rule, and tests/fixtures/rail_levels.json
     holds both to the same answers."""
     band = item.get('order_band')
-    if not (isinstance(band, int) and 1 <= band <= 5): band = band_of(item)
-    # A GOAL is one row and never gone: Goals while it has news you have not walked past, For later once you have (spec
-    # 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on purpose, so unread cannot be the signal.
-    if str(item.get('kind') or '').startswith('goal'): return 'goals' if item.get('news') and not item.get('surfaced') else 'later'
-    # FOR LATER IS WHAT YOU PUT THERE - Next or Remind me - never a card merely shown: clicking another row on the rail moved the
-    # task on the table under For later for three hours (the owner, 2026-10-08: "it moved 1003 automatically to later?")
-    if band == 2 and (item.get('put_down') or item.get('deferred')): return 'later'
+    # ...a stamp from before working agents joined Tasks (band 5, "Agents working") is read again, never taken as fyi
+    if not (isinstance(band, int) and 1 <= band <= 4): band = band_of(item)
+    # A GOAL is one row and never gone: under Tasks while it has news you have not walked past, For later - scheduled to come
+    # back on its next news - once you have (spec 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on
+    # purpose, so unread cannot be the signal.
+    if str(item.get('kind') or '').startswith('goal'): return 'task' if item.get('news') and not item.get('surfaced') else 'later'
+    # FOR LATER IS WHAT YOU PUT THERE WITH A DATE - Remind me - never a card merely shown (the owner, 2026-10-08: "it moved 1003
+    # automatically to later?"), and no longer Next either: Next moves the walk on and the task stays in Tasks, where it was
+    # (the owner, 2026-10-21). The walk skips it by its mark (put_down), not by moving it.
+    if band == 2 and item.get('deferred'): return 'later'
     if band == 4 and item.get('kind') == 'idea': return 'ideas'
     return LEVEL_OF_BAND.get(band, 'fyi')
 
@@ -77,8 +80,9 @@ def waits_on_you(item: dict) -> bool: return bool((LANE.get(item.get('lane')) or
 
 
 def on_you(item: dict, level: str = None) -> bool:
-    """ON YOU, the one answer the opener's headline, the greeting and the header all give: drawn under Urgent or On you, and in a
-    lane that is the owner's move - waiting on THEM sits under On you as the owner's task, but it is on somebody else."""
+    """ON YOU, the one answer the opener's headline, the greeting and the header all give: drawn under Urgent or Tasks, and in a
+    lane that is the owner's move - waiting on THEM, or an agent working, sits under Tasks as the owner's task, but it is on
+    somebody else."""
     if item.get('settling'): return False
     return (level or level_of(item)) in ON_YOU_SECTIONS and (LANE.get(item.get('lane')) or {}).get('on_you', True)
 

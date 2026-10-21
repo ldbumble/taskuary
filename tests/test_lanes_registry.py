@@ -9,8 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 VOCAB = json.loads((ROOT / 'taskuary' / 'lanes.json').read_text(encoding='utf-8'))
 PILE = [{'key': 'a', 'lane': 'asked', 'order_band': 2}, {'key': 'y', 'lane': 'yours', 'order_band': 2},
         {'key': 'b', 'lane': 'blocked', 'order_band': 2}, {'key': 't', 'lane': 'theirs', 'order_band': 2},
-        {'key': 'l', 'lane': 'yours', 'order_band': 2, 'put_down': True}, {'key': 'f', 'lane': 'fyi', 'order_band': 4},
-        {'key': 'r', 'lane': 'report', 'order_band': 3}, {'key': 'w', 'lane': 'working', 'order_band': 5},
+        {'key': 'l', 'lane': 'yours', 'order_band': 2, 'put_down': True}, {'key': 'd', 'lane': 'yours', 'order_band': 2, 'deferred': True},
+        {'key': 'f', 'lane': 'fyi', 'order_band': 4},
+        {'key': 'r', 'lane': 'report', 'order_band': 3}, {'key': 'w', 'lane': 'working', 'order_band': 2},
         {'key': 'm', 'lane': 'time', 'order_band': 1}, {'key': 's', 'lane': 'asked', 'order_band': 2, 'settling': True}]
 
 
@@ -37,7 +38,10 @@ class SectionTests(unittest.TestCase):
 class OnYouTests(unittest.TestCase):
     def test_the_greeting_and_the_opening_card_count_one_set(self):
         you = [i['key'] for i in PILE if lanes.on_you(i)]
-        self.assertEqual(you, ['a', 'y', 'b', 'm'])     # not waiting on them, For later, reading, an agent at work, a settling row
+        # a task Next walked past is still under Tasks, so still on you (the owner, 2026-10-21); not waiting on them, For later
+        # (Remind me), reading, an agent at work - under Tasks, but not on you - nor a settling row
+        self.assertEqual(you, ['a', 'y', 'b', 'l', 'm'])
+        self.assertEqual(lanes.level_of(PILE[8]), 'task'); self.assertEqual(lanes.level_of(PILE[5]), 'later')
         self.assertEqual([i['key'] for i in welcome.needs_you(PILE)], you)
         self.assertEqual([i['key'] for i in PILE if lanes.to_read(i)], ['f', 'r'])
 

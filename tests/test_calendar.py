@@ -2,7 +2,7 @@
 the agenda renders, what the responder is told - and that a calendar that cannot be read makes
 the draft hedge rather than promise. Graph and Google are faked; no network."""
 import json, unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from taskuary import calendar as cal, responder
@@ -76,6 +76,23 @@ class AgendaTests(unittest.TestCase):
         self.assertIn('1:00-2:00 PM · Budget review · Room 2', text)
         self.assertIn('free all day', text)
         self.assertIn('outlook: me@corp.example', text)
+
+    def test_a_google_meeting_you_declined_is_not_busy(self):
+        class R:
+            status_code = 200
+            text = ''
+            def __init__(self, j): self._j = j
+            def json(self): return self._j
+        me = {'email': 'alex@northwind.example', 'self': True}
+        items = [{'summary': 'Vendor demo', 'start': {'dateTime': '2026-09-01T10:00:00Z'}, 'end': {'dateTime': '2026-09-01T11:00:00Z'},
+                  'attendees': [{**me, 'responseStatus': 'declined'}, {'email': 'erin@vendor.example'}]},
+                 {'summary': 'Budget review', 'start': {'dateTime': '2026-09-01T13:00:00Z'}, 'end': {'dateTime': '2026-09-01T14:00:00Z'},
+                  'attendees': [{**me, 'responseStatus': 'accepted'}]}]
+        cfg = {'google_client_id': 'c', 'google_client_secret': 's', 'google_refresh_token': 'r', 'address': 'alex@northwind.example'}
+        with mock.patch('taskuary.calendar.requests.post', lambda *a, **k: R({'access_token': 't'})), \
+             mock.patch('taskuary.calendar.requests.get', lambda *a, **k: R({'items': items})):
+            got = cal.google_events(cfg, datetime.now(), datetime.now() + timedelta(days=1), timezone.utc)
+        self.assertEqual([e['subject'] for e in got], ['Budget review'])
 
     def test_a_forbidden_calendar_says_which_permission(self):
         s = self._store()

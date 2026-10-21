@@ -588,6 +588,14 @@ def ask(payload: dict, wait: float = None) -> dict:
     # the questions first, then the hold: a card read between the two must never show "held" with nothing to answer
     for rid, (text, choices) in zip(rids, qs):
         ws.record(st, t.task_id, t.sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
+    # ...and held ONLY when the page shows them. Claude sits on "running PreToolUse hook" for as long as this holds, with
+    # nothing in the pane, so a hold nobody can see is the agent hung for nine minutes: a question asked again word for
+    # word after it was answered (its id is the words, and that id is answered), or a card refused as another run's.
+    # Not shown, not held - Claude draws its form in the pane at once.
+    shown = {e['RequestId'] for e in ws.open_requests(ws.events(st, t.task_id, t.sid))}
+    if not set(rids) <= shown:
+        logger.info(f'task {t.task_id}: a question the page would not show was not held - the pane asks it')
+        return {}
     ws.hold(t.task_id, t.sid, g, rids)
     got = ws.wait_held(g, ASK_WAIT if wait is None else wait)
     if not got: return {}
@@ -621,11 +629,17 @@ def permit(payload: dict, tid: int, wait: float = None, store=None) -> dict:
     rid = ws.question_id(g, 1)
     # the hold BEFORE the card: an answer that lands between the two would find nothing to release and the wait would never end
     ws.hold(tid, sid, g, [rid])
-    try: ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f"The agent wants to use {payload.get('tool_name') or 'a tool'}: {what}",
-                   choices=['Allow', 'Deny'], source='hook')
+    try: shown = ws.record(store, tid, sid, 'approval_needed', request_id=rid, text=f"The agent wants to use {payload.get('tool_name') or 'a tool'}: {what}",
+                           choices=['Allow', 'Deny'], source='hook')
     except Exception:
         with ws._HELD_LOCK: ws.HELD.pop(g, None)          # a failed card must not leak a hold nobody can release
         raise
+    if not shown:
+        # a card refused (another run owns the task) is a hold nobody can see or answer: the agent waited out the hook's
+        # seven days on "running hook" with nothing on the page. Refused now, and the agent is told why.
+        with ws._HELD_LOCK: ws.HELD.pop(g, None)
+        return {'hookSpecificOutput': {'hookEventName': 'PermissionRequest', 'decision': {
+            'behavior': 'deny', 'message': "Taskuary could not put this request in front of the owner (another run holds the task), so it is refused"}}}
     got = ws.wait_held(g, wait)
     # released: the card must not stay open, and a late answer must not be typed into whatever pane has the task now
     if got is None: ws.record(store, tid, sid, 'answered', request_id=rid, text='the session ended before you answered', source='hook')

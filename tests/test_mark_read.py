@@ -101,6 +101,22 @@ class SlackTests(unittest.TestCase):
             channels.poll_channels(s)
         self.assertNotIn('conversations.mark', calls)
 
+    def test_one_channel_failing_does_not_skip_the_channels_after_it(self):
+        s = MemoryStore()
+        cid = s.get_connector_by_type('slack')['ConnectorId']
+        s.save_connector({'ConnectorId': cid, 'Secret': 'xoxb', 'Active': 1}, 'o')
+        bad = s.save_source({'Channel': 'slack', 'Address': 'C000', 'ConnectorId': cid, 'Active': 1}, 'o')
+        good = s.save_source({'Channel': 'slack', 'Address': 'C123', 'ConnectorId': cid, 'Active': 1}, 'o')
+        def fake(tok, method, post=False, **p):
+            if method == 'conversations.history' and p.get('channel') == 'C000': raise RuntimeError('slack conversations.history: not_in_channel')
+            return self._hist() if method == 'conversations.history' else {'ok': True}
+        with mock.patch.object(channels, '_slack', fake):
+            channels.poll_channels(s)
+        self.assertEqual(len(s._rows("SELECT * FROM message WHERE Channel='slack'")), 2)
+        self.assertIsNotNone(s.get_source(good)['LastPolledAt'])
+        self.assertIsNone(s.get_source(bad)['LastPolledAt'], 'the failed channel keeps its watermark')
+        self.assertIn('C000', s.get_connector(cid)['LastError'] or '')
+
 
 if __name__ == '__main__':
     unittest.main()

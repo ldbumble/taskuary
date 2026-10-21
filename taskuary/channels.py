@@ -1957,21 +1957,32 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
             elif c['Type'] == 'discord':
                 # per SOURCE, like slack: each watched channel id is its own source
                 from . import devtools
-                n += devtools.poll_discord(store, full, s, since, llm, file_only)
+                try: n += devtools.poll_discord(store, full, s, since, llm, file_only)
+                except Exception as e:
+                    logger.warning(f"discord poll failed ({s['Address']}): {e}"); errors.append(f"{s['Address']}: {e}")
+                    continue
             elif c['Type'] in CHAT_SERVERS:
                 # the same shape as Discord, and for the same reason: one watched room per
                 # source, so a rate limit in one room cannot skip the rooms after it
                 from . import chatservers
-                n += chatservers.POLLS[c['Type']](store, full, s, since, llm, file_only)
+                try: n += chatservers.POLLS[c['Type']](store, full, s, since, llm, file_only)
+                except Exception as e:
+                    logger.warning(f"{c['Type']} poll failed ({s['Address']}): {e}"); errors.append(f"{s['Address']}: {e}")
+                    continue
             elif c['Type'] == 'slack':
                 # paged like mail: one page of 25 and a watermark at 'now' lost the rest (audit 2026-09-02)
+                # per channel, like the others: one the bot was removed from (not_in_channel) must not skip the rest
                 hist_all, cursor = [], None
-                while len(hist_all) < 500:
-                    hist = _slack(tok, 'conversations.history', channel=s['Address'], oldest=since.timestamp(),
-                                  limit=100, **({'cursor': cursor} if cursor else {}))
-                    hist_all += hist.get('messages', [])
-                    cursor = (hist.get('response_metadata') or {}).get('next_cursor')
-                    if not cursor: break
+                try:
+                    while len(hist_all) < 500:
+                        hist = _slack(tok, 'conversations.history', channel=s['Address'], oldest=since.timestamp(),
+                                      limit=100, **({'cursor': cursor} if cursor else {}))
+                        hist_all += hist.get('messages', [])
+                        cursor = (hist.get('response_metadata') or {}).get('next_cursor')
+                        if not cursor: break
+                except Exception as e:
+                    logger.warning(f"slack poll failed ({s['Address']}): {e}"); errors.append(f"{s['Address']}: {e}")
+                    continue
                 msgs = [m for m in reversed(hist_all) if not m.get('subtype')]
                 # the channel's read cursor is ONE timestamp - the newest line we took
                 if read_it and msgs: mark_slack_read(tok, s['Address'], msgs[-1].get('ts'))

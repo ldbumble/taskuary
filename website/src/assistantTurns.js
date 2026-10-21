@@ -7,8 +7,13 @@ const words = (v) => String(v || "").replace(/\s+/g, " ").trim();
 // same words, so it is the same turn (a card-carrying line is its own). A failure's line is
 // recorded with its way on as a words card (concierge.receipt_turn): read as its own turn, every failed or
 // stale press showed its receipt twice (re-audit, 2026-10-18)
+// ...and two lines carrying two different ITEMS are two turns, whatever their words: on the desk an item comes up under a few words
+// that name only its kind ("Next up: a report."), so three reports in a row said the same thing - the second's durable turn was taken
+// for the first's bubble, its card replaced the first's in place and the walk's line of the report it left was gone (CI's RECEIPT,
+// 2026-10-21)
+const cardOf = (m) => (m?.card?.key && !NOT_ITEM.has(m.card.kind) ? m.card.key : "");
 const sameTurn = (a, b) => (a?.role === b?.role || (a?.role === "receipt" && b?.role === "assistant" && (!b?.card || b.card.kind === "words")))
-  && words(a?.text) === words(b?.text);
+  && words(a?.text) === words(b?.text) && (!cardOf(a) || !cardOf(b) || cardOf(a) === cardOf(b));
 
 export function mergeDurableTurns(local = [], durable = []) {
   const messages = [...local];

@@ -384,7 +384,10 @@ def _draft(store, step, ctx, llm, tid, dry, warns, title):
     if dry: return {'status': 'dry', 'head': f'would draft for {to}' + (f": {subject[:80]}" if subject else ''), 'body': about}
     out = outbox.compose(store, step.get('channel') or 'email', to, about, mode='draft', subject=subject or None, actor='workflow', llm=llm,
                          cc=cc if isinstance(cc, list) else [cc])
-    return {'head': f'draft for {to}', 'review_id': out.get('reviewId'), 'task_id': out.get('taskId'), 'ref': out.get('ref'),
+    # ...and WHERE it waits: the draft is on a task of its own (outbox.compose), and "draft for erin@..." on the run task named no
+    # place to approve it - two identical "Open invoices this week" tasks sat on the rail with nothing linking them (walk 2026-10-21)
+    where = f" - waiting for your yes on {out['ref']}" if out.get('ref') and out.get('taskId') != tid else ''
+    return {'head': f'draft for {to}{where}', 'review_id': out.get('reviewId'), 'task_id': out.get('taskId'), 'ref': out.get('ref'),
             'body': out.get('draft') or ''}
 
 

@@ -248,6 +248,17 @@ def test_a_new_workflow_waits_for_its_next_slot_and_a_new_report_still_runs_at_o
     assert edited == wf
 
 
+def test_a_draft_step_says_which_task_its_draft_waits_on():
+    """The draft lands on a task of its own (outbox.compose); "draft for erin@..." on the run task named no place to approve it."""
+    s, ctx = MemoryStore(), flow.context({'title': 'Weekly'}, 'manual', None)
+    step = {'id': 's3', 'kind': 'draft', 'label': 'Mail to Erin', 'to': 'erin@northwind.example', 'about': 'the open invoices'}
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 8, 'ref': 'TQ-0008', 'draft': 'Hi Erin'}):
+        rec = flow.run_step(s, step, ctx, None, task_id=7)
+    assert rec['head'] == 'draft for erin@northwind.example - waiting for your yes on TQ-0008' and rec['ref'] == 'TQ-0008'
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 6, 'taskId': 7, 'ref': 'TQ-0007', 'draft': 'Hi Erin'}):
+        assert flow.run_step(s, step, ctx, None, task_id=7)['head'] == 'draft for erin@northwind.example'   # on the run task itself
+
+
 # ── test this step ──────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_testing_a_step_reads_for_real_and_never_writes(db):
     s = MemoryStore()

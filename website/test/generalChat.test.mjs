@@ -37,7 +37,7 @@ test("on the canvas the agent step scrolls the Task strip away, and another step
   assert.match(tasks, /const agentUp = !!canvas && stage === "agent" && workspaceMode === "general" && !liveSession;/);
   assert.match(tasks, /if \(!agentUp\) \{ if \(canvas && stepsBox\.current\) stepsBox\.current\.scrollTop = 0; return undefined; \}/);
   assert.match(tasks, /<Box ref=\{stepsBox\} sx=\{\{ px: liveSession/);
-  assert.match(tasks, /\{!sessionView && !\(canvas && stage === "agent"\) && <Box data-tq-triage-facts=""/);
+  assert.match(tasks, /const triageShown = !sessionView && !\(canvas && stage === "agent"\);/);
 });
 
 // END SESSION ON A GENERAL AGENT (the owner, 2026-10-13): its chat stayed drawn under Agent work with Close out folded below,

@@ -51,9 +51,10 @@ test("one verb for removing a task: the button and its hover say Remove (U13); t
   assert.doesNotMatch(page, /triage is taught|stay on the Timeline/);
 });
 
-test("the header says what triage made of it in one plain line, and the kind hints carry no coding words", async () => {
+test("the header says what triage made of it in one plain sentence (the kind pill's tooltip), and the kind hints carry no coding words", async () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /data-tq-sorted=""[^\n]*\{sortedLine\(facts, t\?\.Kind \|\| "task"\)\}/);
+  assert.match(page, /\{ key: "kind", text: what\.replace[^\n]*\n\s+title: sortedLine\(facts, kind\) \}/);
+  assert.match(page, /p\.key === "kind" \? \{ "data-tq-sorted": "" \}/);
   for (const jargon of ["without a repository", "the configured CLI", "the model triage uses", "harness"]) assert.ok(!page.includes(jargon), jargon);
   // sortedLine is pure: read it out of the source and run it
   const body = page.slice(page.indexOf("const SAID ="), page.indexOf("const FACT_TONE"));
@@ -63,6 +64,34 @@ test("the header says what triage made of it in one plain line, and the kind hin
     "Sorted as: a task for an assistant · normal priority");
   assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "reply", priority: "high" }) }, "reply"), "Sorted as: a reply to send · high priority");
   assert.equal(sortedLine({ triaged: false, pills: pills({ priority: "normal" }) }, "task"), "A task for you · normal priority");
+});
+
+// THE HEADER IS ONE ROW (the owner, 2026-10-21): "TQ-1156  <title>" and, under it, "Sorted as: ... | closes itself when the work is done"
+// took two. The triage facts are pills beside the title now - kind and priority first, so a narrow header keeps them and folds the rest
+test("the task header has no second line: the triage facts are pills on the title's row, most telling first", async () => {
+  const page = src("TaskPage.jsx");
+  const head = page.slice(page.indexOf("<Box data-tq-task-head"), page.indexOf("{/* a flex column so the terminal takes exactly"));
+  assert.ok(head.length > 100, "the header strip is found");
+  // one row: the strip holds the title's flex row and nothing under it - no Sorted-as line, no completion line, no playbook line
+  assert.doesNotMatch(head, /sortedLine\(|completionFact\(|data-tq-triage-facts=""|\{workContext && <Typography/);
+  assert.match(head, /\{headPillsOn && <HeadPills pills=\{headFacts\}/);
+  assert.match(page, /data-tq-head-pills="" sx=\{\{ display: "flex", flexWrap: "wrap"[^\n]*\n\s+height: 18, overflow: "hidden"/, "one pill high: a pill with no room never makes a row");
+  assert.match(page, /flex: headPillsOn && !headControls \? "0 100 auto" : 1/, "the title gives way before the pills");
+  // headPills is pure: run it
+  const body = page.slice(page.indexOf("const SAID ="), page.indexOf("const FACT_TONE"));
+  const { headPills } = await import(`data:text/javascript,${encodeURIComponent(body)}`);
+  const facts = (o, extra = []) => ({ triaged: true, pills: [...Object.entries(o).map(([key, value]) => ({ key, value })), ...extra] });
+  const done = { fact: "closes itself when the work is done", line: "Automatic task." };
+  const ps = headPills(facts({ intent: "task", priority: "normal", repo: "org/app" }), "coding", done, "Playbook · Month end");
+  assert.deepEqual(ps.map((p) => p.key), ["kind", "priority", "repo", "completion", "context"]);
+  assert.deepEqual(ps.map((p) => p.text), ["task for your coding tool", "normal priority", "in org/app", "closes itself when the work is done", "Playbook · Month end"]);
+  assert.equal(ps[0].title, "Sorted as: a task for your coding tool · in org/app · normal priority");
+  assert.deepEqual(ps.slice(0, 2).map((p) => p.short), ["coding tool", "normal"], "a phone's pills say it in a word");
+  // an urgent priority and a held repository are warnings, and lead the tail
+  const urgent = headPills(facts({ intent: "reply" }, [{ key: "priority", value: "urgent", tone: "alert" },
+    { key: "repo", label: "Repository", value: "none - not started", tone: "alert" }]), "reply");
+  assert.deepEqual(urgent.map((p) => [p.key, p.tone || ""]), [["kind", ""], ["priority", "alert"], ["repo", "alert"]]);
+  assert.equal(urgent[0].text, "reply to send");
 });
 
 // the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone

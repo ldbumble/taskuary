@@ -55,6 +55,7 @@
 //             + New playbook put SOUL.md under its dialog, and Cancel left the owner editing it)
 //   BASED     an idea's "Based on <name>'s message" (or a #msg= link) left anything but that message's own card on the table, named
 //             the Advisor for the person, or drew the old row panel ("CLEAR FROM TIMELINE", "Talk it through", "undefined in chat")
+//   HEAD      the task view's header takes more than one row - at 1366 on every road a task opens by, and at 390 (2026-10-21)
 //   PHONE     at 390px the page scrolls sideways (a tooltip ran 200px off it), or a word stands a letter a line (the FYI subjects)
 //   STOPSAVE  Stop and save on a live session (a plain shell, a slow brain - stopsave) drew no pending Close out within 500 ms, or the
 //             draft did not replace that block in the same card (the owner, 2026-10-21: "it looks frozen")
@@ -935,6 +936,22 @@ async function ringed(page, at, tid = "") {
   if (!/^Ask about this one/.test(r.box)) note("RING", at, `${tqOf(r.tid)} is on the table and the box says "${r.box}"`);
   return r.tid;
 }
+// HEAD: the task view's header is ONE row (the owner, 2026-10-21) - id, title, the triage pills, state and the X on one line, never
+// a "Sorted as" line under it. Every child of its row on the same line, and the strip no taller than that line and its padding.
+const headRows = (page) => page.evaluate(() => {
+  const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const heads = [...document.querySelectorAll("[data-tq-task-head]")].filter(vis), head = heads[heads.length - 1];
+  if (!head) return null;
+  const row = head.firstElementChild, kids = [...row.children].filter(vis), mid = (e) => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
+  const mids = kids.map(mid);
+  return { lines: mids.length && Math.max(...mids) - Math.min(...mids) > 10 ? 2 : 1, extra: head.childElementCount - 1, h: Math.round(head.getBoundingClientRect().height), row: Math.round(row.getBoundingClientRect().height),
+    pills: head.querySelectorAll("[data-tq-fact]").length, session: !!head.querySelector('[aria-label="Back to task"]') };
+});
+async function headNote(page, at) {
+  const h = await headRows(page);
+  if (!h) return;
+  if (h.extra || h.lines > 1 || h.h > h.row + 24) note("HEAD", at, `the task header is ${h.h}px - ${h.lines} line(s) on its row and ${h.extra} line(s) under it, where one row is ${h.row}px`);
+}
 async function table() {
   const srv = await serve(4, { linking: true }), page = await pageOn(srv, "table");
   const tasks = ((await srv.api("GET", "/api/search?q=status:open")).hits || []).filter((h) => h.tid && h.ref);
@@ -947,6 +964,7 @@ async function table() {
     const tid = await open();
     if (tid === null) return;                                  // the road was not there to walk: open() said why
     const got = await ringed(page, page.step, tid);
+    await headNote(page, page.step);
     // ...and a reload keeps it - once the open has landed: a row drawn ahead of the server's answer (a rail pick whose task is read
     // ahead) is ringed at the press, and a reload in that first tenth of a second never told the server. The address is written when
     // the answer lands, so the reload waits for it - and an open that never writes it is a RING of its own
@@ -1022,6 +1040,18 @@ async function table() {
     }
     note("RING", page.step, "Next never reached the walk's end chips - the end-chip road was not walked"); return null;
   });
+  // ...and the header on a phone: still one row, its pills folded into "+N" rather than onto a second line
+  page.step = "table phone header";
+  await page.setViewport({ width: 390, height: 844 });
+  for (const t of tasks.slice(0, 3)) {
+    await page.goto(`${srv.base}/#task=${t.tid}`, { waitUntil: "load" }); await wait(6000);
+    const h = await headRows(page);
+    if (!h) { note("HEAD", page.step, `${t.ref} opened at 390px and no task header was drawn`); continue; }
+    // a live session's strip carries no triage facts on purpose: the agent keeps the room
+    if (!h.pills && !h.session) note("HEAD", page.step, `${t.ref} at 390px: the header carries no triage pills`);
+    await headNote(page, `${page.step} ${t.ref}`); await phoneNote(page, `${t.ref}'s task header`);
+    walked.push(`table: ${t.ref}'s header at 390px`);
+  }
   await page.close(); srv.stop();
 }
 

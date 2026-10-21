@@ -99,7 +99,7 @@ class BridgeManagerTests(unittest.TestCase):
         class P:
             pid = 4242
             def poll(self): return None
-        with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge, 'DIR', wabridge.DIR), \
+        with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()) as stg, \
              mock.patch.object(wabridge.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout='', stderr='')) as run, \
              mock.patch.object(wabridge.subprocess, 'Popen', return_value=P()) as pop, mock.patch.object(wabridge.time, 'sleep'), \
              mock.patch('builtins.open', mock.mock_open()):
@@ -107,6 +107,7 @@ class BridgeManagerTests(unittest.TestCase):
                              filter_policy={'allDirect': False, 'jids': ['picked@g.us']})['phase'], 'running')
         self.assertEqual(run.call_args[0][0][1:], ['install', '--no-audit', '--no-fund'])              # npm install first
         self.assertEqual(pop.call_args[0][0], ['node', 'bridge.mjs']); self.assertEqual(wabridge.state()['pid'], 4242)
+        self.assertEqual(pop.call_args.kwargs['cwd'], str(wabridge.run_dir())); stg.assert_called_once_with(carry=False)   # runs from the home
         self.assertEqual(json.loads(pop.call_args.kwargs['env']['WA_BRIDGE_FILTER']),
                          {'allDirect': False, 'jids': ['picked@g.us']})
         self.assertIn('8977', wabridge.state()['detail'])
@@ -116,6 +117,7 @@ class BridgeManagerTests(unittest.TestCase):
             pid = 1; returncode = 1
             def poll(self): return 1
         with mock.patch.object(wabridge, 'node', return_value='node'), mock.patch.object(wabridge.subprocess, 'Popen', return_value=Dead()), \
+             mock.patch.object(wabridge, 'stage', return_value=wabridge.run_dir()), \
              mock.patch.object(wabridge.time, 'sleep'), mock.patch('builtins.open', mock.mock_open()), \
              mock.patch.object(wabridge.Path, 'exists', return_value=True), mock.patch.object(wabridge.Path, 'read_bytes', return_value=b'Error: EADDRINUSE 8977'):
             self.assertEqual(wabridge.start(wait=True)['phase'], 'failed')
@@ -125,6 +127,29 @@ class BridgeManagerTests(unittest.TestCase):
             wabridge._STATE.update(phase='idle')
             self.assertEqual(wabridge.start()['phase'], 'starting'); th.return_value.start.assert_called_once()
             wabridge._LOCK.release()                         # the mocked thread never ran work(), so the lock is ours to give back
+
+    def test_the_bridge_runs_from_the_home_so_its_pairing_outlives_the_launch(self):
+        """The one-file exe unpacks the package into a fresh temp folder every launch and deletes it on exit; the bridge
+        ran there, with its pairing beside it, so every launch of the exe was unpaired (TQ-1157)."""
+        import tempfile
+        from pathlib import Path
+        src = Path(tempfile.mkdtemp()); self.addCleanup(__import__('shutil').rmtree, src, True)
+        (src / 'bridge.mjs').write_text('v1'); (src / 'policy.test.mjs').write_text('t'); (src / 'package.json').write_text('{}')
+        (src / 'wa-auth').mkdir(); (src / 'wa-auth' / 'creds.json').write_text('paired')
+        with mock.patch.object(wabridge, 'DIR', src):
+            run = wabridge.stage()
+            self.assertEqual(run, wabridge.run_dir()); self.assertNotEqual(run.parent, src.parent)
+            self.assertEqual((run / 'bridge.mjs').read_text(), 'v1'); self.assertFalse((run / 'policy.test.mjs').exists())
+            self.assertEqual((run / 'wa-auth' / 'creds.json').read_text(), 'paired', 'a pairing made in the package folder carries over')
+            (run / 'wa-auth' / 'creds.json').write_text('paired-later')                  # the bridge kept saving keys in the home
+            (src / 'bridge.mjs').write_text('v2'); (run / 'gone.mjs').write_text('old')   # an update; a file it no longer ships
+            wabridge.stage()
+            self.assertEqual((run / 'bridge.mjs').read_text(), 'v2'); self.assertFalse((run / 'gone.mjs').exists())
+            self.assertEqual((run / 'wa-auth' / 'creds.json').read_text(), 'paired-later', 'a later launch never overwrites the live pairing')
+            self.assertEqual(wabridge.log(), run / 'wa-bridge.log')
+            # the bridge's fingerprint of its own folder matches what Taskuary computes off the shipped code
+            import hashlib
+            self.assertEqual(hashlib.sha1(b''.join(p.read_bytes() for p in sorted(run.glob('*.mjs')))).hexdigest()[:12], wabridge.code())
 
     def test_the_card_and_the_agent_have_a_verb_for_it(self):
         wa = next(x for x in server.store.list_connectors() if x['Type'] == 'whatsapp')

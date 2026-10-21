@@ -9,14 +9,15 @@ bridge. So the card has a button and the API has a verb: start() installs when n
 missing, spawns `node bridge.mjs` detached with its output in a log, and state() says which phase
 it is in. The bridge outlives the request and the browser tab; only the machine rebooting stops it.
 """
-import json, os, secrets, shutil, subprocess, threading, time
+import json, os, secrets, shutil, subprocess, sys, threading, time
 from datetime import datetime, timedelta
 from pathlib import Path
 from loguru import logger
 from . import spawn
 
-DIR = Path(__file__).resolve().parent / 'whatsapp'
-LOG = DIR / 'wa-bridge.log'
+DIR = Path(__file__).resolve().parent / 'whatsapp'     # the bridge's code as shipped - never where it runs (run_dir)
+LOG = None                                              # None: wa-bridge.log in run_dir(); a test points it elsewhere
+CARRIED = ('wa-auth', 'node_modules')                   # what a bridge that ran from DIR leaves behind worth keeping
 _STATE = {'phase': 'idle', 'detail': '', 'pid': None, 'at': 0.0}   # idle | installing | starting | running | failed
 _LOCK = threading.Lock()
 
@@ -43,7 +44,7 @@ def trim_log(store, now: datetime = None) -> dict | None:
     mode, and on Windows a held-open file cannot be moved. An append handle always writes at the end,
     so the bridge keeps logging across the truncation without noticing.
     """
-    now = now or datetime.now()
+    now, LOG = now or datetime.now(), log()
     if not LOG.exists(): return None
     last = str(store.get_setting(LOG_RAN_KEY) or '')
     if last[:10] == now.strftime('%Y-%m-%d'): return None          # already looked today
@@ -60,6 +61,42 @@ def trim_log(store, now: datetime = None) -> dict | None:
             trimmed = False
     store.set_setting(LOG_RAN_KEY, now.strftime('%Y-%m-%d %H:%M:%S'), 'wabridge')
     return {'trimmed': trimmed, 'bytes': size}
+
+
+def run_dir() -> Path:
+    """Where the bridge runs: <home>/whatsapp. Never the package folder - the one-file exe unpacks the package
+    into a fresh %TEMP%\\_MEIxxxx on every launch and deletes it on exit, and the bridge keeps its pairing
+    (wa-auth), its media and its node_modules in the folder it runs in. So every launch of the exe began unpaired
+    behind a minutes-long npm install, and a bridge that outlived the app had its keys deleted from under it - the
+    chats the owner picked stopped arriving (TQ-1157)."""
+    from . import config
+    return config.home() / 'whatsapp'
+
+
+def log() -> Path: return LOG or run_dir() / 'wa-bridge.log'
+
+
+def _shipped(d: Path) -> dict:
+    return {p.name: p for p in [*d.glob('*.mjs'), d / 'package.json'] if p.is_file() and not p.name.endswith('.test.mjs')}
+
+
+def stage(carry: bool = True) -> Path:
+    """Bring run_dir() up to the shipped code - only what changed; and a .mjs no longer shipped goes, or the bridge's
+    own fingerprint (bridge.mjs CODE) would never match code() and every launch would restart it. A pairing and an
+    install made in the package folder before the bridge moved are carried over once, so nobody pairs again for it."""
+    run = run_dir(); run.mkdir(parents=True, exist_ok=True)
+    src,have = _shipped(DIR),_shipped(run)
+    for n,p in src.items():
+        if n not in have or have[n].read_bytes() != p.read_bytes(): shutil.copyfile(p, run / n)
+    for n in set(have) - set(src): have[n].unlink(missing_ok=True)
+    # never from an exe: its package folder is a fresh extraction, and a pairing found there came from whoever built it
+    for n in CARRIED if carry and not getattr(sys, 'frozen', False) else ():
+        if (DIR / n).is_dir() and not (run / n).exists():
+            try: shutil.copytree(DIR / n, run / n)
+            except OSError as e:
+                logger.warning(f'wa bridge: could not carry {n} over from {DIR}: {e}')
+                shutil.rmtree(run / n, ignore_errors=True)
+    return run
 
 
 def _set(phase, detail='', pid=None): _STATE.update(phase=phase, detail=detail[:300], pid=pid, at=time.time())
@@ -211,24 +248,25 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
                                'restart Taskuary so it sees the new PATH, then Try again'); return
             if not DIR.exists():
                 _set('failed', f'the bridge folder is missing ({DIR})'); return
-            if force_install or not (DIR / 'node_modules' / '@whiskeysockets').exists():
+            run,lg = stage(carry=not force_install),log()
+            if force_install or not (run / 'node_modules' / '@whiskeysockets').exists():
                 _set('installing', 'npm install - the bridge\'s dependency (Baileys) is a few minutes on a slow line')
                 npm = shutil.which('npm') or shutil.which('npm.cmd') or 'npm'
-                r = spawn.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(DIR), capture_output=True, text=True, timeout=900, shell=False)
+                r = spawn.run([npm, 'install', '--no-audit', '--no-fund'], cwd=str(run), capture_output=True, text=True, timeout=900, shell=False)
                 if r.returncode != 0:
                     _set('failed', f'npm install failed: {(r.stderr or r.stdout)[-300:]}'); return
             _set('starting', 'node bridge.mjs')
-            log = open(LOG, 'ab')
+            out = open(lg, 'ab')
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
             env = {**os.environ, 'WA_BRIDGE_TOKEN': token(), 'WA_BRIDGE_PORT': str(port())}   # the bridge listens where we look
             if filter_policy is not None: env['WA_BRIDGE_FILTER'] = json.dumps(filter_policy, separators=(',', ':'))
-            p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(DIR), stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+            p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                  env=env, **kw)
             time.sleep(2.5)
             if p.poll() is not None:
-                tail = LOG.read_bytes()[-400:].decode('utf-8', 'replace') if LOG.exists() else ''
+                tail = lg.read_bytes()[-400:].decode('utf-8', 'replace') if lg.exists() else ''
                 _set('failed', f'the bridge exited at once (code {p.returncode}): {tail}'); return
-            _set('running', f'listening on http://127.0.0.1:{port()} - log: {LOG}', pid=p.pid)
+            _set('running', f'listening on http://127.0.0.1:{port()} - log: {lg}', pid=p.pid)
         except Exception as e:
             logger.warning(f'wa bridge start failed: {e}')
             _set('failed', str(e))

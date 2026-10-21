@@ -282,6 +282,8 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         if store.get_setting('playbooks_enabled', '1') != '1' or len(str(transcript or '').strip()) < MIN_SESSION: return None
         task = store.get_task(task_id) or {}
         if of_task(task): return None                     # the second run of a playbook is not a new kind of job
+        # ...nor is a workflow's run (its job is written down already, as the workflow) or a playbook being written by hand
+        if task.get('Source') == 'workflow' or task.get('SourceRef') == 'assistant:playbook': return None
         llm = llm or build_llm(store)
         if not llm: return None
         books = list_all()

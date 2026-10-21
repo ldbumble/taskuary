@@ -288,6 +288,11 @@ class DraftedOnClose(unittest.TestCase):
         t = s.get_task(tid)
         self.assertEqual(t['Status'], 'done'); self.assertNotIn(proposals.HELD, t['Tags'] or '')
 
+    def test_a_workflow_run_is_not_asked(self):
+        """A workflow is a job already written down; its run proposing a playbook for itself would be the same job twice."""
+        s = MemoryStore(); tid = self._chat(s, Source='workflow')
+        self.assertIsNone(playbooks.draft(s, tid, SESSION, llm=lambda *a, **k: 1 / 0))
+
     def test_a_playbook_setup_conversation_is_not_asked_again(self):
         from taskuary import wrapup
         s = MemoryStore(); tid = self._chat(s, SourceRef='assistant:playbook')

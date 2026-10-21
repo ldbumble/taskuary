@@ -4082,7 +4082,9 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
         system = turn_system(store, llm)
-        asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
+        # the pipe's own SELECT values ride the turn, not the index (toolcatalog.select_values): they move with every mail
+        asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n{toolcatalog.select_values(store)}\n\n"
+                 f"{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
                       + (f"{asks_block}\n\n" if (asks_block := _asks_block(store, p)) else '')

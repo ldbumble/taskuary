@@ -477,14 +477,15 @@ def transcript_frames(path: str, max_first: int = 2 << 20) -> list:
     return [m for t in texts if t.lstrip().startswith(('<reason-message ', '<reason-approval ')) for m in parse_frames(t)]
 
 
-_ACTIVE, _OFFSETS = [0.0, None], {}
+_ACTIVE, _OFFSETS = [0.0, None, None], {}
 
 
 def active(store) -> dict | None:
     "The card's settings when it is switched on - read at most every few seconds, since every hook asks."
-    if time.time() - _ACTIVE[0] < 5: return _ACTIVE[1]
+    # per store: a second store's clock (a test's leftover, a second instance) must not read this one's card as its own
+    if _ACTIVE[2] is store and time.time() - _ACTIVE[0] < 5: return _ACTIVE[1]
     c = connector(store)
-    _ACTIVE[:] = [time.time(), settings(c) if c and c.get('Active') else None]
+    _ACTIVE[:] = [time.time(), settings(c) if c and c.get('Active') else None, store]
     return _ACTIVE[1]
 
 

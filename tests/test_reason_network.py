@@ -35,7 +35,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(rn, 'exe', lambda: FAKE)
     monkeypatch.setattr(rn, 'argv', lambda: [sys.executable, FAKE])
     monkeypatch.setattr(rn, '_state_path', lambda: tmp_path / 'taskuary-reason.json')
-    rn._HELP.clear(); rn._ACTIVE[:] = [0.0, None]; rn._OFFSETS.clear()
+    rn._HELP.clear(); rn._ACTIVE[:] = [0.0, None, None]; rn._OFFSETS.clear()
     (home / 'fake.json').write_text(json.dumps({'person': 'alex', 'team': 'northwind', 'machine': 'alex-pc', 'machines': MACHINES,
                                                 'sessions': SESS, 'held': [], 'inbox': {}}), encoding='utf-8')
     s = MemoryStore()
@@ -49,7 +49,7 @@ def world(tmp_path, monkeypatch):
     w.put = put
     w.notes = lambda: [c['Body'] for c in s.list_comments(tid)]
     yield w
-    rn._HELP.clear(); rn._ACTIVE[:] = [0.0, None]; rn._OFFSETS.clear()
+    rn._HELP.clear(); rn._ACTIVE[:] = [0.0, None, None]; rn._OFFSETS.clear()
 
 
 @pytest.fixture
@@ -306,3 +306,12 @@ def test_the_gate_endpoint_takes_the_assistants_folder_off_too(world, monkeypatc
 def test_only_the_owner_changes_who_is_trusted():
     assert guard.denied('POST', '/api/reason/trusted') and guard.denied('POST', '/api/reason/gate') and guard.denied('POST', '/api/tasks/3/reason-ask')
     assert guard.denied('POST', f'/api/reason/held/{ID(1)}') and not guard.denied('POST', '/api/hooks/claude/reason')
+
+
+def test_one_stores_card_is_never_read_as_anothers(world):
+    # the "is it on?" cache was global: a second store's clock (a leftover from an earlier start) read this card as its own
+    # and polled beside it, delivering and filing what this one was about to (2026-10-21)
+    assert rn.active(world.s)
+    other = MemoryStore()
+    assert rn.active(other) is None
+    assert rn.active(world.s)

@@ -1542,6 +1542,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [firstRun, setFirstRun] = useState(false), [setupTodo, setSetupTodo] = useState("");
   setupOn.current = firstRun;
   const setupRef = useRef(null);
+  // SETUP IS NOT LOST (W2, the 2026-10-21 UI audit): a page or a task opened during setup is drawn OVER it - setup stays mounted, hidden,
+  // on the step and the card it was on - and the rail's steps, the Setup chip and Chat take what is over it away. Before, a page opened
+  // from the sidebar replaced setup, and only a reload brought it back; a task picked in Search or made on New never opened at all.
+  const [overSetup, setOverSetup] = useState(false);                // a task or a message opened by name during setup
+  const backToSetup = useCallback(() => { setOverSetup(false); browseDownRef.current?.(); }, []);
+  useEffect(() => { if (!firstRun) setOverSetup(false); }, [firstRun]);
+  useEffect(() => {
+    if (!firstRun) return undefined;
+    window.addEventListener("tq-setup-go", backToSetup); window.addEventListener("tq-setup-back", backToSetup);
+    return () => { window.removeEventListener("tq-setup-go", backToSetup); window.removeEventListener("tq-setup-back", backToSetup); };
+  }, [firstRun, backToSetup]);
   useEffect(() => {
     // the static demo has no first run: its top-bar Setup says how to install Taskuary (setup() below), and nothing more
     if (DEMO) {
@@ -2623,6 +2634,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const openLater = useRef(null);
   const openTaskCard = (req) => {
     setExpanded(false); setFoldedKey(null);
+    if (setupOn.current) setOverSetup(true);
     if (!(busy || resetting || handoff || turnFlight.current)) {
       openExtra.current = req.start || req.act ? { tid: req.tid, autostart: req.start || null, act: req.act || null } : null;
       pull(`task:${req.tid}`); return;
@@ -2644,6 +2656,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // a pull lands through surface() -> landed() -> putOnTable; one refused as busy lands nothing, so nothing waits for it
   const pull = (key, asUser) => {
     navHow.current = "push";
+    if (setupOn.current) setOverSetup(true);                // during setup it opens over setup, which waits where it was (W2)
     setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
   };
 
@@ -2665,7 +2678,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     // the day, until the walk starts. The popup checklist is gone; this is the one road.
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome"><FirstRun onChanged={() => loadPile(true)} onWalk={() => { setFirstRun(false); start(null); }}
-      onFinish={() => { setFirstRun(false); loadPile(true); }} /></div></div>
+      onFinish={() => { setFirstRun(false); loadPile(true); }} hidden={setupCovered.current} /></div></div>
   ) : (
     <div className="tq-msg tq-welcome-msg"><div className="avatar"><AssistantMark /></div>
     <div className="tq-welcome">
@@ -2716,7 +2729,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // pop up one"): every question open, the day back on Back to my day
   // ...but the browser demo has no setup to run - it cannot connect an inbox - so its door is the install note (setup() above), never
   // a setup that waits on "Getting set up…" for good (the browser CI, 2026-10-15)
-  setupRef.current = () => (DEMO ? setup() : setFirstRun(true));
+  setupRef.current = () => { if (DEMO) { setup(); return; } setFirstRun(true); backToSetup(); };
   // A REMINDER'S RECEIPT, from the walk's picker or the task view's: where it went - one line, and no Take it back (the owner, 2026-10-19:
   // "no take it back button. hate that"): a day picked wrong is picked again with Remind me
   const remindReceipt = (out, tid, ref) => {
@@ -2754,6 +2767,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     return null;
   }, [shown]);
+  // ...and during setup, the task or message opened over it (overSetup): the newest card, drawn alone like a page (W2)
+  const setupCard = firstRun && overSetup && !browsing ? [...shown].reverse().find((m) => m.card && !m.card.background_event) || null : null;
+  const setupCovered = useRef(false);
+  setupCovered.current = !!(firstRun && (browsing || setupCard));
   // THE TABLE, ONE RECORD (tableState.js): folded by its X or under a page opened over it, the item keeps its key - and the Advisor
   // keeps quiet, its button never acting on what nobody can see. The strip speaks only for the item on the table, at rest.
   const table = tableOf({ current, cardKey, foldedKey, browsing, setup: setupOn.current });
@@ -2954,12 +2971,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
               setup alone on the canvas, never under the day's conversation */}
           {/* ...but a place picked from the sidebar during setup opens: it lit up and nothing opened, and nothing said why (re-audit,
               2026-10-18). The place shows alone, with the way back to setup over it */}
-          {firstRun && browsing ? <>
+          {/* ...and setup stays MOUNTED under it, hidden (W2): the rail's steps, the Setup chip and Chat bring it back as it was left */}
+          {firstRun && (browsing || setupCard) && <div data-tq-setup-over="" style={{ display: "contents" }}>
             <div className="tq-next" role="status" data-tq-setup-back=""><div className="tq-next-txt">Setup is waiting where you left it.</div>
-              <button type="button" className="tq-chip" onClick={browseDown}>{`Back to ${place("setup").name}`}</button></div>
-            {shown.filter((m) => m.id === browsing).map((m) => <Line key={m.id} m={m} live last tableChips={[]} barHolds={false}
-                                     actions={actions} fresh={null} canvas={canvasState} />)}
-          </> : firstRun ? state && welcome() : state && !shown.length && !busy && welcome()}
+              <button type="button" className="tq-chip" onClick={backToSetup}>{`Back to ${place("setup").name}`}</button></div>
+            {browsing ? shown.filter((m) => m.id === browsing).map((m) => <Line key={m.id} m={m} live last tableChips={[]} barHolds={false}
+                                     actions={actions} fresh={null} canvas={canvasState} />)
+              : <Line key={setupCard.id} m={setupCard} live last tableChips={tableChips} barHolds={barHolds}
+                  actions={actions} fresh={currentItem} canvas={canvasState} />}
+          </div>}
+          {firstRun ? state && <div data-tq-setup-under={setupCovered.current ? "hidden" : ""} style={setupCovered.current ? { display: "none" } : undefined}>{welcome()}</div>
+            : state && !shown.length && !busy && welcome()}
           {!firstRun && shown.map((m, i) => <Line key={m.id} m={m} lastBrief={m.id === lastBriefId} live={!old && i === lastCardIdx} last={!old && i === lastSaidIdx} tableChips={tableChips} barHolds={barHolds}
                                      actions={actions} fresh={currentItem} canvas={old ? null : canvasState} />)}
           {/* CONTINUE, IN LINE (the owner, 2026-09-30): a card under the item, like New - the mic and pictures in it */}

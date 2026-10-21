@@ -29,7 +29,8 @@ test("the steps say what is done and what is next", async () => {
 test("setup mode: the steps for a rail, setup alone on the canvas, no chat box, no Advisor line", () => {
   const av = read("AssistantView.jsx");
   assert.match(av, /setupMode=\{firstRun\} setupRail=\{firstRun \? <SetupSteps \/> : null\}/);
-  assert.match(av, /firstRun \? state && welcome\(\) : state && !shown\.length && !busy && welcome\(\)\}/);
+  // ...setup alone, and still mounted - hidden - under a page or a task opened over it (W2, 2026-10-21)
+  assert.match(av, /\{firstRun \? state && <div data-tq-setup-under=\{setupCovered\.current \? "hidden" : ""\} style=\{setupCovered\.current \? \{ display: "none" \} : undefined\}>\{welcome\(\)\}<\/div>\s+: state && !shown\.length && !busy && welcome\(\)\}/);
   assert.match(av, /\{!firstRun && shown\.map/);
   assert.match(av, /className="tq-compose-box" style=\{firstRun \? \{ display: "none" \} : undefined\}/);
   assert.match(av, /tableOf\(\{ current, cardKey, foldedKey, browsing, setup: setupOn\.current \}\)/);
@@ -56,7 +57,8 @@ test("a step on the rail takes the canvas back to it", () => {
 
 test("the top bar keeps Setup after setup is done, and it opens the setup canvas", () => {
   assert.match(read("SetupWizard.jsx"), /data-tq-setup-open=""/);
-  assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => \(DEMO \? setup\(\) : setFirstRun\(true\)\);/);
+  // ...over whatever was opened on it: the page or the task goes, and setup is there as it was left (W2)
+  assert.match(read("AssistantView.jsx"), /setupRef\.current = \(\) => \{ if \(DEMO\) \{ setup\(\); return; \} setFirstRun\(true\); backToSetup\(\); \};/);
 });
 
 // "on startup i still don't see ... the survey questions ... does hitting set up taskuary on assistant button put the system on

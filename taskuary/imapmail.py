@@ -805,6 +805,8 @@ def send_smtp(store, c, to: list, subject: str, body: str, in_reply_to: str = No
         m = MIMEText(body, 'plain', 'utf-8')
     m['From'], m['To'], m['Subject'] = user, ', '.join(to), subject or '(no subject)'
     if cc: m['Cc'] = ', '.join(cc)
+    # SMTP servers are not bound to add these, and a mail without them sorts and threads badly at the other end
+    m['Date'], m['Message-ID'] = email.utils.formatdate(localtime=True), email.utils.make_msgid(domain=user.rpartition('@')[2] or None)
     if in_reply_to:
         m['In-Reply-To'] = in_reply_to
         m['References'] = in_reply_to

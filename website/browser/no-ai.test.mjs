@@ -19,13 +19,17 @@ test("with no AI the rail says nothing can be sorted, and every no-AI line opens
   assert.equal(dismissed, 200);
   await page.reload({ waitUntil: "domcontentloaded" });
 
-  // THE RAIL: not "All done", and the button is in the message
-  await page.waitForSelector("[data-tq-pile-no-ai]", { timeout: 30000 });
-  const rail = await page.$eval("[data-tq-pile-no-ai]", (el) => el.innerText);
-  assert.match(rail, /Nothing can be sorted yet/);
+  // THE RAIL: not "All done", and the button is in the message. The seeded End of day checkup runs at startup once its hour has
+  // passed, and a rail carrying that report is not an empty one - so by evening the empty-rail message is rightly not drawn. What
+  // holds at every hour: never "All done" with no AI.
+  await page.waitForFunction(() => document.querySelector("[data-tq-pile-no-ai]") || /REPORTS/.test(document.body.innerText), { timeout: 30000 });
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /All done/);
-  await page.click("[data-tq-pile-no-ai] [data-tq-connect-ai]");
-  await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });
+  if (await page.$("[data-tq-pile-no-ai]")) {
+    const rail = await page.$eval("[data-tq-pile-no-ai]", (el) => el.innerText);
+    assert.match(rail, /Nothing can be sorted yet/);
+    await page.click("[data-tq-pile-no-ai] [data-tq-connect-ai]");
+    await page.waitForFunction(() => decodeURIComponent(location.hash).includes("connections=AI"), { timeout: 10000 });
+  } else t.diagnostic("the evening report is on the rail: the empty-rail message is not expected at this hour");
 
   // A TYPED REQUEST: the no-AI answer leads its chips with Connect an AI
   await page.evaluate(() => { window.location.hash = ""; });

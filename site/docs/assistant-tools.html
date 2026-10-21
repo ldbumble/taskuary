@@ -126,7 +126,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>task</strong></td>
 <td>change any task - the table&#39;s, or one named by ref</td>
-<td>task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject</td>
+<td>task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject</td>
 </tr>
 <tr>
 <td><strong>agents</strong></td>
@@ -141,7 +141,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>pipe</strong></td>
 <td>the walk and sets of items, and filing mail</td>
-<td>pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
+<td>pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage</td>
 </tr>
 <tr>
 <td><strong>reports</strong></td>
@@ -151,12 +151,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <tr>
 <td><strong>app</strong></td>
 <td>settings, connections, roles, scripts and kept facts</td>
-<td>setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
+<td>setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?)</td>
 </tr>
 <tr>
 <td><strong>look</strong></td>
 <td>look-ups - they run at once and change nothing</td>
-<td>task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
+<td>app.find, task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search</td>
 </tr>
 </tbody></table>
 <p>A task you name goes in <code>ref</code> (&quot;TQ-0123&quot;); otherwise the tool acts on what is on the table.</p>
@@ -267,15 +267,17 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-check"><code>task.check</code><a class="anchor" href="#task-check" aria-label="Link to this section">#</a></h3>
-<p>Tick a checklist item on a task.</p>
+<p>Tick, untick or note one to-do on a task - with only a note it is not ticked.</p>
 <ul>
 <li><code>item</code> - its NUMBER (1 is the first; the facts list them numbered)</li>
 <li><code>done</code> (optional) - false un-ticks</li>
+<li><code>note</code> (optional) - words kept under it (&quot;Gail has it&quot;; &quot;&quot; removes it)</li>
 <li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="task-checklist"><code>task.checklist</code><a class="anchor" href="#task-checklist" aria-label="Link to this section">#</a></h3>
 <p>Change what a task&#39;s checklist asks for.</p>
 <ul>
+<li><code>add</code> (optional) - new to-dos to append (&quot;add a to-do: call the bank&quot;)</li>
 <li><code>items</code> (optional) - the full list of item words in order (one left out is removed, emails untouched)</li>
 <li><code>emails</code> (optional) - [{to, about}] to add emails that must go out before it closes</li>
 <li><code>drop</code> (optional) - recipients whose email is no longer owed</li>
@@ -406,9 +408,28 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Brings up its button for you to press.</p><h2 id="pipe">Pipe<a class="anchor" href="#pipe" aria-label="Link to this section">#</a></h2>
 <p>The walk and sets of items, and filing mail.</p>
 <h3 id="pipe-clear"><code>pipe.clear</code><a class="anchor" href="#pipe-clear" aria-label="Link to this section">#</a></h3>
-<p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted. It only clears: when the owner says &quot;from now on&quot; too, also CALL preference.exclude_sender or preference.sender_rule.</p>
+<p>Clear a SET of items from the pipe at once - takes <code>select</code> (below); read, never deleted. &quot;Clear all the FYI&quot; is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said. It only clears: when the owner says &quot;from now on&quot; too, also CALL preference.exclude_sender or preference.sender_rule.</p>
 <ul>
 <li><code>select</code> - below</li>
+</ul>
+<p class="runs">Brings up its button for you to press.</p><h3 id="pipe-defer"><code>pipe.defer</code><a class="anchor" href="#pipe-defer" aria-label="Link to this section">#</a></h3>
+<p>Put a SET away until a day. Runs at once and the count is said.</p>
+<ul>
+<li><code>select</code> - below</li>
+<li><code>until</code> - (as task.defer takes it): &quot;snooze everything from Gail until Monday&quot; is select sender: Gail</li>
+</ul>
+<p class="runs">Brings up its button for you to press.</p><h3 id="pipe-close"><code>pipe.close</code><a class="anchor" href="#pipe-close" aria-label="Link to this section">#</a></h3>
+<p>Close a SET at once. &quot;Close all the tasks from Priya&quot; is select sender: Priya. Runs at once and the count is said.</p>
+<ul>
+<li><code>select</code> - (below): each task in it is marked done, each notice read</li>
+</ul>
+<p class="runs">Brings up its button for you to press.</p><h3 id="review-each"><code>review.each</code><a class="anchor" href="#review-each" aria-label="Link to this section">#</a></h3>
+<p>&quot;approve all the drafts&quot;: brings the next draft waiting for a Send up with its Send lit, and says how many are left - each one still goes only by its own press; CALL it again for the one after.</p>
+<p class="runs">Brings up its button for you to press.</p><h3 id="button-light"><code>button.light</code><a class="anchor" href="#button-light" aria-label="Link to this section">#</a></h3>
+<p>Light any button a row draws, by its name.</p>
+<ul>
+<li><code>button</code> - the verb (THE BUTTONS BY NAME, or a row&#39;s own: review_changes, run_another, attach, pick_repo, change_kind...)</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the row on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="item-settle"><code>item.settle</code><a class="anchor" href="#item-settle" aria-label="Link to this section">#</a></h3>
 <p>Put the item down, read and settled.</p>
@@ -481,10 +502,10 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>value</code></li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="connection-create"><code>connection.create</code><a class="anchor" href="#connection-create" aria-label="Link to this section">#</a></h3>
-<p>Add a system Taskuary talks to; created OFF and never carrying a secret, which the owner gives on the card.</p>
+<p>Bring up a connector card to connect it; a second one of a kind opens with its Add another. Never carrying a secret: the owner gives it on the card.</p>
 <ul>
-<li><code>type</code></li>
-<li><code>name</code></li>
+<li><code>type</code> - the catalogue type or title (linkedin, slack, &quot;QuickBooks Online&quot;)</li>
+<li><code>name</code> (optional)</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h3 id="role-apply"><code>role.apply</code><a class="anchor" href="#role-apply" aria-label="Link to this section">#</a></h3>
 <p>Set Taskuary up for the owner&#39;s job in one go - its worker, playbooks and daily workflow. Before calling, ASK the owner, one question at a time: the address of their bill-approval portal (<code>portal</code>; fine to leave out), and whether their own non-coding mail should go to that worker (<code>route_mail</code>: true or false - when they are only trying it out, false). The workflow is created OFF: after the yes, offer to run it once (report.run), and say they sign in to the portal themselves in the browser pane.</p>
@@ -529,7 +550,12 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h2 id="look">Look<a class="anchor" href="#look" aria-label="Link to this section">#</a></h2>
 <p>Look-ups - they run at once and change nothing.</p>
-<h3 id="task-read"><code>task.read</code><a class="anchor" href="#task-read" aria-label="Link to this section">#</a></h3>
+<h3 id="app-find"><code>app.find</code><a class="anchor" href="#app-find" aria-label="Link to this section">#</a></h3>
+<p>Bring ANYTHING in the app up by words - a setting, a connector card (the catalogue&#39;s and the owner&#39;s own, by name), a page, a report or workflow, a document: <code>query</code>, the words that name it (&quot;sound&quot;, &quot;signature&quot;, &quot;second outlook&quot;). It returns the best candidates with their links: link the one that fits, [its name](its link), and it opens.</p>
+<ul>
+<li><code>query</code></li>
+</ul>
+<p class="runs">Runs at once and changes nothing.</p><h3 id="task-read"><code>task.read</code><a class="anchor" href="#task-read" aria-label="Link to this section">#</a></h3>
 <p>Everything on one task - its summary, status, the messages on it, what agents said and did.</p>
 <ul>
 <li><code>ref</code> - TQ-0401 (or <code>id</code>)</li>
@@ -649,7 +675,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.13 · updated 2026-10-21</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.14 · updated 2026-10-21</p>
   </main>
 </div>
 <script src="./docs.js"></script>

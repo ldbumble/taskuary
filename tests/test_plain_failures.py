@@ -91,6 +91,17 @@ class NumberSettingTests(unittest.TestCase):
                 self.assertEqual(c.patch('/api/settings', json={'name': 'feed_days', 'value': good}).status_code, 200, good)
             self.assertEqual(c.patch('/api/settings', json={'name': 'ui_note', 'value': '-5'}).status_code, 200, 'not a number knob')
 
+    def test_a_setting_changed_on_the_page_is_in_the_audit_log(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        from taskuary.store import MemoryStore
+        s = MemoryStore()
+        with mock.patch.object(server, 'store', s):
+            self.assertEqual(TestClient(server.app).patch('/api/settings', json={'name': 'feed_days', 'value': '21'}).status_code, 200)
+        rows = s.list_audit('setting', 0)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(json.loads(rows[0]['Detail']), {'key': 'feed_days', 'from': '14', 'to': '21'})
+
 
 class CardErrorWordsTests(unittest.TestCase):
     """The 2026-10-19 UI walk: the GitHub card printed "401 Client Error: Unauthorized for url: https://api.github.com/user" under

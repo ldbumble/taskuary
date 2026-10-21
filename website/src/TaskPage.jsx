@@ -2557,8 +2557,14 @@ const CommentRow = ({ c }) => {
 };
 
 // Reference material about the task: present, but never competing with the session.
+// ...opened, it is brought up when it unfolded below the screen: Context & history opened out of view and looked like nothing happened
+// (the UI audit, 2026-10-21). Nothing moves when it is already in view.
+const showOpened = (d) => {
+  if (!d?.open) return;
+  requestAnimationFrame(() => { const r = d.getBoundingClientRect(); if (r.top + 80 > window.innerHeight) d.scrollIntoView({ block: "start", behavior: "smooth" }); });
+};
 const Fold = ({ title, children }) => (
-  <Box component="details" sx={{ mt: 1 }}>
+  <Box component="details" onToggle={(e) => showOpened(e.currentTarget)} sx={{ mt: 1, scrollMarginTop: "8px" }}>
     <Box component="summary" sx={{ cursor: "pointer", color: FAINT, fontSize: 12, fontWeight: 600, py: 0.6, "&:hover": { color: INK } }}>{title}</Box>
     <Box sx={{ mt: 0.5 }}>{children}</Box>
   </Box>

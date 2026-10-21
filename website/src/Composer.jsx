@@ -61,7 +61,10 @@ export default function Composer({ onDraft, kind = "report", initial = "" }) {
         </Typography>
       </Box>
 
-      {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5 }}>{out.error}</Alert>}
+      {/* ...and in the message itself (owner-approved, 2026-10-21: every "no AI" line carries its Connect an AI) */}
+      {out?.error && <Alert severity="warning" sx={{ mt: 1.25, fontSize: 12.5, alignItems: "center" }}
+        action={fix ? <Button size="small" variant="outlined" data-tq-composer-fix="" sx={{ whiteSpace: "nowrap" }}
+          onClick={() => openAppLink(fix.href)}>{fix.label}</Button> : null}>{out.error}</Alert>}
       {/* THE WORKFLOW DOOR, ASKED FOR A REPORT (the owner, 2026-10-18): said plainly, with the report drafted from the same reads */}
       {out?.verdict === "report" && out.report && <Alert severity="info" data-tq-report-verdict="" sx={{ mt: 1.25, fontSize: 12.5 }}
         action={<Button size="small" color="inherit" sx={{ whiteSpace: "nowrap" }}

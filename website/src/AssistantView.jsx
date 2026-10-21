@@ -68,6 +68,7 @@ import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
 import { hashFor } from "./canvasLinks.js";
 import { useCapabilities } from "./capabilities.js";
 import { place } from "./words.js";
+import ConnectAi, { CONNECT_AI, connectAi } from "./ConnectAi.jsx";
 // FirstRun, the walk's workspace and the browse cards are drawn after the pile or a click, never on the first frame: out of the entry chunk
 const FirstRun = lazyView(() => import("./FirstRun.jsx"));
 import SetupSteps from "./SetupSteps.jsx";
@@ -272,7 +273,7 @@ class BeforeCommit extends React.Component {
   render() { return null; }
 }
 
-function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, tag = "on the table" }) {
+function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, noAi = false, tag = "on the table" }) {
   const items = pile?.items || [];
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
   const tail = fyiTail(pile).length;
@@ -564,6 +565,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
         // a first run has nothing here because nothing is CONNECTED yet - "All done" read as finished (fresh-install shot, 2026-10-14)
         // ...and says what is next in the first run's own words (firstrun.state's `todo`), not a step count of its own (2026-10-15)
         <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Setup: {settingUp}. What comes in is then sorted into this list.</div>
+      ) : !drawn.length && noAi ? (
+        // NOTHING COULD BE JUDGED, so nothing is "done" (owner-approved, 2026-10-21): with no AI connected, setup put away, the rail said
+        // "All done - nothing is waiting on you" over a day in which nothing that arrives can be read or sorted
+        <div className="tq-pile-empty" data-tq-pile-no-ai=""><b>Nothing can be sorted yet</b>No AI is connected, so what comes in cannot be read and sorted into this list.
+          <button type="button" className="tq-pile-retry" data-tq-connect-ai="" onClick={connectAi}>{CONNECT_AI}</button>
+        </div>
       ) : !drawn.length ? (
         <div className="tq-pile-empty"><span className="mark">✓</span><b>All done</b>Nothing is waiting on you. New things land here as they arrive, and Taskuary speaks up.</div>
       ) : bands.map(({ level, items: rows }) => {
@@ -963,9 +970,10 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
    the clock menu above the past chats, only while something is on the table. */
 // ...in plain words: the raw drop reasons ("no brain", "verb not offered: stop_agent"), event names and evidence ids were the
 // Advisor's own bookkeeping, unreadable to the person it is for (J)
+const NO_AI_DROP = /no brain|no[ _]ai/i;       // the Advisor's own drop word for "no AI to ask" (advisor.QUIET)
 export const quietWhy = (d = "") => {
   const s = String(d || "");
-  if (/no brain|no[ _]ai/i.test(s)) return "No AI connected yet - connect one under Connections, AI.";
+  if (NO_AI_DROP.test(s)) return "No AI connected yet - connect one under Connections, AI.";
   if (s === "cap") return "Busy hour - I'll look again shortly.";
   if (s.startsWith("no answer")) return "The AI didn't answer - I'll look again when this one changes.";
   if (s.startsWith("verb not offered")) return "Its idea wasn't one of the buttons here, so it kept quiet.";
@@ -995,6 +1003,7 @@ function AdvisorNotes({ keyOnTable }) {
         <div key={i} style={{ padding: "6px 12px", borderTop: "1px solid #eee9e2" }}>
           <Typography sx={{ fontSize: 11.5, color: FAINT }}>{[age(r.at), r.tier > 1 ? "a closer look" : ""].filter(Boolean).join(" · ")}</Typography>
           <Typography sx={{ fontSize: 12.5, color: INK }}>{r.verb ? `${r.pill} - ${r.line}` : quietWhy(r.dropped)}</Typography>
+          {!r.verb && NO_AI_DROP.test(String(r.dropped || "")) && <ConnectAi variant="outlined" sx={{ mt: 0.5 }} />}
           {!!(r.evidence || []).some((e) => e.label) && <Typography sx={{ fontSize: 11.5, color: FAINT }}>Looked at: {r.evidence.map((e) => e.label).filter(Boolean).join(" · ")}</Typography>}
         </div>
       ))}
@@ -3096,7 +3105,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     {DEMO && <DemoJourney onChanged={() => { loadPile(true); onChanged?.(); }} />}
     <FeedView onOpenTask={onOpenTask} onChanged={onChanged} active={active} onGo={(tab, key) => browse(key)} navOn={navOn}
       onInventoryFilter={inventoryFilterChanged} unreadInventory={pile}
-      top={<Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""}current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
+      top={<Pile pile={railPile} settingUp={firstRun ? setupTodo || "finish setting up" : ""} noAi={!!state && !(state.providers || []).length}
+        current={old || (leavingTid && currentItem?.tid === leavingTid) ? null : currentItem}
         error={pile ? "" : err} onRetry={() => { setErr(""); loadPile(true); }}
         onPull={(key, asUser) => { sectionRef.current = null; pull(key, asUser); }}
         onSection={walkSection} onMoreFyi={moreFyi} tag={tableSays.tag} onCurrent={() => { setRailOpen(false); if (table.folded || table.place) { setFoldedKey(null); browseDown(); putOnTable(null, "view"); } }} />}

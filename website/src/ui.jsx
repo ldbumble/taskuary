@@ -45,6 +45,7 @@ import StopCircleIcon from "@mui/icons-material/StopCircle";
 import { IconButton as MuiIconButton, Popover, Tooltip as MuiTooltip } from "@mui/material";
 import { openAppLink } from "./appLinks.js";
 import { place, placeName } from "./words.js";
+import ConnectAi from "./ConnectAi.jsx";
 import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
@@ -638,8 +639,10 @@ export const useAgents = () => {
   const [brainList, setBrainList] = useState([]);
   const [brainModels, setBrainModels] = useState({});
   const [generalBrains, setGeneralBrains] = useState([]);
+  const [agentsRead, setAgentsRead] = useState(false);     // [] read is "no AI connected"; [] not yet read is nothing yet
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
+      setAgentsRead(true);
       setAgents((data.data || []).map((a) => a.Name));
       setModels(data.models || {});
       // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
@@ -657,7 +660,7 @@ export const useAgents = () => {
       setGeneralBrains(data.general_brains || []);
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains };
+  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains, agentsRead };
 };
 // THE CODING PROFILE IS FOUND BY ITS KIND, never by a name: the owner may rename it, or have none - and then blank, so
 // the server (which resolves the same way) chooses rather than this page naming one that is not there.
@@ -692,7 +695,7 @@ export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "too
 
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},
                              coding = false, brains = [], brain = "", onBrain, brainModels = {},
-                             generalBrains = [], pick = "", onPick, has = "" }) => {
+                             generalBrains = [], brainsRead = false, pick = "", onPick, has = "" }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
   // to say so; the role is the coding profile for every coding task now, so that list would be one entry
@@ -738,6 +741,8 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
           {generalBrains.map((b) => <MenuItem key={b.pick} value={b.pick} sx={{ fontSize: 12.5 }}>{b.label}</MenuItem>)}
         </Select>
       )}
+      {/* "No AI connected" in the menu, and the button that connects one beside it (owner-approved, 2026-10-21) */}
+      {handOff && brainsRead && !generalBrains.length && <ConnectAi variant="outlined" sx={{ height: size }} />}
       <ModelSelect size={size} model={model} onModel={onModel} whose={coding ? "tool" : "agent"}
         info={handOff ? { models: chosenBrain.models, default: chosenBrain.model } : info} />
     </>

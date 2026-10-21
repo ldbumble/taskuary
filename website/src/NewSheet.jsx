@@ -32,6 +32,7 @@ import ConnectAi from "./ConnectAi.jsx";
 
 // the server's own words for it (general.NO_AI)
 const NO_AI_LINE = "No AI is connected, so an agent can't run this yet - connect one, then send it again.";
+const NO_AI_PLAN = "No AI is connected to plan the steps - connect one, or choose Track it and add the steps yourself.";
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { place } from "./words.js";
@@ -168,7 +169,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages();
   // agent
-  const { agents, models, kinds, brainList, brainModels, generalBrains } = useAgents();
+  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead } = useAgents();
   const [agent, setAgent] = useState("");   // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
@@ -279,6 +280,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "goal") {
+        // PLAN IT WITH NO AI SAYS SO (owner-approved, 2026-10-21): it promised "planning the steps; they land in a moment" and none came
+        if (plan && !((await api.get("/api/agents")).data?.general_brains || []).length) {
+          setErr(NO_AI_PLAN); setErrAi(true); setBusy(false); return;
+        }
         const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);
         const { data } = await api.post("/api/tasks", { Title: title, Summary: who ? `${about}\nInvolved: ${who}` : about,
           DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
@@ -412,7 +417,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 {/* the task page's hand-off, the same three questions: which profile, which brain, which model */}
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} agent={role} model={model}
-                    generalBrains={generalBrains} pick={pick} onPick={setPick}
+                    generalBrains={generalBrains} brainsRead={agentsRead} pick={pick} onPick={setPick}
                     onAgent={(a) => { setRole(a); setModel(""); }} onModel={setModel} size={30} />
                 </Box>
               </Box>

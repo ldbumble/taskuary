@@ -40,6 +40,7 @@ import { label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import ConnectAi from "./ConnectAi.jsx";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
@@ -102,7 +103,6 @@ function AiWalkButton({ ai }) {
 const STEP_MARK = { done: ["✓", "#47654a"], failed: ["✗", "#6b2733"], agent: ["•", DIM], you: ["›", FAINT] };
 // the walk, on the card under its buttons: what is done, what the AI is doing now, the one step it needs from you (its field lit)
 function AiWalk({ ai }) {
-  const openAgents = useContext(AgentsDoor);
   const box = useRef(null);
   const [text, setText] = useState("");
   const w = ai.walk;
@@ -118,7 +118,8 @@ function AiWalk({ ai }) {
   if (!w && !ai.ready.ok) return (
     <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", lineHeight: 1.5 }}>
       Get AI to set it up needs an AI first. {ai.ready.why || `Set one up under ${placeName("ai_apps")}.`}
-      {openAgents && <Button size="small" onClick={openAgents}>Set up an AI app</Button>}
+      {/* the one button every "no AI" line carries, to the AI cards (owner-approved, 2026-10-21) */}
+      <ConnectAi variant="outlined" />
     </Typography>
   );
   if (!w) return ai.err ? <Alert severity="error" sx={{ fontSize: 12.5 }}>{ai.err}</Alert> : null;

@@ -3119,6 +3119,11 @@ SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() 
 # SAID ONCE, IN WORDS (U3): a typed question with no AI got "set one up" twice in one reply, the second as a raw "#cli-agents".
 # The desk gets the link to the AI page; a phone chat cannot open one, so it gets the words alone.
 NO_BRAIN = f"Connect an AI under {places.name('ai')} so I can take instructions; until then use the buttons."
+def connect_ai_chip() -> dict:
+    """The chip under a no-AI line: it opens Connections at the AI cards (the page's `go` chip, AssistantView.runChip)."""
+    return {'verb': 'go', 'label': 'Connect an AI', 'href': places.href('ai')}
+
+
 def no_brain() -> str:
     return NO_BRAIN if DELIVERY.get() == PHONE else f"[Connect an AI under {places.name('ai')}]({places.href('ai_apps')}) so I can take instructions; until then use the buttons."
 
@@ -4126,7 +4131,10 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         rec('assistant', say_)
         # `open: ''` - these are the app's words, and their AI link is to press: the page followed it, and "show me TQ-0003" with no
         # AI answered about the table and then covered it with Connections (2026-10-19 UI walk)
-        return {'say': say_, 'options': [], 'chips': chips_for(store, item) or walk_chips(len(p['items'])), 'decision': None, 'open': ''}
+        # ...and the button that connects one leads the chips (owner-approved, 2026-10-21: every "no AI" line carries Connect an AI);
+        # a phone chat has no page to open, so it keeps the words alone
+        ai = [] if DELIVERY.get() == PHONE else [connect_ai_chip()]
+        return {'say': say_, 'options': [], 'chips': ai + (chips_for(store, item) or walk_chips(len(p['items']))), 'decision': None, 'open': ''}
     reply, options, decision, call, did_read, failed = '', [], None, None, False, None
     try:
         # NO HUB NOTES PER TURN. Every turn carried whatever notes shared the owner's words - asked to research a

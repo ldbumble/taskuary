@@ -3,6 +3,7 @@ import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogCont
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import api from "./api";
+import ConnectAi from "./ConnectAi.jsx";
 
 const GeneralWorkspace = lazy(() => import("./GeneralWorkspace.jsx"));
 const failure = (e) => e?.response?.data?.detail || e.message || "Could not start playbook setup.";
@@ -19,6 +20,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [task, setTask] = useState(null);
+  const [noAi, setNoAi] = useState(false);
 
   useEffect(() => {
     if (mode !== "email") return undefined;
@@ -35,13 +37,19 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
   }, [mode, query, before]);
 
   const start = async () => {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setNoAi(false);
     try {
       const { data } = await api.post("/api/playbooks/setup", {
         text: text.trim(), message_id: mode === "email" ? selected?.MessageId : null, connector_type: connectorType,
       });
       setTask(data.task);
-    } catch (e) { setError(failure(e)); }
+    } catch (e) {
+      setError(failure(e));
+      // ...and when the reason is that no AI is connected, the line carries Connect an AI (owner-approved, 2026-10-21) - read as a fact
+      // (the general agents' brains), never off the sentence's words
+      const brains = await api.get("/api/agents").then(({ data }) => data?.general_brains || null).catch(() => null);
+      setNoAi(!!brains && !brains.length);
+    }
     finally { setBusy(false); }
   };
 
@@ -96,7 +104,7 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
       {mode && <TextField fullWidth multiline minRows={3} label={mode === "email" ? "Anything to add? (optional)" : "What should this playbook do?"}
         placeholder="When someone asks for updated item numbers, gather the latest data and prepare a summary for my review."
         value={text} disabled={busy} onChange={(e) => setText(e.target.value)} />}
-      {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mt: 2, alignItems: "center" }} action={noAi ? <ConnectAi variant="outlined" onGo={onClose} /> : null}>{error}</Alert>}
       {mode && <Typography sx={{ color: "text.secondary", fontSize: 12, mt: 1.5 }}>The assistant will help you define the steps, connections, and what needs your approval.</Typography>}
     </DialogContent>}
     <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>

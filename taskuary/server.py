@@ -4058,7 +4058,7 @@ def own_note(body: NoteBody):
     """A note to yourself: a reminder, an idea, a thing to come back to.
 
     Everything on the Timeline until now was something that HAPPENED to the owner - mail, a
-    chat, a report, a repository. There was nowhere to put "chase the Ashgrove AP on Tuesday"
+    chat, a report, a repository. There was nowhere to put "chase the Payworth AP on Tuesday"
     except an agent that would go and do something about it, so it went in a notebook instead
     and the one screen the owner watches all day knew nothing about it. `when` is what the note
     is FOR, not when it was typed: the row sits in that day (ownwork.note)."""

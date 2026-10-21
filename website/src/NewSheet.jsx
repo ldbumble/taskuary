@@ -116,10 +116,10 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     <TextField fullWidth multiline minRows={kind === "note" ? 2 : 3} value={value} autoFocus
       onChange={changed} {...(withPics ? pics.drop : {})}
       placeholder={kind === "goal" ? "the nightly census lands in the new ledger for all three sites, and the old portal's export is switched off"
-        : kind === "send" ? "the census numbers he asked for, plus why Ashgrove moved"
-        : kind === "agent" ? (how === "general" ? "why did Riverbend's census move four points in July?"
+        : kind === "send" ? "the census numbers he asked for, plus why Site 7 moved"
+        : kind === "agent" ? (how === "general" ? "why did Site 3's census move four points in July?"
           : "work out why the nightly export drops the last facility")
-        : "chase the Ashgrove AP replacement"}
+        : "chase the Payworth AP replacement"}
       // SAID, NOT TYPED (the owner, 2026-09-30: "can't ... use voice notes to write this prompt?"): the composer's own mic,
       // its words appended where the typing would go
       InputProps={{ endAdornment: (

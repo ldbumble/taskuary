@@ -108,8 +108,15 @@ jobs:
 
   browser:
     # Real Chromium + the disposable fixture backend; never targets the owner's server.
+    # ...in three parts at once (2026-10-21): file after file on one machine it outgrew 10 minutes and was cut off mid-run.
+    # browser/shard.mjs deals package.json's test:browser list out, so the list stays the one place a test is named.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
+    name: browser (${{ matrix.part }} of 3)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -119,7 +126,7 @@ jobs:
       - run: pip install -e .[dev]
       - run: npm ci
         working-directory: website
-      - run: npm run test:browser
+      - run: node browser/shard.mjs ${{ matrix.part }} 3
         working-directory: website
 
   walk:

@@ -64,7 +64,7 @@ ACTIONS = {
     'close_issue': ('close the linked GitHub issue', (), 'use_as_tracker'),
     # the close-out of a task whose work is an open pull request (CLOSEOUT below): raised by the finish, never by an agent
     'merge_pr': ('merge the pull request this task opened', ('repo', 'number'), 'agent_push_enabled'),
-    'run_tool': ('run one query/script through a tool connection', ('type',), None),
+    'run_tool': ('run a step in a connected system', ('type',), None),
     # a workflow step that failed, fixed by the model on the owner's say-so (flow.repair): the new list is saved only past their yes
     'repair_workflow': ("change this workflow's steps to the repaired list", ('source_id', 'flow'), None),
     # the on-close "did this session do a kind of job that will recur?" answer (playbooks.draft),
@@ -177,6 +177,26 @@ def collect(store, task_id: int, transcript: str, actor='agent') -> list:
     return [m for p in parse(transcript) for m in [queue(store, task_id, p, actor)] if m]
 
 
+# WHAT A TOOL RUN WILL DO, in words (the owner, 2026-10-21): the card said "run one query/script through a tool connection" over the
+# proposal's raw JSON for what was a file written to the HR share. The verb is the action's scope (scopes.needs), the place is the
+# first key that says where, the connection by its own name.
+WHERE_KEYS = ('path', 'to', 'folder', 'table', 'url', 'bucket', 'key', 'container', 'blob', 'channel', 'list', 'database')
+
+
+def tool_words(store, p: dict) -> str:
+    from . import reports, scopes
+    t = str(p.get('type') or '')
+    verb = {'read': 'read', 'write': 'write', 'admin': 'run'}.get(scopes.needs(t), 'run')
+    if t.endswith('_move'): verb = 'move'
+    where = next((str(p[k]) for k in WHERE_KEYS if p.get(k)), '')
+    code = ' '.join(str(p.get('query') or p.get('script') or '').split())
+    what = where or (f"this {'query' if p.get('query') else 'script'}: {code[:120]}" if code else t.replace('_', ' '))
+    try: c = reports._connector(store, reports.card_of(t), p.get('connector_id'))
+    except (TypeError, ValueError): c = None
+    on = (c or {}).get('Name') or ''
+    return f"{verb} {what}" + (f" on {on}" if on else '')
+
+
 def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
     """ONE proposal through the gate: a pending review when it validates, a recorded refusal (None) when not."""
     ok, why = validate(store, p)
@@ -186,8 +206,9 @@ def queue(store, task_id: int, p: dict, actor='agent') -> dict | None:
         return None
     # a close-out is not the agent's ask ("proposes to merge the pull request this task opened" was said of a stranger's PR), and
     # neither is a workflow's own repair or write, raised by the run itself (flow.py) with no agent anywhere on the task
+    said = tool_words(store, p) if p['action'] == 'run_tool' else why
     reason = (f"the close-out: {'merge pull request #' + str(p.get('number')) if p['action'] == 'merge_pr' else 'close the issue it came from'}"
-              if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {why}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
+              if p.get('closeout') else f"the {'workflow asks' if actor == 'workflow' else 'agent proposes'} to {said}" + (f" - {p['why'][:200]}" if p.get('why') else ''))
     rid = store.add_review({'TaskId': task_id, 'Kind': 'action', 'Status': 'pending', 'DraftText': json.dumps(p), 'Reason': reason})
     store.audit('review', rid, 'proposed', actor, detail={'action': p['action']})
     logger.info(f'task {task_id}: proposal queued - {p["action"]} (rv{rid})')

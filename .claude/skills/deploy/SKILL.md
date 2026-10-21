@@ -15,9 +15,12 @@ ordered so that nothing irreversible happens until the reversible things have al
 
 ## The one rule
 
-**Tag only after CI is green on the exact commit you are about to tag.** The tag fires
-`.github/workflows/publish.yml`, and that upload is permanent. Pushing `master` is cheap and
-reversible; pushing a tag is not.
+**Nothing reaches PyPI unless CI is green on the exact commit the tag points at.** Since 2026-10-21 the
+publish workflow enforces that itself: its first job (`ci-green`) waits for `ci.yml` on the tag's commit
+and stops the upload on anything but success. So the tag goes on **right after the push** - no sitting
+through CI first (that wait made every release ~40 minutes). A tag on a commit that turns red publishes
+nothing: delete the tag (`git push --delete origin vX.Y.Z.W; git tag -d vX.Y.Z.W`), fix forward, re-tag.
+The upload itself is still permanent, which is exactly why the gate lives in the workflow.
 
 ## Keep it to one round (about 20 minutes)
 
@@ -125,12 +128,12 @@ cd website && npm run test:walk && cd ..                         # the dead-end 
 node --test taskuary/whatsapp/*.test.mjs                         # CI does NOT run these
 ```
 
-**The full `python -m pytest -q` (~10 min) still runs once, on the commit you will tag** - start it in
-the background the moment the release commit is made, and do the rest while it runs. Skipping it
-on 0.3.9.2 cost a whole CI round: some pytest tests read the JSX source between fixed lines
-(`tests/test_every_card_is_reachable.py` slices ConnectorsView.jsx), so a web-only change can fail
-pytest on all six machines. What to skip is the REPEAT run after every small fix - a fix to one
-test file is checked by that file. Rules that cost a round when broken:
+**Locally: only the tests for what changed - CI runs the whole suite** (owner, 2026-10-21: the release took
+~40 minutes, ~17 of them a local full pytest that CI repeats). Run the targeted pytest files, `npm test`
+(it is the only thing that reads JSX source text, and it is ~2 min), and the browser test FILES the change
+touches. Skip the full `python -m pytest -q` and the full `test:browser` - CI runs both (the browser suite
+in three parts, `browser/shard.mjs`). A web-only change can still fail pytest (`tests/test_every_card_is_reachable.py`
+slices ConnectorsView.jsx), so include the pytest files that read the JSX you changed. Rules that cost a round when broken:
 
 - **Never rebuild the bundle while a pytest run is going.** `tests/test_floor_wave_b.py` reads the
   built files and fails when they are replaced mid-run - a false red that cost a rerun.
@@ -175,14 +178,17 @@ node website/pipe_geometry_check.mjs http://127.0.0.1:7911/   # pile rows on the
 Never point a demo or a test at the real `~/.taskuary`: `tests/conftest.py` forces a temp home,
 but only for files **inside `tests/`**.
 
-## 5. Push, then wait, then tag
+## 5. Push and tag together; publish waits for CI
 
 ```bash
 git push origin master
-# wait for CI on THIS sha - all 9 jobs
-gh run watch "$(gh run list --branch master --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
-gh run view <id> --json jobs -q '.jobs[] | "\(.conclusion)\t\(.name)"'
+git tag -a vX.Y.Z.W -m "taskuary X.Y.Z.W - <the release line>" <sha> && git push origin vX.Y.Z.W
+# then watch ci.yml on THIS sha (filter by workflow: CodeQL/Scorecard runs share the sha and are not the gate)
+gh run list --workflow ci.yml --commit <sha> --json databaseId,status,conclusion
 ```
+
+If ci.yml goes red: the publish run stops at `ci-green`, nothing is uploaded. Delete the tag, fix, push,
+re-tag the new sha.
 
 Pushed and rejected because another session pushed first: `git fetch && git rebase origin/master`.
 The committed bundle conflicts every time - do not merge it: take theirs, rebuild, fold it in:
@@ -194,13 +200,6 @@ Confirm the run's `headSha` is the commit you mean — an automated `Downloads:`
 cron, `.github/workflows/downloads.yml`) can land between your push and your check. If it does and
 your push is rejected, do **not** rebase the dirty shared tree: rebuild the commit off-index with
 `git read-tree origin/master`, re-add your paths, and `commit-tree -p origin/master`.
-
-Only once CI is green:
-
-```bash
-git tag -a vX.Y.Z.W -m "taskuary X.Y.Z.W - <the release line>" <sha>
-git push origin vX.Y.Z.W
-```
 
 The tag must match `pyproject.toml` exactly, or you publish a number nobody can see.
 

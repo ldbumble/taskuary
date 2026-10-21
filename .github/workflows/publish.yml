@@ -11,7 +11,32 @@ on:
 permissions: { contents: read }
 
 jobs:
+  # A TAG WAITS FOR ITS OWN CI (2026-10-21): the release used to be push, sit through CI, then tag - about 40 minutes of watching.
+  # Now the tag goes on right after the push and this job holds the upload until ci.yml has finished on the very same commit;
+  # anything but success stops here, before PyPI, so nothing irreversible happens on a red commit. Delete the tag and fix forward.
+  ci-green:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions: { actions: read }
+    steps:
+      - name: Wait for ci.yml on this commit
+        env: { GH_TOKEN: "${{ github.token }}", SHA: "${{ github.sha }}", REPO: "${{ github.repository }}" }
+        run: |
+          for i in $(seq 1 140); do
+            row=$(gh run list -R "$REPO" --workflow ci.yml --commit "$SHA" --json status,conclusion -q '.[0] | "\(.status) \(.conclusion)"')
+            echo "ci on $SHA: ${row:-not started}"
+            case "$row" in
+              "completed success") exit 0 ;;
+              completed*) echo "::error::ci.yml did not pass on $SHA - nothing is published"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::ci.yml never finished on $SHA"; exit 1
+
   build:
+    needs: ci-green
+    if: always() && (needs.ci-green.result == 'success' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -85,6 +110,7 @@ jobs:
     # the one-file Windows build, so taskuary.com's Download button has a stable target:
     # github.com/ldbumble/taskuary/releases/latest/download/Taskuary.exe
     runs-on: windows-latest
+    needs: ci-green
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

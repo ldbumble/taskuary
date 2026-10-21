@@ -226,6 +226,20 @@ class TheModelIsToldTheRow(unittest.TestCase):
             with concierge.delivering(concierge.PHONE): self.assertIn(f'"{buttons.label("not_ours")}"', concierge.table_actions(s, item))
 
 
+class RunItAgain(unittest.TestCase):
+    def test_run_it_again_over_a_good_report_opens_its_page(self):
+        s = store()
+        sid = s.save_source({'Channel': 'report', 'Address': 'AP ageing', 'Owner': 'o', 'Active': 1, 'ConfigJson': json.dumps({'type': 'agent', 'title': 'AP ageing'})}, 'o')
+        m = s.add_message({'ExternalId': 'r1', 'Channel': 'report', 'SourceName': 'AP ageing', 'Subject': 'AP ageing - 5 rows', 'FromName': 'AP ageing',
+                           'SentAt': ago(1), 'BodyText': 'Five invoices past 30 days.', 'Status': 'feed'})
+        s.add_route(m, None, 'feed', None, 'a report you set up', [], 'feed')
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            item = next(i for i in funnel.build(s)['items'] if i.get('kind') == 'report')
+        out, _ = say(s, 'run it again', item['key'], 'CALL: {"kind": "rerun", "params": {}}')
+        self.assertEqual(out['open'], f'#report={item["source_id"]}')
+        self.assertIn('Reports', out['say']); self.assertNotIn('light', out)
+
+
 class ClearingASet(unittest.TestCase):
     """"Clear all the FYI, please." was answered "Next." with a 4-FYI batch on the table and ~90 still on the rail (the owner, 2026-10-20:
     "this is clearly broken"). The desk told the model a set had no button - "the owner puts each one down with Next" - so it pressed Next.

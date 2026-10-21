@@ -4080,6 +4080,11 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         if target_item:
             try: return _lit(store, tid, item, target_item, verb)
             except CallMiss:                                           # no such button on its row: the model says so in words
+                # ...except a report asked to run again: Run it again is drawn only on a failed run, and the report's own page has Run now -
+                # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)
+                if verb == 'rerun' and target_item.get('source_id'):
+                    return _page(store, tid, item, f"#report={int(target_item['source_id'])}",
+                                 f"{target_item.get('title') or 'The report'} is under Reports - {REPORT_SAYS['report.run']} there.")
                 reply, options = _in_words(llm, system, table, text, verb)
                 rec('assistant', reply)
                 return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}

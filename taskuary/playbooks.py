@@ -293,7 +293,9 @@ def draft(store, task_id: int, transcript: str, agent: str = 'agent', llm=None) 
         if any(b['slug'] == slug for b in books): return None
         made = proposals.queue(store, task_id, {'action': 'write_playbook', 'slug': slug, 'text': pb['text'],
                                                 'why': str(pb.get('why') or '')[:300]}, agent)
-        if made: logger.info(f'playbooks: {agent} drafted "{parsed["title"]}" closing task {task_id} (rv{made["reviewId"]})')
+        if made:
+            logger.info(f'playbooks: {agent} drafted "{parsed["title"]}" closing task {task_id} (rv{made["reviewId"]})')
+            proposals.hold_for_playbook(store, task_id, agent)      # a task already done would hide it (proposals.HELD)
         return made
     except Exception as e:
         logger.debug(f'playbooks: nothing drafted for task {task_id} - {e}')

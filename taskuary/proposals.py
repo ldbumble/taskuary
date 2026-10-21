@@ -227,6 +227,28 @@ def playbook_pending(store, tid: int):
                  if _action(r) == PLAYBOOK), None)
 
 
+# A PLAYBOOK PROPOSAL IS ALWAYS SEEN (the owner, 2026-10-21). It is drafted after the task's ending, and a task that closed itself
+# with nobody to answer - a workflow run, the owner's own chat, a coding session - was done by then: a pending review on a done task
+# is shown nowhere (store._VISIBLE_PENDING), so the proposal waited where nobody could find it. Such a task waits for it instead,
+# marked HELD, and goes back to done once the owner answers it, yes or no - the close was already theirs or the agent's.
+HELD = 'held:playbook'
+
+
+def hold_for_playbook(store, tid: int, actor: str) -> None:
+    t = store.get_task(tid) or {}
+    if t.get('Status') != 'done': return
+    tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
+    store.update_task(tid, {'Status': 'waiting', 'Tags': ','.join([*tags, HELD])}, actor)
+    store.add_comment(tid, actor, 'agent', 'Kept open for its playbook proposal - approve or dismiss it, and the task closes again.')
+
+
+def playbook_answered(store, tid: int, actor: str) -> None:
+    t = store.get_task(tid) or {}
+    tags = [x for x in str(t.get('Tags') or '').split(',') if x.strip()]
+    if HELD not in tags or playbook_pending(store, tid): return
+    store.update_task(tid, {'Tags': ','.join(x for x in tags if x != HELD), **({} if owed(store, tid) else {'Status': 'done'})}, actor)
+
+
 def owed(store, tid: int) -> bool:
     """Something of the close-out still waits on the owner: a reply, a close-out act, any other proposal - not the playbook."""
     return any(_action(r) != PLAYBOOK for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Status='pending'", (tid,)))
@@ -320,7 +342,8 @@ def settle(store, rv: dict, verb: str, actor='owner') -> None:
     """After the owner answered a proposal: Approve ran only that act (the owner, 2026-10-18) - the task stays open for Mark
     done, and is said to be on them once nothing else of it waits; "not yet" on a close-out leaves it open and on them."""
     tid = rv.get('TaskId')
-    if not tid or _action(rv) == PLAYBOOK: return
+    if tid and _action(rv) == PLAYBOOK: return playbook_answered(store, tid, actor)
+    if not tid: return
     # a pull request opened on the owner's yes AFTER the agent finished is still a task that ends by merging it
     if _action(rv) in ('land', 'open_pr') and verb in ('approve', 'edit') and (store.get_task(tid) or {}).get('Status') != 'dropped':
         due = closeout_due(store, tid)

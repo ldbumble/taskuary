@@ -270,6 +270,24 @@ class DraftedOnClose(unittest.TestCase):
         self.assertIn('does not tie to the ledger', seen['user'])          # ...and the mail that started it - the playbook's `when`
         self.assertIsNotNone(proposals.playbook_pending(s, tid))
 
+    def test_a_proposal_on_a_task_that_closed_itself_is_kept_in_sight(self):
+        """With nobody to answer, the task closed as done and its pending proposal was shown nowhere (store._VISIBLE_PENDING).
+        It waits for the proposal instead, and closes again once the owner answers it (the owner, 2026-10-21)."""
+        from taskuary import general, wrapup
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Weekly vendor check', 'Kind': 'general'}, 't')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'Check every vendor billed this week for a W-9 and a matching remit-to. ' * 6)
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Checked Payworth, Spendly and Trainly: all on file, all matching. ' * 6)
+        llm, _ = _llm_saying({'playbook': {'slug': 'vendor-check', 'text': ONBOARD}})
+        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+            wrapup.wrap(s, tid, close=True, actor='assistant')
+        t = s.get_task(tid)
+        self.assertEqual(t['Status'], 'waiting'); self.assertIn(proposals.HELD, t['Tags'])
+        rv = next(r for r in s.list_reviews('pending') if r['TaskId'] == tid)      # the rail and the task page both read this
+        verdicts.decide(s, rv, 'reject', None, None, 'owner')
+        t = s.get_task(tid)
+        self.assertEqual(t['Status'], 'done'); self.assertNotIn(proposals.HELD, t['Tags'] or '')
+
     def test_a_playbook_setup_conversation_is_not_asked_again(self):
         from taskuary import wrapup
         s = MemoryStore(); tid = self._chat(s, SourceRef='assistant:playbook')

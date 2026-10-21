@@ -533,6 +533,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
                               f"{str(m.get('BodyText') or '')[:3000]}" for m in ((store.task_detail(tid) or {}).get('messages') or [])[:3])
         job = '\n\n'.join(x for x in (arrived, general.conversation_text(store, tid)) if x)
         pbd = None if task.get('SourceRef') == 'assistant:playbook' else playbooks.draft(store, tid, job, 'assistant')
+        if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, 'assistant')     # always in sight
         _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
@@ -743,6 +744,8 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # (playbooks.py) - the second such job matches it. Last on purpose: the receipt and the sender's
     # answer are what a close is for, and this call must never be the one the drafter's AI budget goes to.
     pbd = playbooks.draft(store, tid, text, agent, llm=_answered(store, ahead))
+    # ...and one the agent proposed itself (TASKUARY-PROPOSE, collected above) is held in sight the same way (proposals.HELD)
+    if proposals.playbook_pending(store, tid): proposals.hold_for_playbook(store, tid, agent)
     if pbd: proposed.append(pbd)
     store.audit('terminal', tid, 'wrap', actor, detail={'sid': found or sid, 'close': close})
     _ended(store, tid, close, actor)

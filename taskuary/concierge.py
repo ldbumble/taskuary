@@ -241,6 +241,8 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             fx = llm_mod.fast_args(cli) if llm_mod.fast_on(store, cli) else []      # the provider's fast tier (Settings > Assistant)
             # ...and its words as they are written, for the page to draw before the answer is whole (agents.spoken)
             from .clis import preset_args
+            # ...and none of the owner's user-level Claude settings: their hooks POST to this app on every prompt and stop (agents._own_settings)
+            own = {'user_settings': False} if cli == 'claude' else {}
             if cli == 'claude' and 'stream-json' in (prof.get('args') or preset_args(str(prof.get('cmd') or name))): fx = fx + ['--include-partial-messages']
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
             if dflt.startswith('effort:'):
@@ -248,9 +250,9 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
                 prof['light_model'] = dflt
                 store_get = store.get_agent
                 store.get_agent = lambda n, _r=row, _p=prof: (_r | {'Config': json.dumps(_p)}) if n == name else store_get(n)
-                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}))
+                try: return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
                 finally: store.get_agent = store_get
-            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}))
+            return llm_mod.make_cli_llm(store, name, model, cwd=cwd, trace=trace, cancel=cancel, resume=resume, keep=keep, **({'extra_args': fx} if fx else {}), **own)
         return llm_mod.build_llm(store, pick=p, model=str(store.get_setting(MODEL_KEY) or '').strip() or None, trace=trace, cancel=cancel)
     except Exception as e:
         logger.debug(f'concierge: no brain - {e}'); return None

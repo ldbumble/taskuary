@@ -1134,7 +1134,7 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # trust prompt, so every one of those died before the model was reached (issue #34). The flag
     # only relaxes WHERE codex may run; the sandbox flags decide what it may do.
     if is_codex and '--skip-git-repo-check' not in args: args.append('--skip-git-repo-check')
-    cmd = _resolve_cmd(name) + args + _model_args(profile, name)
+    cmd = _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name)
     # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')
@@ -1352,6 +1352,32 @@ def _model_args(profile: dict, name: str) -> list:
     return ([profile.get('model_arg') or '--model', m] if m else []) + effort_args(_cli_name(name), eff)
 
 
+_FLAGS: dict = {}
+
+
+def cli_has_flag(name: str, flag: str) -> bool:
+    """Does this CLI's --help name `flag`? Asked once per executable and remembered; a CLI that cannot say is taken as not having it."""
+    exe = tuple(_resolve_cmd(name))
+    if (exe, flag) not in _FLAGS:
+        try:
+            r = spawn.run([*exe, '--help'], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30,
+                          stdin=subprocess.DEVNULL, env=child_env(dict(os.environ)))
+            _FLAGS[(exe, flag)] = flag in (r.stdout or '') + (r.stderr or '')
+        except Exception as e:
+            logger.info(f'{name} --help could not be read ({e}) - running without {flag}'); _FLAGS[(exe, flag)] = False
+    return _FLAGS[(exe, flag)]
+
+
+def _own_settings(profile: dict, name: str) -> list:
+    """THE ASSISTANT READS NONE OF THE OWNER'S USER-LEVEL CLAUDE SETTINGS (the owner, 2026-10-21): their user-wide hooks POST to this app
+    on every prompt and every stop - 0.3-0.5 s a turn, measured - and its headless, tool-less brain has no use for them. Only a profile
+    that asks (user_settings False: the Assistant's); coding and general agents keep theirs. A claude without the flag runs as before."""
+    if profile.get('user_settings') is not False or _cli_name(name) != 'claude': return []
+    args = list(profile.get('args') or [])
+    if '--setting-sources' in args or not cli_has_flag(name, '--setting-sources'): return []
+    return ['--setting-sources', 'project,local']
+
+
 def _keeps(profile: dict, family: str, args: list) -> bool:
     return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
 
@@ -1364,7 +1390,7 @@ def warm_cli(profile: dict, resume: str = None, extra_env: dict = None) -> bool:
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool
-    try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name),
+    try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name) + _own_settings(profile, name),
                              cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume)
     except PermissionError as e: raise FileNotFoundError(denied_msg(name, name, e)) from e
 

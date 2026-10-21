@@ -22,6 +22,8 @@ T0 = time.time()
 args = sys.argv[1:]
 def arg(k): return args[args.index(k) + 1] if k in args and args.index(k) + 1 < len(args) else None
 def env(k, d): return float(os.environ.get(k) or d)
+if '--help' in args:                     # an older claude has no --setting-sources: FAKE_CLAUDE_OLD=1
+    print('Usage: claude [options]\n  -p, --print\n' + ('' if os.environ.get('FAKE_CLAUDE_OLD') else '  --setting-sources <sources>\n')); sys.exit(0)
 SPAWN, THINK, PREFILL, TPS = env('FAKE_CLAUDE_SPAWN', 2.5), env('FAKE_CLAUDE_THINK', 0.7), env('FAKE_CLAUDE_PREFILL', 0.25), env('FAKE_CLAUDE_TPS', 70)
 LIVE, PARTIAL = 'stream-json' in (arg('--input-format') or ''), '--include-partial-messages' in args
 sid = arg('--resume') or f'fake-{os.getpid()}-{int(T0 * 1000) % 100000}'

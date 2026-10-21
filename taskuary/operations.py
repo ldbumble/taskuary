@@ -104,6 +104,8 @@ KINDS = {
     # the owner's yes, never sent from the card
     'message.retriage':         ('message', (), None),
     'task.share':               ('task', ('who',), None),
+    # ...and a teammate's coding agent, asked over Reason Network (reasonnet.ask): only someone the owner trusts, the reply on the task
+    'task.ask_agent':           ('task', ('who', 'text'), None),
 }
 # triage's `task` and `general` are one answer for this comparison (work, no coding agent); `coding` is another
 SAME = {frozenset(('task', 'general'))}

@@ -2481,6 +2481,14 @@ def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: s
         if not new: raise CallMiss(f'{named} already has those to-dos. Say so. Nothing was added.')
         return _did(store, tid, f"Added {plural(len(new), 'to-do')} to {named}: " + '; '.join(f'\u201c{_title_cut(i["text"], 60)}\u201d' for i in new) + '.',
                     'task.checklist')
+    # A TEAMMATE'S AGENT, ASKED (the owner, 2026-10-21: "ask Erin's agent whether X" sends over Reason Network and the reply shows on
+    # the task): only someone on the card's trusted list - anyone else is said back, nothing sent (reasonnet.ask)
+    if kind == 'task.ask_agent' and target:
+        from . import reasonnet
+        try: r = reasonnet.ask(store, target, str(params.get('who') or ''), str(params.get('text') or ''), actor)
+        except reasonnet.Miss as e: raise CallMiss(f'{e} Say so in plain words.')
+        except Exception as e: raise CallMiss(f'Reason Network could not send it ({str(e)[:200]}). Say so in plain words. Nothing was sent.')
+        return _did(store, tid, f"Asked {r['to']}'s agent over Reason Network - its reply will be noted on {named}.", 'task.ask_agent')
     if kind == 'task.update' and target and not (params.get('priority') or params.get('assignee')):
         from . import remind
         c = task_contract(store, kind, target, params)

@@ -30,6 +30,10 @@ MARK = '/api/hooks/claude'
 # owner answers elsewhere, then let go so the form appears in the pane; the owner's own task is never held (ask). Claude's own limit on the hook is ASK_TIMEOUT.
 ASK_MARK = '/api/hooks/claude/ask'
 ASK_WAIT, ASK_TIMEOUT = 540, 600
+# THE REASON NETWORK HOOK (reasonnet.py): before one of our sessions uses a Reason Network tool - a message to an untrusted
+# teammate is refused, a trusted one noted on the task, and ask_user is the owner's approval card instead of Reason's
+# pop-up. Its own mark and command, printed back like the ask hook's; held as long as an ask.
+REASON_MARK, REASON_MATCH = '/api/hooks/claude/reason', 'mcp__reason-network__.*'
 # Claude's events. The last five arrived 2026-09-20 and are the ones the screen could never tell apart:
 # a turn that died on a wall (StopFailure: rate_limit, max_output_tokens, overloaded, billing_error...),
 # the agent asking inside its own TUI (Notification agent_needs_input / idle_prompt), the permission
@@ -145,6 +149,12 @@ def ask_command(base: str, token: str = '', home: str = None) -> str:
     return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{ASK_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
 
 
+def reason_command(base: str, token: str = '', home: str = None) -> str:
+    "The Reason Network hook: like the ask hook, its stdout is the decision; a failure prints nothing and leaves the call to Claude."
+    curl = 'curl.exe' if os.name == 'nt' else 'curl'
+    return f'{curl} -s -f -m {ASK_WAIT + 30} -X POST {base}{REASON_MARK} -H "Content-Type: application/json"{token_arg(token, home)} --data-binary @-'
+
+
 def spool_path(home: str = None) -> str:
     """Where Codex's hooks leave their payloads: <taskuary home>/hooks/codex.jsonl."""
     if home: return os.path.join(home, CODEX_MARK)
@@ -175,7 +185,8 @@ def session_hooks(token: str = None, base: str = None) -> dict:
     base, token = base or base_url(), agent_token() if token is None else token
     ev = {'type': 'command', 'command': command(base, token), 'timeout': 5}
     d = {e: [{'hooks': [ev]}] for e in EVENTS}
-    d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]}]
+    d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]},
+                       {'matcher': REASON_MATCH, 'hooks': [{'type': 'command', 'command': reason_command(base, token), 'timeout': ASK_TIMEOUT}]}]
     return d
 
 
@@ -233,8 +244,11 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
     if cli == 'claude':
         ask = {'type': 'command', 'command': ask_command(base or base_url(), agent_token() if token is None else token, th), 'timeout': ASK_TIMEOUT}
         hooks['PreToolUse'] = [g for g in (hooks.get('PreToolUse') or []) if isinstance(g, dict)
-                               and not any(ASK_MARK in str(h.get('command') or '') for h in (g.get('hooks') or []) if isinstance(h, dict))]
+                               and not any(m in str(h.get('command') or '') for m in (ASK_MARK, REASON_MARK)
+                                           for h in (g.get('hooks') or []) if isinstance(h, dict))]
         hooks['PreToolUse'].append({'matcher': 'AskUserQuestion', 'hooks': [ask]})
+        rn = reason_command(base or base_url(), agent_token() if token is None else token, th)
+        hooks['PreToolUse'].append({'matcher': REASON_MATCH, 'hooks': [{**ask, 'command': rn}]})
     if json.dumps(cur, sort_keys=True) == before: return False
     try: _write_json(p, cur)
     except OSError as e:
@@ -558,6 +572,11 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
                 claude_artifacts.capture_doc(getattr(t, 'store', None), t.task_id, payload['tool_input'], payload.get('tool_response'),
                                              by=getattr(t, 'agent', '') or 'agent')
     _events(t, payload)
+    # ...and whatever Reason Network showed this agent goes on its task (reasonnet.on_hook): never a reason to fail the hook
+    try:
+        from . import reasonnet
+        reasonnet.on_hook(getattr(t, 'store', None), t.task_id, payload)
+    except Exception as e: logger.debug(f'reason network note skipped: {e}')
     # Stop is an observation like the rest: the agent finished a RESPONSE, not the task. Nothing closes
     # on it - only `taskuary --done` (selfclose.declare) or the owner ends a task (2026-09-24). The answer
     # used to carry a `closing` flag for a judge that no longer exists; nothing read it.
@@ -610,6 +629,18 @@ def ask(payload: dict, wait: float = None) -> dict:
     inp['answers'] = {text: got[rid] for rid, (text, _c) in zip(rids, qs)}
     return {'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'allow',
                                    'permissionDecisionReason': 'answered by the owner in Taskuary', 'updatedInput': inp}}
+
+
+def reason(payload: dict, wait: float = None) -> dict:
+    """Before one of OUR sessions uses a Reason Network tool (reasonnet.pre_tool). Not our pane, or the card off: {} - the call
+    is Claude's and Reason's as it always was."""
+    from . import reasonnet
+    tool = str(payload.get('tool_name') or '')
+    if not tool.startswith(reasonnet.TOOL): return {}
+    t = _pane(payload)
+    st = getattr(t, 'store', None) if t else None
+    if not t or not st: return {}
+    return reasonnet.pre_tool(st, t.task_id, run_sid(payload, t.task_id), tool[len(reasonnet.TOOL):], payload.get('tool_input') or {}, wait)
 
 
 def run_sid(payload: dict, tid: int) -> str:

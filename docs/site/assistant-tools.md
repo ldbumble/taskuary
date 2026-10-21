@@ -11,7 +11,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere |
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
-| **agents** | start, continue, answer or stop a task's agent, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
+| **agents** | start, continue, answer or stop a task's agent; teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
@@ -371,7 +371,7 @@ Reject the draft reply waiting on a task - nothing is sent, the task stays open.
 
 ## Agents
 
-Start, continue, answer or stop a task's agent, and teach where work belongs.
+Start, continue, answer or stop a task's agent; teach where work belongs.
 
 ### `dispatch.prepare`
 
@@ -415,6 +415,16 @@ Remember how work like this should be ROUTED next time. kind: coding (an agent i
 
 - `field` - kind | profile | system
 - `value`
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `task.ask_agent`
+
+Ask a trusted teammate's coding agent over Reason Network; the reply is noted on the task.
+
+- `who` - their name or person/session
+- `text` - the question
+- `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
 

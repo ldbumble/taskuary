@@ -42,6 +42,7 @@ import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
 import { validEmail } from "./recipientOptions.js";
+import ReasonPanel from "./ReasonNetwork.jsx";
 
 /* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
    2026-10-21: "it should look like general agent working, not code one"). Its brief is the card's Guide; its hands are the card's
@@ -1752,6 +1753,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : !conn ? null
     : conn.Type === "mssql" ? <MssqlDetail key={conn.ConnectorId} {...shared} drivers={drivers} />
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
+    : conn.Type === "reason_network" ? <ReasonDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
   const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
@@ -1774,9 +1776,9 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       go: () => setOpen({ kind: "connector", id: c.ConnectorId }) };
   }));
   const channelCards = (keys) => keys.flatMap((t) => allOf(t).map(chanCard));
-  const specialCards = (type, title, rtype, haystack) => allOf(type).map((c) => ({
+  const specialCards = (type, title, rtype, haystack, desc = (c) => dataDesc(c, rtype)) => allOf(type).map((c) => ({
     key: `s${c.ConnectorId}`, title: c.Name || title, channel: type,
-    desc: dataDesc(c, rtype), haystack,
+    desc: desc(c), haystack,
     go: () => setOpen({ kind: "connector", id: c.ConnectorId }),
   }));
   const planned = types.filter((t) => t.status === "planned").map((t) => t.type);
@@ -1830,7 +1832,11 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     /* Not a data source and not a channel: these give an AGENT reach. A Zoho card means
        "Taskuary can see this system of ours"; a card here means "an agent can reach outward
        through this". Different question, different shelf. */
-    { title: "Agent tools", cards: [...dataCards(["treg"]), ...catalogCards("Agent tools")] },
+    { title: "Agent tools", cards: [...dataCards(["treg"]),
+      // teammates' coding agents and the owner's, messaging each other - the owner's own install, found here (ReasonNetwork.jsx)
+      ...specialCards("reason_network", "Reason Network", "", "reason network teammates coding agents peer to peer messages trusted people",
+        (c) => (c.Active ? "on · only the people you trust reach your agents" : "off · teammates' agents and yours, peer to peer")),
+      ...catalogCards("Agent tools")] },
     { title: "Developer", cards: [...channelCards(["github", "gitlab", "azdo", "sentry", "pagerduty"]), ...catalogCards("Developer")] },
     { title: "Project management", cards: [...channelCards(["jira", "asana", "monday", "clickup", "todoist", "linear", "trello", "notion"]), ...catalogCards("Project management")] },
     /* One "Data connections" bucket held eleven cards that have nothing to do with each
@@ -2592,6 +2598,19 @@ function MssqlConnection({ conn, drivers, reload }) {
 }
 
 /* ── Remote Windows (WinRM) detail: machine name + live probe; reports live on Reports ── */
+/* ── Reason Network: a program the owner installs; the card finds it, holds who is trusted, and shows the network ── */
+function ReasonDetail({ conn, reload, onBack, onCreated }) {
+  return (
+    <Box sx={{ maxWidth: 980, mx: "auto" }}>
+      <Crumb section="Connections" onBack={onBack} title={conn.Name} />
+      <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
+      <ReasonPanel conn={conn} reload={reload} />
+      <CardPlaybooks type={conn.Type} />
+      <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
+    </Box>
+  );
+}
+
 function WinrmDetail({ conn, reload, onBack, onCreated }) {
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));

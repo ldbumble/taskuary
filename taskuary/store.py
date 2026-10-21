@@ -1173,6 +1173,7 @@ class SQLiteStore:
                          ('telegram', 'Telegram'), ('whatsapp', 'WhatsApp'),
                          ('linkedin', 'LinkedIn'),
                          ('treg', 'treg (agent tools)'),
+                         ('reason_network', 'Reason Network'),
                          ('postgresql', 'PostgreSQL'),
                          ('mysql', 'MySQL / MariaDB'),
                          ('clickhouse', 'ClickHouse'),

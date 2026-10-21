@@ -169,7 +169,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [mode, setMode] = useState("draft");
   const pics = usePromptImages();
   // agent
-  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead } = useAgents();
+  const { agents, models, kinds, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
   const [agent, setAgent] = useState("");   // the coding profile, by kind; blank = the server finds it
   const [brain, setBrain] = useState("");   // WHICH CLI runs it; blank = the brain settings name
   const [model, setModel] = useState("");
@@ -302,7 +302,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
     setBusy(false);
   }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics]);
 
-  const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
+  // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
+  const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);
+  const canGo = hasAbout && !noCodingTool && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words
   const verb = kind === "send" ? (mode === "task" ? btn("regular_agent") : "Draft it")
     : kind === "agent" ? btn(how === "general" ? "regular_agent" : "coding_agent") : kind === "goal" ? (plan ? "Plan it" : "Track it") : "Note it";
@@ -427,7 +429,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
                 <Label>Agent</Label>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
                   <AgentPicker agents={agents} models={models} kinds={kinds} coding agent={agent} model={model}
-                    brains={brainList} brainModels={brainModels} brain={brain}
+                    brains={brainList} brainModels={brainModels} brain={brain} brainsRead={agentsRead} codingReady={codingReady}
                     onBrain={(b) => { setBrain(b); setModel(""); }}
                     onAgent={(a) => { setAgent(a); setModel(""); }} onModel={setModel} size={30} />
                 </Box>

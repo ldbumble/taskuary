@@ -7216,6 +7216,8 @@ def agents():
             # the brains a NON-coding hand-off may choose, one per installed CLI (general.py)
             'general_brains': _general.brain_options(store),
             'brain_list': brains_here,
+            # ...and whether a coding agent can start at all - the fact terminal.start_on_task refuses on, so the pickers say the same
+            'coding_ready': hub_agents.coding_ready(store),
             # every connection keeps its models, installed or not: a task still pinned to a CLI that
             # has since gone has to be able to SAY so, and the picker renders it from this.
             'brain_models': {k: {'choices': _brain_cat(k)['choices'], 'models': _brain_cat(k)['models'],

@@ -11,6 +11,7 @@ SENDS = {'review.approve', 'task.handoff', 'task.clarify'}
 _NOT_INSTALLED = re.compile(r"\[Errno 2\]|No such file or directory|is not recognized as an internal or external command|command not found"
                             r"|not installed|cannot find the file specified", re.I)
 _NO_FOLDER = re.compile(r'working directory does not exist|needs a repository|no repository|not a git repository|repository still to choose', re.I)
+_NO_TOOL = re.compile(r'pick a coding tool first', re.I)
 _NO_AI = re.compile(r'no AI connector|no AI is (set up|connected)|no brain', re.I)
 
 
@@ -47,6 +48,7 @@ def classify(e, *, act: str = None) -> dict:
     sentence = text
     if isinstance(e, FileNotFoundError) or _NOT_INSTALLED.search(text):
         sentence, fix = "The coding tool isn't installed on this computer", fix or _fix('Connect a coding tool', 'ai_apps')
+    elif _NO_TOOL.search(text): fix = fix or _fix('Connect a coding tool', 'ai_apps')       # terminal.NO_CODING_TOOL
     elif _NO_FOLDER.search(text): fix = fix or _fix('Choose where it works', 'coding')
     elif _NO_AI.search(text): fix = fix or _fix('Connect an AI', 'ai')
     unknown = act in SENDS and not isinstance(e, str) and outbound.delivery_uncertain(e)

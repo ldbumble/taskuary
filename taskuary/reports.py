@@ -542,13 +542,14 @@ def run_digest(cfg):
 
 
 def run_evening_inbox(cfg):
-    """{"hours": 8} - an executive end-of-day brief over eligible Inbox and Sent email:
-    what the owner completed and the three most important open items for tomorrow. Bulk mail,
+    """{"hours": 8} - an executive end-of-day brief over whatever is connected (mail, chat, trackers) and the
+    owner's own tasks and agent runs (evening.py): what the owner completed and the three most important open items for tomorrow. Bulk mail,
     system notifications, receipts and suppressed messages are removed before the AI sees rows.
     `store` arrives via resolve_cfg, never persisted."""
-    from .evening import gather
+    from .evening import brief
     hours = max(1, min(int(cfg.get('hours') or 8), 48))
-    return f'the last {hours} hours of Inbox and Sent email', gather(cfg['store'], hours)
+    # over whatever is connected, not email alone - and a connection that cannot be read goes on `_unread` (render_report)
+    return brief(cfg['store'], hours, cfg.get('_unread'))
 
 
 def run_taskuary(cfg):
@@ -1317,20 +1318,38 @@ def headline_from(summary: str, fallback: str) -> str:
 
 
 
-def render_report(store, cfg: dict, llm=None):
+def render_report(store, cfg: dict, llm=None, notes: list = None):
     """Run the executor(s), then (optionally) the AI pass: cfg['ai_prompt'] + a configured
     AI connector turn raw rows into the summary that lands on the timeline. The report may
-    name its own brain and model (report_llm); `llm` is the default it falls back to."""
+    name its own brain and model (report_llm); `llm` is the default it falls back to.
+
+    `notes` is a RUN asking (run_report_source; a preview and the Advisor's look leave it None): a source that could
+    not be read is added to it as (label, why) and the run goes on over the rest, and when NO source could be read the
+    run is Skipped with the reason instead of summarising nothing (the owner, 2026-10-21)."""
     llm = report_llm(store, cfg, llm)
     subs = [s for s in (cfg.get('sources') or []) if s.get('type')]
     if subs:
         parts = run_source_parts(store, subs)
+        bad = [(l, b[len('error: '):] if b.startswith('error: ') else b) for _, l, h, b in parts if h == 'FAILED']
+        if notes is not None:
+            if bad and len(bad) == len(parts): raise Skipped('Skipped: no source could be read - ' + '; '.join(f'{l}: {w}' for l, w in bad))
+            notes += bad
         head, summary = stack(parts)
         sections = {k: f'=== {l} ({h}) ===\n{b}' for k, l, h, b in parts}
     else:
-        gate(store, cfg)
-        cfg = resolve_cfg(store, cfg)
-        head, summary = executor_for(cfg.get('type', 'rest'))(cfg)
+        t, run = cfg.get('type', 'rest'), executor_for(cfg.get('type', 'rest'))
+        try:
+            gate(store, cfg)
+            cfg = resolve_cfg(store, {**cfg, '_unread': notes} if notes is not None else cfg)
+            head, summary = run(cfg)
+        except Skipped: raise
+        except Exception as e:
+            # a preview says the error as it came; Taskuary's own readers failing for any reason but the database is a
+            # fault of this report, not a source that is down, and is said as it is too
+            own = t in STORE_BACKED
+            if notes is None or (own and not isinstance(e, sqlite3.Error)): raise
+            raise Skipped("Skipped: Taskuary's own data could not be read - " + str(e)[:300] if own
+                          else f'Skipped: {source_title(t)} could not be read - {plain_reason(e)}') from e
         sections = {source_key(cfg, 1): summary}
     if cfg.get('ai_prompt') and llm:
         try:
@@ -1660,6 +1679,9 @@ def run_report_source(store, src: dict, llm=None, trigger: str = 'schedule') -> 
     if rec['failed'] and not rec.get('error'):
         why = str(out.get('error') or out.get('summary') or out.get('said') or '').strip()
         rec['error'] = (why[:600] or f"the run reported {out.get('subject') or 'FAILED'} without saying why")
+    # a run that worked without some of its sources carries their names and why where every run's error shows: the run
+    # history's line, and the bell's "<report> ran without <source>" (problems.collect reads it as the detail)
+    elif out.get('note'): rec['error'] = str(out['note'])[:600]
     keep()
     return out
 
@@ -1718,12 +1740,14 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         subject = f'{title} - {said} line(s)'
         err = _after(store, src, cfg, d, title, subject, lines, out.get('message_id'))
         return {'message_id': out.get('message_id'), 'subject': subject, 'files': 0, **out, **err}
+    notes = []          # the sources this run had to go without, (label, why) - render_report fills it
     try:
         if failed_model: raise RuntimeError(failed_model)
-        head, summary = render_report(store, cfg, llm)
+        head, summary = render_report(store, cfg, llm, notes=notes)
         subject, body = f'{title} — {head}', summary
     except Exception as e:
-        head, subject, body = 'FAILED', f'{title} — FAILED', f'Report error: {str(e)[:500]}'
+        # a skip IS its reason ("Skipped: no mailbox is connected"), never "Report error: Skipped: ..."
+        head, subject, body = 'FAILED', f'{title} — FAILED', str(e)[:600] if isinstance(e, Skipped) else f'Report error: {str(e)[:500]}'
         logger.warning(f'report {src["Address"]} failed: {e}')
     stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     # the CHART: line is an instruction to Taskuary about what to draw, not prose for the reader:
@@ -1780,7 +1804,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     if not failed and 'digest' in {cfg.get('type'), *(s.get('type') for s in cfg.get('sources') or [])}:
         from .digest import HEADER
         store.save_doc('digest', f'{HEADER}_refreshed {stamp[:16]}_\n\n{text}\n', 'digest')
-    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': text, 'failed': failed, **err}
+    return {'message_id': mid, 'subject': subject, 'files': len(made), 'summary': text, 'failed': failed,
+            **({'note': unread_note(notes)} if notes else {}), **err}
 
 
 def _after(store, src: dict, cfg: dict, d: dict, title: str, subject: str, text: str, mid=None) -> dict:
@@ -1981,6 +2006,30 @@ def as_card(cfg: dict) -> dict:
     old = any(k in cfg for k in ('reach', 'triage')) or any(str((cfg.get(b) or {}).get(k) or '').strip()
                                                            for b, k in (('alert', 'when'), ('deliver', 'send')))
     return from_old_rules(cfg) if old or cfg.get('route') else {**cfg, 'route': full_route(cfg)}
+
+
+# ── a source that cannot be read ──────────────────────────────────────────────────────────────
+# The owner, 2026-10-21: "reports should skip their run if the data source doesn't work and it will show up in error of
+# course. If one source works and one doesn't it should have a note on the report run of course." A fresh install with no
+# mailbox posted "One more and you're clear." over mail that did not exist. Nothing to read is a FAILED run with the
+# reason (the bell's, like any failed run); some of it unreadable is a run over the rest, the rest named on it (`note`).
+class Skipped(RuntimeError):
+    """No source this run reads could be read. The message is the whole reason, said to the owner as it is."""
+
+
+def source_title(t: str) -> str:
+    from .connectorcatalog import by_type
+    return (by_type(card_of(t)) or {}).get('title') or str(t or 'the source')
+
+
+def plain_reason(e) -> str:
+    from .channels import plain_failure
+    return plain_failure(e if isinstance(e, Exception) else RuntimeError(str(e)))[:300]
+
+
+def unread_note(notes) -> str:
+    """The run's note for the sources it went on without - what the run history and the bell show beside a run that worked."""
+    return 'Not read this run: ' + '; '.join(f'{l} - {w}' for l, w in notes) if notes else ''
 
 
 def run_failed(subject: str) -> bool:

@@ -1474,8 +1474,9 @@ class SQLiteStore:
                                              'ai_prompt': ASSISTANT_PROMPT})))
                 self.cx.execute("INSERT INTO setting (Name, Value, UpdatedBy) VALUES ('assistant_report_seeded', '1', 'template')")
             # The close of the day deserves a different lens from the Morning digest: eight
-            # rolling hours of Inbox/Sent only, accomplishments first and tomorrow's top three
-            # second. It waits for its 6 pm local slot instead of greeting a morning startup.
+            # rolling hours of whatever is connected and the owner's own work (evening.py),
+            # accomplishments first and tomorrow's top three second. It waits for its 6 pm local
+            # slot instead of greeting a morning startup.
             if not self.cx.execute("SELECT 1 FROM setting WHERE Name='evening_inbox_report_seeded'").fetchone():
                 from .evening import PROMPT as EVENING_PROMPT
                 self.cx.execute('INSERT INTO source (Channel, Address, Owner, Active, ConfigJson) VALUES (?,?,?,?,?)',

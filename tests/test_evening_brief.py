@@ -64,10 +64,11 @@ class EveningGatherTests(unittest.TestCase):
 
     def test_the_evening_report_uses_the_assistant_voice_contract(self):
         s = MemoryStore()
+        s.create_task({'Title': 'Renewal decision', 'Kind': 'task'}, 'test')     # something to report on (an empty home is skipped)
         cfg = {'type': 'evening_inbox', 'hours': 8, 'ai_prompt': evening.PROMPT}
         seen = {}
         reports.render_report(s, cfg, llm=lambda system, user, **kw: seen.update(system=system, user=user) or 'brief')
-        self.assertIn('EVENING INBOX BRIEF', seen['system'])
+        self.assertIn('END OF DAY BRIEF', seen['system'])
         self.assertIn('ACCOMPLISHED EVIDENCE', seen['user'])
 
     def test_a_stale_server_explains_that_the_new_report_type_needs_a_restart(self):

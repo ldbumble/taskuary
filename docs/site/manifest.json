@@ -1,6 +1,6 @@
 {
   "_": "THE DOCS SITE'S MAP. One entry per rail page, in rail order; `file` is the markdown under docs/site/ and `slug` is the URL under /docs/. The `##` headings inside each file become that page's rail sub-entries, its anchors and its search crumbs at once - nothing is listed twice. `generated` names a block the build writes from another file in the repo, so that page cannot drift from the code (settings: taskuary/settings_schema.json). Build with `npm run build:docs` in website/; CI fails if site/docs is not what a fresh build produces.",
-  "version": "0.3.9.18",
+  "version": "0.3.9.19",
   "updated": "2026-10-21",
   "pages": [
     {

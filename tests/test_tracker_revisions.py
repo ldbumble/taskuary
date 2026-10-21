@@ -174,6 +174,20 @@ class OtherTrackerRevisionTests(unittest.TestCase):
         self.assertEqual(poll('it breaks'), 1)
         self.assertEqual(poll('it breaks on rows over 10k'), 1, 'an edited GitLab issue is new words')
 
+    def test_gitlab_project_in_a_nested_group_keeps_its_whole_path(self):
+        from taskuary import devtools
+        s = MemoryStore()
+        c = conn(s, 'gitlab', {'base_url': 'https://gitlab.com'})
+        rows = [{'id': 7, 'iid': 3, 'title': 'Export breaks', 'description': 'x', 'state': 'opened',
+                 'updated_at': '2026-08-23T09:00:00Z', 'web_url': 'https://gitlab.com/northwind/finance/ledger/-/issues/3',
+                 'author': {'name': 'Erin Blake'}}]
+        real, devtools._gitlab = devtools._gitlab, lambda c_, path, **kw: rows if path == '/issues' else []
+        got = []
+        with mock.patch('taskuary.ingest.ingest_tracker', lambda store, msg, **kw: got.append(msg) or 1):
+            try: devtools.poll_gitlab(s, c, datetime.now() - timedelta(hours=1))
+            finally: devtools._gitlab = real
+        self.assertEqual(got[0]['source_name'], 'northwind/finance/ledger')
+
     def test_asana_edit_lands_again(self):
         s = MemoryStore()
         c = conn(s, 'asana', {'workspace_gid': '99'})

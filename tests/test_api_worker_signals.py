@@ -41,6 +41,19 @@ class ApiWorkerSignals(unittest.TestCase):
         self.assertEqual(st['state'], 'input_needed'); self.assertEqual(st['requests'][0]['choices'], ['Acme', 'Globex'])
         self.assertEqual([e['Kind'] for e in ws.events(self.s, self.tid, sess.sid)], ['working', 'turn_end', 'input_needed'])
 
+    def test_the_question_stays_in_the_answer_the_chat_shows(self):
+        """The marker line IS the question; cutting the marker cut the question, and with no question card in the chat any
+        more the owner read "it needs your yes first" and never what to say yes to (walk 2026-10-21)."""
+        _, reply = self.turn('Prepared the checklist; the laptop needs your yes first.\n'
+                             '[[TASKUARY-ASK]] The standard laptop is $1,850 - order it? | Order it | Use a spare')
+        self.assertNotIn('TASKUARY-ASK', reply)
+        self.assertIn('The standard laptop is $1,850 - order it? (Order it / Use a spare)', reply)
+        filed = [c['Body'] for c in self.s.list_comments(self.tid) if c['ActorType'] == general.ASSISTANT_TYPE][-1]
+        self.assertTrue(filed.startswith('Prepared the checklist') and 'order it?' in filed)
+        # ...said once: a question already written above its marker is not repeated
+        _, again = self.turn('Which vendor? Acme is cheaper.\n[[TASKUARY-ASK]] Which vendor?')
+        self.assertEqual(again.count('Which vendor?'), 1)
+
     def test_a_plain_reply_ends_the_turn_and_is_no_hand_raise(self):
         sess, _ = self.turn('Acme is cheaper; Globex ships faster.')
         st = ws.status(self.s, self.tid)

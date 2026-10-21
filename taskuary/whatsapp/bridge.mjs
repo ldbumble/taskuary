@@ -102,7 +102,19 @@ async function connect() {
     shouldIgnoreJid: chatGate.shouldIgnore
   });
   sock = thisSock;
+  // THE OWNER'S SAVED NAMES. WhatsApp sends the address book as app-state ("critical_unblock_low"), and
+  // Baileys only syncs app-state as part of a history sync - which is off - so no contact ever got the
+  // name the owner saved, and the picker found a person only by their number (2026-10-21). The roster
+  // lives in memory, so each connect forgets the stored version and asks for the whole list again;
+  // nothing but names comes back. A fresh pairing has no key to read it yet: the key-share retries.
+  const syncContactNames = (why) => {
+    if (thisSock !== sock || !connected || !state.creds.myAppStateKeyId) return;
+    state.keys.set({ "app-state-sync-version": { critical_unblock_low: null } })
+      .then(() => thisSock.resyncAppState(["critical_unblock_low"], true))
+      .catch((e) => console.log(`could not load WhatsApp contact names (${why}):`, e?.message || e));
+  };
   thisSock.ev.on("creds.update", saveCreds);
+  thisSock.ev.on("creds.update", (u) => { if (u?.myAppStateKeyId) syncContactNames("new key"); });
   thisSock.ev.on("connection.update", async (u) => {
     if (thisSock !== sock) return;
     if (u.qr) {
@@ -129,6 +141,7 @@ async function connect() {
         if (thisSock !== sock) return;
         chatRoster.replaceGroups(Object.values(groups || {}));
       }).catch((e) => console.log("could not refresh WhatsApp group roster:", e?.message || e));
+      syncContactNames("connect");
     }
     if (u.connection === "close") {
       connected = false;

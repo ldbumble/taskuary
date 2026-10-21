@@ -1888,7 +1888,8 @@ export const ToRow = ({ to, onSave, disabled }) => {
       ) : (
         <>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
-          {!disabled && <Typography {...pressable(() => setOpen(true))} data-tq-to-change
+          {/* ...opened on the address it has: "change" emptied To while the footer still named the old one (the UI audit, 2026-10-21) */}
+          {!disabled && <Typography {...pressable(() => { setText(to || ""); setOpen(true); })} data-tq-to-change
             sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
             change</Typography>}
         </>

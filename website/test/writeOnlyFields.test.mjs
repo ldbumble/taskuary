@@ -13,7 +13,7 @@ test("one field draws a card's config, masked when it is write-only, on the mail
   assert.match(field, /saved, type to replace/);
   assert.match(src, /\(adminFields \? m\.fields : ownFields\)\.map\(\(f\) => <ConfigField key=\{f\[1\]\} conn=\{conn\} field=\{f\}/);
   assert.match(src, /\{meta\.fields\.map\(\(f\) => <ConfigField key=\{f\[1\]\} conn=\{conn\} field=\{f\}/);
-  assert.match(src, /setSecret\(""\); setCfg\(withoutWriteOnly\(conn, cfg\)\); reload\(\);/, "a typed secret empties its box once saved");
+  assert.match(src, /setSecret\(""\); setCfg\(withoutWriteOnly\(conn, cfg\)\);/, "a typed secret empties its box once saved");
 });
 
 test("reusing the Gmail card's client reads a saved secret it is never sent, and clears its own by name", () => {

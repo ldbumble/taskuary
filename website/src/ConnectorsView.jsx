@@ -2223,7 +2223,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       if (secret) body.Secret = secret;
       const { data } = await api.post("/api/connectors", body);
       const d = data.discovery;
-      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); reload();
+      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); setTest(null); setFresh(!d?.error); reload();
       if (d?.error) setSaveSaid({ ok: false, detail: d.error });     // saved, but the key was refused: the fix is here, not a step on
       else {
         setMsg("saved ✓");
@@ -2233,8 +2233,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     } catch (e) { setSaveSaid({ ok: false, detail: plainError(e, "That didn't save. Try again in a moment.") }); }
     setBusy("");
   };
+  const [fresh, setFresh] = useState(false);     // saved since the last Test: its old failure is not said under the new save
   const runTest = async () => {
-    setBusy("test");
+    setBusy("test"); setFresh(false);
     try {
       const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/test`);
       setTest(data);
@@ -2317,7 +2318,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
         <TestLine test={test} mt={1} />
-        {!test && conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
+        {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ mt: 1, color: DIM }}>Saved - press Test to check it.</Typography>
+          : conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
       </Box>
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (
@@ -2446,8 +2448,13 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         ))}
         {m.secretLabel && <TextField size="small" type="password" label={m.secretLabel} value={secret} sx={{ bgcolor: "#fff" }}
           onChange={(e) => setSecret(e.target.value)} helperText={SIMPLE_HINT[conn.Type] || (isAI ? (m.howto || [])[0] : (m.howto || [])[1]) || ""} />}
-        <Box><Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>
-          {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button></Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, flexWrap: "wrap" }}>
+          <Button variant="contained" disableElevation disabled={busy === "save" || !ready} onClick={connect}>
+            {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Connect"}</Button>
+          {/* the check says what it is doing and how long it takes: an empty grey spinner read as stuck (the UI audit, 2026-10-21) */}
+          {busy === "save" && <Typography variant="body2" data-tq-checking="" sx={{ color: DIM }}>
+            {isAI ? "Checking your key works - it sorts one test email, a minute or two…" : "Signing in to your mailbox - a minute or so…"}</Typography>}
+        </Box>
         <TestLine test={test} mt={0} />
         {another}
       </Box>
@@ -2941,16 +2948,18 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       ai.saved(put);
       // a write-only value typed is the server's now: the box goes back to empty, its label says saved
       if ((conn.WriteOnlyKeys || []).some((k) => cfg[k])) setCfg(withoutWriteOnly(conn, cfg));
-      setMsg("saved ✓"); setSecret(""); reload();
+      setMsg("saved ✓"); setSecret(""); setTest(null); setFresh(true); reload();
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
     setBusy("");
   };
   const runTest = async () => {
-    setBusy("test");
+    setBusy("test"); setFresh(false);
     try { setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data); }
     catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "test call failed" }); }
     setBusy(""); reload();
   };
+  // A SAVE IS NEWS, the last Test's failure is not: the old "need tenant_id" stayed under a good save (the UI audit, 2026-10-21)
+  const [fresh, setFresh] = useState(false);
 
   return (
     <DraftProvider value={draft.ctx}>
@@ -3001,7 +3010,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           </Box>
           {meta.search && <KbSearch conn={conn} />}
           <TestLine test={test} mt={0} />
-          {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
+          {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ color: DIM }}>Saved - press Test to check it.</Typography>
+            : conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
         </Box>
       )}
       {tab === "Connection" && meta.discovers && (

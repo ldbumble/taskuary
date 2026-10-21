@@ -30,7 +30,9 @@ export function canvasRequestFromHash(hash, n = 0) {
   // THE LINK CARRIES ITS TARGET (the 2026-10-19 UI walk): the connector rode in the hash, and its card read the hash once, when it
   // loaded - a link followed while Connections was already open opened nothing. `connector` is the card asked for; the view opens it
   if (/^#cli-agents$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null, connector: "cli-agents" }, n };
-  if ((m = /^#connector=([\w-]*)/.exec(h))) return { kind: "browse", area: "connections", state: { section: null, open: null, ...(m[1] ? { connector: m[1] } : {}) }, n };
+  // ...and &step=1: the Assistant brought it up to connect it - the card lights its first step (connectorStep.js)
+  if ((m = /^#connector=([\w-]*)/.exec(h))) return { kind: "browse", area: "connections", state: { section: null, open: null, ...(m[1] ? { connector: m[1] } : {}),
+    ...(m[1] && /&step=1\b/.test(h) ? { step: true } : {}) }, n };
   // one section of Connections, its cards open ("#connections=AI — voice": the crossed-out mic's Set up voice AI)
   if ((m = /^#connections=([^&]+)/.exec(h))) return { kind: "browse", area: "connections", state: { section: decodeURIComponent(m[1]), open: null }, n };
   if (/^#connections$/.test(h)) return { kind: "browse", area: "connections", state: { section: null, open: null }, n };

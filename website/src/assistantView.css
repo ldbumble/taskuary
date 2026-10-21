@@ -659,6 +659,7 @@
    in the same slate, as a ring that takes no room, so the screen never moves when the advice lands */
 [data-tq-card][data-tq-setup-lit] { border-color: #55697a; outline: 2px solid #55697a; outline-offset: 2px; }
 .MuiButton-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
+.MuiInputBase-root[data-tq-setup-lit] { outline: 2px solid #55697a; outline-offset: 2px; }
 .tq-ab.p:hover:not(:disabled) { background: #46586a; border-color: #46586a; }
 .tq-ab.q { border-color: transparent; background: transparent; color: #6e685f; padding-inline: 8px; }
 .tq-ab.q:hover:not(:disabled) { background: #f1eee8; border-color: transparent; }

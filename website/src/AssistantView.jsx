@@ -87,6 +87,7 @@ import { ROADS, roadOfCard } from "./timelineState.js";
 import { walkAdvances } from "./walkStep.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { noteWrite } from "./wrote.js";
+import { LIT, STEP_SAID, finishLine } from "./connectorStep.js";
 import { revealRing } from "./railReveal.js";
 import "./assistantView.css";
 
@@ -1949,6 +1950,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
         // to light (`light`), the page that holds it (`open`) or a new job written into New (`new`) - never a card to confirm, and nothing runs
         setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
+        // a connector card brought up lights its first step - the line is finished with what it lit ("press Sign in with LinkedIn")
+        if (String(data.say || "").includes(STEP_SAID)) {
+          const done = (e) => { window.removeEventListener(LIT, done); setMsgs((m) => m.map((x) => (x.text === data.say ? { ...x, text: finishLine(x.text, e.detail) } : x))); };
+          window.addEventListener(LIT, done); setTimeout(() => window.removeEventListener(LIT, done), 8000);
+        }
         say(data.say);
         // THE PAGE IT NAMED, OPENED (appLinks.js): "set up Intacct" puts the Sage Intacct card beside the answer, not a sentence
         // about where to find it. Only a fresh reply opens one - a reloaded history draws its links, it does not open them.

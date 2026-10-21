@@ -39,6 +39,7 @@ import { label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import { LIT, lightStep } from "./connectorStep.js";
 
 /* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
    the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
@@ -1642,6 +1643,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   // loaded, so a link followed with Connections already open opened nothing. `at` numbers the ask - the same link twice opens twice -
   // and the card opens in its section, so its Back returns to that section's list rather than to the bare landing.
   const want = browse ? String(browseState?.connector || "") : "", at = browseState?.at || 0;
+  // THE FIRST STEP, LIT (the owner, 2026-10-20): a card the Assistant opened lights its Sign in / Connect or the first box it needs, held in
+  // view, and tells the chat which (connectorStep.LIT) so its line says what to press
+  const [stepAsk, setStepAsk] = useState(""), [scope, setScope] = useState(null);
+  useEffect(() => (stepAsk && scope ? lightStep(scope, (s) => window.dispatchEvent(new CustomEvent(LIT, { detail: s }))) : undefined), [stepAsk, scope]);
   const groupsRef = useRef([]), took = useRef("");
   // a page or a section asked from outside puts the open card down - the list it named is what was asked for
   useEffect(() => { if (browse && browseState?.open == null && !browseState?.connector) setOpen(null); }, [browseState?.open, browseState?.section, at]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -1660,6 +1665,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     const keys = agents ? ["agents"] : ["c", "d", "s"].map((p) => `${p}${direct.ConnectorId}`);
     const g = groupsRef.current.find((x) => x.cards.some((c) => keys.includes(c.key)));
     setErr(""); setOpen(agents ? { kind: "agents" } : { kind: "connector", id: direct.ConnectorId });
+    if (!agents && browseState?.step) setStepAsk(ask);                  // the Assistant brought it up: its first step is lit (connectorStep)
     onBrowseState?.({ ...browseState, section: g?.title ?? browseState.section ?? null, open: g?.cards.find((c) => keys.includes(c.key))?.key ?? null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors, want, at]);
@@ -1679,7 +1685,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
     : conn.Type === "winrm" ? <WinrmDetail key={conn.ConnectorId} {...shared} />
     : DATA_META[conn.Type] ? <DataDetail key={conn.ConnectorId} {...shared} meta={DATA_META[conn.Type]} sources={sources} byType={byType} />
     : <ChannelDetail key={conn.ConnectorId} {...shared} sources={sources} onNavigate={onNavigate} />;
-  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}>{page}</AgentsDoor.Provider>;
+  const detail = page && <AgentsDoor.Provider value={() => setOpen({ kind: "agents" })}><Box ref={setScope} data-tq-connector-scope="">{page}</Box></AgentsDoor.Provider>;
   if (!browse) {
     if (detail) return detail;
     if (open?.kind === "connector") return null;

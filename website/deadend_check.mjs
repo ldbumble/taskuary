@@ -850,7 +850,10 @@ async function links() {
   if (!pb) note("OVER", page.step, "Settings → Playbooks drew no + New playbook to press");
   else {
     await wait(1500);
-    const under = () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => t.getBoundingClientRect().width > 0 && !t.closest("[role=dialog]") && t.value.trim()));
+    // ...a document the owner could type into: not MUI's measuring twin of a multiline field (TextareaAutosize keeps an aria-hidden,
+    // invisible copy holding "x" to size one row - it has a box, so it read as a document open under the dialog on CI, 2026-10-21)
+    const under = () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => t.getBoundingClientRect().width > 0 && !t.closest("[role=dialog]")
+      && t.getAttribute("aria-hidden") !== "true" && getComputedStyle(t).visibility !== "hidden" && t.value.trim()));
     if (!(await page.$("[role=dialog]"))) note("NOTHING", page.step, "+ New playbook opened no dialog");
     if (await under()) note("OVER", page.step, "+ New playbook drew a document under its dialog");
     await clickText(page, "Cancel"); await wait(1500);

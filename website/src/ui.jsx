@@ -1,7 +1,7 @@
 // Shared Task Hub atoms: chips, channel icons, relative time. Light + compact.
 import { says } from "./laneSays.js";
 import { laneMeta, taskStateMeta } from "./funnelPile.js";
-import { AGENT, READY } from "./taskLifecycle.js";
+import { AGENT, NOT_SENT, READY } from "./taskLifecycle.js";
 import { WORD } from "./lanes.js";
 import { ago, agoMins, dur, durSince, plural } from "./timeWords.js";
 import React, { useEffect, useRef, useState } from "react";
@@ -1072,11 +1072,13 @@ const LC = {
   needsYou: { bg: "#5f7a5f", fg: "#fffdfb", bd: "#5f7a5f" },  // ...solid, as the On you pill is
   done: { bg: "#dfeade", fg: "#47654a", bd: "#c8d9c7" },
   reply: { bg: "#f1ead9", fg: "#765f38", bd: "#ded0ad" },
+  bad: { bg: ROLES.bad.tint, fg: ROLES.bad.ink, bd: ROLES.bad.bd },
 };
 
 const lifecycleColor = (kind, phase) => {
   const value = String(phase || "");
   if (value === AGENT.waiting) return LC.needsYou;        // an agent blocked on you, and only that
+  if (value === NOT_SENT) return LC.bad;                  // a refused send is a failure, never the green of ready
   if (value === READY || value === "approval needed" || value === "ready") return LC.you;
   if (value === AGENT.working || value === "in progress") return LC.working;
   if (value === "done" || value === "sent" || value === AGENT.saved || value === AGENT.finished) return LC.done;

@@ -150,6 +150,13 @@
       "hint": "the reply went out and the agent is finished, but the task is still open"
     },
     {
+      "key": "not_sent",
+      "word": "didn't send",
+      "role": "bad",
+      "mark": "⛔",
+      "hint": "you sent it and it was refused - the reply is kept, and the row says why"
+    },
+    {
       "key": "goal",
       "word": "on track",
       "role": "info",

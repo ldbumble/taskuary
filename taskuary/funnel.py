@@ -330,6 +330,10 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
                              stale=stale,
                              sig=hashlib.sha1(str(rv.get('DraftText') or '').encode()).hexdigest()[:10],   # the draft's fingerprint: a rewrite is news
                              **base))
+            # A SEND THE SERVER REFUSED IS NOT READY TO SEND: the row said "ready to send" in green over a reply the mail server
+            # had turned away, its reason a grey line on the card (the UI audit, 2026-10-21) - it says not sent, and why
+            if not action and rv.get('DeliveryState') == 'failed':
+                out[-1].update(not_sent=True, why=re.sub(r'^Not sent:\s*', '', str(rv.get('Reason') or '')).rstrip('.') or 'the send was refused')
             from . import proposals
             co = proposals.CLOSEOUT.get(proposals._action(rv)) if action else None
             if not action and r.get('TaskId'):         # a reply whose task also waits on its merge: Close out runs both

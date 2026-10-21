@@ -1145,7 +1145,8 @@ class GeneralSession:
                 user += '\n\nATTACHED FILES (read these when relevant)\n' + '\n'.join(str(Path(p).resolve()) for p in paths)
             try:
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
-                reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
+                    reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
             except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
@@ -1181,7 +1182,8 @@ class GeneralSession:
                 build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
                 brain = llm_mod.build_llm(self.store, **build_args)
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
-                reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
+                with llm_mod.watching(visible):          # an API brain's own web searches are steps too (llm.watching)
+                    reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
             actual = getattr(brain, 'last_pick', '')
             if isinstance(actual, str) and actual and actual != self.pick:
                 choice = next((o for o in provider_options(self.store) if o['pick'] == actual), None)

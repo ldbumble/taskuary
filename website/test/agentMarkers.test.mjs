@@ -8,7 +8,10 @@ test("the progress box shows the agent's words, never Taskuary's markers or the 
   assert.equal(forScreen("Looked it up.\n[[TASKUARY-REPLY]]\n2 + 2 is 4.\n[[/TASKUARY-REPLY]]\n[[TASKUARY-ATTACH: C:/work/sum.csv]]"), "Looked it up.");
   assert.equal(forScreen("[[TASKUARY-REPLY]]\n2 + 2 is 4.\n[[/TASKUARY-REPLY]]"), "");
   assert.equal(forScreen("plain words"), "plain words");
-  assert.match(readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8"), /forScreen\(raw\)/);
+  // the canvas's steps say the agent's words through it (agentSteps.js: its prose, its thinking)
+  const steps = readFileSync(new URL("../src/agentSteps.js", import.meta.url), "utf8");
+  assert.match(steps, /const t = forScreen\(text\);/);
+  assert.match(steps, /flat\(forScreen\(e\.detail\)\)/);
 });
 
 test("a progress line that only says what the answer says leaves the box; the box goes when nothing is left", () => {

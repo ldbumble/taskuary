@@ -1,0 +1,206 @@
+[
+ {
+  "type": "tool_call",
+  "name": "execute",
+  "detail": {
+   "tool_call_id": "g1",
+   "args": {
+    "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/search?q=budget%20review\"",
+    "title": "Shell"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "Shell (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g1",
+  "detail": {
+   "result": "{\"data\": [{\"id\": 1, \"subject\": \"Budget review\"}, {\"id\": 2, \"subject\": \"Re: Budget review\"}, {\"id\": 3, \"subject\": \"Budget review notes\"}]}",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g1 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "execute",
+  "detail": {
+   "tool_call_id": "g2",
+   "args": {
+    "command": "curl -s -H \"X-Taskuary-Token: $TASKUARY_TOKEN\" \"$TASKUARY_URL/api/tasks/1142\"",
+    "title": "Shell"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "Shell (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g2",
+  "detail": {
+   "result": "{\"task\": {\"TaskId\": 1142, \"Title\": \"Budget review\"}, \"comments\": [], \"messages\": []}",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g2 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "read",
+  "detail": {
+   "tool_call_id": "g3",
+   "args": {
+    "absolute_path": "/home/alex/northwind/portal/src/Components/Budget/StatusBoard.js",
+    "title": "ReadFile"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "ReadFile (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g3",
+  "detail": {
+   "result": "export const StatusBoard = () => null;",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g3 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "read",
+  "detail": {
+   "tool_call_id": "g4",
+   "args": {
+    "absolute_path": "/home/alex/northwind/portal/src/Components/Budget/BudgetTable.js",
+    "title": "ReadFile"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "ReadFile (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g4",
+  "detail": {
+   "result": "export const BudgetTable = () => null;",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g4 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "search",
+  "detail": {
+   "tool_call_id": "g5",
+   "args": {
+    "pattern": "approvedTotal",
+    "path": "src",
+    "title": "SearchText"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "SearchText (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g5",
+  "detail": {
+   "result": "Found 2 matches",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g5 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "search",
+  "detail": {
+   "tool_call_id": "g6",
+   "args": {
+    "query": "northwind budget review policy",
+    "title": "GoogleSearch"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "GoogleSearch (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g6",
+  "detail": {
+   "result": "results",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g6 (completed)"
+ },
+ {
+  "type": "tool_call",
+  "name": "fetch",
+  "detail": {
+   "tool_call_id": "g7",
+   "args": {
+    "url": "https://docs.northwind.example/budget/review",
+    "title": "WebFetch"
+   }
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "WebFetch (pending)"
+ },
+ {
+  "type": "tool_result",
+  "name": "g7",
+  "detail": {
+   "result": "Budget reviews close when the owner signs off.",
+   "is_error": false
+  }
+ },
+ {
+  "type": "live",
+  "name": "gemini",
+  "detail": "g7 (completed)"
+ }
+]

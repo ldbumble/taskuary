@@ -1,0 +1,44 @@
+{
+ "stop_reason": "end_turn",
+ "content": [
+  {
+   "type": "server_tool_use",
+   "id": "srvtoolu_1",
+   "name": "web_search",
+   "input": {
+    "query": "northwind budget review policy"
+   }
+  },
+  {
+   "type": "web_search_tool_result",
+   "tool_use_id": "srvtoolu_1",
+   "content": [
+    {
+     "type": "web_search_result",
+     "url": "https://docs.northwind.example/budget/review",
+     "title": "Budget reviews"
+    }
+   ]
+  },
+  {
+   "type": "server_tool_use",
+   "id": "srvtoolu_2",
+   "name": "web_fetch",
+   "input": {
+    "url": "https://docs.northwind.example/budget/review"
+   }
+  },
+  {
+   "type": "web_fetch_tool_result",
+   "tool_use_id": "srvtoolu_2",
+   "content": {
+    "type": "web_fetch_result",
+    "url": "https://docs.northwind.example/budget/review"
+   }
+  },
+  {
+   "type": "text",
+   "text": "The budget review is waiting on Gail Moreno's sign-off: TQ-1142 holds the thread, and the status board reads approvedTotal before the review closes, so it shows last month's figure until then."
+  }
+ ]
+}

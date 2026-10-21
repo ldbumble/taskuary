@@ -20,6 +20,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/sync-phase',
         '/api/fixture/task/agent-closed',
+        '/api/fixture/general/canvas',
     })
 
     def fixture_refuse(method, path):
@@ -208,3 +209,28 @@ def install_processing_changes(app, store):
         funnel.invalidate()
         store._poke('feed-changed')
         return {'titles': titles}
+
+    @app.post('/api/fixture/general/canvas')
+    def general_canvas(body: dict):
+        """A research task one email brought, whose general agent already finished a turn: the recorded claude trace from
+        tests/fixtures/agent_steps (invented people and paths) on a session that ran no CLI, and a look-up through the tool door."""
+        if body:
+            raise HTTPException(422, 'this fixed canvas fixture accepts only an empty object')
+        import json
+        from pathlib import Path
+        from taskuary import general, sessionrecord, terminal
+        rec = Path(__file__).resolve().parents[2] / 'tests' / 'fixtures' / 'agent_steps' / 'claude.trace.json'
+        trace = json.loads(rec.read_text(encoding='utf-8'))
+        answer = next(e['detail'] for e in reversed(trace) if e['type'] == 'progress')
+        tid = store.create_task({'Title': 'Budget review status', 'Kind': 'research', 'Status': 'open'}, 'fixture')
+        store.add_message({'TaskId': tid, 'Channel': 'email', 'Status': 'routed', 'ExternalId': 'canvas:budget',
+                           'FromEmail': 'gail@northwind.example', 'FromName': 'Gail Moreno', 'Subject': 'Budget review',
+                           'BodyText': 'Where does the budget review stand?', 'SentAt': datetime.now().isoformat(' ')})
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'What is the budget review waiting on?')
+        reply = store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, answer)
+        sessionrecord.keep_turn(tid, reply, [{'type': 'tool_call', 'name': 'Bash', 'detail': {'args': {
+            'command': 'curl -s -X POST "$TASKUARY_URL/api/tools/run" -d \'{"type": "mssql", "query": "select 1"}\''}}}])
+        sess = general.GeneralSession(store, tid)
+        sess.trace, sess.trace_revision = [{'type': 'start', 'session': {'provider': 'Claude Code'}}, *trace], 1
+        terminal.SESSIONS[sess.sid] = sess
+        return {'taskId': tid}

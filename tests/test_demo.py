@@ -199,6 +199,17 @@ class TheScriptedBrainTests(unittest.TestCase):
         self.assertIn('Reply', draft)
         self.assertTrue(weather.startswith(demo.OUT_OF_SCRIPT) and "what's the weather" in weather, weather)
 
+    def test_a_line_fires_on_its_ask_never_on_a_word_it_shares(self):
+        """The 2026-10-20 query walk: "run the end of day report" was asked for a schedule, and a meeting, a list entry and a task by name
+        were all answered with the rail's count."""
+        from taskuary import concierge
+        ask = lambda q: demo.brain(store=MemoryStore())('You are the assistant.', f'{concierge.OWNER_SAYS}{q}\nAnswer them, briefly.')
+        for q in ('run the end of day report', 'when is my next meeting?', 'put it on my list', 'show me the new starter task', 'next'):
+            self.assertTrue(ask(q).startswith(demo.OUT_OF_SCRIPT), (q, ask(q)))
+        for q in ("what's waiting on me", 'summarize my day', 'how many open tasks do I have'):
+            self.assertTrue(ask(q).startswith('I looked at your list.'), (q, ask(q)))
+        self.assertEqual(ask('every monday send me the overdue invoices'), demo.CANNED[2])
+
     def test_a_draft_is_a_reply_never_a_canned_chat_line(self):
         """2026-10-19 UI walk: TQ-0001's demo draft read "I looked at your list. 25 things are on it..." - the responder's prompt
         was answered from CANNED."""

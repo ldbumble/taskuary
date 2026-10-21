@@ -48,7 +48,9 @@ TIMEOUT = 30
 def _headers(cfg):
     token = (cfg.get('token') or cfg.get('secret') or '').strip()
     if not token:
-        raise RuntimeError('LinkedIn needs an access token - My Apps -> Auth -> OAuth 2.0 token generator')
+        raise RuntimeError('LinkedIn is not signed in yet - save the app\'s Client ID and Client Secret on the '
+                           'LinkedIn card, then press Sign in with LinkedIn (or paste a token from the '
+                           'developer portal\'s OAuth token generator)')
     return {'Authorization': f'Bearer {token}',
             'LinkedIn-Version': str(cfg.get('version') or VERSION),
             'X-Restli-Protocol-Version': '2.0.0',

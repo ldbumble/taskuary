@@ -415,17 +415,23 @@ def test_connector(store, cid: int) -> dict:
             # with something the owner recognises. Posting would be a strange thing for Test.
             from .reports import REGISTRY, resolve_cfg
             rtype = f"{c['Type']}_me"
-            out = REGISTRY[rtype](resolve_cfg(store, {'type': rtype}))
+            out = REGISTRY[rtype](resolve_cfg(store, {'type': rtype, 'connector_id': cid}))
             row = (out.get('rows') or [{}])[0]
             detail = (f"signed in as {row.get('handle') or '?'}"
                       f" - {row.get('followers')} followers, {row.get('posts')} posts")
         elif c['Type'] == 'linkedin':
             # whoami, which is the one call that proves the token AND returns something the
-            # owner recognises - a post would be a strange thing for a Test button to do
-            from .linkedin import run_linkedin_me
+            # owner recognises - a post would be a strange thing for a Test button to do.
+            # THIS card's token (a second LinkedIn card tested the first one's), and the member it
+            # names: unpacking the rows/columns dict as (head, body) said "LinkedIn answered: rows".
+            from . import linkedin
             from .reports import resolve_cfg
-            head, _body = run_linkedin_me(resolve_cfg(store, {'type': 'linkedin_me'}))
-            detail = f'LinkedIn answered: {head}'
+            conf = resolve_cfg(store, {'type': 'linkedin_me', 'connector_id': cid})
+            me = linkedin.whoami(conf)
+            left = linkedin.days_left(conf)
+            detail = (f"signed in as {me.get('name') or me.get('sub') or 'your LinkedIn member'}"
+                      + (f" ({me['email']})" if me.get('email') else '')
+                      + (f' - the token lasts {left} more days' if left is not None else ''))
         elif c['Type'] == 'treg':
             from .treg import run_treg_tools
             from .reports import resolve_cfg

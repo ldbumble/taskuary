@@ -1375,7 +1375,10 @@ def pages_block(store) -> str:
     return ('APP PAGES - DO FIRST, SHOW SECOND: what the owner asks you to do and you can do, you do - with your own calls and '
             'words, never a page sent instead. When they need to SEE or SET something themselves - the keys of a connection, a '
             'setting, the form of a report - or want to look at it, end your answer with ONE markdown link to that screen, e.g. '
-            '[Open the Sage Intacct connection](#connector=intacct), and say in a line what to do there; a task is [TQ-0123](#task=123). '
+            # A FEW WORDS BESIDE IT (the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up
+            # UI components"): "bring up TQ-12" was answered with the task's story beside the task, which the screen already showed
+            '[Open the Sage Intacct connection](#connector=intacct), with a few words at most beside it - what to do there, never what '
+            'the screen itself shows; a task is [TQ-0123](#task=123). '
             'The screen opens beside your answer. Use only the addresses below; no link when no screen helps.\n'
             f"- a connection: #connector=<its type>{' - connected now: ' + conns if conns else ''}; any other system by its type "
             '(intacct, outlook, gmail, teams, slack, whatsapp, quickbooks, sharepoint, mssql, github, jira ...)\n'
@@ -2271,8 +2274,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                 return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
             cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner')]
             _off_the_table(store, cleared, actor)
-            n, shown = len(cleared), ', '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 50) for i in cleared[:3])
-            say_ = (f"Marked {plural(n, 'item')} read - {shown}{' and more' if n > 3 else ''}. Search still finds them; nothing was deleted."
+            # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
+            # is left; the line counts what went and says it is not gone
+            n = len(cleared)
+            say_ = (f"Marked {plural(n, 'item')} read - search still finds them."
                     + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
                     + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             record_related(store, tid, item, 'assistant', say_)
@@ -2380,9 +2385,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                 return _miss(f"There is no {want or 'such'} connector{' yet' if c else ''}{'; the closest are ' + near if near else ''}. "
                              'Say so in plain words, naming those. Nothing was changed.')
             ex = store.get_connector_by_type(c['type'])
-            said = (f"Opened your {c['title']} card under Connections - press Add another there to connect a second one." if ex and ex.get('Active')
-                    else f"Opened the {c['title']} card under Connections - its first step is lit there. A key or password goes on the card, "
-                         'never in this chat.')
+            # a few words beside the card it opens (the owner, 2026-10-21): the card lights its own first step
+            said = (f"Opened your {c['title']} card - Add another connects a second one." if ex and ex.get('Active')
+                    else f"Opened the {c['title']} card - its first step is lit there.")     # the page names the step (connectorStep.STEP_SAID)
             # &step=1: the card lights its first real step and the page finishes the line with it (connectorStep.js STEP_SAID)
             return _page(store, tid, item, f"#connector={c['type']}" + ('' if ex and ex.get('Active') else '&step=1'), said)
         elif kind == 'connection.create':
@@ -2857,12 +2862,27 @@ def prepare_next(store, selection, token: str) -> dict | None:
     if funnel.batchable(item):
         if item.get('kind') != 'fyis': return None
         batch, say, card = _fyi_card(item, item.get('items'), {})
+        if routes(): say = brought_up(card)
         card['chips'] = chips_for(store, card)
         out = {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
     else:
         chips = chips_for(store, item, '')
-        out = {'item': item | {'chips': chips}, 'say': fallback(item, True, store=store), 'options': [], 'chips': chips, 'left': len(p['items']) - 1}
+        say = brought_up(item) if routes() else fallback(item, True, store=store)
+        out = {'item': item | {'chips': chips}, 'say': say, 'options': [], 'chips': chips, 'left': len(p['items']) - 1}
     return {'selection_revision': token, 'answer': out, 'answer_hash': answer_hash(out)}     # the token the page echoes (navigation.fields)
+
+
+KIND_WORDS = {'report': 'a report', 'idea': 'an Advisor idea', 'meeting': 'a meeting', 'fyi': 'an FYI', 'agentdone': "an agent's result"}
+
+
+def brought_up(item: dict, picked: bool = False) -> str:
+    """THE CARD CARRIES IT (the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up
+    UI components"): on the desk an item comes up under a few words that name it, never a paragraph restating the card beside them -
+    the walk's FYIs read "4 things people told you: Marcus Reed - FW: Quarterly newsletter; ..." over the card listing the same four.
+    `picked`: the owner opened it themselves, rather than Next bringing it. A phone has no card and keeps the facts (fallback)."""
+    what = (plural(len(item.get('items') or []), 'FYI') if item.get('kind') == 'fyis' else item.get('ref')
+            or KIND_WORDS.get(str(item.get('kind') or ''), 'a goal' if str(item.get('kind') or '').startswith('goal') else 'the next one'))
+    return f"Opened {what}." if picked else f"Next up: {what}."
 
 
 def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = None, trace=None, cancel=None,
@@ -2973,6 +2993,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # the whole of it now, and each entry keeps its own gist (fyiRow.gistFor).
         gists, remember_llm = {}, False
         batch, say, card = _fyi_card(item, batch, gists)
+        if routes(): say = brought_up(card)             # the card lists the four; the line only names them
         with guarded():
             put_down()
             if remember_llm:
@@ -2998,7 +3019,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             say, options, wanted = _ask(store, llm, tid, item, ask, p['items'])
             remember_llm = True
         except Exception as e: logger.warning(f'concierge: the model pass failed - {e}')
-    if not say: say = fallback(item, True, store=store)
+    if not say: say = brought_up(item, picked=bool(key)) if routes() else fallback(item, True, store=store)
     chips = chips_for(store, item, wanted)
     with guarded():
         put_down()
@@ -4324,7 +4345,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
         said = (f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
-                f" - nothing goes out until you {'press ' + buttons.label('approve') if routes() else 'say yes'}.") + closed_note(store, target_item)
+                + (f" - it waits for your {buttons.label('approve')}." if routes() else ' - nothing goes out until you say yes.')) + closed_note(store, target_item)
         rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)

@@ -41,11 +41,11 @@ class LifecycleTests(unittest.TestCase):
         # 2. the chat opens with the day, nothing on the table yet
         opened = concierge.open_day(s)
         self.assertTrue(opened['opened']); self.assertEqual(opened['card']['n'], 1)
-        # 3. the owner starts; the item comes onto the table in three beats
+        # 3. the owner starts; the item comes onto the table - its card carries it, the line only names it (2026-10-21)
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = concierge.surface(s, only='mail')
         self.assertEqual(out['item']['key'], f'msg:{m}')
-        self.assertIn('Craig wrote on email', out['say']); self.assertIn('From you:', out['say'])
+        self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
         # 4. the owner decides in words: the model names the hand-off, it comes back as a PROPOSAL with every
         #    word of the ask, and only the click on its button starts the agent (PW-123/124)
         #    ...on the phone's road: on the desk the same words light the row's Send to agent (test_assistant_router)
@@ -81,7 +81,8 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual([e['kind'] for e in ev], ['asking'])
             self.assertEqual(funnel.next_item(s)['kind'], 'agent')
             out = concierge.surface(s)
-        self.assertEqual(out['item']['kind'], 'agent'); self.assertIn('asked you: Remove Bulk Deny as well?', out['say'])
+        self.assertEqual(out['item']['kind'], 'agent'); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
+        self.assertIn('Remove Bulk Deny as well?', str(out['item']))          # the question is on its card, not restated beside it
         # 7. it finishes with a report and drafts the reply; the watcher offers the report, the pipe holds the draft
         s.add_comment(t, 'coding', 'agent', 'AGENT REPORT' + chr(10) + 'Summary: removed Bulk Approve and Deny; deployed.')
         r = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Done - both are off now.', 'Status': 'pending'})
@@ -92,7 +93,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn('removed Bulk Approve and Deny', p['items'][0]['summary'])
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             out = concierge.surface(s)
-        self.assertEqual(out['item']['rid'], r); self.assertIn('it was worked on - removed Bulk Approve and Deny', out['say']); self.assertIn(f"From you: {buttons.label('approve')}", out['say'])
+        self.assertEqual(out['item']['rid'], r); self.assertEqual(out['say'], f"Next up: {out['item']['ref']}.")
+        self.assertIn('removed Bulk Approve and Deny', str(out['item'])); self.assertIn(buttons.label('approve'), [c['label'] for c in out['chips']])
         # 8. approving SENDS - and only sends (the owner, 2026-10-18: "sending and closing are two steps"); Mark done closes the
         #    task, and the pipe empties and says so
         sent = {'channel': 'email', 'to': ['craig@northwind.example'], 'cc': []}

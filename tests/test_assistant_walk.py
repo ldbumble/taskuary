@@ -23,6 +23,32 @@ def test_every_answer_says_what_it_did(rows):
     assert not bad, bad
 
 
+def test_what_brings_something_up_says_it_in_a_few_words(rows):
+    """The owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"."""
+    bad = [(r['step'].text, W.words(r['say']), r['say'][:160]) for r in rows if not r['brief']]
+    assert not bad, bad
+
+
+def test_the_walks_lines_name_what_comes_up_and_repeat_nothing_its_card_shows():
+    """Every item Next brings up on the desk - the FYI handful, a report, a draft, a to-do - comes with a few words naming it,
+    never its sender, its subject or its gist beside the card that shows them (the walk read the four FYIs out over their card)."""
+    from contextlib import ExitStack
+    from taskuary import concierge
+    s, seen = W.world(), []
+    with ExitStack() as st:
+        W._guards(st, set())
+        for _ in range(30):
+            out = concierge.surface(s)
+            it = out.get('item')
+            if not it or it['key'] in [k for k, _ in seen]: break
+            seen.append((it['key'], out['say']))
+            shown = [it.get('title'), it.get('who'), it.get('preview')] + [x for e in it.get('items') or [] for x in (e.get('title'), e.get('who'))]
+            assert W.words(out['say']) <= W.BRIEF, (it['key'], out['say'])
+            assert not [x for x in shown if x and len(str(x)) > 3 and str(x) in out['say']], (it['key'], out['say'])
+            concierge.move_on(s, it['key'], 'owner')
+    assert {k.split(':')[0] for k, _ in seen} >= {'msg', 'review', 'report', 'fyis'}, seen       # every kind of card the demo has
+
+
 def test_every_step_answers_inside_its_budget(rows):
     over = [(r['step'].text, round(r['first_word'], 2), round(r['action'], 2), r['step'].budget) for r in rows
             if r['first_word'] > r['step'].budget[0] or r['action'] > r['step'].budget[1]]

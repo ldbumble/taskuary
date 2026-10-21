@@ -5646,6 +5646,13 @@ def save_connector(body: ConnectorBody):
     sync_connections(store, ACTOR)
     return {'ok': True, 'connectorId': cid, 'discovery': discovery}
 
+@app.get('/api/connectors/{cid}/uses')
+def connector_uses(cid: int):
+    """What leans on this card - the line beside its Remove (dependents.py)."""
+    if not store.get_connector(cid): raise HTTPException(404, 'connector not found')
+    from . import dependents
+    return {'data': dependents.of(store, cid)}
+
 @app.post('/api/connectors/{cid}/reset')
 def connector_reset(cid: int):
     c = store.get_connector(cid)

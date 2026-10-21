@@ -21,6 +21,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import api from "./api";
 import { takeLists } from "./connectorLists.js";
+import { usedBy } from "./connectorUses.js";
 import { nothingMatches } from "./searchHits.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
@@ -2056,6 +2057,14 @@ function CardPlaybooks({ type }) {
 
 function RemoveConnection({ conn, reload, onBack }) {
   const [confirm, setConfirm] = useState(false);
+  // what leans on it, beside the button: read before the press, never asked after it (#238)
+  const [uses, setUses] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/connectors/${conn.ConnectorId}/uses`).then(({ data }) => { if (live) setUses(data.data); }).catch(() => {});
+    return () => { live = false; };
+  }, [conn.ConnectorId]);
+  const line = usedBy(uses);
   const remove = async () => {
     await api.post(`/api/connectors/${conn.ConnectorId}/reset`);
     reload(); onBack();
@@ -2063,9 +2072,10 @@ function RemoveConnection({ conn, reload, onBack }) {
   // this one already asked, as a row that swapped itself for a "Sure?" - which is a different
   // shape of question from every other delete in the app. Same dialog as the rest now.
   return (
-    <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", maxWidth: 720 }}>
+    <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", maxWidth: 720 }}>
       <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
         onClick={() => setConfirm(true)}>Remove connection</Button>
+      {line && <Typography data-tq-used-by="" variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{line}</Typography>}
       <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
         consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
         onClose={() => setConfirm(false)} onConfirm={remove} />

@@ -37,6 +37,7 @@ import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
+import { withoutAsked } from "./askOnce.js";
 import ReviewDecision from "./ReviewDecision.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -777,7 +778,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
 
   if (!data && !error) return <Box sx={{ height: 520, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>;
   const session = data?.session;
-  const shownMessages = messagesWithTrace(data?.messages, session, dock);
+  // ...the question the answer box below shows is said there only (askOnce.js)
+  const shownMessages = withoutAsked(messagesWithTrace(data?.messages, session, dock),
+    !dock && data?.asking && data.asking.request_id !== answered ? data.asking : null);
   // WHO is on this task, what its turn has done so far, and when the turn began - all three read
   // off what this pane already has (agentWork.js). The dock is exempt: it IS the assistant.
   // Plain calls, NOT useMemo: this sits after the early return for "no data yet", so a hook here

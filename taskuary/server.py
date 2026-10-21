@@ -4466,7 +4466,7 @@ def _pile_payload(force: bool = False, current: str = None, only: str = None,
     # to know which writes this read already saw (funnelPile.coveredByReload); transient, outside the revision
     # display_revision: the slot is held where it always sat - the final present() below fills it over the rows sent
     p = {**capture.pile, 'display_revision': None, **fields(store, capture), 'generated_at': int(started * 1000),
-         'alerts': funnel.alerts(store, capture.pile['items']), 'events': events}
+         'alerts': funnel.desk_alerts(funnel.alerts(store, capture.pile['items'])), 'events': events}
     # ...and what the page is HOLDING: an item whose review was decided (or whose task closed)
     # leaves the pile, and nothing told the page - so a sent reply sat on the table as
     # "reply pending" for as long as the tab stayed open (the owner, 2026-09-03: "why is it

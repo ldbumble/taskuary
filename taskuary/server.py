@@ -3808,14 +3808,19 @@ def task_record(tid: int):
 
 
 @app.post('/api/hooks/claude/ask')
-def cli_hook_ask(payload: dict):
+async def cli_hook_ask(payload: dict):
     """Claude's AskUserQuestion, BEFORE it draws its form (hooks.ask): held here - a worker thread, up to hooks.ASK_WAIT -
     while the owner answers in the Assistant or on the phone, then the answers are this hook's reply. {} lets Claude
-    draw its own form; so does anything that goes wrong - a hook must never trouble the agent."""
+    draw its own form; so does anything that goes wrong - a hook must never trouble the agent.
+
+    On the permits' own threads (_PERMIT_POOL), never anyio's shared forty: queued behind other sync routes the question
+    was recorded nowhere while Claude sat on "running PreToolUse hook" until curl's 570 s ran out."""
     from . import hooks
-    try: return hooks.ask(payload if isinstance(payload, dict) else {})
-    except Exception as e:
-        logger.debug(f'ask hook ignored: {e}'); return {}
+    def go():
+        try: return hooks.ask(payload if isinstance(payload, dict) else {})
+        except Exception as e:
+            logger.debug(f'ask hook ignored: {e}'); return {}
+    return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
 
 
 @app.post('/api/hooks/claude/floor')

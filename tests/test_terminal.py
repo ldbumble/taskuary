@@ -1000,9 +1000,12 @@ class ReplaySeedTests(unittest.TestCase):
 
     def test_the_seed_is_what_the_terminal_would_show_not_the_bytes(self):
         E = self.ESC
-        raw = (E + '[?1049h' + E + '[2J' + E + '[3;5Hhello there'
-               + E + '[1;1Hcodex is working' + E + '[6n')
-        out = self._seed(raw)
+        paint = E + '[2J' + E + '[3;5Hhello there' + E + '[1;1Hcodex is working' + E + '[6n'
+        # on the ALTERNATE screen the paint is drawn there, over an empty main screen the pane can go back to (2026-10-21)
+        alt = self._seed(E + '[?1049h' + paint)
+        self.assertEqual(alt, terminal.REPLAY_RESET + E + '[1G' + E + '[?1049h' + E + '[H' + E + '[2J' + 'codex is working' + terminal.CRLF * 2
+                         + '    hello there' + terminal.CRLF * 9 + E + '[1;17H')
+        out = self._seed(paint)
         self.assertTrue(out.startswith(terminal.REPLAY_RESET))
         body = out[len(terminal.REPLAY_RESET):]
         # the one move it ends with is the cursor going back to where the CLI left it, relative (2026-09-25)

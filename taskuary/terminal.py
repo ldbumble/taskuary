@@ -275,7 +275,26 @@ class Term:
 
     def _append(self, s):
         self.buf.append(s); self.n += len(s); self.writes += 1; self.wrote_at = time.time()   # monotonic: self.n falls back on trim
-        while self.n > SCROLLBACK and len(self.buf) > 1: self.n -= len(self.buf.popleft())
+        if self.n > SCROLLBACK: self._fold()
+
+    def _fold(self):
+        """Keep the scrollback bounded WITHOUT losing the screen. It used to drop its oldest bytes - and a CLI animating
+        one line rewrites only that line, so after minutes of spinner the dropped bytes were the ones that drew the
+        input box and the footer, and a reopened pane drew the spinner over nothing, with half an escape sequence
+        printed as digits (the owner, 2026-10-21: 22 minutes into a PreToolUse hook). The oldest part is replaced by
+        its rendered state instead (fold_text): the same screen, cursor and alternate screen, at a few KB. Only when
+        the pump is past SCROLLBACK - a pyte pass over ~150 KB per ~100 KB of new output, on the pump thread."""
+        chunks, keep, k = list(self.buf), 0, len(self.buf)
+        while k > 1 and keep + len(chunks[k - 1]) <= FOLD_KEEP: k -= 1; keep += len(chunks[k])
+        head = ''.join(chunks[:k]); cut = unfinished_at(head)
+        try: seed = fold_text(head[:cut], self.cols, self.rows)
+        except Exception as e:                            # never lose the pump over it: the old trim, as a last resort
+            logger.warning(f'terminal {getattr(self, "sid", "?")}: scrollback fold failed ({e})')
+            while self.n > SCROLLBACK and len(self.buf) > 1: self.n -= len(self.buf.popleft())
+            return
+        rest = ([head[cut:]] if cut < len(head) else []) + chunks[k:]
+        self.buf = deque(([seed] if seed else []) + rest)      # swapped whole: a reader joining it never sees half
+        self.n = sum(map(len, self.buf))
 
     def _emit(self, data):
         for loop, q in list(self.subs):
@@ -1307,9 +1326,56 @@ def _history_screen(pyte):
     return _HIST[0]
 
 
-def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
+_VT = {}
+ALT_SCREENS = (1049, 1047, 47)          # xterm's alternate screen: the private modes that switch to it
+
+def _vt_screen(pyte):
+    """The history screen plus the ALTERNATE screen, which pyte does not keep: it paints a full-screen TUI over the
+    shell's lines and leaves its paint there when the TUI quits. A pane must show what xterm shows - the TUI while it is
+    up, the shell's screen again once it has left - and a reopened pane must be able to leave it, so the main screen is
+    kept aside while the alternate one is up, and lines scrolled off the alternate screen are not history (xterm keeps
+    none for it). Only the pane's replay uses it: the wrap-up wants every word the TUI painted, whichever screen."""
+    H = _history_screen(pyte)
+    if H not in _VT:
+        import copy
+        def set_mode(self, *modes, **kw):
+            if kw.get('private') and any(m in ALT_SCREENS for m in modes):
+                if self.alt is None:
+                    self.alt = (self.buffer, copy.copy(self.cursor))
+                    self.buffer = type(self.buffer)(self.buffer.default_factory)
+                modes = [m for m in modes if m not in ALT_SCREENS]
+            if modes: H.set_mode(self, *modes, **kw)
+        def reset_mode(self, *modes, **kw):
+            if kw.get('private') and any(m in ALT_SCREENS for m in modes):
+                if self.alt is not None:
+                    self.buffer, cur = self.alt; self.alt = None
+                    if 1049 in modes: self.cursor = cur
+                    self.dirty.update(range(self.lines))
+                modes = [m for m in modes if m not in ALT_SCREENS]
+            if modes: H.reset_mode(self, *modes, **kw)
+        def index(self): return (pyte.Screen.index if self.alt is not None else H.index)(self)
+        def reverse_index(self): return (pyte.Screen.reverse_index if self.alt is not None else H.reverse_index)(self)
+        _VT[H] = type('VTScreen', (H,), {'alt': None, 'set_mode': set_mode, 'reset_mode': reset_mode,
+                                         'index': index, 'reverse_index': reverse_index})
+    return _VT[H]
+
+
+def _row(r, n: int) -> str:
+    """One screen row as text: a history row is a sparse Char map (a missing cell is a blank), a display row a string."""
+    if isinstance(r, str): return r.rstrip()
+    a = [' '] * n
+    for x, ch in r.items():
+        if 0 <= x < n: a[x] = ch.data
+    return ''.join(a).rstrip()
+
+
+def render_at(raw: str, cols: int = 110, rows: int = 32, state: dict = None) -> tuple:
     """render(), and WHERE THE CURSOR IS: (text, the cursor's line index in that text, its column) - (text, None,
-    None) when there is no emulator to ask. A reopened pane needs the cursor back where the CLI left it."""
+    None) when there is no emulator to ask. A reopened pane needs the cursor back where the CLI left it.
+
+    `state`, when given, is filled with what a PANE needs beyond the text to stand where the CLI left it (pane_state):
+    the text is then the MAIN screen and its history as xterm keeps them, and the alternate screen, the scroll region and
+    the cursor's visibility come in `state`."""
     if not (raw or '').strip(): return '', None, None
     try:
         import pyte
@@ -1317,18 +1383,21 @@ def render_at(raw: str, cols: int = 110, rows: int = 32) -> tuple:
         logger.warning('pyte is not installed - transcripts will be rendered with the fallback')
         return plain(raw), None, None
     try:
-        sc = _history_screen(pyte)(max(40, int(cols or 110)), max(4, int(rows or 32)), history=HISTORY_LINES, ratio=1.0)
+        cls = _history_screen(pyte) if state is None else _vt_screen(pyte)
+        sc = cls(max(40, int(cols or 110)), max(4, int(rows or 32)), history=HISTORY_LINES, ratio=1.0)
         _feed(pyte.Stream(sc), raw)
-        # history rows are sparse Char maps (a missing cell is a blank); display rows are already strings
-        n = sc.columns
-        def line(r):
-            if isinstance(r, str): return r.rstrip()
-            a = [' '] * n
-            for x, ch in r.items():
-                if 0 <= x < n: a[x] = ch.data
-            return ''.join(a).rstrip()
-        top = list(sc.history.top)
-        return '\n'.join(line(r) for r in top + list(sc.display)), len(top) + sc.cursor.y, sc.cursor.x
+        n, top = sc.columns, list(sc.history.top)
+        alt = getattr(sc, 'alt', None)
+        if alt is not None:
+            buf, cur = alt
+            screen = [_row(buf[y], n) for y in range(sc.lines)]
+            state['alt'] = ([r.rstrip() for r in sc.display], sc.cursor.y, sc.cursor.x)
+        else: screen, cur = list(sc.display), sc.cursor
+        if state is not None:
+            state['margins'] = tuple(sc.margins) if sc.margins and tuple(sc.margins) != (0, sc.lines - 1) else None
+            state['hidden'] = pyte.modes.DECTCEM not in sc.mode
+            state['nowrap'] = pyte.modes.DECAWM not in sc.mode
+        return '\n'.join(_row(r, n) for r in top + screen), len(top) + cur.y, cur.x
     except Exception as e:
         logger.warning(f'terminal render failed ({e}) - falling back to plain()')
         return plain(raw), None, None
@@ -1354,8 +1423,14 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
     The reset prefix leaves the alternate screen and clears, so the pane starts from a known
     state whatever the old bytes left behind - and a terminal QUERY cannot survive a render, so
     the replay can no longer make xterm answer one into the CLI as typed junk."""
-    n = max(4, int(getattr(t, 'rows', 32) or 32))
-    text, cy, cx = render_at(t.scrollback(), getattr(t, 'cols', 110), n)
+    return pane_state(t.scrollback(), getattr(t, 'cols', 110), max(4, int(getattr(t, 'rows', 32) or 32)), lines)
+
+
+def pane_state(raw: str, cols: int, n: int, lines: int = REPLAY_LINES) -> str:
+    """The text that puts a fresh terminal where `raw` left one: the main screen and up to `lines` of its history, the
+    cursor, and - when the CLI set them - the alternate screen it is painting on, its scroll region, a hidden cursor."""
+    st = {}
+    text, cy, cx = render_at(raw, cols, n, st)
     rows = text.split('\n')                               # splitlines() eats a blank last row
     # The last n rows are the pty's SCREEN, and they must land on the pane's rows one for one. Claude Code repaints
     # from ESC[H and Codex by absolute row: a seed shifted by one blank row put the next keystroke on the line
@@ -1370,8 +1445,46 @@ def replay_text(t, lines: int = REPLAY_LINES) -> str:
     # pane from the bottom, so there the blank rows ARE the alignment and stay.
     if cy is None or first >= screen:
         while tail and not tail[-1].strip(): tail.pop()
-    if not any(r.strip() for r in tail): return ''
-    return REPLAY_RESET + CRLF.join(tail) + cursor_back(len(tail) - 1, (cy - first) if cy is not None else None, cx)
+    alt, mg = st.get('alt'), st.get('margins')
+    if not any(r.strip() for r in tail) and not (alt and any(r.strip() for r in alt[0])): return ''
+    out = REPLAY_RESET + CRLF.join(tail)
+    region = f'{ESC}[{mg[0] + 1};{mg[1] + 1}r' if mg else ''
+    # A scroll region homes the cursor as it is set, so it goes before the cursor is put back - and with one the CLI is
+    # placing rows absolutely, so the cursor goes back absolutely too: the seed's screen rows are the pane's rows.
+    if region and not alt: out += region + (f'{ESC}[{cy - screen + 1};{cx + 1}H' if cy is not None else '')
+    else: out += cursor_back(max(0, len(tail) - 1), (cy - first) if cy is not None else None, cx)
+    if alt:
+        # Up on the alternate screen: the main screen is drawn first, so leaving it (ESC[?1049l, when the TUI quits)
+        # brings the shell's screen back - not the TUI's last paint, which is what a seed drawn flat left behind
+        a, ay, ax = alt
+        out += f'{ESC}[?1049h{ESC}[H{ESC}[2J' + CRLF.join(a) + region + f'{ESC}[{ay + 1};{ax + 1}H'
+    if st.get('nowrap'): out += f'{ESC}[?7l'
+    if st.get('hidden'): out += f'{ESC}[?25l'
+    return out
+
+
+# A sequence cut in two by a pty read: the folded half would be drawn and the rest printed as text after it - the stray
+# "119;87m" (or a run of digits) at the top of a reopened pane
+_SEQ_DONE = re.compile(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[^\x1b]*\x1b\\|[ -/]*[0-OQ-Z\\^-~])', re.S)
+
+def unfinished_at(s: str) -> int:
+    """Where an escape sequence the text ends inside of begins - len(s) when it ends on whole ones."""
+    i = s.rfind(ESC)
+    return len(s) if i < 0 or _SEQ_DONE.match(s, i) else i
+
+
+FOLD_KEEP = SCROLLBACK // 4     # raw bytes left behind a fold - the newest, untouched
+FOLD_LINES = 1000               # history lines a fold keeps as text (the wrap-up reads them), while they fit FOLD_CAP
+FOLD_CAP = SCROLLBACK // 4
+
+def fold_text(raw: str, cols: int, rows: int) -> str:
+    """`raw` as the few KB that leave a terminal in the same state: what the oldest part of a session's scrollback
+    becomes when it no longer fits. History too long for FOLD_CAP loses its oldest lines, never the screen."""
+    lines = FOLD_LINES
+    while True:
+        out = pane_state(raw, cols, rows, lines)
+        if len(out) <= FOLD_CAP or lines <= rows: return out
+        lines = max(rows, lines // 2)
 
 
 from concurrent.futures import ThreadPoolExecutor

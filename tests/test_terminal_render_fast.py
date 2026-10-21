@@ -55,10 +55,10 @@ def test_a_replay_is_the_same_seed():
         argv = ['claude']
         def __init__(s, raw, cols, rows): s.raw, s.cols, s.rows = raw, cols, rows
         def scrollback(s): return s.raw
-    for raw in STREAMS[:6]:
+    from unittest import mock
+    for raw in STREAMS[:6]:                       # the replay's screen (alternate screen and all) on pyte's own class
         t = T(raw, 110, 32)
-        text, cy, cx = _plain_pyte(raw, 110, 32)
-        with __import__('unittest').mock.patch.object(terminal, 'render_at', lambda *a: (text, cy, cx)):
+        with mock.patch.object(terminal, '_HIST', [pyte.HistoryScreen]), mock.patch.object(terminal, '_VT', {}):
             want = terminal.replay_text(t)
         assert terminal.replay_text(t) == want
 

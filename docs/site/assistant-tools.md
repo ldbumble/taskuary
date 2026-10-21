@@ -10,7 +10,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | Bucket | What it is for | Tools, and what each needs |
 |---|---|---|
 | **table** | decide about the item on the table | reply(text, cc?), approve, redraft(text), mine, regular_agent(text, as?, new?), coding_agent(text, as?, new?), not_ours, not_ours_sender, block_sender, not_ours_kind, close, next, answer_agent(text), stop_agent, rerun, remember(text), setup(text), confirm, cancel, chase, let_go, accept_invite, decline_invite, propose_time, find_time, elsewhere |
-| **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
+| **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?, note?), task.checklist(add?, items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | start, continue, answer or stop a task's agent, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
@@ -237,10 +237,11 @@ Put a coding task in the repository it belongs in.
 
 ### `task.check`
 
-Tick a checklist item on a task.
+Tick, untick or note one to-do on a task - with only a note it is not ticked.
 
 - `item` - its NUMBER (1 is the first; the facts list them numbered)
 - `done` (optional) - false un-ticks
+- `note` (optional) - words kept under it ("Gail has it"; "" removes it)
 - `ref` (optional) - the task (TQ-0123), when it is not the one on the table
 
 <p class="runs">Brings up its button for you to press.</p>
@@ -249,6 +250,7 @@ Tick a checklist item on a task.
 
 Change what a task's checklist asks for.
 
+- `add` (optional) - new to-dos to append ("add a to-do: call the bank")
 - `items` (optional) - the full list of item words in order (one left out is removed, emails untouched)
 - `emails` (optional) - [{to, about}] to add emails that must go out before it closes
 - `drop` (optional) - recipients whose email is no longer owed

@@ -66,8 +66,9 @@ PURPOSE = {
                                  "it is not the one on the table. Any other value is refused with the allowed ones"),
     'task.set_kind':            'say what kind of work a task is - `kind`: task (the owner does it) | general (a non-coding agent) | coding; `ref`',
     'task.set_repo':            'put a coding task in the repository it belongs in - `repo` (its name, as the repositories list says it); `ref`',
-    'task.check':               'tick a checklist item on a task - `item`: its NUMBER (1 is the first; the facts list them numbered); `done`: false un-ticks; `ref`',
-    'task.checklist':           ("change what a task's checklist asks for - `items`: the full list of item words in order (one left out "
+    'task.check':               ('tick, untick or note one to-do on a task - `item`: its NUMBER (1 is the first; the facts list them numbered); '
+                                 '`done`: false un-ticks; `note`: words kept under it ("Gail has it"; "" removes it) - with only a note it is not ticked; `ref`'),
+    'task.checklist':           ("change what a task's checklist asks for - `add`: new to-dos to append (\"add a to-do: call the bank\"); `items`: the full list of item words in order (one left out "
                                  'is removed, emails untouched); `emails`: [{to, about}] to add emails that must go out before it closes; '
                                  '`drop`: recipients whose email is no longer owed; `ref`'),
     'task.watch':               ("tell the owner here when something happens on a task nobody needs to start - `what`: done (when it is "
@@ -348,7 +349,7 @@ BUCKETS = (
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
 HINTS = {'button.light': 'button, ref?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
-         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
+         'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?, note?', 'task.checklist': 'add?, items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 
 
 def signature(kind: str) -> str:

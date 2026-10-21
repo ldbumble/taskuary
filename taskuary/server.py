@@ -898,6 +898,18 @@ def tick_checklist(task_id: int, item_id: str, body: ChecklistTick):
     return {'ok': True, 'checklist': store.task_checklist(task_id), 'closed': False}
 
 
+class ChecklistNote(BaseModel):
+    note: str = ''
+
+
+@app.patch('/api/tasks/{task_id}/checklist/{item_id}/note')
+def note_checklist(task_id: int, item_id: str, body: ChecklistNote):
+    """A note on one to-do, kept with it ('' takes it off) - the to-do's own Note (the owner, 2026-10-20)."""
+    if not store.get_task(task_id): raise HTTPException(404, 'task not found')
+    if not store.note_checklist_item(task_id, item_id, body.note, ACTOR): raise HTTPException(404, 'no such checklist item')
+    return {'ok': True, 'checklist': store.task_checklist(task_id)}
+
+
 @app.put('/api/tasks/{task_id}/checklist')
 def edit_checklist(task_id: int, body: ChecklistEdit):
     """The owner's words for the list; a box whose words are unchanged keeps its state (PW-076)."""
@@ -1126,12 +1138,19 @@ def _run_kind(op: dict, background: BackgroundTasks):
         from . import concierge
         try: hit = concierge.task_contract(store, kind, tid, p)['item']
         except ValueError as e: raise HTTPException(422, str(e))
+        if p.get('note') is not None:
+            store.note_checklist_item(tid, hit['id'], str(p['note']), ACTOR)
+            if p.get('done') is None: return {'taskId': tid, 'item': hit['text'], 'note': str(p['note'])}
         on = str(p.get('done', True)).lower() not in ('false', '0', 'no')
         out = tick_checklist(tid, hit['id'], ChecklistTick(done=on))
         return {**(out if isinstance(out, dict) else {}), 'item': hit['text'], 'done': on}
     if kind == 'task.checklist':
         from . import slots
         items, emails, drop = p.get('items'), p.get('emails'), p.get('drop')
+        if p.get('add') and not isinstance(items, list):
+            add = p['add'] if isinstance(p['add'], list) else [p['add']]
+            new = store.merge_task_checklist(tid, [str(x) for x in add], ACTOR)
+            if not emails and not drop: return {'taskId': tid, 'checklist': store.task_checklist(tid), 'added': len(new)}
         if not isinstance(items, list) and not emails and not drop: raise HTTPException(422, 'say the new list (items), emails to add or emails to drop')
         # plain items and emails are edited apart: a reworded list never deletes an email by leaving it out
         if isinstance(items, list): store.set_task_checklist(tid, [str(x) for x in items] + [i['text'] for i in slots.all_(store, tid)], ACTOR)

@@ -317,6 +317,44 @@ class AConnectorIsItsCard(unittest.TestCase):
         self.assertIn('the closest are Slack', seen[1]); self.assertNotIn('open', out)
 
 
+class TheToDos(unittest.TestCase):
+    # tick, note and add a to-do from the Assistant, run and said (the owner, 2026-10-20)
+    def setUp(self):
+        self.s = store(); self.tid, self.item = on_table(self.s)
+        self.s.set_task_checklist(self.tid, ['send the W-9', 'book the call'], 'owner')
+
+    def call(self, text, kind, **p):
+        return say(self.s, text, self.item['key'], 'CALL: ' + json.dumps({'kind': kind, 'params': p}))[0]
+
+    def test_a_note_on_a_to_do_is_kept_and_said(self):
+        out = self.call("note on 'send the W-9' that Paula has it", 'task.check', item='1', note='Paula has it')
+        self.assertEqual(out['say'], f"Noted on TQ-{self.tid:04d}'s \u201csend the W-9\u201d: Paula has it.")
+        box = self.s.task_checklist(self.tid)[0]
+        self.assertEqual((box['note'], box['done']), ('Paula has it', False))
+        self.assertIn('(note: Paula has it)', self.s.checklist_markdown(self.tid))
+        self.s.set_task_checklist(self.tid, ['send the W-9', 'book the call', 'one more'], 'owner')       # an edit of the list keeps it
+        self.assertEqual(self.s.task_checklist(self.tid)[0]['note'], 'Paula has it')
+
+    def test_tick_and_add(self):
+        out = self.call('tick 2', 'task.check', item='2')
+        self.assertEqual(out['say'], f"Ticked \u201cbook the call\u201d on TQ-{self.tid:04d}.")
+        self.assertTrue(self.s.task_checklist(self.tid)[1]['done'])
+        out = self.call('add a to-do: call the bank', 'task.checklist', add=['call the bank'])
+        self.assertTrue(out['say'].startswith(f'Added 1 to-do to TQ-{self.tid:04d}'), out['say'])
+        self.assertEqual(self.s.task_checklist(self.tid)[-1]['text'], 'call the bank')
+
+    def test_the_note_route(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        iid = self.s.task_checklist(self.tid)[0]['id']
+        with mock.patch.object(server, 'store', self.s):
+            r = TestClient(server.app).patch(f'/api/tasks/{self.tid}/checklist/{iid}/note', json={'note': 'with legal'})
+            self.assertEqual(r.json()['checklist'][0]['note'], 'with legal')
+            r = TestClient(server.app).patch(f'/api/tasks/{self.tid}/checklist/{iid}/note', json={'note': ''})
+            self.assertNotIn('note', r.json()['checklist'][0])
+            self.assertEqual(TestClient(server.app).patch(f'/api/tasks/{self.tid}/checklist/nope/note', json={'note': 'x'}).status_code, 404)
+
+
 class RunItAgain(unittest.TestCase):
     def test_run_it_again_over_a_good_report_opens_its_page(self):
         s = store()

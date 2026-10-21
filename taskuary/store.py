@@ -1886,7 +1886,7 @@ class SQLiteStore:
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)
             items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done')),
-                          **{k: prior[k] for k in ('out', 'rid', 'tid') if k in prior}})     # a slot keeps what it sends and its draft; a step its child
+                          **{k: prior[k] for k in ('out', 'rid', 'tid', 'note') if k in prior}})     # a slot keeps what it sends and its draft; a step its child; a box its note
         self._write_checklist(task_id, items, actor)
         return items
     def merge_task_checklist(self, task_id, texts, actor: str) -> list:
@@ -1915,6 +1915,16 @@ class SQLiteStore:
             have.add(text); used_ids.add(item_id)
         if new: self._write_checklist(task_id, items + new, actor)
         return new
+    def note_checklist_item(self, task_id, item_id: str, note: str, actor: str) -> bool:
+        """A note on one to-do, kept with the box ('' removes it) - the owner's "Gail has it" under "send the W-9" (2026-10-20)."""
+        items = self.task_checklist(task_id)
+        hit = [i for i in items if i['id'] == item_id]
+        if not hit: return False
+        note = ' '.join(str(note or '').split())[:500]
+        if note: hit[0]['note'] = note
+        else: hit[0].pop('note', None)
+        self._write_checklist(task_id, items, actor)
+        return True
     def tick_checklist_item(self, task_id, item_id: str, done: bool, actor: str) -> bool:
         items = self.task_checklist(task_id)
         hit = [i for i in items if i['id'] == item_id]
@@ -1928,7 +1938,7 @@ class SQLiteStore:
             o = i.get('out') if isinstance(i.get('out'), dict) else None
             maybe = f" (could be {' or '.join(o['candidates'][:3])} - fill with --to)" if o and o.get('candidates') else ''
             tail = (f" -> email to {o.get('to')}{maybe}, " + ('drafted' if i.get('rid') else f"fill with `taskuary --slot {i['id']} --draft \"<text>\"`")) if o else ''
-            return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}"
+            return f"- [{'x' if i.get('done') else ' '}] {i['text']}{tail}" + (f" (note: {i['note']})" if i.get('note') else '')
         return '\n'.join(line(i) for i in self.task_checklist(task_id))
     # ── goals: a task whose boxes are tasks (spec 2026-10-12) ─────────────────────────────────
     def children(self, task_id) -> list:

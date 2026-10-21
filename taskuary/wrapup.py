@@ -613,20 +613,25 @@ def _ask_ahead(store, questions: list) -> dict:
     with _AHEAD_LOCK:
         if _AHEAD is None: _AHEAD = ThreadPoolExecutor(max_workers=2, thread_name_prefix='wrap-ahead')
     out = {}
+    # ...a brain built only for a question there is: the functions build theirs only once they ask, and asking ahead is never
+    # what fails an ending - a brain that cannot be built here is built (and its failure handled) at the function's own place
     for q in questions:
-        brain = build_llm(store)
-        if q is not None and brain and q not in out: out[q] = _AHEAD.submit(lambda b=brain, q=q: b(q[0], q[1], **dict(q[2])))
+        if q is None or q in out: continue
+        try: brain = build_llm(store)
+        except Exception as e: logger.debug(f'wrap: not asked ahead - {e}'); continue
+        if brain: out[q] = _AHEAD.submit(lambda b=brain, q=q: b(q[0], q[1], **dict(q[2])))
     return out
 
 
 def _answered(store, ahead: dict):
     """The brain a function asks at its place in the ending: a question asked ahead is answered from there."""
     from .llm import build_llm
-    brain = build_llm(store)
-    if not brain: return None
+    if not ahead: return None                                   # nothing asked ahead: the function builds its own, as it always did
     def llm(system, user, **kw):
         f = ahead.get((system, user, tuple(sorted(kw.items()))))
-        return f.result() if f is not None else brain(system, user, **kw)
+        if f is not None: return f.result()
+        brain = build_llm(store)                                # ...and one asked differently builds its brain then, as before
+        return brain(system, user, **kw) if brain else None
     return llm
 
 

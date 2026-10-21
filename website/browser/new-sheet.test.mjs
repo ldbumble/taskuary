@@ -50,6 +50,22 @@ test("New > Send something with no mailbox draws, and offers the mailbox", { tim
     assert.match(text, /Nothing here can send yet/);
     assert.ok(await page.$$eval("button", bs => bs.some(b => b.textContent.trim() === "Connect a mailbox")), "the mailbox is offered on the row");
     assert.deepEqual(errors.filter(e => /#185|Maximum update depth/i.test(e)), []);
+    // A WHOLE ADDRESS TYPED AND TABBED AWAY FROM IS KEPT (the UI audit, 2026-10-21: Tab threw it away); half a name is not taken
+    await page.evaluate(async () => {
+      const { default: React } = await import("/node_modules/.vite/deps/react.js");
+      const { default: ReactDOM } = await import("/node_modules/.vite/deps/react-dom_client.js");
+      const { EmailRecipients } = await import("/src/NewSheet.jsx");
+      const host = document.createElement("div"); host.id = "to-fixture"; document.body.prepend(host);
+      window.toSaid = [];
+      const Box = () => { const [v, setV] = React.useState([]);
+        return React.createElement(EmailRecipients, { value: v, onChange: (x) => { window.toSaid = x; setV(x); }, options: [], placeholder: "To" }); };
+      ReactDOM.createRoot(host).render(React.createElement(Box));
+    });
+    await page.waitForSelector("#to-fixture input");
+    await page.type("#to-fixture input", "erin"); await page.keyboard.press("Tab"); await delay(300);
+    assert.deepEqual(await page.evaluate(() => window.toSaid), []);
+    await page.click("#to-fixture input"); await page.keyboard.type("@northwind.example"); await page.keyboard.press("Tab"); await delay(300);
+    assert.deepEqual(await page.evaluate(() => window.toSaid), ["erin@northwind.example"]);
     // ...and every tab is a keyboard stop: Tab reaches the next one, Enter opens it (the UI audit, 2026-10-21: the six tabs were mouse-only)
     await page.$$eval("[data-tq-new] [role=tab]", tabs => tabs.find(t => t.getAttribute("aria-selected") === "true").focus());
     await page.keyboard.press("Tab"); await page.keyboard.press("Enter");

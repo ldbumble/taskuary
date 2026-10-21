@@ -22,7 +22,7 @@ import { outcomeOf } from "./dispatchOutcome.js";
 import { NO_REPO, planTask } from "./newTask.js";
 import NewRepo from "./NewRepo.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
-import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions } from "./recipientOptions.js";
+import { emailRecipientOptions, normalizeEmails, recipientLabel, recipientOptions, validEmail } from "./recipientOptions.js";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import Composer from "./Composer.jsx";
@@ -63,11 +63,17 @@ const Fork = ({ on, title, hint, onClick }) => (
   </Box>
 );
 
-export const EmailRecipients = ({ value, onChange, options, placeholder }) => (
+// A WHOLE ADDRESS TYPED IS AN ADDRESS GIVEN, however the box is left: Tab or a click away threw it away, and the reply went to
+// nobody (the UI audit, 2026-10-21). Only a whole address is taken - half a name never becomes a recipient behind the owner's back.
+export const EmailRecipients = ({ value, onChange, options, placeholder }) => {
+  const [typed, setTyped] = useState("");
+  const take = () => { const v = typed.trim(); if (validEmail(v)) { onChange(normalizeEmails([...value, v])); setTyped(""); } };
+  return (
   <Autocomplete multiple freeSolo autoHighlight openOnFocus size="small" fullWidth
     options={options}
-    value={value}
-    onChange={(_event, values) => onChange(normalizeEmails(values))}
+    value={value} inputValue={typed} onInputChange={(_event, v, why) => { if (why !== "reset") setTyped(v); }}
+    onBlur={take}
+    onChange={(_event, values) => { onChange(normalizeEmails(values)); setTyped(""); }}
     getOptionLabel={(option) => typeof option === "string" ? option : (option.name || option.to || "")}
     isOptionEqualToValue={(option, selected) => option.to?.toLowerCase() === String(selected).toLowerCase()}
     filterOptions={(rows, state) => emailRecipientOptions(rows, state.inputValue)}
@@ -87,7 +93,8 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => (
       <TextField {...params} placeholder={value.length ? "Add another email" : placeholder}
         sx={{ "& .MuiInputBase-root": { fontSize: 13, bgcolor: "#fcfaf7" } }} />
     )} />
-);
+  );
+};
 
 // Keep the large freeform field below its own render boundary. The sheet contains provider
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of

@@ -69,7 +69,8 @@ class FyiHandfulTests(unittest.TestCase):
         self.assertEqual(asked, [], 'the handful is handed over without asking a model anything')
         # each entry keeps its OWN gist, which is what the card shows under the line (fyiRow.gistFor)
         self.assertTrue(all(i['summary'] == i['preview'] for i in card['items']))
-        self.assertIn('4 things people told you', out['say'])
+        # the card lists the four; the line beside it only names them (brought_up, the owner 2026-10-21)
+        self.assertEqual(out['say'], 'Next up: 4 FYIs.')
         # ...and the keys travel with it, so the work rail can ring the very rows on the table
         self.assertEqual(card['members'], [i['key'] for i in card['items']])
         # ...and the batch still reads after a refresh. The model's lines used to ride on the
@@ -188,7 +189,10 @@ class CounselIntroductionTests(unittest.TestCase):
     def test_the_facts_are_the_fallback_not_the_normal_path(self):
         s, out = self._asked()
         with quiet(), mock.patch.object(concierge, 'brain', return_value=None): no = concierge.surface(s)
-        self.assertIn('Craig wrote on email', no['say'])                                            # no AI: the facts
+        self.assertEqual(no['say'], 'Next up: TQ-0001.')                                            # no AI: the card carries it
+        s, out = self._asked()
+        with quiet(), mock.patch.object(concierge, 'brain', return_value=None), concierge.delivering(concierge.PHONE): no = concierge.surface(s)
+        self.assertIn('Craig wrote on email', no['say'])                                            # ...a phone has no card: the facts
         s, out = self._asked()
         # staying in character is the prompt's job (concierge.IN_PART), never a word list that throws a reply away (2026-10-11)
         seen = {}
@@ -196,7 +200,7 @@ class CounselIntroductionTests(unittest.TestCase):
         self.assertIn(concierge.IN_PART, seen['system'])
         s, out = self._asked()
         with quiet(): off = concierge.surface(s, llm=lambda *a, **k: 'Robin asked to deploy gpt-4.1 (TQ-0312).')
-        self.assertIn('Craig wrote on email', off['say'])                                           # another subject: the facts
+        self.assertEqual(off['say'], 'Next up: TQ-0001.')                                           # another subject: the card's few words
 
 
 class PresentingMarksNothingTests(unittest.TestCase):

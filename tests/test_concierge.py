@@ -184,6 +184,9 @@ class TurnTests(unittest.TestCase):
         s = store()
         t, m, r = drafted(s)
         with mock.patch.object(concierge, 'brain', return_value=None):
+            self.assertEqual(concierge.surface(s)['say'], 'Next up: TQ-0001.')   # the desk: the card carries it
+        s = store(); drafted(s)
+        with mock.patch.object(concierge, 'brain', return_value=None), concierge.delivering(concierge.PHONE):
             out = concierge.surface(s)
         self.assertIn('Dana wrote on email', out['say']); self.assertIn('"Export still broken"', out['say'])
         self.assertIn('Since then: I read it as needing a reply', out['say']); self.assertIn('From you: Send, Redraft, or move on', out['say'])
@@ -193,7 +196,7 @@ class TurnTests(unittest.TestCase):
         s = store(); drafted(s)
         def boom(*a, **k): raise RuntimeError('quota')
         out = concierge.surface(s, llm=boom)
-        self.assertIn('Dana wrote on email', out['say'])
+        self.assertEqual(out['say'], 'Next up: TQ-0001.')
 
     def test_an_empty_pipe_says_all_done_and_a_missing_key_says_so(self):
         s = store()
@@ -367,7 +370,7 @@ class BrainTests(unittest.TestCase):
             out = concierge.surface(s)
             # the introduction is the FACTS and it is instant: the model's sentence (PW-153) put a
             # blocking call in front of every Next (the owner, 2026-09-07: "next still take 5 seconds?")
-            self.assertEqual(out['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send, Redraft, or move on.')
+            self.assertEqual(out['say'], 'Next up: TQ-0001.')          # a few words: the card carries the rest (2026-10-21)
             self.assertEqual(seen, {}, 'the introduction asks no model at all, so there is no gear to pick')
             concierge.say(s, 'what did she attach?', key=f'review:{r}')                                 # a question: the model's
             self.assertEqual((seen['name'], seen['model'], seen['resume'], seen['cwd']), ('claude', 'sonnet@low', None, None))   # the Assistant default (haiku broke its contract, 2026-09-24) at low effort, tools off
@@ -436,7 +439,7 @@ class BrainTests(unittest.TestCase):
             self.assertEqual([l['type'] for l in lines], ['done', 'pile'])
             self.assertTrue(lines[0]['pile_follows']); self.assertNotIn('pile', lines[0]); self.assertIn('items', lines[1]['pile'])
             self.assertEqual(lines[0]['item']['key'], it['key'])
-            self.assertIn('GitHub Trending', lines[0]['say'])
+            self.assertEqual(lines[0]['say'], 'Next up: a report.')
             with c.stream('POST', '/api/concierge/stream', json={'mode': 'say', 'text': 'why did it fail?', 'key': it['key']}) as r:
                 lines = [json.loads(l) for l in r.iter_lines() if l.strip()]
             self.assertEqual([l['type'] for l in lines], ['tool_call', 'done'])                          # a question: the model's turn streams
@@ -479,7 +482,7 @@ class FyiWalkTests(unittest.TestCase):
             out = concierge.surface(s)
         self.assertEqual((out['item']['kind'], out['item']['title'], out['left']), ('fyis', '4 fyi', 1))
         self.assertEqual(len(out['item']['items']), 4)
-        self.assertIn('4 things people told you', out['say'])
+        self.assertEqual(out['say'], 'Next up: 4 FYIs.')
         self.assertEqual([i['title'] for i in funnel.build(s)['items']], ['Note 0'])
         with mock.patch.object(concierge, 'brain', return_value=None):
             two = concierge.surface(s)
@@ -500,7 +503,7 @@ class StaysOnSubjectTests(unittest.TestCase):
         wander = lambda sy, u, **k: seen.update(u=u) or "Robin asked 13 hours ago to deploy gpt-4.1 (TQ-0312); I'd push it to the coding agent."
         out = concierge.surface(s, llm=wander)
         self.assertEqual(out['item']['rid'], r)
-        self.assertIn('Dana wrote on email', out['say']); self.assertNotIn('Robin', out['say'])   # the facts, not Robin
+        self.assertEqual(out['say'], 'Next up: TQ-0001.')                                # the card's few words, not Robin
         self.assertTrue(seen['u'].startswith('THE ITEM ON THE TABLE - speak only about this one:'))
         self.assertNotIn('Coming next', seen['u'])                                       # no other items to wander to
         self.assertTrue(concierge.off_subject('TQ-0312 sat untouched', {'tid': 327}))
@@ -936,7 +939,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual([l['n'] for l in pile['lanes']], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])   # fifteen since 'theirs' (2026-09-25)
             nxt = c.post('/api/concierge/next', json={}).json()
             self.assertEqual(nxt['item']['rid'], r)
-            self.assertEqual(nxt['say'], 'Dana wrote on email (5h ago): "Export still broken". Since then: I read it as needing a reply. From you: Send, Redraft, or move on.')      # the facts, instant (2026-09-07)
+            self.assertEqual(nxt['say'], 'Next up: TQ-0001.')      # instant, and the card carries the facts (2026-10-21)
             # The browser's walk resumes unresolved rows it already showed; a shown card is not read.
             resumed = c.post('/api/concierge/next', json={'include_surfaced': True}).json()
             self.assertEqual(resumed['item']['rid'], r)

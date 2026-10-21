@@ -31,7 +31,7 @@ class Step:
 
 
 STEPS = [
-    Step('bring up TQ-12', None, 'Here it is: [TQ-0012](#task=12) - the census sync bug.', 'link:#task=12', r'TQ-0*12'),
+    Step('bring up TQ-12', None, 'Here: [TQ-0012](#task=12).', 'link:#task=12', r'TQ-0*12'),
     Step("respond to this - say we'll have it Friday", 'msg:17', "I'll draft it.\n" + c('reply', text="We'll have it Friday."), 'draft:reply', r'draft|Draft'),
     # TQ-12's coding agent ran before and its session is saved (world()): Continue reopens it, the notes riding along
     Step('rerun the agent with these notes: use the new template', 'msg:17',
@@ -67,6 +67,20 @@ def outcomes(out: dict, reads: list) -> list:
 # the real CLI reads no user- or plugin-level settings: the owner's user-wide hooks POST to the live app, and must never fire from here
 REAL_ARGS = ['--setting-sources', 'project,local', '--include-hook-events']
 LIVE_PORT = ':7787'
+
+
+BRIEF = 12      # words beside a component brought up (the owner, 2026-10-21: "free text should almost never be used in the assistant")
+
+
+def words(say: str) -> int:
+    """Words as the owner reads them: a markdown link counts as its label."""
+    return len(re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', say or '').split())
+
+
+def brief(step, say: str) -> bool:
+    """A turn that brings something up - a page, a card, a lit button, a draft, a cleared set - says it in a few words; only a
+    question's answer (a look-up) may run longer."""
+    return step.expect.startswith('read:') or words(say) <= BRIEF
 
 
 def world(real: bool = False):
@@ -206,7 +220,7 @@ def run(steps=STEPS, real: bool = False, warm: bool = True, quiet: bool = False,
             got = outcomes(out, list(reads))
             say = str(out.get('say') or '')
             ok = any(g.startswith(step.expect) for g in got) and err is None
-            rows.append({'step': step, 'got': got, 'say': say, 'ok': ok, 'said_ok': bool(re.search(step.says, say)),
+            rows.append({'step': step, 'got': got, 'say': say, 'ok': ok, 'said_ok': bool(re.search(step.says, say)), 'brief': brief(step, say),
                          'first_word': clock.words if clock.words is not None else action, 'action': action,
                          'spawns': clock.spawns, 'rounds': list(clock.rounds),
                          'prompt_chars': sum(r['chars'] for r in clock.rounds),

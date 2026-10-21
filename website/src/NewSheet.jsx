@@ -173,6 +173,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
   const noAi = useCapabilities().ai === false;
+  const filed = useRef(null);      // a task this sheet filed whose start was refused: {taskId, ref, about, how}
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
   useEffect(() => {
@@ -232,25 +233,33 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // a general agent: kind general with no repository, started below like the task page's hand-off - never the
         // assistant's thread, which does nothing itself (2026-10-15)
         const plan = planTask(general ? NO_REPO : pickd?.repo || null, general ? "file" : "terminal", false, true);
-        const { data } = await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
-          Kind: plan.kind, Tags: plan.tags });
-        // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
-        api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
+        // A START REFUSED FILES ONE TASK, NOT ONE PER PRESS (the UI audit, 2026-10-21): the task was made before the start was asked
+        // for, so each retry of a refused start filed another copy nobody worked on. The same words pressed again start the one filed.
+        const again = filed.current?.about === about && filed.current.how === how ? filed.current : null;
+        const data = again || (await api.post("/api/tasks", { Title: about.slice(0, 300), Summary: withImages(about, pics.paths),
+          Kind: plan.kind, Tags: plan.tags })).data;
+        if (!again) {
+          filed.current = { ...data, about, how };
+          // it skipped triage, so nothing gave it a checklist: read the words behind the answer (server._read_hand_task)
+          api.post(`/api/tasks/${data.taskId}/read-ask`).catch(() => null);
+        }
         // a folder typed for a repository the agent had none for is saved on the agent first - the session refuses to open without one
         if (pickd?.repo && pickd.path) await api.put(`/api/tasks/${data.taskId}/repo`, { repo: pickd.repo, path: pickd.path, ...(agent ? { agent } : {}) });
-        if (general) {
-          const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
-            { kind: "general", agent: role || null, pick: pick || null, model: model || null });
-          setOk(`${data.ref} — ${outcomeOf(out).text}.`);
-        } else {
+        let out;
+        try {
           // WHAT THE ANSWER SAID, not what the button hoped. A task with no checkout comes back
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          const { data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`,
-            { agent: agent || null, brain: brain || null, model: model || null });
-          setOk(`${data.ref} — ${outcomeOf(out).text}.`);
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general
+            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }
+            : { agent: agent || null, brain: brain || null, model: model || null }));
+        } catch (e) {
+          // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
+          throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
         }
+        filed.current = null;
+        setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "goal") {
         const title = about.split(/[.\n]/)[0].trim().slice(0, 120) || about.slice(0, 120);

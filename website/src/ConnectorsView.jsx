@@ -2181,6 +2181,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // the Outlook card leads with the sign-in; the tenant-app fields (an admin's road) fold
   // away unless they are already what this card runs on
   const [adminFields, setAdminFields] = useState(!MS_SIGNIN.includes(conn.Type) || (!!cfg.client_id && cfg.auth !== "user"));
+  // ...only the tenant app's own fields fold: a Teams card's chat clock is the signed-in person's setting too (PW-003), and folding
+  // it with tenant_id and client_id hid it behind "Admin?" the moment Teams signed in like Outlook
+  const ownFields = m.fields.filter(([, key]) => !MS_APP_KEYS.includes(key));
   const syncHere = async () => {
     setSrcSync(true);
     const r = await run(() => api.post("/api/ingest/poll"), { ok: "Syncing — new items appear in a minute", lead: "Sync didn't start — " });
@@ -2206,14 +2209,14 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             Microsoft mailboxes no longer accept IMAP passwords — use the Outlook connector and “Sign in with Microsoft”.
           </Typography>
         )}
-        {adminFields && (
+        {(adminFields || ownFields.length > 0) && (
           <>
-            {m.fields.map(([label, key, ph, helper]) => (
+            {(adminFields ? m.fields : ownFields).map(([label, key, ph, helper]) => (
               <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
                 helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
             ))}
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
-            {m.secretLabel && (
+            {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
                 value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
                 helperText="Write-only: stored server-side, never returned to the browser." />
@@ -3084,6 +3087,7 @@ const GithubCloseout = ({ conn, mine, reload }) => {
 const MAIL_CARDS = ["outlook", "gmail", "imap"];
 // the cards that sign in with Microsoft, each its own account: Outlook for mail and calendar, Teams for chats (msauth.TEAMS_SCOPES)
 const MS_SIGNIN = ["outlook", "teams"];
+const MS_APP_KEYS = ["tenant_id", "client_id"];      // a tenant app registration's fields - an admin's road (adminFields)
 function MailSignature({ conn, reload }) {
   const saveConn = useSaveConnector(reload);
   const cfg = parse(conn.ConfigJson);

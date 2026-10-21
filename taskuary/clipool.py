@@ -29,6 +29,9 @@ class Ended(RuntimeError):
     """The process went away mid-turn: its stderr, for the caller's error message."""
 
 
+RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
+
+
 class Live:
     def __init__(self, key: str, cmd: list, cwd: str, env: dict, sig: tuple):
         self.key, self.cmd, self.sig = key, cmd, sig
@@ -55,8 +58,11 @@ class Live:
 
     def turn(self, prompt: str, on_event, cancel=None, timeout: float = 1200) -> tuple:
         """Send one message and read until its `result`. Returns (result event, raw lines)."""
-        self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
-        self.p.stdin.flush()
+        # a process that went away while idle - killed, or its CLI updated itself under it - refuses the message: that is an end too
+        try:
+            self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
+            self.p.stdin.flush()
+        except (OSError, ValueError) as e: raise Ended(f'the CLI was gone before the message reached it ({e})')
         raw, end = [], time.time() + timeout
         while True:
             if cancel is not None and cancel.is_set():
@@ -144,13 +150,16 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
         lv = _take(key, cmd, cwd, env, resume, sig)
         with lv.lock:
             try: return lv.turn(prompt, on_event, cancel=cancel, timeout=timeout)
-            except Ended:
+            except Ended as e:
                 with _LOCK:
                     if _POOL.get(key) is lv: _POOL.pop(key)
                 lv.close()
                 resume = lv.sid or resume
-                if attempt == 2 or lv.turns == 0: raise
-                logger.info(f'clipool: {key} ended between turns - reopening it on {resume}')
+                # ONCE MORE, ON A NEW PROCESS, first turn or not: the CLI updating itself mid-session left every later turn "Broken pipe"
+                # (the real-CLI walk, 2026-10-21) - and a warmed process killed before its first turn is the same case. Only a second end
+                # is the caller's, said plainly (RESTART_FAILED).
+                if attempt == 2: raise Ended(f'{RESTART_FAILED} ({e})') from e
+                logger.info(f'clipool: {key} ended - reopening it{" on " + resume if resume else ""} and sending the turn again')
             except Exception:
                 with _LOCK:
                     if _POOL.get(key) is lv: _POOL.pop(key)

@@ -263,6 +263,14 @@ function greeting() {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
+// The one hook React runs BEFORE it changes the page (getSnapshotBeforeUpdate, class components only): Pile reads where its rows are
+// drawn there, so a glide that changes course starts from that frame - after the change a row React moved has lost it
+class BeforeCommit extends React.Component {
+  getSnapshotBeforeUpdate() { this.props.take(); return null; }
+  componentDidUpdate() {}
+  render() { return null; }
+}
+
 function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onMoreFyi, settingUp = false, tag = "on the table" }) {
   const items = pile?.items || [];
   // the plain FYI the page has not asked for whole yet (funnel.page_fyi): counted with their band, drawn when it is opened
@@ -484,15 +492,31 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   useEffect(() => () => { clearTimeout(enterTimer.current); }, []);
   // ...AND A ROW REORDERED IN ITS BAND GLIDES TOO: React moves its node in the page to keep the order, and a moved node starts
   // from its new place with no transition - the row put on the table jumped to its slot, full height, over rows still gliding
-  // past it (a rail click: 15 frames of rows drawn on each other). Such a row is sent back to where it was and let go from there.
+  // past it (a rail click: 15 frames of rows drawn on each other). Such a row is sent back to where it was drawn and let go from there.
   // ...AND A GLIDE THAT CHANGES COURSE RESTARTS EVERY ROW TOGETHER. A close rings the next row at once (drawn ahead) and the pile's
   // answer lands mid-glide with the closed row gone: the rows whose top changed again began a fresh .55s glide from where they were,
   // while the ringed row's height kept its old one - it grew into the row under it (CI's slow runner, SWAP: 3-6px for a few frames).
   // So on any change of course every row starts again from where it is drawn now, top and height, on the one curve: the drawn frame
   // has no overlap and neither has the end, and one curve over one time never makes one in between.
-  const rested = useRef(new Map());
+  // WHERE IT IS DRAWN is read before React changes the page (BeforeCommit). Read after, a row React moved had lost its glide, and it
+  // was sent back to where it was last GOING, not where it was: a send moves the row on the table inside its band (the walk's faults
+  // pass: 0 -> 99), and when that lands while a glide still runs - CI's slow runner - the row restarted off its drawn place, over the
+  // row under it (SWAP, faults unknown, 2026-10-21).
+  const rested = useRef(new Map()), restNow = useRef(new Map()), drawnAt = useRef(null);
+  restNow.current = new Map();
+  const takeDrawn = () => {
+    const was = rested.current, now = restNow.current;
+    drawnAt.current = null;
+    if (!was.size || (now.size === was.size && [...now].every(([k, n]) => was.get(k)?.top === n.top && was.get(k)?.h === n.h))) return;
+    drawnAt.current = new Map();
+    for (const el of wrapRef.current?.querySelectorAll(".tq-pile-row[data-tq-key]") || []) {
+      const cs = getComputedStyle(el);
+      drawnAt.current.set(`${el.closest("[data-tq-run]")?.dataset.tqRun} ${el.dataset.tqKey}`, [parseFloat(cs.top), parseFloat(cs.height)]);
+    }
+  };
   useLayoutEffect(() => {
-    const was = rested.current, now = new Map();
+    const was = rested.current, now = new Map(), drawn = drawnAt.current;
+    drawnAt.current = null;
     const els = [...(wrapRef.current?.querySelectorAll(".tq-pile-row[data-tq-key]") || [])].filter((el) => !el.classList.contains("landing"));
     for (const el of els) {
       const k = `${el.closest("[data-tq-run]")?.dataset.tqRun} ${el.dataset.tqKey}`;
@@ -501,10 +525,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
     rested.current = new Map([...now].map(([k, { top, h }]) => [k, { top, h }]));
     const moved = [...now].some(([k, n]) => !was.has(k) || was.get(k).top !== n.top || was.get(k).h !== n.h) || was.size !== now.size;
     if (!moved || !was.size) return;
-    // read every row first, then write: one frame's values for all of them. A row React moved in the page starts where it stood still.
-    const from = [...now].map(([k, { el, top }]) => {
-      const p = was.get(k), cs = getComputedStyle(el), at = parseFloat(cs.top);
-      return p && Math.abs(p.top - top) > 1 && Math.abs(at - top) < 0.5 ? [el, p.top, p.h] : [el, at, parseFloat(cs.height)];
+    // read every row first, then write: one frame's values for all of them - as drawn before the change, or, new here, where it lands
+    const from = [...now].map(([k, { el }]) => {
+      const d = was.has(k) && drawn?.get(k);
+      if (d) return [el, ...d];
+      const cs = getComputedStyle(el);
+      return [el, parseFloat(cs.top), parseFloat(cs.height)];
     });
     for (const [el, top, h] of from) { el.style.transitionProperty = "opacity, transform"; el.style.top = `${top}px`; el.style.height = `${h}px`; }
     void wrapRef.current.offsetHeight;                         // that frame is the start; then the glide runs from it, for every row at once
@@ -521,6 +547,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   return (
     <div className="tq-pile" data-tq-keep ref={wrapRef} role="listbox" aria-label="Your list" onKeyDown={railKey}
       onFocus={(e) => { if (!wrapRef.current?.contains(e.relatedTarget)) kbdBack.current = e.relatedTarget || null; }}>
+      <BeforeCommit take={takeDrawn} />
       {!pile ? (error ? (
         /* A LOAD THAT FAILED IS NOT A LOAD IN PROGRESS. This spun on "Loading timeline" for as long
            as the tab stayed open while the server had answered 500 twenty minutes earlier - and the
@@ -569,6 +596,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
           stackHeight += item.key === curKey ? CUR_H : ROW_H;
           if (byKey[item.key]) { moreTops.push({ top: stackHeight, mark: byKey[item.key] }); stackHeight += MORE_PX; }
           placedNow.current.push(`${level} ${item.key}`);
+          if (!falls(item.key)) restNow.current.set(`${level} ${item.key}`, { top, h: (item.key === curKey ? CUR_H : ROW_H) - 3 });
           return { item, top };
         });
         // the bracket spans its members where they already are: it adds no height and moves no row

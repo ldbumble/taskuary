@@ -7042,8 +7042,11 @@ def test_cli_connection(name: str):
     pathcache.forget()     # Test is the owner's "look again": it, and every page after it, sees PATH as it is now
     try:
         result, _, _ = hub_agents.run_cli({**connection, 'timeout': 30}, 'Reply with exactly: ok', lambda *a: None)
+        hub_agents.record_cli_test(store, name, True)
         return {'ok': True, 'result': str(result or '')[:300]}
-    except Exception as e: return {'ok': False, 'error': str(e)[:400]}
+    except Exception as e:
+        hub_agents.record_cli_test(store, name, False)     # a brain nobody chose is never one whose own test failed (ready_brains)
+        return {'ok': False, 'error': str(e)[:400]}
 
 
 class SkillPathBody(BaseModel):

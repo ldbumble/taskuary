@@ -31,7 +31,8 @@ def of_message(store, row: dict) -> tuple:
     return ('trusted' if ok else 'stranger'), why
 
 # concierge.setup_task's refs: a walkthrough, a coding hand-off, an agent job - each the owner's own sentence. An Advisor
-# idea ('assistant:idea:<n>') and a playbook built from a past mail carry what was read, and are not here.
+# idea ('assistant:idea:<n>') carries what was read, and is not here. A playbook stores its own base (playbooks.setup_task):
+# the owner's, or its example mail's sender's when that is worse.
 OWNER_REFS = ('assistant:setup', 'assistant:handoff', 'assistant:agent')
 
 def of_task(store, tid: int) -> tuple:
@@ -108,11 +109,28 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     from . import clis
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
     cli = clis._base(cli)
-    if cli not in clis.AUTO:
-        raise Refusal(f"this CLI has no built-in reviewer, so it cannot run a stranger's task - start it with {next(iter(clis.AUTO))}")
+    if cli not in clis.AUTO: raise Refusal(no_reviewer(store))
     if cli == 'claude' and _claude_version(cmd or 'claude') < MIN_CLAUDE:
         raise Refusal("a stranger's task needs Claude Code 2.1.295 or later (its hooks must refuse when Taskuary cannot answer)")
     return 'auto'
+
+def no_reviewer(store) -> str:
+    """Why a stranger's task cannot run with this CLI's tools - offering only an AI that is CONNECTED here and has a reviewer.
+    It named claude to everyone, and to a person with only Codex that is an AI they do not have (2026-10-21)."""
+    from . import agents, clis
+    have = [k for k in agents.ready_brains(store) if clis._base(k) in clis.AUTO]
+    why = "this CLI has no built-in reviewer, so it cannot run a stranger's task with its tools"
+    return (f'{why} - start it with {have[0]}' if have else
+            f"{why}, and no AI connected here has one. Its chat can still read and answer, or vouch for the task if you trust who wrote it")
+
+
+def looks_only(store, tid, cli: str) -> bool:
+    """A stranger's task on a CLI with no reviewer of its own, but a read-only mode it does have (clis.READONLY - Codex's read-only
+    sandbox): the general agent runs it there, looking and answering, rather than not at all."""
+    from . import clis
+    cli = clis._base(cli)
+    return bool(tid) and cli not in clis.AUTO and cli in clis.READONLY and of_task(store, tid)[0] == 'stranger'
+
 
 def stranger_path(tid: int):
     """Where a stranger's headless and general work runs: OUTSIDE Taskuary's home, so its folder never sits inside what the floor

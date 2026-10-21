@@ -1057,6 +1057,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import agents as _hub
         # an explicit brain is the OWNER's choice at the picker and outranks the setting
         profile = with_brain(profile, _hub.brain_command(store, agent, want=brain))
+        # ...and a role whose row names no CLI runs on a READY brain (agents.ready_brains), never on claude by default
+        if not profile.get('cmd'): profile = with_brain(profile, _hub.brain_command(store, agent, want=_hub.default_brain(store)))
+        if not profile.get('cmd'):
+            from .general import NO_AI
+            from . import words
+            raise ValueError(f"{NO_AI} - connect one on {words.name('ai_apps')} to start {agent}")
         label = agent
     else:
         label = 'shell'

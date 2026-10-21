@@ -458,9 +458,33 @@ def coding_ready(store) -> bool:
 
 
 def runs_here(profile: dict) -> bool:
-    """Does this profile's command resolve to something we can start?"""
-    try: return bool(_resolve_cmd((profile or {}).get('cmd') or 'claude'))
+    """Does this profile's command resolve to something we can start? A profile naming no command names no CLI: it used to be
+    read as claude, so a role row synced before any brain was chosen "ran here" on a machine where only Codex was set up."""
+    cmd = (profile or {}).get('cmd')
+    if not cmd: return False
+    try: return bool(_resolve_cmd(cmd))
     except (FileNotFoundError, OSError): return False
+
+
+# WHICH CONNECTED CLI PASSED ITS TEST: {key: true|false}, written by the owner's own Test and by setup's pick (firstrun.choose_cli).
+# A fallback brain - one nobody chose - is only ever one that starts here and did not FAIL its last test, a passed one ahead of an
+# untested one: a claude left connected by a sign-in that never finished started every researcher task signed out, beside the
+# Codex the person had actually set up (2026-10-21).
+CLI_TESTS = 'cli_tests'
+
+def cli_tests(store) -> dict:
+    try: out = json.loads(store.get_setting(CLI_TESTS) or '{}')
+    except (TypeError, ValueError): out = {}
+    return out if isinstance(out, dict) else {}
+
+def record_cli_test(store, key: str, ok: bool):
+    if key: store.set_setting(CLI_TESTS, json.dumps({**cli_tests(store), str(key): bool(ok)}), 'system')
+
+def ready_brains(store) -> list:
+    """The connected CLIs a brain nobody chose may fall back to: starts here, last test not failed; passed ones first."""
+    tests = cli_tests(store)
+    keys = [k for k, c in connection_brains(store) if tests.get(k) is not False and runs_here(c)]
+    return sorted(keys, key=lambda k: tests.get(k) is not True)
 
 
 def agent_row(store, name: str) -> dict | None:
@@ -736,7 +760,7 @@ def default_brain(store) -> str:
     key = str(store.get_setting('default_brain') or '').strip()
     if key: return key
     legacy = str(store.get_setting('default_agent') or '').strip()       # an install from before brains named tools
-    return brain_key(store, f'cli:{legacy}') if legacy else next((k for k, c in connection_brains(store) if runs_here(c)), '')
+    return brain_key(store, f'cli:{legacy}') if legacy else next(iter(ready_brains(store)), '')
 
 
 def brain_ready(store, key: str) -> bool:
@@ -769,13 +793,14 @@ def default_pick(store) -> str:
     brains = dict(connection_brains(store))
     conn = brains.get(key) if key else None
     pick = f'cli:{key}' if conn else ''
-    if pick and runs_here(conn): return pick
-    if pick and saved and store.setting_writer('default_brain') != 'migration': return pick
-    # ...any OTHER connected CLI that runs here: the default key is claude, and an install with only Codex (or Gemini) read
-    # "no brain" over a CLI that worked - every mail awaited triage (a first-run log, 2026-10-14)
-    # ...but never in place of a default the OWNER named: theirs is taken at its word, connected or not
+    # a default the OWNER named is taken at its word, connected or not; one nobody chose only when it is ready (ready_brains)
     chosen = bool(saved) and store.setting_writer('default_brain') != 'migration'
-    other = '' if chosen else next((f'cli:{k}' for k, c in brains.items() if runs_here(c)), '')
+    if pick and chosen: return pick
+    ready = ready_brains(store)
+    if pick and key in ready: return pick
+    # ...any OTHER connected CLI that is ready: an install with only Codex (or Gemini) read "no brain" over a CLI that worked -
+    # every mail awaited triage (a first-run log, 2026-10-14)
+    other = '' if chosen else next((f'cli:{k}' for k in ready), '')
     if other: return other
     c = ready_connector(store)
     return f"connector:{c['ConnectorId']}" if c else ''
@@ -804,7 +829,8 @@ def brain_chain(store, first: str = None, cfg: dict = None) -> list:
     known = list(cfg.get('cli_connections') or {})
     head = str(first or default_brain(store) or '').strip()
     setting = str(store.get_setting('backup_brains') or '').strip()
-    backups = known if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
+    # ...but never one whose own test FAILED: a CLI the person never got signed in is no backup for anything
+    backups = [k for k in known if cli_tests(store).get(k) is not False] if setting == '*' else [x.strip() for x in setting.split(',') if x.strip()]
     # `*` expands from what is configured; a CSV is the owner naming brains outright, and is taken
     # at its word - one that turns out not to start just fails over like any other.
     out = []

@@ -25,6 +25,18 @@ export const connectorNamed = (text, cards = CATALOGUE) => {
   const hits = cards.filter((c) => !c.planned && names(c).some((n) => new RegExp(` ${esc(n.replace(/[^a-z0-9]+/g, " ").trim())} `).test(t)));
   return hits.sort((a, b) => b.title.length - a.title.length)[0] || null;      // "azure openai" over "openai"
 };
+// THE CONNECTIONS BOX'S MATCHES (the owner, 2026-10-21: "link" typed, and LinkedIn sat third behind Outlook and WhatsApp, whose
+// guides only say "link"): a card whose NAME holds the words leads, then its type, then whatever its guide mentions. Several names
+// at once, comma-separated - setup types the Advisor's picks here (FirstRun): "Sage Intacct, QuickBooks Online".
+export const matchCards = (groups, q) => {
+  const terms = String(q || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  if (!terms.length) return [];
+  const rank = (c) => terms.some((x) => String(c.title || "").toLowerCase().includes(x)) ? 0
+    : terms.some((x) => String(c.channel || "").replace(/_/g, " ").includes(x)) ? 1 : 2;
+  const hits = groups.flatMap((g) => g.cards.map((c) => ({ ...c, crumb: g.title })).filter((c) => rank(c) < 2
+    || terms.some((x) => String(c.haystack || "").toLowerCase().includes(x))));
+  return hits.map((c, i) => [rank(c), c.planned ? 1 : 0, i, c]).sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]).map((x) => x[3]);
+};
 // ONE CARD PER SYSTEM: a planned card is dropped where a card for the same type is already on the page - a live one anywhere, or
 // the same planned type earlier. The server's planned list (reports.PLANNED) and this catalogue are kept apart, and PointClickCare
 // drew twice: once by its catalogue name under Corporate systems, once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)

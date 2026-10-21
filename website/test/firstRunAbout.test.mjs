@@ -105,7 +105,8 @@ test("More connections suggests in the catalogue's search, never as row buttons,
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   assert.doesNotMatch(fr, /setup:open:/, "no suggestion buttons in the row");
   assert.match(fr, /setBrowseSt\(\{ q: names\.join\(", "\), section: null, open: null \}\)/);
-  assert.match(cv, /const terms = q\.split\(","\)/);
+  assert.match(cv, /const hits = matchCards\(groups, q\);/);
+  assert.match(read("connectorCatalog.js"), /const terms = String\(q \|\| ""\)\.split\(","\)/);
   assert.match(cv, /const \[q, setQ\] = useState\(asked \|\| ""\);/);
   // what ticks it is the server's (firstrun.rail, tests/test_setup_state.py); the rail shows the row as it comes
   const { stepsOf } = await import("../src/setupSteps.js");

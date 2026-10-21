@@ -27,7 +27,7 @@ import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, 
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
-import { onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
+import { matchCards, onceEach, oneOf, plannedFor } from "./connectorCatalog.js";
 import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
@@ -96,8 +96,8 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
         <Box sx={{ flex: 1, minWidth: 240 }}>
           <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
           <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
-            Your coding agent takes the Guide as its prompt, asks you here for anything only you can fetch, saves it onto this
-            card and runs Test until it passes. It sits on the Board as a task while it works.
+            Optional - the card below connects without it. Your coding agent takes the Guide as its prompt, asks you here for
+            anything only you can fetch, saves it onto this card and runs Test until it passes. It sits on the Board as a task while it works.
           </Typography>
         </Box>
         {sess ? (
@@ -106,8 +106,10 @@ const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], 
             <Button size="small" variant="outlined" onClick={done}>Done — close the session</Button>
           </>
         ) : (
-          <Button variant="contained" disableElevation disabled={busy} onClick={start}
-            startIcon={busy ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+          // OUTLINED, not the page's one filled button (the owner, 2026-10-21): it read as the way to connect, and pressing it
+          // put a coding session on the Board where Sign in with LinkedIn was all it took
+          <Button variant="outlined" disabled={busy} onClick={start}
+            startIcon={busy ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
             {busy ? "starting…" : "Get AI to set it up"}
           </Button>
         )}
@@ -859,10 +861,13 @@ const DATA_META = {
       "You may NOT post. Draft it and propose it: TASKUARY-PROPOSE {\"action\": \"run_tool\", \"type\": \"mastodon_post\", \"text\": \"<the post>\", \"visibility\": \"public\"}. Show the full text — it goes out under their name.",
       "SETUP DONE."] },
   linkedin: { title: "LinkedIn", types: ["linkedin_me", "linkedin_post"],
-    fields: [["LinkedIn app client id (developer.linkedin.com → your app → Auth)", "client_id"],
-      ["LinkedIn app client secret", "client_secret"],
-      ["API version (blank = 202609) — LinkedIn dates its REST surface by month", "version"]],
-    secretLabel: "access token (write-only) — Connect fills it in",
+    // IN PLAIN WORDS, each saying where it comes from (the owner, 2026-10-21: "LinkedIn is not working") - the two keys are the
+    // app's, the token is what Sign in brings back, and nothing here asks for a token as if one had to be fetched by hand
+    fields: [["Client ID", "client_id", "", "developer.linkedin.com/apps → your app → Auth tab → Client ID"],
+      ["Client Secret", "client_secret", "", "The same Auth tab → Primary Client Secret. Paste both, press Save, then Sign in with LinkedIn above."],
+      ["API version (optional)", "version", "", "Leave blank - 202609 is used. LinkedIn dates its API by month."]],
+    secretLabel: "Access token — Sign in with LinkedIn fills it in",
+    secretHelp: "Nothing to paste here: Sign in with LinkedIn brings the token back on its own. A token from the developer portal's OAuth token generator works too. Write-only - never shown again.",
     connect: { label: "Sign in with LinkedIn", status: (cid) => `/api/connectors/${cid}/linkedin/status`,
       start: (cid) => `/api/connectors/${cid}/linkedin/authorize`,
       text: "Opens LinkedIn's consent screen in a new tab. The token returns directly to Taskuary." },
@@ -1808,10 +1813,10 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       ...catalogCards("Files & sheets")] },
     { title: "Everything else", cards: [...catalogCards("Everything else"), ...plannedCards(KNOWN_PLANNED, true)] },
  ]);
-  // several names at once, comma-separated: setup types the Advisor's picks here (FirstRun) - "Sage Intacct, QuickBooks Online"
-  const terms = q.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
-  const hits = terms.length ? groups.flatMap((g) => g.cards.filter((c) => terms.some((x) => c.haystack.toLowerCase().includes(x)))
-    .map((c) => ({ ...c, crumb: g.title }))) : [];
+  const hits = matchCards(groups, q);
+  // WORDS TYPED PUT THE OPEN CARD DOWN (the owner, 2026-10-21: "link" typed over the open LinkedIn card, and the page went on
+  // showing that card and the section chips - the matches are only ever drawn with no card open, so none showed)
+  const search = (v) => { setQ(v); if (v.trim() && open) back(); };
 
   groupsRef.current = groups;
   const shown = groups.find((g) => g.title === group) || groups[0];
@@ -1835,7 +1840,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
       detail, onBack: back,
       openLabel: openCard ? `the ${openCard.title} connector card (Connections), ${openCard.desc}` : conn ? `the ${conn.Name} connector card (Connections)` : "",
       search: (
-        <Box component="input" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search connectors…"
+        <Box component="input" type="search" value={q} onChange={(e) => search(e.target.value)} placeholder="Search connectors…"
           aria-label="Search connectors" data-tq-browse-search=""
           sx={{ mt: 1.5, width: "100%", boxSizing: "border-box", height: 34, px: 1.25, border: `1px solid ${BORDER}`, borderRadius: "8px",
             fontFamily: "inherit", fontSize: 12.5, color: INK, bgcolor: "#fff", outline: "none", "&:focus": { borderColor: "#55697a" } }} />
@@ -1845,7 +1850,7 @@ export default function ConnectorsView({ onNavigate, browse = null, browseState 
   }
 
   return (
-    <SideRail title="Connections" q={q} setQ={setQ}
+    <SideRail title="Connections" q={q} setQ={search}
       placeholder="Search connectors…"
       items={groups.map((g) => ({ key: g.title, label: g.title, n: g.cards.length || null }))}
       value={group} onChange={setGroup}
@@ -2724,7 +2729,10 @@ function OAuthConnect({ conn, meta, reload }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [token, setToken] = useState("");
-  const load = useCallback(async () => { try { setSt((await api.get(meta.connect.status(conn.ConnectorId))).data); } catch { /* the card still works */ } }, [conn.ConnectorId, meta]);
+  // ...read again when the card's saved keys change: the status was read once, when the card opened, so keys pasted and saved
+  // left Sign in greyed under "Save first" until the card was closed and opened again (the owner, 2026-10-21: LinkedIn)
+  const load = useCallback(async () => { try { setSt((await api.get(meta.connect.status(conn.ConnectorId))).data); } catch { /* the card still works */ } },
+    [conn.ConnectorId, conn.ConfigJson, conn.HasSecret, meta]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
   // the sign-in happens in another tab; poll while it is likely underway so the box flips to
   // "connected" without a refresh
@@ -2792,7 +2800,7 @@ function OAuthConnect({ conn, meta, reload }) {
           {busy ? <><CircularProgress size={12} sx={{ color: "#fff", mr: 1 }} /> {meta.connect.widget === "token" ? "claiming…" : "waiting for the sign-in…"}</> : st?.connected ? "Reconnect" : meta.connect.label}
         </Button>
         {st?.connected
-          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}</Typography>
+          ? <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Connected{st.member ? ` as ${st.member}` : ""}{st.realm_id ? ` · company ${st.realm_id}` : ""}{st.institution ? ` · ${st.institution}` : ""}{(st.env || st.environment) === "sandbox" ? " · sandbox" : ""}{st.days_left != null ? ` · ${plural(st.days_left, "day")} left on the sign-in` : ""}</Typography>
           : <Typography variant="body2" sx={{ color: DIM }}>{st?.has_app ? "keys saved — not connected yet" : "paste the application's keys below and Save first"}</Typography>}
         {busy && url && !st?.connected && (
           <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexBasis: "100%" }}>
@@ -2886,14 +2894,15 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             </Box>
           )}
           {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
-          {meta.fields.map(([label, key, ph]) => (
-            <TextField key={key} label={label} placeholder={ph} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
+          {/* a field's 4th entry says where to get what it asks for, under the box */}
+          {meta.fields.map(([label, key, ph, help]) => (
+            <TextField key={key} label={label} placeholder={ph} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
               multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
               onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
           ))}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
-            helperText="Write-only: stored server-side, never returned to the browser." />}
+            helperText={meta.secretHelp || "Write-only: stored server-side, never returned to the browser."} />}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Button variant="contained" disableElevation disabled={busy === "save"} onClick={save}>
               {busy === "save" ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : "Save"}</Button>

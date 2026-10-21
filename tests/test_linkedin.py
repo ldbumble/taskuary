@@ -39,6 +39,7 @@ class TheCall(unittest.TestCase):
         with self.assertRaises(RuntimeError) as e:
             linkedin.whoami({})
         self.assertIn('token generator', str(e.exception))
+        self.assertIn('Sign in with LinkedIn', str(e.exception))   # the card's own button is the first answer
 
     def test_it_resolves_the_author_urn_itself(self):
         """Nobody can paste urn:li:person:<opaque> from memory, so the post fetches it."""

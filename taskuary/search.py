@@ -220,9 +220,7 @@ def _stem(w: str) -> str: w = _fold(w); return w[:-2] if len(w) >= 7 else w.rstr
 # a short word is a whole word ("my" is never MySQL, "ap" is AP ageing); a longer one starts a word, the mail index's prefix match
 def _hit(w: str, t: str) -> bool: return re.search(r'(?<![^\W_])' + re.escape(w) + (r'(?![^\W_])' if len(w) <= 3 else ''), t) is not None
 # the pages words.json has no sentence for, by the links the canvas opens (canvasLinks.js)
-PAGES = (('Settings → Audit log', '#settings=audit', 'audit log history changes'), ('Settings → Updates', '#settings=updates', 'updates version upgrade'),
-         ('Settings → Routing policies', '#settings=policies', 'rules policies routing'), ('Settings → Docs', '#settings=docs', 'documents docs'),
-         ('the Hub', '#hub', 'hub company knowledge handbook'), ('Reports', '#report=', 'reports'), ('New report', '#report=new', 'new report'),
+PAGES = (('the Hub', '#hub', 'hub company knowledge handbook'), ('Reports', '#report=', 'reports'), ('New report', '#report=new', 'new report'),
          ('New workflow', '#report=new-agent', 'new workflow'))
 
 
@@ -230,7 +228,7 @@ def _app_rows(store) -> list:
     from . import words as places
     rows = [{'type': 'place', 'title': p['name'], 'rest': k, 'href': p['href'], 'key': k} for k, p in places.PLACES.items() if p.get('href')]
     rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h, 'key': w.split()[0]} for t, h, w in PAGES]
-    rows += [{'type': 'setting', 'title': m['label'], 'where': f"Settings → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
+    rows += [{'type': 'setting', 'title': m['label'], 'where': f"{places.name('settings')} → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
               'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
     mine = [c for c in store.list_connectors()]
@@ -251,7 +249,7 @@ def _app_rows(store) -> list:
                      'href': f"#report={s['SourceId']}"})
     try: docs = store.doc_names()
     except Exception: docs = []
-    rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': 'Settings → Docs', 'rest': f'{d} document doc', 'key': d,
+    rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': places.name('docs'), 'rest': f'{d} document doc', 'key': d,
               'href': f'#settings=docs&doc={d}' if re.fullmatch(r'\w+', d) else '#settings=docs'} for d in docs]
     return rows
 

@@ -2,7 +2,7 @@
 // open beside it - these six are read against each other, so hiding five behind a landing
 // grid cost a round trip every time you wanted to compare two.
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, CircularProgress, TextField, Tooltip, Typography } from "@mui/material";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import PsychologyIcon from "@mui/icons-material/Psychology";
@@ -248,10 +248,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   const [pbMsg, setPbMsg] = useState("");
   const [pbFilter, setPbFilter] = useState("");
   const [newPlaybook, setNewPlaybook] = useState(null);
-  const [deletePlaybook, setDeletePlaybook] = useState(null);
   const [deleteProf, setDeleteProf] = useState(null);       // the profile whose Delete is waiting on a confirm
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
   useEffect(() => {
@@ -432,23 +430,20 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       else setDocs((d) => ({ ...d, "pb:new": tpl }));
       return;
     }
-    setDeleteError("");
-    setDeletePlaybook({ slug, title: books.find((b) => b.slug === slug)?.title || slug });
-  };
-  const confirmDeletePb = async () => {
-    if (!deletePlaybook || deleteBusy) return;
-    const { slug } = deletePlaybook;
-    setDeleteBusy(true); setDeleteError("");
+    // AT ONCE, no "are you sure" (the owner, 2026-10-21): it goes to Recently deleted on Reports -> Playbooks for 30 days, where
+    // Restore puts it back as it was. A failure is said here, over the words that are still open.
+    if (deleteBusy) return;
+    setDeleteBusy(true); setPbMsg("");
     try {
       try { await api.delete(`/api/playbooks/${slug}`); }
       catch (e) { if (e?.response?.status !== 404) throw e; }
       const next = books.find((b) => b.slug !== slug);
       await loadBooks();
-      if (onGone) { setDeletePlaybook(null); onGone(); return; }
+      if (onGone) { onGone(); return; }
       await openPb(next?.slug || "new");
-      setDeletePlaybook(null);
+      setPbMsg("deleted - Recently deleted on Reports → Playbooks keeps it 30 days, with Restore");
     } catch (e) {
-      setDeleteError(e?.response?.data?.detail || "Could not delete this playbook. Please try again.");
+      setPbMsg(e?.response?.data?.detail || "Could not delete this playbook. Please try again.");
     } finally { setDeleteBusy(false); }
   };
   const chooseSection = (next) => {
@@ -704,8 +699,8 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
               title="Delete this profile - triage stops offering it and its rules document goes with it">Delete</Button>
           )}
           {isPb(docName) && (
-            <Button size="small" variant="outlined" color="error" onClick={removePb}
-              title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it and the cards stop listing it"}>
+            <Button size="small" variant="outlined" color="error" onClick={removePb} disabled={deleteBusy}
+              title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it at once; Recently deleted on Reports → Playbooks keeps it 30 days"}>
               {docName === "pb:new" ? "Discard" : "Delete"}
             </Button>
           )}
@@ -739,7 +734,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
           </Box>
         )}
         {pbMsg && isPb(docName) && (
-          <Typography variant="caption" sx={{ display: "block", mb: 1, color: pbMsg.startsWith("saved") ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
+          <Typography variant="caption" sx={{ display: "block", mb: 1, color: /^(saved|deleted)/.test(pbMsg) ? "#47654a" : "#6b2733" }}>{pbMsg}</Typography>
         )}
         {genMsg && GEN[docName] && (
           <Typography variant="caption" sx={{ display: "block", mb: 1,
@@ -799,22 +794,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     {newPlaybook && <NewPlaybookDialog {...newPlaybook}
       onClose={() => { setNewPlaybook(null); loadBooks(); }}
       onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}
-    <Dialog open={!!deletePlaybook} onClose={deleteBusy ? undefined : () => setDeletePlaybook(null)}
-      fullWidth maxWidth="xs" aria-labelledby="delete-playbook-title" aria-describedby="delete-playbook-description">
-      <DialogTitle id="delete-playbook-title">Delete playbook?</DialogTitle>
-      <DialogContent>
-        <DialogContentText id="delete-playbook-description">
-          Delete “{deletePlaybook?.title}”? New requests will no longer match this playbook, and it will be removed from your connector cards. This cannot be undone.
-        </DialogContentText>
-        {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
-      </DialogContent>
-      <DialogActions>
-        <Button autoFocus disabled={deleteBusy} onClick={() => setDeletePlaybook(null)}>Cancel</Button>
-        <Button variant="contained" color="error" disabled={deleteBusy} onClick={confirmDeletePb}>
-          {deleteBusy ? "Deleting…" : "Delete playbook"}
-        </Button>
-      </DialogActions>
-    </Dialog>
     </>
   );
 }

@@ -35,7 +35,7 @@ import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind,
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
-import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
+import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -604,8 +604,12 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           }} />}
         </Box>
       ) : null,
-      cards: section === "playbooks" ? pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
-          onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> }))
+      cards: section === "playbooks" ? [...pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
+          onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> })),
+          // ...and under them, Recently deleted - with nothing on the shelf the shelf's own empty line still leads
+          ...(pbs.deleted.length ? [
+            ...(pbs.books.length ? [] : [{ key: "pb-none", node: <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{pbs.err || PB_EMPTY}</Typography> }]),
+            { key: "pb-deleted", node: <RecentlyDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
         : sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
       detail: browseState.open != null && !missing ? (pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={back} />
         : wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid }))) : null,

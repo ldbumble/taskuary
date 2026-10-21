@@ -94,8 +94,10 @@ done when: the journal entry is posted
         s = MemoryStore(); s.set_setting('playbooks_enabled', '0', 'owner')
         self.assertEqual(playbooks.menu(store=s), '')
         s.set_setting('playbooks_enabled', '1', 'owner'); self.assertIn('- onboard:', playbooks.menu(store=s))
-        playbooks.set_on('bill', False); playbooks.delete('bill')
-        self.assertNotIn('bill', playbooks.off())                           # a deleted one leaves no stale switch behind
+        playbooks.set_on('bill', False); playbooks.delete('bill', now=0)
+        self.assertIn('bill', playbooks.off())                              # kept while Restore can still bring it back...
+        playbooks.purge()
+        self.assertNotIn('bill', playbooks.off())                           # ...and a purged one leaves no stale switch behind
 
     def test_a_slug_never_ends_in_a_hyphen_after_the_cut(self):
         self.assertEqual(playbooks.slugify('x' * 59 + ' onboarding'), 'x' * 59)
@@ -328,6 +330,70 @@ class OverTheApi(unittest.TestCase):
         self.assertFalse(guard.denied('GET', '/api/playbooks'))
         self.assertEqual(c.delete(f"/api/playbooks/{r['slug']}").json(), {'ok': True})
         self.assertEqual(c.get(f"/api/playbooks/{r['slug']}").status_code, 404)
+        shelf = c.get('/api/playbooks').json()
+        self.assertEqual(shelf['data'], []); self.assertEqual(shelf['keep_days'], 30)
+        self.assertEqual([(d['slug'], d['days_left']) for d in shelf['deleted']], [(r['slug'], 29)])
+        self.assertTrue(guard.denied('POST', f"/api/playbooks/{r['slug']}/restore"))
+        self.assertEqual(c.post(f"/api/playbooks/{r['slug']}/restore").json(), {'ok': True, 'slug': r['slug']})
+        self.assertEqual(c.post(f"/api/playbooks/{r['slug']}/restore").status_code, 404)  # nothing deleted to restore
+        shelf = c.get('/api/playbooks').json()
+        self.assertEqual(([b['slug'] for b in shelf['data']], shelf['deleted']), ([r['slug']], []))
+
+
+class DeletedIsRecoverable(unittest.TestCase):
+    """Delete is at once - no "are you sure" (the owner, 2026-10-21) - so it has to be undoable: Recently deleted for 30 days."""
+    def setUp(self): _clean()
+
+    def test_delete_hides_it_from_the_shelf_the_cards_and_the_seed(self):
+        playbooks.write('bill', BILL); playbooks.write('onboard', ONBOARD)
+        self.assertTrue(playbooks.delete('bill')); self.assertFalse(playbooks.delete('bill'))
+        self.assertFalse(playbooks.delete('nope'))
+        self.assertEqual([b['slug'] for b in playbooks.list_all()], ['onboard'])
+        self.assertEqual(playbooks.for_connector('quickbooks'), [])
+        self.assertIsNone(playbooks.read('bill')); self.assertIn('ZZMARKPLAYBOOKZZ', playbooks.read('bill', deleted=True))
+        self.assertIsNone(playbooks.for_task({'Tags': 'playbook:bill'}))
+        self.assertEqual(playbooks.seed_block({'Tags': 'playbook:bill'}), '')
+        self.assertEqual([d['slug'] for d in playbooks.recently_deleted()], ['bill'])
+
+    def test_triage_never_matches_a_deleted_one(self):
+        playbooks.write('bill', BILL); playbooks.write('onboard', ONBOARD)
+        playbooks.delete('bill')
+        m = playbooks.menu()
+        self.assertNotIn('- bill:', m); self.assertIn('- onboard:', m)
+        s = MemoryStore()
+        llm, seen = _llm_saying({'intent': 'task', 'kind': 'task', 'why': 'a card line', 'playbook': 'bill'})
+        out = ingest.ingest_message(s, {'channel': 'email', 'external_id': 'pbdel1', 'from_email': 'alerts@card.example',
+                                        'subject': 'Transaction: 12.00', 'body': 'A new transaction posted.'}, llm=llm)
+        self.assertNotIn('- bill: ', seen['system']); self.assertIn('- onboard: ', seen['system'])
+        self.assertIsNone(playbooks.of_task(s.get_task(out['task_id'])))  # the model named it anyway: never offered, never tagged
+
+    def test_restore_brings_back_its_words_its_switch_and_its_place(self):
+        playbooks.write('bill', BILL); playbooks.write('onboard', ONBOARD)
+        playbooks.set_on('bill', False)
+        before = playbooks.list_all()
+        playbooks.delete('bill')
+        self.assertTrue(playbooks.restore('bill')); self.assertFalse(playbooks.restore('bill'))
+        self.assertEqual(playbooks.list_all(), before)                     # words, enabled=False and the mtime order, exactly
+        self.assertEqual(playbooks.recently_deleted(), [])
+        self.assertNotIn('- bill:', playbooks.menu())                       # it was off when deleted, and is off again
+
+    def test_purge_after_thirty_days_and_not_before(self):
+        playbooks.write('bill', BILL); playbooks.write('onboard', ONBOARD)
+        day = 86400
+        playbooks.delete('bill', now=1000 * day); playbooks.delete('onboard', now=1020 * day)
+        self.assertEqual(playbooks.purge(now=1029 * day), [])
+        self.assertEqual(playbooks.recently_deleted(now=1029 * day)[1]['days_left'], 1)
+        self.assertEqual(playbooks.purge(now=1030 * day), ['bill'])
+        self.assertFalse((playbooks.folder() / 'bill.md').exists())
+        self.assertFalse(playbooks.restore('bill'))
+        self.assertEqual(list(playbooks.deleted_at()), ['onboard'])
+        self.assertTrue((playbooks.folder() / 'onboard.md').exists())
+
+    def test_a_new_one_under_a_deleted_name_starts_fresh_and_on(self):
+        playbooks.write('bill', BILL); playbooks.set_on('bill', False); playbooks.delete('bill')
+        playbooks.write('bill', BILL.replace('ZZMARKPLAYBOOKZZ', 'ZZNEWZZ'))
+        (b,) = playbooks.list_all()
+        self.assertTrue(b['enabled']); self.assertIn('ZZNEWZZ', b['text']); self.assertEqual(playbooks.recently_deleted(), [])
 
 
 if __name__ == '__main__':

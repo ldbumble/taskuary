@@ -22,6 +22,13 @@ test("each playbook switches on and off where it is listed", () => {
   assert.match(s, /<Switch size="small" checked=\{on\}/);
 });
 
+test("Delete is at once, and Recently deleted under the shelf restores it", () => {
+  const d = src("DocsView.jsx"), s = src("PlaybookShelf.jsx"), r = src("ReportsView.jsx");
+  assert.doesNotMatch(d, /Delete playbook\?|confirmDeletePb|<Dialog /);
+  assert.match(s, /api\.post\(`\/api\/playbooks\/\$\{slug\}\/restore`\)/);
+  assert.match(r, /<RecentlyDeleted items=\{pbs\.deleted\} onRestore=\{pbs\.restore\} \/>/);
+});
+
 test("Settings offers no playbooks any more", () => {
   const v = src("SettingsView.jsx");
   assert.doesNotMatch(v, /label: "Playbooks"/);

@@ -147,6 +147,8 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'first-run finish flag not settled: {e}')
         try: _firstrun.offer_about(store)             # ...but one that never answered About your work opens on it, once
         except Exception as e: logger.warning(f'About your work not offered: {e}')
+        try: playbooks.purge()                        # Recently deleted keeps a playbook KEEP_DAYS, then it goes for good
+        except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)
@@ -7199,6 +7201,7 @@ def put_doc(name: str, body: DocBody):
 @app.get('/api/playbooks')
 def list_playbooks():
     return {'data': [{k: v for k, v in b.items() if k != 'text'} for b in playbooks.list_all()],
+            'deleted': playbooks.recently_deleted(), 'keep_days': playbooks.KEEP_DAYS,
             'template': playbooks.template(), 'folder': str(playbooks.folder())}
 
 @app.get('/api/playbooks/examples')
@@ -7268,6 +7271,13 @@ def delete_playbook(slug: str):
     if not playbooks.delete(slug): raise HTTPException(404, f'no playbook {slug!r}')
     store.audit('playbook', 0, 'deleted', ACTOR, detail={'slug': playbooks.slugify(slug)})
     return {'ok': True}
+
+@app.post('/api/playbooks/{slug}/restore')
+def restore_playbook(slug: str):
+    """Recently deleted -> back on the shelf as it was: its words, its on/off switch, its place in the order."""
+    if not playbooks.restore(slug): raise HTTPException(404, f'no deleted playbook {slug!r}')
+    store.audit('playbook', 0, 'restored', ACTOR, detail={'slug': playbooks.slugify(slug)})
+    return {'ok': True, 'slug': playbooks.slugify(slug)}
 
 @app.get('/api/learned/graph')
 def learned_graph():
@@ -8024,6 +8034,8 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             sweep.run_if_due(target_store)
         except Exception as e:
             logger.warning(f'loose-end check skipped: {e}')
+        try: playbooks.purge()                          # ...and a playbook deleted KEEP_DAYS ago leaves Recently deleted (playbooks.py)
+        except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
         _lap('housekeeping')
         return added
     finally:

@@ -10,14 +10,16 @@ import api from "./api.js";
 import DocsView from "./DocsView.jsx";
 import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, mono } from "./theme.jsx";
+import { plural } from "./timeWords.js";
 
 export { PB_OPEN, pbOpen } from "./playbookOpen.js";
 
 export function usePlaybooks() {
   const [books, setBooks] = useState(null);              // null until read (collectionsStartNull): "none yet" is not "not read"
+  const [deleted, setDeleted] = useState(null);          // Recently deleted: kept 30 days, Restore puts one back as it was
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
-    try { const { data } = await api.get("/api/playbooks"); setBooks(data.data || []); setErr(""); }
+    try { const { data } = await api.get("/api/playbooks"); setBooks(data.data || []); setDeleted(data.deleted || []); setErr(""); }
     catch (e) { setErr(e?.response?.data?.detail || "The playbooks could not be read."); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -28,7 +30,12 @@ export function usePlaybooks() {
     catch (e) { setErr(e?.response?.data?.detail || "It could not be switched."); }
     load();
   }, [load]);
-  return { books: books || [], loaded: books !== null, err, load, setOn };
+  const restore = useCallback(async (slug) => {
+    try { await api.post(`/api/playbooks/${slug}/restore`); }
+    catch (e) { setErr(e?.response?.data?.detail || "It could not be restored."); }
+    load();
+  }, [load]);
+  return { books: books || [], deleted: deleted || [], loaded: books !== null, err, load, setOn, restore };
 }
 
 export function PlaybookRow({ b, onOpen, onToggle }) {
@@ -46,6 +53,30 @@ export function PlaybookRow({ b, onOpen, onToggle }) {
       <Typography variant="caption" sx={{ color: on ? DIM : FAINT, flexShrink: 0 }}>{on ? "triage matches it" : "off - kept, not matched"}</Typography>
       <Switch size="small" checked={on} inputProps={{ "aria-label": `${b.title}: ${on ? "on" : "off"}` }}
         onClick={(e) => e.stopPropagation()} onChange={() => onToggle(!on)} />
+    </Box>
+  );
+}
+
+// RECENTLY DELETED, under the shelf: Delete is at once (no "are you sure" - the owner, 2026-10-21), so this is its undo.
+// Restore brings one back exactly - its words, its on/off switch, its place; after 30 days it is gone for good.
+export function RecentlyDeleted({ items, onRestore }) {
+  if (!items?.length) return null;
+  return (
+    <Box data-tq-playbooks-deleted="" sx={{ mt: 2 }}>
+      <Typography sx={{ fontSize: 12, fontWeight: 600, color: DIM, px: 0.5, mb: 0.5 }}>Recently deleted</Typography>
+      {items.map((d) => (
+        <Box key={d.slug} data-tq-playbook-deleted={d.slug}
+          sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, px: 0.5, borderBottom: `1px solid ${BORDER}` }}>
+          <MenuBookIcon sx={{ fontSize: 18, color: FAINT, flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ color: DIM, fontWeight: 600, fontSize: 13.5 }} noWrap>{d.title}</Typography>
+            <Typography variant="caption" sx={{ color: FAINT, display: "block" }} noWrap>
+              not matched · gone for good {d.days_left > 0 ? `in ${plural(d.days_left, "day")}` : "today"}
+            </Typography>
+          </Box>
+          <Button size="small" variant="outlined" onClick={() => onRestore(d.slug)}>Restore</Button>
+        </Box>
+      ))}
     </Box>
   );
 }

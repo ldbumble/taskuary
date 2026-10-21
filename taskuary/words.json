@@ -19,7 +19,7 @@
     "rules":             {"name": "Settings → Routing policies", "href": "#settings=policies"},
     "docs":              {"name": "Settings → Docs", "href": "#settings=docs"},
     "memory":            {"name": "Settings → Verdicts & notes", "href": "#settings=memory"},
-    "audit":             {"name": "Settings → Audit log", "href": "#settings=audit"},
+    "audit":             {"name": "Settings → Audit integrity", "href": "#settings=audit"},
     "updates":           {"name": "Settings → Updates", "href": "#settings=updates"},
     "profiles":          {"name": "Settings → Profiles", "href": "#profiles"},
     "workflows":         {"name": "Workflows", "href": "#report=workflows"},

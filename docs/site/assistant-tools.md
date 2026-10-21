@@ -105,7 +105,7 @@ The "Mark done" button: the task behind the item is finished.
 
 ### `next`
 
-The "Next" button: move on to the next thing.
+The "Next" button: move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or "clear ..." - those name a set: pipe.clear.
 
 <p class="runs">At once.</p>
 
@@ -454,7 +454,7 @@ The walk and sets of items, and filing mail.
 
 ### `pipe.clear`
 
-Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said. It only clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
+Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said. It only clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
 
 - `select` - below
 

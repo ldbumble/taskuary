@@ -220,6 +220,18 @@ def _feed_skip(r: dict) -> bool:
     return is_auto(r)                 # the mail system's mark (autoreply.py), never the subject
 
 
+def _said_at(stamp) -> str:
+    "'today at 09:33', or 'on 2026-10-20 at 18:00'."
+    s = str(stamp or '')
+    return ('today' if s[:10] == datetime.now().strftime('%Y-%m-%d') else f'on {s[:10]}') + f' at {s[11:16]}'
+
+
+def closed_why(r: dict) -> str:
+    "What happened to a closed task's mail, from the facts: 'handled - you replied today at 09:33; closed', or 'closed'."
+    replied = f"you replied {_said_at(r['AnsweredAt'])}; " if r.get('AnsweredAt') else ''
+    return ('handled - ' if r.get('TaskStatus') == 'done' else '') + replied + ('closed' if r.get('TaskStatus') == 'done' else 'dropped, closed')
+
+
 def _assistant_wrapper(r: dict) -> bool:
     """True for an Assistant message that is only a VEHICLE for an idea shown in its own right.
 
@@ -435,6 +447,13 @@ def from_feed(store, rows: list, *, canonical=False) -> list:
         # What the newest message was about is not what the task is: the open task is the row.
         if open_work and r.get('TaskId'):
             _work(open_only=True); continue
+        # ...AND A CLOSED TASK'S MAIL IS NOT FYI. Opened again, it wore the fyi face - "I read it as just for your information -
+        # attached: same conversation thread" - over mail triage had judged work, that reopened the task and was answered.
+        # A closed task says what happened to it: handled, when you replied, closed.
+        if r.get('TaskId') and r.get('TaskStatus') in ('done', 'dropped'):
+            out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, closed=True, why=closed_why(r), **base))
+            if group and threads.get(group) is None: threads[group] = out[-1]
+            continue
         out.append(_item(f"msg:{r['MessageId']}", 'fyi', 'fyi', subj, why=r.get('RouteReason') or 'a person told you something; nothing to do', **base))
         if group and out and threads.get(group) is None: threads[group] = out[-1]
     # ONE brief leads the day. `brief_today` is true of every digest run made today, and the digest

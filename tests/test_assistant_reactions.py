@@ -496,6 +496,24 @@ class ResponseTests(unittest.TestCase):
         run(s3, p3)
         self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s3.list_memories(active_only=True)))
 
+    def test_not_ours_pressed_runs_just_this_once_and_offers_from_now_on_after(self):
+        """The owner, 2026-10-21: no "are you sure". Not ours asked how far before anything happened - a card with Cancel. Pressed on the
+        table it now runs at once as just this once (the page executes an `auto` proposal), and the card's other answer - from now on -
+        is the follow-up: its own operation on that message (proposalCard.followUps), which runs once the message is filed."""
+        s, tid, mid, item = self._asked()
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            p = concierge.propose_direct(s, 'not_ours', item['key'], table=True)
+        self.assertEqual((p['kind'], p['params'], p.get('auto'), p['say_card']), ('message.file', {'learn': False}, True, ''))   # never "until you say yes"
+        self.assertIn('not_ours_sender', [a['verb'] for a in p['alts']])          # the chip under its receipt (proposalCard.followUps)
+        self.assertEqual(run(s, p).json()['status'], 'done')
+        self.assertEqual(s.get_message(mid)['Status'], 'ignored'); self.assertEqual(s.list_memories(active_only=True), [])
+        self.assertEqual(p['target'], mid)
+        with mock.patch.object(server, 'store', s):
+            c = TestClient(server.app)
+            q = c.post('/api/operations', json={'kind': 'preference.exclude_sender', 'target': mid, 'params': {'scope': 'sender'}}).json()
+            self.assertEqual(c.post(f"/api/operations/{q['id']}/execute", json={'version': q['version']}).json()['status'], 'done')
+        self.assertTrue(any('craig@vendor.com' in (n['ScopeKey'] or '').lower() for n in s.list_memories(active_only=True)))
+
     def test_remember_keeps_the_fact_in_the_owners_words_once_confirmed(self):
         s, tid, mid, item = self._asked()
         p = decide(s, 'remember that Gail is the CFO and signs off on refunds', 'remember', key=item['key'],

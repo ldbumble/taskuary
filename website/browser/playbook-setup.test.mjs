@@ -28,14 +28,14 @@ test('Deleting a playbook is at once, keeps a failure visible, and Recently dele
   });
   await page.goto(`${harness.ui}#playbook=item-report`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some((el) => el.value.includes('# Prepare item numbers')));
-  await click(page, 'Delete');
+  await click(page, 'Remove');
   await page.waitForFunction(() => document.body.innerText.includes('file is locked'));
   assert.equal(deletes.length, 1, 'Delete sends at once - no confirm in between');
   assert.equal(await page.$('[role="dialog"]'), null, 'no "are you sure" dialog');
   assert.equal(await page.$$eval('textarea', (els) => els.some((el) => el.value.includes('# Prepare item numbers'))), true,
     'a failed delete leaves the words open');
   fail = false;
-  await click(page, 'Delete');
+  await click(page, 'Remove');
   await page.waitForSelector('[data-tq-playbook-deleted="item-report"]');
   assert.equal(deletes.length, 2);
   assert.equal(await page.$('[role="dialog"]'), null);

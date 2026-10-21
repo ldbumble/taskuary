@@ -24,7 +24,8 @@ import { takeLists } from "./connectorLists.js";
 import { usedBy } from "./connectorUses.js";
 import { nothingMatches } from "./searchHits.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, mono } from "./theme.jsx";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, ConfirmDelete, Confirm } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, UnderTabs, Empty, FilterPills, SideRail, Confirm } from "./ui.jsx";
+import { UndoLine, removeNow } from "./Removed.jsx";
 import { hasLogo } from "./logos.jsx";
 import { CliConnectionsPage } from "./AgentsPanel.jsx";
 import { TerminalPane } from "./TerminalView.jsx";
@@ -2056,8 +2057,11 @@ function CardPlaybooks({ type }) {
   );
 }
 
-function RemoveConnection({ conn, reload, onBack }) {
-  const [confirm, setConfirm] = useState(false);
+// REMOVE IS AT ONCE (the owner, 2026-10-21: no "are you sure"): its credentials and settings are wiped and its sources switched off
+// on the press, and "Removed <it> - Undo" stays on the card in its place. The sealed sign-in is kept only for the Undo line's minutes
+// (recentlydeleted.UNDO_SECONDS), then forgotten. `onBack` is kept for the callers; the card no longer leaves on a Remove.
+function RemoveConnection({ conn, reload }) {
+  const [err, setErr] = useState("");
   // what leans on it, beside the button: read before the press, never asked after it (#238)
   const [uses, setUses] = useState(null);
   useEffect(() => {
@@ -2067,19 +2071,20 @@ function RemoveConnection({ conn, reload, onBack }) {
   }, [conn.ConnectorId]);
   const line = usedBy(uses);
   const remove = async () => {
-    await api.post(`/api/connectors/${conn.ConnectorId}/reset`);
-    reload(); onBack();
+    setErr("");
+    try { await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/reset`), "connection", conn.Name || conn.Type); await reload(); }
+    catch (e) { setErr(e?.response?.data?.detail || "It could not be removed."); }
   };
-  // this one already asked, as a row that swapped itself for a "Sure?" - which is a different
-  // shape of question from every other delete in the app. Same dialog as the rest now.
   return (
-    <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", maxWidth: 720 }}>
-      <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
-        onClick={() => setConfirm(true)}>Remove connection</Button>
-      {line && <Typography data-tq-used-by="" variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{line}</Typography>}
-      <ConfirmDelete open={confirm} what={`the ${conn.Name || conn.Type} connection`} confirmLabel="Remove"
-        consequence="Its saved credentials and settings are wiped and its sources are switched off. The card stays in the catalog, so you can set it up again from scratch."
-        onClose={() => setConfirm(false)} onConfirm={remove} />
+    <Box sx={{ mt: 3, pt: 1.5, borderTop: `1px solid ${BORDER}`, maxWidth: 720 }}>
+      <UndoLine kinds={["connection"]} onRestored={reload} />
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+        <Button size="small" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />} sx={{ color: "#867f74" }}
+          title="Wipes its saved sign-in and settings and switches its sources off - Undo puts them back"
+          onClick={remove}>Remove connection</Button>
+        {line && <Typography data-tq-used-by="" variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>{line}</Typography>}
+        {err && <Typography variant="body2" sx={{ color: "#6b2733", fontWeight: 600 }}>✗ {err}</Typography>}
+      </Box>
     </Box>
   );
 }
@@ -2214,7 +2219,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   // ONE SAVE FOR THE CARD (ConnectorDraft.jsx): every control below draws from the draft and stages into it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
-  const onBack = () => { if (!draft.pending.length || window.confirm(`Leave without saving ${draft.pending.length} change(s)?`)) leave(); };
+  const onBack = leave;      // the unsaved changes stay in the card's draft for when it is opened again (keepDraft) - leaving never asks
   const m = META[conn.Type] || { fields: [], howto: [] };
   const isAI = m.channel === "ai";
   const [tab, setTab] = useState("Setup");
@@ -2290,7 +2295,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
     else setSrcSync(false);
   };
   const toggleSource = (s) => draft.ctx.stageSource({ SourceId: s.SourceId, Active: !s.Active });
-  const [delSrc, setDelSrc] = useState(null);      // a source being removed for good - off was the only option before
+  // a source removed AT ONCE (the owner, 2026-10-21): "Removed <address> - Undo" under the list puts it back as it was
+  const removeSrc = async (s) => { await run(() => removeNow(() => api.delete(`/api/sources/${s.SourceId}`), "source", s.Address), { ok: "", lead: "Not removed — " }); reload(); };
   const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
 
   const steps = [
@@ -2380,14 +2386,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             <Box sx={{ flex: 1 }} />
             {s.LastPolledAt && <Typography variant="caption" sx={{ color: FAINT }}>polled {timeAgo(s.LastPolledAt)}</Typography>}
             <Switch checked={!!s.Active} onChange={() => toggleSource(s)} />
-            <IconButton size="small" title="Remove it for good (off keeps it listed)" onClick={() => setDelSrc(s)}>
+            <IconButton size="small" title="Remove it (off keeps it listed) - Undo puts it back" aria-label={`Remove ${s.Address}`} onClick={() => removeSrc(s)}>
               <DeleteOutlineIcon sx={{ fontSize: 16, color: "#867f74" }} />
             </IconButton>
           </Box>
         ))}
-        <ConfirmDelete open={!!delSrc} what={delSrc ? `"${delSrc.Address}"` : ""} confirmLabel="Remove"
-          consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived is kept - search finds it."
-          onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
+        <UndoLine kinds={["source"]} onRestored={reload} sx={{ mt: 1, mb: 0 }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
           <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }} error={!!srcBad} helperText={srcBad || undefined}
             onChange={(e) => { setNewSrc(e.target.value); setSrcBad(""); }} onKeyDown={(e) => e.key === "Enter" && addSource()} />
@@ -2937,7 +2941,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   // the same one Save as a channel card: what each discovered object is used for is held until the bar saves it
   const draft = useCardDraft(savedConn, savedSources, reload);
   const { conn, sources } = draft;
-  const onBack = () => { if (!draft.pending.length || window.confirm(`Leave without saving ${draft.pending.length} change(s)?`)) leave(); };
+  const onBack = leave;      // the unsaved changes stay in the card's draft for when it is opened again (keepDraft) - leaving never asks
   const [tab, setTab] = useState("Connection");
   const [cfg, setCfg] = useState(parse(conn?.ConfigJson));
   const [secret, setSecret] = useState("");
@@ -3744,21 +3748,25 @@ const ChatGptSignIn = ({ conn, cfg, reload }) => {
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
-  // asked first, and a refusal is said in the dialog (Confirm) - it used to sign out on one click and say nothing either way
-  const [askOut, setAskOut] = useState(false);
-  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`); setState("ok"); setDetail("Signed out."); reload(); };
+  // SIGN OUT IS AT ONCE (the owner, 2026-10-21: no "are you sure"), with "Signed out of <it> - Undo" in its place; the session is
+  // ended at OpenAI only once the Undo has passed (recentlydeleted.py). A refusal is said here, never swallowed.
+  const signout = async () => {
+    setState(""); setDetail("");
+    try { await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/chatgpt/signout`), "signout", "ChatGPT", "Signed out of"); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "it could not sign out"); }
+    reload();
+  };
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with ChatGPT</Typography>
+      <UndoLine kinds={["signout"]} onRestored={reload} sx={{ mb: 0 }} />
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         Your own ChatGPT account and plan - no API key. Calls count against your ChatGPT allowance, under a weekly cap you set in ChatGPT.
       </Typography>
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
-          <Confirm open={askOut} title="Sign out of ChatGPT?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
-            text="Anything set to run on your ChatGPT account stops until you sign in again." />
+          <Button size="small" variant="outlined" onClick={signout} title="Anything set to run on your ChatGPT account stops until you sign in again - Undo puts it back">Sign out</Button>
         </Box>
       ) : flow ? (
         <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
@@ -3825,8 +3833,13 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
     catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "could not start the sign-in"); }
     setBusy(false);
   };
-  const [askOut, setAskOut] = useState(false);
-  const signout = async () => { await api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`); setState("ok"); setDetail("Signed out."); setAdminUrl(""); reload(); };
+  // SIGN OUT IS AT ONCE, with "Signed out of <account> - Undo" in its place (the owner, 2026-10-21: no "are you sure")
+  const signout = async () => {
+    setState(""); setDetail(""); setAdminUrl("");
+    try { await removeNow(() => api.post(`/api/connectors/${conn.ConnectorId}/ms/signout`), "signout", cfg.account || "Microsoft", "Signed out of"); }
+    catch (e) { setState("error"); setDetail(e?.response?.data?.detail || "it could not sign out"); }
+    reload();
+  };
   const copy = (s) => { try { navigator.clipboard?.writeText(s); } catch { /* it is on screen anyway */ } };
   const adminLink = async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/ms/adminlink`); setAdminUrl(data.url); }
@@ -3835,6 +3848,7 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
   return (
     <Box sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Sign in with Microsoft</Typography>
+      <UndoLine kinds={["signout"]} onRestored={reload} sx={{ mb: 0 }} />
       {/* the first-run card says it for someone who has never heard of a tenant (FirstRun.jsx) */}
       <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5 }}>
         {plain ? "Press the button, then type the code it shows on Microsoft's page and sign in as usual. This page finishes by itself."
@@ -3846,9 +3860,8 @@ export const MsSignIn = ({ conn, cfg, reload, onSignedIn, plain = false }) => {
       {signedIn ? (
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
           <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Signed in as {cfg.name ? `${cfg.name} · ` : ""}{cfg.account}</Typography>
-          <Button size="small" variant="outlined" onClick={() => setAskOut(true)}>Sign out</Button>
-          <Confirm open={askOut} title="Sign out of Microsoft?" confirmLabel="Sign out" onConfirm={signout} onClose={() => setAskOut(false)}
-            text={`${chats ? "Teams chats" : "Mail and calendar"}${cfg.account ? ` for ${cfg.account}` : ""} stop syncing until you sign in again. Nothing already here is lost.`} />
+          <Button size="small" variant="outlined" onClick={signout}
+            title={`${chats ? "Teams chats" : "Mail and calendar"} stop syncing until you sign in again - Undo puts it back. Nothing already here is lost.`}>Sign out</Button>
         </Box>
       ) : flow ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>

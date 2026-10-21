@@ -7,7 +7,7 @@
     "redraft":         {"label": "Redraft", "hint": "Has the AI write the draft again", "row": ["redraft"], "states": {"none": "Draft with AI"}},
     "close":           {"label": "Mark done", "hint": "Closes the task - it stops coming back", "row": ["done"]},
     "defer":           {"label": "Remind me", "hint": "Put the task away until a day - it waits under For later on your rail and is back in front of you that morning", "row": ["remind"]},
-    "not_ours":        {"label": "Not ours", "hint": "File it - the card asks whether just this once, from now on, or as a rule", "row": []},
+    "not_ours":        {"label": "Not ours", "hint": "File it, just this once - From now on is offered after", "row": []},
     "not_ours_sender": {"label": "Ignore this sender", "hint": "Their mail is filed for you from now on", "row": []},
     "block_sender":    {"label": "Block this sender", "hint": "A rule in Settings - their mail never comes in", "row": []},
     "not_ours_kind":   {"label": "No more ideas like this", "hint": "The Advisor stops raising this kind of idea", "row": []},

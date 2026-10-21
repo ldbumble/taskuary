@@ -2446,7 +2446,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
 
 # where a report's or a connection's act is pressed, on its own page
 REPORT_SAYS = {'report.run': 'run it', 'report.rerun': 'run it again', 'report.pause': 'pause it', 'report.resume': 'switch it back on',
-               'report.route': 'change where it goes', 'report.edit': 'change it', 'report.delete': 'delete it'}
+               'report.route': 'change where it goes', 'report.edit': 'change it', 'report.delete': 'remove it'}
 CONN_SAYS = {'connection.pause': 'switch it off', 'connection.resume': 'switch it on', 'connection.test': f"press {buttons.label('test_connection')}",
              'connection.create': 'fill it in and test it'}
 # a task's own part that has no button of its own - the task is brought up and the line says where on it
@@ -3106,6 +3106,9 @@ PROPOSALS = {v: (k, buttons.label(v), s) for v, (k, s) in _OPS.items()} | {
 # session up and drafts the reply for your yes - nothing leaves (the owner, 2026-09-23: "it should be save
 # end session as well same as in task", having been asked to confirm a card that read "wrap: false")
 AUTO = ('close', 'stop_agent', 'continue',                              # settles what is on the table; nothing leaves, nothing is handed off
+        # ...and NOT OURS, as "just this once" (the owner, 2026-10-21: no "are you sure"): filing one item teaches nothing and is
+        # found again by search; how far it goes - from now on - is the chip offered under its receipt, never a question before it
+        'not_ours',
         'test_connection',                                              # ...and a connection test, which only asks and changes nothing
         # ...and the ANSWER to an agent that asked: the words matched to its Answer pill go to the run at once, desktop and phone alike -
         # the phone used to skip the AI for this and sent "next" to the agent (the owner, 2026-10-08: "ai should match to pill action")
@@ -3403,7 +3406,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
         record_related(store, tid, item, 'assistant', f"{str(e)[:1].upper()}{str(e)[1:]}.", {'kind': 'words', 'key': None, 'chips': way})
         return {'id': None, 'failed': True, 'say': f"{str(e)[:1].upper()}{str(e)[1:]}.", 'chips': way, 'key': key}
     prop['settles'] = bool(table and PROPOSALS[verb][2])
-    if table and verb in AUTO: prop.update(auto=True, say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
+    if table and verb in AUTO: prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(item)}." + (f" {prop['note']}" if prop.get('note') else ''))
     record_related(store, tid, item, 'assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                                                'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': item.get('lane')})
     return prop
@@ -3829,7 +3832,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
     if kind in ('report.pause', 'report.resume'): return f" {o.get('title') or 'It'} is {'back on its clock' if o.get('active') else 'off its clock'}."
     if kind == 'report.route': return f" {o.get('title') or 'It'} now goes - {o.get('route')}."
     if kind == 'report.edit': return f" {o.get('title') or 'It'} changed: {', '.join(o.get('changed') or [])}."
-    if kind == 'report.delete': return f" {o.get('title') or 'It'} is deleted."
+    if kind == 'report.delete': return f" {o.get('title') or 'It'} is removed - Restore brings it back from Recently deleted on Reports for 30 days."
     if kind == 'setting.set': return f" {o.get('said') or ''}"
     if kind == 'task.update':
         from .remind import when
@@ -4407,7 +4410,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # "what should I do next?" over an Advisor idea started a researcher; it had earlier asked for a clear ask to start at once)
         if verb in AUTO and verb not in AGENT_STARTS and not elsewhere:
             # ...and a run at once still says what it could not do ("nothing to wrap")
-            prop.update(auto=True, say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
+            prop.update(auto=True, say_card=prop.get('note') or '', say=f"{prop['label']} - {_where(target_item or {})}." + (f" {prop['note']}" if prop.get('note') else ''))
         rec('assistant', prop['say'], {'kind': 'proposal', 'key': prop.get('key'), 'title': prop['label'], 'op': prop['id'],
                                         'tid': prop.get('tid'), 'ref': prop.get('ref'), 'lane': (target_item or {}).get('lane')})
         return {'say': prop['say'], 'options': [], 'decision': None, 'proposal': prop}

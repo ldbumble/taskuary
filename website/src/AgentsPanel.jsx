@@ -6,7 +6,8 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import api from "./api";
 import { noun, placeName } from "./words.js";
 import { BORDER, DIM, ROLES, card, mono } from "./theme.jsx";
-import { Crumb, Empty, ConfirmDelete, TaskuaryMark } from "./ui.jsx";
+import { Crumb, Empty, TaskuaryMark } from "./ui.jsx";
+import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { useCliInstall, InstallLine, UpdateLine } from "./cliInstall.jsx";
 import { useCliSetup, SetupButton, CliPane } from "./cliSetup.jsx";
 import SkillImport from "./SkillImport.jsx";
@@ -22,7 +23,14 @@ const PROFILE_KINDS = ["general", "coding", "research", "analysis", "coordinatio
 export const CliConnectionsPage = ({ onBack }) => {
   const [clis, setClis] = useState(null), [draft, setDraft] = useState(null);
   const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
-  const [tests, setTests] = useState({}), [confirmDel, setConfirmDel] = useState(null);
+  const [tests, setTests] = useState({});
+  // DISCONNECT IS AT ONCE (the owner, 2026-10-21: no "are you sure"): "Disconnected <it> - Undo" over the cards puts it back, and the
+  // profiles on it with it. A profile left on it is never moved to another CLI (2026-10-06) - it has none until one is picked.
+  const disconnect = async (cli) => {
+    setErr("");
+    try { await removeNow(() => api.delete(`/api/cli/connections/${encodeURIComponent(cli.name)}?detach=1`), "cli", cli.label || cli.name, "Disconnected"); await load(); }
+    catch (e) { setErr(failure(e)); }
+  };
   const { install, update, busy, note, pane: installPane, setPane: setInstallPane } = useCliInstall({ terminal: true });
   const installerRef = useRef(null);
   useEffect(() => { if (installPane) installerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }, [installPane]);
@@ -83,6 +91,7 @@ export const CliConnectionsPage = ({ onBack }) => {
     </Box>
     <Button size="small" onClick={() => { openAppLink("profiles"); }} sx={{ mb: 2 }}>Manage profiles in Docs</Button>
     {err && !draft && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
+    <UndoLine kinds={["cli"]} onRestored={load} />
     {!clis && !err && <CircularProgress size={22} />}
     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "repeat(2, minmax(0, 1fr))" }, gap: 2 }}>
       {(clis || []).map((cli) => <Box key={cli.name} data-connection={cli.name} sx={{ ...card, p: 2 }}>
@@ -110,7 +119,7 @@ export const CliConnectionsPage = ({ onBack }) => {
             <SetupButton cli={cli} opening={opening} onOpen={openSetup} />
             <UpdateLine cli={cli} busy={busy} onUpdate={async () => { if (await update(cli)) await load(); }} />
           </> : <InstallLine cli={cli} busy={busy} onInstall={async () => { if (await install(cli)) await load(); }} />}
-          {cli.configured && <Button size="small" color="error" onClick={() => setConfirmDel(cli.name)}>Disconnect</Button>}
+          {cli.configured && <Button size="small" color="error" onClick={() => disconnect(cli)}>Disconnect</Button>}
         </Box>
         {tests[cli.name] && !tests[cli.name].busy && <Alert severity={tests[cli.name].ok ? "success" : "error"} sx={{ mt: 1 }}>{tests[cli.name].ok ? tests[cli.name].result || "Connection works" : tests[cli.name].error}</Alert>}
       </Box>)}
@@ -144,21 +153,19 @@ export const CliConnectionsPage = ({ onBack }) => {
         <Box><Button variant="contained" disabled={saving || !draft.name.trim() || !draft.cmd.trim() || !(Number(draft.timeout) > 0)} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}
-    {/* REMOVE REMOVES (the owner, 2026-10-06: "can't remove the claude cli install"): the profiles on it are named here and
-        left with no CLI until one is picked for them - never moved onto another CLI behind the owner's back */}
-    <ConfirmDelete open={!!confirmDel} what={`the CLI connection "${confirmDel}"`} title={`Disconnect ${(clis || []).find((c) => c.name === confirmDel)?.label || confirmDel}?`}
-      confirmLabel="Disconnect" undoable
-      consequence={(() => { const used = (clis || []).find((c) => c.name === confirmDel)?.used_by || [];
-        return (used.length ? `${used.join(", ")} ${used.length === 1 ? "uses" : "use"} it and will have no CLI until you pick one for ${used.length === 1 ? "it" : "them"}. ` : "")
-          + "Taskuary stops using it. The program stays installed on this computer, and Connect brings it back."; })()}
-      onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/cli/connections/${encodeURIComponent(confirmDel)}?detach=1`); await load(); } catch (e) { setErr(failure(e)); } }} />
   </Box>;
 };
 
 export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles", initialCreate = false, onCreated, onRules }) => {
   const [agents, setAgents] = useState(null), [connections, setConnections] = useState([]);
   const [draft, setDraft] = useState(initialCreate ? { ...BLANK_PROFILE } : null);
-  const [err, setErr] = useState(""), [saving, setSaving] = useState(false), [confirmDel, setConfirmDel] = useState(null);
+  const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
+  // REMOVE IS AT ONCE (the owner, 2026-10-21): "Removed <profile> - Undo" over the list, and Recently deleted keeps it 30 days
+  const remove = async (name) => {
+    setErr("");
+    try { await removeNow(() => api.delete(`/api/agents/${encodeURIComponent(name)}`), "profile", name); await load(); }
+    catch (e) { setErr(failure(e)); }
+  };
   const [importSkills, setImportSkills] = useState(false);   // the same wizard Docs -> Profiles opens
   const load = useCallback(async () => {
     try {
@@ -202,6 +209,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
       <Button variant="outlined" onClick={() => setImportSkills(true)} title="Bring in somebody else's SKILL.md - from a link or this machine - as a worker profile">Import skills</Button>
     </Box>
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={load} />}
+    <UndoLine kinds={["profile"]} onRestored={load} />
     {!agents && !err && <CircularProgress size={22} />}
     {agents && !Object.keys(agents).length && <Empty>Add a profile to create your first worker.</Empty>}
     {Object.entries(agents || {}).map(([name, a]) => <Box key={name} data-profile={name} sx={{ py: 2, borderBottom: `1px solid ${BORDER}` }}>
@@ -209,7 +217,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
         <Chip size="small" label={name} /><Typography variant="body2" sx={{ flex: 1 }}>{providerLabel(a.provider)} · {a.model || "Provider default model"}</Typography>
         {a.triage_enabled === false && <Chip size="small" label="Manual only" />}
         {onRules && <Button size="small" onClick={() => onRules(a.rules_doc || name)}>Instructions</Button>}
-        <Button size="small" onClick={() => edit(name)}>Edit</Button><Button size="small" color="error" onClick={() => setConfirmDel(name)}>Delete</Button>
+        <Button size="small" onClick={() => edit(name)}>Edit</Button><Button size="small" color="error" onClick={() => remove(name)}>Remove</Button>
       </Box>
       <Typography variant="body2" sx={{ color: DIM, mt: 1 }}>{a.purpose || "Add a purpose so triage knows when to choose this profile."}</Typography>
     </Box>)}
@@ -242,7 +250,6 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
         <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}
-    <ConfirmDelete open={!!confirmDel} what={`the profile "${confirmDel}"`} consequence="Existing sessions are kept. Tasks fall back to the default profile."
-      onClose={() => setConfirmDel(null)} onConfirm={async () => { try { await api.delete(`/api/agents/${encodeURIComponent(confirmDel)}`); await load(); } catch (e) { setErr(failure(e)); } }} />
+    <RecentlyDeleted kinds={["profile"]} onRestored={load} />
   </Box>;
 };

@@ -151,6 +151,9 @@ async def _lifespan(_app):
         except Exception as e: logger.warning(f'About your work not offered: {e}')
         try: playbooks.purge()                        # Recently deleted keeps a playbook KEEP_DAYS, then it goes for good
         except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
+        try:                                          # Recently deleted keeps a report, a rule or a profile KEEP_DAYS, then it goes for good
+            from . import recentlydeleted; recentlydeleted.purge(store)
+        except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
     else:
         # THE DEMO WORLD IS A FINISHED INSTALL: the settle above never runs for it, so its flag stayed unset and read as "not finished" -
         # every demo, and every browser test in CI, opened on setup instead of the day (2026-10-15)
@@ -1079,9 +1082,9 @@ def _run_kind(op: dict, background: BackgroundTasks):
             store.save_source({'SourceId': tid, 'ConfigJson': json.dumps(new)}, ACTOR)
             store.audit('source', tid, 'edit', 'assistant', detail={'title': title, 'changed': sorted(patch)})
             return {'title': new.get('title') or title, 'changed': sorted(patch)}
-        delete_source(tid)
+        out = delete_source(tid)                       # the page's own Remove: kept under Recently deleted, with Restore
         store.audit('source', tid, 'delete', 'assistant', detail={'title': title})
-        return {'title': title, 'deleted': True}
+        return {'title': title, 'deleted': out.get('deleted') or True}
     if kind == 'setting.set':
         from . import settings_schema
         key, meta = str(p.get('setting') or '').strip(), settings_schema.knobs().get(str(p.get('setting') or '').strip())
@@ -5408,11 +5411,31 @@ def _woke_up(before, after) -> bool:
 @app.delete('/api/sources/{sid}')
 def delete_source(sid: int):
     if not store.get_source(sid): raise HTTPException(404, 'source not found')
-    store.delete_source(sid)
+    from . import recentlydeleted
+    out = recentlydeleted.remove_source(store, sid)          # at once, and kept: the page's Undo, and Recently deleted for a report
     store.audit('source', sid, 'delete', ACTOR)
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
-    return {'ok': True}
+    return {'ok': True, **out}
+
+# ── RECENTLY DELETED (recentlydeleted.py): a Remove acts at once; its Undo line and this list bring it back ──
+@app.get('/api/deleted')
+def deleted_list(kinds: str = ''):
+    from . import recentlydeleted
+    want = tuple(k for k in kinds.split(',') if k) or recentlydeleted.LISTED
+    return {'data': recentlydeleted.listing(store, want), 'keep_days': recentlydeleted.KEEP_DAYS}
+
+@app.post('/api/deleted/{did}/restore')
+def deleted_restore(did: int):
+    """Undo and Restore alike: what the Remove took, put back as it was."""
+    from . import recentlydeleted
+    try: out = recentlydeleted.restore(store, cfg, did)
+    except recentlydeleted.Gone as e: raise HTTPException(404, str(e))
+    except recentlydeleted.Taken as e: raise HTTPException(409, str(e))
+    store.audit('deleted', did, 'restored', ACTOR, detail=out)
+    from .docsync import sync_connections
+    sync_connections(store, ACTOR)
+    return {'ok': True, **out}
 
 @app.get('/api/reports/last-runs')
 def report_last_runs():
@@ -5662,11 +5685,13 @@ def connector_uses(cid: int):
 def connector_reset(cid: int):
     c = store.get_connector(cid)
     if not c: raise HTTPException(404, 'connector not found')
-    store.reset_connector(cid)
+    # at once, with the page's Undo: its sealed sign-in is kept for the Undo line's minutes, then forgotten (recentlydeleted.py)
+    from . import recentlydeleted
+    out = recentlydeleted.remove_connection(store, cid, c.get('Name') or c['Type'])
     store.audit('connector', cid, 'reset', ACTOR, detail={'type': c['Type']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
-    return {'ok': True}
+    return {'ok': True, **out}
 
 @app.get('/api/deps')
 def deps_list():
@@ -6006,13 +6031,14 @@ def chatgpt_cancel(cid: int, body: dict):
 def chatgpt_signout(cid: int):
     """End the session at OpenAI and forget it here. The host id stays: this install is the same host next time."""
     from . import chatgptauth
-    _c, cfg = _chatgpt_card(cid)
-    full = store.get_connector(cid, with_secret=True)
-    if full.get('Secret'): chatgptauth.revoke(cfg, full['Secret'])
+    c, cfg = _chatgpt_card(cid)
     keep = {k: v for k, v in cfg.items() if k in ('host_id', 'model')}
-    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(keep), 'Secret': '', 'Active': 0}, ACTOR)
+    # signed out here at once; the session is ended at OpenAI once the page's Undo has passed (recentlydeleted.purge) - a
+    # revoked session could never be undone
+    from . import recentlydeleted
+    out = recentlydeleted.sign_out(store, cid, c.get('Name') or 'ChatGPT', keep, revoke='chatgpt', cfg_before=cfg)
     store.audit('connector', cid, 'chatgpt_signout', ACTOR)
-    return {'ok': True}
+    return {'ok': True, **out}
 
 # ── Sign in with Microsoft (taskuary/msauth.py): Graph for a regular user, no Azure portal ──
 _MSFLOWS = {}   # flow id -> the device code being polled; one browser tab, minutes, then gone
@@ -6116,11 +6142,12 @@ def ms_signout(cid: int):
     if not c: raise HTTPException(404, 'connector not found')
     cfg = json.loads(c.get('ConfigJson') or '{}')
     for k in ('auth', 'account', 'name'): cfg.pop(k, None)
-    store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(cfg), 'Secret': '', 'Active': 0}, ACTOR)
+    from . import recentlydeleted                     # at once, with the page's Undo (recentlydeleted.py)
+    out = recentlydeleted.sign_out(store, cid, c.get('Name') or c['Type'], cfg)
     store.audit('connector', cid, 'ms_signout', ACTOR, detail={'type': c['Type']})
     from .docsync import sync_connections
     sync_connections(store, ACTOR)
-    return {'ok': True}
+    return {'ok': True, **out}
 
 @app.post('/api/platform/macos/open-settings')
 def macos_open_settings(body: dict):
@@ -7039,6 +7066,8 @@ def delete_cli_connection(name: str, detach: bool = False):
     users = [n for n, p in cfg.get('agents', {}).items() if p.get('provider') == f'cli:{name}']
     if users and not detach: raise HTTPException(409, f'Choose another provider for these profiles first: {", ".join(users)}')
     if name not in cfg.get('cli_connections', {}): raise HTTPException(404, 'Connection not found')
+    from . import recentlydeleted                       # at once, with the page's Undo: the connection and its profiles' choice of it
+    out = recentlydeleted.remove_cli(store, cfg, name, users)
     for n in users:
         prof = cfg['agents'][n]
         prof.pop('provider', None)
@@ -7047,7 +7076,7 @@ def delete_cli_connection(name: str, detach: bool = False):
     config.save(cfg); pathcache.forget()
     cli_connections.sync(cfg, store)
     store.audit('cli_connection', 0, 'delete', ACTOR, detail={'name': name, 'detached': users})
-    return {'ok': True, 'detached': users}
+    return {'ok': True, 'detached': users, **out}
 
 
 @app.post('/api/cli/connections/{name}/test')
@@ -7292,14 +7321,11 @@ def delete_agent(name: str):
     # An IMPORTED profile's document goes with it: the import wrote it, nothing else shares it, and
     # left behind it would be the body a later profile of the same name silently inherits. A document
     # anyone else wrote (the owner, a template) stays - deleting a worker is not deleting its rules.
-    doc = hub_agents.profile_document(store, name)
-    orphan = doc == name and store.doc_owner(doc) == 'import'
-    cfg['agents'].pop(name)
-    config.save(cfg)
-    store.delete_agent(name)
-    if orphan: store.delete_doc(doc)
+    # ...and all of it is kept under Recently deleted, so Undo and Restore bring the profile back whole (recentlydeleted.py)
+    from . import recentlydeleted
+    out = recentlydeleted.remove_profile(store, cfg, name)
     store.audit('agent', 0, 'delete', ACTOR, detail=name)
-    return {'ok': True}
+    return {'ok': True, **out}
 
 def _template_text(name: str) -> str:
     return hub_agents.profile_template(store, name)
@@ -7574,10 +7600,10 @@ def delete_policy(pid: int):
     comes back first, exactly as switching it off would have done."""
     p = next((x for x in store.list_policies(active_only=False) if x['PolicyId'] == pid), None)
     if not p: raise HTTPException(404, 'policy not found')
-    shown = policy_engine.apply_retroactively(store, {**p, 'Active': 0})
-    store.delete_policy(pid)
-    store.audit('policy', pid, 'delete', ACTOR, detail={'name': p.get('Name'), 'restored': shown})
-    return {'ok': True, 'restored': shown}
+    from . import recentlydeleted
+    out = recentlydeleted.remove_policy(store, pid)            # kept under Recently deleted: Restore hides that history again
+    store.audit('policy', pid, 'delete', ACTOR, detail={'name': p.get('Name'), 'restored': out['restored']})
+    return {'ok': True, **out}
 
 @app.get('/api/memory')
 def memory(): return {'data': store.list_memories(active_only=False)}
@@ -8189,6 +8215,9 @@ def _poll_reports(backfill_hours: float = 0, what: str = 'syncing',
             logger.warning(f'loose-end check skipped: {e}')
         try: playbooks.purge()                          # ...and a playbook deleted KEEP_DAYS ago leaves Recently deleted (playbooks.py)
         except Exception as e: logger.warning(f'deleted playbooks not purged: {e}')
+        try:                                            # ...and what Recently deleted has kept its time goes for good (recentlydeleted.py)
+            from . import recentlydeleted; recentlydeleted.purge(target_store)
+        except Exception as e: logger.warning(f'Recently deleted not purged: {e}')
         _lap('housekeeping')
         return added
     finally:

@@ -32,7 +32,8 @@ import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
 import api from "./api";
 import { useSaveNote } from "./SaveNote.jsx";
 import { PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, ACTION_COLORS } from "./theme.jsx";
-import { ChannelIcon, ConfirmDelete, Empty } from "./ui.jsx";
+import { ChannelIcon, Empty } from "./ui.jsx";
+import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import { normalizeBrainOptions } from "./brainOptions.js";
 import { mailboxChoices, mailboxValue } from "./ruleMailbox.js";
 import { ABOUT_SECTIONS, AUDIT_SECTIONS, secId, pageId, scrollToSection, sectionOffset, SCROLL_TOP } from "./settingsMap.js";
@@ -464,8 +465,8 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
   const savePolicy = async (p) => { if ((await run(() => api.post("/api/policies", p), { ok: "Rule saved" })).ok) setDraft(null); load(); };
   const togglePolicy = async (p) => { await run(() => api.post("/api/policies", { PolicyId: p.PolicyId, Active: !p.Active }),
     { ok: p.Active ? "Rule switched off" : "Rule switched on" }); load(); };
-  const [delPolicy, setDelPolicy] = useState(null);      // the rule awaiting its confirm
-  const deletePolicy = async (p) => { await run(() => api.delete(`/api/policies/${p.PolicyId}`), { ok: "Rule deleted", lead: "Not deleted — " }); load(); };
+  // REMOVE IS AT ONCE (the owner, 2026-10-21): "Removed <rule> - Undo" over the list, and Recently deleted keeps it 30 days
+  const deletePolicy = async (p) => { await run(() => removeNow(() => api.delete(`/api/policies/${p.PolicyId}`), "rule", p.Name), { ok: "", lead: "Not removed — " }); load(); };
   // `el`: the text box that was typed in - put back to the stored value when the save is refused,
   // or it keeps showing a value that is not the one in force
   const saveSetting = async (name, value, el) => {
@@ -775,6 +776,7 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
             <Box sx={{ flex: 1 }} />
             <Button size="small" variant="contained" startIcon={<AddIcon sx={{ fontSize: 14 }} />} onClick={() => setDraft({ ...NEW_POLICY })}>Add rule</Button>
           </Box>
+          <UndoLine kinds={["rule"]} onRestored={load} sx={{ mt: 1.5, mb: 0 }} />
           {!(policies || []).length && !draft && (
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2.25, mt: 2, maxWidth: 680 }}>
               <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13.5 }}>No routing rules yet</Typography>
@@ -798,12 +800,10 @@ function SettingsPages({ q, setQ, onNavigate, onJump, onSections, docSel, setDoc
                 title="When two rules with the same action match, the lower number wins">priority {p.SortOrder}</Typography>
               <Button size="small" onClick={() => setDraft({ ...p, Active: !!p.Active })}>Edit</Button>
               <Switch checked={!!p.Active} onChange={() => togglePolicy(p)} />
-              <IconButton size="small" title="Delete this rule" onClick={() => setDelPolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
+              <IconButton size="small" title="Remove this rule" aria-label="Remove this rule" onClick={() => deletePolicy(p)}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
             </Box>
           ))}
-          <ConfirmDelete open={!!delPolicy} what={delPolicy ? `the rule “${delPolicy.Name}”` : "this rule"}
-            consequence="Messages it matched go back to being judged by triage alone."
-            onClose={() => setDelPolicy(null)} onConfirm={() => deletePolicy(delPolicy)} />
+          <RecentlyDeleted kinds={["rule"]} onRestored={load} />
           {draft && (
             <Box sx={{ ...card, bgcolor: PANEL2, p: 2, mt: 2, display: "flex", flexDirection: "column", gap: 1.25 }}>
               <Typography variant="body2" sx={{ color: "#55697a", fontWeight: 600 }}>{draft.PolicyId ? `Edit rule · ${draft.Name}` : "New rule"}</Typography>

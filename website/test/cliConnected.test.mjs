@@ -16,8 +16,9 @@ test("only a connected card shows its command; the rest offer Connect", () => {
   assert.match(src, /cli\.installed && <Button[^>]*onClick=\{\(\) => connect\(cli\)\}/);
 });
 
-test("a connected card disconnects, and the dialog says it can be undone", () => {
-  assert.match(src, /setConfirmDel\(cli\.name\)\}>Disconnect<\/Button>/);
-  assert.match(src, /confirmLabel="Disconnect" undoable/);
+test("a connected card disconnects at once, with Undo in place - no dialog (the owner, 2026-10-21)", () => {
+  assert.match(src, /onClick=\{\(\) => disconnect\(cli\)\}>Disconnect<\/Button>/);
+  assert.match(src, /<UndoLine kinds=\{\["cli"\]\}/);
+  assert.doesNotMatch(src, /ConfirmDelete/);
   assert.doesNotMatch(src, /Set it up connects it again/);
 });

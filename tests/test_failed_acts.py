@@ -147,8 +147,9 @@ class AYesAnswersTheTableTests(unittest.TestCase):
 
     def test_the_same_ask_again_is_the_same_proposal_still_waiting_not_a_change(self):
         s = store(); out = arrive(s); item = pile(s)[0]
-        first = say(s, 'not ours', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours", "params": {}}')['proposal']
-        again = say(s, 'yes file it', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours", "params": {}}')['proposal']
+        # (Not ours itself runs at once now - owner-approved, 2026-10-21 - so the act that waits is its From now on)
+        first = say(s, 'ignore this sender', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours_sender", "params": {}}')['proposal']
+        again = say(s, 'yes ignore them', key=item['key'], model='Filing it.\nCALL: {"kind": "not_ours_sender", "params": {}}')['proposal']
         self.assertEqual((again['id'], again['version']), (first['id'], first['version']))
         self.assertTrue(again['say'].startswith('Still waiting for your yes'), again['say'])
         self.assertEqual(s.get_task(out['task_id'])['Status'], 'open')

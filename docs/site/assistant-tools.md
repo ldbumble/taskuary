@@ -607,9 +607,9 @@ Change a report's configuration.
 
 ### `report.delete`
 
-Delete a report or workflow for good.
+Remove a report or workflow.
 
-- `title`
+- `title` - kept 30 days under Recently deleted
 
 <p class="runs">Brings up its button for you to press.</p>
 

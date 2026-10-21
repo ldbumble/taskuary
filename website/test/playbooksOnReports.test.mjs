@@ -26,7 +26,7 @@ test("Delete is at once, and Recently deleted under the shelf restores it", () =
   const d = src("DocsView.jsx"), s = src("PlaybookShelf.jsx"), r = src("ReportsView.jsx");
   assert.doesNotMatch(d, /Delete playbook\?|confirmDeletePb|<Dialog /);
   assert.match(s, /api\.post\(`\/api\/playbooks\/\$\{slug\}\/restore`\)/);
-  assert.match(r, /<RecentlyDeleted items=\{pbs\.deleted\} onRestore=\{pbs\.restore\} \/>/);
+  assert.match(r, /<PlaybooksDeleted items=\{pbs\.deleted\} onRestore=\{pbs\.restore\} \/>/);
 });
 
 test("Settings offers no playbooks any more", () => {

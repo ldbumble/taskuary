@@ -216,7 +216,7 @@ def _connectors(store, words) -> list:
 # reports and workflows, the documents. The Assistant asks it (app.find) and links what it picked; nothing is pasted into a turn.
 # Ranked, not filtered: a word in a NAME counts three times what it does anywhere else, and a word counts by how RARE it is in the
 # index (log N/df) - so "turn off the sound" finds the sound knob by "sound", and "the" and "off", in half the rows, weigh nearly nothing.
-def _stem(w: str) -> str: w = _fold(w); return w[:5] if len(w) >= 7 else w.rstrip('s') if len(w) > 3 else w
+def _stem(w: str) -> str: w = _fold(w); return w[:-2] if len(w) >= 7 else w.rstrip('s') if len(w) > 3 else w      # "signature" is never Signal
 # a short word is a whole word ("my" is never MySQL, "ap" is AP ageing); a longer one starts a word, the mail index's prefix match
 def _hit(w: str, t: str) -> bool: return re.search(r'(?<![^\W_])' + re.escape(w) + (r'(?![^\W_])' if len(w) <= 3 else ''), t) is not None
 # the pages words.json has no sentence for, by the links the canvas opens (canvasLinks.js)
@@ -228,8 +228,8 @@ PAGES = (('Settings → Audit log', '#settings=audit', 'audit log history change
 
 def _app_rows(store) -> list:
     from . import words as places
-    rows = [{'type': 'place', 'title': p['name'], 'rest': k, 'href': p['href']} for k, p in places.PLACES.items() if p.get('href')]
-    rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h} for t, h, w in PAGES]
+    rows = [{'type': 'place', 'title': p['name'], 'rest': k, 'href': p['href'], 'key': k} for k, p in places.PLACES.items() if p.get('href')]
+    rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h, 'key': w.split()[0]} for t, h, w in PAGES]
     rows += [{'type': 'setting', 'title': m['label'], 'where': f"Settings → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
               'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
              for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
@@ -251,7 +251,7 @@ def _app_rows(store) -> list:
                      'href': f"#report={s['SourceId']}"})
     try: docs = store.doc_names()
     except Exception: docs = []
-    rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': 'Settings → Docs', 'rest': f'{d} document doc',
+    rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': 'Settings → Docs', 'rest': f'{d} document doc', 'key': d,
               'href': f'#settings=docs&doc={d}' if re.fullmatch(r'\w+', d) else '#settings=docs'} for d in docs]
     return rows
 
@@ -268,9 +268,12 @@ def places(store, q: str, n: int = 8) -> list:
     score = lambda nt: sum(weight[w] * (3 if _hit(w, nt[0]) else 1 if _hit(w, nt[1]) else 0) for w in words)
     seen = set()      # one row per thing: the catalogue lists a few cards twice, and a place two names for one link
     rows_ = [(nt, r) for nt, r in zip(texts, rows) if not ((r['href'], r['title']) in seen or seen.add((r['href'], r['title'])))]
-    # ...and a word that IS a card's own type ("database", "imap") names that card over others that only carry it in their title
+    # ...and a word that IS a thing's own key - a card's type ("database", "imap"), a document's name ("learned"), a page's ("hub") - names it
     exact = lambda r: r.get('key') in said
-    scored = sorted(((score(nt) + (1 if exact(r) else 0), r) for nt, r in rows_), key=lambda x: (-x[0], not x[1].get('boost'), len(x[1]['title'])))
+    # ...and on a tie the app's own place before a catalogue card that shares its name ("the Hub" is the Hub, not the Company Hub connector)
+    order = {'place': 0, 'setting': 1, 'report': 2, 'document': 3, 'connector': 4}
+    scored = sorted(((score(nt) + (1 if exact(r) else 0), r) for nt, r in rows_),
+                    key=lambda x: (-round(x[0], 6), not x[1].get('boost'), order.get(x[1]['type'], 5), len(x[1]['title'])))
     top = scored[0][0] if scored else 0
     # what is near the best - a weak echo of one common word is no candidate
     return [{k: v for k, v in r.items() if k not in ('rest', 'boost', 'key')} for s, r in scored[:n] if top > 0 and s >= top * 0.35]

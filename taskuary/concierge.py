@@ -4259,9 +4259,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     if decision and verb in ('reply', 'redraft') and target_item:
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
-        said = (RECEIPTS[verb] if not routes() else
-                f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
-                f" - nothing goes out until you press {buttons.label('approve')}.") + closed_note(store, target_item)
+        said = (f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
+                f" - nothing goes out until you {'press ' + buttons.label('approve') if routes() else 'say yes'}.") + closed_note(store, target_item)
         rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)

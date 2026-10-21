@@ -675,8 +675,13 @@ def seed(store) -> int:
 
     # ...and spread across the day: the pictures all stamp themselves 'now', so a demo opened
     # at 8pm showed a morning's work arriving in the same minute
+    # ...ALL of the morning's, wherever midnight falls: only what was stamped TODAY was spread, so before mid-afternoon the seeds a few
+    # hours back (an fyi 14 and 17 hours ago) kept their stamps across midnight, outside the pipe's reach (funnel_hours), and the demo
+    # held two fyi at 08:00 and four at 18:00 (tests/assistant_queries.py, 2026-10-21). The morning is everything from the last day;
+    # the week of history is seeded after this and keeps its days.
+    since = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
     for i, m in enumerate(store.scan_messages(60)):
-        if str(m.get('SentAt') or '')[:10] != datetime.now().strftime('%Y-%m-%d'): continue
+        if str(m.get('SentAt') or '') < since: continue
         store._exec('UPDATE message SET SentAt=? WHERE MessageId=?',
                     ((datetime.now() - timedelta(minutes=37 * i + 11)).strftime('%Y-%m-%d %H:%M:%S'), m['MessageId']))
 

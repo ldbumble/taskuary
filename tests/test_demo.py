@@ -368,5 +368,27 @@ class TheWorldTests(unittest.TestCase):
         self.assertNotIn('rm -rf', r.scrollback())
 
 
+
+class TheSameWorldAtEveryHourTests(unittest.TestCase):
+    def test_the_pile_is_the_same_whenever_the_demo_is_opened(self):
+        """Before mid-afternoon the fyi seeded 14 and 17 hours back kept stamps across midnight, outside the pipe's twelve hours, and
+        the demo held two fyi at 08:00 and four at 18:00 (tests/assistant_queries.py, 2026-10-21). The morning is spread from now."""
+        from datetime import datetime, timedelta
+        from taskuary import funnel, terminal
+        from tests.fake_clock import fake_clock
+        day = (datetime.now() - timedelta(days=1)).replace(second=0, microsecond=0)     # in the past: SQLite's 'now' is the real one
+        seen = {}
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(MemoryStore())     # its lazy imports, loaded
+        for h, mi in ((1, 0), (8, 0), (13, 0), (23, 30)):
+            with fake_clock(day.replace(hour=h, minute=mi)), mock.patch.object(terminal, 'live_sessions', return_value=[]):
+                funnel.invalidate(); funnel.forget_states(); funnel._SOURCES.update(at=0.0, by={})
+                s = MemoryStore(); demo.seed(s); funnel.invalidate()
+                seen[f'{h:02d}:{mi:02d}'] = sorted((i['kind'], i['key']) for i in funnel.build(s)['items'])
+        funnel.invalidate()
+        first = next(iter(seen.values()))
+        self.assertEqual(sum(k == 'fyi' for k, _ in first), 4, first)
+        for at, pile in seen.items(): self.assertEqual(pile, first, at)
+
+
 if __name__ == '__main__':
     unittest.main()

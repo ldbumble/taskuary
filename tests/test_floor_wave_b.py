@@ -3,6 +3,10 @@ of the owner's reads as configuration or runs as a hook (B3). Name matching, by 
 import os, pytest
 from taskuary import floor
 
+# the floor's speed guards: 0.2s here; a shared CI runner is several times slower and noisier (macOS took 0.58s, 2026-10-21).
+# They guard against a quadratic scan (seconds), not against a busy machine.
+FAST = 1.5 if os.environ.get('CI') else 0.2
+
 def call(tool, cwd='', **inp): return floor.check({'tool_name': tool, 'cwd': cwd, 'tool_input': inp}, 7)
 def denied(r): return r.get('hookSpecificOutput', {}).get('permissionDecision') == 'deny'
 SHELLS = ('Bash', 'PowerShell')
@@ -370,12 +374,12 @@ def test_many_inline_shells_in_one_file_are_judged_fast(n, tmp_path):
     import time
     body = 'TASKS = {\n' + ''.join(f"    't{i}': ['bash', '-c', 'make t{i}'],\n" for i in range(n)) + '}\n'
     t = time.perf_counter(); r = call('Write', file_path=str(tmp_path / 'tasks.py'), content=body)
-    assert r == {} and time.perf_counter() - t < 0.2, time.perf_counter() - t
+    assert r == {} and time.perf_counter() - t < FAST, time.perf_counter() - t
 
 def test_a_chain_of_inline_shells_is_judged_fast_and_still_refused():
     import time
     t = time.perf_counter(); r = call('Bash', command='echo ' + 'sh -c ' * 50 + '; taskuary --prompts')
-    assert denied(r) and time.perf_counter() - t < 0.2, time.perf_counter() - t
+    assert denied(r) and time.perf_counter() - t < FAST, time.perf_counter() - t
 
 @pytest.mark.parametrize('content', ["subprocess.run(['taskuary','--reply','hi','--prompts'])\n", "subprocess.run(['taskuary-desktop'])\n",
                                      "subprocess.run(['C:/tools/taskuary.exe', '--link'])\n", "subprocess.run(['taskuary'])\n",
@@ -408,7 +412,7 @@ def test_a_thousand_inline_shells_stay_fast(tmp_path):
     body = 'TASKS = {\n' + ''.join(f"    't{i}': ['bash', '-c', 'make t{i}'],\n" for i in range(1000)) + '}\n'
     call('Write', file_path=str(tmp_path / 'warm.py'), content="['bash', '-c', 'make']\n")     # first-call setup is not the floor's work
     t = time.perf_counter(); r = call('Write', file_path=str(tmp_path / 'tasks.py'), content=body)
-    assert r == {} and time.perf_counter() - t < 0.2, time.perf_counter() - t
+    assert r == {} and time.perf_counter() - t < FAST, time.perf_counter() - t
 
 @pytest.mark.parametrize('content', ["spawnSync('taskuary-desktop')\n", "spawn('taskuary')\n", "execa('taskuary-desktop')\n",
                                      "execFile('taskuary.exe')\n", "spawn(\"taskuary\", ['--link'])\n"])

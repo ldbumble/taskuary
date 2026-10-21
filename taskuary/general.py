@@ -1058,10 +1058,13 @@ class GeneralSession:
             try:
                 limit = DOCK_REPLY_TOKENS if is_dock(self.store.get_task(self.task_id)) else MAX_REPLY_TOKENS
                 reply = str(brain(system, user, max_tokens=limit, images=_images(paths), **_web(brain)) or '').strip()
-            except Exception:
+            except Exception as e:
                 # the CLI could not pick that conversation back up (it was restarted, its history
                 # was cleared, the id aged out). Start a fresh one and say the whole thing, once.
-                if not self.cli_sid or (cancel is not None and cancel.is_set()): raise
+                # ...but never a turn its CLI died part-way through: it may have done some of the work, and a fresh conversation
+                # saying the whole thing again would do it twice (clipool.MID_TURN) - that turn ends, and Continue picks it up
+                from .clipool import MID_TURN
+                if not self.cli_sid or (cancel is not None and cancel.is_set()) or MID_TURN in str(e): raise
                 logger.info(f'assistant could not resume {self.cli_sid} on task {self.task_id}; starting a new one')
                 self.cli_sid = ''
                 self.resume_notice = 'The original session could not be resumed. Restored from the saved conversation.'
@@ -1191,6 +1194,11 @@ class GeneralSession:
                 ws.record(self.store, self.task_id, self.sid, 'failed', text=str(e)[:4000], source='api')
             except Exception as skipped: logger.debug(f'api worker event skipped: {skipped}')
             logger.warning(f'assistant turn failed on task {self.task_id}: {e}')
+            # ITS CLI DIED PART-WAY THROUGH (clipool.MID_TURN): the turn was not sent again, as it may have done some of the work.
+            # The session ends here, its conversation saved - so the task reads stopped and its row offers Continue, which picks the
+            # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
+            from .clipool import MID_TURN
+            if MID_TURN in str(e): threading.Timer(0.1, self.close, kwargs={'learn': False}).start()
             raise
         finally:
             self.busy, self.last = False, time.time()

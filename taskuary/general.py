@@ -1149,8 +1149,12 @@ class GeneralSession:
                 except Exception as e: logger.debug(f'could not keep the page of task {self.task_id}: {e}')
             reply, closing = selfclose.chat_marker(reply)
             reply, asks = selfclose.ask_markers(reply)
-            asked = asks[0][0] if asks else None
-            reply = reply or (closing or '') or (asked or '')
+            # THE QUESTION STAYS IN THE ANSWER. The marker line IS the question - ASK_LINE asks for it there - and cutting the
+            # marker cut the question with it, so the chat showed "the laptop spend needs your yes first" and never what to say
+            # yes to. Since the question card left the chat (2026-10-19: "the agent's question is in its own answer above, and
+            # the reply goes in the composer") the answer above is the only place it can be read (walk 2026-10-21).
+            said = '\n\n'.join(q + (f" ({' / '.join(c)})" if c else '') for q, c in asks if q not in reply)
+            reply = '\n\n'.join(x for x in (reply, said) if x) or (closing or '')
             # the worker's own lifecycle, as events (PW-225): the turn ended; and if it asked, the exact question
             try:
                 from . import workerstate as ws

@@ -9,6 +9,7 @@ import { BORDER, DIM, INK, PANEL, mono } from "./theme.jsx";
 
 import { looksMd, refParts } from "./mdText.js";
 import { appLink, openAppLink } from "./appLinks.js";
+import { plainCitations } from "./taskOutputs.js";
 export { looksMd };
 
 const TASK_LINK = /#task=(\d+)/;
@@ -60,7 +61,8 @@ export const Md = ({ text }) => (
   <Box sx={sx}>
     <ReactMarkdown remarkPlugins={[remarkGfm]}
       components={{ a: A, img: Img, td: Td, table: ({ children }) => <div className="tbl"><table>{children}</table></div> }}>
-      {String(text || "")}
+      {/* a Codex citation marker reads as the file's name wherever an answer is shown; the chat makes it a file (taskOutputs.js) */}
+      {plainCitations(text || "")}
     </ReactMarkdown>
   </Box>
 );

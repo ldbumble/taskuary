@@ -2,7 +2,19 @@
 // A real function under test, not a source regex.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adviceKeyFor } from "../src/advice.js";
+import { adviceKeyFor, stripWord } from "../src/advice.js";
+
+// C2 (the UI audit, 2026-10-21): the strip's word and the lit button are one decision (advice.stripWord)
+test("a working agent's strip says it is working and lights Next, even with no AI connected", () => {
+  const w = stripWord({ speaks: true, aiOff: true, key: "task:9", lane: "working" });
+  assert.equal(w.noAi, false); assert.equal(w.none.none, "working"); assert.equal(w.pick.none, "working");
+  const n = stripWord({ speaks: true, advice: { none: "no_ai", for: "task:9" }, key: "task:9", lane: "working" });
+  assert.equal(n.none.none, "working", "a no-AI answer read for a working agent is said as working");
+  const p = stripWord({ speaks: true, aiOff: true, key: "task:3", lane: "asked" });
+  assert.equal(p.noAi, true); assert.equal(p.pick.none, "no_ai", "elsewhere the strip asks for an AI, and the row lights nothing of its own");
+  const s = { verb: "reply", line: "x" };
+  assert.equal(stripWord({ speaks: true, shown: s, key: "k", lane: "asked" }).pick, s, "a line lights its verb");
+});
 
 test("an advice event is about the item on the table when it names its key or one of its aliases", () => {
   const cur = { key: "processing:pi_1", aliases: ["msg:3", "agent:1", "task:1"] };
@@ -34,7 +46,7 @@ test("the page draws the gated line, starts each item with none, and drops a rea
   const src = fs.readFileSync(path.join(process.cwd(), "src", "AssistantView.jsx"), "utf8");
   assert.match(src, /<AdvisorNext advice=\{shownAdvice\} onPropose=\{pressAdvice\} \/>/);
   assert.match(src, /try \{ return await proposeDirect\(a\.verb, key, true, a\.revision\); \}/);
-  assert.match(src, /advised=\{litNow \|\| shownAdvice \|\| noneSaid( \|\| setupLit)?\}/);
+  assert.match(src, /advised=\{stripPick \|\| setupLit\}/);
   assert.doesNotMatch(src, /<AdvisorNext advice=\{advice\}/);
   assert.match(src, /if \(!keep\) setAdvice\(null\)/);
   assert.match(src, /if \(n !== adviceAsk\.current\) return;[\s\S]{0,400}?setAdvice\(got\);/);

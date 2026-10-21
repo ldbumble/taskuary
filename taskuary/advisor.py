@@ -158,7 +158,10 @@ SYSTEM = (
     f"{L('reply')}. "
     f"SOMEONE THE OWNER WAITS ON IS QUIET PAST THEIR DAY (the item says how long, and {L('chase')} is offered): {L('chase')} - a short "
     f"nudge for the owner's yes - unless the item says they answered or are away. "
-    "A POSSIBLE DUPLICATE with an agent already on it is said in the line, so the owner does not answer the same ask twice. "
+    # ...AND THE VERB AGREES WITH IT (the UI audit's C2, 2026-10-21): "TQ-0006 may already cover it, and an agent is on that" stood over a
+    # dark Reply - the line said don't answer twice and the button said answer
+    "A POSSIBLE DUPLICATE with an agent already on it is said in the line, so the owner does not answer the same ask twice - and then "
+    f"the verb is never {L('reply')}: it is {L('defer')}, to look again once that agent is done, when offered; else say nothing. "
     f"A GOAL (a THE GOAL line): a step past its day, or held by someone late, is named in the line with the move offered that gets it "
     f"going ({L('chase')} when offered, else {L('defer')} to look again on a day); a goal with no news says so, and the move is "
     f"{L('defer')}. AN IDEA (a THE IDEA line, the assistant's own suggestion): {L('mine')} when it names work worth doing now, "

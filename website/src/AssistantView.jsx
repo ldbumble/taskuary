@@ -36,7 +36,7 @@ import { hint as btnHint, label as btn, liveVerb, verbOfRow } from "./buttons.js
 import { readTurn, toolTarget } from "./assistantStream.js";
 import { pollWhileActive } from "./visible.js";
 import { liveUp, onLive } from "./live.js";
-import { adviceKeyFor, adviceShown } from "./advice.js";
+import { adviceKeyFor, adviceShown, stripWord } from "./advice.js";
 import { Md, looksMd } from "./md.jsx";
 import { ChannelIcon, MicButton, TaskuaryMark, fmtDateTime, fmtTime12 } from "./ui.jsx";
 // TASKUARY'S MARK IN THE CHAT (the owner, 2026-09-28: "the taskuary logo is blue and very obvious ... you can change the
@@ -2784,10 +2784,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const shownAdvice = table.speaks && !litNow ? adviceShown(advice, { key: table.key, lane: currentItem?.lane }, busy) : null;
   shownRef.current = shownAdvice?.verb ? { key: shownAdvice.for || shownAdvice.key || table.key, verb: shownAdvice.verb, revision: shownAdvice.revision } : null;
   // ...an answer that landed wins: the strip asking for an AI over a line the Advisor did give hid the line and left its button dark
-  const noAi = table.speaks && !busy && !shownAdvice && !litNow && (caps.ai === false || (advice?.none === "no_ai" && advice.for === table.key));
-  // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden
-  const noneSaid = !table.speaks || busy || shownAdvice || noAi || litNow ? null
-    : advice?.none && advice.for === table.key ? advice : currentItem?.lane === "working" ? { none: "working", for: table.key } : null;
+  // ...and every other reason there is no line, said (words.json advice_none) - an agent at work included, whose line is hidden.
+  // ONE DECISION for the strip's word and the button it lights (advice.stripWord): they were chosen apart, and "Connect an AI" stood
+  // over a dark Stop and save on an agent that needed nothing (the UI audit's C2, 2026-10-21)
+  const { noAi, none: noneSaid, pick: stripPick } = stripWord({ speaks: table.speaks, busy, shown: shownAdvice, lit: litNow, aiOff: caps.ai === false,
+    advice, key: table.key, lane: currentItem?.lane });
   // ON A PHONE THE LINE RIDES WITH ITS ROW: the row is drawn at the task view's foot there (CanvasItem), and the line pinned over the
   // composer stood a screen away from the button it lit (2026-10-19) - the view draws both, and the dock none
   const hostedRow = useHosted();
@@ -3081,7 +3082,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           </>}
           {/* ...and during setup its line is the Advisor's (SetupLine): the move setup fills (FirstRun's tone) is the one lit - nothing
               was, so the line said "pick it" over a plain Back and a greyed Next (2026-10-19) */}
-          <ActionRow advised={litNow || shownAdvice || noneSaid || setupLit} />
+          <ActionRow advised={stripPick || setupLit} />
           {!firstRun && <ImageTray pics={pics} sx={{ width: "100%", mb: 0.75 }} />}
           <div className="tq-compose-box" style={firstRun ? { display: "none" } : undefined}>
             <AttachImage pics={pics} sx={{ color: DIM }} />

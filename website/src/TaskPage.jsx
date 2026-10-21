@@ -864,7 +864,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // The task itself leads when no coding terminal is open. Triage already distilled an inbound
   // item into Title + Summary; falling back to its newest inbound body keeps older/promoted rows
   // equally useful. This is the human TODO, not an agent-launch advertisement.
-  const taskAsk = cleanText(t?.Summary || sourceMessage?.BodyText || "");
+  // ...except where Summary is Taskuary's own brief to the agent (a playbook built with AI: the setup instructions and the example
+  // email's raw record - ownwork.BRIEFED): its title is the ask, and the owner's words are in the conversation
+  const taskAsk = cleanText(t?.SourceRef === "assistant:playbook" ? t?.Title : t?.Summary || sourceMessage?.BodyText || "");
   // WHAT THEY ACTUALLY SAID. A task opens on one message and then keeps collecting the rest of
   // the conversation - three WhatsApp voice notes seconds apart are one thought, and ingest
   // attaches the later ones to the same task. The panel showed the FIRST and nothing else, so a

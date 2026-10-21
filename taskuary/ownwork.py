@@ -39,6 +39,19 @@ def row_for(store, tid: int):
     return next((m for m in store.list_messages(tid) if (m.get('Channel') or '') == CHANNEL), None)
 
 
+# A ROW SIGNED "YOU" CARRIES ONLY WHAT YOU SAID (the owner, 2026-10-21). A task Taskuary opened for you can carry its own brief in
+# Summary - a playbook built with AI holds the setup instructions and the example email's raw record there - and the row showed that
+# under "You" in The conversation. Such a task's row reads the owner's own first words instead.
+BRIEFED = ('assistant:playbook',)
+
+
+def yours(store, t: dict) -> str:
+    if str(t.get('SourceRef') or '') not in BRIEFED: return str(t.get('Summary') or '').strip()
+    from . import general
+    said = next((c for c in store.list_comments(t['TaskId']) if c.get('ActorType') == general.USER_TYPE), None)
+    return str((said or {}).get('Body') or t.get('Title') or '').strip()
+
+
 def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
     """Give a task a timeline row if nothing else already speaks for it. Returns the message id,
     or None when the task already has one (from mail, chat, a report, or an earlier session).
@@ -49,12 +62,14 @@ def ensure(store, tid: int, when=None, why: str = '', actor: str = 'owner'):
         t = store.get_task(tid)
         if not t: return None
         if t.get('SourceRef') == 'assistant:dock': return None
+        # a workflow's run already says where it came from (workflows.of_task) - its brief is no message from anybody
+        if t.get('Source') == 'workflow': return None
         if [m for m in store.list_messages(tid) if m.get('Status') != 'context']: return None
         at = _stamp(when)
         mid = store.add_message({
             'TaskId': tid, 'ExternalId': f'own:{tid}', 'ConversationId': f'own:{tid}',
             'Channel': CHANNEL, 'SourceName': SOURCE, 'Subject': t.get('Title') or 'Untitled',
-            'FromName': 'You', 'SentAt': at, 'BodyText': str(t.get('Summary') or '').strip(),
+            'FromName': 'You', 'SentAt': at, 'BodyText': yours(store, t),
             'Status': 'routed'})
         store.add_route(mid, tid, 'own', None,
                         why or 'you started this yourself - no message came in, so the timeline '

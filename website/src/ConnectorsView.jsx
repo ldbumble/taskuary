@@ -41,6 +41,7 @@ import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { validEmail } from "./recipientOptions.js";
 
 /* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
    2026-10-21: "it should look like general agent working, not code one"). Its brief is the card's Guide; its hands are the card's
@@ -2205,6 +2206,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [secret, setSecret] = useState("");
   const [newSrc, setNewSrc] = useState("");
   const [roster, setRoster] = useState(new Set());   // WhatsApp jids WaChats lists - each with its own switch there
+  const [srcBad, setSrcBad] = useState("");
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
@@ -2246,6 +2248,10 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const { run, note } = useSaveNote();
   const addSource = async () => {
     if (!newSrc.trim()) return;
+    // A MAILBOX IS AN ADDRESS: "not an address" was added, ticked green and confirmed in a toast far away, and the steps after it
+    // failed on raw errors (the UI audit, 2026-10-21) - refused here, under the box
+    if (m.channel === "email" && !validEmail(newSrc.trim())) { setSrcBad("That isn't an email address - type the whole address, like name@company.com."); return; }
+    setSrcBad("");
     const r = await run(() => api.post("/api/sources", { Channel: m.channel, Address: newSrc.trim(), ConnectorId: conn.ConnectorId, Active: true }),
       { ok: `Added ${newSrc.trim()}`, lead: "Not added — " });
     if (r.ok) setNewSrc("");
@@ -2364,8 +2370,8 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           consequence="It is removed from this connection - nothing from it comes in until you add it again. What already arrived is kept - search finds it."
           onClose={() => setDelSrc(null)} onConfirm={async () => { await api.delete(`/api/sources/${delSrc.SourceId}`); reload(); }} />
         <Box sx={{ display: "flex", gap: 1, mt: 1.5, maxWidth: 460 }}>
-          <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }}
-            onChange={(e) => setNewSrc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSource()} />
+          <TextField fullWidth placeholder={m.srcPh} value={newSrc} sx={{ bgcolor: "#fff" }} error={!!srcBad} helperText={srcBad || undefined}
+            onChange={(e) => { setNewSrc(e.target.value); setSrcBad(""); }} onKeyDown={(e) => e.key === "Enter" && addSource()} />
           <Button variant="contained" disableElevation onClick={addSource}>Add</Button>
         </Box>
         {MAIL_CARDS.includes(conn.Type) && <MailSignature conn={conn} reload={reload} />}

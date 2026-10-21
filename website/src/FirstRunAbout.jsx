@@ -4,9 +4,10 @@
 // can (firstrun.suggest_about) and never over what was typed; the title answered, JOB.md is written from the mail with them in hand
 // (firstrun.learn) and the last screen asks whether it is right. No placeholder text: a box is either filled from the mail or empty.
 // The row's Back and Next are this component's while it is on the canvas; the question is the Advisor's line (onLine).
-// EVERY MAILBOX BEFORE THE JOB (the owner, 2026-10-20): the job is read out of all the mail, so a step lists the mailboxes connected
-// so far and adds the rest with the email step's own cards (FirstRun hands its shelf in as `mailShelf`). It is never skipped - Skip
-// on a question before it lands on it - and "That's all my mail" moves on once one is connected.
+// EVERY SOURCE BEFORE THE JOB (the owner, 2026-10-20; any source, 2026-10-21): the job is read out of what comes in, so a step lists the
+// sources connected so far - mailboxes, chats, task systems (firstrun.sources) - and adds the rest with the main source step's own
+// cards (FirstRun hands its shelf in as `mailShelf`). It is never skipped - Skip on a question before it lands on it - and
+// "That's all my sources" moves on once one is connected.
 // ...AND THREE DRAFTS, each written from the mail, edited, then accepted: the job (JOB.md), how you write (STYLE.md - it was written
 // silently after the job and its failure only logged) and who you are (SOUL.md). Each says its state, and a failure is said with
 // Write it again.
@@ -26,7 +27,7 @@ export const canSkip = (step) => step !== "mailboxes";
 export const DRAFTS = ["job", "style", "soul"];
 const KIND = { outlook: "Microsoft 365 / Outlook", gmail: "Gmail", imap: "Email (IMAP)" };
 const LABEL = { name: "Your name", org: "Your organisation", role: "Your job title", signature: "Your email signature",
-  systems: "Systems you work in", mailboxes: "Connect all your mailboxes", job: "Your job", style: "How you write", soul: "Who you are" };
+  systems: "Systems you work in", mailboxes: "Connect your sources", job: "Your job", style: "How you write", soul: "Who you are" };
 const ASK = {
   name: "What's your name?", org: "What organisation do you work for?",
   role: "What's your job title? Next, I write your job description from your email.",
@@ -34,7 +35,7 @@ const ASK = {
   // from the email and use that in emails ... have a setting so they can check it that it looks good")
   signature: "Is this your email signature? It goes under every email Taskuary writes for you, exactly like this - fix anything that's off.",
   systems: "Which systems do you work in? The ones ticked came up in your email - add any that are missing.",
-  mailboxes: "Add every other mailbox you use with its card - your job is read from all of them.",
+  mailboxes: "Add every other place your work comes in - email, chat or a task system - with its card; your job is read from all of them.",
 };
 // each draft's line, by its state - the job's as it was, the other two in the same words
 const SAYS = {
@@ -154,20 +155,20 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
   // line names it by its label
   const writeLit = !!draft && ["none", "failed"].includes(draft.state);
   const nextLabel = busy === "save" ? "Saving…" : draft ? (draft.state === "ready" ? "Looks right" : last ? "Save" : "Next")
-    : step === "mailboxes" ? "That's all my mail" : "Next";
+    : step === "mailboxes" ? "That's all my sources" : "Next";
   useVerbs("setup-about", a ? [
-    { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your email", run: back },
+    { id: "about:back", group: "next", tone: "s", label: "Back", title: at ? "The question before" : "Your main source", run: back },
     { id: "about:next", group: "decide", tone: writeLit ? "s" : "p", disabled: !ready || !!busy,
-      why: draft ? `${LABEL[step].toLowerCase()} is still being written` : step === "mailboxes" ? "connect a mailbox first" : "",
+      why: draft ? `${LABEL[step].toLowerCase()} is still being written` : step === "mailboxes" ? "connect a source first" : "",
       label: nextLabel,
-      title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : step === "mailboxes" ? "Every mailbox you use is connected"
+      title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : step === "mailboxes" ? "Every place your work comes in is connected"
         : draft ? "Kept as it is here - change it any time in Settings" : "The next question", run: next },
   ] : [], !!a && !hidden);
   // the question is the Advisor's line over the row
   const says = draft && SAYS[step];
   const line = !a ? "" : draft ? (draft.state === "failed" ? says.failed(draft.why) : says[draft.state])
-    : step === "mailboxes" ? (boxes ? `${boxes === 1 ? "One mailbox is" : `${boxes} mailboxes are`} connected. ${ASK.mailboxes} Then press ${nextLabel}.`
-      : "Connect your email with its card - your job is read from every mailbox you use.")
+    : step === "mailboxes" ? (boxes ? `${boxes === 1 ? "One source is" : `${boxes} sources are`} connected. ${ASK.mailboxes} Then press ${nextLabel}.`
+      : "Connect your email, chat or task system with its card - your job is read from everything you connect.")
     : `${ASK[step]}${reading && step !== "systems" ? " I'm reading your email to fill this in." : ""} Then press ${nextLabel}.`;
   useEffect(() => { onLine?.(line); }, [line, onLine]);
   useEffect(() => () => onLine?.(""), [onLine]);
@@ -224,8 +225,8 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
       {step === "mailboxes" && <>
         <Box data-tq-mailboxes="" sx={{ display: "flex", flexDirection: "column", gap: 0.4 }}>
           {boxes ? mailboxes.map((m) => <Typography key={m.address} sx={{ fontSize: 14 }}>{m.address}
-            <span style={{ color: DIM, fontSize: 12.5 }}> · {KIND[m.type] || "Email"}</span></Typography>)
-            : <Typography sx={{ color: DIM, fontSize: 13.5 }}>No mailbox is connected yet.</Typography>}
+            <span style={{ color: DIM, fontSize: 12.5 }}> · {KIND[m.type] || m.title || "Email"}</span></Typography>)
+            : <Typography sx={{ color: DIM, fontSize: 13.5 }}>Nothing is connected yet.</Typography>}
         </Box>
         {mailShelf}
       </>}

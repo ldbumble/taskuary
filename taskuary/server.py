@@ -6817,7 +6817,7 @@ class FirstRunMailBody(BaseModel): type: str; address: str; password: str; host:
 
 @app.get('/api/setup/first-run')
 def first_run_state():
-    """Where the first run stands - pick your AI, connect your email, reading - and the one line saying what to do next."""
+    """Where the first run stands - pick your AI, connect your main source, reading - and the one line saying what to do next."""
     from . import firstrun
     return firstrun.state(store)
 

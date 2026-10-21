@@ -52,7 +52,7 @@ class OnlyBrainsThatMaySortMail(unittest.TestCase):
         row = {'name': 'copilot', 'label': 'GitHub Copilot CLI', 'installed': True, 'installable': True, 'install': 'copilot', 'setup': 'copilot'}
         with mock.patch.object(clis, 'detect', return_value=[row]):
             out = firstrun.choose_cli(MemoryStore(), {}, 'copilot')
-        self.assertFalse(out['ok']); self.assertIn("can't sort mail", out['why']); self.assertNotIn('sign in', out['why'])
+        self.assertFalse(out['ok']); self.assertIn("can't sort what comes in", out['why']); self.assertNotIn('sign in', out['why'])
 
 
 if __name__ == '__main__': unittest.main()

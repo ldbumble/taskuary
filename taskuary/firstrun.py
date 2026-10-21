@@ -1,5 +1,5 @@
-"""First run, as three plain questions on the assistant canvas: what AI do you have, what email do you have, any other
-connection - then the mail is read and sorted.
+"""First run, as three plain questions on the assistant canvas: what AI do you have, where does your work come in (email, chat
+or a task system - email is the usual one), any other connection - then what came in is read and sorted.
 
 The owner, 2026-10-14: "Think about a idiot user who knows nothing about nothing and he should setup this app in 2 steps
 ... it should never drop the user". Setup was a checklist popup over four tabs; a first run that connected Codex and
@@ -89,7 +89,28 @@ def _read_once(store) -> bool:
     mail now..." stood for good over one that had nothing new in it (the non-coder audit, 2026-10-17)."""
     try: running = (json.loads(store.get_setting('ingest_status') or '{}') or {}).get('state') == 'running'
     except ValueError: running = False
-    return not running and any(c.get('LastSyncAt') for c in store.list_connectors() if c.get('Active') and c.get('Type') in MAIL_TYPES)
+    return not running and any(c.get('LastSyncAt') for c in store.list_connectors() if c.get('Active') and c.get('Type') in source_types())
+
+
+def source_types() -> tuple:
+    """The main source's choices, as the setup shelf orders them: email first - the usual one - then the catalogue's other groups of
+    incoming work in its own order (connectorcatalog.source_types: chat, then task systems, then developer trackers)."""
+    from . import connectorcatalog as cat
+    from .channels import CH2SRC
+    gs = cat._raw()['sources']['groups']
+    return tuple(sorted(cat.source_types(), key=lambda t: (CH2SRC.get(t) != 'email', gs.index((cat.by_type(t) or {}).get('group')))))
+
+
+def sources(store) -> list:
+    """Every source connected so far, [{address, type, title}] - each mailbox by its address (histgen.mailboxes), any other source
+    that brings work in by its card's name: what About your work's sources step lists and waits for. A chat or a task system
+    counts as much as a mailbox: a monday.com-only owner could never pass a step that counted only mailboxes (2026-10-21)."""
+    from . import connectorcatalog as cat, setup as setup_mod
+    try: names = set(setup_mod._inbound(store))
+    except Exception as e: logger.debug(f'setup: sources not listed - {e}'); names = set()
+    others = [{'address': c.get('Name') or c['Type'], 'type': c['Type'], 'title': (cat.by_type(c['Type']) or {}).get('title') or c['Type']}
+              for c in store.list_connectors() if c['Type'] not in MAIL_TYPES and (c.get('Name') or c['Type']) in names]
+    return [{**m, 'title': 'Email'} for m in _mailboxes(store)] + others
 
 
 # A FAILING AI IN PLAIN WORDS: the raw exception ("'claude' not found on PATH", "not JSON") stood on the Advisor's line, and stayed
@@ -119,7 +140,7 @@ def _ai_error(store) -> str:
 
 
 def state(store) -> dict:
-    """{step, brain, ais, keys, mail, connected, sorting, sorted, next}. `step` is ai -> email -> reading -> done."""
+    """{step, brain, ais, keys, mail, connected, sorting, sorted, next}. `step` is ai -> email (the main source: any email, chat or task system) -> reading -> done."""
     from . import clis, setup as setup_mod, capabilities
     # an AI and a mailbox are asked the way every offer asks them (capabilities.py), so setup and the chips never disagree
     brain, inbound, items = capabilities.ai_brain(store), capabilities.mail_cards(store), setup_mod._first_items(store)
@@ -161,37 +182,39 @@ def state(store) -> dict:
     if pick.startswith('connector:') and pick[10:].isdigit() and (store.get_connector(int(pick[10:])) or {}).get('Type') == 'chatgpt': name = 'ChatGPT'
     # ...kept past step 1 too: Change brings the AI cards back, and a pick that fails there must still say why (2026-10-15)
     fix = _fix(store)
-    ask = "What AI do you have? Pick it - Taskuary checks it works and uses it to sort your mail."
+    ask = "What AI do you have? Pick it - Taskuary checks it works and uses it to sort what comes in."
     # a brain that fails on the mail itself: said, with the way out, instead of "Sorting 18 emails" for good (2026-10-15)
     ai_error = _ai_error(store) if step in ('reading', 'done') else ''
     mail_err = str(store.get_setting(MAIL_ERR) or '').strip()
     empty = step == 'reading' and not sorting and _read_once(store)
     nxt = {'ai': fix['why'] if fix else ask,
-           'email': f"{mail_err} Fix it in the card and press Connect again - or pick a different email." if mail_err
+           'email': f"{mail_err} Fix it in the card and press Connect again - or pick a different source." if mail_err
                     # the card by the title it wears on the shelf: "Microsoft 365" named a card that read "Outlook mail" (2026-10-19)
-                    else f"{name or 'Your AI'} is ready. What email do you have? Pick it - "
-                         f"{(store.get_connector_by_type('outlook') or {}).get('Name') or 'Outlook mail'} is one sign-in.",
-           'reading': (f"{name or 'Your AI'} isn't sorting your mail - {ai_error}. Change AI picks one that does." if ai_error
+                    # ...and any source of incoming work, email the usual one (the owner, 2026-10-21)
+                    else f"{name or 'Your AI'} is ready. Where does your work come in? Connect your email, chat or task system - "
+                         f"email is the usual one: {(store.get_connector_by_type('outlook') or {}).get('Name') or 'Outlook mail'} is one sign-in.",
+           'reading': (f"{name or 'Your AI'} isn't sorting what comes in - {ai_error}. Change AI picks one that does." if ai_error
                        else "Connected - nothing new to sort yet. Any other connection you'd like to set up?" if empty
-                       else f"Sorting {plural(sorting, 'email')} now. Any other connection you'd like to set up while it reads?"
-                       if sorting else "Reading your mail now. Any other connection you'd like to set up while it reads?"),
+                       else f"Sorting {plural(sorting, 'item')} now. Any other connection you'd like to set up while it reads?"
+                       if sorting else "Reading what came in now. Any other connection you'd like to set up while it reads?"),
            'done': "You're set up. Anything else you connect is optional."}[step]
     # what is next, as the rail and the top bar's chip say it - from here, so the three never disagree (2026-10-15); the mail read and
     # About your work unanswered is the step left, not "reading your mail" (the non-coder audit, 2026-10-17)
     done_about = about(store)['done']
     todo = ('about your work' if step in ('reading', 'done') and not done_about
-            else {'ai': 'pick your AI', 'email': 'connect your email', 'reading': 'reading your mail', 'done': ''}[step])
+            else {'ai': 'pick your AI', 'email': 'connect your main source', 'reading': 'reading what came in', 'done': ''}[step])
     out = {'step': step, 'todo': todo, 'brain': {'ready': brain['ready'], 'name': name, 'pick': pick, 'why': brain.get('why') or '',
                                                  'type': brain.get('Type') or ''}, 'fix': fix,
            'ais': ais, 'keys': keys, 'mail': mail, 'connected': inbound, 'sorting': sorting, 'sorted': len(items), 'first_items': items,
            'empty': empty, 'next': nxt, 'ai_error': ai_error, 'mail_error': mail_err if step == 'email' else '', 'about_done': done_about,
-           'more_connected': more_connected(store), 'dismissed': dismissed(store), 'mailboxes': _mailboxes(store)}
+           'more_connected': more_connected(store), 'dismissed': dismissed(store), 'mailboxes': _mailboxes(store),
+           'sources': sources(store), 'source_types': source_types()}
     return {**out, **rail(out)}
 
 
 # THE SETUP RAIL, said here once: which steps are done, which can be opened yet, and what a waiting one waits for. setupSteps.js
 # re-derived all of it from `step` on the page (2026-10-18); it now only marks the row on the canvas.
-RAIL = (('ai', 'Your AI', 'pick an AI that works first'), ('mail', 'Your email', 'connect your email first'),
+RAIL = (('ai', 'Your AI', 'pick an AI that works first'), ('mail', 'Your main source', 'connect your main source first'),
         ('about', 'About your work', 'save or skip the answers first'), ('other', 'More connections', ''), ('finish', 'Finish', ''))
 PREV = {'mail': 'ai', 'about': 'mail'}
 
@@ -200,7 +223,7 @@ def rail(st: dict) -> dict:
     """{rail, ready, frontier, left} from a state's step, about_done, dismissed, more_connected, brain and empty.
 
     THREE STEPS ARE SETUP, the rest is optional (the owner, 2026-10-15: "it should be after email/ai/survey rest is optional"): Finish
-    opens once the AI, the email and About your work are done. A row past what is done waits, and says for what: pressed, About your
+    opens once the AI, the main source and About your work are done. A row past what is done waits, and says for what: pressed, About your
     work opened over no AI and no mail (2026-10-17). Finish ticks only when finished AND the three are done: a setup put away early
     read "Finish" ticked over no email (a demo walk, 2026-10-17)."""
     step, about_done, put_away, more = st.get('step'), bool(st.get('about_done')), bool(st.get('dismissed')), st.get('more_connected') or 0
@@ -209,9 +232,9 @@ def rail(st: dict) -> dict:
     done = {'ai': ai, 'mail': mail, 'about': about_done, 'other': more > 0, 'finish': put_away and ready}
     opens = {**{k: k not in PREV or done[PREV[k]] for k in done}, 'finish': ready or put_away}
     sub = {'ai': (st.get('brain') or {}).get('name') or '' if ai else '',
-           'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting your mail') if step == 'reading' else 'connected' if mail else '',
+           'mail': ('connected - nothing new yet' if st.get('empty') else 'connected - sorting what came in') if step == 'reading' else 'connected' if mail else '',
            'about': 'saved' if about_done else '', 'other': f'{more} connected' if more else 'optional',
-           'finish': 'ready - Finish setup is below' if ready else 'after AI, email and About your work'}
+           'finish': 'ready - Finish setup is below' if ready else 'after AI, your main source and About your work'}
     need = {k: n for k, _l, n in RAIL}
     rows = [{'key': k, 'label': l, 'done': done[k], 'open': opens[k], 'optional': k == 'other', 'need': n,
              'sub': sub[k] if opens[k] or done[k] or k == 'finish' else f'waits - {need[PREV[k]]}'} for k, l, n in RAIL]
@@ -303,7 +326,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     if not k: return {'ok': False, 'why': f"Taskuary doesn't know an AI called {name} - pick another one.", 'fix': ''}
     label = PLAIN.get(name, (k['label'],))[0]
     if name not in clis.READONLY:
-        return {'ok': False, 'fix': '', 'why': f"{label} can run tasks for you, but it can't sort mail - pick Claude, Codex or Gemini, or an API key."}
+        return {'ok': False, 'fix': '', 'why': f"{label} can run tasks for you, but it can't sort what comes in - pick Claude, Codex or Gemini, or an API key."}
     def failed(out):
         _mark_failed(store, name, True)
         store.set_setting(FIX, json.dumps({'name': name, 'title': label, 'fix': out['fix'], 'setup': k.get('setup') or '', 'why': out['why'],
@@ -352,7 +375,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     cli_connections.sync(cfg, store)
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
     store.set_setting(FIX, '', 'owner'); _mark_failed(store, name, False); _close_setup(store, name)
-    return {'ok': True, 'why': f'{label} works - it will sort your mail.'}
+    return {'ok': True, 'why': f'{label} works - it will sort what comes in.'}
 
 
 def choose_key(store, typ: str, secret: str, cid: int = None, config: dict = None) -> dict:
@@ -403,9 +426,9 @@ def _choose_key(store, c, typ: str, secret: str, config: dict = None) -> dict:
         m = models_by_job(store, config_mod.load(), c['ConnectorId'])
         if m['fast']:
             # the jobs said, not the model names behind them - Settings has those for whoever wants them
-            return {'ok': True, 'why': "Your access code works - a quick model sorts your mail and runs the Assistant"
+            return {'ok': True, 'why': "Your access code works - a quick model sorts what comes in and runs the Assistant"
                                        + (', a stronger one does the agent work.' if m['agent'] else '.')}
-    return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort your mail."}
+    return {'ok': True, 'why': f"Your {c.get('Name') or typ.capitalize()} key works - it will sort what comes in."}
 
 
 def choose_connector(store, cid: int) -> dict:
@@ -425,7 +448,7 @@ def choose_connector(store, cid: int) -> dict:
         if not why:
             store.audit('setting', 0, 'first_run_brain', 'owner', detail={'pick': f'connector:{cid}'})
             store.set_setting(FIX, '', 'owner')
-            return {'ok': True, 'why': f'{title} works - it will sort your mail.'}
+            return {'ok': True, 'why': f'{title} works - it will sort what comes in.'}
         detail = why
     else: detail = str(out.get('detail') or 'no reason given')
     _restore(store, was)
@@ -484,7 +507,7 @@ def _connect_mail(store, typ: str, address: str, secret: str, host: str = '', ci
     if not mine.get('owner') or mine.get('owner') == 'the owner':
         guess = ' '.join(w.capitalize() for w in address.split('@')[0].replace('.', ' ').replace('_', ' ').split()) or address
         store.set_setting('owner_name', guess, 'owner'); store.set_setting('owner_email', address, 'owner')
-    return {'ok': True, 'why': f'Connected {address} - reading your mail now.'}
+    return {'ok': True, 'why': f'Connected {address} - reading it now.'}
 
 # ABOUT YOUR WORK (the owner, 2026-10-15: "a few short question on setup screen to fill out soul.md and job.md (though you can generate
 # as much as possible from history) ... we only have repo's in the soul.md not what other corporate system connectors they have for
@@ -750,8 +773,8 @@ def unfinished(store) -> str:
     finished and reopened to change something can always go back to its day."""
     if dismissed(store): return ''
     step = state(store)['step']
-    return {'ai': 'Pick an AI that works first - setup finishes once it is sorting your mail.',
-            'email': 'Connect your email first - setup finishes once your mail is being read.'}.get(step, '')
+    return {'ai': 'Pick an AI that works first - setup finishes once it is sorting what comes in.',
+            'email': 'Connect your main source first - your email, chat or task system; setup finishes once your work is coming in.'}.get(step, '')
 
 
 def finish(store):

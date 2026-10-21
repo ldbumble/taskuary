@@ -1,5 +1,9 @@
 {
   "_": "THE connector catalogue, once: every card the Connections tab shows - the working ones (seeded as connector rows on first launch, store.py) and the planned ones - with a group, a one-line desc and `match`: the words in mail, chats, tasks and reports that mean this system. The tab reads it (connectorCatalog.js); the Advisor is handed the unconnected cards and judges which one the owner's threads are about (assistant.connect_evidence) - `match` decides nothing there any more.",
+  "sources": {
+    "_": "Where work comes in: the groups whose working cards are a source of incoming work - mail, chat and task systems. Setup's Connect your main source offers them (email first, the usual one) and is done once one of them is connected and passes its test.",
+    "groups": ["Messaging", "Email", "Project management", "Developer"]
+  },
   "cards": [
     {
       "type": "outlook",

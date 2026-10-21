@@ -564,7 +564,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
       ) : !drawn.length && settingUp ? (
         // a first run has nothing here because nothing is CONNECTED yet - "All done" read as finished (fresh-install shot, 2026-10-14)
         // ...and says what is next in the first run's own words (firstrun.state's `todo`), not a step count of its own (2026-10-15)
-        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your mail shows up here</b>Setup: {settingUp}. What comes in is then sorted into this list.</div>
+        <div className="tq-pile-empty" data-tq-pile-setup=""><b>Your work shows up here</b>Setup: {settingUp}. What comes in is then sorted into this list.</div>
       ) : !drawn.length && noAi ? (
         // NOTHING COULD BE JUDGED, so nothing is "done" (owner-approved, 2026-10-21): with no AI connected, setup put away, the rail said
         // "All done - nothing is waiting on you" over a day in which nothing that arrives can be read or sorted

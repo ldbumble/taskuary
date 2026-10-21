@@ -53,10 +53,12 @@ test("the mailbox step comes right before the job, and Skip lands on it instead 
   for (let i = 0; i < at; i++) assert.equal(skipTo(i), at, `Skip on ${steps[i]} lands on the mailboxes`);
   assert.match(src, /\{!again && canSkip\(step\) && <Box><Button size="small" disabled=\{!!busy\} onClick=\{skip\}/);
   assert.match(src, /if \(to !== null\) return setAt\(to\);/);
-  // "That's all my mail" moves on only with one connected, and the cards are the email step's own
+  // "That's all my sources" moves on only with one connected - any source, not only a mailbox - and the cards are the main source step's own
   assert.match(src, /\(step !== "mailboxes" \|\| boxes > 0\)/);
-  assert.match(src, /step === "mailboxes" \? "That's all my mail" : "Next"/);
-  assert.match(read("FirstRun.jsx"), /mailboxes=\{st\.mailboxes \|\| \[\]\} mailShelf=\{mailAbout && <Shelf cards=\{mail\} more="More email"/);
+  assert.match(src, /step === "mailboxes" \? "That's all my sources" : "Next"/);
+  assert.match(read("FirstRun.jsx"), /mailboxes=\{st\.sources \|\| \[\]\} mailShelf=\{mailAbout && <Shelf cards=\{mail\} more="More chat and task"/);
+  // ...and the main source's cards are the server's list (firstrun.source_types: the catalogue's, email first), never a name list here
+  assert.match(read("FirstRun.jsx"), /const mail = byType\(st\.source_types \|\| MAIL_TYPES\)/);
 });
 
 test("a failed email sign-in is the Advisor's line, with what to do", () => {
@@ -93,7 +95,7 @@ test("the first time About your work is saved, setup is complete: confetti and o
 test("an AI connected on the Connections page says so, and the one in use leads the shelf", () => {
   const fr = read("FirstRun.jsx");
   assert.match(fr, /: ai\.connected \? \["on", "Connected - pick it to make it your AI"\]/);
-  assert.match(fr, /\["on", "Your AI - it sorts your mail"\]/);
+  assert.match(fr, /\["on", "Your AI - it sorts what comes in"\]/);
   assert.match(fr, /const ai = inUse \? \[\.\.\.all\.filter\(using\), \.\.\.lead\.filter\(\(c\) => !using\(c\)\)\] : lead;/);
   // ...matched by its connection, not its name: "ChatGPT (your plan)" never matched the card titled ChatGPT (2026-10-17)
   assert.match(fr, /const inUseCid = \(c\) => st\.step !== "ai" && st\.brain\?\.pick === `connector:\$\{c\.ConnectorId\}`;/);

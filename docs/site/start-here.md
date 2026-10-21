@@ -107,20 +107,25 @@ card, and the cards are the same ones the [Connections](connections) page shows.
 top always says what to do next, and so do the Work list and the **Setup** chip in the top bar.
 
 1. **What AI do you have?** Click the one you already pay for: Claude, ChatGPT, Gemini or
-   Copilot. Taskuary connects it, checks that it answers, and uses it to sort your mail. If it
+   Copilot. Taskuary connects it, checks that it answers, and uses it to sort what comes in. If it
    is not installed, the click installs it. If it needs you to sign in once, the card says
    **Needs sign-in** and **Set it up** opens the AI's own sign-in. **More AI** lists every other
    AI on this computer and every API provider, for when you would rather paste a key.
-2. **What email do you have?** Microsoft 365 or Outlook is one sign-in, with nothing to type.
-   Gmail needs an App Password, which Google makes at
+2. **Where does your work come in?** Connect your main source: your email, a chat or a task
+   system. Email is the usual one and comes first. Microsoft 365 or Outlook is one sign-in, with
+   nothing to type. Gmail needs an App Password, which Google makes at
    [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) once 2-Step
-   Verification is on. Any other mailbox takes its address, server and password.
-3. **Any other connection you'd like to set up?** While your mail is read, WhatsApp, Teams,
+   Verification is on. Any other mailbox takes its address, server and password. If your work
+   arrives somewhere else, **More chat and task options** has Teams, Slack, WhatsApp, Discord,
+   monday.com, Jira, GitHub, Linear, Asana and the rest. The step is done once one of them is
+   connected and passes its test. Before Taskuary writes your job description it asks you to
+   connect your other sources too.
+3. **Any other connection you'd like to set up?** While what came in is read, WhatsApp, Teams,
    Slack and Telegram are offered, and **More connections** shows the rest. This one is optional:
    press **Walk me through my tasks** when you are ready.
 
 **Setup** on the top bar opens the same three questions again whenever you want to
-change the AI or the mailbox. Setup does not overwrite an existing user's model or connection
+change the AI or your sources. Setup does not overwrite an existing user's model or connection
 configuration.
 
 After that, connect a coding CLI if you want code written, or add a report for numbers you check

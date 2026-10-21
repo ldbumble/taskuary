@@ -1,5 +1,6 @@
-// FIRST RUN, on the assistant canvas: three plain questions - what AI do you have, what email do you have, any other
-// connection - each answered by clicking one of the Connections page's own cards.
+// FIRST RUN, on the assistant canvas: three plain questions - what AI do you have, where does your work come in (email, chat or a
+// task system - the owner, 2026-10-21: "normally it's email"), any other connection - each answered by clicking one of the
+// Connections page's own cards.
 //
 // The owner, 2026-10-14: "Think about a idiot user who knows nothing about nothing and he should setup this app in 2 steps
 // ... use the advisor as well to say next steps ... it should never drop the user". And 2026-10-15: "Don't create new ui. keep
@@ -31,7 +32,7 @@ const FIRST = 4;                    // the four most people have; More shows the
 const errText = (e) => e?.response?.data?.detail || (e?.code === "ECONNABORTED" ? "That took too long." : e?.message) || "That didn't work.";
 // the logo each CLI wears is its maker's - the same mark as that maker's API card on Connections
 const CLI_LOGO = { claude: "anthropic", codex: "openai", gemini: "gemini", copilot: "github" };
-const MAIL_TYPES = ["outlook", "gmail", "imap"];
+const MAIL_TYPES = ["outlook", "gmail", "imap"];      // the main source's shelf before the server says (firstrun.source_types)
 
 // THE QUESTION, in the Advisor's own line (ActionRow's AdvisorNext draws the same row over the composer)
 const Ask = ({ text }) => (
@@ -223,7 +224,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
       title: "Installs it on this computer, then checks it works", run: () => install(fixed) }] : []),
     // (on Setup complete its big button is Change AI itself - SetupDone)
     ...(view !== "ai" && view !== "done" && st.ai_error ? [{ id: "setup:change-ai", group: "decide", tone: "p", label: "Change AI",
-      title: "Back to Your AI, to pick one that sorts your mail", run: () => go("ai") }] : []),
+      title: "Back to Your AI, to pick one that sorts what comes in", run: () => go("ai") }] : []),
   ];
   // ONE filled move, and only when the lit move is on the row (rowLit): a card or the open setup's button lit leaves the row outlined
   const toneOf = (id) => (id === rowLit ? "p" : "s");
@@ -386,7 +387,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const stateOf = (ai) => (busy === ai.name ? ["on", "Checking it works…"]
     : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - press Install"
       : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : !ai.installed ? noInstall : "Not answering"]
-    : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts your mail"]
+    : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts what comes in"]
     // ...one whose test failed is not connected, and is not lit once another card is the pick (firstrun.FAILED; the UI audit, 2026-10-21)
     : ai.failed && ai.installed ? ["off", "Didn't pass the test - pick it to try again"]
     // connected on the Connections page, just not the one sorting the mail: it read "Not set up" (the owner, 2026-10-16)
@@ -409,7 +410,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const planCard = plan && { ...card(plan, true), title: "ChatGPT", channel: "openai", plain: true, pick: `connector:${plan.ConnectorId}`,
     state: signing || planBusy || planOn ? "on" : fix?.key === planKey || planFailed ? "failing" : "off",
     desc: `${signing ? "Signing in…" : planBusy ? "Checking it works…" : planFailed ? "Sign-in didn't finish - pick it to try again" : fix?.key === planKey ? "Signed in · not answering"
-      : planOn ? "Your AI - it sorts your mail" : "Not set up"}` + " · sign in with your ChatGPT account",
+      : planOn ? "Your AI - it sorts what comes in" : "Not set up"}` + " · sign in with your ChatGPT account",
     // ...and pressable while a sign-in waits: pressing it again starts a fresh one - it did nothing, and the old one never ended
     go: busy || planOn ? undefined : () => planSignin(plan) };
   const keyCards = byType(SETUP_AI).map((c) => ({ ...card(c, true), type: c.Type, pick: `connector:${c.ConnectorId}` }));
@@ -426,7 +427,11 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const using = (c) => (c.pick ? inUseCid({ ConnectorId: Number(c.pick.slice(10)) }) : c.title === inUse);
   const ai = inUse ? [...all.filter(using), ...lead.filter((c) => !using(c))] : lead;
   const coding = cliCards.filter((c) => !(inUse && using(c)));
-  const mail = byType(MAIL_TYPES).map((c) => card(c, true));
+  // THE MAIN SOURCE: any card the catalogue marks as where work comes in - email first, then chat and task systems (firstrun.source_types)
+  // ...a mailbox opens the simple form (one Connect that signs in, tests and reads); any other source opens its card's own setup, as
+  // Connections shows it - the simple form's one Connect is the mail road (firstrun.connect_mail), and a chat or a tracker needs its
+  // Test, its sources and its switch
+  const mail = byType(st.source_types || MAIL_TYPES).map((c) => card(c, MAIL_TYPES.includes(c.Type)));
   const conn = open && conns.find((c) => c.ConnectorId === open.id);
   const detail = conn && (
     <Box sx={{ mt: 0.5 }}>
@@ -439,10 +444,10 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false,
   const aboutDue = q === "about";
   // the mail is sorted in the background: setup never waits on it, and says so (the owner, 2026-10-15: "it never says emails 45 are
   // processed, moving on or doing it in background as no need to wait") - and a mailbox read with nothing in it says that (st.empty)
-  const sortingLine = st.step === "reading" ? (st.sorting ? ` Your mail is being sorted in the background - ${plural(st.sorting, "email")} to go; no need to wait.`
-    : st.empty ? " Connected - nothing new to sort yet." : " Your mail is being read in the background - no need to wait.") : "";
+  const sortingLine = st.step === "reading" ? (st.sorting ? ` What came in is being sorted in the background - ${plural(st.sorting, "item")} to go; no need to wait.`
+    : st.empty ? " Connected - nothing new to sort yet." : " What came in is being read in the background - no need to wait.") : "";
   // the brain failing on the real mail, said the same on every step - the server's own line only came with its "reading" step
-  const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting your mail - ${st.ai_error}.` : "";
+  const aiErr = st.ai_error ? `${st.brain?.name || "Your AI"} isn't sorting what comes in - ${st.ai_error}.` : "";
   // THE PICKED CARD STANDS ALONE with its one next step under it (the owner, 2026-10-15: "i clicked chat gpt the other boxes should
   // go away, otherwise it looks like nothing happens ... you act something happens, show whats next step clearly. any error lead them
   // to fix"). Checking: say so. Needs sign-in: one button that runs the CLI's own login, and the check runs by itself when it ends.
@@ -534,16 +539,17 @@ ${fix.detail || ""}`, screen: "Setup",
       ? (found.length === 1 ? `${found[0].title} is on this computer - pick it if that is the one you use, or pick any other` : "Pick the one you use")
       : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
       : litCard.state === "failing" ? `${litCard.title} didn't work last time - pick ${litCard.title} to try again, or pick another`
-      : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort your mail.`
-      : `Your AI is ${st.brain?.name || "set"} - it sorts your mail and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
+      : `Pick its card - ${litCard.title} if that is the one you pay for`}. Taskuary checks it works, then uses it to sort what comes in.`
+      : `Your AI is ${st.brain?.name || "set"} - it sorts what comes in and runs the Assistant. Pick another here to switch, or press ${VERB.next.label}.`),
     // a brain failing on the real mail is said on every step past the AI, with Change AI in the row - "no need to wait" over mail
     // that was not being sorted at all was the opposite of true (the Advisor audit, 2026-10-15)
-    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your email is connected.${sortingLine} Another mailbox can be added the same way - a second one of the same kind is Add another on its card - or press ${VERB.next.label}.`
+    mail: aiErr ? `${aiErr} Change AI picks one that does.` : doneOf(st, "mail") ? `Your main source is connected.${sortingLine} Another source can be added the same way - a second one of the same kind is Add another on its card - or press ${VERB.next.label}.`
       // a sign-in that failed: why, and what to do - not the question again under the card's own error (2026-10-16)
       // ...and once that card is shut (a reload), the card to open again is the one lit, by its title
-      : st.mail_error ? (litCard ? `${st.mail_error} Pick ${litCard.title} to fix it - or pick a different email.`
-        : `${st.mail_error} Fix it in the card and press Connect again - or pick a different email.`)
-      : `What email do you have? Pick its card - ${!litCard ? "the one your mail is in" : oneSignIn ? `${litCard.title} is one sign-in` : `start with ${litCard.title} if that is yours`}.`,
+      : st.mail_error ? (litCard ? `${st.mail_error} Pick ${litCard.title} to fix it - or pick a different source.`
+        : `${st.mail_error} Fix it in the card and press Connect again - or pick a different source.`)
+      : `Where does your work come in? Connect your email, chat or task system - ${!litCard ? "pick its card" : oneSignIn
+        ? `email is the usual one: ${litCard.title} is one sign-in` : `email is the usual one: start with ${litCard.title} if that is yours`}.`,
     about: aiErr ? `${aiErr} Change AI picks one that does.` : aboutLine || "A few questions about your work - filled in from your email where I can.",
     done: aiErr ? `${aiErr} Change AI picks one that does.` : "You're set up. Anything else you connect is optional - Connections has it all, any time.",
     other: aiErr ? `${aiErr} Change AI picks one that does.` : connSug ? (connLine || (connSug.failed ? "I couldn't suggest connections just now - pick a section below, or skip it: nothing more is needed."
@@ -572,9 +578,9 @@ ${fix.detail || ""}`, screen: "Setup",
     <Box ref={rootRef} data-tq-firstrun={st.step} sx={{ display: "flex", flexDirection: "column", gap: 1.75, maxWidth: 980 }}>
       <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
-      {shelf("mail", mail, "More email")}
+      {shelf("mail", mail, "More chat and task")}
       {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} hidden={hidden}
-        onStep={onAboutStep} mailboxes={st.mailboxes || []} mailShelf={mailAbout && <Shelf cards={mail} more="More email"
+        onStep={onAboutStep} mailboxes={st.sources || []} mailShelf={mailAbout && <Shelf cards={mail} more="More chat and task"
           opened={open ? `c${open.id}` : null} detail={<Box data-tq-setup-scope="">{detail}</Box>} onAll={() => setOpen(null)} />} />}
       {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) - or, with the AI
           failing on the mail, that problem and Change AI as its one big button */}

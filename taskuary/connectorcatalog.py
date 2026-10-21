@@ -12,7 +12,16 @@ _PATH = Path(__file__).with_name('connectorcatalog.json')
 
 
 @lru_cache(maxsize=1)
-def cards() -> list: return json.loads(_PATH.read_text(encoding='utf-8'))['cards']
+def _raw() -> dict: return json.loads(_PATH.read_text(encoding='utf-8'))
+def cards() -> list: return _raw()['cards']
+
+
+def source_types() -> tuple:
+    """Where work comes in: the working cards of the groups the catalogue marks as sources (its `sources`), in its own order.
+    Setup's main source is any one of them - mail, chat or a task system (the owner, 2026-10-21: "normally it's email ... any
+    messaging/email/task system (e.g. monday.com) as an option") - so the list is the catalogue's, never a name list here."""
+    gs = _raw()['sources']['groups']
+    return tuple(c['type'] for c in cards() if c.get('group') in gs and not c.get('planned'))
 
 
 def by_type(t: str) -> dict | None: return next((c for c in cards() if c['type'] == t), None)

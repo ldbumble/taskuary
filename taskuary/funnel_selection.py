@@ -202,6 +202,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     if lazy and first is not None:
         want = _members(first, ready, funnel.fyi_batch_size(store)) if funnel.batchable(first) else [first]
         for row, stamped in zip(want, funnel.present(store, {"items": want})["items"]):
+            stamped = dict(stamped)                   # present() may hand back the very row it was given: clearing it first emptied both
             row.clear(); row.update(stamped)          # in place: `items` and `ready` hold the same row; nested cards come stamped too
     if first is not None and funnel.batchable(first):
         selected, member_keys = _batch(first, ready, funnel.fyi_batch_size(store))

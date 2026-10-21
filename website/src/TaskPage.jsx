@@ -48,7 +48,7 @@ import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, expands, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, previewRows, triageLine, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, expands, filesByMessage, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, previewRows, rowText, triageLine, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -134,7 +134,8 @@ const whenShort = (s) => {
 // A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
 // message in full under it. Task's Came from and Close out draw this SAME list (the owner, 2026-10-16: "full chat should be in task
 // (condensed and full). in close out chats condensed version?"), so the two cannot tell one conversation two ways.
-function ConversationRows({ rows, open, onOpen }) {
+// `files` is each message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
+function ConversationRows({ rows, open, onOpen, files = new Map(), fetchFor = null }) {
   return rows.map((r, ri) => r.gap ? (
     <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
       · · · {r.gap} more - {r.names}</Typography>
@@ -148,9 +149,13 @@ function ConversationRows({ rows, open, onOpen }) {
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
-        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.excerpt || r.m.Subject || "(no text)"}</Box>
+        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rowText(r.m, files.get(r.m.MessageId))}</Box>
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
       </Box>
+      {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
+        <Box data-tq-row-files="" sx={{ pl: { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
+          <Attachments messageId={r.m.MessageId} canFetch={fetchFor === r.m.MessageId} dense /></Box>
+      )}
       {open === r.m.MessageId && (
         <Box sx={{ my: 0.6, p: 1.1, border: `1px solid ${BORDER}`, borderRadius: 1, bgcolor: PANEL, minWidth: 0 }}>
           <Box sx={{ display: "flex", gap: 0.75, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -851,6 +856,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
   const sources = groupConversations(storedMessages, { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
+  // ...and what they SENT with each message - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see the
+  // image on the task incoming message") - drawn under its own row inside the thread; a mail that names a picture it does not
+  // carry offers the fetch on the message that opened the task
+  const sourceFiles = filesByMessage(detail?.attachments);
+  const fetchFor = inbound[0]?.Channel === "email" && mentionsPicture(inbound[0].BodyText) ? inbound[0].MessageId : null;
   // CLOSE OUT'S CONVERSATION is the one being answered - the reply source's - condensed, newest first; never a batch's four authors
   const closeGroup = detail?.batch || !inbound.length ? null
     : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
@@ -1628,7 +1638,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5, minWidth: 0 }}>
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={360} />
                                     : <Box sx={showAll ? { maxHeight: 360, overflowY: "auto", minWidth: 0 } : undefined}>
-                                        <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg} /></Box>}
+                                        <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg}
+                                          files={sourceFiles} fetchFor={fetchFor} /></Box>}
                                 </Box>
                               </Box>
                             ))}
@@ -1665,10 +1676,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
-                        {/* ...and what they SENT with it - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see
-                            the image on the task incoming message") - unless its message is open above, which shows them already */}
-                        {inbound[0]?.MessageId && openMsg !== inbound[0].MessageId && <Box sx={{ mt: 0.6 }}>
-                          <Attachments messageId={inbound[0].MessageId} canFetch={inbound[0].Channel === "email" && mentionsPicture(inbound[0].BodyText)} dense /></Box>}
                       </Part>
                     </Box>
                     </Box>}

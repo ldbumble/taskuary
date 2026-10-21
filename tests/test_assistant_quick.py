@@ -151,6 +151,30 @@ def test_a_cli_that_dies_is_restarted_and_the_turn_answered_as_if_nothing_happen
     assert _live_proc() is not first and _live_proc().alive()
 
 
+def test_an_agent_with_tools_killed_mid_turn_is_never_sent_its_turn_again(fast_fake, monkeypatch, tmp_path):
+    """Only a turn with no side effects is sent twice. A general agent's CLI has its tools: killed part-way through a turn it
+    may have done some of the work, so the turn ends saying so (Continue picks it up) - and one killed BETWEEN turns, which
+    never got the message, is still started again and answers."""
+    from taskuary import llm
+    s = MemoryStore()
+    s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose']}))
+    b = llm.make_cli_llm(s, 'claude', keep='general:9', cwd=str(tmp_path), gear='main')
+    assert b('SYS', 'hello')
+    lv = _live_proc()
+    assert '--tools' not in lv.cmd                                  # the agent's hands are on
+    lv.p.kill(); lv.p.wait(5)
+    assert b('SYS', 'again') and _live_proc() is not lv            # between turns: never delivered, so restarted and answered
+    turns = lambda: [json.loads(l) for l in fast_fake.read_text().splitlines() if '"ev": "turn"' in l]
+    monkeypatch.setenv('FAKE_CLAUDE_THINK', '1.0')
+    lv = _live_proc(); lv.p.kill(); lv.p.wait(5)
+    b('SYS', 'warm it up')                                          # a fresh process that reads the new think time
+    lv, n = _live_proc(), len(turns())
+    threading.Timer(0.4, lv.p.kill).start()
+    with pytest.raises(RuntimeError, match='stopped in the middle of its turn'):
+        b('SYS', 'do the work')
+    assert len(turns()) == n + 1                                     # sent once, never again
+
+
 def test_a_cli_that_dies_again_on_restart_is_said_plainly(fast_fake, monkeypatch):
     s = _store()
     concierge.say(s, 'hello')

@@ -30,6 +30,19 @@ MAIL_TYPES = tuple(t for t, _l, _s in MAIL)
 TEST_SECONDS = 60          # a CLI that has not answered in a minute is not going to: say so, never spin
 # a pick that failed, kept until one works: the NEXT line said "pick your AI" again after it, and a reload lost Sign in (2026-10-15)
 FIX = 'first_run_fix'
+# ...and every CLI whose setup test failed, until it passes: the connection is saved before the test, so one that failed read
+# "Connected - pick it to make it your AI" once another card was picked and FIX moved on (the UI audit, 2026-10-21)
+FAILED = 'first_run_failed_clis'
+
+
+def _failed(store) -> set:
+    try: return set(json.loads(store.get_setting(FAILED) or '[]'))
+    except ValueError: return set()
+
+
+def _mark_failed(store, name: str, on: bool):
+    names = _failed(store)
+    if (name in names) != on: store.set_setting(FAILED, json.dumps(sorted(names | {name} if on else names - {name})), 'owner')
 # ONE "SETUP IS PUT AWAY" FLAG. The old checklist kept its own (setup_dismissed) beside this one, so setup could be put away on one
 # road and still open on the other (2026-10-18). An older install's flag is folded in on the first read, then only this one is kept.
 DISMISSED, OLD_DISMISSED = 'first_run_dismissed', 'setup_dismissed'
@@ -120,13 +133,14 @@ def state(store) -> dict:
     # connected on the Connections page is its own fact, apart from being the one that sorts the mail: every CLI read "Not set up"
     # while Connections had them all connected (the owner, 2026-10-16)
     from . import config as config_mod
-    linked = set((config_mod.load() or {}).get('cli_connections') or {})
+    linked, failed = set((config_mod.load() or {}).get('cli_connections') or {}), _failed(store)
     # ...and only one that is ON THIS MACHINE: a saved connection to a CLI nobody installed read "Connected - pick it to make it your
     # AI" and was lit, on a fresh install with no Claude Code (the owner, 2026-10-20: "stop assuming that")
     ais = [{'name': k['name'], 'title': PLAIN.get(k['name'], (k['label'], ''))[0], 'sub': PLAIN.get(k['name'], ('', 'Already on this computer'))[1],
             'installed': k['installed'], 'install': k['install'] if k.get('installable') else '', 'setup': k.get('setup') or '',
             'why_not': k.get('why_not') or '', 'more': k['name'] not in OFFERED,
-            'connected': k['name'] in linked and bool(k['installed'])} for k in ais]
+            'connected': k['name'] in linked and bool(k['installed']) and k['name'] not in failed,
+            'failed': k['name'] in failed} for k in ais]
     by = lambda t: (store.get_connector_by_type(t) or {}).get('ConnectorId')
     keys = [{'type': t, 'title': label, 'sub': where, 'cid': by(t)} for t, label, where in KEYS if by(t)]
     mail = [{'type': t, 'title': label, 'sub': sub, 'cid': by(t)} for t, label, sub in MAIL if by(t)]
@@ -290,6 +304,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     if name not in clis.READONLY:
         return {'ok': False, 'fix': '', 'why': f"{label} can run tasks for you, but it can't sort mail - pick Claude, Codex or Gemini, or an API key."}
     def failed(out):
+        _mark_failed(store, name, True)
         store.set_setting(FIX, json.dumps({'name': name, 'title': label, 'fix': out['fix'], 'setup': k.get('setup') or '', 'why': out['why'],
                                            'detail': out.get('detail') or '', 'install': k['install'] if k.get('installable') else ''}), 'owner')
         return out
@@ -331,7 +346,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
         return failed({'ok': False, 'fix': 'retry', 'why': f"{label} answered, but {why.split(' - ')[0]}. Press {buttons.label('try_again')}, or pick another AI.",
                        'detail': why})
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
-    store.set_setting(FIX, '', 'owner'); _close_setup(store, name)
+    store.set_setting(FIX, '', 'owner'); _mark_failed(store, name, False); _close_setup(store, name)
     return {'ok': True, 'why': f'{label} works - it will sort your mail.'}
 
 

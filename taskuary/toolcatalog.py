@@ -107,7 +107,8 @@ PURPOSE = {
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
     # uses - report.create through save_source, connection.create through save_connector.
     'report.create':            'create a scheduled report or workflow - `config`; the composer builds it from what the owner asked for',
-    'connection.create':        'add a system Taskuary talks to - `type`, `name`; created OFF and never carrying a secret, which the owner gives on the card',
+    'connection.create':        ('bring up a connector card to connect it - `type`: the catalogue type or title (linkedin, slack, "QuickBooks Online"), `name` '
+                                 'optional; a second one of a kind opens with its Add another. Never carrying a secret: the owner gives it on the card'),
     # A ROLE IS A WALK, NOT A GUESS (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up
     # new role and work"): the chat asks the two questions a role needs, then puts the whole set-up on one card.
     'role.apply':               ("set Taskuary up for the owner's job in one go - its worker, playbooks and daily workflow. `role`: "

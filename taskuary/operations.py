@@ -81,7 +81,7 @@ KINDS = {
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),
-    'connection.create':        ('connector', ('type', 'name'), None),
+    'connection.create':        ('connector', ('type',), None),     # its name defaults to the type's
     # ...and a whole job at once (roles.py): the worker, its playbooks, its workflow and where the mail goes
     'role.apply':               ('role', ('role',), None),
     # ...and the app itself, by name (the assistant-runs-the-app design, 2026-09-18): a report or

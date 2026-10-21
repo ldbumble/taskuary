@@ -15,7 +15,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
 | **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), review.each, button.light(button, ref?), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
-| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
+| **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
 
 A task you name goes in `ref` ("TQ-0123"); otherwise the tool acts on what is on the table.
@@ -616,10 +616,10 @@ Change one setting; the schema says what it takes.
 
 ### `connection.create`
 
-Add a system Taskuary talks to; created OFF and never carrying a secret, which the owner gives on the card.
+Bring up a connector card to connect it; a second one of a kind opens with its Add another. Never carrying a secret: the owner gives it on the card.
 
-- `type`
-- `name`
+- `type` - the catalogue type or title (linkedin, slack, "QuickBooks Online")
+- `name` (optional)
 
 <p class="runs">Brings up its button for you to press.</p>
 

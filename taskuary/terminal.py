@@ -2200,6 +2200,9 @@ def _ask_quietly(session, ask: str, tid: int):
     except Exception as e: logger.warning(f'task {tid}: the general agent could not take the work - {e}')     # said on the task by the turn
 
 
+NO_CODING_TOOL = 'Pick a coding tool first - connect one under Connections, then start the coding agent again'
+
+
 def start_on_task(store, tid: int, agent: str = '', model: str = None, instruction: str = None,
                   actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None,
                   brain: str = None, instruction_theirs: bool = False) -> dict:
@@ -2235,6 +2238,13 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     if not brain and not resume and not _chain and not hub_agents.resolved_command(store, 'coding') \
             and hub_agents.resolve_brain(store, 'general').startswith('connector:'):
         return _as_general(store, tid, instruction, actor)
+    # NO CODING TOOL CHOSEN, NO START (owner-approved, 2026-10-21): with none connected, Send to coding agent found a tool on the
+    # computer by itself and started it with its permission checks off, in a folder nobody named. Every road comes through here - a
+    # press, a queue drain, a workflow - so the refusal is here, not only on the button. It comes after the general agent's turn above:
+    # with an AI connection the work still runs, as general work; with no coding tool and none of that, nothing starts. A coding tool
+    # is one connected that starts here (agents.coding_ready - the fact triage and the pickers read), and which one runs is the
+    # resolver's (agents.resolve_brain), never a tool found on the computer by itself.
+    if not resume and not hub_agents.coding_ready(store): raise ValueError(NO_CODING_TOOL)
     agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
     row = store.get_agent(agent or '')
     if not row:

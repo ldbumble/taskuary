@@ -417,7 +417,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     )).catch(() => {});
   }, []);
   const stale = (id) => selRef.current !== id;
-  const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead } = useAgents();
+  const { agents, models, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady } = useAgents();
   const pickerTask = useRef(null);          // initialize each task from its durable worker once
   const [err, setErr] = useState("");
   const [startFail, setStartFail] = useState(null);   // a failed agent start's ways past it (failures.py), drawn on the error line
@@ -1432,7 +1432,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <AgentPicker agents={agents} models={models} kinds={kinds} coding={!generalOnly}
                           agent={run.agent} model={run.model}
                           brains={brainList} brainModels={brainModels} brain={run.brain || ""}
-                          generalBrains={generalBrains} brainsRead={agentsRead} pick={run.pick || ""} has={ownProfile}
+                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
                           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
                           onBrain={(b) => setRun((r) => ({ ...r, brain: b, model: "" }))}
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
@@ -1456,7 +1456,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!generalOnly && <RepoSelect taskId={selected} agent={run.agent} instruction={run.instruction}
                         value={startRepo} onChange={setStartRepo} />}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.75, flexWrap: "wrap" }}>
-                        {!generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy}
+                        {!generalOnly && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent || startRepo === "" || runPics.busy || !agentsRead || !codingReady}
                           startIcon={startingAgent === "coding" ? <CircularProgress size={11} /> : <TerminalIcon sx={{ fontSize: 14 }} />}
                           onClick={startCodingAgent}>
                           {startingAgent === "coding" ? "Starting…" : btn("coding_agent")}
@@ -1929,7 +1929,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {/* the same three answers the hand-off asks - this door had none at all */}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
                         <AgentPicker agents={agents} models={models} kinds={kinds} agent={run.agent} model={run.model}
-                          generalBrains={generalBrains} brainsRead={agentsRead} pick={run.pick || ""} has={ownProfile}
+                          generalBrains={generalBrains} brainsRead={agentsRead} codingReady={codingReady} pick={run.pick || ""} has={ownProfile}
                           onPick={(p) => setRun((r) => ({ ...r, pick: p }))}
                           onAgent={(a) => setRun((r) => ({ ...r, agent: a }))}
                           onModel={(m) => setRun((r) => ({ ...r, model: m }))} size={28} />

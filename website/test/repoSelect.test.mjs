@@ -19,7 +19,8 @@ test("the Start panel shows the repository and pins it before the session starts
   const view = taskSource();
   assert.match(view, /<RepoSelect taskId=\{selected\}/);
   assert.match(view, /api\.put\(`\/api\/tasks\/\$\{id\}\/repo`, \{ repo: startRepo/);
-  assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === "" \|\| runPics\.busy\}/);
+  // ...and with no coding tool chosen it stays off (owner-approved, 2026-10-21)
+  assert.match(view, /disabled=\{!!startingAgent \|\| startRepo === "" \|\| runPics\.busy \|\| !agentsRead \|\| !codingReady\}/);
   // the picker above already names it: a second "repo · …" by Cancel said it twice (the owner, 2026-10-13)
   assert.doesNotMatch(view, /repo · \{repoOf\(t\)\}/);
 });

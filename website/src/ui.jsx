@@ -640,9 +640,10 @@ export const useAgents = () => {
   const [brainModels, setBrainModels] = useState({});
   const [generalBrains, setGeneralBrains] = useState([]);
   const [agentsRead, setAgentsRead] = useState(false);     // [] read is "no AI connected"; [] not yet read is nothing yet
+  const [codingReady, setCodingReady] = useState(false);   // a coding agent can start: the server's own fact (agents.coding_ready)
   useEffect(() => {
     api.get("/api/agents").then(({ data }) => {
-      setAgentsRead(true);
+      setAgentsRead(true); setCodingReady(data.coding_ready ?? !!(data.brain_list || []).length);
       setAgents((data.data || []).map((a) => a.Name));
       setModels(data.models || {});
       // what each worker is FOR. A coding dialog asks which CLI; the five general profiles -
@@ -660,7 +661,7 @@ export const useAgents = () => {
       setGeneralBrains(data.general_brains || []);
     }).catch(() => {});
   }, []);
-  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains, agentsRead };
+  return { agents, models, cmds, kinds, brains, brainList, brainModels, generalBrains, agentsRead, codingReady };
 };
 // THE CODING PROFILE IS FOUND BY ITS KIND, never by a name: the owner may rename it, or have none - and then blank, so
 // the server (which resolves the same way) chooses rather than this page naming one that is not there.
@@ -693,9 +694,16 @@ export const ModelSelect = ({ info = {}, model, onModel, size = 30, whose = "too
   );
 };
 
+export const NO_CODING_TOOL = "Pick a coding tool first";
+export const NoCodingTool = () => (
+  <Box data-tq-no-coding-tool="" sx={{ display: "flex", alignItems: "center", gap: 1, fontSize: 12.5, color: INK }}>
+    <span>{NO_CODING_TOOL} -</span>
+    <Button size="small" variant="outlined" onClick={() => openAppLink(place("ai_apps").href)}>Connect one</Button>
+  </Box>);
+
 export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, size = 30, kinds = {},
                              coding = false, brains = [], brain = "", onBrain, brainModels = {},
-                             generalBrains = [], brainsRead = false, pick = "", onPick, has = "" }) => {
+                             generalBrains = [], brainsRead = false, codingReady = true, pick = "", onPick, has = "" }) => {
   // A coding picker chooses the BRAIN - which CLI runs the work. It always did in spirit ("chooses
   // the executable, not one of several instruction profiles backed by it") but it named a profile
   // to say so; the role is the coding profile for every coding task now, so that list would be one entry
@@ -717,6 +725,9 @@ export const AgentPicker = ({ agents, models, agent, model, onAgent, onModel, si
   // blank runs the task's own profile - triage's role, else the assistant (general.py) - so it NAMES it. A role no longer
   // carries a brain (the 2026-09-16 spec): the brain is the next picker's answer, and a stale "· claude" here said otherwise.
   const hasLabel = has ? `its profile · ${has}` : "the profile it has";
+  // NO CODING TOOL CHOSEN, SAID IN PLACE OF A BLANK PICKER (owner-approved, 2026-10-21): the picker drew an empty box and the start
+  // found a tool on the computer by itself. The server refuses that start too (terminal.start_on_task).
+  if (coding && brainsRead && !codingReady) return <NoCodingTool />;
   return (
     <>
       {/* a blank answer SAYS so: closed, the select drew an empty box where "the profile it has" belonged (the 2026-10-07

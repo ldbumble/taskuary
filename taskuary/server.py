@@ -7246,6 +7246,16 @@ def put_playbook(slug: str, body: DocBody):
     store.audit('playbook', 0, 'saved', ACTOR, detail={'slug': out})
     return {'ok': True, 'slug': out}
 
+class PlaybookOnBody(BaseModel): on: bool
+
+@app.put('/api/playbooks/{slug}/enabled')
+def playbook_on(slug: str, body: PlaybookOnBody):
+    """Switch one playbook off, kept for later - triage stops offering it - or back on."""
+    if playbooks.read(slug) is None: raise HTTPException(404, f'no playbook {slug!r}')
+    playbooks.set_on(slug, body.on)
+    store.audit('playbook', 0, 'switched_on' if body.on else 'switched_off', ACTOR, detail={'slug': playbooks.slugify(slug)})
+    return {'ok': True, 'slug': playbooks.slugify(slug), 'enabled': body.on}
+
 @app.delete('/api/playbooks/{slug}')
 def delete_playbook(slug: str):
     if not playbooks.delete(slug): raise HTTPException(404, f'no playbook {slug!r}')

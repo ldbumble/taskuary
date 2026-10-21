@@ -181,11 +181,11 @@ def _from_row(r: dict, store=None) -> dict:
             **({'file_text': files} if files else {})}
 
 
-def _playbook_menu() -> str:
+def _playbook_menu(store=None) -> str:
     """What triage is shown of the owner's playbooks - '' when there are none, so no words are spent."""
     try:
         from . import playbooks
-        return playbooks.menu()
+        return playbooks.menu(store=store)
     except Exception as e:
         logger.debug(f'ingest: playbook menu skipped - {e}'); return ''
 
@@ -605,7 +605,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(), project=project, candidates=candidates, repos=repos or None,
+                             playbooks=_playbook_menu(store), project=project, candidates=candidates, repos=repos or None,
                              # ...and WHICH worker, out of the ones this install actually has: the roster is
                              # data the owner edits on the Agents page, never a vocabulary in the prompt
                              profiles=hub_agents.roster(store) or None,

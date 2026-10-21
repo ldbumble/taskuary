@@ -82,6 +82,13 @@
       "desc": "Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.",
       "help": "Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, 'Not a task' / 'Not our task' — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.\n\nRules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc's 'Proposed rules' for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected."
     },
+    "playbooks_enabled": {
+      "group": "How mail is sorted",
+      "label": "Use playbooks",
+      "type": "switch",
+      "desc": "Triage matches new mail to your playbooks, and agents may propose new ones.",
+      "help": "On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead."
+    },
     "email_signature": {
       "group": "Replies",
       "label": "Email signature",

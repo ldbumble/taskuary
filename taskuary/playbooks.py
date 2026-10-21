@@ -165,21 +165,41 @@ def write(slug: str, text: str) -> str:
 def delete(slug: str) -> bool:
     p = folder() / f'{slugify(slug)}.md'
     if not p.is_file(): return False
-    p.unlink(); return True
+    p.unlink(); set_on(slug, True); return True
+
+
+# ONE PLAYBOOK SWITCHED OFF, KEPT FOR LATER (the owner, 2026-10-21): delete was the only way to stop one matching. Which are off
+# lives beside the files, not in them - the six lines stay the owner's words, and a playbook copied elsewhere carries no switch.
+OFF_FILE = '_off.json'
+
+
+def off() -> set:
+    try: return set(json.loads((folder() / OFF_FILE).read_text(encoding='utf-8')) or [])
+    except (OSError, ValueError, TypeError): return set()
+
+
+def set_on(slug: str, on: bool) -> bool:
+    s, cur = slugify(slug), off()
+    now = cur - {s} if on else cur | {s}
+    if now != cur:
+        d = folder(); d.mkdir(parents=True, exist_ok=True)
+        (d / OFF_FILE).write_text(json.dumps(sorted(now)), encoding='utf-8')
+    return on
 
 
 def list_all() -> list:
     """Every playbook on disk, oldest first, each parsed - the shelf, the cards and triage all read this."""
     d = folder()
     if not d.is_dir(): return []
-    out = []
+    out, shut = [], off()
     for p in sorted(d.glob('*.md'), key=lambda p: p.stat().st_mtime):
         try: text = p.read_text(encoding='utf-8')
         except OSError: continue
         pb = parse(text)
         out.append({'slug': p.stem, 'title': pb['title'] or p.stem, 'when': pb['when'], 'uses': uses_of(pb),
                     'alone': pb['alone'], 'ask_first': pb['ask first'], 'done_when': pb['done when'],
-                    'about_code': about_code(pb), 'updated': p.stat().st_mtime, 'text': text})
+                    'about_code': about_code(pb), 'updated': p.stat().st_mtime, 'text': text,
+                    'enabled': p.stem not in shut})
     return out
 
 
@@ -188,11 +208,13 @@ def for_connector(ctype: str) -> list:
 
 
 # ── triage ──────────────────────────────────────────────────────────────────────────────
-def menu(books: list = None) -> str:
+def menu(books: list = None, store=None) -> str:
     """What triage is shown: one line per playbook, slug and `when`. '' when there are none - the
-    paragraph is never added for nothing."""
+    paragraph is never added for nothing. A playbook switched off is not offered, and with the store's
+    `playbooks_enabled` off none is: that switch said "follow" while triage went on matching them all."""
+    if store is not None and store.get_setting('playbooks_enabled', '1') != '1': return ''
     books = list_all() if books is None else books
-    return '\n'.join(f"- {b['slug']}: {b['title']} - when: {b['when']}" for b in books if b['when'])
+    return '\n'.join(f"- {b['slug']}: {b['title']} - when: {b['when']}" for b in books if b['when'] and b.get('enabled', True))
 
 
 def tag(slug: str) -> str: return f'playbook:{slugify(slug)}'

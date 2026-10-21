@@ -406,3 +406,34 @@ def without_config_secrets(row: dict) -> dict:
                and not str(k).lower().endswith(('_secret', '_password', '_token'))}
     if cleaned != cfg: out['ConfigJson'] = json.dumps(cleaned)
     return out
+
+
+# WRITE-ONLY CARD FIELDS (the owner, 2026-10-21: "hide secrets"): an app's client secret is typed into
+# the card's form like any field, but once saved it is never sent back to the browser - like the
+# Secret column, it can be replaced and not read. The server keeps spending the stored value.
+# LinkedIn's refresh token lives in ConfigJson too (linkedin._save), so it is held back the same way.
+WRITE_ONLY_CONFIG = {'linkedin': ('client_secret', 'refresh_token'),
+                     'quickbooks': ('client_secret',), 'zoho_invoice': ('client_secret',)}
+
+
+def masked_config(row: dict) -> dict:
+    """A connector row for the owner's browser: its write-only keys out of ConfigJson, and which of
+    them are saved (ConfigSaved) so the card can say "saved - type to replace"."""
+    keys = WRITE_ONLY_CONFIG.get(row.get('Type'))
+    if not keys: return row
+    try: cfg = json.loads(row.get('ConfigJson') or '{}')
+    except (TypeError, ValueError): cfg = {}
+    if not isinstance(cfg, dict): cfg = {}
+    return {**row, 'ConfigJson': json.dumps({k: v for k, v in cfg.items() if k not in keys}),
+            'WriteOnlyKeys': list(keys), 'ConfigSaved': [k for k in keys if cfg.get(k)]}
+
+
+def keep_write_only(typ: str, incoming: str, current: str) -> str:
+    """A save that does not carry a write-only key - the browser never had it - keeps the stored one.
+    A value typed replaces it."""
+    keys = WRITE_ONLY_CONFIG.get(typ)
+    if not keys or incoming is None: return incoming
+    try: new, old = json.loads(incoming), json.loads(current or '{}')
+    except (TypeError, ValueError): return incoming
+    if not (isinstance(new, dict) and isinstance(old, dict)): return incoming
+    return json.dumps({**new, **{k: old[k] for k in keys if old.get(k) and not new.get(k)}})

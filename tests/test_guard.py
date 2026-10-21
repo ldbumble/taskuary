@@ -163,7 +163,9 @@ class OverTheWireTests(unittest.TestCase):
                                                                'realm_id': '123'})}, 't')
         try:
             shown = next(x for x in c.get('/api/connectors').json()['data'] if x['ConnectorId'] == qb['ConnectorId'])
-            self.assertIn('super-secret-app', shown['ConfigJson'])          # the card the owner edits
+            # the owner's card holds it back too since 2026-10-21 (guard.WRITE_ONLY_CONFIG): saved, replaceable, never sent back
+            self.assertNotIn('super-secret-app', shown['ConfigJson'])
+            self.assertIn('client_secret', shown['ConfigSaved'])
             hidden = next(x for x in c.get('/api/connectors', headers=AGENT).json()['data']
                           if x['ConnectorId'] == qb['ConnectorId'])
             cfg = json.loads(hidden['ConfigJson'])

@@ -110,5 +110,50 @@ class ConnectingFromTheCard(unittest.TestCase):
         self.assertIn('Alex Doyle', self.client.post(f'/api/connectors/{self.cid}/test').json()['detail'])
 
 
+
+class SecretsAreWriteOnly(unittest.TestCase):
+    """The owner, 2026-10-21: an app's client secret is typed like any field, then never sent back -
+    replaceable, not readable - and the server goes on spending the stored one."""
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        self.server, self.client = server, TestClient(server.app)
+
+    def row(self, cid):
+        return next(c for c in self.client.get('/api/connectors').json()['data'] if c['ConnectorId'] == cid)
+
+    def test_each_app_card_holds_its_secret_back_and_keeps_it_across_a_save(self):
+        for typ in ('linkedin', 'quickbooks', 'zoho_invoice'):
+            with self.subTest(typ):
+                cid = self.server.store.get_connector_by_type(typ)['ConnectorId']
+                self.client.post('/api/connectors', json={'ConnectorId': cid,
+                                 'ConfigJson': json.dumps({'client_id': 'app-id', 'client_secret': 'app-secret'})})
+                r = self.row(cid)
+                self.assertNotIn('app-secret', json.dumps(r))
+                self.assertEqual(json.loads(r['ConfigJson'])['client_id'], 'app-id')
+                self.assertIn('client_secret', r['WriteOnlyKeys'])
+                self.assertIn('client_secret', r['ConfigSaved'])
+                # the card saves what it was sent - no secret - and the stored one stays
+                self.client.post('/api/connectors', json={'ConnectorId': cid, 'ConfigJson': json.dumps({'client_id': 'app-id-2'})})
+                stored = json.loads(self.server.store.get_connector(cid)['ConfigJson'])
+                self.assertEqual((stored['client_id'], stored['client_secret']), ('app-id-2', 'app-secret'))
+                # typed, it replaces
+                self.client.post('/api/connectors', json={'ConnectorId': cid,
+                                 'ConfigJson': json.dumps({'client_id': 'app-id-2', 'client_secret': 'new-secret'})})
+                self.assertEqual(json.loads(self.server.store.get_connector(cid)['ConfigJson'])['client_secret'], 'new-secret')
+
+    def test_linkedins_refresh_token_is_held_back_too_and_the_status_still_sees_the_app(self):
+        cid = self.server.store.get_connector_by_type('linkedin')['ConnectorId']
+        self.server.store.save_connector({'ConnectorId': cid, 'ConfigJson': json.dumps(
+            {'client_id': 'a', 'client_secret': 'b', 'refresh_token': 'r-1', 'member_name': 'Alex Doyle'})}, 'test')
+        r = self.row(cid)
+        self.assertNotIn('r-1', r['ConfigJson'])
+        self.assertEqual(json.loads(r['ConfigJson'])['member_name'], 'Alex Doyle')
+        self.assertTrue(self.client.get(f'/api/connectors/{cid}/linkedin/status').json()['has_app'])
+
+    def test_other_cards_are_unchanged(self):
+        r = self.row(self.server.store.get_connector_by_type('exa')['ConnectorId'])
+        self.assertNotIn('WriteOnlyKeys', r)
+
 if __name__ == '__main__':
     unittest.main()

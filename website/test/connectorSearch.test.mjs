@@ -49,8 +49,14 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
   assert.match(li, /\["Client Secret", "client_secret", "", "The same Auth tab/);
   assert.match(li, /label: "Sign in with LinkedIn"/);
   assert.match(li, /secretHelp: "Nothing to paste here/);
-  assert.match(src, /\[label, key, ph, help\]\) => \(\s*<TextField key=\{key\} label=\{label\} placeholder=\{ph\} helperText=\{help\}/);
+  assert.match(src, /\) : \(\s*<TextField key=\{key\} label=\{label\} placeholder=\{ph\} helperText=\{help\}/);
   const ai = src.slice(src.indexOf("const AiSetup ="), src.indexOf("const GATEWAY_HINT"));
   assert.match(ai, /Optional - the card below connects without it/);
   assert.match(ai, /<Button variant="outlined" disabled=\{busy\} onClick=\{start\}/, "not the page's one filled button");
+});
+
+test("an app's client secret is a masked, write-only box that says it is saved (guard.WRITE_ONLY_CONFIG)", () => {
+  assert.match(src, /\(conn\.WriteOnlyKeys \|\| \[\]\)\.includes\(key\) \? \(\s*<TextField key=\{key\} type="password" data-tq-write-only=\{key\}/);
+  assert.match(src, /`\$\{label\} — saved, type to replace`/);
+  assert.match(src, /setCfg\(Object\.fromEntries\(Object\.entries\(cfg\)\.filter\(\(\[k\]\) => !wo\.includes\(k\)\)\)\)/, "typed, then saved, the box empties");
 });

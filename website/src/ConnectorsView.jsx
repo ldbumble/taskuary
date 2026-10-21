@@ -2861,6 +2861,9 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
       if (secret) body.Secret = secret;
       await api.post("/api/connectors", body);
+      // a write-only value typed is the server's now: the box goes back to empty, its label says saved
+      const wo = conn.WriteOnlyKeys || [];
+      if (wo.some((k) => cfg[k])) setCfg(Object.fromEntries(Object.entries(cfg).filter(([k]) => !wo.includes(k))));
       setMsg("saved ✓"); setSecret(""); reload();
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
     setBusy("");
@@ -2895,7 +2898,14 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           )}
           {meta.connect && <OAuthConnect conn={conn} meta={meta} reload={reload} />}
           {/* a field's 4th entry says where to get what it asks for, under the box */}
-          {meta.fields.map(([label, key, ph, help]) => (
+          {/* ...and a write-only one (an app's client secret, guard.WRITE_ONLY_CONFIG) is masked: once saved the server never sends it
+              back, so the box is empty and says it is saved - typed, it replaces the stored one */}
+          {meta.fields.map(([label, key, ph, help]) => (conn.WriteOnlyKeys || []).includes(key) ? (
+            <TextField key={key} type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }}
+              label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label}
+              placeholder={ph} helperText={help ? `${help} Write-only: never shown again once saved.` : "Write-only: never shown again once saved."}
+              value={cfg[key] || ""} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
+          ) : (
             <TextField key={key} label={label} placeholder={ph} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
               multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
               onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />

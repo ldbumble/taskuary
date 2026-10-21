@@ -5461,6 +5461,7 @@ def connectors(request: Request):
     rows = [c | {'GatewayBuiltIn': bool(OPENAI_COMPATIBLE['hipaa_ai'][0])} if c['Type'] == 'hipaa_ai' else c for c in rows]
     if guard.scope_of(cfg['server'], request.headers) == guard.AGENT:
         rows = [guard.without_config_secrets(c) for c in rows]
+    rows = [guard.masked_config(c) for c in rows]
     from .connectorcatalog import connected_count
     return {'data': rows, 'connected': connected_count(store, cfg.get('cli_connections'))}
 
@@ -5543,6 +5544,8 @@ def save_connector(body: ConnectorBody):
         fields.setdefault('Roles', store_mod.DEFAULT_ROLES.get(fields['Type'], ''))
     current = store.get_connector(fields['ConnectorId']) if fields.get('ConnectorId') else None
     typ = fields.get('Type') or (current or {}).get('Type')
+    if current and fields.get('ConfigJson') is not None:
+        fields['ConfigJson'] = guard.keep_write_only(typ, fields['ConfigJson'], current.get('ConfigJson'))
     name = fields.get('Name') or (current or {}).get('Name')
     if typ and name and any(c['Name'].casefold() == name.casefold()
                             and c['ConnectorId'] != fields.get('ConnectorId')

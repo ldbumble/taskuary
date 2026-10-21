@@ -57,7 +57,7 @@ import { agentOpen } from "./taskFilter.js";
 import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
-import { afterCancel, afterConfirm, afterExecute, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
+import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
 import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { isCoveragePending } from "./processingAll.js";
@@ -2142,7 +2142,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // (the repositories stay on the proposal card's own picker here - the chat has them only where there is no card)
       // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
       const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
-        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : [];
+        : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : followUps(p, out);
       setMsgs((m) => [...m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
                        { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
       onChanged?.();
@@ -2245,6 +2245,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "opentask" && c.tid) { openTaskRef.current?.({ tid: c.tid }); return; }
     if (c.verb === "bug") { openBugReport(shownError(c.text)); return; }
     if (c.verb === "setupask") { askSetup(); return; }
+    // ...a Not ours taken further, under its receipt (followUps): the item it names, whatever is on the table now - run at once
+    if (c.follow?.kind) {
+      setBusy(true); setErr("");
+      try {
+        await runOperation(api, c.follow.kind, c.follow.target, c.follow.params);
+        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: `${c.label} - done.` }]);
+        onChanged?.();
+      } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+      return;
+    }
     if (c.verb === "tour") { await setup(); return; }
     const item = currentRef.current || currentItem;
     const key = item?.key || current;

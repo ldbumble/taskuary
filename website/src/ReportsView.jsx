@@ -24,7 +24,8 @@ import { nothingMatches } from "./searchHits.js";
 import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue, toShape, toSources } from "./sourceShape.js";
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
-import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
+import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail } from "./ui.jsx";
+import { RecentlyDeleted, UndoLine, removeNow } from "./Removed.jsx";
 import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import RunSteps from "./RunSteps.jsx";
 import { asSteps, runWords } from "./workflowFlow.js";
@@ -35,7 +36,7 @@ import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind,
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
-import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
+import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -569,6 +570,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
     const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
+    // what Remove kept for this shelf: Restore puts it back for 30 days (recentlydeleted.py)
+    const binKinds = section === "workflows" ? ["workflow"] : section === "reports" ? ["report"] : null;
     // a link to a report that has since been removed: the list, and why - never an empty editor saving to a missing id
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
@@ -592,6 +595,8 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
+          <UndoLine kinds={["report", "workflow"]} onRestored={load} sx={{ mb: 0 }} />
+          {!sectionRows.length && binKinds && <RecentlyDeleted kinds={binKinds} onRestored={load} sx={{ mt: 0 }} />}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing}
               startIcon={syncing ? <CircularProgress size={12} /> : <SyncIcon sx={{ fontSize: 15 }} />}>
@@ -609,8 +614,9 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           // ...and under them, Recently deleted - with nothing on the shelf the shelf's own empty line still leads
           ...(pbs.deleted.length ? [
             ...(pbs.books.length ? [] : [{ key: "pb-none", node: <Typography sx={{ fontSize: 12.5, color: FAINT, p: 1 }}>{pbs.err || PB_EMPTY}</Typography> }]),
-            { key: "pb-deleted", node: <RecentlyDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
-        : sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
+            { key: "pb-deleted", node: <PlaybooksDeleted items={pbs.deleted} onRestore={pbs.restore} /> }] : [])]
+        : [...sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
+          ...(sectionRows.length && binKinds ? [{ key: "recently-deleted", node: <RecentlyDeleted kinds={binKinds} onRestored={load} /> }] : [])],
       detail: browseState.open != null && !missing ? (pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={back} />
         : wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid }))) : null,
       onBack: back,
@@ -646,11 +652,13 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           onClick={() => { setQ(""); setDraft(null); setBucket("new-agent"); }} sx={workflowOverview ? { background: GRADIENT } : {}}>New workflow</Button>
       </Box>
       {note && <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600, color: note.ok ? "#47654a" : "#6b2733" }}>{note.ok ? "✓" : "✗"} {note.detail}</Typography>}
+      <UndoLine kinds={["report", "workflow"]} onRestored={load} />
       {!workflowOverview && <Composer kind="report" onDraft={(config, meta) => { onDraft(config, meta); setBucket("draft"); }} />}
       {!list.length && <Empty>{q ? nothingMatches(q, workflowOverview ? "Workflows" : "Reports") : workflowOverview
         ? "No workflows yet — New workflow describes one and sets it up."
         : "No reports yet — New report walks you through source, query, AI summary and schedule."}</Empty>}
       {list.map((s) => row(s))}
+      {!q && <RecentlyDeleted kinds={[workflowOverview ? "workflow" : "report"]} onRestored={load} />}
       </>)}
     </SideRail>
   );
@@ -1275,7 +1283,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
      POST that failed for any other reason threw into a void with no catch anywhere. */
   const [saveErr, setSaveErr] = useState("");
   const [savedMsg, setSavedMsg] = useState(carry?.msg || "");
-  const [confirmDel, setConfirmDel] = useState(false);
+  // REMOVE IS AT ONCE (the owner, 2026-10-21): the list it lands back on says "Removed <it> - Undo", and Recently deleted keeps it
+  const [removeErr, setRemoveErr] = useState("");
+  const remove = async () => {
+    setRemoveErr("");
+    try { await removeNow(() => api.delete(`/api/sources/${cur.SourceId}`), workflow ? "workflow" : "report", cfg.title || cur?.Address); await reload(); onBack(); }
+    catch (e) { setRemoveErr(e?.response?.data?.detail || e?.message || "It could not be removed."); }
+  };
   const save = async () => {
     setSaveErr(""); setSavedMsg("");
     const c = bodyCfg();
@@ -1315,10 +1329,11 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
             title={cur ? (parse(cur.ConfigJson).title || `Edit ${workflow ? "workflow" : "report"}`) : `New ${workflow ? "AI agent workflow" : "report"}`} />
         </Box>
         {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-          onClick={() => setConfirmDel(true)} sx={{ mt: 0.25, flexShrink: 0 }}>
-          Delete {workflow ? "workflow" : "report"}
+          onClick={remove} sx={{ mt: 0.25, flexShrink: 0 }}>
+          Remove {workflow ? "workflow" : "report"}
         </Button>}
       </Box>
+      {removeErr && <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>{removeErr}</Alert>}
       {/* the bell's "Open the report" lands here: the failure it rang for is the first thing on the page */}
       {cur && lastRun?.failed && (
         <Alert severity="error" sx={{ mb: 1.5, fontSize: 12.5 }}>
@@ -1690,10 +1705,6 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
         </Step>
       </Stepper>
       <SavedReportSummary source={cur} workflow={workflow} />
-      <ConfirmDelete open={confirmDel} what={`the ${workflow ? "workflow" : "report"} "${cfg.title || cur?.Address || "untitled"}"`}
-        consequence={`It stops running on its schedule and disappears from the ${workflow ? "Workflows" : "Reports"} section. Anything it already filed is kept - search finds it.`}
-        onClose={() => setConfirmDel(false)}
-        onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />
     </Box>
   );
 }

@@ -4,15 +4,18 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import api from "./api";
 import { PANEL, BORDER, DIM, INK } from "./theme.jsx";
-import { applied, changes, saveBody, say, stage, stageable } from "./connectorDraft.js";
+import { applied, changes, keepDraft, keptDraft, saveBody, say, stage, stageable } from "./connectorDraft.js";
 import { plural } from "./timeWords.js";
 
 const Draft = createContext(null);
 
 // the draft a connection card holds, over the connection and its sources
 export function useCardDraft(conn, sources, reload) {
-  const [want, setWant] = useState(null);
-  const [wantSrc, setWantSrc] = useState({});
+  // what was left unsaved on this card last time it was open comes back with it (keepDraft) - leaving never asks
+  const id = conn?.ConnectorId;
+  const [want, setWant] = useState(() => keptDraft(id).want);
+  const [wantSrc, setWantSrc] = useState(() => keptDraft(id).wantSrc);
+  useEffect(() => { keepDraft(id, want, wantSrc); }, [id, want, wantSrc]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // THE BAR SAYS IT WORKED before it goes. It used to vanish the instant the save landed, which

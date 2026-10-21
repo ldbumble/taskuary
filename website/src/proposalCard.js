@@ -11,7 +11,7 @@ export const pickingRepo = (p) => !!p && p.kind === "task.create_from_text" && p
   && p.clear === false && Array.isArray(p.repo_choices) && p.repo_choices.length > 0;
 
 export function describe(p) {
-  const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context", "wrap"]);   // wrap: whether a transcript exists - machinery, never a fact to confirm   // a revision map, not a fact for the owner
+  const hidden = new Set(["key", "tid", "rid", "hint", "config", "processing_context", "wrap", "learn"]);   // learn: Not ours's just-this-once switch, machinery   // wrap: whether a transcript exists - machinery, never a fact to confirm   // a revision map, not a fact for the owner
   // A nested value printed as "[object Object]", which is the one thing a confirmation card must never
   // do: the selector IS what the owner is being asked to approve (the owner, 2026-09-07). Flatten it
   // into the fields it actually holds.
@@ -85,6 +85,15 @@ export function afterExecute(p, res) {
 //
 // A HAND-OFF THAT STARTED is "watch": its task opens on the table with the agent working in it, and the walk waits for Next
 // (the owner, 2026-10-01: "it should open the task and I can see the agent doing its work, why did it just close it?").
+// NOT OURS ACTS AT ONCE, AS JUST THIS ONCE (the owner, 2026-10-21: no "are you sure"): the card's question - how far? - is asked
+// after, as a chip under the receipt that goes further ("From now on", "No more ideas like this"). A hard rule in Settings stays a
+// page of its own, not a chip. Each carries its own operation on the same message (or idea): the item is filed and off the pile by
+// the time it is pressed, so it cannot be looked up there again.
+const FURTHER = { not_ours_sender: (p) => ({ kind: "preference.exclude_sender", target: p.target, params: { scope: "sender" } }),
+  not_ours_kind: (p) => ({ kind: "idea.act", target: p.target, params: { ...(p.params || {}), verb: "dismiss_kind" } }) };
+export const followUps = (p, out) => (out?.status === "done" && p?.verb === "not_ours" && p.target != null
+  ? (p.alts || []).filter((a) => FURTHER[a.verb]).map((a) => ({ verb: a.verb, label: a.label, follow: FURTHER[a.verb](p) })) : []);
+
 export function afterConfirm(p, out, current) {
   if (out?.handoff && out.tid) return "watch";
   if (!(out?.settle && p.key && p.key === current)) return "reload";

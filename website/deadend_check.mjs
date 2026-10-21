@@ -92,9 +92,9 @@ const WALK_SKIP = {
   "approve:action": "an agent's proposal: the demo's agents are recordings and never propose an act",
   "redraft": "redrafting asks the AI - the demo's canned brain writes no drafts, and the faults world has no AI",
   "redraft:none": "as Redraft: writing a draft is the AI's",
-  "not_ours_sender": "an answer inside Not ours' own question (buttons.json choices), pressed through that card, not a row of its own",
-  "block_sender": "as Ignore this sender: an answer inside Not ours' question",
-  "not_ours_kind": "an answer inside an idea's Not ours question",
+  "not_ours_sender": "From now on: the chip under Not ours' receipt (proposalCard.followUps), not a row of its own",
+  "block_sender": "a rule in Settings: the card's third answer, now a page of its own, not a chip under Not ours",
+  "not_ours_kind": "No more ideas like this: the chip under an idea's Not ours receipt (proposalCard.followUps)",
   "coding_agent": "an answer inside Send to agent's question; the faults pass starts one through it",
   "stop_agent": "Stop and save ends a live session - the demo's agents are recordings with no session to save",
   "answer_agent": "no button on any row (the owner, 2026-10-20: \"we don't need that button\") - an agent's question is answered in its own pane",
@@ -731,11 +731,12 @@ async function faults() {
 // ── CARDS: a proposal cancelled then pressed; a task folded by its X then opened again ────────────────────────────────────────
 async function cards() {
   const srv = await serve(3), page = await pageOn(srv, "cards");
-  // a proposal card: Not ours on an idea asks its own question, Put it on my list proposes; whichever draws a card first
+  // a proposal card: Put it on my list proposes. (Not ours no longer asks - it files at once, just this once, with From now on after
+  // it - the owner, 2026-10-21 - so it draws no card to cancel)
   page.step = "cards cancel";
   let card = null;
   for (const r of (await look(page)).rail) {
-    for (const verb of ["not_ours", "mine"]) {
+    for (const verb of ["mine"]) {
       if (!(await openItem(page, r.key)) || !(await pressVerb(page, verb))) continue;
       await wait(4000);
       card = await page.$(".tq-proposal");

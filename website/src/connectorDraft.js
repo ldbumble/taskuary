@@ -75,3 +75,15 @@ export const say = (v, key, words = {}) => {
   const s = String(v);
   return s.length > 40 ? `${s.slice(0, 39)}…` : s;
 };
+
+// LEAVING KEEPS THE DRAFT (the owner, 2026-10-21: no "are you sure"): the crumb asked "Leave without saving 1 change(s)?" in the
+// browser's own box. Saving on the way out would post what the owner had not said yes to - a switch, a role - so the draft is
+// kept instead, per card, for as long as the app is open: back on the card, the bar still lists the changes and Save or Discard
+// them. Nothing is lost and nothing is saved behind the owner's back.
+const KEPT = new Map();
+export const keptDraft = (id) => (id != null && KEPT.get(id)) || { want: null, wantSrc: {} };
+export function keepDraft(id, want, wantSrc) {
+  if (id == null) return;
+  if (want || Object.keys(wantSrc || {}).length) KEPT.set(id, { want, wantSrc: wantSrc || {} });
+  else KEPT.delete(id);
+}

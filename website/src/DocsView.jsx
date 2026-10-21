@@ -21,7 +21,8 @@ import NewPlaybookDialog from "./NewPlaybookDialog.jsx";
 import SkillImport from "./SkillImport.jsx";
 import RoleStart from "./RoleStart.jsx";
 import { FAINT, INK, ROLES, mono } from "./theme.jsx";
-import { ConfirmDelete, TaskuaryMark } from "./ui.jsx";
+import { TaskuaryMark } from "./ui.jsx";
+import { UndoLine, removeNow } from "./Removed.jsx";
 import { plural } from "./timeWords.js";
 import { fmtDate } from "./dates.js";
 
@@ -248,7 +249,16 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   const [pbMsg, setPbMsg] = useState("");
   const [pbFilter, setPbFilter] = useState("");
   const [newPlaybook, setNewPlaybook] = useState(null);
-  const [deleteProf, setDeleteProf] = useState(null);       // the profile whose Delete is waiting on a confirm
+  // REMOVE IS AT ONCE (the owner, 2026-10-21): the next profile opens under "Removed <it> - Undo"; Undo opens it again
+  const removeProf = async (name) => {
+    setErr("");
+    try {
+      await removeNow(() => api.delete(`/api/agents/${encodeURIComponent(name)}`), "profile", name);
+      const left = (await loadProfs()) || [];
+      const next = left.find((p) => p.name !== name);
+      if (next) await openProf(next.name); else { setSection("documents"); setDocName(NAMES[0]); }
+    } catch (e) { setErr(e?.response?.data?.detail || `${name} could not be removed`); }
+  };
   const [deleteBusy, setDeleteBusy] = useState(false);
   // the generation is inspectable, not a vibe: poll its status while it runs so the button
   // narrates ("reading you@... — 240 sent so far"), then show the exact evidence it judged
@@ -638,6 +648,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
 
       <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
         {err && <Alert severity="error" onClose={() => setErr("")} sx={{ mb: 1.5, flexShrink: 0 }}>{err}</Alert>}
+        <UndoLine kinds={["profile"]} sx={{ flexShrink: 0 }} onRestored={async (r) => { await loadProfs(); await openProf(r.title); }} />
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 1.5, flexShrink: 0, flexWrap: { xs: "wrap", md: "nowrap" } }}>
           {/* on a phone the title takes its own line; beside four buttons it was 45px wide */}
           <Box sx={{ flex: 1, minWidth: 0, flexBasis: { xs: "100%", md: "auto" } }}>
@@ -695,13 +706,13 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
             }}>Reflect now</Button>
           )}
           {isProf(docName) && ownProfile && (
-            <Button size="small" variant="outlined" color="error" onClick={() => setDeleteProf(cur.name)}
-              title="Delete this profile - triage stops offering it and its rules document goes with it">Delete</Button>
+            <Button size="small" variant="outlined" color="error" onClick={() => removeProf(cur.name)}
+              title="Remove this profile - triage stops offering it; Undo, or Restore under Recently deleted for 30 days, brings it back">Remove</Button>
           )}
           {isPb(docName) && (
             <Button size="small" variant="outlined" color="error" onClick={removePb} disabled={deleteBusy}
-              title={docName === "pb:new" ? "Discard this draft" : "Delete this playbook - triage stops matching it at once; Recently deleted on Reports → Playbooks keeps it 30 days"}>
-              {docName === "pb:new" ? "Discard" : "Delete"}
+              title={docName === "pb:new" ? "Discard this draft" : "Remove this playbook - triage stops matching it at once; Recently deleted on Reports → Playbooks keeps it 30 days"}>
+              {docName === "pb:new" ? "Discard" : "Remove"}
             </Button>
           )}
           <Button size="small" variant="contained" disableElevation disabled={docs[docName] === saved[docName]} onClick={save}>
@@ -783,14 +794,6 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     </Box>
     )}
     {importSkills && <SkillImport onClose={() => setImportSkills(false)} onImported={loadProfs} />}
-    <ConfirmDelete open={!!deleteProf} what={`the profile "${deleteProf}"`} onClose={() => setDeleteProf(null)}
-      consequence="Triage stops offering it, its row goes, and its rules document goes with it - a document has no history to restore from."
-      onConfirm={async () => {
-        await api.delete(`/api/agents/${encodeURIComponent(deleteProf)}`);
-        const left = (await loadProfs()) || [];
-        const next = left.find((p) => p.name !== deleteProf);
-        if (next) await openProf(next.name); else { setSection("documents"); setDocName(NAMES[0]); }
-      }} />
     {newPlaybook && <NewPlaybookDialog {...newPlaybook}
       onClose={() => { setNewPlaybook(null); loadBooks(); }}
       onManual={() => { openPb("new", newPlaybook.connectorType); setNewPlaybook(null); }} />}

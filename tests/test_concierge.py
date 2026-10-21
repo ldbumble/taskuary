@@ -299,7 +299,8 @@ class DecisionTests(unittest.TestCase):
         self.assertIsNone(out['decision']); p = out['proposal']
         self.assertEqual((p['kind'], p['target'], p['label']), ('message.file', m, buttons.label('not_ours')))
         self.assertEqual(s.get_message(m)['Status'], 'routed')                              # nothing filed on the words
-        self.assertIn(concierge.WAITS, out['say'])
+        # ...run at once by the page, just this once - no "are you sure" (owner-approved, 2026-10-21): From now on follows as a chip
+        self.assertTrue(p.get('auto')); self.assertNotIn(concierge.WAITS, out['say'])
         # a reply request drafts at once and sends nothing (PW-126): the words ride into the draft
         out = concierge.say(s, 'tell her the file is with the developer, Friday', key=f'review:{r}',
                             llm=lambda sy, u, **k: "I'll draft that.\nCALL: {\"kind\": \"reply\", \"params\": {\"text\": \"the file is with the developer, Friday\"}}")

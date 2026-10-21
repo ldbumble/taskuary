@@ -592,7 +592,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(config.load()['cli_connections']['uitest-cli']['model'], 'sonnet')
         self.assertEqual(json.loads(server.store.get_setting('profile_brains'))['uitest'], 'uitest-cli')   # the CLI is the role's brain
         self.assertEqual(c.put('/api/agents/bad', json={'provider': 'cli:not-connected'}).status_code, 422)   # a brain that is not there
-        self.assertEqual(c.delete('/api/agents/uitest').json(), {'ok': True})
+        self.assertTrue(c.delete('/api/agents/uitest').json()['ok'])
         self.assertNotIn('uitest', config.load().get('agents', {}))
         self.assertEqual(c.delete('/api/cli/connections/uitest-cli').status_code, 200)
         self.assertEqual(c.delete('/api/agents/uitest').status_code, 404)
@@ -635,7 +635,7 @@ class ApiTests(unittest.TestCase):
             from taskuary import reports
             out = reports.run_one(server.store, server.store.get_source(sid), None, 'manual')
             self.assertIn('2 rows', out['subject'])
-            self.assertEqual(c.delete(f'/api/sources/{sid}').json(), {'ok': True})
+            self.assertTrue(c.delete(f'/api/sources/{sid}').json()['ok'])
             self.assertEqual(c.delete(f'/api/sources/{sid}').status_code, 404)
         finally:
             REGISTRY.pop('_t')

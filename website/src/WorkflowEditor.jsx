@@ -10,7 +10,8 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import api from "./api";
 import { label as btnLabel } from "./buttons.js";
 import { BORDER, DIM, FAINT, INK, card } from "./theme.jsx";
-import { ConfirmDelete, useAgents } from "./ui.jsx";
+import { useAgents } from "./ui.jsx";
+import { removeNow } from "./Removed.jsx";
 import { effortChoices, keepEffort, modelChoices } from "./workflowBrain.js";
 import WorkflowSteps from "./WorkflowSteps.jsx";
 import { REPAIR, REPORT_WORDS, asReport, asSteps, askFor, diffKeys, firstMissing, onlyReads, outputsOf, toSaved } from "./workflowFlow.js";
@@ -106,7 +107,11 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
   useEffect(() => { if (!cur && draft) { setCfg({ type: "agent", access: "write", ...draft }); setSched(scheduleOf(draft)); } }, [draft, cur]);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState(null);
-  const [confirmDel, setConfirmDel] = useState(false);
+  // REMOVE IS AT ONCE (the owner, 2026-10-21): the Workflows list says "Removed <it> - Undo", and Recently deleted keeps it 30 days
+  const remove = async () => {
+    try { await removeNow(() => api.delete(`/api/sources/${cur.SourceId}`), "workflow", cfg.title || cur.Address); await reload(); onBack(); }
+    catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be removed." }); }
+  };
   const { agents, kinds } = useAgents();
   // who does it: the general profiles. A coding name only runs code work (a repository folder below), so it is not offered here
   const roles = agents.filter((a) => !["coding", "cli"].includes(String(kinds[a] || "").toLowerCase()));
@@ -334,14 +339,10 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
                 onChange={(e) => set("cwd", e.target.value)} sx={{ bgcolor: "#fff" }} />
             </Field>
             {cur && <Button size="small" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 15 }} />}
-              onClick={() => setConfirmDel(true)}>Delete workflow</Button>}
+              onClick={remove}>Remove workflow</Button>}
           </Box>
         </Box>
       </Box>
-      {cur && <ConfirmDelete open={confirmDel} what={`the workflow "${cfg.title || cur.Address || "untitled"}"`}
-        consequence="It stops running and leaves the Workflows list. The tasks its runs opened stay."
-        onClose={() => setConfirmDel(false)}
-        onConfirm={async () => { await api.delete(`/api/sources/${cur.SourceId}`); await reload(); onBack(); }} />}
     </Box>
   );
 }

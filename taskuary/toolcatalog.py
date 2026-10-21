@@ -128,7 +128,7 @@ PURPOSE = {
     'report.resume':            'put a paused report or workflow back on its clock - `title`',
     'report.route':             'change where one line of a report\'s route card goes - `title`, `line`: timeline | alert | send, `how`: always | ai | rule | never, `when` (for ai: what to look for), `rule`/`count`/`text` (for rule)',
     'report.edit':              'change a report\'s configuration - `title`, `config`: only the keys to change (title, cron, daily_at, every_minutes, deliver, alert...)',
-    'report.delete':            'delete a report or workflow for good - `title`',
+    'report.delete':            'remove a report or workflow - `title` (kept 30 days under Recently deleted)',
     'setting.set':              'change one setting - `setting` (its key, or `label`: part of its name) and `value`; the schema says what it takes',
     'connection.test':          'test a connection now and say what it answered - `name`',
     'connection.pause':         'switch a connection off - `name`; nothing is deleted',

@@ -167,10 +167,11 @@ test("a profile row's roster state comes from the server, and the open profile s
   assert.match(docs, /not on the roster — \$\{why\}/);   // one line per REASON, however many members share it
 });
 
-test("an own profile can be deleted from Docs, and it asks first", () => {
-  assert.match(docs, /setDeleteProf\(cur\.name\)/);
-  assert.match(docs, /<ConfirmDelete open=\{!!deleteProf\}/);
-  assert.match(docs, /api\.delete\(`\/api\/agents\/\$\{encodeURIComponent\(deleteProf\)\}`\)/);
+test("an own profile can be removed from Docs at once, with Undo in place - it never asks (the owner, 2026-10-21)", () => {
+  assert.match(docs, /removeProf\(cur\.name\)/);
+  assert.doesNotMatch(docs, /ConfirmDelete/);
+  assert.match(docs, /api\.delete\(`\/api\/agents\/\$\{encodeURIComponent\(name\)\}`\)/);
+  assert.match(docs, /<UndoLine kinds=\{\["profile"\]\}/);
   // never for the shared coding document: its workers are removed on Manage profiles
   assert.match(docs, /cur\.kind !== "coding"/);
 });

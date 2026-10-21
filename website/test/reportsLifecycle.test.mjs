@@ -15,11 +15,12 @@ test("Run now is owned by the server and survives leaving the Reports tab", () =
   assert.match(block, /leave this tab/);
 });
 
-test("an existing report has a visible top-level Delete button", () => {
+test("an existing report has a visible top-level Remove button that acts at once (the owner, 2026-10-21: no confirm)", () => {
   const wizard = source.slice(source.indexOf("function ReportWizard"));
   const header = wizard.slice(wizard.indexOf("return ("), wizard.indexOf("<Stepper"));
-  assert.match(header, /Delete \{workflow \? "workflow" : "report"\}/);
-  assert.match(header, /setConfirmDel\(true\)/);
+  assert.match(header, /Remove \{workflow \? "workflow" : "report"\}/);
+  assert.match(header, /onClick=\{remove\}/);
+  assert.doesNotMatch(wizard, /ConfirmDelete/);
   assert.match(wizard, /api\.delete\(`\/api\/sources\/\$\{cur\.SourceId\}`\)/);
 });
 

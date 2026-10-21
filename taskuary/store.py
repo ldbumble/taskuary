@@ -316,6 +316,7 @@ CREATE TABLE IF NOT EXISTS connector (ConnectorId INTEGER PRIMARY KEY, Type TEXT
   ConfigJson TEXT, Secret TEXT, Active INTEGER DEFAULT 0, LastSyncAt TEXT, LastError TEXT, LastErrorAt TEXT, Roles TEXT,
   Scope TEXT);
 CREATE TABLE IF NOT EXISTS setting (Name TEXT PRIMARY KEY, Value TEXT, Description TEXT, UpdatedBy TEXT);
+CREATE TABLE IF NOT EXISTS deleted (DeletedId INTEGER PRIMARY KEY, Kind TEXT, Title TEXT, DataJson TEXT, DeletedAt REAL, KeepUntil REAL);
 CREATE TABLE IF NOT EXISTS memory (MemoryId INTEGER PRIMARY KEY, Scope TEXT, ScopeKey TEXT, Note TEXT,
   Source TEXT, Active INTEGER DEFAULT 1, CreatedBy TEXT, CreatedAt TEXT);
 -- A small project graph. `project_link` is deliberately generic: repositories, email addresses,
@@ -4801,6 +4802,20 @@ class SQLiteStore:
     def get_source(self, sid): return self._one('SELECT * FROM source WHERE SourceId=?', (sid,))
     def delete_source(self, sid): self._exec('DELETE FROM source WHERE SourceId=?', (sid,))
     def delete_agent(self, name): self._exec('DELETE FROM agent WHERE Name=?', (name,))
+    # RECENTLY DELETED (recentlydeleted.py): what a Remove took, kept whole so Restore and Undo put it back as it was
+    def keep_deleted(self, kind, title, data, at, until) -> int:
+        return self._exec('INSERT INTO deleted (Kind, Title, DataJson, DeletedAt, KeepUntil) VALUES (?,?,?,?,?)',
+                          (kind, title, json.dumps(data, default=str), at, until))
+    def deleted_rows(self): return self._rows('SELECT * FROM deleted ORDER BY DeletedAt DESC, DeletedId DESC')
+    def get_deleted(self, did): return self._one('SELECT * FROM deleted WHERE DeletedId=?', (did,))
+    def drop_deleted(self, did): self._exec('DELETE FROM deleted WHERE DeletedId=?', (did,))
+    def put_back(self, table, row, key):
+        """A row Recently deleted kept, inserted again as it was - under its old id while nothing has taken it."""
+        cols = {r['name'] for r in self._rows(f'PRAGMA table_info({table})')}
+        d = {k: v for k, v in (row or {}).items() if k in cols}
+        if d.get(key) is not None and self._one(f'SELECT 1 FROM {table} WHERE {key}=?', (d[key],)): d.pop(key)
+        rid = self._exec(f"INSERT INTO {table} ({','.join(d)}) VALUES ({','.join('?' * len(d))})", list(d.values()))
+        return d.get(key) or rid
 
     # Monthly invoice workflow. These methods deliberately expose dicts like the rest of the
     # store; Zoho-specific decisions stay in invoice_workflow.py.

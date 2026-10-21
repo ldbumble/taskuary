@@ -58,7 +58,8 @@ class WhatShipsTests(unittest.TestCase):
         self.assertEqual((cfg['hours'], cfg['daily_at'], cfg['once_per_day']), (8, '18:00', True))
         self.assertTrue(cfg['first_run_at_schedule'])
         self.assertIn('Focus for tomorrow', cfg['ai_prompt'])
-        self.assertIn('Focused and Other', cfg['ai_prompt'])
+        # over whatever is connected, not an Inbox Brief: email is not a requirement (2026-10-21)
+        self.assertNotIn('Inbox Brief', cfg['ai_prompt'])
 
     def test_the_evening_checkup_promises_no_count_and_no_praise_the_data_does_not_bear_out(self):
         """2026-09-29: a day with one open item and nothing completed read "Summary of top 3 priorities: 1) ..." and

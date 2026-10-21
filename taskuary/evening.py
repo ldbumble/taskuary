@@ -1,10 +1,17 @@
-"""The default end-of-day inbox checkup.
+"""The default end-of-day checkup.
 
 This is deliberately a scheduled report, not another always-on Assistant producer. It runs once
-at the end of the local workday, reads only email activity from a short rolling window, and files
-one durable brief on the Timeline. Its instruction remains editable on the Reports tab.
+at the end of the local workday, reads a short rolling window of WHATEVER is connected - mail, chat,
+task trackers - and the owner's own Taskuary tasks and agent runs, and files one durable brief on the
+Timeline. Its instruction remains editable on the Reports tab.
+
+Email is not a requirement (the owner, 2026-10-21): a home may be monday.com only, chat only, or
+nothing but its own tasks. What is connected is read off the poller's own list at run time
+(sources), a connection that cannot be read is named on the run rather than read as "nothing came
+in", and a home with truly nothing to report on is a skipped run with the reason, never a brief over
+nothing (brief).
 """
-import json
+import json, sqlite3
 from datetime import datetime, timedelta
 
 from .categories import category_of, team_domains_of
@@ -17,6 +24,30 @@ HOURS = 8
 # line "acknowledging progress", so a quiet day with one open item read "top 3 priorities: 1) ..." and "Good
 # progress today" (2026-09-29). A count is the data's to give, and praise needs something completed.
 PROMPT = (
+    'Give me an executive and concise end-of-day brief over the last 8 hours: what came in and what I did '
+    'across every source in the data, and my own Taskuary tasks and agent work.\n\n'
+    'Start with exactly two one-sentence roll-ups:\n'
+    'Done today: the main themes completed today, and the number of meeting invites handled when there were any.\n'
+    'Tomorrow: the most urgent and important open items, at most three.\n\n'
+    'Then use these groups in this order, omitting a group entirely when its data has no items:\n'
+    'What I accomplished today\n'
+    'Focus for tomorrow\n\n'
+    'One bullet per item the data supports - at most five for today and three for tomorrow, never padded. '
+    'Never state a number of items the data does not show. Use exactly this bullet shape: '
+    '[Who or where] — Subject — one-line gist. Begin completed items with ✅, priorities with 🔍, and meeting '
+    'invites with 📅 (an invite may use 📅 with ✅ or 🔍). Rank tomorrow by urgency and importance.\n\n'
+    'Exclude bulk and marketing mail, system notifications, receipts, and anything suppressed by a blocked '
+    'sender or keyword rule. Include meeting invites and flagged messages when the supplied data identifies them. '
+    'Do not infer that an item was completed, flagged, deleted, archived, or still open unless the data says so. '
+    'Do not mention excluded items or missing groups. When the data says a source could not be read, say so in '
+    'one short line first and never say nothing came in from it. '
+    'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
+    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.'
+)
+
+# shipped instructions an unedited report still runs - store.py moves it to PROMPT; an owner-edited one is never touched
+OLD_PROMPTS = (
+    # the Inbox-and-Sent-only instruction until 2026-10-21: it read nothing but email
     'Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) '
     'and Sent from the last 8 hours only.\n\n'
     'Start with exactly two one-sentence roll-ups:\n'
@@ -34,11 +65,7 @@ PROMPT = (
     'when the supplied data identifies them. Do not infer that an item was completed, flagged, deleted, '
     'archived, or still open unless the data says so. Do not mention excluded items or missing groups. '
     'End with one short, plain closing sentence that the data bears out: speak of progress only when something '
-    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.'
-)
-
-# shipped instructions an unedited report still runs - store.py moves it to PROMPT; an owner-edited one is never touched
-OLD_PROMPTS = (
+    'was completed; on a quiet day, say what is left instead. No preamble, table, or extra sections.',
     'Give me an executive and concise evening Inbox Brief for emails in my Inbox (Focused and Other) '
     'and Sent from the last 8 hours only.\n\n'
     'Start with exactly two one-sentence roll-ups:\n'
@@ -60,12 +87,13 @@ OLD_PROMPTS = (
 
 
 CONTRACT = (
-    '\n\nYOU ARE WRITING THE EVENING INBOX BRIEF. Follow the report instruction exactly. Plain text '
+    '\n\nYOU ARE WRITING THE END OF DAY BRIEF. Follow the report instruction exactly. Plain text '
     'only: the two named roll-ups, then the named groups and bullets, then one short closing sentence. '
     'Never claim more items, or more progress, than the rows show. '
-    'The supplied rows are the complete eligible Taskuary email slice for the stated window unless a block '
-    'explicitly says it was capped. Never promote an excluded row into the brief, never call an automatic '
-    'filing a user accomplishment, and never invent mailbox flags or actions that are not present in the data.'
+    'The supplied rows are the complete eligible Taskuary slice for the stated window - every connected source, '
+    'and the owner\'s own tasks and agent runs - unless a block explicitly says it was capped. A source the data '
+    'says could not be read is unknown, not quiet. Never promote an excluded row into the brief, never call an '
+    'automatic filing a user accomplishment, and never invent flags or actions that are not present in the data.'
 )
 
 
@@ -108,6 +136,7 @@ def _row_line(row: dict, state: str) -> str:
         f"subject={_one_line(row.get('Subject') or '(no subject)', 140)}",
         f"at={str(row.get('SentAt') or '')[:16]}",
     ]
+    if row.get('Channel') and row['Channel'] != 'email': bits.append(f"where={row['Channel']}")
     if _invite(row): bits.append('invite=yes')
     meta = _mail_meta(row)
     if str(meta.get('flag') or '').lower() == 'flagged': bits.append('flagged=yes')
@@ -121,28 +150,45 @@ def _row_line(row: dict, state: str) -> str:
     return ' | '.join(bits)
 
 
-def gather(store, hours: int = HOURS) -> str:
-    """Return only eligible Inbox/Sent evidence in the exact rolling window.
+def sources(store) -> list:
+    """[{label, channel, ok, why}] - every connection the poller reads, and whether it can be read right now. The
+    poller's own list (channels._poll_jobs) says what is connected, so no channel is named here and a card added
+    later is covered without a word; its health is the card's own state (Microsoft's sign-in, the last poll's error)."""
+    from . import channels, connectorcatalog, problems
+    out = []
+    for c, _ in channels._poll_jobs(store):
+        err = str(c.get('LastError') or '').strip()
+        why = ('signed out - sign in again under Connections' if problems.signed_out(c)
+               else channels.plain_error_text(err)[:200] if err else '')
+        label = (c.get('Name') or '').strip() or (connectorcatalog.by_type(c['Type']) or {}).get('title') or c['Type']
+        out.append({'label': label, 'channel': channels.CH2SRC[c['Type']], 'ok': not why, 'why': why})
+    return out
 
-    New Outlook rows retain Inbox/Sent, Focused/Other and flag state. Rows ingested by older
-    versions predate that metadata and are treated as Inbox because Inbox was the default source.
-    """
+
+def _and(xs): return xs[0] if len(xs) == 1 else ', '.join(xs[:-1]) + f' and {xs[-1]}'
+
+
+def collect(store, hours: int = HOURS) -> dict:
+    """The window's evidence: the connected channels' rows sorted into done and open, and the owner's own tasks and
+    agent runs. Every channel a connection lands in is read (channels.CH2SRC), not email alone. New Outlook rows
+    retain Inbox/Sent, Focused/Other and flag state; rows from before that metadata are treated as Inbox."""
+    from .channels import CH2SRC
     hours = max(1, min(int(hours or HOURS), 48))
-    start = datetime.now() - timedelta(hours=hours)
-    since = start.strftime('%Y-%m-%d %H:%M:%S')
+    since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+    chans = sorted(set(CH2SRC.values()))
     # newest route/review by index per row, never a GROUP BY over the whole table (the store.feed fix)
     rows = store._rows(
-        """SELECT m.*, t.Status TaskStatus, t.Priority,
+        f"""SELECT m.*, t.Status TaskStatus, t.Priority,
                   rt.Decision, rt.Reason RouteReason, rt.RoutedBy,
                   rv.Status ReviewStatus
              FROM message m
              LEFT JOIN task t ON t.TaskId=m.TaskId
              LEFT JOIN route rt ON rt.RouteId=(SELECT MAX(RouteId) FROM route WHERE MessageId=m.MessageId)
              LEFT JOIN review rv ON rv.ReviewId=(SELECT MAX(ReviewId) FROM review WHERE MessageId=m.MessageId)
-            WHERE m.Channel='email' AND m.SentAt>=?
+            WHERE m.Channel IN ({','.join('?' * len(chans))}) AND m.SentAt>=?
             ORDER BY m.SentAt DESC, m.MessageId DESC
             LIMIT 500""",
-        (since,),
+        (*chans, since),
     )
     team = team_domains_of(store.get_settings())
     eligible, sent, archived = [], [], []
@@ -152,7 +198,7 @@ def gather(store, hours: int = HOURS) -> str:
         if mine:
             sent.append(row)
             continue
-        # Graph source cards may also watch custom folders. Only Inbox belongs in this brief;
+        # Graph source cards may also watch custom folders. Only a mailbox's Inbox belongs in this brief;
         # rows from before folder metadata shipped are Inbox by the historical default.
         if meta.get('folder') and str(meta['folder']).lower() != 'inbox':
             continue
@@ -187,9 +233,42 @@ def gather(store, hours: int = HOURS) -> str:
         if flagged or review == 'pending' or row.get('TaskStatus') in ('open', 'in_progress', 'waiting'):
             priorities.append(_row_line(row, 'open priority'))
 
+    from .store import task_ref
+    done = store._rows("SELECT TaskId, Title, Priority FROM task WHERE Status='done' AND ClosedAt>=? "
+                       "ORDER BY ClosedAt DESC LIMIT 80", (since,))
+    open_ = store._rows("SELECT TaskId, Title, Priority, Status FROM task WHERE Status IN ('open','in_progress','waiting') "
+                        "ORDER BY CASE Priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, COALESCE(UpdatedAt, CreatedAt) DESC "
+                        "LIMIT 40", ())
+    runs = store._rows("SELECT r.AgentName, r.Status, r.LastError, r.TaskId, t.Title FROM run r LEFT JOIN task t ON t.TaskId=r.TaskId "
+                       "WHERE COALESCE(r.FinishedAt, r.UpdatedAt, r.StartedAt)>=? ORDER BY r.RunId DESC LIMIT 80", (since,))
+    def task_line(t, state):
+        return f"state={state} | task={task_ref(t['TaskId'])} | title={_one_line(t.get('Title'), 140)} | priority={t.get('Priority') or 'normal'}"
+    def run_line(r):
+        bits = [f"agent={_one_line(r.get('AgentName'), 60)}", f"status={r.get('Status') or 'running'}"]
+        if r.get('TaskId'): bits.append(f"task={task_ref(r['TaskId'])} {_one_line(r.get('Title'), 120)}")
+        if r.get('LastError'): bits.append(f"error={_one_line(r['LastError'], 160)}")
+        return ' | '.join(bits)
+    return {'hours': hours, 'since': since, 'accomplished': accomplished, 'priorities': priorities,
+            'done': [task_line(t, 'closed') for t in done], 'open': [task_line(t, t.get('Status') or 'open') for t in open_],
+            'runs': [run_line(r) for r in runs]}
+
+
+def has_any(ev: dict) -> bool: return any(ev[k] for k in ('accomplished', 'priorities', 'done', 'open', 'runs'))
+
+
+def gather(store, hours: int = HOURS, read=(), unread=()) -> str:
+    """The evidence as the model reads it. `read` names the connections read, `unread` the (label, why) of those that
+    could not be (sources): one that could not is said at the top, so its silence is never read as a quiet day."""
+    return _text(collect(store, hours), read, unread)
+
+
+def _text(ev: dict, read=(), unread=()) -> str:
+    since, hours, accomplished, priorities = ev['since'], ev['hours'], ev['accomplished'], ev['priorities']
     out = [
         f"WINDOW: {since[:16]} through {datetime.now().strftime('%Y-%m-%d %H:%M')} ({hours} rolling hours)",
-        'SCOPE: email Inbox (Focused and Other together) and Sent copies retained by Taskuary only.',
+        f"SCOPE: {_and([*read, 'Taskuary tasks and agent runs'])}; of a mailbox, its Inbox (Focused and Other together) and Sent copies only.",
+        *([f"COULD NOT READ THIS RUN: {'; '.join(f'{l} ({w})' for l, w in unread)}. Its rows below are only what Taskuary "
+           'already held - never say nothing came in from it.'] if unread else []),
         'EXCLUSIONS APPLIED: blocked/ignored/withdrawn, bulk/marketing, system notifications, and receipts.',
         '',
         f"ACCOMPLISHED EVIDENCE ({len(accomplished)} rows; newest first):",
@@ -197,7 +276,35 @@ def gather(store, hours: int = HOURS) -> str:
         '',
         f"OPEN PRIORITY EVIDENCE ({len(priorities)} rows; newest first):",
         *(priorities[:80] or ['(none)']),
+        '',
+        f"TASKUARY TASKS CLOSED IN THE WINDOW ({len(ev['done'])}):",
+        *(ev['done'] or ['(none)']),
+        '',
+        f"TASKUARY AGENT RUNS IN THE WINDOW ({len(ev['runs'])}):",
+        *(ev['runs'] or ['(none)']),
+        '',
+        f"TASKUARY TASKS STILL OPEN ({len(ev['open'])}, most urgent first):",
+        *(ev['open'] or ['(none)']),
     ]
     if len(accomplished) > 80 or len(priorities) > 80:
         out += ['', 'CAP NOTICE: one or more evidence blocks were capped at 80 rows.']
     return '\n'.join(out)
+
+
+def brief(store, hours: int = HOURS, unread: list = None) -> tuple:
+    """(head, evidence) for one run - or Skipped, with the reason, when there is truly nothing to report on: nothing
+    that can be read is connected AND Taskuary itself holds no work in the window or open. A connection that cannot be
+    read is named on the run (`unread` collects (label, why) for run_report_source) and the run goes on over the rest;
+    a connected source with nothing in the window is a normal, quiet run - zero items is a result."""
+    from .reports import Skipped
+    srcs = sources(store)
+    try: ev = collect(store, hours)
+    except sqlite3.Error as e: raise Skipped(f"Skipped: Taskuary's own data could not be read - {e}") from e
+    good, bad = [x for x in srcs if x['ok']], [x for x in srcs if not x['ok']]
+    if not good and not has_any(ev):
+        if bad: raise Skipped('Skipped: ' + '; '.join(f"{x['label']} could not be read ({x['why']})" for x in bad))
+        raise Skipped(f"Skipped: nothing is connected and Taskuary has no work in the last {ev['hours']} hours or still open")
+    if unread is not None: unread += [(x['label'], x['why']) for x in bad]
+    read = list(dict.fromkeys(x['label'] for x in good))
+    head = f"the last {ev['hours']} hours of {_and([*read, 'your Taskuary work'])}" + ''.join(f" · {x['label']}: FAILED" for x in bad)
+    return head, _text(ev, read, [(x['label'], x['why']) for x in bad])

@@ -417,7 +417,7 @@ def gather(store, days: int = DAYS) -> str:
     # brief that renames a task is a lie in the one place the owner trusts by default
     _block(out, 'WAITING ON THE OWNER (pending reviews):',
            (f"  TQ-{r['TaskId']:04d} ({(r.get('Title') or '?')[:60]}) {r.get('Kind')} "
-            f"on mail: {(r.get('Subject') or '(no subject)')[:90]} {task_link(r['TaskId'])}" for r in store.list_reviews('pending')[:15]))
+            f"on: {(r.get('Subject') or '(no subject)')[:90]} {task_link(r['TaskId'])}" for r in store.list_reviews('pending')[:15]))
     _block(out, 'WHAT PEOPLE SAID (the window, by thread, newest first; the last lines of each, oldest first; "you" = the owner):',
            people)
     away = A.ooo(store)

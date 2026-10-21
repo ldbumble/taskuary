@@ -111,7 +111,7 @@ function Shelf({ cards, more, opened, detail, onAll, allLabel = "Show all", grou
 
 // `revisit`: opened from Set up Taskuary on an install that may be set up already - every question stays open, so the AI or
 // the mailbox can be changed from the same cards
-export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false }) {
+export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false, hidden = false }) {
   const [st, setSt] = useState(null), [err, setErr] = useState("");
   const [loadErr, setLoadErr] = useState(""), [fails, setFails] = useState(0);   // the FIRST load failing: said, retried, Try again
   const [conns, setConns] = useState([]), [sources, setSources] = useState([]);
@@ -137,8 +137,14 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // Back, Next, a fix's link - on an open step (setupSteps.landOn), so the guard is not the rail's alone
   const stRef = useRef(null);
   const go = useCallback((v) => { setView(landOn(stRef.current, v)); setOpen(null); setBrowse(false); }, []);
+  // ...and HIDDEN under a page opened during setup (W2, the 2026-10-21 UI audit), the step it was on comes back as it was left - a card
+  // half filled in included: pressing that step on the rail only takes the page away (AssistantView), it does not start the step again
+  const hiddenRef = useRef(hidden); hiddenRef.current = hidden;
   useEffect(() => {
-    const on = (e) => { const v = e.detail === "finish" ? "other" : e.detail; if (!stRef.current || reachable(stRef.current, v)) go(v); };
+    const on = (e) => {
+      if (hiddenRef.current && e.detail === window.__tqSetupShown) return;
+      const v = e.detail === "finish" ? "other" : e.detail; if (!stRef.current || reachable(stRef.current, v)) go(v);
+    };
     window.addEventListener("tq-setup-go", on);
     return () => window.removeEventListener("tq-setup-go", on);
   }, [go]);
@@ -156,7 +162,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   const connLine = connSug?.line || "";
   // what setup says next is the ADVISOR'S line, in its bar over the row (setupLine.js): written every render, cleared on the way out
   const lineRef = useRef("");
-  useEffect(() => { writeSetupLine(lineRef.current); });
+  useEffect(() => { writeSetupLine(hidden ? "" : lineRef.current); });
   useEffect(() => () => writeSetupLine(""), []);
   const prevSt = useRef(null);
   useEffect(() => {
@@ -225,7 +231,7 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
   // ...and SETUP COMPLETE has its one big button on the canvas (SetupDone), nothing in the row
   const navShown = view === "done" ? [] : view === "about" ? nav.filter((m) => m.id === "finish") : nav;
   useVerbs("setup", [...navShown.map((m) => ({ id: `setup:${m.id}`, group: m.id === "back" ? "next" : "decide", disabled: !!m.disabled, why: m.why || "",
-    ...VERB[m.id], tone: toneOf(`setup:${m.id}`) })), ...fixRow.map((v) => ({ ...v, tone: toneOf(v.id) }))], navShown.length + fixRow.length > 0);
+    ...VERB[m.id], tone: toneOf(`setup:${m.id}`) })), ...fixRow.map((v) => ({ ...v, tone: toneOf(v.id) }))], !hidden && navShown.length + fixRow.length > 0);
   // an error is about the step it happened on: it followed the owner to the next one (the Advisor audit, 2026-10-15)
   useEffect(() => { setErr(""); }, [view]);
   // THE RAIL MARKS WHAT IS ON THE CANVAS (SetupSteps): it said About your work while the owner was back on the email step
@@ -567,7 +573,7 @@ ${fix.detail || ""}`, screen: "Setup",
       <Light root={rootRef} card={litCard?.key || ""} canvas={canvas} onShown={onShown} />
       {shelf("ai", ai, "More AI", { label: "If you use a coding tool", cards: coding })}
       {shelf("mail", mail, "More email")}
-      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout}
+      {aboutDue && <FirstRunAbout again={!!st.about_done} onBack={() => go("mail")} onLine={setAboutLine} onSaved={afterAbout} hidden={hidden}
         onStep={onAboutStep} mailboxes={st.mailboxes || []} mailShelf={mailAbout && <Shelf cards={mail} more="More email"
           opened={open ? `c${open.id}` : null} detail={<Box data-tq-setup-scope="">{detail}</Box>} onAll={() => setOpen(null)} />} />}
       {/* the first time the required steps are done: confetti and the way into the day (the owner, 2026-10-16) - or, with the AI

@@ -81,3 +81,49 @@ test("one CLI genuinely on PATH is said to be found - as one choice, never lit, 
   assert.doesNotMatch(cards["cli-codex"], /On this computer|Connected/, "only the one that is here");
   assert.deepEqual(errors, []);
 });
+
+// SETUP IS NOT LOST (W2, the 2026-10-21 UI audit): a page opened from the sidebar during setup replaced it, and the rail's step, the
+// Setup chip and Chat all left that page on screen - only a reload brought setup back, on its first card. A task found in Search
+// never opened at all. Setup now waits, mounted, under whatever is opened over it, and each of the three takes that away.
+test("setup comes back as it was left from the rail, the Setup chip and Chat - and a task found in Search opens over it", { timeout: 240000 }, async (t) => {
+  const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
+  const { page, errors } = await firstRun(harness);
+  const shelfOpen = () => page.evaluate(() => {
+    const fr = document.querySelector("[data-tq-firstrun]");
+    const shown = !!fr && fr.getBoundingClientRect().height > 0;
+    return { shown, more: !!fr?.querySelector("[data-tq-shelf-more]"), fewer: [...(fr?.querySelectorAll("button") || [])].some((b) => b.innerText === "Show fewer") };
+  });
+  // a state of the step that only lives on the screen: every AI card open (the shelf's own Show all)
+  await page.click("[data-tq-firstrun] [data-tq-shelf-more]");
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-tq-firstrun] button")].some((b) => b.innerText === "Show fewer"));
+  const away = async () => {
+    await page.evaluate(() => document.querySelector('[data-tq-nav="connections"]').click());
+    await page.waitForFunction(() => document.querySelector("[data-tq-setup-back]") && !(document.querySelector("[data-tq-firstrun]")?.getBoundingClientRect().height > 0));
+  };
+  const back = async (how) => {
+    await page.waitForFunction(() => !document.querySelector("[data-tq-setup-back]") && document.querySelector("[data-tq-firstrun]")?.getBoundingClientRect().height > 0,
+      { timeout: 10000 }).catch(() => { throw new Error(`${how} did not bring setup back`); });
+    assert.deepEqual(await shelfOpen(), { shown: true, more: false, fewer: true }, `${how}: setup is where it was left - every AI card still open`);
+  };
+  await away();
+  await page.click('[data-tq-setup-step="ai"]'); await back("the rail's step");
+  await away();
+  await page.evaluate(() => [...document.querySelectorAll("#tqTopNav p, #tqTopNav span")].find((e) => /^Setup:/.test(e.innerText || ""))?.click());
+  await back("the Setup chip");
+  await away();
+  await page.click('[data-tq-view="chat"]'); await back("Chat");
+  // a task made during setup, found in Search, opens over setup - and setup is still there behind it
+  const made = await fetch(`${harness.fixtureApi}/api/tasks`, { method: "POST", headers: { "Content-Type": "application/json", "X-Taskuary-Token": harness.token },
+    body: JSON.stringify({ Title: "Chase the Payworth invoice for Northwind", Summary: "Ask Erin Blake where the invoice is", Kind: "task" }) }).then((r) => r.json());
+  assert.ok(made.taskId, JSON.stringify(made));
+  await page.click("[data-tq-search-open]");
+  await page.waitForSelector("[data-tq-search-input]");
+  await page.type("[data-tq-search-input]", "Payworth invoice");
+  await page.waitForSelector(`[data-tq-search-task="${made.taskId}"], [data-tq-search-hit]`, { timeout: 20000 });
+  await page.evaluate((tid) => (document.querySelector(`[data-tq-search-task="${tid}"]`) || document.querySelector("[data-tq-search-hit]")).click(), made.taskId);
+  await page.waitForFunction((tid) => document.querySelector(`[data-tq-task-page="${tid}"]`)?.getBoundingClientRect().height > 0, { timeout: 30000 }, made.taskId)
+    .catch(() => { throw new Error("the task found in Search did not open during setup"); });
+  assert.ok(await page.$("[data-tq-setup-back]"), "the way back to setup stands over the task");
+  await page.click('[data-tq-setup-step="ai"]'); await back("the rail's step, from the task");
+  assert.deepEqual(errors, []);
+});

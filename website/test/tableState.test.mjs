@@ -57,6 +57,6 @@ test("the page wires the record: the strip, the box's subject, the folded line a
   assert.match(src, /if \(card\) openCardRef\.current = null;/, "a task put on the table ends the page the chat was answering about");
   assert.match(src, /live && foldedNow \? \{ role: "button"/, "the folded item on the table is its own door back");
   assert.match(src, /onCurrent=\{\(\) => \{ setRailOpen\(false\); if \(table\.folded \|\| table\.place\)/, "the ringed rail row reopens it");
-  assert.match(src, /firstRun && browsing \?/, "a sidebar place opens during setup, with the way back");
+  assert.match(src, /firstRun && \(browsing \|\| setupCard\) && <div data-tq-setup-over=""/, "a sidebar place - or a task - opens during setup, with the way back");
   assert.doesNotMatch(src, /setTimeout\(\(\) => \{ if \(n === adviceAsk\.current\) setAsking\(null\); \}, 20000\)/, "no 20 s spinner that then shows nothing");
 });

@@ -239,7 +239,8 @@ export const ViewSwitch = ({ view, onView }) => (
       const on = view === v.k;
       return (
         <Box key={v.k} component="button" type="button" role="tab" aria-selected={on} data-tq-view={v.k} title={v.title}
-          onClick={() => onView(v.k)}
+          // ...and Chat during setup is setup, as it was left: a page opened over it goes (W2; AssistantView acts on it only in setup)
+          onClick={() => { onView(v.k); if (v.k === "chat") window.dispatchEvent(new Event("tq-setup-back")); }}
           sx={{ display: "flex", alignItems: "center", gap: 0.8, height: 34, px: { xs: 1.1, md: 1.8 }, borderRadius: 99, border: 0, cursor: "pointer",
             fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", color: on ? "#fff" : INK,
             background: on ? BRAND.solid : "transparent", "&:hover": on ? {} : { bgcolor: "#fff" } }}>

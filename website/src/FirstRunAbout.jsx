@@ -55,7 +55,7 @@ const NONE = { state: "none", why: "", text: "" };
 // what the job was written from: the answers and every mailbox it read - one added since is a reason to write it again
 const who = (a, boxes = []) => JSON.stringify([...[a.name, a.org, a.role].map((x) => (x || "").trim()), ...boxes.map((b) => b.address.toLowerCase()).sort()]);
 
-export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again = false, mailboxes = [], mailShelf = null }) {
+export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again = false, mailboxes = [], mailShelf = null, hidden = false }) {
   const [a, setA] = useState(null), [offered, setOffered] = useState([]), [seen, setSeen] = useState([]), [all, setAll] = useState(false);
   const [at, setAt] = useState(0), [reading, setReading] = useState(false), [note, setNote] = useState("");
   const [busy, setBusy] = useState(""), [err, setErr] = useState(""), [other, setOther] = useState("");
@@ -162,7 +162,7 @@ export default function FirstRunAbout({ onSaved, onBack, onLine, onStep, again =
       label: nextLabel,
       title: last ? "Saved to what Taskuary knows about you - change it any time in Settings" : step === "mailboxes" ? "Every mailbox you use is connected"
         : draft ? "Kept as it is here - change it any time in Settings" : "The next question", run: next },
-  ] : [], !!a);
+  ] : [], !!a && !hidden);
   // the question is the Advisor's line over the row
   const says = draft && SAYS[step];
   const line = !a ? "" : draft ? (draft.state === "failed" ? says.failed(draft.why) : says[draft.state])

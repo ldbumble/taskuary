@@ -10,7 +10,7 @@ import json
 from . import flow, playbooks, reports, settings_schema, workflows
 
 # the settings a brain is picked on, in the words their own pages use (settings_schema labels the rest)
-BRAIN_WORDS = {'triage_ai': 'Triage brain', 'triage_backup_ai': 'backup Triage brain', 'concierge_ai': 'Assistant tab brain',
+BRAIN_WORDS = {'triage_ai': 'Triage brain', 'triage_backup_ai': 'backup Triage brain', 'concierge_ai': 'Assistant brain',
                'assistant_ai': 'General agent brain', 'judge_ai': 'report judge'}
 ORDER = ('workflow', 'report', 'brain', 'card', 'draft', 'rule', 'playbook', 'source')
 

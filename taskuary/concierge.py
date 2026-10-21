@@ -2391,7 +2391,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             ex = store.get_connector_by_type(c['type'])
             # a few words beside the card it opens (the owner, 2026-10-21): the card lights its own first step
             said = (f"Opened your {c['title']} card - Add another connects a second one." if ex and ex.get('Active')
-                    else f"Opened the {c['title']} card - its first step is lit there.")     # the page names the step (connectorStep.STEP_SAID)
+                    # ...and the safety point in the same few words: a key or password belongs on the card, never typed into the chat
+                    else f"Opened the {c['title']} card - keys go there, never in chat.")
             # &step=1: the card lights its first real step and the page finishes the line with it (connectorStep.js STEP_SAID)
             return _page(store, tid, item, f"#connector={c['type']}" + ('' if ex and ex.get('Active') else '&step=1'), said)
         elif kind == 'connection.create':

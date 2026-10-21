@@ -546,11 +546,16 @@ def _mailboxes(store) -> list:
 
 
 def more_connected(store) -> int:
-    """Connections switched on beyond the AI, the mail and Taskuary's own Hub - what ticks More connections on the rail, which never
+    """Connections switched on beyond the AI, the main source and Taskuary's own Hub - what ticks More connections on the rail, which never
     ticked however many were set up (the owner, 2026-10-16: "why is it still not checked, what checks it?")."""
     from .llm import AI_TYPES
-    skip = {*AI_TYPES, *(t for t, _l, _s in MAIL), *GENERIC}
-    return sum(1 for c in store.list_connectors() if c.get('Active') and c.get('Type') not in skip)
+    on = [c for c in store.list_connectors() if c.get('Active') and c.get('Type') not in {*AI_TYPES, *GENERIC}]
+    # ...and beyond the MAIN SOURCE, whichever kind it is: every mailbox when there is one, else the first source on the shelf - a
+    # monday.com-only home read "More connections: 1 connected" over the one card that was its main source (the owner, 2026-10-21)
+    order = source_types()
+    srcs = sorted((c for c in on if c['Type'] in order), key=lambda c: (order.index(c['Type']), c['ConnectorId']))
+    main = {c['ConnectorId'] for c in srcs if c['Type'] in MAIL_TYPES} or {c['ConnectorId'] for c in srcs[:1]}
+    return sum(1 for c in on if c['ConnectorId'] not in main and c['Type'] not in MAIL_TYPES)
 
 
 # HOW FILES MOVE OR WHERE THEY SIT, NOT A SYSTEM ONE WORKS IN - and Taskuary's own: never offered as "systems you work in" nor

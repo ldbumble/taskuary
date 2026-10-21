@@ -542,6 +542,17 @@ class MainSourceTests(unittest.TestCase):
         self.assertEqual(self.s.get_setting(firstrun.DISMISSED), '1')
         self.assertTrue(next(r for r in firstrun.state(self.s)['rail'] if r['key'] == 'finish')['done'])
 
+    def test_more_connections_counts_beyond_the_main_source_whichever_kind_it_is(self):
+        self.on('monday', 'monday', 'Alex Doyle')
+        st = firstrun.state(self.s)
+        self.assertEqual(st['more_connected'], 0, 'monday.com is the main source, not one more')
+        self.assertEqual(next(r for r in st['rail'] if r['key'] == 'other')['sub'], 'optional')
+        self.on('slack', 'slack', '#ops')
+        self.assertEqual(firstrun.more_connected(self.s), 1, 'a chat beside it is one more')
+        # a mailbox, once there is one, is the main source: then both the tracker and the chat are more
+        self.on('gmail', 'email', 'alex@northwind.example')
+        self.assertEqual(firstrun.more_connected(self.s), 2)
+
     def test_a_chat_alone_passes(self):
         self.on('slack', 'slack', '#ops')
         st = firstrun.state(self.s)

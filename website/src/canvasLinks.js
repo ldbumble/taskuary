@@ -21,7 +21,7 @@ export function canvasRequestFromHash(hash, n = 0) {
     // a draft New built (draftHandoff): its kind's shelf, the draft open
     const state = v === "new" ? { section: "reports", open: "new-report" }
       : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
-      : v === "workflows" ? { section: "workflows", open: null }
+      : v === "workflows" ? { section: "workflows", open: null } : v === "playbooks" ? { section: "playbooks", open: null }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
           : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}) }
             : { section: "reports", open: null };
@@ -42,17 +42,20 @@ export function canvasRequestFromHash(hash, n = 0) {
   if ((m = /^#settings=docs&doc=(\w+)(?:&view=(\w+))?/.exec(h))) return { kind: "browse", area: "settings", state: { section: "docs", open: `d:${m[1]}`, ...(m[2] ? { view: m[2] } : {}) }, n };
   if ((m = /^#settings=([^&]*)(?:&group=([^&]*))?/.exec(h))) {
     const page = decodeURIComponent(m[1] || "config") || "config", group = m[2] ? decodeURIComponent(m[2]) : "";
-    // Profiles and Playbooks are sections of their own now (2107f0d2): their link opens that section's list, where it fell to the
-    // section list above - and the playbook test's New playbook was on neither
-    if (["profiles", "playbooks"].includes(page)) return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
+    // Profiles is a section of its own (2107f0d2): its link opens that section's list. PLAYBOOKS LEFT SETTINGS for the Reports page
+    // (the owner, 2026-10-21) - an old link to them still lands, on their new shelf
+    if (page === "playbooks") return { kind: "browse", area: "reports", state: { section: "playbooks", open: null }, n };
+    if (page === "profiles") return { kind: "browse", area: "settings", state: { section: page, open: null }, n };
     if (!SETTINGS_PAGES.includes(page)) return { kind: "browse", area: "settings", state: { section: null, open: null }, n };
     // Docs is a shelf of files: its link opens the shelf, not whichever document happens to be first
     // ...and &key=<knob>: the one setting the Assistant brought the page up for (concierge._route), outlined and in view
     const knob = page === "config" && group && /&key=([^&]+)/.test(h) ? decodeURIComponent(/&key=([^&]+)/.exec(h)[1]) : "";
     return { kind: "browse", area: "settings", state: { section: page, open: page === "config" ? (group || null) : page === "docs" ? null : page, ...(knob ? { knob } : {}) }, n };
   }
-  // a playbook: the words live in Settings -> Playbooks, edited in the Docs page (DocsView reads the hash itself and opens it)
-  if (/^#playbook=/.test(h)) return { kind: "browse", area: "settings", state: { section: "playbooks", open: "docs" }, n };
+  // a connector card's "new playbook for this connection" (#playbook=new:<type>): the Playbooks shelf, its New playbook asked for that card
+  if ((m = /^#playbook=new:([\w-]+)/.exec(h))) return { kind: "browse", area: "reports", state: { section: "playbooks", open: null, newFor: m[1] }, n };
+  // a playbook: Reports -> Playbooks, that one open in its editor (#playbook=new is a new one)
+  if ((m = /^#playbook=([\w.-]+)/.exec(h))) return { kind: "browse", area: "reports", state: { section: "playbooks", open: `pb:${m[1]}` }, n };
   // "Manage profiles": the Profiles section, where every profile is a card beside Manage profiles and + New profile
   if (/^#profiles(?:$|=)/.test(h)) return { kind: "browse", area: "settings", state: { section: "profiles", open: null }, n };
   return null;
@@ -77,6 +80,7 @@ export function hashFor(area, s = {}) {
   }
   if (area === "reports") {
     if (s.section === "workflows") return s.open === "draft" ? "#report=draft-workflow" : REPORT_BUCKETS.includes(s.open) ? `#report=${s.open}` : "#report=workflows";
+    if (s.section === "playbooks") return /^pb:[\w.-]+$/.test(String(s.open || "")) ? `#playbook=${s.open.slice(3)}` : "#report=playbooks";
     // ...a run's Fix with AI (&fix=) is an act the link asks for once, not a place: Back to it must not ask again
     return typeof s.open === "number" ? `#report=${s.open}` : s.open === "new-report" ? "#report=new"
       : s.open === "draft" ? "#report=draft" : "#report=reports";

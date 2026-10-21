@@ -16,7 +16,7 @@ test("a playbook review is a save process, not a reply", () => {
   const shown = proposalPresentation(playbook);
   assert.equal(shown.kind, "playbook");
   assert.equal(shown.title, "Playbook · Run manual PTO import");
-  assert.equal(shown.destination, "Docs → Playbooks → run-manual-pto-import.md");
+  assert.equal(shown.destination, "Reports → Playbooks → run-manual-pto-import.md");
   assert.equal(shown.approveLabel, "Approve");          // one word for every proposal (buttons.json approve.states.action)
   assert.match(shown.context, /nothing will be sent/);
 });
@@ -25,7 +25,7 @@ test("a playbook proposed as new names the file its title files it under", () =>
   // playbooks.write files slug "new" under slugify(title): the card said new.md over a playbook saved as send-our-w-9-....md
   const review = { Kind: "action", DraftText: JSON.stringify({ action: "write_playbook", slug: "new",
     text: "# Send our W-9 to a customer who asks\nwhen: a customer asks for our W-9\n" }) };
-  assert.equal(proposalPresentation(review).destination, "Docs → Playbooks → send-our-w-9-to-a-customer-who-asks.md");
+  assert.equal(proposalPresentation(review).destination, "Reports → Playbooks → send-our-w-9-to-a-customer-who-asks.md");
 });
 
 test("a workflow's write waiting for the yes reads as what it writes and where, never its JSON", () => {

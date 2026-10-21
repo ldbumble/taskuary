@@ -23,6 +23,7 @@
     "updates":           {"name": "Settings → Updates", "href": "#settings=updates"},
     "profiles":          {"name": "Settings → Profiles", "href": "#profiles"},
     "workflows":         {"name": "Workflows", "href": "#report=workflows"},
+    "playbooks":         {"name": "Reports → Playbooks", "href": "#report=playbooks"},
     "setup":             {"name": "Setup", "href": "#setup"},
     "later":             {"name": "For later on your rail", "href": ""},
     "board":             {"name": "the Board", "href": ""},

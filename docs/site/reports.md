@@ -239,6 +239,31 @@ under Reports and never goes through triage; its agent works it like any other t
 - The task shows where it came from: the workflow's mark, **Workflow · its name** and
   **Started by** - its schedule (with the clock, e.g. "Mondays 08:00"), you, the assistant, or your
   phone - in the header and under **Came from**, with a link back to the workflow.
+- **A mail can start it.** Describe, in words, the mail that should start it under **Start when a
+  mail like this arrives** ("a vendor sends an invoice for something we ordered"). Triage is shown
+  every such workflow beside your playbooks; when a mail is one, that workflow runs and its run is
+  the mail's task, with the mail filed on it. Its steps read the mail as `{{mail.from}}`,
+  `{{mail.subject}}` and `{{mail.body}}` - as data, never pasted into a query. Approvals work as on
+  any run. A workflow that hands to an agent is not started by a sender who may not start one by
+  themselves; that mail becomes a task of its own that says which workflow it matched.
+- A new workflow's first scheduled run is its next slot - saving one on a Wednesday does not run a
+  Monday job straight away. **Run now** runs it now.
+- A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
+  waits on its own task, which the step names.
+
+## Playbooks
+
+The third shelf on the Reports page, beside Reports and Workflows. A **playbook** is how this
+company does one kind of job - when it starts, which connections it uses, the steps, what an agent
+may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
+playbook's `when` line, and the agent working that task is handed the playbook.
+
+- **New playbook** builds one with AI from a past email or your own words - the draft appears in
+  the conversation with its **Approve** - or opens the editor to write it by hand.
+- When an agent finishes a kind of job that will recur and no playbook covers it, Taskuary
+  proposes one on the task; approve it and the next mail like it is matched.
+- Each playbook has an **on/off switch**: off keeps it, and triage stops matching it. Settings →
+  How mail is sorted → **Use playbooks** turns them all off at once.
 
 ## Stateful workflows
 

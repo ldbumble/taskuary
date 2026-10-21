@@ -5,7 +5,7 @@ CODING.md is one playbook - the one about code - and "work only in the repositor
 names" is the wrong first rule for a bill. So a playbook is a fourth operator document with a
 DIRECTORY instead of a file: ~/.taskuary/playbooks/<slug>.md, six labelled lines on top
 (when / uses / steps / alone / ask first / done when) and any prose below. Two doors to the
-same file: the Docs section's Playbooks shelf edits the words, and every connector card lists the
+same file: the Reports page's Playbooks shelf edits the words (and switches one off), and every connector card lists the
 playbooks whose `uses:` line names it.
 
 Three consumers, none of which re-reads the mail to second-guess triage:
@@ -115,9 +115,10 @@ def collect_setup_draft(store, task_id, reply):
         queued = queued or proposals.queue(store, task_id, draft, 'assistant')
         # the draft is drawn right under this answer with its Approve (the assistant payload's playbookDrafts): say where, and what
         # Approve does - "Draft ready on the task (rv12)" pointed at a Close out the live chat hid (the owner, 2026-10-21)
-        outcome = ("Your playbook draft is below. Edit it if you like - Approve saves it to Reports → Playbooks, and triage starts "
-                   "matching new mail against its when line." if queued
-                   else 'The draft could not be queued. Check that "Use playbooks" is on in Settings → How mail is sorted.')
+        from . import words
+        outcome = (f"Your playbook draft is below. Edit it if you like - Approve saves it to {words.name('playbooks')}, and triage "
+                   "starts matching new mail against its when line." if queued
+                   else f"The draft could not be queued. Check that \"Use playbooks\" is on in {words.name('sorting')}.")
     except (ValueError, TypeError) as e:
         outcome = f'The draft could not be queued: {e} Ask the assistant to correct it.'
     return visible.rstrip() + '\n\n' + outcome

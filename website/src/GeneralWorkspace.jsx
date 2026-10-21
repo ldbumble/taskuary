@@ -35,6 +35,7 @@ import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import ReviewDecision from "./ReviewDecision.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
 const textOf = (message) => (message?.content || []).filter((p) => p.type === "text").map((p) => p.text).join("\n").trim();
@@ -363,7 +364,7 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, reportLike = false, drafts = [], onDraftDecided }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -535,7 +536,18 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
           {!dock && <PublishedPages pages={published} />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
               the answer needed */}
-          {!dock && !serverBusy && !asking && messages?.some((m) => m.role === "assistant") && (
+          {/* A PLAYBOOK DRAFTED HERE IS APPROVED HERE (the owner, 2026-10-21): Close out, where it also waits, is hidden while the
+              conversation is live - Approve was reachable only after a Stop and save nothing said to press */}
+          {!dock && !!drafts?.length && (
+            <Box data-tq-playbook-drafts="" sx={{ mt: 1.5, mx: { xs: 1, sm: 2 }, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 1.5, bgcolor: "#fff" }}>
+              <Typography variant="caption" sx={{ display: "block", color: DIM, mb: 0.75 }}>
+                Approve saves this playbook to Reports → Playbooks, and triage starts matching new mail against its when line. Nothing is sent to anyone.</Typography>
+              {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
+            </Box>
+          )}
+          {/* WORTH RUNNING AGAIN only under an answer reading data produced - decided by what produced it, never its words
+              (general.report_like: a report's or a workflow's run, or a look-up through the tool door) */}
+          {!dock && reportLike && !serverBusy && !asking && messages?.some((m) => m.role === "assistant") && (
             <div className="tq-aui-report-action">
               <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
               <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}
@@ -704,6 +716,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
     }, 2500);
     return () => { live = false; clearInterval(timer); };
   }, [busy, task.TaskId, data?.messages, onSession]);
+  const refresh = useCallback(() => {
+    api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
+  }, [accept, task.TaskId]);
   const makeReport = async () => {
     setError(""); setNotice(""); setReportBusy(true);
     try {
@@ -755,7 +770,8 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
-        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since} />
+        serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
+        reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} />
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
   const tools = (<>

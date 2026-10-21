@@ -256,6 +256,24 @@ def history(store, tid: int) -> list:
              'createdAt': c.get('CreatedAt')} for c in chat_rows(store, tid)]
 
 
+# WHO DECIDES "WORTH RUNNING AGAIN?" (the owner, 2026-10-21): WHAT PRODUCED THE ANSWER, never the model's wording or a keyword
+# list. The offer to make a conversation a recurring report was drawn under every answer - a playbook being written, a question to the
+# owner. It is offered only where the answer came out of reading data: the task is a report's or a workflow's run, or the agent
+# called a connected system through Taskuary's tool door (/api/tools/run, docsync's instructions) on this task - which is exactly
+# what a report does on a schedule.
+DATA_SOURCES = ('report', 'workflow')
+TOOL_DOOR = '/api/tools/run'
+
+
+def report_like(store, tid: int) -> bool:
+    t = store.get_task(tid) or {}
+    if str(t.get('Source') or '') in DATA_SOURCES: return True
+    from . import sessionrecord
+    try: steps = sessionrecord.general_steps(store, tid)
+    except Exception: return False
+    return any(s.get('k') == 'tool' and TOOL_DOOR in f"{s.get('text') or ''} {s.get('detail') or ''}" for s in steps)
+
+
 def conversation_text(store, tid: int) -> str:
     """The durable assistant conversation as plain text, for end-of-session learning.
 

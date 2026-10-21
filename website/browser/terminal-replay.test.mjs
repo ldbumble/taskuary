@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { bodyText, startHarness } from "./harness.mjs";
 
@@ -84,4 +87,59 @@ test("P0-BROWSER terminal replay becomes visible and accepts fixture input", { t
   t.diagnostic(JSON.stringify({ fixture: "actual Taskuary --demo Replay; no PTY/worker; fixture intentionally ignores input",
     sentFrames: sentFrames.length, receivedFrames: receivedFrames.length, reconnectReady: readyAfterReload,
     timings: { replayVisibleMs, inputEmissionMs, reconnectMs } }));
+});
+
+// The owner's pane, 2026-10-21: a Claude session long into one hook, reopened, showed its spinner over a bare cursor and a
+// stray number - the input box and footer gone. A CLI animating one line rewrites only that line, so the bytes that drew the
+// box fell off the front of the server's bounded scrollback. tests/test_pane_keeps_the_screen.py holds the seed to pyte;
+// this holds it to xterm itself, the emulator the pane IS: for each CLI kind's fake session (three scrollbacks of spinner
+// after one paint), xterm seeded with the reopened pane's replay and xterm that saw the whole session show the same rows
+// and cursor - and still do after the CLI's next paint, and after a full-screen TUI leaves the alternate screen.
+test("a reopened pane shows the screen the CLI left, per CLI kind, in a real xterm", { timeout: 180000 }, async (t) => {
+  const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const python = process.env.TASKUARY_TEST_PYTHON || (process.platform === "win32" ? "python" : "python3");
+  const make = [
+    "import sys, json; sys.path[:0] = ['.', 'tests']",
+    "import test_pane_keeps_the_screen as T",
+    "from taskuary import terminal",
+    "out = {}",
+    "for k in list(T.KINDS) + ['alt']:",
+    "    t, body = T._run(k)",
+    "    out[k] = {'body': body, 'seed': terminal.replay_text(t), 'next': (T.KINDS.get(k) or T.alt)()[1](10 ** 6) + 'hello'}",
+    "json.dump({'rows': T.ROWS, 'cols': T.COLS, 'kinds': out}, sys.stdout)",
+  ].join("\n");
+  const fixture = JSON.parse(execFileSync(python, ["-c", make], { cwd: repository, encoding: "utf8", maxBuffer: 64 << 20 }));
+  const harness = await startHarness();
+  t.after(() => harness.close());
+  const page = await harness.newPage();
+  await page.goto(`${harness.ui}/`, { waitUntil: "domcontentloaded", timeout: 20000 });
+  const got = await page.evaluate(async ({ rows, cols, kinds }) => {
+    const { Terminal } = await import("/@id/@xterm/xterm");
+    const { Unicode11Addon } = await import("/@id/@xterm/addon-unicode11");
+    const screen = async (...parts) => {
+      const term = new Terminal({ rows, cols, scrollback: 1000, allowProposedApi: true });
+      term.loadAddon(new Unicode11Addon()); term.unicode.activeVersion = "11";       // as the pane measures (TerminalView)
+      for (const p of parts) await new Promise((resolve) => term.write(p, resolve));
+      const b = term.buffer.active, shown = [];
+      for (let y = 0; y < rows; y++) shown.push(b.getLine(b.baseY + y)?.translateToString(true) ?? "");
+      const out = { type: b.type, shown, cursor: [b.cursorY, b.cursorX] };
+      term.dispose();
+      return out;
+    };
+    const res = {};
+    for (const [kind, { body, seed, next }] of Object.entries(kinds)) {
+      res[kind] = { pane: await screen(seed), truth: await screen(body), paneNext: await screen(seed, next), truthNext: await screen(body, next),
+                    paneLeft: await screen(seed, "\x1b[?1049l"), truthLeft: await screen(body, "\x1b[?1049l") };
+    }
+    return res;
+  }, fixture);
+  for (const [kind, r] of Object.entries(got)) {
+    assert.deepEqual(r.pane, r.truth, `${kind}: the reopened pane is not the screen the CLI left`);
+    assert.match(r.pane.shown.at(-1), /bypass permissions on/, `${kind}: the footer is gone`);
+    assert.match(r.pane.shown.at(-2), /╰/, `${kind}: the input box is gone`);
+    assert.deepEqual(r.paneNext, r.truthNext, `${kind}: the CLI's next paint landed elsewhere on the reopened pane`);
+    assert.deepEqual(r.paneLeft.shown, r.truthLeft.shown, `${kind}: leaving the alternate screen showed something else`);
+  }
+  assert.equal(got.alt.pane.type, "alternate");
+  assert.deepEqual(page.fixtureEscapes, [], `browser attempted non-fixture requests: ${page.fixtureEscapes.join(", ")}`);
 });

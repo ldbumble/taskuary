@@ -17,7 +17,8 @@
 //             a typed ref, a link in a reply and the walk's end chip - each, and each reloaded
 //
 // The rules, checked at every step:
-//   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai")
+//   DARK      the bar is dark only when the Advisor spoke, and then on one button (the owner, 2026-10-17: "keep it ai") - save a running
+//             agent's own Stop and save, which the row darkens itself (the owner, 2026-10-20)
 //   SEEN      the card on the table shows more than its header
 //   FIX       an error on screen has a way out on the row - a verb that is not Next
 //   RECEIPT   an item that leaves the rail leaves a line in the chat naming it
@@ -324,7 +325,7 @@ const look = async (page) => { const s = await readPage(page); for (const w of s
 const readPage = (page) => page.evaluate(() => {
   const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const row = document.querySelector("[data-tq-row]"), chat = document.querySelector(".tq-chat-body");
-  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
+  const verbs = row ? [...row.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), id: b.getAttribute("data-tq-verb") || "", dark: b.classList.contains("p"), own: b.hasAttribute("data-tq-own"), next: b.hasAttribute("data-tq-next"), off: b.disabled })) : [];
   const cards = [...document.querySelectorAll("[data-tq-task-page]")].filter(vis), card = cards[cards.length - 1];
   const cardBtns = card ? [...card.querySelectorAll("button")].filter(vis).map((b) => ({ word: b.innerText.trim(), off: b.disabled })).filter((b) => b.word) : [];
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
@@ -360,8 +361,10 @@ const readPage = (page) => page.evaluate(() => {
 const sig = (s) => JSON.stringify([s.verbs.map((v) => v.id + v.word + v.off), s.cardBtns.map((b) => b.word + b.off), s.rail.map((r) => r.key), s.nmsg, s.last,
   s.errs, s.pops, s.url, s.focus, s.ref, s.card?.text || 0, s.folded]);
 
+const darkOwn = (v) => !!v?.own && v.id === "save-end";
 const judge = (s, at) => {
-  const dark = s.verbs.filter((v) => v.dark);
+  // ...but for ONE button the row darkens itself (the owner, 2026-10-20): a running agent's own Stop and save, the Advisor quiet over it
+  const dark = s.verbs.filter((v) => v.dark && !darkOwn(v));
   if (s.card || s.ref) {
     if (!s.advice && dark.length) note("DARK", at, `"${dark.map((v) => v.word).join('", "')}" dark with no Advisor line over it`);
     if (s.advice && dark.length > 1) note("DARK", at, `the Advisor spoke and ${dark.length} buttons are dark - ${JSON.stringify(s.verbs.map((v) => v.word))} / "${s.adv.slice(0, 80)}"`);

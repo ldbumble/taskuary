@@ -1184,7 +1184,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     ...(heldRepo || (!isGeneral && canCode) ? [{ id: "repo", group: heldRepo ? "decide" : "more", tone: heldRepo ? "p" : undefined, label: btn("pick_repo", repoOf(t) ? "set" : null), run: pickRepo,
       title: heldRepo ? "Not started: it needs to know where the code is - it starts once you choose" : btnHint("pick_repo") }] : []),
   ];
-  const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
+  // ...and DARK while the agent is running (the owner, 2026-10-20): not over a turn that finished or a question - those are waiting
+  const stopSave = { id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT.working && !pendingReview, label: labelOfRow("save-end"), disabled: !!wrapping, run: wrapUp, title: hintOfRow("save-end") };
   const rowVerbs = !t ? [] : !notDone
     ? [{ id: "reopen", group: "decide", tone: "s", label: labelOfRow("reopen"), run: reopen, title: hintOfRow("reopen") }]
     : [

@@ -11,7 +11,7 @@ import { label, liveVerb, verbOfRow } from "./buttons.js";
 const live = new Map();          // id -> the latest verb (its run closes over the freshest state)
 const owners = new Map();        // owner -> { verbs, ref }
 const subs = new Set();
-const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}) });
+const view = (v) => ({ id: v.id, label: v.label, group: v.group, tone: v.tone || "s", title: v.title || "", disabled: !!v.disabled, why: v.why || "", ...(v.blank ? { blank: v.blank } : {}), promote: v.promote !== false, lead: !!v.lead, ...(v.closes ? { closes: true } : {}), ...(v.fill ? { fill: true } : {}), ...(v.beside ? { beside: true } : {}), ...(v.onCard ? { onCard: true } : {}), ...(v.card ? { card: true } : {}) });
 let snap = { list: [], ref: "" }, sig = "";
 
 export function put(owner, verbs, ref = "") {
@@ -138,6 +138,10 @@ export function rowOf({ list, ref }, pick = null) {
     const fill = (xs) => xs.map((v) => (v.id === advised.id ? primary : v));
     decide = fill(decide); agent = fill(agent); more = fill(more);
   }
+  // ...WITH ONE EXCEPTION, the owner's (2026-10-20): while an agent is RUNNING its row's Stop and save is dark with no Advisor line -
+  // the Advisor stays quiet over a working agent, and the one move there is ending it. A verb asks for that with `fill`; it is
+  // marked `own` so the dead-end walk's DARK rule can tell it from the Advisor's
+  if (!advised) agent = agent.map((v) => (v.fill ? { ...v, tone: "p", own: true } : v));
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
   // single task not inside the more button"). With no decision waiting it leads the bar; dark only when it is the advice.
   const done = more.find((v) => v.id === "done");

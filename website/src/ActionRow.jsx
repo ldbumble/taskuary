@@ -132,7 +132,7 @@ export default function ActionRow({ inline = false, advised = null }) {
   // ONE NAME PER BUTTON (buttons.json, the owner, 2026-10-17): the bar says the same words the hover, the Advisor and the menu say -
   // a short bar word ("Snooze", "Stop") beside a long hover one was two names for one button
   const btn = (v) => (
-    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id}
+    <button key={v.id} type="button" className={`tq-ab ${v.tone}`} disabled={v.disabled} data-tq-verb={v.id} data-tq-own={v.own ? "" : undefined}
       title={(v.disabled && v.why) || v.title || undefined} onClick={(e) => press(v.id, e, e.currentTarget)}>{v.label}</button>
   );
   return (

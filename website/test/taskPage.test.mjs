@@ -79,6 +79,26 @@ test("an agent waiting on you keeps its terminal in view; its row has no Answer 
     "first on the row while nothing waits on approval; after Review changes when a reply does");
 });
 
+// WHILE AN AGENT IS RUNNING, Stop and save is DARK with no Advisor line (the owner, 2026-10-20) - and that alone is excused by the
+// dead-end walk's DARK rule
+test("a running agent's Stop and save is dark on its own; the Advisor's pick outranks it, and nothing else darkens itself", async () => {
+  const { rowOf } = await import("../src/actionRow.js");
+  const v = (id, group, extra = {}) => ({ id, group, label: id, tone: "s", promote: true, ...extra });
+  const list = [v("save-end", "agent", { lead: true, fill: true }), v("diff", "agent"), v("done", "more"), v("next", "next")];
+  const dark = (r) => [...r.decide, ...r.agent, ...r.more].filter((x) => x.tone === "p");
+  assert.deepEqual(dark(rowOf({ ref: "", list })).map((x) => [x.id, !!x.own]), [["save-end", true]], "running: Stop and save, marked the row's own");
+  const advised = rowOf({ ref: "", list }, { verb: "review_changes", label: "diff" });
+  assert.ok(!dark(advised).some((x) => x.own), "the Advisor spoke: its pick is the one dark button");
+  assert.deepEqual(dark(rowOf({ ref: "", list: list.map((x) => ({ ...x, fill: false })) })), [], "a finished turn or a question: nothing dark");
+  const page = src("TaskPage.jsx");
+  assert.match(page, /const stopSave = \{ id: "save-end", group: "agent", lead: !pendingReview, fill: liveSession && agentState === AGENT\.working && !pendingReview,/);
+  assert.match(src("ActionRow.jsx"), /data-tq-verb=\{v\.id\} data-tq-own=\{v\.own \? "" : undefined\}/);
+  const walk = readFileSync(new URL("../deadend_check.mjs", import.meta.url), "utf8");
+  assert.match(walk, /const darkOwn = \(v\) => !!v\?\.own && v\.id === "save-end";/, "the walk excuses that one button and no other");
+  assert.match(walk, /const dark = s\.verbs\.filter\(\(v\) => v\.dark && !darkOwn\(v\)\);/);
+  assert.match(walk, /own: b\.hasAttribute\("data-tq-own"\)/);
+});
+
 test("the row puts a leading agent verb first and Mark done beside it (actionRow.rowOf)", async () => {
   const { rowOf, clustersOf } = await import("../src/actionRow.js");
   const v = (id, group, extra = {}) => ({ id, group, label: id, tone: "s", promote: true, ...extra });

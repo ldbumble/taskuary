@@ -56,7 +56,7 @@ test("the conversation is a centred column with its own line around it", () => {
 const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Close out"'), page.indexOf("<Fold title={`Context & history"));
 const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
-  assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{360\} \/>/);
+  assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);
   assert.match(cameFrom, /<ConversationRows rows=\{previewRows\(g, 2, showAll\)\} open=\{openMsg\} onOpen=\{setOpenMsg\}/);
   assert.match(cameFrom, /\{expands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles");
   assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");

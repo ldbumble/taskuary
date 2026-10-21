@@ -131,7 +131,10 @@ test("the task view draws the new section: read-only pills, no in-section button
   // each part named in its own column, so the three read as separate parts with no rule between them
   for (const part of ["The ask", "To do", "Came from"]) assert.ok(page.includes(`<Part label="${part}"`), `${part} is its own part`);
   assert.match(page, /verdict\?\.summary \|\| t\?\.Summary/, "the ask is triage's summary first");
-  assert.match(page, /maxHeight: 360, overflowY: "auto"/, "Show all scrolls when it goes far back");
+  assert.match(page, /maxHeight: THREAD_MAX, overflowY: "auto"/, "Show all scrolls when it goes far back");
+  // ...in a box as tall as the window leaves, never the 360px that held three lines of seven (the owner, 2026-10-20)
+  assert.match(page, /const THREAD_MAX = "max\(360px, calc\(100vh - 160px\)\)";/);
+  assert.doesNotMatch(page, /maxHeight=\{360\}|showAll \? \{ maxHeight: 360/);
   // the edits the pills offered are reachable from the bar: kind, priority, who, repository
   for (const id of ["kind", "priority", "assign"]) assert.ok(page.includes(`{ id: "${id}", group: "more"`), `the row carries ${id}`);
   // the repository is a More item too - and the row's own move while a start is held for it

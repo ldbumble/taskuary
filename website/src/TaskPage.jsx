@@ -131,6 +131,9 @@ const whenShort = (s) => {
   return d.toDateString() === new Date().toDateString() ? fmtTime(d, [], { hour: "2-digit", minute: "2-digit" })
     : fmtDate(d, [], { month: "short", day: "numeric" });
 };
+// SHOW ALL IS FOR READING (the owner, 2026-10-20: seven messages in a 360px box): the opened thread is as tall as the window
+// leaves room for - the terminal's rule, every row the page can give - and never shorter than the box it was; past that it scrolls
+const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
 // message in full under it. Task's Came from and Close out draw this SAME list (the owner, 2026-10-16: "full chat should be in task
 // (condensed and full). in close out chats condensed version?"), so the two cannot tell one conversation two ways.
@@ -1636,8 +1639,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                     (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
                                     thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
                                 <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5, minWidth: 0 }}>
-                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={360} />
-                                    : <Box sx={showAll ? { maxHeight: 360, overflowY: "auto", minWidth: 0 } : undefined}>
+                                  {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
+                                    : <Box sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
                                         <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg}
                                           files={sourceFiles} fetchFor={fetchFor} /></Box>}
                                 </Box>

@@ -24,7 +24,15 @@ test("the owner's scroll lets go of the end, and scrolling back down takes it ag
 test("a key pressed in the thread, focus Tabbed into it, or a press on its scrollbar lets go of the pin", () => {
   assert.match(src, /const key = \(\) => \{ keyAt = Date\.now\(\); \}, typed = \(\) => \{ pin\.current = false; \};/);
   assert.match(src, /const tabbed = \(\) => \{ if \(Date\.now\(\) - keyAt < 800\) pin\.current = false; \};/, "only focus a key just moved");
-  assert.match(src, /const bar = \(e\) => \{ if \(e\.target === el\) own\(\); \};/);
+  // ...and a press ON a line inside is the owner working there (a Connections step header snapped the card to its top, 2026-10-21)
+  assert.match(src, /const bar = \(e\) => \{ if \(e\.target === el\) own\(\); else pin\.current = false; \};/);
   assert.match(src, /document\.addEventListener\("keydown", key, true\); el\.addEventListener\("keydown", typed\); el\.addEventListener\("focusin", tabbed\);/);
   assert.match(src, /document\.removeEventListener\("keydown", key, true\);/, "and the listeners go with the effect");
+});
+
+// a fold opened below the screen is brought up; one already in view does not move (Context & history, the UI audit 2026-10-21)
+test("a task page fold that opens out of view is scrolled up to it", () => {
+  const page = readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /<Box component="details" onToggle=\{\(e\) => showOpened\(e\.currentTarget\)\}/);
+  assert.match(page, /if \(r\.top \+ 80 > window\.innerHeight\) d\.scrollIntoView\(\{ block: "start"/);
 });

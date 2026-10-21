@@ -1628,7 +1628,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     let keyAt = 0;
     const key = () => { keyAt = Date.now(); }, typed = () => { pin.current = false; };
     const tabbed = () => { if (Date.now() - keyAt < 800) pin.current = false; };
-    const bar = (e) => { if (e.target === el) own(); };             // the scrollbar: a press on the body itself, not on a line in it
+    // the scrollbar: a press on the body itself, not on a line in it. A press ON a line is the owner working there, as a key is: a
+    // Connections step header or switch snapped the card back to its top on every click, the thing pressed gone (the UI audit, 2026-10-21)
+    const bar = (e) => { if (e.target === el) own(); else pin.current = false; };
     document.addEventListener("keydown", key, true); el.addEventListener("keydown", typed); el.addEventListener("focusin", tabbed);
     el.addEventListener("pointerdown", bar);
     return () => {

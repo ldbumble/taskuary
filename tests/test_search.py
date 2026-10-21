@@ -102,3 +102,30 @@ class SearchTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+class TheAppIndexed(unittest.TestCase):
+    """search.places: everything the app can bring up, best first, each with its link (the owner, 2026-10-20: "index the entire app")."""
+    def first(self, s, q): return (search.places(s, q) or [{}])[0].get('href')
+
+    def test_a_setting_by_the_word_that_names_it_and_the_rest_weighs_nothing(self):
+        s = MemoryStore()
+        self.assertEqual(self.first(s, 'turn off the sound'), '#settings=config&group=Notifications&key=hand_sound')
+        self.assertEqual(self.first(s, 'where do I change my signature'), '#settings=config&group=Replies&key=email_signature')
+        self.assertEqual(self.first(s, 'the sync interval'), '#settings=config&group=Sync%20%26%20startup&key=poll_minutes')
+
+    def test_cards_pages_reports_and_documents(self):
+        s = MemoryStore()
+        s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
+        s.save_doc('soul', '# SOUL', 't')
+        sid = s.save_source({'Channel': 'report', 'Address': 'AP ageing', 'Owner': 'o', 'Active': 1, 'ConfigJson': '{"title": "AP ageing weekly"}'}, 'o')
+        self.assertEqual(self.first(s, 'linkedin'), '#connector=linkedin')
+        self.assertEqual(self.first(s, 'my second outlook'), '#connector=outlook')
+        self.assertEqual(self.first(s, 'work mail'), '#connector=outlook')
+        self.assertEqual(self.first(s, 'the database card'), '#connector=database')
+        self.assertEqual(self.first(s, 'audit log'), '#settings=audit')
+        self.assertEqual(self.first(s, 'soul'), '#settings=docs&doc=soul')
+        self.assertTrue(str(self.first(s, 'AP ageing')).startswith('#report='))
+        self.assertEqual(search.places(s, 'zzqx'), [])
+        self.assertNotIn('MySQL', ' '.join(h['title'] for h in search.places(s, 'my style')))       # "my" is a whole word

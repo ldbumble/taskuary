@@ -209,6 +209,73 @@ def _connectors(store, words) -> list:
     return sorted(out, key=lambda h: h.pop('rank'))
 
 
+# ── THE APP, INDEXED (the owner, 2026-10-20: "index the entire app so it can pull up anything from connectors/settings or anything
+# correctly") ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# One list of everything the app can bring up, each with the link that opens it - the same registries the pages draw from: the places
+# (words.json), every setting (the schema, held in view by its &key), every catalogue card and the owner's own cards by name, the
+# reports and workflows, the documents. The Assistant asks it (app.find) and links what it picked; nothing is pasted into a turn.
+# Ranked, not filtered: a word in a NAME counts three times what it does anywhere else, and a word counts by how RARE it is in the
+# index (log N/df) - so "turn off the sound" finds the sound knob by "sound", and "the" and "off", in half the rows, weigh nearly nothing.
+def _stem(w: str) -> str: w = _fold(w); return w[:5] if len(w) >= 7 else w.rstrip('s') if len(w) > 3 else w
+# a short word is a whole word ("my" is never MySQL, "ap" is AP ageing); a longer one starts a word, the mail index's prefix match
+def _hit(w: str, t: str) -> bool: return re.search(r'(?<![^\W_])' + re.escape(w) + (r'(?![^\W_])' if len(w) <= 3 else ''), t) is not None
+# the pages words.json has no sentence for, by the links the canvas opens (canvasLinks.js)
+PAGES = (('Settings → Audit log', '#settings=audit', 'audit log history changes'), ('Settings → Updates', '#settings=updates', 'updates version upgrade'),
+         ('Settings → Routing policies', '#settings=policies', 'rules policies routing'), ('Settings → Docs', '#settings=docs', 'documents docs'),
+         ('the Hub', '#hub', 'hub company knowledge handbook'), ('Reports', '#report=', 'reports'), ('New report', '#report=new', 'new report'),
+         ('New workflow', '#report=new-agent', 'new workflow'))
+
+
+def _app_rows(store) -> list:
+    from . import words as places
+    rows = [{'type': 'place', 'title': p['name'], 'rest': k, 'href': p['href']} for k, p in places.PLACES.items() if p.get('href')]
+    rows += [{'type': 'place', 'title': t, 'rest': w, 'href': h} for t, h, w in PAGES]
+    rows += [{'type': 'setting', 'title': m['label'], 'where': f"Settings → {m['group']}", 'rest': f"{m['group']} {m.get('desc') or ''} {m.get('help') or ''} {k}",
+              'href': f"#settings=config&group={quote(m['group'], safe='')}&key={quote(k, safe='')}"}
+             for k, m in settings_schema.knobs().items() if k not in _UNSHOWN]
+    mine = [c for c in store.list_connectors()]
+    on = {str(c.get('Type') or '') for c in mine if c.get('Active')}
+    rows += [{'type': 'connector', 'title': c.get('title') or c['type'], 'where': 'Connections', 'boost': c['type'] in on, 'key': c['type'],
+              'sub': 'connected' if c['type'] in on else 'planned' if c.get('planned') else 'not connected',
+              'rest': ' '.join([c['type'], c.get('group') or '', c.get('desc') or '', *(c.get('match') or [])]),
+              'href': f"#connector={quote(c['type'], safe='')}"} for c in connectorcatalog.cards()]
+    # ...and the owner's own cards, by the name and account they were given ("my work Outlook"): the card of that type opens
+    rows += [{'type': 'connector', 'title': str(c.get('Name') or c.get('Type')), 'where': f"Connections · your {c.get('Type')} card", 'boost': True,
+              'sub': 'connected' if c.get('Active') else 'off', 'rest': f"{c.get('Type')} {c.get('Account') or ''} {c.get('Scope') or ''}",
+              'href': f"#connector={quote(str(c.get('Type') or ''), safe='')}"} for c in mine if c.get('Name')]
+    for s in store.list_sources():
+        if s.get('Channel') != 'report': continue
+        try: cfg = json.loads(s.get('ConfigJson') or '{}') or {}
+        except ValueError: cfg = {}
+        rows.append({'type': 'report', 'title': cfg.get('title') or s.get('Address') or 'report', 'where': 'Reports', 'rest': f"report workflow {cfg.get('type') or ''}",
+                     'href': f"#report={s['SourceId']}"})
+    try: docs = store.doc_names()
+    except Exception: docs = []
+    rows += [{'type': 'document', 'title': d.upper() + '.md' if re.fullmatch(r'[a-z]+', d) else d, 'where': 'Settings → Docs', 'rest': f'{d} document doc',
+              'href': f'#settings=docs&doc={d}' if re.fullmatch(r'\w+', d) else '#settings=docs'} for d in docs]
+    return rows
+
+
+def places(store, q: str, n: int = 8) -> list:
+    """The app's places that best answer `q`, best first, each with its link."""
+    import math
+    said = [_fold(w) for w in re.findall(r'[\w@.\-]+', str(q or '')) if len(w) > 1 or w.isdigit()]
+    words = list(dict.fromkeys(_stem(w) for w in said))
+    rows = _app_rows(store)
+    if not words or not rows: return []
+    texts = [(_fold(r['title']), _fold(f"{r['title']} {r.get('where') or ''} {r['rest']}")) for r in rows]
+    weight = {w: math.log((len(rows) + 1) / (1 + sum(_hit(w, t) for _, t in texts))) for w in words}
+    score = lambda nt: sum(weight[w] * (3 if _hit(w, nt[0]) else 1 if _hit(w, nt[1]) else 0) for w in words)
+    seen = set()      # one row per thing: the catalogue lists a few cards twice, and a place two names for one link
+    rows_ = [(nt, r) for nt, r in zip(texts, rows) if not ((r['href'], r['title']) in seen or seen.add((r['href'], r['title'])))]
+    # ...and a word that IS a card's own type ("database", "imap") names that card over others that only carry it in their title
+    exact = lambda r: r.get('key') in said
+    scored = sorted(((score(nt) + (1 if exact(r) else 0), r) for nt, r in rows_), key=lambda x: (-x[0], not x[1].get('boost'), len(x[1]['title'])))
+    top = scored[0][0] if scored else 0
+    # what is near the best - a weak echo of one common word is no candidate
+    return [{k: v for k, v in r.items() if k not in ('rest', 'boost', 'key')} for s, r in scored[:n] if top > 0 and s >= top * 0.35]
+
+
 def everything(store, q: str) -> dict:
     toks = str(q or '').split()
     # a task's status is asked for by name - `status:open` - and never matched as a word (store._search_where `shown`)

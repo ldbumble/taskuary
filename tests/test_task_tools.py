@@ -260,7 +260,8 @@ class OneLineTests(unittest.TestCase):
         self.assertEqual(every - bucketed, set())
         for k in every | set(toolcatalog.READS):
             self.assertNotIn('There is no tool', toolcatalog.describe(k), k)
-        self.assertLess(len(toolcatalog.block()), 7400, 'the index rides every turn - keep it an index')
+        # 7400 until "anything you can do, via the Assistant" (app.find, the set and to-do tools - the owner, 2026-10-20)
+        self.assertLess(len(toolcatalog.block()), 7600, 'the index rides every turn - keep it an index')
         # ...and it names every look-up, so a question finds its tool without guessing a bucket (the 2026-10-20 query walk)
         for k in toolcatalog.READS: self.assertIn(k, toolcatalog.block(), k)   # 7000 until the four calendar tools (2026-10-20)
 

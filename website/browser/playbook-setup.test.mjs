@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir } from 'node:fs/promises';
-import { clickRail, startHarness } from './harness.mjs';
+import { startHarness } from './harness.mjs';
 
 test('Deleting a saved playbook requires confirmation and keeps failures visible', { timeout: 120000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
@@ -43,7 +43,8 @@ test('Deleting a saved playbook requires confirmation and keeps failures visible
   await click(page, 'Delete playbook');
   await page.waitForSelector('[role="dialog"]', { hidden: true });
   assert.equal(deletes.length, 2);
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.textContent === 'Discard'));
+  // the editor is opened from Reports -> Playbooks, and a deleted one goes back to that shelf (not to a blank editor's Discard)
+  await page.waitForFunction(() => document.body.innerText.includes('No playbooks yet') && !document.querySelector('[data-tq-playbook]'));
 });
 
 async function click(page, label, exact = true) {
@@ -76,11 +77,11 @@ test('New playbook offers optional historical email, starts AI, and preserves co
     if (data) return request.respond({ status, contentType: 'application/json', body: JSON.stringify(data) });
     page.fixtureRequestGuard(request);
   });
-  // Playbooks is a Settings section of its own (2107f0d2), no longer a group on the Docs shelf
-  await page.goto(`${harness.ui}#settings=playbooks`, { waitUntil: 'domcontentloaded' });
-  await clickRail(page, 'Playbooks');
-  assert.equal(await page.$('[role="dialog"]'), null, 'Opening the group does not start setup');
-  await clickRail(page, '+ New playbook');
+  // Playbooks live on the Reports page (Reports / Workflows / Playbooks), their own New playbook on the shelf
+  await page.goto(`${harness.ui}#report=playbooks`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.body.innerText.includes('No playbooks yet'));
+  assert.equal(await page.$('[role="dialog"]'), null, 'Opening the shelf does not start setup');
+  await click(page, 'New playbook');
   await page.waitForSelector('[role="dialog"]');
   assert.match(await page.$eval('[role="dialog"]', (el) => el.innerText), /Use a past email/);
   await click(page, 'Use a past email', false);
@@ -93,7 +94,7 @@ test('New playbook offers optional historical email, starts AI, and preserves co
   assert.deepEqual(writes[0], { text: '', message_id: 41, connector_type: '' });
   await click(page, 'Close'); await page.waitForSelector('[role="dialog"]', { hidden: true });
 
-  await clickRail(page, '+ New playbook'); await click(page, 'Use a past email', false);
+  await click(page, 'New playbook'); await click(page, 'Use a past email', false);
   await page.type('[role="dialog"] input', 'missing');
   await page.waitForFunction(() => document.body.innerText.includes('No emails match'));
   await click(page, 'Start from scratch', false);
@@ -115,7 +116,7 @@ test('New playbook offers optional historical email, starts AI, and preserves co
   assert.equal(writes[2].connector_type, 'quickbooks');
   await click(page, 'Close'); await page.waitForSelector('[role="dialog"]', { hidden: true });
   await page.setViewport({ width: 390, height: 844 });
-  await clickRail(page, '+ New playbook'); await click(page, 'Start from scratch', false);
+  await click(page, 'New playbook'); await click(page, 'Start from scratch', false);
   assert.equal(await page.$eval('[role="dialog"]', (el) => {
     const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight;
   }), true);

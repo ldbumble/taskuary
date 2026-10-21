@@ -35,7 +35,8 @@ STEPS = [
     Step("respond to this - say we'll have it Friday", 'msg:17', "I'll draft it.\n" + c('reply', text="We'll have it Friday."), 'draft:reply', r'draft|Draft'),
     # TQ-12's coding agent ran before and its session is saved (world()): Continue reopens it, the notes riding along
     Step('rerun the agent with these notes: use the new template', 'msg:17',
-         'Sending it back to work with your notes.\n' + c('agent.continue', ref='TQ-0012', text='use the new template'), 'light:continue', r'.'),
+         'Sending it back to work with your notes.\n' + c('agent.continue', ref='TQ-0012', note='use the new template'), 'light:continue',
+         r'^Lit Continue on TQ-0012 with your notes: use the new template'),
     Step("what's waiting on me", None, c('pipe.list'), 'read:pipe.list', r'month-end',
          # a question that needs a look-up is two model rounds, and its first words are the second round's
          then='Ten things are on you - the month-end close is short by 4,180 and leads the list.', budget=(2.0, 3.0)),

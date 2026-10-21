@@ -12,8 +12,9 @@ import { label } from "./buttons.js";
 // voice note/images"): on the canvas it is a card in the conversation, with the mic and pictures; elsewhere still a popover.
 // `onPress` fires AT THE PRESS, before the server answers, so the rail can move the row to Agents working at once;
 // `onFail(error)` if it could not continue
-export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail }) {
-  const [note, setNote] = useState("");
+// `initial`: words the box opens holding - the owner's notes when the Assistant lit Continue with them ("rerun it with these notes: ...")
+export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "" }) {
+  const [note, setNote] = useState(initial || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const pics = usePromptImages();

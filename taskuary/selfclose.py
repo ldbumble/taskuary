@@ -89,7 +89,10 @@ def blocked(store, tid: int, term=None) -> str:
         if req and req['kind'] == 'approval_needed': return f'a pending approval is open: {req["text"][:160]}'
         age = time.time() - (getattr(term, 'started_ts', 0) or 0)
         if getattr(term, 'started_ts', 0) and age < MIN_AGE: return f'the session is younger than {int(MIN_AGE)}s'
-        if getattr(term, 'n', 0) < MIN_CHARS: return 'the session has barely printed anything'
+        # ...both are a TERMINAL's: a CLI that just started has printed its banner and nothing else. An API conversation's turn
+        # is a whole answer, and a short one is still an answer - a W-9 reply drafted in 188 characters was refused its own
+        # [[TASKUARY-DONE]], silently, while a longer answer to the same kind of job closed (walk 2026-10-21)
+        if getattr(term, 'started_ts', 0) and getattr(term, 'n', 0) < MIN_CHARS: return 'the session has barely printed anything'
         # A QUESTION THE RUN ITSELF RAISED and nobody has answered: one a hook holds (hooks.ask), or one the agent asked
         # through its CLI's question tool or a [[TASKUARY-ASK]] marker (both recorded as requests by hooks/general). Not
         # the words on its screen - a line ending in "?" read as a question and refused an agent's own --done (2026-10-11:

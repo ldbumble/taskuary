@@ -1215,8 +1215,15 @@ class GeneralSession:
         the conversation stays on the task as its record, and the reply to whoever asked is
         drafted for the owner to approve."""
         from . import selfclose
-        try: selfclose.declare(self.store, self.task_id, summary, 'assistant')
-        except Exception as e: logger.warning(f'assistant self-close failed on task {self.task_id}: {e}')
+        try: out = selfclose.declare(self.store, self.task_id, summary, 'assistant')
+        except Exception as e:
+            logger.warning(f'assistant self-close failed on task {self.task_id}: {e}'); return
+        # A REFUSED CLOSE IS SAID ON THE TASK, as selfclose.blocked promises ("a self-close that silently declines is
+        # indistinguishable from one that is broken"): the CLI prints the reason to the agent, and this road dropped it - the
+        # task sat in progress under an answer that said it was done (walk 2026-10-21). The owner-ends road files its own line.
+        why = (out or {}).get('why')
+        if not (out or {}).get('closed') and why and why != selfclose.OWNER_ENDS:
+            self.store.add_comment(self.task_id, 'assistant', 'agent', f'The agent said it was finished, but the task was not closed: {why}.')
 
     def stop(self) -> bool:
         """Stop the answer being written now - the STOP BUTTON, and nothing else.

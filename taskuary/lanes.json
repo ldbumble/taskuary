@@ -132,7 +132,11 @@
       "mark": "⚙️",
       "_section": "a task an agent is working is a task like any other, under Tasks where the walk's order puts it, its icon ringed while the agent works (the owner, 2026-10-21) - it never moves between sections as the agent starts, asks, finishes or stops",
       "section": "task", "on_you": false,
-      "hint": "an agent is working on it — its icon spins until it finishes, asks, fails or is stopped"
+      "hint": "an agent is working on it — its icon spins until it finishes, asks, fails or is stopped",
+      "_says": "the one sentence for an agent that has been started and has said nothing yet (laneSays.starting): `line` names the AI it runs on, `bare` when that is not known",
+      "says": {
+        "starting": { "bare": "Starting the {agent}…", "line": "Starting the {agent} on {text}…" }
+      }
     }
   ],
   "kinds": [

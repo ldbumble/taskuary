@@ -15,3 +15,11 @@ export const says = (sub, agent, text = "") => {
   const s = SAYS[sub] || SAYS.parked, t = String(text || "").replace(/\s+/g, " ").trim().slice(0, 300);
   return (t && s.line ? s.line : s.bare).replace("{agent}", agent || "the agent").replace("{text}", t);
 };
+
+// ...and the one for an agent started that has said nothing yet: "Starting the researcher on Codex…" - the pane's band says it
+// while the first output is on its way, in place of a tall empty conversation (the owner, 2026-10-21)
+const WORKING = vocab.lanes.find((l) => l.key === "working").says;
+export const starting = (agent, brain = "") => {
+  const s = WORKING.starting, b = String(brain || "").trim();
+  return (b ? s.line : s.bare).replace("{agent}", agent || "agent").replace("{text}", b);
+};

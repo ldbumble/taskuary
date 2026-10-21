@@ -18,7 +18,7 @@ test("a running turn says so, whichever backend is answering", () => {
   assert.match(view, /\{serverBusy && atWork\}/);
   assert.match(view, /serverBusy=\{busy\} provider=\{session\?\.provider \|\| pickedLabel\} name=\{name\}/);
   assert.match(view, /const Thinking = \(/);
-  assert.match(view, /const AgentBand = \(\{ name, provider, work, since \}\)/);
+  assert.match(view, /const AgentBand = \(\{ name, provider, work, since, starting = "" \}\)/);
 });
 
 test("the band reports the turn, and never invents a total it was not told", () => {

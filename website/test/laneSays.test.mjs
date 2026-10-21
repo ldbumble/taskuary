@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { says, subState } from "../src/laneSays.js";
+import { says, starting, subState } from "../src/laneSays.js";
 import { assistantFocus } from "../src/funnelPile.js";
 import { handRaiseWhat } from "../src/handraiseState.js";
 import { subline } from "../src/timelineState.js";
@@ -30,4 +30,10 @@ test("the walk's lead, the hand-raise and the Timeline read the same sentence", 
   assert.equal(handRaiseWhat({ agent: "coding", asking: false, line: "coding is stuck - rate limit" }), "coding is stuck - rate limit");
   assert.equal(handRaiseWhat({ agent: "coding", asking: true }), "coding asked you something");
   assert.match(subline({ TaskId: 4, Working: "coding", AgentWaiting: true, AgentLine: "coding is stuck - rate limit" }), /coding is stuck - rate limit/);
+});
+
+test("an agent started and silent is one sentence, from lanes.json", () => {
+  assert.equal(starting("researcher", "Codex"), "Starting the researcher on Codex…");
+  assert.equal(starting("researcher"), "Starting the researcher…");
+  assert.equal(lanes.lanes.find((l) => l.key === "working").says.starting.line, "Starting the {agent} on {text}…");
 });

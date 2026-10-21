@@ -274,6 +274,24 @@ class SetsFromOneSender(unittest.TestCase):
         self.assertEqual(out['proposal']['kind'], 'pipe.close')
 
 
+class DraftsInTurnAndAnyButton(unittest.TestCase):
+    def test_approve_all_the_drafts_lights_each_send_in_turn(self):
+        from tests.assistant_queries import _world
+        s = _world()                                                    # the demo world: five drafts wait for a Send
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            drafts = [i for i in funnel.build(s)['items'] if i.get('kind') == 'review']
+        out, _ = say(s, 'approve all the drafts', 'msg:1', 'CALL: {"kind": "review.each", "params": {}}')
+        self.assertGreater(len(drafts), 1)
+        self.assertEqual(out['light']['verb'], 'approve')
+        self.assertRegex(out['say'], rf"^Lit {buttons.label('approve')} on .* - 1 of \d+ drafts? waiting")
+        self.assertEqual(proposals(s), [])
+
+    def test_any_row_button_by_name(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'press remove', item['key'], 'CALL: {"kind": "button.light", "params": {"button": "remove"}}')
+        self.assertEqual(out['light']['verb'], 'remove'); self.assertTrue(out['say'].startswith('Lit '))
+
+
 class RunItAgain(unittest.TestCase):
     def test_run_it_again_over_a_good_report_opens_its_page(self):
         s = store()

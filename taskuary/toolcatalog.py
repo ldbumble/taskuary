@@ -98,6 +98,10 @@ PURPOSE = {
                                  'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
     'pipe.close':               ('close a SET at once - `select` (below): each task in it is marked done, each notice read. "Close all '
                                  'the tasks from Priya" is select sender: Priya. Runs at once and the count is said'),
+    'review.each':              ('"approve all the drafts": brings the next draft waiting for a Send up with its Send lit, and says how many '
+                                 'are left - each one still goes only by its own press; CALL it again for the one after'),
+    'button.light':             ('light any button a row draws, by its name - `button`: the verb (THE BUTTONS BY NAME, or a row\'s own: '
+                                 'review_changes, run_another, attach, pick_repo, change_kind...), `ref` when it is not the row on the table'),
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
@@ -211,7 +215,7 @@ def block(store=None) -> str:
     # ...and every look-up WHERE does not already show, by name: "what is the agent doing?" and "what drafts wait for my yes?" had their
     # look-ups (agents.now, approvals.list) only behind a `look` bucket the index never named (the 2026-10-20 query walk)
     shown = {k for _, k, _ in WHERE} | {'tools.list', 'tools.describe'}
-    lines.append('  look - the other look-ups, run at once: ' + ', '.join(k for k in READS if k not in shown))
+    lines.append('  look - more look-ups: ' + ', '.join(k for k in READS if k not in shown))
     lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - use only these names:',
               '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),
@@ -331,7 +335,7 @@ BUCKETS = (
     ('agents', "start, continue, answer or stop a task's agent, and teach where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
-    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'item.settle', 'message.file', 'message.archive',
+    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
@@ -341,7 +345,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'button.light': 'button, ref?', 'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

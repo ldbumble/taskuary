@@ -2120,6 +2120,31 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if not hit: raise CallMiss('The roles I can set up: ' + '; '.join(f"{k} ({v['title']})" for k, v in roles.ROLES.items()) + '. Nothing was set up.')
         # a yes/no the model may write as words: anything but an explicit yes keeps the owner's mail where it goes today
         return role_card(store, tid, hit, params.get('portal'), str(params.get('route_mail')).strip().lower() in ('true', 'yes', '1'), item, actor)
+    # THE DRAFTS IN TURN (the owner, 2026-10-20: "approve all drafts - each draft still goes through its own Send"): the next one comes up
+    # with Send lit, and the line says how many wait - never sent from here. On a phone the next draft is the walk's card, its Send a choice
+    if kind == 'review.each':
+        drafts = [i for i in _pipe(store) if i.get('kind') == 'review' and i.get('rid')
+                  and any(b['verb'] == 'approve' for b in row_buttons(store, i))]          # a draft whose row draws its Send now
+        if not drafts:
+            say_ = 'No draft is waiting for a Send.'
+            record_related(store, tid, item, 'assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        nxt = drafts[0]
+        if not routes(): return surface(store, nxt['key'], None, actor)
+        out = _lit(store, tid, item, nxt, 'approve')
+        out['say'] = (f"Lit {out['light']['label']} on {nxt.get('ref') or _where(nxt)} - 1 of {plural(len(drafts), 'draft')} waiting. "
+                      "Read it before you press; ask again for the next one.")
+        return out
+    # ANY BUTTON A ROW DRAWS, BY NAME (the owner, 2026-10-20: "pretty much any action should work"): lit on its row - the table's, or the
+    # task `ref` names - never pressed. A phone has no rows to light: its acts are the tools and decisions, answered yes or no
+    if kind == 'button.light':
+        b = canon_verb(str(params.get('button') or '').strip().lower())
+        ref = re.search(r'(\d+)', str(params.get('ref') or ''))
+        on = funnel.item_for_key(store, f'task:{int(ref.group(1))}') if ref else (item or None)
+        if not on: raise CallMiss('Name the task (TQ-0123) whose button to light, or bring it up first. Nothing was changed.')
+        if not routes():
+            raise CallMiss(f"A phone has no row to light - CALL the tool or decision {b!r} is (THE BUTTONS BY NAME) and it is asked yes or no.")
+        return _lit(store, tid, item, on, b)
     if kind in ('pipe.defer', 'pipe.close'):
         sel = params.get('select') or {}
         hits = select_items(store, sel)

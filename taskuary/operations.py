@@ -74,6 +74,10 @@ KINDS = {
     # ...and a named set put away until a day, or closed - "snooze everything from Gail until Monday" (the owner, 2026-10-20)
     'pipe.defer':               ('pipe', ('until',), None),
     'pipe.close':               ('pipe', (), None),
+    # ...and the drafts, one at a time: each still goes by its own Send - this brings the next one up with Send lit
+    'review.each':              ('pipe', (), None),
+    # ...and any button a row draws, by its name (buttons.json): lit on the row, never pressed
+    'button.light':             ('pipe', ('button',), None),
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),

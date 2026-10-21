@@ -106,6 +106,12 @@ class TheExecutorsUseItTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             REGISTRY['rss']({'url': 'http://127.0.0.1:8000/feed.xml'})
 
+    def test_graphql_is_guarded_too(self):
+        """A GraphQL endpoint is still a url an agent can choose - and the POST is what makes
+        an unchecked one worse than rest: the same request can carry a mutation."""
+        with self.assertRaises(RuntimeError):
+            REGISTRY['graphql']({'url': 'http://127.0.0.1:8000/graphql', 'query': '{ viewer { name } }'})
+
     def test_the_refusal_explains_why_rather_than_just_saying_no(self):
         with self.assertRaises(RuntimeError) as e:
             REGISTRY['rest']({'url': 'http://192.168.0.10/'})

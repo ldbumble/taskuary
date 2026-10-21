@@ -136,6 +136,10 @@ export const FIELDS = {
     ["repository folder — for a skill that lives in a repo (optional)", "cwd", "text", "C:/work/census"],
     ["model (optional — the agent's default otherwise)", "model", "text", ""], AI_FIELD],
   rest: [["url", "url", "text", "https://api.example.com/items"], ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'], ["json path", "path", "text", "data.items"], AI_FIELD],
+  graphql: [["url", "url", "text", "https://api.example.com/graphql"],
+    ["query", "query", "multiline", "query { viewer { name } }"],
+    ["headers (JSON)", "headers", "multiline", '{"Authorization": "Bearer ..."}'],
+    ["json path into data", "path", "text", "viewer.reports"], AI_FIELD],
   rss: [["feed url", "url", "text", "https://example.com/feed.xml"], AI_FIELD],
   // Research: the web as a source. Each is one REST call with a key on its card - what is NOT
   // here is anything that drives a browser (logging in, clicking), which needs CDP and a client
@@ -185,7 +189,7 @@ const reportSchedule = (c) => [c.on_startup && startupText(c), c.cron && cronTex
 
 export const TYPE_LABELS = {
   zoho_monthly_invoices: "Monthly Zoho invoices", taskuary: "Taskuary",
-  mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", rss: "RSS / Atom",
+  mssql: "SQL Server", winrm: "Remote Windows", mcp: "MCP server", sqlite: "SQLite", rest: "REST / JSON", graphql: "GraphQL", rss: "RSS / Atom",
   database: "Any database", aws: "AWS (any call)", s3_object: "S3 object", cloudwatch_logs: "CloudWatch logs",
   azure: "Azure (ARM)", azure_blob: "Azure blob", azure_logs: "Azure Log Analytics",
   entra_users: "Entra ID — people", entra_groups: "Entra ID — group members",

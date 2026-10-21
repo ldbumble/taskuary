@@ -112,6 +112,9 @@ ACTIONS = {
     'create': 'write', 'update': 'write', 'comment': 'write', 'reply': 'write',
     'send': 'write', 'notify': 'write', 'assign': 'write', 'complete': 'write',
     'upload': 'write', 'push': 'write',
+    # GraphQL posts the query to the endpoint - and the same POST carries a mutation, so it is
+    # not a read by construction the way run_rest's GET-only request is.
+    'graphql': 'write',
     'mcp': 'write',          # an MCP server exposes arbitrary tools - never assume read
     # ── admin: destructive, structural, or arbitrary code ─────────────────────────────
     'delete': 'admin', 'close': 'admin', 'archive': 'admin', 'manage': 'admin',

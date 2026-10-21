@@ -1561,7 +1561,8 @@ def task_detail(task_id: int):
     from . import batch as _batch
     batch_rows = store.batch_items(task_id)
     batch_outside = bool(batch_rows) and _batch.outside(store, task_id)
-    return {**d, 'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
+    session = hub_term.for_task(task_id, tail=3, details=False)
+    return {**d,'task': {**d['task'], 'Playbook': _playbook_brief(d['task'])},
             'origin': {**dict(zip(('origin', 'why'), origin.of_task(store, task_id))),     # who's words are on it (origin.py)
                        # ...and what one of them tries to make an AI do, as triage or ranking read it (message.Danger)
                        'danger': next((m['Danger'] for m in store.list_messages(task_id) if m.get('Danger')), None)},
@@ -1575,7 +1576,12 @@ def task_detail(task_id: int):
             'artifacts': [_artifact_row(a) for a in d.get('artifacts') or []],
             # The detail page only needs lifecycle here; its terminal pane and optional WorkStrip
             # load their own rich data. Do not block selecting a task on git status.
-            'session': hub_term.for_task(task_id, tail=3, details=False),
+            'session': session,
+            # ...and what the task IS, the list's own State (taskstate): the table opens a task with no list row, and without it an
+            # agent's own close read "stopped and saved" and opened on Close out (the owner, 2026-10-21)
+            'state': _task_state(task_id, d, session),
+            # ...and who closed it and why, one line, when its agent did (taskstate.closed_why)
+            'closedWhy': taskstate.closed_why(store, d['task'], d.get('comments')),
             # ...and how its last run ENDED, in the run's own word (finished / failed / stopped / disconnected) - what taskstate read
             'runEnded': _workerstate().ended(store, task_id),
             'transcript': {'sid': tr['Sid'], 'agent': tr['Agent'], 'cwd': tr['Cwd'], 'brain': tr['Brain'],
@@ -1598,6 +1604,17 @@ def task_detail(task_id: int):
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _task_state(task_id: int, d: dict, session=None):
+    """taskstate.state for one task's page, from the detail already read - its latest review and run as the list row carries them."""
+    try:
+        rv = (d.get('reviews') or [{}])[0]
+        rn = max(d.get('runs') or [{}], key=lambda r: r.get('RunId') or 0)
+        t = {**d['task'], 'ReviewStatus': rv.get('Status'), 'RunStatus': rn.get('Status')}
+        return taskstate.state(store, t, session, store.get_dispatch(task_id))
+    except Exception as e:
+        logger.debug(f'task {task_id}: state skipped - {e}'); return None
 
 
 def _writeup_state(task_id: int):

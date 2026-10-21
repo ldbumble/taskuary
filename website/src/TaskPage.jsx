@@ -81,7 +81,7 @@ import { adviceKeyFor, suggestion } from "./advice.js";
 import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
-  AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
+  AGENT, agentPhase, closedLine, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pageState, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
 } from "./taskLifecycle.js";
 import { closeoutOf } from "./reviewProposal.js";
 import { AgentRecord } from "./AgentRecord.jsx";
@@ -1067,8 +1067,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
   // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.
   const agentBar = !term?.alive && !restartOpen && (isGeneral ? generalStarted : !!(report || detail?.transcript));
-  // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict
-  const rowState = listRow?.State;
+  // the list's row for this task carries the server's state (taskstate.py): the page reads the same verdict - and on the table,
+  // where there is no row, the detail's own (pageState)
+  const rowState = pageState(listRow, detail);
   const answered = generalAnswered(isGeneral, term);
   const agentState = agentPhase({
     session: term?.alive ? { ...term, waiting: answered || isWaiting(term) } : null,
@@ -1877,6 +1878,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...folded over a record, its sentence and what happened - the draft it wrote opens below it (2026-09-22) */}
                   {storyAt === "summary" && <AgentRecord {...recordProps} story={story} folded />}
                   {stage === "agent" && <>
+                  {/* WHO CLOSED IT AND WHY, one plain line over its work (the owner, 2026-10-21: "I have no idea what the agent did
+                      and why it closed"): the agent's own done sentence, else its report's first line (server taskstate.closed_why) */}
+                  {!term?.alive && t?.Status === "done" && detail?.closedWhy && (
+                    <Typography data-tq-closed-why="" sx={{ color: INK, fontSize: 12.5, lineHeight: 1.45, mt: 0.9 }}>{detail.closedWhy}</Typography>)}
                   {term?.alive && !inRow && (
                     // on a phone the two buttons take their own row: sharing one with the heading, they
                     // stacked over the "agent · needs you" chip (2026-09-20)
@@ -2082,7 +2087,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           : pendingReview ? "What goes back to the sender." : "What goes back to the sender. Sending it never closes the task - Mark done does.")
                       : owesEmails
                         ? "The emails this task owes - each waits for your yes. Mark done closes the task."
-                        : "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
+                        : closedLine(t, detail?.closedWhy) || "Nobody sent this one, so there is nobody to answer. Work it, or write what you found on the task."}
                     chip={emailsWaiting ? <LifecycleChip kind="emails" phase={`${emailsWaiting} waiting`} compact />
                       : <LifecycleChip kind="reply" phase={replyMessage ? replyState : "not available"} compact />}
                     /* oxblood is the one colour that means "this is on you" - a draft or an email waiting for your yes. Every card

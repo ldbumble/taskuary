@@ -5,10 +5,11 @@ import { parseDigest } from "./digestText.js";
 import { label as btnLabel } from "./buttons.js";
 import { openAppLink } from "./appLinks.js";
 import { placeHref } from "./words.js";
+import ConnectAi from "./ConnectAi.jsx";
 
 // A failed digest names its way on: the connection that would fix it, and the digest written again. `sourceId` is
 // the Morning digest report when the caller knows it; else it is looked up by name, the way the cards spot one.
-function DigestWayOn({ sourceId }) {
+function DigestWayOn({ sourceId, noAi = false }) {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
   const again = async () => {
@@ -27,7 +28,9 @@ function DigestWayOn({ sourceId }) {
     <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
       <Button size="small" variant="outlined" disabled={busy} onClick={again}>{busy ? "Starting…" : btnLabel("try_again")}</Button>
       {/* the AI section, by its place (words.json): "#connector=" named no card, and the bare Connections landing opened (2026-10-19) */}
-      <Button size="small" component="a" href={placeHref("ai")} onClick={(e) => { e.preventDefault(); openAppLink(placeHref("ai")); }}>Check the AI connection</Button>
+      {/* ...and with none connected, the one button every "no AI" line carries (owner-approved, 2026-10-21) */}
+      {noAi ? <ConnectAi variant="outlined" />
+        : <Button size="small" component="a" href={placeHref("ai")} onClick={(e) => { e.preventDefault(); openAppLink(placeHref("ai")); }}>Check the AI connection</Button>}
     </Box>
     {said && <Typography sx={{ fontSize: 12, mt: 0.5, color: "#55697a" }}>{said}</Typography>}
   </Box>;
@@ -81,7 +84,7 @@ export default function DigestText({ text, sourceId = null }) {
         <summary>What the AI said</summary>
         <Typography sx={{ fontSize: 12, color: "#817b72", whiteSpace: "pre-wrap" }}>{digest.error}</Typography>
       </Box>
-      <DigestWayOn sourceId={sourceId} />
+      <DigestWayOn sourceId={sourceId} noAi={/^No active AI connector/.test(digest.error)} />
     </Alert>}
     {digest.meta && <Typography variant="caption" sx={{ display: "block", color: "#817b72", mb: 1 }}>
       {digest.meta}

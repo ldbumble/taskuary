@@ -35,6 +35,7 @@ import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import ConnectAi from "./ConnectAi.jsx";
 import ReviewDecision from "./ReviewDecision.jsx";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "The assistant could not respond.";
@@ -862,7 +863,9 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
       )}
       {/* "Connections → AI", as the chat says it (concierge.py, no AI connected): the AI CLI agents page's own name is a word the owner never reads
           (words.json jargon), and the walk read it here on a box with no AI (WORDS, 2026-10-20) */}
-      {!data?.providers?.length && <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>Connect an AI app under {placeName("ai")} to run this work. An online AI is optional.</Alert>}
+      {/* ...with the button that does it (owner-approved, 2026-10-21): every "no AI" line carries Connect an AI */}
+      {!data?.providers?.length && <Alert severity="info" data-tq-no-ai="" sx={{ borderRadius: 0, py: 0, alignItems: "center" }}
+        action={<ConnectAi variant="outlined" />}>No AI is connected, so this work cannot run yet - connect one under {placeName("ai")}.</Alert>}
       {session?.resume_notice && <Typography sx={{ px: 1.5, py: 0.5, fontSize: 12, color: FAINT }}>{session.resume_notice}</Typography>}
       <input ref={fileRef} hidden type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onChange={(e) => upload(e.target.files)} />
       {uploading && <Box sx={{ px: 1, py: 0.5, color: FAINT, fontSize: 11 }}>Attaching image…</Box>}

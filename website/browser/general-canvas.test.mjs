@@ -7,7 +7,7 @@ import { startHarness } from "./harness.mjs";
 // THE GENERAL AGENT'S CANVAS READS AS WHAT IT DID (the owner, 2026-10-21: "make the output on the general agent canvas more readable,
 // not some greps and gets"). A research task one email brought, whose agent finished a turn on Claude Code: the recorded stream from
 // tests/fixtures/agent_steps, invented people and paths, on a demo server that started no CLI.
-test("a finished research turn shows plain steps, its words and its answer - no scripts, no repeats, no schedule offer", { timeout: 180000 }, async (t) => {
+test("a finished research turn shows plain steps, its words and its answer - no scripts, no repeats", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
   const page = await harness.newPage();
@@ -33,8 +33,6 @@ test("a finished research turn shows plain steps, its words and its answer - no 
     assert.ok(!shown.includes(raw), `"${raw}" is shown:\n${shown}`);
   assert.equal(shown.split("Opened TQ-1142").length - 1, 1, "a step is drawn once");
   assert.equal(shown.split("I'll find the budget review thread first").length - 1, 1, "its words are said once");
-  // a one-off research request about one email is not something to put on a schedule
-  assert.ok(!shown.includes("Worth running again?"), "the recurring-report offer stands under a one-off answer");
 
   // ...and the raw call is one disclosure away, for debugging
   const opened = await page.evaluate(() => {

@@ -67,10 +67,10 @@ test("the agent's question is drawn in its canvas with an answer box, and answer
   assert.deepEqual(errors, []);
 });
 
-/* A LONG ANSWER THAT ENDS IN A QUESTION, OPENED IN A SHORT WINDOW. Pinned to the bottom, the question card, the report offer
-   and the input took the room and the owner read the answer's last paragraph only (2026-10-18: "I can't see any of the agent
-   output without scrolling"). Opened, the answer reads from its first line; the offer to schedule waits until nothing is asked. */
-test("a long answer opens at its first line, and nothing offers to schedule a run that is waiting on you", { timeout: 180000 }, async (t) => {
+/* A LONG ANSWER THAT ENDS IN A QUESTION, OPENED IN A SHORT WINDOW. Pinned to the bottom, the question card and the input
+   took the room and the owner read the answer's last paragraph only (2026-10-18: "I can't see any of the agent
+   output without scrolling"). Opened, the answer reads from its first line. */
+test("a long answer opens at its first line", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
 
@@ -109,10 +109,9 @@ test("a long answer opens at its first line, and nothing offers to schedule a ru
   const seen = await page.evaluate(() => {
     const v = document.querySelector(".tq-aui-viewport"), m = [...v.querySelectorAll(".tq-aui-agent")].pop();
     const vr = v.getBoundingClientRect(), mr = m.getBoundingClientRect();
-    return { scrolled: v.scrollTop, overflow: v.scrollHeight > v.clientHeight, top: mr.top - vr.top, offer: !!document.querySelector(".tq-aui-report-action") };
+    return { scrolled: v.scrollTop, overflow: v.scrollHeight > v.clientHeight, top: mr.top - vr.top };
   });
   assert.ok(seen.overflow, `the answer must be longer than the pane for this to test anything: ${JSON.stringify(seen)}`);
   assert.ok(seen.top >= 0 && seen.top < 40, `the answer's first line must open at the top of the pane: ${JSON.stringify(seen)}`);
-  assert.equal(seen.offer, false, "no 'Worth running again?' while the agent waits on your call");
   assert.deepEqual(errors, []);
 });

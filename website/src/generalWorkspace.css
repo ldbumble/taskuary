@@ -13,10 +13,6 @@
 .tq-aui-agent-body pre, .tq-aui-agent-body code { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .tq-aui-agent-body table { width: 100%; table-layout: fixed; }
 .tq-aui-agent-body th, .tq-aui-agent-body td, .tq-aui-agent-body a { overflow-wrap: anywhere; word-break: break-word; }
-.tq-aui-report-action { width: 100%; margin: 2px auto 14px; padding: 10px 12px; border: 1px dashed #d8d1c5; border-radius: 11px; background: #f8f5ee; display: flex; align-items: center; gap: 12px; }
-.tq-aui-report-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.tq-aui-report-action b { color: #4d514b; font-size: 12px; }
-.tq-aui-report-action span { color: #858078; font-size: 10.5px; }
 /* WHAT THE AGENT ASKED, with its answer box (AgentAsks, the UI audit's W6): the amber of a raised hand; the choices and the box wrap
    under the question at any width */
 .tq-aui-asking { width: 100%; box-sizing: border-box; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f;
@@ -151,5 +147,4 @@
 
 /* on a phone the recurring-report offer stacks: side by side the text squeezed into a one-word column */
 @media (max-width: 600px) {
-  .tq-aui-report-action { flex-direction: column; align-items: stretch; gap: 10px; }
   }

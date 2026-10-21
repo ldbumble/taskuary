@@ -175,12 +175,25 @@ def vocabularies(store=None) -> dict:
             'kind': seen('kind'), 'lane': seen('lane') or list(funnel.LANES)}
 
 
-def selector(store=None) -> str:
+def select_values(store=None) -> str:
+    """The values SELECT's category, kind and lane can take in the pipe as it is NOW - said with each turn, never in the index:
+    the index is a CLI brain's launch instructions, and a value that came or went (an FYI cleared, a mail landed) restarted it."""
     v = vocabularies(store)
-    lines = ['SELECT (pipe.clear, or wherever a set is meant) - every field optional, ANDed together:',
-             '  category   one of these, exactly: ' + ', '.join(v['category'])]
-    if v['kind']: lines.append('  kind       ' + ' | '.join(v['kind']))
-    lines.append('  lane       ' + ' | '.join(v['lane']))
+    return ('SELECT VALUES IN THE PIPE NOW - category: ' + ', '.join(v['category']) + (f"; kind: {' | '.join(v['kind'])}" if v['kind'] else '')
+            + '; lane: ' + ' | '.join(v['lane']))
+
+
+def selector(store=None, live: bool = True) -> str:
+    """SELECT's fields. `live`: with the pipe's own values for category, kind and lane; else pointing at select_values, which the
+    turn carries (block)."""
+    v = vocabularies(store)
+    lines = ['SELECT (pipe.clear, or wherever a set is meant) - every field optional, ANDed together:']
+    if live:
+        lines.append('  category   one of these, exactly: ' + ', '.join(v['category']))
+        if v['kind']: lines.append('  kind       ' + ' | '.join(v['kind']))
+        lines.append('  lane       ' + ' | '.join(v['lane']))
+    else: lines += ['  category   exactly one of the categories SELECT VALUES IN THE PIPE NOW names (with the owner\'s words)',
+                    '  kind       one of the kinds it names', '  lane       one of the lanes it names']
     lines += ['  sender     an address or a name, matched on the sender only',
               '  contains   words that must appear in the subject',
               '  older_than_hours  a number',
@@ -221,7 +234,7 @@ def block(store=None) -> str:
     lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - use only these names:',
               '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),
-              '', selector(store), '',
+              '', selector(store, live=False), '',
         'WHICH ONE, in this order:',
         '  1. the owner means one of the action words under your line - do that (bucket table).',
         '  2. they want detail, history or a summary - LOOK IT UP and answer with what you read. Search the period',

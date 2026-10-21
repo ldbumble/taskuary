@@ -883,11 +883,11 @@ async function links() {
   walked.push("links: the address through four Nexts");
   // OVER: + New playbook asks over the list it was pressed on, and Cancel leaves that list - never SOUL.md, open under the dialog
   page.step = "links new playbook";
-  await page.goto(`${srv.base}/#settings`, { waitUntil: "load" }); await wait(5000);
-  await clickText(page, "Playbooks"); await wait(1500);
-  const pb = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-browse='settings'] button")].find((x) => x.innerText.trim().startsWith("+ New playbook"));
+  // ...Playbooks left Settings for the Reports page (Reports / Workflows / Playbooks, 0.3.9.16): the shelf's own New playbook
+  await page.goto(`${srv.base}/#report=playbooks`, { waitUntil: "load" }); await wait(5000);
+  const pb = await page.evaluate(() => { const e = [...document.querySelectorAll("[data-tq-browse='reports'] button")].find((x) => /^\+?\s*New playbook/.test(x.innerText.trim()));
     e?.click(); return !!e; });
-  if (!pb) note("OVER", page.step, "Settings → Playbooks drew no + New playbook to press");
+  if (!pb) note("OVER", page.step, "Reports → Playbooks drew no New playbook to press");
   else {
     await wait(1500);
     // ...a document the owner could type into: not MUI's measuring twin of a multiline field (TextareaAutosize keeps an aria-hidden,

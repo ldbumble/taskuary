@@ -2946,7 +2946,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { if ((conn.WriteOnlyKeys || []).includes(k)) next[k] = null; else delete next[k]; });
     setCfg(next); setBusy("save"); setMsg("");
     try {
-      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next), Active: true });
+      await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next) });
       setMsg(`saved — using the ${meta.reuse.from} card's app ✓`);
       setBusy("test");
       setTest((await api.post(`/api/connectors/${conn.ConnectorId}/test`)).data);
@@ -2957,7 +2957,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const save = async () => {
     setBusy("save"); setMsg("");
     try {
-      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
+      // the settings only: it switched the card on too, so editing a card turned off turned it back on (#242) - the switch below does that
+      const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg) };
       if (secret) body.Secret = secret;
       // what this press put on the card, by its label - the AI setup is told (never the values)
       const was = parse(conn.ConfigJson);
@@ -2979,6 +2980,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   };
   // A SAVE IS NEWS, the last Test's failure is not: the old "need tenant_id" stayed under a good save (the UI audit, 2026-10-21)
   const [fresh, setFresh] = useState(false);
+  // held for the Save bar, as on a channel card; Save was once the only thing that turned a data card on
+  const setActive = (on) => draft.ctx.stageConn({ ConnectorId: conn.ConnectorId, Active: on });
 
   return (
     <DraftProvider value={draft.ctx}>
@@ -3026,6 +3029,12 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
             ))}
             <AiWalkButton ai={ai} />
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+            <Switch data-tq-card-on="" checked={!!conn.Active} onChange={(e) => setActive(e.target.checked)} />
+            <Typography variant="body2" sx={{ color: DIM }}>
+              {conn.Active ? "On — reports, workflows and agents can use it." : "Off — flip on once Test passes."}
+            </Typography>
           </Box>
           {meta.search && <KbSearch conn={conn} />}
           <TestLine test={test} mt={0} />

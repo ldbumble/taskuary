@@ -49,8 +49,9 @@ test("the bar says values in words", () => {
 test("no settings control on a connection card saves by itself any more", () => {
   const src = readFileSync(new URL("../src/ConnectorsView.jsx", import.meta.url), "utf8");
   // every connector post left is an action: a rename, or a credential save that tests the connection right after
+  // (a data card's "Use it" saves the shared app's settings and tests - it no longer switches the card on, #242)
   const posts = src.match(/api\.post\("\/api\/connectors", \{ ConnectorId: conn\.ConnectorId,.*$/gm) || [];
-  assert.ok(posts.every((p) => /Name: value|Active: true/.test(p)), posts.join("\n"));
+  assert.ok(posts.length && posts.every((p) => /Name: value|Active: true|ConfigJson: JSON\.stringify\(next\) \}\);/.test(p)), posts.join("\n"));
   assert.ok(!/api\.post\("\/api\/sources", \{ SourceId/.test(src), "a source setting posted by itself");
   assert.ok(!src.includes("Save prompts"));
   assert.match(src, /<SaveBar draft=\{draft\} labels=\{DRAFT_LABELS\} words=\{DRAFT_WORDS\} \/>/);

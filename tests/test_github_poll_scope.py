@@ -73,3 +73,21 @@ def test_explicit_issue_modes_override_tool_and_feed_roles():
     for mode in ('tasks', 'feed', 'replies', 'off'):
         for roles in ({'tool'}, {'feed', 'tool'}):
             assert channels.gh_modes({'ConfigJson': json.dumps({'issues': mode})}, True, roles) == (mode, 'off')
+
+
+def test_testing_one_github_card_leaves_the_other_cards_repos_alone():
+    store = MemoryStore()
+    work, home = card(store), card(store)
+    keep = repo(store, work, 'northwind/ledger', {'issues': 'tasks'})
+    mine, gone = repo(store, home, 'alex/notes'), repo(store, home, 'alex/old')
+    class U:
+        def raise_for_status(self): pass
+        def json(self): return {'login': 'alex'}
+    with mock.patch('taskuary.channels.requests.get', return_value=U()), \
+         mock.patch('taskuary.channels.list_accessible_repos', return_value=[{'full_name': 'alex/notes'}]), \
+         mock.patch('taskuary.docsync.update_repo_map'), mock.patch('taskuary.docsync.sync_connections'):
+        out = channels.github_discover(store, store.get_connector(home, with_secret=True))
+    assert store.get_source(keep) is not None, "the other card's repo was deleted"
+    assert json.loads(store.get_source(keep)['ConfigJson']) == {'issues': 'tasks'}
+    assert store.get_source(mine) is not None and store.get_source(gone) is None
+    assert out['unreachable'] == 1

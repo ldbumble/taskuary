@@ -120,7 +120,10 @@ def github_discover(store, c: dict, actor='owner') -> dict:
         except ValueError: cfg0 = {}
         if cfg0.get('login') != login: store.set_connector_config(c['ConnectorId'], {**cfg0, 'login': login})
     repos = list_accessible_repos(tok)
-    have = {s['Address']: s for s in store.list_sources(active_only=False) if s['Channel'] == 'github'}
+    # only THIS card's repos (and unowned ones): a second GitHub card's repos are another token's to keep or drop
+    have = {s['Address']: s for s in store.list_sources(active_only=False)
+            if s['Channel'] == 'github' and s.get('ConnectorId') in (None, c['ConnectorId'])}
+    alone = len(store.connectors_by_type('github')) <= 1
     added = 0
     for rp in repos:
         s = have.get(rp['full_name'])
@@ -141,7 +144,8 @@ def github_discover(store, c: dict, actor='owner') -> dict:
     seen = {rp['full_name'] for rp in repos}
     gone = 0
     for name, s in have.items():
-        if name not in seen:
+        # an unowned row may be another card's from before rows had owners: dropped only when this is the one card
+        if name not in seen and (s.get('ConnectorId') == c['ConnectorId'] or alone):
             store.delete_source(s['SourceId']); gone += 1
     from .docsync import sync_connections, update_repo_map
     from .llm import build_llm

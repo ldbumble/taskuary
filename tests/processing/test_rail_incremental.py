@@ -272,3 +272,28 @@ def test_a_setting_the_pile_reads_or_might_still_empties_it(db, name):
     first = pile(db)
     db.set_setting(name, '[]' if name == 'funnel_mutes' else '1', 'owner')
     assert pile(db) is not first
+
+
+def test_threads_reading_the_rail_at_once_each_get_an_answer(db):
+    # sqlite3 shares one cached statement per SQL text on a connection: two threads asking "anything new?" at once
+    # reset each other's, and one got no row back - a 500 on the walk's table chip (2026-10-21)
+    import threading
+    for n in range(3): mail(db, n)
+    def rail(): return db.processing_inventory_snapshot(fixed_now=NOW.isoformat(), live_state=[], display_only=True)
+    rail()
+    errs, go = [], threading.Event()
+    def top():
+        for _ in range(300): assert db.rail_top() is not None
+    def show():
+        for _ in range(60): assert rail()['items'] is not None
+    def run(f):
+        go.wait()
+        try: f()
+        except Exception as e: errs.append(e)
+    def write():
+        for n in range(3, 40): mail(db, n)
+    ts = [threading.Thread(target=run, args=(f,)) for f in [top, show]*4 + [write]]
+    for t in ts: t.start()
+    go.set()
+    for t in ts: t.join()
+    assert not errs, errs[:3]

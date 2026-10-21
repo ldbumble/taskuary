@@ -104,7 +104,8 @@ def _open_keyed(url):
 # moment a session unsets its own. An owner's session already has full permissions, so this buys nothing there and stays
 # as it was. A stranger's session runs only the agent commands that go over HTTP with its own task-bound token, where the
 # server's STRANGER scope decides.
-AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'done', 'note', 'board', 'learned', 'upvote', 'downvote', 'comment')
+AGENT_ACTS = ('reply', 'reply_file', 'draft', 'draft_file', 'attach', 'item', 'done', 'note', 'board', 'learned', 'upvote', 'downvote', 'comment',
+              'search', 'message')                  # ...and the owner's mail history, which a stranger's task never reads
 STRANGER_ACTS = AGENT_ACTS[:8]                      # ...the Hub, and the wall's other sessions' words, are not a stranger's to read or write
 OWNER_ACTS = ('prompts', 'reroute_held', 'backfill_asks', 'evalset', 'demo', 'link')
 NO_TOKEN = ("not sent: this session has no token of its own (TASKUARY_TOKEN) - Taskuary's own is the owner's, and a "
@@ -137,7 +138,7 @@ def session() -> tuple:
     return True, int(tid) if tid.isdigit() else 0
 
 def _acts(args) -> list:
-    return [a for a in AGENT_ACTS if (getattr(args, a) is not None if a in ('reply', 'draft', 'done') else bool(getattr(args, a)))]
+    return [a for a in AGENT_ACTS if (getattr(args, a) is not None if a in ('reply', 'draft', 'done', 'search', 'message') else bool(getattr(args, a)))]
 
 def _refuse_outside(args):
     "SystemExit unless every command asked for is one a stranger's session may run - and at least one is (bare `taskuary` starts the app)."
@@ -165,6 +166,41 @@ def _post(path: str, body: dict, stranger, timeout: int = 60, hdr: dict = None):
         return r, (r.json() if r.headers.get('content-type', '').startswith('application/json') else {})
     except Exception as e:
         print(f'could not reach Taskuary at {base}: {e}'); return None
+
+
+def _get(path: str, params: dict, stranger, timeout: int = 60):
+    "GET from the running server as this session: (response, its JSON) - or None, said, as _post."
+    import requests
+    srv = _session_srv() if stranger is not None else config.load()['server']
+    if stranger is not None and not srv['token']: print(NO_TOKEN); return None
+    host = '127.0.0.1' if srv.get('host') in ('0.0.0.0', '::', '', None) else srv['host']
+    base = f"http://{host}:{srv.get('port') or 7787}"
+    try:
+        r = requests.get(f'{base}{path}', timeout=timeout, params=params, headers=_session_headers(srv))
+        return r, (r.json() if r.headers.get('content-type', '').startswith('application/json') else {})
+    except Exception as e:
+        print(f'could not reach Taskuary at {base}: {e}'); return None
+
+
+def _history(args, stranger):
+    """`taskuary --search` / `--message ID`: the owner's own mail and messages, read through the server (mailsearch.py) on this
+    session's task - the way in, so an agent never writes code of its own to read a mailbox or the database."""
+    import os, sys
+    try: sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, OSError): pass
+    tid = os.environ.get('TASKUARY_TASK')
+    if not str(tid).isdigit(): print('not in a Taskuary session - TASKUARY_TASK is not set, so there is no task to search for'); return
+    if args.message is not None: got = _get(f'/api/agent/messages/{int(args.message)}', {'task_id': int(tid)}, stranger)
+    else: got = _get('/api/agent/messages', {'task_id': int(tid), 'words': args.search or '', 'sender': args.sender, 'subject': args.subject,
+                                             'since': args.since, 'until': args.until, 'limit': args.limit}, stranger)
+    if not got: return
+    r, out = got
+    if r.status_code != 200: print(f"not read: {out.get('detail') or r.text[:200]}"); return
+    if args.message is None: print(out.get('says') or ''); return
+    print(f"[{out['id']}] {out['when']} - {out['from']}\n{out['subject']}" + (f"\nto {out['to']}" if out.get('to') else '')
+          + (f"\nthread {out['thread']}" if out.get('thread') else '') + f"\n\n{out.get('body') or ''}")
+    rest = [m for m in out.get('messages') or [] if m['id'] != out['id']]
+    if rest: print('\nTHE REST OF THE THREAD, oldest first:\n' + '\n'.join(f"[{m['id']}] {m['when']} - {m['from']}: {m['snippet']}" for m in rest))
 
 
 def main():
@@ -273,6 +309,14 @@ def main():
     ap.add_argument('--overlap', default='', metavar='TEXT', help='with --item: the other item it duplicates, conflicts with or needs')
     ap.add_argument('--settled', action='store_true', help='with --item: nothing is left for the owner to do on it')
     ap.add_argument('--propose', default='', choices=['', 'merge', 'close', 'changes'], help='with --item: what should happen to it')
+    ap.add_argument('--search', metavar='WORDS', nargs='?', const='',
+                    help="search the owner's own mail and messages in Taskuary - with --from, --subject, --since, --until - "
+                         'and print each hit: its id, when, who, subject, thread and a snippet')
+    ap.add_argument('--from', dest='sender', default='', metavar='WHO', help='with --search: the sender, a name or an address')
+    ap.add_argument('--since', default='', metavar='YYYY-MM-DD', help='with --search: sent on or after this day')
+    ap.add_argument('--until', default='', metavar='YYYY-MM-DD', help='with --search: sent on or before this day')
+    ap.add_argument('--limit', type=int, default=20, help='with --search: how many hits at most')
+    ap.add_argument('--message', type=int, metavar='ID', help='print one message from --search in full, with its thread')
     args = ap.parse_args()
     agent, stranger = session()
     if stranger is not None: _refuse_outside(args)
@@ -355,6 +399,7 @@ def main():
         else:
             print(f"not closed: {out.get('why') or out.get('detail') or r.text[:200]}")
         return
+    if args.search is not None or args.message is not None: return _history(args, stranger)
     if args.note and stranger is not None:
         # a stranger's note: through the board door, which pins it to the token's own task (B2 keeps it off the others' seeds)
         import os, sys

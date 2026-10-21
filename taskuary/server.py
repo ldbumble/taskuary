@@ -4207,6 +4207,33 @@ def agent_done(body: AgentDoneBody, request: Request):
     if not store.get_task(body.task_id): raise HTTPException(404, 'no such task')
     return selfclose.declare(store, body.task_id, body.summary, body.agent, no_reply=body.no_reply)
 
+def _owner_history(request: Request, tid: int):
+    """A session reads the owner's history on its OWN task, and never on a stranger's: the middleware refuses a stranger's token
+    (guard.stranger_denied), and a task a stranger wrote on is refused here whoever asks for it, as its brief never names the door."""
+    from . import origin
+    _own_task_only(request, tid)
+    if not store.get_task(tid): raise HTTPException(404, 'no such task')
+    if origin.of_task(store, tid)[0] == 'stranger':
+        raise HTTPException(403, "a stranger's task does not read the owner's mail - work from what the task itself holds")
+
+@app.get('/api/agent/messages')
+def agent_messages(request: Request, task_id: int, sender: str = '', subject: str = '', words: str = '', since: str = '', until: str = '',
+                   limit: int = 20):
+    """`taskuary --search` from an agent's own shell: the owner's mail and messages by sender, subject, words and date (mailsearch)."""
+    from . import mailsearch
+    _owner_history(request, task_id)
+    hits = mailsearch.search(store, sender, subject, words, since, until, limit)
+    return {'data': hits, 'says': mailsearch.says(hits)}
+
+@app.get('/api/agent/messages/{mid}')
+def agent_message(mid: int, request: Request, task_id: int):
+    """`taskuary --message ID`: one message in full, with its thread."""
+    from . import mailsearch
+    _owner_history(request, task_id)
+    m = mailsearch.message(store, mid)
+    if not m: raise HTTPException(404, 'no such message')
+    return m
+
 class AgentFile(BaseModel): name: str; data: str                  # data is base64: the CLI reads the file, the server never opens a path it is handed
 class AgentReplyBody(BaseModel): task_id: int; text: str = ''; agent: str = 'agent'; files: list[AgentFile] = []; follow_up: bool = False
 

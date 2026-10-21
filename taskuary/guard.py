@@ -126,6 +126,15 @@ AGENT_WRITES = (
     (r'POST', r'^/api/reports/\d+/rerun$', 'a report run as its schedule would run it (concierge.tools_block) - no configuration changes'),
 )
 
+# ── THE READS A SESSION IS HANDED, NAMED ────────────────────────────────────────────────
+# Every GET is 'read' to an agent (classify), so these need no allowance - they are listed because a session is TOLD of them
+# (general.HISTORY_LINE, cli.py), and a door it is told of is a decision: each reads on the session's OWN task (owns_task),
+# and a stranger's session is refused by stranger_denied, which names none of them.
+AGENT_READS = (
+    (r'GET', r'^/api/agent/messages(/\d+)?$',
+     "`taskuary --search/--message`: the owner's mail and messages, read-only (mailsearch.py) - never a stranger's task"),
+)
+
 # ── EVERY OTHER WRITE, NAMED ────────────────────────────────────────────────────────────
 # Refused to an agent whether or not it is listed - the default in classify() does that. It is
 # listed so that test_guard walks app.routes and FAILS on a write route nobody classified: a new

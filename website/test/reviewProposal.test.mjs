@@ -28,6 +28,20 @@ test("a playbook proposed as new names the file its title files it under", () =>
   assert.equal(proposalPresentation(review).destination, "Docs → Playbooks → send-our-w-9-to-a-customer-who-asks.md");
 });
 
+test("a workflow's write waiting for the yes reads as what it writes and where, never its JSON", () => {
+  const review = { Kind: "action", Reason: "the workflow asks to write Onboarding/new-starter-checklist.txt on Network file share",
+    DraftText: JSON.stringify({ action: "run_tool", type: "smb_write", connector_id: 44, path: "Onboarding/new-starter-checklist.txt",
+      text: "Start-day checklist\nJordan Pike - Finance", why: "workflow Monday onboarding run step Checklist", flow_run: { run_id: 4 } }) };
+  const p = proposalPresentation(review);
+  assert.equal(p.title, "A workflow step waits for your yes");
+  assert.equal(p.destination, "Onboarding/new-starter-checklist.txt · smb write");
+  assert.equal(p.readOnly, true);
+  assert.equal(reviewText(review), "Start-day checklist\nJordan Pike - Finance");
+  const other = { Kind: "action", DraftText: JSON.stringify({ action: "run_tool", type: "treg_call", endpoint: "e1", args: { q: "x" } }) };
+  assert.equal(reviewText(other), 'endpoint: e1\nargs: {"q":"x"}');
+  assert.doesNotMatch(reviewText(other), /"action"/);
+});
+
 test("the editable review body is the playbook markdown, not its action envelope", () => {
   assert.equal(reviewText(playbook), "# Run manual PTO import\nwhen: files are waiting\n");
   assert.equal(reviewText({ Kind: "draft", DraftText: "Thanks." }), "Thanks.");

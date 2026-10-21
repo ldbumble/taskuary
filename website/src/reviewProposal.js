@@ -31,11 +31,28 @@ const slugify = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
 // a proposal whose words ARE a playbook page: a new one (the agent's on-close draft) or the ledger's block on one (build step 5)
 export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 
+// a tool run's place (proposals.WHERE_KEYS, the same order) and what it carries: the text it writes, the query or script it runs,
+// else its other settings one per line - the plumbing (the action, the run it belongs to, the connection id) left out
+const WHERE_KEYS = ["path", "to", "folder", "table", "url", "bucket", "key", "container", "blob", "channel", "list", "database"];
+const PLUMBING = new Set(["action", "type", "flow_run", "connector_id", "why", ...WHERE_KEYS]);
+export const toolWhere = (p) => {
+  const k = WHERE_KEYS.find((x) => p?.[x]);
+  const sys = String(p?.type || "").replace(/_/g, " ");
+  return k ? `${String(p[k])} · ${sys}` : sys || "a connected system";
+};
+export const toolBody = (p) => {
+  const body = p?.text ?? p?.body ?? p?.message ?? p?.query ?? p?.script;
+  if (body != null && body !== "") return String(body);
+  return Object.entries(p || {}).filter(([k, v]) => !PLUMBING.has(k) && v !== "" && v != null)
+    .map(([k, v]) => `${k.replace(/_/g, " ")}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n");
+};
+
 export const reviewText = (review) => {
   const proposal = proposalFrom(review);
   if (CLOSEOUT[proposal?.action]) return proposal.text || "";      // never the JSON envelope: an empty box sends nothing extra
   // a workflow repair reads as what was wrong and what changes, never the step list's JSON (flow.repair)
   if (proposal?.action === "repair_workflow") return [proposal.why, proposal.changes].filter(Boolean).join("\n\n");
+  if (proposal?.action === "run_tool") return toolBody(proposal);
   return PAGES.has(proposal?.action) && proposal.text ? proposal.text : review?.DraftText || "";
 };
 
@@ -79,6 +96,20 @@ export const proposalPresentation = (review) => {
       rejectLabel: "Discard proposal",
     };
   }
+  // A TOOL RUN IN WORDS (the owner, 2026-10-21): what it will write, send or run, and where - never the proposal's JSON. The
+  // sentence with the connection's own name is the server's (proposals.tool_words, the review's Reason); this is the place and the
+  // content, read-only - an edit to them was never what ran (proposals.execute runs the proposal as queued)
+  if (proposal?.action === "run_tool") return {
+    kind: "action",
+    title: proposal.flow_run ? "A workflow step waits for your yes" : "Run a step in a connected system",
+    context: review.Reason || "Proposed action · nothing will be sent to the conversation",
+    destinationLabel: "Where",
+    destination: toolWhere(proposal),
+    approveLabel: APPROVE,
+    busyLabel: "running…",
+    rejectLabel: "Dismiss",
+    readOnly: true,
+  };
   if (proposal?.action === "repair_workflow") return {
     kind: "action",
     title: "Repair this workflow's steps",

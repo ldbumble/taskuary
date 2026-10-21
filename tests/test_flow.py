@@ -183,6 +183,8 @@ def test_a_write_below_the_cards_authority_waits_for_the_owners_yes():
     assert (rv['TaskId'], p['action'], p['type'], p['path']) == (tid, 'run_tool', 'smb_write', 'exports/ap.csv')
     assert 'step File the export' in p['why'] and out['summary'].startswith('Waiting for your yes on step 1')
     assert s.get_task(tid)['Status'] == 'open'
+    # ...said in words: what it writes and on which connection - not "one query/script through a tool connection" (walk 2026-10-21)
+    assert rv['Reason'].startswith(f"the workflow asks to write exports/ap.csv on {card['Name']}") and 'query/script' not in rv['Reason']
 
 
 def test_the_last_agent_step_gets_what_the_steps_above_found(db):

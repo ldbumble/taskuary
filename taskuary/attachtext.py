@@ -16,6 +16,9 @@ Bounds, all stated here and nowhere else:
 Pictures are not here: the vision road (llm.readable_images) shows them to a model that can see. Audio and video are the
 voice road's.
 
+A LINK is a document too (linkdocs.py): of_message appends the documents a body points at - a shared sheet, a SharePoint file,
+a GitHub issue, a PDF on the web - as the same entries, so every reader below gets them without a road of its own.
+
 Cached by CONTENT HASH (sha256 of the bytes, plus VERSION of these rules): a file is extracted once, whichever message,
 poll or prompt asks - in memory for this process, in ~/.taskuary/cache/attachtext.sqlite for the next.
 
@@ -128,8 +131,9 @@ def of_items(items) -> list:
     return out
 
 
-def of_message(store, mid) -> list:
-    "Entries for the attachments saved on one message (store.list_attachments rows)."
+def of_message(store, mid, links: bool = True) -> list:
+    """Entries for the attachments saved on one message (store.list_attachments rows) - and, after them, for the documents its
+    body LINKS to (linkdocs: a shared sheet, a SharePoint file, a contract PDF on the web), read through the card that owns each."""
     out = []
     for a in store.list_attachments(mid) or []:
         name, ct = str(a.get('Name') or 'file'), a.get('ContentType')
@@ -142,6 +146,10 @@ def of_message(store, mid) -> list:
             if p.stat().st_size > READ_BYTES: out.append({'name': name, 'note': f'{_mb(p.stat().st_size)}, over the {_mb(READ_BYTES)} read limit'}); continue
             out.append(read(name, p.read_bytes()))
         except OSError: out.append({'name': name, 'note': 'could not be read'})
+    if links:
+        from . import linkdocs
+        try: out += linkdocs.entries(store, store.get_message(mid) or {})
+        except Exception as e: logger.debug(f'attachtext: linked documents on {mid} not read - {e}')
     return out
 
 
@@ -150,8 +158,11 @@ def lines(entries, cap: int = MESSAGE_CHARS, file_cap: int = FILE_CHARS) -> list
     to what is left and then only named - each cut said in words, so a model never takes part of a file for the whole."""
     from .redact import scrub
     from .terminal import fence
-    out, left = [], cap
+    out, left, docs = [], cap, set()
     for e in entries or []:
+        if e.get('doc'):                          # a linked document quoted under every reply on the thread is said once
+            if e['doc'] in docs: continue
+            docs.add(e['doc'])
         name = str(e.get('name') or 'file').replace('\n', ' ')[:120]
         if e.get('note'): out.append(f'{name} (not read: {e["note"]})'); continue
         text, total = scrub(e.get('text') or ''), int(e.get('chars') or len(e.get('text') or ''))
@@ -160,6 +171,7 @@ def lines(entries, cap: int = MESSAGE_CHARS, file_cap: int = FILE_CHARS) -> list
         cut = text[:room]
         left -= len(cut)
         more = f' [cut: the first {len(cut):,} of {total:,} characters]' if total > len(cut) else ''
+        if e.get('more'): more += f" [{str(e['more'])[:200]}]"     # a table's rows: how many in all, and how to read the rest
         out.append(f'{name}: {fence(cut)}{more}')
     return out
 

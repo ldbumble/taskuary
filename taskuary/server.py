@@ -2679,7 +2679,40 @@ def message_thread(mid: int, limit: int = 40):
 @app.get('/api/messages/{mid}/attachments')
 def message_attachments(mid: int):
     if not store.get_message(mid): raise HTTPException(404, 'message not found')
-    return {'data': [_att_row(a) for a in store.list_attachments(mid)]}
+    from . import linkdocs
+    return {'data': [_att_row(a) for a in store.list_attachments(mid)] + [_doc_row(d) for d in linkdocs.of_message(store, mid)]}
+
+
+def _doc_row(d: dict) -> dict:
+    """A document the message LINKS to, beside its files: name, kind and the address it opens - and what the last read found,
+    from the cache (linkdocs.peek: drawing the row never dials out). `external_url` is the document's own address, never ours."""
+    from . import linkdocs
+    got = linkdocs.peek(d) or {}
+    return {'id': d['id'], 'name': linkdocs.name_of(d, got), 'kind': d['label'], 'link': True, 'external_url': d['url'],
+            'content_type': '', 'size': 0, 'inline': False, 'saved': False, 'is_image': False, 'is_audio': False, 'url': None,
+            'read': 'text' in got, **({'note': got['note']} if got.get('note') else {}), **({'fix': got['fix']} if got.get('fix') else {}),
+            **({'rows': got['total_rows']} if got.get('total_rows') is not None else {})}
+
+
+@app.get('/api/tasks/{tid}/documents')
+def task_documents(tid: int):
+    "The documents a task's messages link to, once each, as the page lists them - an agent reads one with the call below."
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    from . import linkdocs
+    return {'data': [{**_doc_row(d), 'message_id': d['mid']} for d in linkdocs.of_task(store, tid)]}
+
+
+@app.get('/api/tasks/{tid}/documents/{did}')
+def task_document(tid: int, did: str, offset: int = 0, limit: int = 0, fresh: bool = True):
+    """One linked document IN FULL, through the card that owns it: a table's rows from `offset` (up to linkdocs.FULL_ROWS a call),
+    a text from character `offset`, and `related` - the files beside it in its folder. Only a document on THIS task's messages:
+    the id is looked up there, so the call never opens an address a caller names with the owner's accounts."""
+    from . import linkdocs
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    d = linkdocs.find_on_task(store, tid, did)
+    if not d: raise HTTPException(404, f'no document {did} on {task_ref(tid)} - GET /api/tasks/{tid}/documents lists them')
+    got = linkdocs.read(store, d, auto=False, full=True, fresh=fresh, offset=offset, limit=max(0, min(int(limit or 0), linkdocs.FULL_ROWS)))
+    return {'id': d['id'], 'kind': d['label'], 'url': d['url'], 'name': linkdocs.name_of(d, got), **got}
 
 @app.get('/api/attachments/{aid}')
 def attachment(aid: int, download: bool = False):

@@ -449,6 +449,23 @@ def unreal_refs(store, text: str, said: str = '') -> list:
             + [f'message {n}' for n in dict.fromkeys(_MSG_REF.findall(text)) if -int(n) not in own and not store.get_message(int(n))])
 
 
+def documents_line(store, item: dict | None) -> str:
+    """DOCUMENTS ON IT: what the item's messages link to (linkdocs) - kind, name, and whether it was read - so a request ABOUT a
+    document ("go through the open bills in that sheet") can be routed to an agent that will have it. From the cache only: a turn
+    never dials out to say what is attached. '' when nothing is linked."""
+    from . import linkdocs
+    try: docs = linkdocs.of_task(store, item['tid']) if item.get('tid') else linkdocs.of_message(store, item['mid']) if item.get('mid') else []
+    except Exception as e: logger.debug(f'concierge: linked documents skipped - {e}'); return ''
+    if not docs: return ''
+    def said(d):
+        got = linkdocs.peek(d) or {}
+        return (f"{linkdocs.name_of(d, got)} - " + (f"read, {got['total_rows']} rows" if got.get('total_rows') is not None else 'read' if 'text' in got
+                else f"not read: {got['note']}" if got.get('note') else 'not read yet'))
+    return ('DOCUMENTS ON IT (linked from its messages): ' + '; '.join(said(d) for d in docs[:6]) + '. Work on one - going through it, '
+            'comparing it, deciding what to pay or answer - is an agent\'s: an agent started on this task gets every document in its '
+            'context and can read each in full; whatever it would pay, send or change comes back as a proposal for the owner\'s yes.')
+
+
 def facts(store, item: dict, whole: bool = False) -> str:
     """What the model is handed about ONE item: the item's own words, then the body, the draft,
     the agent's screen or the meeting, whichever it has. Bounded, so a turn stays fast."""
@@ -521,6 +538,7 @@ def facts(store, item: dict, whole: bool = False) -> str:
             lines.append('IMPORTANT: newer messages arrived after that draft. It is stale and must be redrafted before sending; do not recommend approving it.')
     if item['kind'] == 'agent':
         lines.append('the agent\'s last lines:\n' + '\n'.join(item.get('tail') or ['(nothing captured)']))
+    if docs := documents_line(store, item): lines.append(docs)
     # THE WHOLE OPEN BOX (the owner, 2026-10-01: "if it has task open, entire task is in context, same with anything else, 4 fyi's"):
     # a task's own description, checklist and notes - the agent's report among them - not only its mail; and every message of a
     # batch, not its title ("4 fyi" was all the model was told)

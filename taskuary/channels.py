@@ -485,12 +485,25 @@ def test_connector(store, cid: int) -> dict:
 _DROP = re.compile(r'(?is)<(script|style|head)[^>]*>.*?</\1>')
 _BLOCK = re.compile(r'(?i)<br\s*/?>|</(p|div|tr|li|h[1-6]|blockquote|table)>')
 
+# A shared document arrives as a BUTTON: "Open" whose href is the sheet. Stripping the tag kept the word and lost the sheet,
+# so a link to a document (linkdocs.is_doc_link - a known host or a file, never a plain page or a tracker) keeps its address
+# beside its words: "Outstanding bills (https://docs.google.com/...)" - in brackets the tag strip below leaves alone.
+_A = re.compile(r'''(?is)<a\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>''')
+
+def _keep_doc_link(m):
+    from html import unescape
+    from .linkdocs import is_doc_link
+    href, inner = unescape(m.group(1)).strip(), m.group(2)
+    return f' {inner} ({href}) ' if href not in unescape(inner) and is_doc_link(href) else f' {inner} '   # spaced, as the tag strip spaced it
+
+
 def _clean(html):
     """HTML mail -> readable text. Block ends become NEWLINES: collapsing every whitespace
     run (the old behaviour) mashed the reply and the quoted 'From:/Sent:/To:' history into
     one wall of text, which no reader - human or model - could take apart."""
     from html import unescape
-    txt = _BLOCK.sub('\n', _DROP.sub(' ', html or ''))
+    txt = _A.sub(_keep_doc_link, _DROP.sub(' ', html or ''))
+    txt = _BLOCK.sub('\n', txt)
     txt = unescape(re.sub(r'<[^>]+>', ' ', txt))
     txt = re.sub(r'[^\S\n]+', ' ', txt.replace('\xa0', ' '))
     return re.sub(r'\n{3,}', '\n\n', re.sub(r' ?\n ?', '\n', txt)).strip()

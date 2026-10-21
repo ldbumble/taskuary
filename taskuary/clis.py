@@ -184,6 +184,13 @@ def _require_restricted_mode(cmd: str):
                          'Choose Qwen Code, Ollama, or an API provider for that role.')
 
 
+# A HEADLESS TURN FINISHES IN THE TURN. Nothing wakes a general agent's CLI once its answer is filed, so work it sent to the
+# background - a subagent walking a repository, a shell left running - came back to nobody, and the turn ended "I'm waiting for the
+# walkthrough to finish, then I'll write the brief" (the owner, 2026-10-21). Claude Code's own switch turns background work off
+# (run_in_background on Bash and subagents, auto-backgrounding); Codex and the rest have no background mode to turn off.
+HEADLESS_ENV = {'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS': '1'}
+
+
 def preset_args(cmd: str) -> list:
     """The known CLI's headless flags, for a profile that names a cmd and nothing else. A profile
     saved as just `cmd = "claude"` used to run bare `claude -p`: no permission flag, so a

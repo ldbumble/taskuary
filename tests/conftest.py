@@ -504,6 +504,15 @@ def no_advisor_in_the_background():
 
 
 @pytest.fixture(autouse=True)
+def no_turn_end_judge_in_the_background():
+    """A general agent's finished turn is read by the turn-end judge on a daemon thread (hooks.judge_ended) - one more model call
+    behind every turn, which a test counting its brain's calls would see at random. A test that wants the verdict asks for it
+    inline (`wait=True`)."""
+    from taskuary import hooks
+    hooks.BACKGROUND = False; yield; hooks.BACKGROUND = True
+
+
+@pytest.fixture(autouse=True)
 def no_path_lookup_carryover():
     """pathcache remembers where a CLI was found while the PATH directories read the same - and a test that writes a fake
     CLI into one, or patches os.access or os.path.exists under the real which(), must not inherit the test before it (perf 2.7)."""

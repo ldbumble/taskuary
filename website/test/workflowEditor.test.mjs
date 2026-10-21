@@ -16,6 +16,14 @@ test("every Monday at 8 is a weekly cron, and reads back as Monday - never daily
   assert.equal(scheduleWords(scheduleOf(c)), "Mon at 08:00");
 });
 
+test("a workflow a mail starts says so, and the page asks which mail in words", () => {
+  const { runsWords } = new Function(`${helpers.replace(/export /g, "")}; return { runsWords };`)();
+  assert.equal(runsWords({ mode: "manual" }, { on_mail: "a vendor sends an invoice" }), "when a mail like the one described arrives");
+  assert.equal(runsWords({ mode: "weekly", at: "08:00", days: [1] }, { on_mail: "x" }), "Mon at 08:00, and when a mail like the one described arrives");
+  assert.equal(runsWords({ mode: "manual" }, {}), "only when you press Run now");
+  assert.ok(src.includes('set("on_mail"') && src.includes("Start when a mail like this arrives"));
+});
+
 test("each schedule is one key, and the others are cleared", () => {
   assert.deepEqual(withSchedule({ cron: "0 8 * * 1" }, { mode: "daily", at: "07:30" }), { daily_at: "07:30" });
   assert.deepEqual(withSchedule({ daily_at: "07:30" }, { mode: "monthly", at: "09:00", day: 1 }), { cron: "0 9 1 * *" });

@@ -164,6 +164,7 @@ def _refs(v) -> list:
 # WHAT A STEP READ NEVER BECOMES SQL: a vendor's name, a row or a mail pasted into a query is text that can end it and write its own.
 # The owner's inputs and the run's facts may still fill one; a judgement on the rows belongs to an AI step or "only if".
 SQL_KEYS = ('query', 'filter')
+RESERVED = ('inputs', 'run', 'mail')           # names the run keeps for itself - never a step's
 SQL_PASTE = ("the query cannot have an earlier step's output pasted into it - what a step read could rewrite the query. Keep the query "
              'fixed, and judge its rows in an AI step or with "only if"')
 def pasted_sql(s: dict) -> list: return [r for k in SQL_KEYS for r in _refs(s.get(k)) if r not in ('inputs', 'run')]
@@ -187,12 +188,12 @@ def validate(store, flow, strict: bool = False) -> tuple:
         at = f"step {n}{f' ({label})' if label else ''}"
         if not sid: return False, f'{at} has no id'
         if sid in seen: return False, f'{at}: two steps answer to "{sid}"'
-        if sid in ('inputs', 'run') or slug(label) in ('inputs', 'run'): return False, f'{at}: "{sid}" is a name the run keeps for itself'
+        if sid in RESERVED or slug(label) in RESERVED: return False, f'{at}: "{sid}" is a name the run keeps for itself'
         if kind not in KINDS: return False, f"{at}: unknown kind {kind!r} - one of {', '.join(KINDS)}"
         if kind == 'agent' and n != len(flow): return False, f'{at}: handing to an agent is always the last step'
         known = {**seen, **{slug(v['label']): k for k, v in seen.items() if v.get('label')}}
         for r in _refs({k: v for k, v in s.items() if k not in STEP_KEYS}):
-            if r not in ('inputs', 'run') and r not in known and slug(r) not in known:
+            if r not in RESERVED and r not in known and slug(r) not in known:
                 return False, f'{at} reads {{{{{r}}}}}, which is not a step before it'
         oi = s.get('only_if')
         if oi:
@@ -253,9 +254,11 @@ def as_report(cfg: dict) -> dict:
 
 
 # ── templating ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-def context(cfg: dict, trigger: str = 'manual', sid=None, outputs: dict = None) -> dict:
-    """What a token can name: the steps run so far (their records, `full` bodies kept beside them), the inputs, the run."""
-    return {'steps': dict(outputs or {}), 'labels': {}, 'inputs': (cfg or {}).get('inputs') or {},
+def context(cfg: dict, trigger: str = 'manual', sid=None, outputs: dict = None, mail: dict = None) -> dict:
+    """What a token can name: the steps run so far (their records, `full` bodies kept beside them), the inputs, the run - and, on a
+    run a mail started (workflows.from_mail), that mail: {{mail.from}}, {{mail.subject}}, {{mail.body}}. The mail is someone else's
+    words, so it is DATA like a step's read: fenced in an AI prompt, and never pasted into a query (pasted_sql)."""
+    return {'steps': dict(outputs or {}), 'labels': {}, 'inputs': (cfg or {}).get('inputs') or {}, 'mail': dict(mail or {}),
             'run': {'date': datetime.now().strftime('%Y-%m-%d'), 'trigger': trigger, 'source_id': sid, 'title': (cfg or {}).get('title') or ''}}
 
 
@@ -266,8 +269,8 @@ def _add(ctx, step, rec, full=None):
 
 def _value(ctx, path: str):
     head, *rest = [p.strip() for p in path.split('.')]
-    if head in ('inputs', 'run'):
-        v = ctx[head]
+    if head in RESERVED:
+        v = ctx.get(head) or {}
         for k in rest: v = v.get(k) if isinstance(v, dict) else None
         return v
     rec = ctx['steps'].get(head) or ctx['steps'].get(ctx['labels'].get(slug(head), ''))
@@ -402,7 +405,8 @@ def agent_brief(store, src, step, ctx, recs, trigger, when) -> str:
     defn = workflows.definition(store, src)
     defn['objective'] = render(str(step.get('prompt') or ''), ctx).strip() or defn['objective']
     if step.get('skill'): defn['skill'] = str(step['skill']).strip().lstrip('/')
-    return workflows.brief(defn, trigger, when, {'done_so_far': done_so_far(recs)} if recs else None)
+    run = {**({'done_so_far': done_so_far(recs)} if recs else {}), **({'mail': ctx['mail']} if ctx.get('mail') else {})}
+    return workflows.brief(defn, trigger, when, run or None)
 
 
 def _agent(store, step, ctx, llm, tid, dry, warns, title, src=None, recs=None):
@@ -512,7 +516,7 @@ def _keep_last(store, sid, rec):
     store.set_setting(f'{LAST_RUN}{sid}', json.dumps(rec, default=str), 'report')
 
 
-def execute(store, src, tid, trigger='manual', llm=None) -> dict:
+def execute(store, src, tid, trigger='manual', llm=None, mail: dict = None) -> dict:
     """Walk the steps on the run task `tid`: each recorded on a report_run row as it lands and said on the task in one line, a stop
     at the first failed or waiting step, then the agent step's hand-off - or, with none, the task closed when nothing waits.
     A failed step is repaired toward the workflow's goal (repair_mode): kept at once and the run goes on from it when the goal
@@ -521,9 +525,10 @@ def execute(store, src, tid, trigger='manual', llm=None) -> dict:
     cfg, sid = workflows.cfg_of(src), src.get('SourceId')
     steps, title, t0 = steps_of(cfg), cfg.get('title') or src.get('Address') or 'Workflow', time.time()
     if llm is None and any(s.get('kind') in ('ai', 'draft') for s in steps): llm = _llm(store)
-    ctx, recs, repairs = context(cfg, trigger, sid), [], []
+    ctx, recs, repairs = context(cfg, trigger, sid, mail=mail), [], []
     at, ref = datetime.now().strftime('%Y-%m-%d %H:%M:%S'), task_ref(tid)
-    rec = {'at': at, 'type': 'flow', 'title': title, 'trigger': trigger, 'subject': f'{title} → {ref} (steps)', 'task_id': tid, 'steps': recs}
+    rec = {'at': at, 'type': 'flow', 'title': title, 'trigger': trigger, 'subject': f'{title} → {ref} (steps)', 'task_id': tid, 'steps': recs,
+           **({'inputs': json.dumps({'mail': mail}, default=str)} if mail else {})}      # kept for a run that goes on after a yes (resume)
     rid = store.add_report_run(sid, rec); rec['run_id'] = rid
     _keep_last(store, sid, rec)
     ctx['run']['run_id'] = rid
@@ -625,7 +630,9 @@ def resume(store, fr: dict, result: dict = None) -> dict | None:
         return None
     task = store.get_task(tid) or {}
     trigger = workflows.trigger_of(task) or 'manual'
-    ctx = context(cfg, trigger, src['SourceId']); ctx['run']['run_id'] = run['runId']
+    try: mail = (json.loads(run.get('inputs') or '{}') or {}).get('mail') if str(run.get('inputs') or '').startswith('{') else None
+    except ValueError: mail = None
+    ctx = context(cfg, trigger, src['SourceId'], mail=mail); ctx['run']['run_id'] = run['runId']
     by_id = {s.get('id'): s for s in steps}
     for r in recs[:-1]:
         if r.get('status') not in ('repaired', 'failed', 'waiting'): _add(ctx, by_id.get(r.get('id')) or {}, r)

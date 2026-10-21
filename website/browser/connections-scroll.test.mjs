@@ -11,7 +11,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // A PRESS INSIDE AN OPEN CARD KEEPS THE PLACE (the UI audit, 2026-10-21): every Connections step header snapped the card back to its
 // top - the table's pin held the card's head while the owner worked a screen below it
-test("pressing a Connections step header leaves the page where it was", { timeout: 90000 }, async () => {
+test("pressing a Connections step header leaves the page where it was, and a mailbox must be an address", { timeout: 90000 }, async () => {
   const port = await new Promise((resolve, reject) => {
     const server = net.createServer(); server.once("error", reject);
     server.listen(0, "127.0.0.1", () => { const port = server.address().port; server.close(() => resolve(port)); });
@@ -52,6 +52,13 @@ test("pressing a Connections step header leaves the page where it was", { timeou
       await el.click(); await delay(1200);
       assert.ok(Math.abs((await top()) - before) < 40, `${word}: the page stayed (${before} -> ${await top()})`);
     }
+    // ...and a mailbox is an address: "not an address" was added and ticked green (the UI audit, 2026-10-21)
+    const open = (await page.evaluateHandle(() => [...document.querySelectorAll("[data-tq-browse=connections] [role=button], [data-tq-browse=connections] button")]
+      .find(e => (e.innerText || "").replace(/\s+/g, " ").trim() === "3 Mailboxes"))).asElement();
+    await open.click(); await delay(800);
+    const box = await page.waitForSelector('[data-tq-browse=connections] input[placeholder="someone@yourdomain.com"]', { timeout: 5000 });
+    await box.type("not an address"); await page.keyboard.press("Enter"); await delay(500);
+    assert.match(await page.$eval("[data-tq-browse=connections]", e => e.innerText), /That isn't an email address/);
     assert.deepEqual(errors, []);
   } finally {
     await browser?.close();

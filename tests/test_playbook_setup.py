@@ -110,3 +110,17 @@ def test_malformed_and_unrelated_proposals_do_not_create_reviews(tmp_path):
         for envelope in ('not json', '{"action":"run_tool"}', json.dumps({'action': 'write_playbook', 'text': '# Missing fields'})):
             assert 'could not be queued' in playbooks.collect_setup_draft(store, tid, 'TASKUARY-PROPOSE ' + envelope)
     assert store.list_reviews('pending') == []
+
+
+def test_the_conversation_never_shows_the_setup_brief_as_you():
+    """A playbook built with AI keeps its setup instructions and the example email's raw record in Summary; the row signed "You" showed
+    them in The conversation (walk 2026-10-21). It carries the owner's own words; a workflow's run gets no such row at all."""
+    from taskuary import ownwork
+    store = MemoryStore()
+    made = playbooks.setup_task(store, 'Always attach the signed W-9.', email(store), '', 'owner')
+    ownwork.ensure(store, made['taskId'])
+    [row] = store.list_messages(made['taskId'])
+    assert row['FromName'] == 'You' and row['BodyText'].startswith('Always attach the signed W-9.')
+    assert 'Help the owner build' not in row['BodyText'] and 'BodyText' not in row['BodyText']
+    run = store.create_task({'Title': 'Weekly - run', 'Summary': 'WORKFLOW RUN: Weekly', 'Kind': 'general', 'Source': 'workflow'}, 'owner')
+    assert ownwork.ensure(store, run) is None and store.list_messages(run) == []

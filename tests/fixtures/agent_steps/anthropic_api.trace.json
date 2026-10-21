@@ -1,0 +1,38 @@
+[
+ {
+  "type": "tool_call",
+  "name": "web_search",
+  "detail": {
+   "tool_call_id": "srvtoolu_1",
+   "args": {
+    "query": "northwind budget review policy"
+   }
+  }
+ },
+ {
+  "type": "tool_result",
+  "name": "srvtoolu_1",
+  "detail": {
+   "result": "1 results",
+   "is_error": false
+  }
+ },
+ {
+  "type": "tool_call",
+  "name": "web_fetch",
+  "detail": {
+   "tool_call_id": "srvtoolu_2",
+   "args": {
+    "url": "https://docs.northwind.example/budget/review"
+   }
+  }
+ },
+ {
+  "type": "tool_result",
+  "name": "srvtoolu_2",
+  "detail": {
+   "result": "",
+   "is_error": false
+  }
+ }
+]

@@ -18,7 +18,8 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import api from "./api.js";
-import { streamAssistant, toolTarget } from "./assistantStream.js";
+import { streamAssistant } from "./assistantStream.js";
+import { stepsOf } from "./agentSteps.js";
 import { wantsAsk, wantsBrowser, withoutAsk } from "./newTask.js";
 import { FULL_SX, useFullScreen } from "./fullScreen.js";
 import { pickFor } from "./assistantProvider.js";
@@ -31,7 +32,6 @@ import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
 import { MicButton, ModelSelect, TaskuaryMark } from "./ui.jsx";
-import { dropEcho, forScreen } from "./agentMarkers.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
@@ -49,47 +49,20 @@ const initial = (messages) => (messages || []).map((m) => ({
   createdAt: m.createdAt ? new Date(String(m.createdAt).replace(" ", "T") + (String(m.createdAt).includes("Z") ? "" : "Z")) : undefined,
 }));
 
-const traceParts = (events, keepStart = true) => {
-  const tools = new Map();
-  const progress = [];
-  let structured = false;
-  for (const event of events || []) {
-    if (event.type === "tool_call") {
-      structured = true;
-      const id = event.detail?.tool_call_id || `${event.name}-${tools.size}`;
-      const args = event.detail?.args || {};
-      tools.set(id, { type: "tool-call", toolCallId: id, toolName: event.name || "tool", args,
-        argsText: JSON.stringify(args) });
-    } else if (event.type === "tool_result") {
-      const id = event.detail?.tool_call_id || event.name;
-      const old = tools.get(id);
-      if (old) tools.set(id, { ...old, result: { output: event.detail?.result || "" },
-        isError: !!event.detail?.is_error });
-    } else if (event.type === "start") {
-      // "Agent progress: Started <CLI> · <profile> (your CLI)" is the header's own words in a box
-      // labelled progress, and on a work window the band states who started and when (the owner's
-      // screenshots, 2026-09-08). The dock has no band, so it keeps the line.
-      if (keepStart) progress.push(`Started ${event.session?.provider || "the selected agent"}`);
-    } else if (event.type === "progress" && event.detail) {
-      structured = true; progress.push(String(event.detail));
-    } else if (event.type === "live" && !structured && event.detail) {
-      progress.push(String(event.detail));
-    } else if (event.type === "error") {
-      progress.push(`⚠ ${event.detail?.result || "The assistant could not answer."}`);
-    }
-  }
-  return [...tools.values(), ...(progress.length ? [{ type: "reasoning", text: progress.join("\n\n") }] : [])];
-};
+// ONE PART carries the turn's working: the steps every backend maps into (agentSteps.js), drawn in the order they happened - its own
+// words, then a plain line per thing it did - above the answer. It was a row per raw tool call and then an "Agent progress" box saying
+// the same commands again (the owner, 2026-10-21: "make the output on the general agent canvas more readable, not some greps and gets").
+const stepsPart = (trace, opts) => { const steps = stepsOf(trace, opts); return steps.length ? [{ type: "data", name: "agent_steps", data: { steps } }] : []; };
 
 // assistant-ui owns the response being streamed in the currently mounted pane. The task's
 // session owns it when this pane is not mounted. Rehydrate that same tool/progress trace when a
 // user switches back, and attach it to the filed answer once the run is complete.
 export const messagesWithTrace = (messages, session, keepStart = true) => {
   const out = (messages || []).map((m) => ({ ...m, content: [...(m.content || [])] }));
-  const parts = traceParts(session?.trace, keepStart);
-  if (!parts.length) return out;
+  const trace = session?.trace;
+  if (!stepsOf(trace, { keepStart }).length) return out;
   if (session?.busy) {
-    out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
+    out.push({ id: `live-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
     return out;
   }
   // The trail belongs to the NEWEST turn. When that turn filed an answer the trail is its
@@ -99,8 +72,8 @@ export const messagesWithTrace = (messages, session, keepStart = true) => {
   // working" (TQ-0496 - codex exited 1 refusing the model it was configured with). A turn's
   // last word is its record when there is no other.
   const tail = out[out.length - 1];
-  if (tail?.role === "assistant") tail.content = dropEcho([...parts, ...tail.content]);
-  else out.push({ id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: parts });
+  if (tail?.role === "assistant") tail.content = [...stepsPart(trace, { keepStart, answer: textOf(tail) }), ...tail.content];
+  else out.push({ id: `trace-${session.sid}-${session.trace_revision || 0}`, role: "assistant", content: stepsPart(trace, { keepStart }) });
   return out;
 };
 
@@ -187,22 +160,21 @@ const AssistantText = ({ text }) => {
     {!!files.length && <PublishedPages pages={files.map((f) => outputRow(at.tid, f, at.listed))} />}
   </>;
 };
-const AssistantReasoning = ({ text: raw }) => { const text = forScreen(raw); return text ? (
-  <details className="tq-aui-progress" open>
-    <summary>Agent progress</summary>
-    <div>{text}</div>
-  </details>
-) : null; };
-const AssistantTool = ({ toolName, args, result, isError }) => {
-  const state = isError ? "error" : result === undefined ? "running" : "complete";
-  const target = toolTarget(args);
-  return (
-    <details className={`tq-aui-tool tq-aui-tool-${state}`}>
-      <summary><span className="tq-aui-tool-dot" /> <b>{toolName}</b>{target && <span>{target}</span>}<em>{state}</em></summary>
-      <pre>{JSON.stringify({ input: args, ...(result?.output ? { output: result.output } : {}) }, null, 2)}</pre>
-    </details>
-  );
+// A step is one line. What it did is a row whose raw call - the command, its output - waits behind the row's own disclosure, for
+// debugging; what it SAID is its own words, in the type the answer is in.
+const StepRow = ({ step }) => {
+  if (step.kind === "said") return <div className="tq-aui-said"><Md text={step.summary} /></div>;
+  if (step.kind === "note" || step.kind === "error") return <div className={`tq-aui-note tq-aui-note-${step.kind}`}>{step.summary}</div>;
+  const head = <><span className="tq-aui-tool-dot" /><span>{step.summary}</span>
+    {step.status !== "done" && <em>{step.status === "running" ? "working" : "failed"}</em>}</>;
+  const cls = `tq-aui-step tq-aui-step-${step.kind} tq-aui-tool-${step.status === "done" ? "complete" : step.status}`;
+  return step.detail
+    ? <details className={cls}><summary>{head}</summary><pre>{step.detail}</pre></details>
+    : <div className={cls}><div className="tq-aui-step-line">{head}</div></div>;
 };
+const AgentSteps = ({ data }) => (
+  <div className="tq-aui-steps">{(data?.steps || []).map((st) => <StepRow key={st.id} step={st} />)}</div>
+);
 const UserMessage = () => (
   <MessagePrimitive.Root className="tq-aui-message tq-aui-user">
     <div className="tq-aui-role">you</div>
@@ -217,8 +189,7 @@ const AssistantMessage = () => {
     <MessagePrimitive.Root className="tq-aui-message tq-aui-agent">
       <div className="tq-aui-role">{React.useContext(AgentNameCtx)}</div>
       <div className="tq-aui-agent-body">
-        <MessagePrimitive.Parts components={{ Text: AssistantText, Reasoning: AssistantReasoning,
-          tools: { Fallback: AssistantTool } }} />
+        <MessagePrimitive.Parts components={{ Text: AssistantText, data: { by_name: { agent_steps: AgentSteps } } }} />
         {!!shown?.length && <PublishedPages pages={shown} open />}
       </div>
     </MessagePrimitive.Root>
@@ -435,14 +406,8 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
         model: selected.model || null,
         attachments: attachmentsRef.current.map((a) => a.path),
       };
-      const tools = new Map();
-      const progress = [];
-      let structuredSeen = false;
-      const content = (reply) => dropEcho([
-        ...tools.values(),
-        ...(progress.length ? [{ type: "reasoning", text: progress.join("\n\n") }] : []),
-        ...(reply ? [{ type: "text", text: reply }] : []),
-      ]);
+      const events = [];
+      const content = (reply) => [...stepsPart(events, { answer: reply || "" }), ...(reply ? [{ type: "text", text: reply }] : [])];
       // A run that fails has to SAY so, here, under the question. Thrown out of the adapter it
       // is swallowed: the owner sees their own message and nothing after it, which is
       // indistinguishable from an agent that is still thinking (the wall, 2026-08-31). The
@@ -450,31 +415,14 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
       // task, it is still answering the last question, no AI is connected - so they are shown.
       try {
       for await (const event of streamAssistant(task.TaskId, body, abortSignal)) {
-        if (event.type === "tool_call") {
-          structuredSeen = true;
-          const id = event.detail?.tool_call_id || `${event.name}-${tools.size}`;
-          const args = event.detail?.args || {};
-          tools.set(id, { type: "tool-call", toolCallId: id, toolName: event.name || "tool", args,
-            argsText: JSON.stringify(args) });
-          yield { content: content() };
-        } else if (event.type === "tool_result") {
-          const id = event.detail?.tool_call_id || event.name;
-          const old = tools.get(id);
-          if (old) tools.set(id, { ...old, result: { output: event.detail?.result || "" },
-            isError: !!event.detail?.is_error });
-          yield { content: content() };
-        } else if (event.type === "start") {
+        if (event.type === "start") {
           onStarted?.(event.session);
-          progress.push(`Started ${event.session?.provider || "the selected agent"}`);
+          events.push(event);
           yield { content: content() };
-        } else if (event.type === "progress" && event.detail) {
-          structuredSeen = true;
-          progress.push(String(event.detail));
-          yield { content: content() };
-        } else if (event.type === "live" && !structuredSeen && event.detail) {
+        } else if (["tool_call", "tool_result", "progress", "live"].includes(event.type)) {
           // Custom/Gemini/Aider CLIs may only provide line-oriented stdout. It is still live
-          // work and must not leave a blank pane merely because it lacks Claude/Codex JSON.
-          progress.push(String(event.detail));
+          // work and must not leave a blank pane merely because it lacks Claude/Codex JSON (agentSteps.stepsOf).
+          events.push(event);
           yield { content: content() };
         } else if (event.type === "error") {
           yield { content: content(`⚠ ${event.error || "The agent stopped without an answer."}`) };

@@ -343,6 +343,8 @@ def isolated_runtime_boundaries():
                          for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py')}
         # ...and the fake stream-json CLI takes the flags a real one is launched with (tests/test_clipool.py)
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_stream_cli.py': return True
+        # ...and the replay of a recorded backend stream, by fixture name only (tests/test_agent_steps_backends.py)
+        if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_recorded_cli.py': return True
         # ...and so does the timed stand-in for claude the Assistant walk-through runs on (tests/assistant_walk.py)
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_claude.py': return True
         # ...and the stand-in for the owner's own reason-network CLI, never the real internet-facing one (tests/test_reason_network.py)

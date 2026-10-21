@@ -1144,6 +1144,41 @@ def repair_role_assignees(store) -> int:
     return fixed
 
 
+def acp_tracer(trace, name: str):
+    """An ACP session/update as the SAME trace events the argv road emits - tool_call with its arguments, tool_result with its
+    output - so a general agent on gemini reads like one on claude. Over ACP it was a `live` line only ("ReadFile (completed)"),
+    and the canvas drew it as raw text in the progress box (2026-10-21). The line still goes out, for the pane and the Board."""
+    seen = set()
+    def show(u):
+        # the agent's words arrive one TOKEN per update ("Hello", "!", "Shell", "command") and are
+        # returned whole as the result; traced one by one they buried the tool calls between them
+        # (a copilot turn left 40 one-word trace lines, measured 2026-09-20). Tools and plans are the
+        # progress worth a line.
+        kind = u.get('sessionUpdate')
+        if kind == 'agent_message_chunk': return
+        if kind in ('tool_call', 'tool_call_update'):
+            iid = u.get('toolCallId') or f'acp-{len(seen)}'
+            if iid not in seen and (kind == 'tool_call' or u.get('rawInput') or u.get('title')):
+                seen.add(iid)
+                args = dict(u['rawInput']) if isinstance(u.get('rawInput'), dict) else {}
+                loc = next((l.get('path') for l in u.get('locations') or [] if isinstance(l, dict) and l.get('path')), None)
+                if loc and not any(args.get(k) for k in ('path', 'file_path', 'absolute_path', 'filePath')): args['path'] = loc
+                if u.get('title'): args.setdefault('title', u['title'])
+                trace('tool_call', u.get('kind') or u.get('title') or 'tool', {'tool_call_id': iid, 'args': args})
+            if iid in seen and u.get('status') in ('completed', 'failed'):
+                out = ' '.join(acp_mod._text_of(c.get('content')) for c in u.get('content') or [] if isinstance(c, dict)).strip()
+                trace('tool_result', iid, {'result': out, 'is_error': u.get('status') == 'failed'})
+        elif kind == 'plan':
+            steps = [str((e or {}).get('content') or '') for e in u.get('entries') or []]
+            if any(steps):
+                iid = f'plan-{len(seen)}'; seen.add(iid)
+                trace('tool_call', 'update_plan', {'tool_call_id': iid, 'args': {'plan': [s for s in steps if s]}})
+                trace('tool_result', iid, {'result': ''})
+        line = acp_mod.trace_line(u)
+        if line: trace('live', name, line)
+    return show
+
+
 def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
@@ -1167,18 +1202,9 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     head0 = _git(cwd, 'rev-parse', 'HEAD')
     env = spawn_env(profile, extra_env)
 
-    def show(u):
-        # the agent's words arrive one TOKEN per update ("Hello", "!", "Shell", "command") and are
-        # returned whole as the result; traced one by one they buried the tool calls between them
-        # (a copilot turn left 40 one-word trace lines, measured 2026-09-20). Tools and plans are the
-        # progress worth a line.
-        if u.get('sessionUpdate') == 'agent_message_chunk': return
-        line = acp_mod.trace_line(u)
-        if line: trace('live', name, line)
-
     try:
         client = acp_mod.ACPClient(cmd[0], cmd[1:], cwd=cwd, env=env,
-                                   timeout=profile.get('timeout', 1200), on_update=show)
+                                   timeout=profile.get('timeout', 1200), on_update=acp_tracer(trace, name))
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     with _CLI_CHILDREN_LOCK: _CLI_CHILDREN.add(client.p)

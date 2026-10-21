@@ -12,7 +12,8 @@ triage.classify_intent expects. Which brain is the owner's choice (setting `tria
 Cloud keys are cheap and instant per message; a CLI run is slower and heavier but keeps
 everything on one model (and one bill). Configure it in Settings -> How mail is sorted.
 """
-import base64, hashlib, json, mimetypes, re, requests
+import base64, contextvars, hashlib, json, mimetypes, re, requests
+from contextlib import contextmanager
 from pathlib import Path
 from time import sleep
 from typing import NamedTuple
@@ -790,6 +791,26 @@ def make_llm(t, cfg: dict, key: str):
 # 2026-09-30: "even plain api can look things up before answering"). Asked only where the job is research - the
 # general agent - never for triage, which reads one message and would pay for a search on every mail. A provider,
 # model or account that refuses the tool answers the same question without it: None here means "ask it plainly".
+# WHAT IT LOOKED UP, for whoever is watching the call (general.send_prompt): an API brain's searches run inside the provider and
+# came back as prose only, so its canvas showed nothing between the question and the answer while a CLI's showed every search
+# (2026-10-21). The same tool_call/tool_result events a CLI emits, so both read the same.
+_WATCH = contextvars.ContextVar('tq_llm_watch', default=None)
+
+
+@contextmanager
+def watching(trace):
+    tok = _WATCH.set(trace)
+    try: yield
+    finally: _WATCH.reset(tok)
+
+
+def _saw(kind, name, detail):
+    t = _WATCH.get()
+    if not t: return
+    try: t(kind, name, detail)
+    except Exception: pass                      # a watcher that fails never fails the answer
+
+
 ANTHROPIC_WEB = ([{'type': 'web_search_20260209', 'name': 'web_search', 'max_uses': 5},
                   {'type': 'web_fetch_20260209', 'name': 'web_fetch', 'max_uses': 5}],
                  [{'type': 'web_search_20250305', 'name': 'web_search', 'max_uses': 5},      # models before 4.6
@@ -808,8 +829,21 @@ def _anthropic_web(cli, model, system, content, max_tokens):
         except anthropic.BadRequestError as e:
             _log_web('anthropic', e); continue
         if r.stop_reason == 'refusal': raise RuntimeError('model refused the request')
+        for m in msgs[1:] + [{'content': r.content}]: _saw_anthropic(m['content'])      # a paused turn's searches, then the last
         return '\n\n'.join(b.text for b in r.content if b.type == 'text').strip()
     return None
+
+
+def _saw_anthropic(blocks):
+    """Each search or page the provider's server tools ran inside the call, as a step on the canvas (watching)."""
+    for b in blocks or []:
+        typ = getattr(b, 'type', '')
+        if typ == 'server_tool_use':
+            _saw('tool_call', getattr(b, 'name', '') or 'tool', {'tool_call_id': getattr(b, 'id', ''), 'args': dict(getattr(b, 'input', None) or {})})
+        elif typ.endswith('_tool_result'):
+            got = getattr(b, 'content', None)
+            failed = 'error' in str(getattr(got, 'type', '') or (got.get('type') if isinstance(got, dict) else ''))
+            _saw('tool_result', getattr(b, 'tool_use_id', ''), {'result': f'{len(got)} results' if isinstance(got, list) else '', 'is_error': failed})
 
 
 def _responses_web(t, cfg, headers, model, system, user, images, max_tokens):
@@ -821,6 +855,13 @@ def _responses_web(t, cfg, headers, model, system, user, images, max_tokens):
     except requests.RequestException as e: _log_web(t, e); return None
     if r.status_code != 200: _log_web(t, f'{r.status_code} {r.text[:200]}'); return None
     out = r.json()
+    for o in out.get('output') or []:
+        if o.get('type') != 'web_search_call': continue
+        act = o.get('action') or {}
+        name, args = (('web_search', {'query': act.get('query') or ''}) if act.get('type', 'search') == 'search'
+                      else ('web_fetch', {'url': act.get('url') or ''}))
+        _saw('tool_call', name, {'tool_call_id': o.get('id') or name, 'args': args})
+        _saw('tool_result', o.get('id') or name, {'result': o.get('status') or '', 'is_error': o.get('status') == 'failed'})
     return out.get('output_text') or '\n\n'.join(c.get('text', '') for o in out.get('output') or [] if o.get('type') == 'message'
                                                   for c in o.get('content') or [] if c.get('type') == 'output_text').strip()
 

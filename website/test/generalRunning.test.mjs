@@ -82,7 +82,7 @@ test("the working dots animate from the general workspace's own stylesheet", () 
 
 test("a turn that died shows its reason, with no answer of its own to hang it on", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /progress\.push\(`⚠ \$\{event\.detail\?\.result/);           // the reason is built
+  assert.match(read("agentSteps.js"), /kind: "error", summary: `⚠ \$\{e\.detail\?\.result/);   // the reason is built
   // ...and it reaches the page. The trail used to be folded into the newest ASSISTANT message,
   // so a turn that filed no answer folded it into nothing and the chat showed the question,
   // no reply, and no reason at all (TQ-0496).

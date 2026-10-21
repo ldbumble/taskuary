@@ -1302,8 +1302,8 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)
     items = [i for i in items if not _aged_out(i, now, hours)]
-    from .processing_unread import return_minutes, walk_started_at
-    quiet, walk_at = return_minutes(store), walk_started_at(store)
+    from .processing_unread import RETURN_MINUTES, walk_started_at
+    quiet, walk_at = RETURN_MINUTES, walk_started_at(store)
     items = [i for i in _apply_states(items, states, now, keep_surfaced, quiet, walk_at) if not i.get('ranked_wait')]
     # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
     # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
@@ -1689,8 +1689,8 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         return _present_one(store, item) or batch_item(store, key)
     if getattr(store, 'processing_reads_active', lambda: False)():
         return capture_selection(store, only=only, exclude=exclude).selected
-    from .processing_unread import return_minutes        # the same hour the canonical pile's mark holds
-    again = (datetime.now() - timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
+    from .processing_unread import RETURN_MINUTES        # the same hour the canonical pile's mark holds
+    again = (datetime.now() - timedelta(minutes=RETURN_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
     ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('deferred')
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')
@@ -1842,8 +1842,8 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
     # WALKED PAST (Next), not merely shown: the mark's Until is what says so. An open task is passed for the rest of this walk
     # whatever it says (processing_unread.this_walk); a row with no task behind it, until then.
     if verb == 'surfaced' and put_down and until is None:
-        from .processing_unread import return_minutes
-        until = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
+        from .processing_unread import RETURN_MINUTES
+        until = (datetime.now() + timedelta(minutes=RETURN_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
     if verb == 'later' and until is None:
         back, says = later_until(store, hours=hours)
         until = back.strftime('%Y-%m-%d %H:%M:%S')

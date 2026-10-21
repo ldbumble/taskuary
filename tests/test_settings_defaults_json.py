@@ -17,7 +17,6 @@ CODE_DEFAULTS = {
     'funnel_hours': ('taskuary.funnel', 'HOURS_DEFAULT'),
     'funnel_max': ('taskuary.funnel', 'MAX_DEFAULT'),
     'meeting_grace_minutes': ('taskuary.funnel', 'STARTED_MIN'),
-    'task_return_minutes': ('taskuary.processing_unread', 'RETURN_MINUTES'),
 }
 
 

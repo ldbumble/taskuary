@@ -52,7 +52,6 @@
     "concierge_fast": "auto",
     "funnel_hours": "12",
     "funnel_max": "25",
-    "task_return_minutes": "180",
     "meeting_grace_minutes": "5",
     "fyi_batch": "4",
     "chat_keep_days": "15",

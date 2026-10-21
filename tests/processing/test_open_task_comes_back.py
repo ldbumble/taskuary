@@ -31,8 +31,6 @@ STAMP = NOW.isoformat(sep=' ')
 def db(tmp_path):
     store = SQLiteStore(str(tmp_path / 'back.db'))
     store.set_setting('funnel_hours', '72', 'fixture')
-    # the mechanism at a round hour; the shipped default is three (2026-09-25), checked below
-    store.set_setting('task_return_minutes', '60', 'fixture')
     funnel.invalidate(); funnel.forget_states()
     yield store
     store.cx.close()
@@ -135,14 +133,6 @@ def test_a_closed_task_never_comes_back(db):
     assert work(db, after(days=2)) == {}, 'a closed task is not work'
 
 
-def test_the_setting_no_longer_times_an_open_task(db):
-    db.set_setting('task_return_minutes', '5', 'owner')
-    a_task(db, 'Call Paula about PAM review')
-    key = only_key(db)
-    clear_it(db, key)
-    assert passed(db, key, after(minutes=6)), 'the quiet spell brought an open task back inside the walk'
-
-
 def test_it_says_why_it_is_back(db):
     """"if they ask why explain it should be closed" - the card carries that sentence itself."""
     a_task(db, 'Call Paula about PAM review')
@@ -153,17 +143,18 @@ def test_it_says_why_it_is_back(db):
     assert 'close' in (work(db)[key].get('why_open') or '').lower()
 
 
-def test_the_owner_can_change_the_clock_by_saying_so(db):
-    """The knob is a switch the assistant may propose, and only ever as a whole number."""
-    from taskuary import proposals
-    changes, why = proposals.setting_changes({'changes': [{'name': 'task_return_minutes', 'value': '90'}]})
-    assert changes == [{'name': 'task_return_minutes', 'value': '90',
-                        'says': proposals.SETTING_ALLOW['task_return_minutes']}], why
-    assert proposals.setting_changes({'changes': [{'name': 'task_return_minutes', 'value': 'soon'}]})[1] \
-        == 'task_return_minutes must be a whole number'
-
-
-def test_a_nonsense_setting_falls_back_to_the_default_three_hours(db):
-    from taskuary import processing_unread
-    db.set_setting('task_return_minutes', 'soon', 'owner')
-    assert processing_unread.return_minutes(db) == 180
+def test_the_come_back_setting_is_gone(db):
+    """The owner, 2026-10-21: remove it. Not in Settings, not proposable, and a home that still stores it is ignored."""
+    import json
+    from pathlib import Path
+    from taskuary import processing_unread, proposals
+    root = Path(processing_unread.__file__).parent
+    assert 'task_return_minutes' not in json.loads((root / 'settings_schema.json').read_text(encoding='utf-8'))['knobs']
+    assert 'task_return_minutes' not in json.loads((root / 'settings_defaults.json').read_text(encoding='utf-8'))['defaults']
+    assert 'task_return_minutes' not in proposals.SETTING_ALLOW
+    assert proposals.setting_changes({'changes': [{'name': 'task_return_minutes', 'value': '5'}]})[0] == []
+    db.set_setting('task_return_minutes', '5', 'owner')            # an old home's stored value
+    a_task(db, 'Call Paula about PAM review')
+    key = only_key(db)
+    clear_it(db, key)
+    assert passed(db, key, after(minutes=6)), 'a stored old value still timed an open task'

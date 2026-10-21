@@ -8,7 +8,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptImages.jsx";
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCapabilities } from "./capabilities.js";
 import { createPortal } from "react-dom";
 import {
@@ -109,21 +109,75 @@ const PRIORITIES = ["low", "normal", "high", "urgent"];
 const NAT_TITLE = "Removes this task. Taskuary stops making tasks from messages like this; the email itself is kept, and search finds it.";
 
 // WHAT TRIAGE DECIDED READS AS FACTS, NOT CONTROLS (the owner, 2026-10-16: "why are there dropdowns by the triage results? you
-// can't change it"). The pills sit under the title, read-only; changing who does it, the priority, the assignee or the repository is
+// can't change it"). The pills sit beside the title, read-only; changing who does it, the priority, the assignee or the repository is
 // on the bar by the prompt box (the row's Task menu) on the canvas, and behind Change on the Tasks tab's own bar.
-const factPill = { display: "inline-flex", alignItems: "center", gap: 0.6, height: 22, px: 1.1, borderRadius: 11, border: `1px solid ${BORDER}`,
-  bgcolor: "#fff", fontSize: 11.5, color: INK, whiteSpace: "nowrap", maxWidth: "100%", overflow: "hidden", minWidth: 0 };
 // ...and SAID AS ONE LINE in plain words (the audit, 2026-10-17): "Triage decided · Intent task · Who does it an agent · general" was
 // the sorter's own vocabulary. Now "Sorted as: a task for an assistant · normal priority". A held repository stays a pill: it is a warning.
 const SAID = new Set(["intent", "who", "profile", "repo", "priority"]);
+const factOf = (facts, k) => facts.pills.find((p) => p.key === k && p.tone !== "alert")?.value || "";
+const whatOf = (facts, kind) => { const intent = factOf(facts, "intent");
+  return intent === "reply" || kind === "reply" ? "a reply to send" : intent === "fyi" ? "for your information"
+    : `a task ${{ general: "for an assistant", coding: "for your coding tool" }[kind] || "for you"}`; };
 export const sortedLine = (facts, kind) => {
-  const v = (k) => facts.pills.find((p) => p.key === k && p.tone !== "alert")?.value || "";
-  const intent = v("intent"), reply = intent === "reply" || kind === "reply";
-  const what = reply ? "a reply to send" : intent === "fyi" ? "for your information" : `a task ${{ general: "for an assistant", coding: "for your coding tool" }[kind] || "for you"}`;
+  const what = whatOf(facts, kind), repo = factOf(facts, "repo");
   const head = facts.triaged ? `Sorted as: ${what}` : what.charAt(0).toUpperCase() + what.slice(1);
-  return [head, v("repo") && `in ${v("repo")}`, `${v("priority") || "normal"} priority`].filter(Boolean).join(" · ");
+  return [head, repo && `in ${repo}`, `${factOf(facts, "priority") || "normal"} priority`].filter(Boolean).join(" · ");
+};
+// THE HEADER IS ONE ROW (the owner, 2026-10-21): the "Sorted as" line under the title cost every task a second row, so what triage made
+// of it rides BESIDE the title as pills - most telling first (the kind, the priority, a warning), so a narrow header cuts the tail into
+// "+N" (HeadPills), never onto a line of its own. The sentence each pill shortens is its tooltip.
+export const headPills = (facts, kind, done = null, context = "") => {
+  const pri = facts.pills.find((p) => p.key === "priority"), repo = factOf(facts, "repo"), what = whatOf(facts, kind);
+  return [
+    { key: "kind", text: what.replace(/^a /, ""), short: /reply/.test(what) ? "reply" : /information/.test(what) ? "FYI" : { general: "assistant", coding: "coding tool" }[kind] || "for you",
+      title: sortedLine(facts, kind) },
+    pri && { key: "priority", text: `${pri.value} priority`, short: pri.value, title: `Priority: ${pri.value}`, tone: pri.tone },
+    ...facts.pills.filter((p) => p.tone === "alert" && p.key !== "priority").map((p) => ({ key: p.key, text: `${p.label}: ${p.value}`, title: `${p.label}: ${p.value}`, tone: "alert" })),
+    repo && { key: "repo", text: `in ${repo}`, title: `Repository: ${repo}`, mono: true },
+    done && { key: "completion", text: done.fact, title: done.line },
+    ...facts.pills.filter((p) => !SAID.has(p.key) && p.tone !== "alert").map((p) => ({ key: p.key, text: `${p.label}: ${p.value}`, title: `${p.label}: ${p.value}`, tone: p.tone })),
+    context && { key: "context", text: context, title: context },
+  ].filter(Boolean);
 };
 const FACT_TONE = { agent: { bgcolor: BRAND.tint, borderColor: BRAND.bd, k: BRAND.ink }, alert: { bgcolor: ALERT_TINT, borderColor: ALERT_BD, color: ALERT_INK, k: ALERT_INK } };
+// the "task · open" chip's own size, so the facts and the state read as one row of pills
+const headPill = { display: "inline-block", boxSizing: "border-box", height: 18, lineHeight: "16px", px: 0.8, borderRadius: 9, border: `1px solid ${BORDER}`,
+  bgcolor: "#f7f5f1", color: DIM, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", flexShrink: 0 };
+// ONE ROW OF PILLS, and what does not fit is "+N", its tooltip naming the rest (a tap shows it on a phone). Every pill stays in the box,
+// so its width asks for them all and the title gives way first; the ones past the room are measured, hidden, and moved behind the +N
+// (order 2) - the box is one pill high and wraps, so nothing they do can grow it. The first pill always shows: it truncates instead.
+function HeadPills({ pills, workflow = false }) {
+  const box = useRef(null), [cut, setCut] = useState(pills.length), sig = pills.map((p) => p.text).join("|");
+  useLayoutEffect(() => {
+    const el = box.current; if (!el) return undefined;
+    const count = () => {
+      const kids = [...el.querySelectorAll(":scope > [data-tq-fact]")], g = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const more = (el.querySelector(":scope > [data-tq-pills-more]")?.offsetWidth || 28) + g;
+      let used = 0, fit = 0;
+      for (const [i, k] of kids.entries()) { used += k.offsetWidth + (i ? g : 0); if (used + (i < kids.length - 1 ? more : 0) > el.clientWidth + 0.5) break; fit = i + 1; }
+      setCut(Math.max(1, fit));
+    };
+    count();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(count); ro.observe(el); return () => ro.disconnect();
+  }, [sig]);
+  const rest = pills.slice(cut);
+  return <>
+    {workflow && <ChannelIcon channel="workflow" sx={{ fontSize: 15, flexShrink: 0 }} />}
+    <Box ref={box} data-tq-triage-facts="" data-tq-head-pills="" sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 0.5, rowGap: 0,
+      height: 18, overflow: "hidden", flex: "0 1 auto", minWidth: 0 }}>
+      {pills.map((p, i) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
+        <Box key={p.key} component="span" data-tq-fact={p.key} {...(p.key === "kind" ? { "data-tq-sorted": "" } : {})} title={p.title} aria-hidden={i >= cut || undefined}
+          sx={{ ...headPill, ...tone, ...(p.mono ? { ...mono, fontSize: 10.5 } : {}), ...(i >= cut ? { order: 2, visibility: "hidden" } : {}) }}>
+          {p.short ? <><Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>{p.short}</Box>
+            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>{p.text}</Box></> : p.text}</Box>); })}
+      {rest.length > 0 && <Tooltip title={rest.map((p) => p.title || p.text).join(" · ")} enterTouchDelay={0}>
+        <Box component="span" tabIndex={0} data-tq-pills-more="" aria-label={`${rest.length} more: ${rest.map((p) => p.text).join(", ")}`}
+          sx={{ ...headPill, order: 1, cursor: "default", "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: -2 } }}>+{rest.length}</Box>
+      </Tooltip>}
+    </Box>
+  </>;
+}
 // "09:06" today, "Oct 9" before - a row of messages reads its times at a glance
 const whenShort = (s) => {
   if (!s) return "";
@@ -1232,6 +1286,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // the task's own controls ride in the header strip only while a session hides the task card - and never on the canvas,
   // whose row holds them
   const headControls = sessionView && !inRow && notDone;
+  // TRIAGE DECIDED - what the task is, as pills beside its title (headPills). Not over a session: that strip keeps the agent's room.
+  // Nor over the agent's step on the canvas: the facts are the Task step's (the owner, 2026-10-18: "see more of the agent canvas").
+  // A playbook or a report it works from is a pill either way - it was a line of its own under the title.
+  const triageShown = !sessionView && !(canvas && stage === "agent");
+  const headFacts = triageShown ? headPills(facts, t?.Kind || "task",
+    notDone ? { fact: completionFact(completionIsManual, owesEmails, !replyMessage), line: completionLine(completionIsManual, owesEmails, !replyMessage) } : null, workContext)
+    : workContext ? [{ key: "context", text: workContext, title: workContext }] : [];
+  const headPillsOn = headFacts.length > 0;
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
@@ -1422,13 +1484,13 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   - sitting directly above a second heading that said "Task · the job itself". The
                   provenance line moved into the card (Came from, under its messages), where you go
                   and look at it rather than read it every time. */}
-              <Box sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
+              <Box data-tq-task-head="" sx={{ px: liveSession ? 1.5 : 1.75, py: liveSession ? 0.7 : 1,
                 bgcolor: "#fff", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
                 {/* on a phone the strip WRAPS: ref and title keep the first line, the controls take the next - one line
                     pushed Next, Expand and the X off the right edge (the canvas redesign's phone pass, 2026-09-29) */}
                 {/* ...only while there ARE controls to wrap. On the assistant's canvas there are none up here, and the strip still
                     wrapped: Expand and the X took a row of their own under a cut title (the 2026-10-07 design pass) */}
-                <Box sx={{ display: "flex", gap: 0.9, rowGap: 0.5, alignItems: "center",
+                <Box sx={{ display: "flex", gap: headPillsOn ? { xs: 0.6, sm: 0.9 } : 0.9, rowGap: 0.5, alignItems: "center",
                   flexWrap: headControls ? { xs: "wrap", sm: "nowrap" } : "nowrap" }}>
                   {/* THE (1) IS THE TASK STEP'S NUMBER, so it sits on whichever line is that step's heading: up here while the
                       step is open (or a session hides it), on the folded Task strip once another step is open - it stood up
@@ -1439,12 +1501,17 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     display: "grid", placeItems: "center", flexShrink: 0, fontSize: 9.5, fontWeight: 600 }}>1</Box>}
                   <Typography sx={{ color: "#41525f", fontVariantNumeric: "tabular-nums", flexShrink: 0,
                     letterSpacing: ".015em", fontWeight: 600, fontSize: 11.5 }}>{detail.ref}</Typography>
-                  <Typography sx={{ color: INK, flex: 1, fontWeight: 600,
+                  {/* ...and the TITLE GIVES WAY FIRST to the pills beside it (it shrinks a hundred times faster), down to a few words; past
+                      that the pills drop into "+N" */}
+                  <Typography title={t.Title} sx={{ color: INK, flex: headPillsOn && !headControls ? "0 100 auto" : 1, fontWeight: 600,
                     fontSize: liveSession ? 12.5 : 13,
-                    minWidth: headControls ? { xs: 90, sm: 180 } : 0, flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
+                    minWidth: headControls ? { xs: 90, sm: 180 } : headPillsOn ? { xs: Math.min(56, 7 * String(t.Title || "").length), sm: Math.min(160, 7 * String(t.Title || "").length) } : 0,
+                    flexBasis: headControls ? { xs: "calc(100% - 90px)", sm: "auto" } : "auto",
                     letterSpacing: "-.005em" }} noWrap>
                     {t.Title}
                   </Typography>
+                  {headPillsOn && <HeadPills pills={headFacts} workflow={!sessionView && facts.workflow} />}
+                  {headPillsOn && !headControls && <Box sx={{ flex: "1 0 0", minWidth: 0 }} />}
                   {/* the list row said this and the task page did not, so a held task looked merely open */}
                   {interruptedTask && <Chip size="small" label="agent stopped"
                     title="Taskuary closed while an agent was working this. Nothing restarts until you choose one."
@@ -1494,29 +1561,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <IconButton aria-label={sessionView ? "Back to task" : "Close task"} size="small" onClick={() => (sessionView ? setPeek(true) : dismiss())}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
                   </Tooltip>
                 </Box>
-                {workContext && <Typography variant="caption" sx={{ color: "#6b5f45", display: "block",
-                  mt: 0.15, ml: 3.4, fontWeight: 600, fontSize: 10 }}>
-                  {workContext}
-                </Typography>}
-                {/* TRIAGE DECIDED - what the task is, said once under its title as facts, never as controls (the owner, 2026-10-16: "why
-                    are there dropdowns by the triage results? you can't change it"). A task nobody triaged shows its own facts, unlabelled.
-                    Not over a session: that strip stays one line so the agent keeps the room. Nor over the agent's step on the canvas:
-                    the facts are the Task step's, and the height is the agent's (the owner, 2026-10-18: "see more of the agent canvas"). */}
-                {!sessionView && !(canvas && stage === "agent") && <Box data-tq-triage-facts="" sx={{ display: "flex", alignItems: "center", gap: 0.6, rowGap: 0.5, flexWrap: "wrap", mt: 0.8, minWidth: 0 }}>
-                  {facts.workflow && <ChannelIcon channel="workflow" sx={{ fontSize: 15, mr: 0.1 }} />}
-                  {facts.pills.filter((p) => !SAID.has(p.key) || p.tone === "alert").map((p) => { const { k, ...tone } = FACT_TONE[p.tone] || {}; return (
-                    <Box key={p.key} component="span" data-tq-fact={p.key} sx={{ ...factPill, ...tone }}>
-                      <Box component="span" sx={{ color: k || FAINT }}>{p.label}</Box>
-                      <Box component="span" sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", ...(p.mono ? { ...mono, fontSize: 11 } : {}) }}>{p.value}</Box>
-                    </Box>); })}
-                  <Typography component="span" data-tq-sorted="" sx={{ fontSize: 12, color: DIM, minWidth: 0 }}>{sortedLine(facts, t?.Kind || "task")}</Typography>
-                  {/* WHAT HAPPENS AT THE END, in a few words on the facts' own line; the sentence that explains it is the tooltip */}
-                  {notDone && <>
-                    <Box sx={{ width: "1px", height: 16, bgcolor: BORDER, mx: 0.5, display: { xs: "none", sm: "block" } }} />
-                    <Typography variant="caption" sx={{ color: DIM }} title={completionLine(completionIsManual, owesEmails, !replyMessage)}>
-                      {completionFact(completionIsManual, owesEmails, !replyMessage)}</Typography>
-                  </>}
-                </Box>}
               </Box>
               {/* a flex column so the terminal takes exactly what is left between the strip above and the
                   waiting room below - a fixed-height formula clipped its bottom line on shorter screens */}

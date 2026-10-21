@@ -30,7 +30,9 @@ test("the menus' unassigned is a change, and a blur that moved no day presses no
 
 test("a box is named by its own id as well as its number", () => {
   const page = read("TaskPage.jsx");
-  assert.match(page, /runOperation\(api, "task\.check", t\.TaskId, \{ item: String\(checklist\.indexOf\(i\) \+ 1\), id: i\.id, done: !i\.done \}\)/);
+  // the press is read at the click (drawn at once, sent in order): the number and the id are the box's as it was pressed
+  assert.match(page, /const tid = t\.TaskId, done = !i\.done, item = String\(checklist\.indexOf\(i\) \+ 1\);/);
+  assert.match(page, /runOperation\(api, "task\.check", tid, \{ item, id: i\.id, done \}\)/);
   assert.match(page, /op\("task\.check", \{ item: String\(steps\.indexOf\(s\) \+ 1\), id: s\.id, done: !s\.done \}/);
 });
 

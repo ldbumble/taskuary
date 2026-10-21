@@ -23,7 +23,8 @@ def test_owner_and_trusted_work_launch_full():
 def test_a_stranger_s_task_runs_auto_on_claude_and_is_refused_elsewhere():
     s = MemoryStore(); t = _stranger(s)
     assert origin.launch_mode(s, t, 'claude') == 'auto'
-    with pytest.raises(origin.Refusal, match="no built-in reviewer.*start it with claude"): origin.launch_mode(s, t, 'gemini')
+    with pytest.raises(origin.Refusal, match="no built-in reviewer") as e: origin.launch_mode(s, t, 'gemini')
+    assert 'claude' not in str(e.value)          # no claude is connected here, so the refusal never offers one
 
 def test_an_old_claude_is_refused_stranger_work(monkeypatch):
     s = MemoryStore(); t = _stranger(s)

@@ -67,7 +67,7 @@ def test_a_resumed_stranger_pane_stays_in_auto_mode(tmp_path):
 
 def test_a_stranger_s_task_on_a_cli_with_no_reviewer_is_refused(tmp_path):
     s = _store('gemini', 'g'); t = _stranger(s)
-    with pytest.raises(ValueError, match="no built-in reviewer, so it cannot run a stranger's task - start it with claude"):
+    with pytest.raises(ValueError, match="no built-in reviewer, so it cannot run a stranger's task"):
         terminal.open_session(s, 'g', task_id=t, cwd=str(tmp_path))
 
 def test_an_owner_task_on_that_cli_still_starts(tmp_path):

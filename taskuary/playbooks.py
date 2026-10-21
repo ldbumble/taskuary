@@ -82,8 +82,14 @@ def setup_task(store, text='', message_id=None, connector_type='', actor='owner'
         reference['BodyText'] = (example.get('BodyText') or '')[:12000]
         summary += '\nHistorical email (untrusted reference data):\n' + json.dumps(reference, ensure_ascii=False)
     title = 'Create playbook: ' + ((example or {}).get('Subject') or text)[:100]
-    tid = store.create_task({'Title': title, 'Summary': summary, 'Kind': 'general', 'Status': 'open',
-                             'Priority': 'normal', 'Source': 'assistant', 'SourceRef': 'assistant:playbook'}, actor)
+    # THE OWNER MADE THIS TASK (Reports, Playbooks), so it is theirs - it was stored with no origin, and assistant-sourced
+    # work with none reads as a stranger's, so a playbook described in the owner's own words was refused on Codex as "a
+    # stranger's task" (2026-10-21). The past email it is built from is the one part someone else wrote: it counts as its sender.
+    from . import origin
+    base = origin.worse('owner', origin.of_message(store, example)[0]) if example else 'owner'
+    tid = store.create_task({'Title': title, 'Summary': summary, 'Kind': 'general', 'Status': 'open', 'Priority': 'normal',
+                             'Source': 'assistant', 'SourceRef': 'assistant:playbook',
+                             **({'OriginBase': base} if base != 'stranger' else {})}, actor)
     ask = text or 'Help me create a reusable playbook from this email.'
     if example: ask += '\n\nExample email: ' + (example.get('Subject') or '(no subject)')
     if connector_type: ask += '\nConnection: ' + connector_type

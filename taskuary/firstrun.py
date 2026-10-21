@@ -325,6 +325,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
     try: agents.run_cli({**conns[key], 'timeout': TEST_SECONDS}, 'Reply with exactly: ok', lambda *a: None)
     except Exception as e:
         logger.info(f'first run: {name} did not answer - {e}')
+        agents.record_cli_test(store, key, False)          # connected, but never a brain nobody chose (agents.ready_brains)
         from . import clisetup
         if clisetup.signed_in(name):
             # signed in and still failing: the sign-in is not what is wrong, so it is never the move (clisetup.STATUS)
@@ -338,6 +339,7 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
                        + (f" Press Sign in to {label} - Taskuary checks it by itself when you're done." if k.get('setup') else
                           ' Sign in to it on this computer, then pick it again.'),
                 'detail': str(e)[:200]})
+    agents.record_cli_test(store, key, True)
     worker = next((o['value'] for o in agents.cli_agent_options(store) if o['cli'] == name), '') or key
     was = _brains(store)
     _everywhere(store, f'cli:{worker}', cli=key)                       # the owner's own click: theirs, not an auto-pick
@@ -345,6 +347,8 @@ def choose_cli(store, cfg: dict, name: str) -> dict:
         _restore(store, was)
         return failed({'ok': False, 'fix': 'retry', 'why': f"{label} answered, but {why.split(' - ')[0]}. Press {buttons.label('try_again')}, or pick another AI.",
                        'detail': why})
+    # every role's row runs on it now: synced before a brain was chosen, the researcher's row named no CLI at all
+    cli_connections.sync(cfg, store)
     store.audit('setting', 0, 'first_run_brain', 'owner', detail={'cli': name, 'pick': f'cli:{worker}'})
     store.set_setting(FIX, '', 'owner'); _mark_failed(store, name, False); _close_setup(store, name)
     return {'ok': True, 'why': f'{label} works - it will sort your mail.'}

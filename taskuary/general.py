@@ -161,6 +161,15 @@ def brain_options(store, keep: str = '') -> list:
     return out
 
 
+def _cli_of_pick(store, pick: str) -> str:
+    "The CLI family a `cli:` pick runs - 'codex' - read off the row it launches."
+    from . import agents as hub_agents
+    row = hub_agents.agent_row(store, str(pick or '')[4:]) or {}
+    try: prof = json.loads(row.get('Config') or '{}')
+    except ValueError: prof = {}
+    return hub_agents.cli_of(prof)
+
+
 def _browser_task(task: dict) -> bool:
     """Does this task drive a browser? Only a CLI can: the browser is driven from a shell."""
     from . import browserview
@@ -179,9 +188,10 @@ def walk_pick(store, task: dict = None) -> str:
     from . import agents as hub_agents, concierge
     pick = concierge.pick(store)
     if pick.startswith('cli:') or not _browser_task(task): return pick
-    clis = [o['pick'] for o in provider_options(store) if o.get('type') == 'cli']
-    want = f'cli:{hub_agents.default_brain(store)}'
-    return want if want in clis else (clis[0] if clis else '')
+    # the default CLI, else a READY one (agents.ready_brains) - never simply the first connected, which may be one never signed in
+    want = hub_agents.default_pick(store)
+    if want.startswith('cli:'): return want
+    return next((f'cli:{k}' for k in hub_agents.ready_brains(store)), '')
 
 
 def assigned_role(store, task: dict) -> str:
@@ -236,13 +246,20 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
         # they need its tools.
         native = next((o for o in options if o.get('type') != 'cli'), None)
         if native: wanted = native['pick']
-        else:
-            from . import agents as hub_agents
-            wanted = f'cli:{hub_agents.default_brain(store)}'
-    choice = next((o for o in options if o['pick'] == wanted), None) or (options[0] if options else None)
+    # what was asked for, else ONLY an AI that is ready - a connector, or a CLI that starts here and did not fail its test
+    # (agents.ready_brains). It used to be options[0]: the first CLI connected, which was claude on a machine where the
+    # person had set up Codex, and every researcher task started on a claude that was signed out (2026-10-21).
+    from . import agents as hub_agents
+    ready = {f'cli:{k}' for k in hub_agents.ready_brains(store)}
+    choice = next((o for o in options if o['pick'] == wanted), None) \
+        or next((o for o in options if o.get('type') != 'cli' or o['pick'] in ready), None)
     if not choice: return '', '', model or ''
     saved_model = store.get_setting('assistant_model') if not explicit else ''
     return choice['pick'], choice['label'], model or saved_model or choice['model']
+
+
+# The reason a general agent gives when there is nothing to run it on - said as it is, naming no AI the person does not have.
+NO_AI = 'No AI is connected'
 
 
 def chat_rows(store, tid: int) -> list:
@@ -962,7 +979,7 @@ class GeneralSession:
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
             if not self.pick:
-                raise RuntimeError('connect a CLI agent or an AI provider before starting general work')
+                raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai_apps')} to run this task")
             if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
             if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             system, user = _prompt(self.store, self.task_id)
@@ -1001,6 +1018,11 @@ class GeneralSession:
             from . import selfclose as _sc
             system = f'{system}\n\n{_sc.ASK_LINE}'                     # a question is an event, not prose (PW-225)
             hands = self.pick.startswith('cli:') and full_hands(self.store)
+            # a stranger's task on a CLI with no reviewer runs in that CLI's own read-only mode (origin.looks_only) - it reads and
+            # answers - where it used to be refused outright with "start it with claude"
+            if hands:
+                from . import origin
+                hands = not origin.looks_only(self.store, self.task_id, _cli_of_pick(self.store, self.pick))
             systems = ''
             if hands:
                 from . import docsync

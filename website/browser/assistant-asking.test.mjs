@@ -3,13 +3,14 @@ import test from "node:test";
 
 import { startHarness } from "./harness.mjs";
 
-/* THE HAND IT RAISED IS THE AGENT'S OWN WORDS. The question and its choices used to be repeated in a card with answer
-   buttons under the answer (2026-09-15); the owner removed it (2026-10-19: "inline we have the agent to talk to, no need
-   to intermediate"). Only the WhatsApp doorway relays a question with its choices. Here the answer reads as the agent
-   wrote it, nothing is drawn over or under it, and the owner's reply goes in the composer.
+/* THE QUESTION IS ON THE AGENT'S CANVAS, WITH ITS ANSWER BOX (owner-approved, the UI audit's W6, 2026-10-21). The card said
+   "Agent asked you something" over a pane that never showed what - the question lived only in the rail row's hover. Now the
+   question and the answers it named are drawn in the Agent work pane with a box under them; an answer that cannot be delivered
+   says why and keeps the words, and one that is delivered takes the card away.
 
-   The fixture is the raised hand: /assistant answers with `asking`, exactly as the server does. */
-test("the agent's question is its own answer - no card with answer buttons in the pane", { timeout: 180000 }, async (t) => {
+   The fixture is the raised hand of an agent asking from a terminal on the task: /assistant answers with `asking` and no
+   conversation session, exactly as the server does, so the answer goes by the worker's answer road. */
+test("the agent's question is drawn in its canvas with an answer box, and answering it clears it", { timeout: 180000 }, async (t) => {
   const harness = await startHarness();
   t.after(() => harness.close());
 
@@ -26,24 +27,43 @@ test("the agent's question is its own answer - no card with answer buttons in th
   });
   assert.ok(made.taskId, `task not created: ${JSON.stringify(made)}`);
 
+  const answers = [];
   page.off("request", page.fixtureRequestGuard);
   page.on("request", (req) => {
-    if (new URL(req.url()).pathname === `/api/tasks/${made.taskId}/assistant`) {
+    const at = new URL(req.url()).pathname;
+    if (at === `/api/tasks/${made.taskId}/assistant`) {
       return void req.respond({ status: 200, contentType: "application/json", body: JSON.stringify({
         messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "The login page is open. Have you signed in successfully?" }] }],
-        asking: { request_id: "r1", kind: "input_needed", text: "Have you signed in successfully?", choices: ["Signed in", "Login failed"] },
+        asking: { request_id: "r1", kind: "input_needed", text: "Have you signed in successfully?", choices: ["Signed in", "Login failed"], sid: "p1" },
         session: null, starting: false, providers: [{ id: 1, label: "Test CLI", model: "" }] }) });
+    }
+    if (at === `/api/tasks/${made.taskId}/worker/answer` && req.method() === "POST") {
+      answers.push(JSON.parse(req.postData() || "{}"));
+      // the first answer finds nobody listening - the card says so and keeps the words; the second is delivered
+      return void req.respond(answers.length === 1
+        ? { status: 422, contentType: "application/json", body: JSON.stringify({ detail: "disconnected: no live worker on this task" }) }
+        : { status: 200, contentType: "application/json", body: JSON.stringify({ delivered: true, state: "delivered", sid: "p1" }) });
     }
     page.fixtureRequestGuard(req);
   });
 
   await page.evaluate((id) => { window.location.hash = `task=${id}`; }, made.taskId);
-  await page.waitForFunction(() => [...document.querySelectorAll(".tq-aui-agent")].some((m) => m.innerText.includes("Have you signed in")),
-    { timeout: 20000 });
-  await new Promise((r) => setTimeout(r, 800));
-  const shown = await page.evaluate(() => ({ card: !!document.querySelector(".tq-aui-asking"),
-    choices: [...document.querySelectorAll("button")].filter((b) => ["Signed in", "Login failed"].includes(b.textContent.trim())).length }));
-  assert.deepEqual(shown, { card: false, choices: 0 }, "the question is not repeated as a card with answer buttons");
+  await page.waitForSelector('[data-tq-asking="r1"]', { visible: true, timeout: 20000 });  const card = await page.$eval('[data-tq-asking="r1"]', (el) => ({ text: el.innerText,
+    choices: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()), box: !!el.querySelector("input") }));
+  assert.match(card.text, /Have you signed in successfully\?/, "the question itself is on the canvas");
+  assert.deepEqual(card.choices.filter((c) => ["Signed in", "Login failed"].includes(c)), ["Signed in", "Login failed"]);
+  assert.ok(card.box, "an answer box under the question");
+
+  // the failure: typed, sent, refused - the reason is said and the words stay
+  await page.type('[data-tq-asking="r1"] input', "Signed in on the second try");
+  await page.click('[data-tq-asking="r1"] button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('[data-tq-asking="r1"] [role="alert"]')?.innerText.includes("no live worker"), { timeout: 10000 });
+  assert.equal(await page.$eval('[data-tq-asking="r1"] input', (i) => i.value), "Signed in on the second try");
+
+  // ...and a press on one of its answers is delivered, and the card goes
+  await page.evaluate(() => [...document.querySelectorAll('[data-tq-asking="r1"] button')].find((b) => b.textContent.trim() === "Signed in").click());
+  await page.waitForFunction(() => !document.querySelector('[data-tq-asking="r1"]'), { timeout: 10000 });
+  assert.deepEqual(answers, [{ request_id: "r1", text: "Signed in on the second try" }, { request_id: "r1", text: "Signed in" }]);
   assert.deepEqual(errors, []);
 });
 

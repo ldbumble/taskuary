@@ -754,7 +754,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       } else setErr(msg);
     }
   }, [loadDetail, loadTasks, onChanged]);
-  const generalSession = useCallback((session) => setTerm(session), []);
+  // ...never a live terminal's row put out by the conversation having none: an agent asking from a terminal on a general task read
+  // as no session at all, its Agent work folded shut over the question (the UI audit's W6, 2026-10-21)
+  const generalSession = useCallback((session) => setTerm((was) => session || (was?.alive && was.mode !== "assistant" ? was : null)), []);
   // "New task -> live session" lands here: put the CLI on it once we know this task has no
   // session already, so a reload never spawns a second one.
   // A GENERAL task has no repository and no CLI - it is a question, worked in the assistant's
@@ -2007,6 +2009,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports}
+                        onAnswered={() => { findTerm(selected); onChanged?.(); }}
                         toolsAt={canvas ? chatTools : null} />
                     </React.Suspense>
                   </Box>

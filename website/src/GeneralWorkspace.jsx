@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { says, subState } from "./laneSays.js";
 import {
   AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useLocalRuntime,
 } from "@assistant-ui/react";
@@ -363,9 +364,38 @@ export function DockActions({ messages, expanded = false, onNavigate, onChanged 
   );
 }
 
+// WHAT THE AGENT ASKED, AND THE BOX THAT ANSWERS IT (the UI audit's W6): the question in its own words, the answers it named as one
+// press each, and a box for anything else. `onAnswer(text)` delivers it - a reply in this conversation, or the worker's own answer road -
+// and throws with the reason when it could not; the card stays with the words still in it.
+export function AgentAsks({ asking, name, onAnswer }) {
+  const [text, setText] = useState(""), [going, setGoing] = useState(false), [err, setErr] = useState("");
+  useEffect(() => { setText(""); setErr(""); setGoing(false); }, [asking?.request_id]);
+  const send = async (words) => {
+    const w = String(words || "").trim();
+    if (!w || going) return;
+    setGoing(true); setErr("");
+    try { await onAnswer?.(w); setText(""); } catch (e) { setErr(errText(e)); } finally { setGoing(false); }
+  };
+  return (
+    <div className="tq-aui-asking" data-tq-asking={asking.request_id}>
+      <b>{says(subState({ request: asking }), name)}</b>
+      <span className="tq-aui-asking-q">{asking.text}</span>
+      {!!asking.choices?.length && <div className="tq-aui-asking-choices">
+        {asking.choices.map((c) => <Button key={c} size="small" variant="outlined" disabled={going} onClick={() => send(c)}>{c}</Button>)}
+      </div>}
+      <form className="tq-aui-asking-box" onSubmit={(e) => { e.preventDefault(); send(text); }}>
+        <TextField size="small" fullWidth value={text} disabled={going} onChange={(e) => setText(e.target.value)}
+          placeholder="Type your answer" inputProps={{ "aria-label": `Your answer to ${name}` }} />
+        <Button type="submit" size="small" variant="contained" disableElevation disabled={going || !text.trim()}>{going ? "Sending…" : "Answer"}</Button>
+      </form>
+      {err && <span className="tq-aui-asking-err" role="alert">{err}</span>}
+    </div>
+  );
+}
+
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, reportLike = false, drafts = [], onDraftDecided }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, reportLike = false, drafts = [], onDraftDecided }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -531,9 +561,11 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               reopened - and the poll is what tells us so */}
           {serverBusy && atWork}
           {dock && <DockActions messages={messages} expanded={dockExpanded} onNavigate={onDockNavigate} onChanged={onDockChanged} />}
-          {/* No question card with answer buttons here (the owner, 2026-10-19: "inline we have the agent to talk to, no need to
-              intermediate"): the agent's question is in its own answer above, and the reply goes in the composer. The
-              WhatsApp doorway is where a question is relayed with its choices. */}
+          {/* THE QUESTION IS ON THE AGENT'S OWN CANVAS, with its answer box (owner-approved, the UI audit's W6, 2026-10-21): the
+              card said "Agent asked you something" over a pane that never showed what - the question lived only in the rail row's
+              hover. It was taken out on 2026-10-19 as a repeat of the answer above; an agent asking from a terminal has no answer
+              above at all, and an answer needs a box beside the question it answers. */}
+          {!dock && asking && <AgentAsks asking={asking} name={name} onAnswer={onAnswer} />}
           {!dock && <PublishedPages pages={published} />}
           {/* not while it waits on your call: a run that stopped to ask is not one to schedule yet, and the offer took the room
               the answer needed */}
@@ -598,7 +630,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onOpenReports, compact = false, dock = false, toolsAt = null,
+export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat }) {
   const [data, setData] = useState(null);
@@ -610,6 +642,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
+  const [answered, setAnswered] = useState("");          // the question this card answered (AgentAsks)
   const [reportBusy, setReportBusy] = useState(false);
   // the whole window, where it stands - the dock is exempt, it has its own expand
   const { full, toggle: toggleFull } = useFullScreen();
@@ -759,7 +792,17 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
   // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
   // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding
   // agent is a terminal, so there is nothing to switch (the owner, 2026-09-22).
-  const asking = data?.asking || null;
+  // ...gone from the card the moment it is answered: the snapshot carries it until the agent's next word lands
+  const asking = data?.asking && data.asking.request_id !== answered ? data.asking : null;
+  // THE ANSWER GOES WHERE THE QUESTION CAME FROM: this conversation's own agent takes it as its next message, streamed here as any
+  // other (its new turn overtakes the question - workerstate.open_requests); an agent asking from a terminal on this task gets it
+  // through the worker's answer road (workerstate.answer), and the card's state clears with the `answered` it records
+  const answerAsk = async (text) => {
+    const req = asking;
+    if (session?.sid && String(req.sid) === String(session.sid)) { setOwnPrompt({ id: `ask:${req.request_id}`, text }); setAnswered(req.request_id); return; }
+    await api.post(`/api/tasks/${task.TaskId}/worker/answer`, { request_id: req.request_id, text });
+    setAnswered(req.request_id); onAnswered?.();
+  };
   const promptUsed = (id) => { if (ownPrompt?.id === id) setOwnPrompt(null); else onPromptUsed?.(id); };
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   const thread = (
@@ -769,7 +812,7 @@ export function GeneralWorkspace({ task, onSession, onOpenReports, compact = fal
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
-        asking={asking}
+        asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} />

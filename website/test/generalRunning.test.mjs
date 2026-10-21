@@ -60,7 +60,7 @@ test("the picker names the brain that is actually answering, not the one it open
 
 test("the offer to schedule the workflow waits for the answer it is offering to repeat, and for any question it asked", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /!dock && !serverBusy && !asking && messages\?\.some/);
+  assert.match(view, /!dock && reportLike && !serverBusy && !asking && messages\?\.some/);
 });
 
 // the owner, 2026-10-19: "inline we have the agent to talk to, no need to intermediate" - its question is in its own answer,

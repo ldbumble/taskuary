@@ -239,6 +239,9 @@ def brain(store, trace=None, cancel=None, resume=None, fast=False, keep: str = N
             if model and '@' not in model and llm_mod.ASSISTANT_EFFORT.get(cli): model = f'{model}@{llm_mod.ASSISTANT_EFFORT[cli]}'
             folder = config.home() / 'assistant'; folder.mkdir(parents=True, exist_ok=True)
             fx = llm_mod.fast_args(cli) if llm_mod.fast_on(store, cli) else []      # the provider's fast tier (Settings > Assistant)
+            # ...and its words as they are written, for the page to draw before the answer is whole (agents.spoken)
+            from .clis import preset_args
+            if cli == 'claude' and 'stream-json' in (prof.get('args') or preset_args(str(prof.get('cmd') or name))): fx = fx + ['--include-partial-messages']
             cwd = None if fast else str(folder)                  # no cwd = make_cli_llm's read-only gear: no tools, no permission bypass
             if dflt.startswith('effort:'):
                 # an effort-only gear (codex) rides on a copy of the profile, never written back to the row
@@ -1618,6 +1621,39 @@ def _brain_for(store, tid: int, llm, trace=None, cancel=None, fast=True):
     except Exception as e:
         logger.warning(f'concierge: no brain for this turn - {e}')
         return None
+
+
+def turn_system(store, llm=None) -> str:
+    """A typed turn's instructions: COUNSEL, SOUL, the voice, then the tool index. ONE text for every round of a turn and for
+    warm(): a CLI brain is launched with it (--system-prompt-file, named by its content), so a round that sent another one
+    restarted the process under it."""
+    return _system(store, llm) + '\n\n' + toolcatalog.block(store)
+
+
+_WARMING = threading.Lock()
+
+
+def warm(store, actor: str = 'owner', wait: bool = False) -> bool:
+    """Start the chat's CLI before the owner types (the owner, 2026-10-20: "it should respond to things quickly"): the page
+    opening, New chat and a brain changed each start it, so the CLI's start-up - 2.5-4 s on this machine - is paid while they
+    read, never on their first ask. Exactly the process that ask would take: the same brain, instructions and conversation.
+    Nothing for an API brain or a CLI that keeps no conversation, and nothing at all while one is already starting.
+    True when a process was started."""
+    if not is_cli(store): return False
+    def go() -> bool:
+        if not _WARMING.acquire(blocking=False): return False
+        try:
+            tid = general.dock_task(store, actor)[0]['TaskId']
+            from . import clipool
+            if any(x['key'] == f'{LIVE_KEY}:{tid}' for x in clipool.live()): return False     # the page's every read: one look, no build
+            llm = _brain_for(store, tid, None)
+            return bool(getattr(llm, 'warm', None) and llm.warm(turn_system(store, llm)))
+        except Exception as e:
+            logger.info(f'concierge: the CLI was not warmed - {e}'); return False
+        finally: _WARMING.release()
+    if wait: return go()
+    threading.Thread(target=go, daemon=True, name='concierge-warm').start()
+    return False
 
 
 _NUMBERED = re.compile(r'^\s*(\d+)[.)]\s*(.+?)\s*$', re.M)
@@ -4045,7 +4081,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # workers, the repositories and the app's state rode every turn as blocks; agents.list, repos.list,
         # reports.list, connections.list and settings.list read them when a turn needs them.
         # ...and the Hub is a tool too (hub.publish), not an envelope taught every turn (2026-09-25)
-        system = _system(store, llm) + '\n\n' + toolcatalog.block(store)
+        system = turn_system(store, llm)
         asked = (f"NOW: {datetime.now().strftime('%A %d %B %H:%M')}\n{funnel.summary(p['items'], coming=False)}\n\n{facts(store, item, whole=True)}\n\n"
                       + (f"THE TASKS THEY NAMED, as they are now:\n{nn}\n\n" if (nn := named_now(store, text, item)) else '')
                       # what the owner handed over and where each stands (asks.py) - "where's the tab check?", "add Omar to that"
@@ -4174,7 +4210,8 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
     # which row its words meant (2026-10-08)
     if decision and decision.get('on') and _resolve_named(store, decision['on'], item) == '?' and llm:
         try:
-            again = str(llm(_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
+            # ...on the turn's own instructions: a CLI brain is launched with them, and other ones restarted its process twice
+            again = str(llm(turn_system(store, llm), f"{table}\n\n{_rail_block(p)}\n\n{OWNER_SAYS}{text}\nYou chose {decision.get('verb')} "
                                                 f"with `on`: {str(decision['on'])[:80]!r}, which names no row. Put the row's handle in `on` - the "
                                                 'TQ ref or m-number that starts its line above, or one a look-up gave you - and CALL it again. '
                                                 'If none of them is it, say so in plain words.', max_tokens=MAX_TOKENS) or '')

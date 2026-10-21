@@ -205,6 +205,22 @@ class ItemEndingTests(unittest.TestCase):
         self.assertIn('ready to merge', it['Result'], 'what the agent said before is kept')
 
 
+class JiraEndedTests(unittest.TestCase):
+    def test_a_resolved_jira_issue_settles_its_line_not_the_whole_batch(self):
+        from taskuary import pm
+        s = MemoryStore()
+        rows = [s.get_message(s.add_message({'ExternalId': f'jira:OPS-{n}@r1', 'ConversationId': f'jira:OPS-{n}', 'Channel': 'jira',
+                                             'SourceName': 'OPS', 'Subject': f'OPS-{n} change {n}', 'FromName': 'Erin Blake',
+                                             'SentAt': '2026-10-12 07:00:00', 'BodyText': f'[Jira issue]\nfix {n}', 'Status': 'triaging'}))
+                for n in (1, 2)]
+        tid = batch.create(s, 'jira', 'OPS', rows)
+        with mock.patch.object(batch, '_next'):
+            pm._jira_ended(s, {'fields': {'status': {'name': 'Done', 'statusCategory': {'key': 'done'}}}}, 'jira:OPS-1')
+        self.assertEqual(s.get_task(tid)['Status'], 'open', 'one issue ending closed the batch of two')
+        self.assertEqual(s.batch_item(tid, 'jira:OPS-1')['State'], 'ended')
+        self.assertNotEqual(s.batch_item(tid, 'jira:OPS-2')['State'], 'ended')
+
+
 class AgentTests(unittest.TestCase):
     """The batch's agent: one prompt naming every item, one report per item."""
 

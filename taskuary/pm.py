@@ -88,6 +88,9 @@ def _jira_ended(store, issue, base: str) -> bool:
     if t and t.get('Status') not in ('done', 'dropped'):
         from .channels import close_upstream_ended
         where, key = (f.get('status') or {}).get('name') or 'Done', base.split(':', 1)[-1]
+        # one issue of a batch settles its own line, as GitHub's does (channels._gh_ended) - not the whole task
+        from . import batch
+        if batch.is_batch(store, tid): batch.ended(store, tid, base, f'It was moved to {where} in Jira.'); return True
         said = (f'The Jira issue this task came from was moved to {where} '
                 f'({key}), so there is nothing left to do here.')
         close_upstream_ended(store, tid, said)

@@ -28,6 +28,10 @@ import Checkbox from "@mui/material/Checkbox";
 import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 import { useVerbs } from "./actionRow.js";
+import ConnectAi from "./ConnectAi.jsx";
+
+// the server's own words for it (general.NO_AI)
+const NO_AI_LINE = "No AI is connected, so an agent can't run this yet - connect one, then send it again.";
 import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { place } from "./words.js";
@@ -149,6 +153,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const repoPick = useRef(null);  // what the picker says to use, read on submit
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [errAi, setErrAi] = useState(false);      // the error is "no AI is connected": it carries Connect an AI
   const [ok, setOk] = useState("");
 
   // send
@@ -218,7 +223,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const close = () => { if (!busy) onClose?.(); };
 
   const submit = useCallback(async () => {
-    setBusy(true); setErr(""); setOk("");
+    setBusy(true); setErr(""); setErrAi(false); setOk("");
     const about = String(aboutRef.current?.value || "").trim();
     try {
       if (kind === "send") {
@@ -234,6 +239,11 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         // one module decides chat-vs-terminal for the whole app, so the Board and this sheet can
         // never disagree about what "no repository" means
         const general = how === "general";
+        // NOTHING TO RUN IT ON, SAID HERE AND THE SHEET STAYS OPEN (owner-approved, 2026-10-21): the task was made, its agent failed a
+        // second later, and it sat on the rail under "waiting on you". Read fresh - the list loaded with the sheet may be from before
+        if (general && !((await api.get("/api/agents")).data?.general_brains || []).length) {
+          setErr(NO_AI_LINE); setErrAi(true); setBusy(false); return;
+        }
         // a session opens where the picker says (auto = the repository the words name, else the server guesses as ever);
         // the choice is the task's `repo:` tag, the override that always wins
         const pickd = general ? null : repoPick.current?.(about) || null;
@@ -492,7 +502,8 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           </Box>
         )}
 
-        {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5 }}>{err}</Alert>}
+        {err && <Alert severity="error" sx={{ py: 0.25, fontSize: 12.5, alignItems: "center" }}
+          action={errAi ? <ConnectAi onGo={() => onClose?.()} /> : null}>{err}</Alert>}
         {ok && <Alert severity="success" sx={{ py: 0.25, fontSize: 12.5 }}>{ok}</Alert>}
       </DialogContent>
 

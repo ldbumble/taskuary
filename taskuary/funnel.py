@@ -566,6 +566,17 @@ def _sentence(x: str) -> str:
     return x if not x or x.endswith(('.', '!', '?')) else _cap(x.rstrip(' -;,')) + '.'
 
 
+def run_failed(store, tid) -> dict | None:
+    """{sentence, fix} when the task's last run ended FAILED by its own word (workerstate.ended), nothing live on it: the reason in
+    plain words (failures.classify) and the place that fixes it - Connect an AI for an agent with no AI to run on - else None."""
+    from . import workerstate
+    from .failures import classify
+    if workerstate.ended(store, tid) != 'failed': return None
+    last = store.last_worker_event(tid, kinds=('failed',)) or {}
+    c = classify(' '.join(str(last.get('Text') or '').split()) or 'it stopped without saying why')
+    return {'sentence': _sentence(c['sentence']), 'fix': c['fix']}
+
+
 def idle_state(store, tid) -> dict:
     """Why nothing is running on a task that was handed to an agent and never began: {'kind', 'line', 'row'}.
 
@@ -619,6 +630,9 @@ def idle_state(store, tid) -> dict:
                        'queued - waiting its turn')
         return out('queued', f'Waiting its turn. Every agent slot is busy, and {agent} starts on this when one frees up.' + old,
                    'queued - starts when a slot frees')
+    # A RUN THAT FAILED SAYS SO, with its reason in plain words (owner-approved, 2026-10-21): it read "Not started yet. Nothing has
+    # started the assistant on this." under a chip saying stopped, while the run's own last word was why it failed
+    if (f := run_failed(store, tid)): return out('failed', f"Failed - {f['sentence']}", f"failed - {f['sentence'][:1].lower()}{f['sentence'][1:]}")
     if any(r.get('Status') in ('stopped', 'failed', 'error') for r in (store.list_runs(tid) or [])):
         return out('left', f'{_cap(agent)} ran on this and stopped without finishing it.' + old)
     # ...and a pty worker leaves NO run row at all - it writes a transcript on the way out, which is
@@ -716,8 +730,11 @@ def agent_story(store, tid) -> dict | None:
             steps.append({'at': e['CreatedAt'], 'text': w, 'cut': k == 'disconnected' and src in terminal.INTERRUPTING})
     if len(steps) > 8: steps = steps[:1] + steps[-7:]
     said = next((e for e in reversed(run) if e['Kind'] == 'turn_end' and str(e.get('Text') or '').strip()), None)
-    return {'kind': 'interrupted' if interrupted else 'left', 'line': line, 'steps': steps,
-            'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None}
+    # ...and a run that FAILED is a failure, with the place that fixes it when there is one (Connect an AI): the step offers Try again
+    failed = st['kind'] == 'failed' and not interrupted
+    return {'kind': 'interrupted' if interrupted else 'failed' if failed else 'left', 'line': line, 'steps': steps,
+            'said': _said(said['Text']) if said else '', 'said_at': said['CreatedAt'] if said else None,
+            **({'fix': (run_failed(store, tid) or {}).get('fix')} if failed else {})}
 
 
 def left_by_facts(tags, runs) -> str:

@@ -37,7 +37,8 @@ CASES = [
     ('agent asking (coding)', {None}, {'stop_agent', 'answer_agent'}, ['THE AGENT IS ASKING']),
     ('agent finished (general)', {'close'}, set(), ["RUN ENDED (finished)"]),
     ('agent finished (coding)', {'close'}, set(), ["RUN ENDED (finished)"]),
-    ('agent failed (general)', {'new_task'}, {'continue', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),
+    # a failed general run is tried again from its saved conversation, never made a task of (owner-approved, 2026-10-21)
+    ('agent failed (general)', {'continue'}, {'new_task', 'stop_agent'}, ['WHAT FAILED', 'test database was not reachable']),
     ('agent failed (coding)', {'new_task'}, {'continue'}, ['WHAT FAILED', 'test database was not reachable']),
     ('agent stopped-saved (general)', {None, 'defer', 'stop_agent'}, set(), []),
     ('agent stopped-saved (coding)', {'continue'}, set(), []),

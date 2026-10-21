@@ -418,7 +418,9 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         end = ws.ended(store, tid)
         if end in ws.TERMINAL:
             last = store.last_worker_event(tid, kinds=ws.TERMINAL) or {}
-            said = ' '.join(str(last.get('Text') or '').split())[:160]
+            # a failure in plain words (funnel.run_failed): "connect a CLI agent or an AI provider ..." reached the row as it was
+            said = ((funnel.run_failed(store, tid) or {}).get('sentence') if end == 'failed' else '') or ' '.join(str(last.get('Text') or '').split())
+            said = said[:160]
             card.update(lane='saved' if funnel.session_saved(store, tid) else 'stopped',
                         why=f"{agent_word(task.get('Kind'))} {'failed' if end == 'failed' else 'stopped'}" + (f': {said}' if said else ''))
         elif end == 'finished':

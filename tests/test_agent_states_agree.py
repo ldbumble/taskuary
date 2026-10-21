@@ -74,7 +74,8 @@ class AgentStatesAgreeTests(unittest.TestCase):
         """The task page's agent step (funnel.agent_story): a finished run read "not started" over "finished its work" (G7)."""
         from taskuary import funnel
         story = lambda k: (funnel.agent_story(self.s, self.w[k]) or {}).get('kind')
-        self.assertEqual((story('coding-finished'), story('coding-failed'), story('coding-stopped-saved')), ('finished', 'left', 'left'))
+        # ...and a run that failed reads failed, never "stopped" over its own reason (owner-approved, 2026-10-21)
+        self.assertEqual((story('coding-finished'), story('coding-failed'), story('coding-stopped-saved')), ('finished', 'failed', 'left'))
 
     def test_a_stopped_run_offers_no_stop(self):
         """Nothing is live on a stopped run: no Stop and save on its rail row, and its own word says it was stopped (the task page reads

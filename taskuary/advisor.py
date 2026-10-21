@@ -675,8 +675,20 @@ def agent_failed(store, item: dict) -> dict | None:
     except Exception: return None
     if st.get('state') != 'failed': return None
     last = next((e for e in reversed(workerstate.events(store, int(item['tid']), st.get('sid'))) if e['Kind'] == 'failed'), {})
-    return {'what': "the agent's run failed", 'why': _one(st.get('result') or last.get('Text'), 300), 'fix': None, 'unknown': False,
+    # ...in plain words, with the place that fixes it (failures.classify): an agent with no AI to run on is fixed by connecting one -
+    # it lit "New task to fix this" and turned connecting an AI into another task (owner-approved, 2026-10-21)
+    from .failures import classify
+    c = classify(_one(st.get('result') or last.get('Text'), 300) or 'it stopped without saying why')
+    return {'what': "the agent's run failed", 'why': c['sentence'], 'fix': c['fix'], 'unknown': False,
             'kind': 'agent', 'source': 'agent', 'cause': 'taskuary'}
+
+
+def _retryable_agent(store, item: dict) -> bool:
+    """Can the failed run be tried again from its step: a general agent's saved conversation, with nothing live on it."""
+    tid = item.get('tid')
+    if not tid: return False
+    from . import workerstate
+    return workerstate._live(int(tid)) is None and concierge._general(store, item)
 
 
 def fix_task(store, item: dict, f: dict) -> dict:
@@ -726,6 +738,11 @@ def offered(store, item: dict) -> list:
     # ...and nothing for what the demo refused: no task or bug report makes the demo send
     if f and f.get('cause') == 'demo': pass
     elif f and (f.get('cause') == 'step' or f.get('source') == 'workflow'): lead.append(buttons.chip('report_bug'))
+    # ...and A GENERAL AGENT'S RUN THAT FAILED with nothing named to fix is tried again from its saved conversation - the step's own
+    # Continue, said as Try again (owner-approved, 2026-10-21). A coding agent's keeps New task: Continue reopened it into the same
+    # unreachable database (the 2026-10-20 deep dive)
+    elif f and f.get('kind') == 'agent' and _retryable_agent(store, item):
+        lead.append(buttons.chip('continue') | {'label': buttons.label('try_again'), 'hint': buttons.hint('try_again')})
     elif f and not f.get('unknown'): lead.append(buttons.chip('new_task', 'fix') | {'task': fix_task(store, item, f)})
     return lead + verbs
 

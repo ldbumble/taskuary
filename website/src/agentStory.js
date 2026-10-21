@@ -7,9 +7,10 @@ import { WORD } from "./lanes.js";
 
 // the chip beside "Agent work" - only the two that wait on the owner wear oxblood. `finished`: its run said it was done - the chip read
 // "not started" over "finished its work" (G7, 2026-10-20); the word is the one the list and the Board give it (lanes.json agentdone)
+// `failed`: its run said it failed - said as a failure, never "not started" or "stopped" over the reason (owner-approved, 2026-10-21)
 export const STORY_CHIP = { held: "waiting on you", interrupted: "interrupted", left: "stopped", idle: "not started", news: "earlier session",
-  finished: WORD.agentdone };
-export const storyAlarm = (kind) => kind === "held" || kind === "interrupted";
+  finished: WORD.agentdone, failed: "failed" };
+export const storyAlarm = (kind) => kind === "held" || kind === "interrupted" || kind === "failed";
 
 // a live session tells its own story, and a queued start already has its card (QueuedStart) with Start now and Cancel
 export const storyShown = (story, { alive, liveRun, queued, closed } = {}) =>

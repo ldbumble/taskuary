@@ -18,8 +18,21 @@ test("a queued start is left to its own card, which has Start now and Cancel", (
   assert.equal(storyShown({ kind: "queued", line: "next in line" }, { queued: true }), false);
 });
 
-test("only the two that wait on the owner wear the alarm colour", () => {
-  assert.deepEqual(Object.keys(STORY_CHIP).filter(storyAlarm), ["held", "interrupted"]);
+test("only the two that wait on the owner, and a run that failed, wear the alarm colour", () => {
+  assert.deepEqual(Object.keys(STORY_CHIP).filter(storyAlarm), ["held", "interrupted", "failed"]);
+});
+
+// a failed run is said as a failure (owner-approved, 2026-10-21): it read "not started" or "stopped" over its own reason
+test("a failed run's chip says failed", () => {
+  assert.equal(STORY_CHIP.failed, "failed");
+});
+
+// ...and its step offers Try again at the press, with the fix (Connect an AI) filled when it has one - never the Continue card
+test("the agent step tries a failed run again and lights its fix", () => {
+  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
+  assert.match(page, /failedRun \? btn\("try_again"\)/);
+  assert.match(page, /continue-work`, \{ note: null \}/);
+  assert.match(page, /runFix && [^\n]*\{ id: "fix"/);
 });
 
 // by what the agent IS, from the task's kind - "Start coder" named a profile as if it were a worker (the owner, 2026-10-16)

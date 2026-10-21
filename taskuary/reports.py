@@ -13,7 +13,7 @@ from loguru import logger
 from . import spawn
 from .timewords import ago_m, plural, span
 
-PLANNED = ['graphql',
+PLANNED = [
            # systems of record. Intacct is BUILT (see run_intacct); the rest are named because
            # the category is the question people arrive with - "does this reach our ERP / our
            # EMR" - and an empty Corporate systems group answers that worse than a list does.
@@ -332,6 +332,30 @@ def run_rest(cfg):
     for k in (cfg.get('path') or '').split('.'):
         if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
     return (plural(len(data), 'item') if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
+
+
+def run_graphql(cfg):
+    """{"url", "query", "headers", "path": "a.b"} - POST a GraphQL query, dot-path into its data.
+
+    Guarded like run_rest: the URL can come from an AGENT, whose context is full of mail this
+    codebase calls data and never instructions. A redirect is not followed - checking the
+    original URL and then following a 302 would hand the request to whatever the redirect names."""
+    import requests
+    from . import webguard
+    webguard.check_url(cfg['url'])
+    r = requests.post(cfg['url'], json={'query': cfg['query']}, headers=cfg.get('headers') or {},
+                      timeout=30, allow_redirects=False)
+    if r.is_redirect: raise RuntimeError(f'{cfg["url"]} redirected - not followed')
+    r.raise_for_status()
+    payload = r.json()
+    # GraphQL reports failures in a 200 body. Returning the empty data object would file "ok"
+    # and an empty summary, which is exactly the silent absence PLANNED exists to prevent.
+    if payload.get('errors'):
+        raise RuntimeError(f'GraphQL errors: {json.dumps(payload["errors"], default=str)[:500]}')
+    data = payload.get('data') or {}
+    for k in (cfg.get('path') or '').split('.'):
+        if k: data = data[int(k)] if isinstance(data, list) else data.get(k)
+    return (f'{len(data)} items' if isinstance(data, list) else 'ok'), json.dumps(data, indent=1, default=str)[:BODY_CHARS]
 
 
 def run_rss(cfg):
@@ -696,7 +720,7 @@ REGISTRY = {'sqlite': run_sqlite, 'mssql': run_mssql, 'database': run_database,
             'entra_users': run_entra_users, 'entra_groups': run_entra_groups,
             'entra_signins': run_entra_signins, 'entra_licenses': run_entra_licenses,
             'prometheus': run_prometheus, 'datadog': run_datadog,
-            'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest,
+            'winrm': run_winrm, 'mcp': run_mcp, 'rest': run_rest, 'graphql': run_graphql,
             # Named database cards: the same reader as 'Any database', with the dialect, the
             # default port and the driver name filled in. All reads - see databases.py.
             'postgresql': _lazy('databases', 'runner')('postgresql'),

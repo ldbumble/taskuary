@@ -698,7 +698,7 @@ class ApiTests(unittest.TestCase):
             self.assertEqual((r['ok'], r['headline'], r['summary']), (True, 'head', 'sum'))
         finally:
             REGISTRY.pop('_p')
-        r = c.post('/api/reports/preview', json={'type': 'graphql'}).json()
+        r = c.post('/api/reports/preview', json={'type': 'netsuite'}).json()
         self.assertFalse(r['ok']); self.assertIn('roadmap', r['error'])
 
     def test_report_types(self):
@@ -709,7 +709,8 @@ class ApiTests(unittest.TestCase):
         for t in ('database', 'aws', 's3_object', 'cloudwatch_logs', 'azure', 'azure_blob', 'azure_logs',
                   'prometheus', 'datadog'):
             self.assertEqual(d[t], 'builtin')
-        self.assertEqual(d['graphql'], 'planned')
+        self.assertEqual(d['graphql'], 'builtin')
+        self.assertEqual(d['netsuite'], 'planned')
 
     def test_channel_connectors_seeded_and_secret_writeonly(self):
         rows = {x['Type']: x for x in c.get('/api/connectors').json()['data']}

@@ -33,7 +33,8 @@ class CatalogTests(unittest.TestCase):
         self.assertIn('local_file', types)
         self.assertIn('intacct', types)
         self.assertIn('sharepoint_list', types)         # built 2026-08-28 - it borrows the Outlook tenant app
-        self.assertNotIn('graphql', types)              # planned types are not offered as choices
+        self.assertIn('graphql', types)                 # built 2026-10-18 - POST, guarded like rest
+        self.assertNotIn('netsuite', types)             # planned types are not offered as choices
 
     def test_every_type_carries_its_config_keys(self):
         """Taken from the executors' own docstrings, so the composer cannot believe a type

@@ -586,7 +586,9 @@ def _walk(store, src, tid, trigger, llm, ctx, recs, repairs, rec, start, t0) -> 
         if workflows.runs_on(cfg) == 'coding':
             store.update_task(tid, {'Summary': brief}, 'workflow'); ingest._auto_code(store, tid)
         else: ingest._auto_general(store, tid, brief)
-    elif stop is None and not any(r.get('review_id') for r in recs):
+    # ...done when nothing waits HERE. A draft step's review sits on a task of its own (outbox.compose) and is answered there: counting
+    # it kept every run that drafts a mail open as "not started yet", offering Send to agent after every step had run (walk 2026-10-21)
+    elif stop is None and not any(r.get('review_id') and r.get('task_id') in (None, tid) for r in recs):
         store.update_task(tid, {'Status': 'done'}, 'workflow')
     return {'run_id': rid, 'steps': recs, 'failed': failed, 'error': error, 'waiting': stop is not None and not failed, 'summary': words,
             'repairs': repairs, **({'cause': 'taskuary' if app else 'step'} if failed else {})}

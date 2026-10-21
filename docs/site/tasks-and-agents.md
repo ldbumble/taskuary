@@ -69,7 +69,7 @@ These never end a task:
 |---|---|
 | **Stop and save** | The agent stops and its report is written; the task stays open |
 | **Reject** a draft | The draft is rejected; the task is untouched |
-| **Next** | Read and moved on; open work comes back after a few hours |
+| **Next** | Read and moved on for this walk; the next walk starts with the open tasks again |
 | **Remind me** | Put away until the day you pick, then back on your rail that morning |
 | A stopped or quiet session | Nothing — only you, or the agent saying so, ends a task |
 
@@ -261,7 +261,7 @@ it until it is empty, then says so ("FYI done.") and the walk goes on as usual.
 
 | You or it does | It goes | Back when |
 |---|---|---|
-| **Next** on your open work | stays under Tasks; the walk skips it | after 3 hours (Settings → Passed work comes back after), or a new message |
+| **Next** on your open work | stays under Tasks; this walk skips it | when the walk ends or a new one starts, or a new message |
 | **Next** on anything else | off | a new message, note or edit on it |
 | **Mark done** | off | THEY write after the close - your own reply does not count |
 | **Remind me** | For later, with its day | 07:00 on that day, saying "you asked to be reminded about this today" |

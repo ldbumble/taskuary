@@ -388,7 +388,7 @@ export const asPressed = (items, { leaving = null, continuing = null } = {}) => 
   : items.filter((i) => !leaving || i.tid !== leaving)
     .map((i) => (continuing && i.tid === continuing
       ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
-// when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
+// when a For later row comes back: its Remind me date (an open task walked past has no clock - it is back with the next walk)
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads
 // a GOAL's gutter is its date, not its age: for a goal the date is the clock (spec 2026-10-12)

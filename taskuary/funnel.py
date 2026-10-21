@@ -1108,7 +1108,7 @@ def _ts_dt(value):
     except ValueError: return None
 
 
-def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False, quiet: int = 180) -> list:
+def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool = False, quiet: int = 180, walk_at=None) -> list:
     """Apply the owner's decisions to the assistant's work queue.
 
     A surfaced row is read and the feed's Unread view removes it. Unresolved approvals and agent
@@ -1140,9 +1140,12 @@ def _apply_states(items: list, states: dict, now: datetime, keep_surfaced: bool 
                     out.append(i); continue
                 # Read is gone from the ordinary queue. Only unresolved work that is still on the
                 # owner (a draft/approval or an agent question) remains addressable and marked.
-                # ...and open work walked past waits in For later until the quiet hours bring it back (2026-09-29)
-                back = (_ts_dt(st.get('At')) + timedelta(minutes=quiet)) if st.get('At') else None
-                later = bool(i.get('tid') and i['lane'] in _LATER_LANES and back and back > now)
+                # ...and an open task walked past stays on the rail for the rest of THIS walk - no clock brings it back
+                # (the owner, 2026-10-21; processing_unread.this_walk); a row with no task behind it, for the quiet hours
+                from .processing_unread import this_walk
+                at = _ts_dt(st.get('At')) if st.get('At') else None
+                back = None if i.get('tid') else (at + timedelta(minutes=quiet)) if at else None
+                later = bool(i.get('tid') and i['lane'] in _LATER_LANES and this_walk(at, walk_at))
                 if not keep_surfaced and i['lane'] not in ('blocked', 'approve', 'working') and not later: continue
                 i = i | {'surfaced': True, 'surfaced_at': st.get('At'), 'put_down': bool(st.get('Until'))}
                 if back and i['put_down'] and i['lane'] != 'working': i = i | {'back_at': back.strftime('%Y-%m-%d %H:%M:%S')}
@@ -1299,14 +1302,14 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     seen = set(); items = [i for i in items if not (i['key'] in seen or seen.add(i['key']))]
     hours, cap = knobs(store)
     items = [i for i in items if not _aged_out(i, now, hours)]
-    from .processing_unread import return_minutes
-    quiet = return_minutes(store)
-    items = [i for i in _apply_states(items, states, now, keep_surfaced, quiet) if not i.get('ranked_wait')]
+    from .processing_unread import return_minutes, walk_started_at
+    quiet, walk_at = return_minutes(store), walk_started_at(store)
+    items = [i for i in _apply_states(items, states, now, keep_surfaced, quiet, walk_at) if not i.get('ranked_wait')]
     # The wrap-up is merged HERE, once the pile is what the owner has left: a task whose message they
     # have already read (or that triage filed as fyi - "Thank you!") is a task nobody closed, and the
     # wrap-up is the one thing still on them. Merged before the read, the row they had just cleared
     # suppressed it and the task fell out of the pipe altogether (2026-09-03).
-    wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced, quiet)
+    wrapped = _apply_states(from_wrapped(store, now, busy), states, now, keep_surfaced, quiet, walk_at)
     wrap_tids = {w['tid'] for w in wrapped}
     # ...and it outranks a row that is on the rail for its open task alone (from_feed open_only): an
     # open task whose reply already went out is better told as "the reply went out - the task is
@@ -1836,7 +1839,8 @@ def settle(store, key: str, verb: str, by: str = 'owner', hours: float = None, n
         if start and start > datetime.now(): verb, until = 'later', start.strftime('%Y-%m-%d %H:%M:%S')
         else: verb = 'done'
     says = ''
-    # WALKED PAST (Next), not merely shown: the shown mark carries when it comes back, which is what files it under For later
+    # WALKED PAST (Next), not merely shown: the mark's Until is what says so. An open task is passed for the rest of this walk
+    # whatever it says (processing_unread.this_walk); a row with no task behind it, until then.
     if verb == 'surfaced' and put_down and until is None:
         from .processing_unread import return_minutes
         until = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
@@ -1921,7 +1925,14 @@ def reset_walk(store):
                 if k and (states.get(k) or {}).get('Status') == 'surfaced': store.clear_funnel_state(k)
     except Exception as e: logger.debug(f'a new walk could not raise the waiting agents again: {e}')
     # ...and their READ is from the old walk too. The mark alone left a row read and unmarked, which is no band at all -
-    # processing_unread counts a read before this stamp as not yet seen on these lanes
+    # processing_unread counts a read before this stamp as not yet seen on every open task (this_walk)
+    new_walk(store)
+
+
+def new_walk(store):
+    """The walk now running ends here and the next one begins: every open task passed with Next in it is the owner's again, from
+    the top, in the rail's order (the owner, 2026-10-21: "if you start over or finish walk it goes back to whatever tasks are
+    left"). A new chat (reset_walk) and a walk that ran out (concierge.surface) both come through here. What was read stays read."""
     from .processing_unread import WALK_KEY
     store.set_setting(WALK_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
     invalidate()

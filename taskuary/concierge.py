@@ -81,7 +81,7 @@ CHIP_HINTS = {v: buttons.hint(v) for v in buttons.VERBS if buttons.hint(v)}
 # per kind, in the order they are offered. `next` is last on every one of them: moving on is always available,
 # and it is the one word that is never a decision about the thing itself.
 # THE SHORT LIST (the owner, 2026-09-25, word by word): eight buttons. Tomorrow and Later are gone - Next on
-# open work brings it back after task_return_minutes, and a date is the task's own Remind me. Redraft, Answer
+# open work passes it for the rest of this walk (2026-10-21), and a date is the task's own Remind me. Redraft, Answer
 # it, Run it again, Prep me and Handled lost their buttons (the words still work typed);
 # the three hand-offs are Make a task (yours) and Send to agent (triage picks which); the sender rules are
 # Not ours's own question. The rest of CHIP_WORDS is what `first` may still promote from a typed decision.
@@ -2812,7 +2812,7 @@ def card_for(item: dict) -> dict:
 
 def move_on(store, key: str, actor: str = 'owner') -> dict:
     """Put down the thing the owner is walking away from. It is READ, and that is all: Next settles
-    nothing. It waits in Passed, still theirs, and comes back after task_return_minutes (three hours by default).
+    nothing. An open task stays under Tasks, passed for the rest of this walk; the next walk starts with it again.
 
     Next used to END a draft waiting for a yes as `no_reply` and close its task (2026-09-07: "if you hit
     next then no more reply needed"). The Passed band replaced that - "still yours, you pressed Next" -
@@ -2942,12 +2942,8 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             # ...in ONE order for the line and its buttons - what waits on the owner first, then the soonest back: the line named
             # TQ-0001 and TQ-0002 over buttons that opened TQ-0003..5 (the UX review, 2026-10-07)
-            # the pile was read before Next put `leaving` down: that row is put aside now, back after the quiet hours
-            if leaving:
-                from .processing_unread import return_minutes
-                back = (datetime.now() + timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
-                waiting = [i | {'put_down': True, 'back_at': i.get('back_at') or back} if leaving in (i['key'], *i.get('aliases', ())) else i
-                           for i in waiting]
+            # the pile was read before Next put `leaving` down: that row is passed now
+            if leaving: waiting = [i | {'put_down': True} if leaving in (i['key'], *i.get('aliases', ())) else i for i in waiting]
             # ...in the RAIL'S order, which already leads with what is on the owner: a sort of its own here named TQ-0001, TQ-0003,
             # TQ-0004 over a rail reading TQ-0001, TQ-0002, TQ-0003 - a to-do is not on_you() - and the owner could not match them
             # (the walk click-through, 2026-10-17)
@@ -2959,9 +2955,12 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # under Tasks (the owner, 2026-10-21: Next moves on, the task stays)
             aside = all(i.get('deferred') for i in waiting)
             # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
+            # ...and what this walk passed is where the next one starts (the owner, 2026-10-21) - no hour it comes back in
             say = (f"That's everything for now. {plural(n, 'thing')} "
                    + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
-                   + f" - {when}{' and more' if n > 4 else ''}. Open {'it' if n == 1 else 'one'} now if you want it sooner.")
+                   + f" - {when}{' and more' if n > 4 else ''}. "
+                   + (f"Open {'it' if n == 1 else 'one'} now if you want it sooner." if aside
+                      else f"The next walk starts with {'it' if n == 1 else 'them'}, or open {'it' if n == 1 else 'one'} now."))
             # ...and the way to them NOW, by name: a Next under this line only said it again (2026-09-23, six days running).
             # What waits on the owner first - a close-out, an agent's question - then the rest.
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
@@ -2978,13 +2977,16 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             parts += ([f"{pending['scheduled']} scheduled for a little later"] if pending['scheduled'] else [])
             say = "Nothing else needs you right now; " + ', '.join(parts) + '.'
         else: say = all_done(store)
+        over = not key and not (only and left)
         with guarded():
             put_down()
             if not key: set_current(store, tid, None, actor)                  # the walk ran out: nothing is on the table
+            # ...and the next walk is a new one: every open task this walk passed comes up again, from the top (2026-10-21)
+            if over: funnel.new_walk(store)
             record(store, tid, 'assistant', say, {'kind': 'words', 'key': None, 'chips': opens} if opens else None)
         # `over`: the walk itself ran out (not a name that was not found, not one filter done) - a phone offers the hand-back
         return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
-                'exhausted': only if (only and left) else None, 'over': not key and not (only and left)}
+                'exhausted': only if (only and left) else None, 'over': over}
     # A TASK AN AGENT IS WORKING is walked like any other task, in the rail's order, and goes on the table with its agent's pane
     # (the owner, 2026-10-21): Next used to say "is with the agent right now" and skip it, so a task jumped out of the walk - and
     # out of On you, to Agents working - every time its agent started, and back when it stopped.

@@ -1,4 +1,4 @@
-"""An open task you cleared comes back when it has been quiet for an hour.
+"""An open task you cleared comes back with the next walk.
 
 Pressing Next or Done on a task marked it read and that was the end of it: the task tab still held
 it, but the work tab never raised it again, however long it sat there open (the owner, 2026-09-15:
@@ -11,6 +11,9 @@ column ("why is that one showing up but not 575"). Both now clear, and both come
 
 ...and cleared is not GONE (the owner, 2026-09-29: "everything should be one driver from work rail to tasks board"):
 an open task stays on the rail in Passed - not offered - until the quiet hours make it Your task again.
+
+...and not the quiet hours any more (the owner, 2026-10-21: "if you start over or finish walk it goes back to whatever tasks are
+left"): cleared in this walk, it is back when the walk ends or a new one starts (funnel.new_walk), however long that takes.
 """
 from datetime import datetime, timedelta
 from unittest import mock
@@ -89,12 +92,16 @@ def test_a_cleared_open_task_waits_in_passed(db):
     assert passed(db, key), 'an open task left the rail while the task list still showed it'
 
 
-def test_it_comes_back_once_the_hour_is_up(db):
+def next_walk(db): funnel.new_walk(db)
+
+
+def test_it_comes_back_with_the_next_walk_not_the_hour(db):
     a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
-    assert passed(db, key, after(minutes=59)), 'it came back before the hour was up'
-    assert offered(db, key, after(minutes=61)), 'an open task never came back to the work tab'
+    assert passed(db, key, after(minutes=61)), 'the hour brought it back in the middle of the walk'
+    next_walk(db)
+    assert offered(db, key), 'an open task never came back to the work tab'
 
 
 def test_a_task_handed_to_an_agent_clears_like_any_other(db):
@@ -103,7 +110,8 @@ def test_a_task_handed_to_an_agent_clears_like_any_other(db):
     key = only_key(db)
     clear_it(db, key)
     assert passed(db, key), 'a queued task ignored Done and stayed offered'
-    assert offered(db, key, after(minutes=61)), 'and then it never came back'
+    next_walk(db)
+    assert offered(db, key), 'and then it never came back'
 
 
 def test_later_still_holds_it_past_the_hour(db):
@@ -112,8 +120,9 @@ def test_later_still_holds_it_past_the_hour(db):
     key = only_key(db)
     funnel.settle(db, key, 'later', hours=6)
     # put away is still on the rail since the canvas redesign (2026-09-29) - in For later, never offered
+    next_walk(db)
     held = work(db, after(minutes=61)).get(key)
-    assert held is None or (funnel.level_of(held) == 'later' and not held['actionable']), 'the hourly nudge overrode Later'
+    assert held is None or (funnel.level_of(held) == 'later' and not held['actionable']), 'a new walk overrode Later'
     back = work(db, after(hours=7)).get(key)
     assert back and not back.get('deferred'), 'and then Later never expired'
 
@@ -126,12 +135,12 @@ def test_a_closed_task_never_comes_back(db):
     assert work(db, after(days=2)) == {}, 'a closed task is not work'
 
 
-def test_the_setting_moves_the_clock(db):
+def test_the_setting_no_longer_times_an_open_task(db):
     db.set_setting('task_return_minutes', '5', 'owner')
     a_task(db, 'Call Paula about PAM review')
     key = only_key(db)
     clear_it(db, key)
-    assert key in work(db, after(minutes=6)), 'the setting did not shorten the quiet spell'
+    assert passed(db, key, after(minutes=6)), 'the quiet spell brought an open task back inside the walk'
 
 
 def test_it_says_why_it_is_back(db):
@@ -140,7 +149,8 @@ def test_it_says_why_it_is_back(db):
     key = only_key(db)
     assert not work(db)[key].get('why_open'), 'a task you have not cleared yet is not back from anywhere'
     clear_it(db, key)
-    assert 'close' in (work(db, after(minutes=61))[key].get('why_open') or '').lower()
+    next_walk(db)
+    assert 'close' in (work(db)[key].get('why_open') or '').lower()
 
 
 def test_the_owner_can_change_the_clock_by_saying_so(db):

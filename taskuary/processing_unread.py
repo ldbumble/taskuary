@@ -11,11 +11,8 @@ from datetime import date, datetime, timedelta
 
 from . import lanes, processing_all, proposals
 
-# An open task the owner cleared comes back to the work tab once it has been quiet this long. Done
-# used to be the end of it: the task stayed open in the task tab and the work tab never raised it
-# again (the owner, 2026-09-15: "it should show back up in the work also if it's still open later").
-# ...after a few hours, not one (the owner, 2026-09-25: Tomorrow and Later are gone, so Next on open work is
-# the only "not now" and it must not be back before the next coffee). A date is the task's own Remind me.
+# How long a row with NO open task behind it - a draft or an agent's question on its own - stays passed after Next, and how long a
+# phone's section walk is held. An open task has no clock any more: Next passes it for the rest of this walk (`this_walk`, below).
 RETURN_MINUTES = 180
 
 
@@ -77,6 +74,14 @@ WALK_KEY = 'walk_started_at'
 
 def walk_started_at(store):
     return processing_all._stamp(store.get_setting(WALK_KEY))
+
+
+def this_walk(at, walk_at) -> bool:
+    """Was a read or a mark on an open task made in the walk now running? NEXT IS ONCE PER WALK (the owner, 2026-10-21: "next keeps
+    a task on unless it's closed. It does not have to come back... if it starts over you see same list of tasks again"): it passes an
+    open task until the walk ends or a new one starts (both stamp WALK_KEY, funnel.new_walk), never for a number of hours. The same
+    second as the stamp is the old walk's: the Next that ran the walk out is written just before it."""
+    return bool(at and (walk_at is None or at > walk_at))
 
 
 def _decided(view, allowed) -> bool:
@@ -462,19 +467,15 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
                                mids=[m['MessageId'] for m in view.get('messages') or []])
         if loose: card.update(lane_was=card['lane'], lane='yours', why=loose['Text'], loose=True, loose_at=loose.get('LastSaid'))
     read_at = processing_all._stamp(read.get('read_at'))
-    back = bool(tid and active and not read.get('deferred') and read_at
-                and read_at <= now - timedelta(minutes=quiet))
+    # ...read in an EARLIER walk: the walk that passed it is over, so it is the owner's again (this_walk) - an open task, whatever
+    # its lane, a yes still owed and an agent waiting included: shown in the old chat is not answered
+    back = bool(tid and active and not read.get('deferred') and read_at and not this_walk(read_at, walk_at))
     if back: card['why_open'] = 'Nothing has closed this since you last looked. If it is done, close it.'
     # A GOAL COMES BACK ON NEWS, never on the quiet hours (the review, 2026-10-12): a step closed or a day slipped since you
     # last read it is what puts it under Tasks; a quiet goal stays in For later however long it has been quiet
     if str(card.get('kind') or '').startswith('goal'):
         back = bool(card.get('news_at') and (not read_at or read_at <= processing_all._stamp(card['news_at'])))   # same second counts
         card.pop('why_open', None)
-    # ...and a yes still owed, or an agent waiting on you, read before this walk began is back in Your task: shown in the
-    # old chat is not answered (funnel.reset_walk). Clearing the shown mark alone left it read and unmarked - off the rail
-    # for the quiet hours while the task list still showed it (2026-09-29).
-    if tid and active and not read.get('deferred') and read_at and walk_at and read_at <= walk_at and card['lane'] in RAISED_BY_NEW_WALK:
-        back = True
     # PASSED IS STILL YOURS (the owner, 2026-09-23: "i thought if you hit next it goes to passed section?"):
     # Next reads the row, and a read row used to leave the rail altogether until the hour brought it back -
     # an open task, a draft waiting for a yes, simply gone. Work that is still the owner's stays on the rail
@@ -576,7 +577,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     if shown and card['lane'] in ('approve', 'blocked', 'queued', 'stopped', 'saved', 'working'):
         shown_at = processing_all._stamp(shown.get('At'))
         if since and shown_at and shown_at < since: shown = None                  # passed before the agent stopped
-        elif shown_at is None or shown_at > now - timedelta(minutes=quiet):
+        # ...an open task's mark holds for this walk, a row with no task behind it for the quiet hours
+        elif shown_at is None or (this_walk(shown_at, walk_at) if tid and active else shown_at > now - timedelta(minutes=quiet)):
             card.update(surfaced=True, surfaced_at=shown.get('At'))
     # AN OPEN TASK IS ALWAYS ON THE RAIL (the owner, 2026-09-29: "everything should be one driver from work rail to tasks
     # board"). Passed used to need the shown mark as well as the read, so any door that read a task without marking it - a
@@ -590,11 +592,11 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # task open and then hit another task in work rail and it moved 1003 automatically to later?")
     mark = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
     card['put_down'] = bool(card.get('surfaced') and mark and mark.get('Until'))
-    # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it. A row
-    # walked past returns when its read is task_return_minutes old (`back`, above); one merely shown, when its mark ages
-    # out; one put away with Remind me, on its date.
+    # FOR LATER SAYS WHEN IT COMES BACK (the canvas redesign, 2026-09-29): the rail's gutter counts down to it - a row put away
+    # with Remind me, on its date. An open task walked past has no time to say: it is back when this walk ends (this_walk); a
+    # row with no task behind it, when its mark ages out.
     if card.get('deferred'): card['back_at'] = card.get('defer_until')
-    elif card.get('put_down'):
+    elif card.get('put_down') and not (tid and active):
         base = read_at if passed else processing_all._stamp(card.get('surfaced_at'))
         if base: card['back_at'] = (base + timedelta(minutes=quiet)).strftime('%Y-%m-%d %H:%M:%S')
     if card['lane'] == 'fyi' and not card.get('sig'):

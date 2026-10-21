@@ -29,7 +29,7 @@ phone the task view is the screen, and **Expand** takes the session full screen 
 
 | Button | Shown on | What it does | Runs |
 |---|---|---|---|
-| **Next** | every card | Marks it read and moves on. Open work you pass comes back after a few hours (Settings → Passed work comes back after) | at once |
+| **Next** | every card | Marks it read and moves on. An open task you pass stays under Tasks, and the walk goes on to the rest; when the walk ends, or a new one starts, it comes up again from the top | at once |
 | **Mark done** | a draft reply, a finished agent, a task | The one close: the task is done, an unsent draft is retired, a live agent is stopped, and it leaves your rail | at once |
 | **Send** | a draft reply, one of a task's emails, a question for the sender | Sends it, and only that: the task stays open - on the table with its receipt, Mark done or Next - until you **Mark done** | you confirm |
 | **Approve** | an agent's proposal, a task's close-out (a pull request to merge, an issue to close) | Runs only that action - on GitHub merges the pull request or closes the issue and posts the reply as its comment. The task stays open until you **Mark done** | you confirm |

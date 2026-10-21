@@ -40,7 +40,7 @@ class LevelOfTests(unittest.TestCase):
 
 
 class ForLaterTests(unittest.TestCase):
-    def test_a_passed_task_stays_in_tasks_and_says_when_it_comes_back(self):
+    def test_a_passed_task_stays_in_tasks_with_no_clock_on_it(self):
         from taskuary import concierge
         s, settle = settled()
         t = s.create_task({'Title': 'Send the August financials', 'Kind': 'task', 'Status': 'open'}, 'triage')
@@ -49,13 +49,11 @@ class ForLaterTests(unittest.TestCase):
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            concierge.move_on(s, first['item']['key'])                  # Next's mark, the walk not run out yet
             card = next(i for i in rail(s) if i.get('tid') == t)
         self.assertEqual(funnel.level_of(card), 'task')                 # Next moves on; the task stays (2026-10-21)
         self.assertTrue(card['put_down']); self.assertFalse(card['actionable'])
-        back = datetime.strptime(card['back_at'], '%Y-%m-%d %H:%M:%S')
-        want = datetime.now() + timedelta(minutes=processing_unread.return_minutes(s))
-        self.assertLess(abs((back - want).total_seconds()), 120, card['back_at'])
+        self.assertNotIn('back_at', card, 'passed for this walk, not for a number of hours')
 
     def test_remind_me_keeps_the_task_on_the_rail_in_for_later_until_its_day(self):
         s, settle = settled()
@@ -99,7 +97,7 @@ class LegacyPileForLaterTests(unittest.TestCase):
         out = {i['key']: i for i in funnel._apply_states(items, states, now, quiet=180)}
         self.assertEqual(set(out), {'msg:1', 'msg:3', 'msg:4'}, 'a read fyi is gone; open work is not')
         self.assertTrue(out['msg:1']['surfaced'])
-        self.assertEqual(out['msg:1']['back_at'], (now - timedelta(minutes=10) + timedelta(minutes=180)).strftime('%Y-%m-%d %H:%M:%S'))
+        self.assertNotIn('back_at', out['msg:1'], 'an open task walked past is passed for this walk, with no clock')
         self.assertEqual((out['msg:3']['deferred'], out['msg:3']['back_at']), (True, until))
         self.assertEqual({k: funnel.level_of(i | {'order_band': 2}) for k, i in out.items()},
                          {'msg:1': 'task', 'msg:3': 'later', 'msg:4': 'task'},

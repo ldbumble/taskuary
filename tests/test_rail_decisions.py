@@ -112,7 +112,7 @@ class NextOnAMeetingHoldsItUntilItStartsTests(unittest.TestCase):
 
 
 class StoppedGoesToPassedTests(unittest.TestCase):
-    def test_next_puts_a_stopped_agent_in_passed_and_the_quiet_hours_bring_it_back(self):
+    def test_next_puts_a_stopped_agent_in_passed_and_the_next_walk_brings_it_back(self):
         from taskuary import concierge
         s, settle = settled()
         s.upsert_agent('coding', 'coding', 'cli', '{}')
@@ -124,12 +124,13 @@ class StoppedGoesToPassedTests(unittest.TestCase):
              mock.patch.object(funnel, 'agent_left', return_value=True):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['lane'], first['item']['tid']), ('stopped', t))
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            concierge.move_on(s, first['item']['key'])                   # Next's mark, the walk not run out
             now = [(i['lane'], bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
             self.assertEqual(now, [('stopped', True, False)], 'in Passed, not offered again')
-            later = datetime.now() + timedelta(hours=4)
-            back = [i['actionable'] for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t]
-            self.assertEqual(back, [True])
+            later = datetime.now() + timedelta(hours=4)          # no clock brings it back inside the walk (2026-10-21)...
+            self.assertEqual([i['actionable'] for i in processing_unread.build(s, now=later, live_state=[])['items'] if i.get('tid') == t], [False])
+            funnel.new_walk(s)                                   # ...the next walk does
+            self.assertEqual([i['actionable'] for i in rail(s) if i.get('tid') == t], [True])
 
 
 class AStopAfterNextIsYoursTests(unittest.TestCase):
@@ -145,7 +146,7 @@ class AStopAfterNextIsYoursTests(unittest.TestCase):
         settle(); s.activate_processing_reads(fixed_now=ago(0), live_state=[]); settle()
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]),              mock.patch.object(funnel, 'agent_left', return_value=True):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            concierge.move_on(s, first['item']['key'])
             passed = [(i['lane'], bool(i.get('surfaced'))) for i in rail(s) if i.get('tid') == t]
             self.assertEqual(passed, [('stopped', True)], 'Next passed it')
             # the run speaks again after the pass: continued, then stopped with a question
@@ -169,7 +170,7 @@ class UrgentGoesToPassedTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual(first['item']['tid'], t)
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            concierge.move_on(s, first['item']['key'])
             now = [(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t]
         self.assertEqual(now, [(True, False)], 'in Passed, not gone')
 
@@ -247,7 +248,7 @@ class NewWalkRaisesWavingAgentsTests(unittest.TestCase):
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             first = concierge.surface(s, llm=lambda *a, **k: 'never')
             self.assertEqual((first['item']['tid'], first['item']['lane']), (t, 'approve'))
-            concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
+            concierge.move_on(s, first['item']['key'])
             self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(True, False)], 'Passed')
             funnel.reset_walk(s)
             self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail(s) if i.get('tid') == t], [(False, True)],

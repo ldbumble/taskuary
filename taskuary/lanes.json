@@ -242,7 +242,7 @@
     { "key": "urgent", "word": "Urgent", "band": 1, "on_you": true, "minutes": 15,
       "hint": "a meeting inside fifteen minutes, an ask triage called urgent, or a sender on your escalate list" },
     { "key": "task", "word": "Tasks", "band": 2, "on_you": true,
-      "hint": "every open task, whether an agent is working on it or not - a spinning ring is an agent at work, a goal with news is here and its steps are rows of their own. Next moves on; the task stays here" },
+      "hint": "every open task, whether an agent is working on it or not - a spinning ring is an agent at work, a goal with news is here and its steps are rows of their own. Next moves on for this walk; the task stays here, and the next walk starts with it again" },
     { "key": "later", "word": "For later", "band": null,
       "hint": "still yours - put away with Remind me, or a goal waiting for its next news; each comes back when its time says" },
     { "key": "reports", "word": "Reports", "band": 3, "to_read": true,

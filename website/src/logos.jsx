@@ -476,7 +476,9 @@ LOGOS.xai_image = (p) => (
 LOGOS.openai_image = LOGOS.openai;
 LOGOS.azure_openai_image = LOGOS.azure_openai;
 LOGOS.openrouter_image = LOGOS.openrouter;
-LOGOS.image_server = LOGOS.stt_server;     // "a server you run yourself", same idea as the Whisper one
+LOGOS.image_server = LOGOS.stt_server;
+// Reason Network: a monogram - its own mark is a wordmark
+LOGOS.reason_network = (p) => <T p={p} bg="#2b2d42" text="R" />;     // "a server you run yourself", same idea as the Whisper one
 // the organisation's own AI wears Taskuary's mark (ui.jsx TaskuaryMark's file): it is no vendor's product, and the shared AI
 // sparkle read as one more provider (the owner, 2026-10-20)
 LOGOS.hipaa_ai = ({ sx }) => (

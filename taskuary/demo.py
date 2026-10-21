@@ -116,7 +116,7 @@ def refuse_op(op) -> str:
     if not op: return ''                                    # no such proposal: the handler's own 404 says so
     kind, p = op.get('kind'), op.get('params') or {}
     if kind in LOCAL_OPS or (kind == 'task.create_from_message' and str(p.get('kind') or 'task').lower() == 'task'): return ''
-    if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share'): return SENDS
+    if kind in ('review.approve', 'task.clarify', 'task.chase', 'task.handoff', 'task.share', 'task.ask_agent'): return SENDS
     if kind in ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'task.create_from_message', 'task.create_from_text'): return STARTS
     return OFF
 

@@ -432,6 +432,9 @@ def test_connector(store, cid: int) -> dict:
             detail = (f"signed in as {me.get('name') or me.get('sub') or 'your LinkedIn member'}"
                       + (f" ({me['email']})" if me.get('email') else '')
                       + (f' - the token lasts {left} more days' if left is not None else ''))
+        elif c['Type'] == 'reason_network':
+            from . import reasonnet
+            detail = reasonnet.test()
         elif c['Type'] == 'treg':
             from .treg import run_treg_tools
             from .reports import resolve_cfg

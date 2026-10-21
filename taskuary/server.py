@@ -220,6 +220,8 @@ async def _lifespan(_app):
     threading.Thread(target=quick_forever, daemon=True).start()   # the chat clock, never behind a slow sync
     threading.Thread(target=doorway_forever, daemon=True).start()  # the assistant chat, answered as fast as it is typed
     waitroom.watch(store)          # notes queued for a working agent land when it stops
+    from . import reasonnet
+    reasonnet.watch(store)         # Reason Network: held messages and replies, while its card is on (reasonnet.py)
     from . import asks
     asks.watch(store)              # what the owner asked for is said back at its door when it moves (asks.py)
     from . import msauth
@@ -1335,6 +1337,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     # SORT IT AGAIN and SEND OUT RESULTS as tools (2026-10-18): each runs the page's own handler - the row's retriage, the task
     # bar's Email someone - so a card and a click agree. The second only drafts: it waits in Close out for the owner's yes
     if kind == 'message.retriage': return retriage_message(mid)
+    if kind == 'task.ask_agent': return task_reason_ask(tid, {'to': p.get('who'), 'text': p.get('text')})
     if kind == 'task.share':
         from . import concierge
         who = (concierge.person(store, str(p.get('who') or '')) or {}).get('Email')
@@ -3824,6 +3827,16 @@ async def cli_hook_ask(payload: dict):
     return await asyncio.get_running_loop().run_in_executor(_PERMIT_POOL, go)
 
 
+@app.post('/api/hooks/claude/reason')
+def cli_hook_reason(payload: dict):
+    """Before one of our sessions uses a Reason Network tool (hooks.reason): a message to someone the owner does not trust is
+    refused, and ask_user is held here as the owner's approval card. {} - and any error - leaves the call to Claude and Reason."""
+    from . import hooks
+    try: return hooks.reason(payload if isinstance(payload, dict) else {})
+    except Exception as e:
+        logger.debug(f'reason network hook ignored: {e}'); return {}
+
+
 @app.post('/api/hooks/claude/floor')
 def cli_hook_floor(payload: dict, task: int, request: Request):
     """A stranger's session asks, before every tool call, whether the floor allows it (floor.check). An error here is a
@@ -5655,6 +5668,93 @@ def connector_test(cid: int):
     from . import funnel
     funnel.invalidate()
     return out
+
+# ── Reason Network (reasonnet.py): teammates' agents - only the ones the owner trusts ──
+def _reason(f):
+    "One call to the owner's own reason-network: what it cannot do is a 422 in its words, what went wrong a 502 - never a 500."
+    from . import reasonnet as rn
+    try: return f()
+    except (rn.Unsupported, rn.NotInstalled, rn.Miss, ValueError) as e: raise HTTPException(422, str(e))
+    except Exception as e: raise HTTPException(502, str(e) or type(e).__name__)
+
+
+def _reason_card():
+    from . import reasonnet as rn
+    if demo.enabled(): raise HTTPException(409, 'the demo has no Reason Network')
+    c = rn.connector(store)
+    if not c: raise HTTPException(404, 'the Reason Network card is missing')
+    return rn, c
+
+
+@app.get('/api/reason/status')
+def reason_status():
+    from . import reasonnet as rn
+    return rn.demo_status() if demo.enabled() else rn.status(store)
+
+
+@app.post('/api/reason/trusted')
+def reason_trusted(payload: dict):
+    """The people (or single sessions) the owner trusts. With the gate on, Reason's own policy follows at once."""
+    rn, c = _reason_card()
+    cfg = rn.save_settings(store, c, ACTOR, trusted=rn.clean_trusted(payload.get('trusted') or []))
+    store.audit('connector', c['ConnectorId'], 'reason_trusted', ACTOR, detail={'trusted': cfg['trusted']})
+    gate = _reason(lambda: rn.apply_gate(cfg['trusted'], rn.me(refresh=True))) if cfg['gate'] and rn.exe() else None
+    return {'trusted': cfg['trusted'], 'gate': gate}
+
+
+@app.post('/api/reason/gate')
+def reason_gate(payload: dict):
+    """Only trusted people reach agents on this computer: Reason's inbound default becomes hold (reasonnet.apply_gate), and
+    the Assistant's own folder goes off the network with it. Off puts Reason's default back to accept."""
+    rn, c = _reason_card()
+    on = payload.get('on') is not False
+    def go():
+        name = rn.me(refresh=True)
+        if on and not name: raise rn.Miss("Reason Network didn't say who you are on it - finish its own setup first (reason-network setup).")
+        g = rn.apply_gate(rn.settings(c)['trusted'], name, on)
+        if on and rn.has('folder'): rn.folder(rn.assistant_folder(), True)
+        return g
+    g = _reason(go)
+    rn.save_settings(store, c, ACTOR, gate=on)
+    store.audit('connector', c['ConnectorId'], 'reason_gate', ACTOR, detail={'on': on})
+    return {'gate': g}
+
+
+@app.post('/api/reason/folder')
+def reason_folder(payload: dict):
+    "One repository's checkout (or the Assistant's folder) off the network or back on - reason-network folder <path> off|on."
+    rn, c = _reason_card()
+    path, off = str(payload.get('path') or ''), payload.get('off') is not False
+    if path not in set(rn.checkouts(store).values()) | {rn.assistant_folder()}:
+        raise HTTPException(422, "only a repository's checkout Taskuary knows, or the Assistant's folder")
+    said = _reason(lambda: rn.folder(path, off))
+    cur = rn.settings(c)['off']
+    rn.save_settings(store, c, ACTOR, off=[*cur, path] if off and path not in cur else [p for p in cur if p != path or off])
+    store.audit('connector', c['ConnectorId'], 'reason_folder', ACTOR, detail={'path': path, 'off': off})
+    return {'said': said}
+
+
+@app.post('/api/reason/held/{mid}')
+def reason_held(mid: str, payload: dict):
+    "A held message from someone untrusted: delivered as it is, or dropped - the owner's word, said on its task."
+    rn, c = _reason_card()
+    deliver = payload.get('deliver') is True
+    said = _reason(lambda: rn.settle([mid], deliver))
+    store.audit('connector', c['ConnectorId'], 'reason_delivered' if deliver else 'reason_dropped', ACTOR, detail={'id': mid})
+    tid = rn.state()['held'].get(mid)
+    if tid and store.get_task(int(tid)):
+        store.add_comment(int(tid), ACTOR, 'human', 'You delivered it to the agent it was for.' if deliver else 'You dropped it - no agent saw it.')
+    return {'said': said}
+
+
+@app.post('/api/tasks/{tid}/reason-ask')
+def task_reason_ask(tid: int, payload: dict):
+    "Ask a trusted teammate's agent about this task; the question and the reply are notes on it (reasonnet.ask)."
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    if demo.enabled(): raise HTTPException(409, 'the demo has no Reason Network')
+    from . import reasonnet as rn
+    return _reason(lambda: rn.ask(store, tid, str(payload.get('to') or ''), str(payload.get('text') or ''), ACTOR))
+
 
 # ── Voice (taskuary/voice.py): speech to text for the funnel and for the prompt box ──
 @app.get('/api/voice/status')

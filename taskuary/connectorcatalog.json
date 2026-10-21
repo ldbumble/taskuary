@@ -2335,6 +2335,17 @@
       ]
     },
     {
+      "type": "reason_network",
+      "title": "Reason Network",
+      "group": "Agent tools",
+      "planned": false,
+      "desc": "Your teammates' coding agents and yours, messaging each other peer to peer - and only the people you trust get through. You install Reason Network yourself; Taskuary finds it.",
+      "match": [
+        "reason network",
+        "reason-network"
+      ]
+    },
+    {
       "type": "oracle",
       "title": "Oracle Database",
       "group": "Databases",

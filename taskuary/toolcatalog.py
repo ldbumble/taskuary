@@ -77,6 +77,8 @@ PURPOSE = {
     'task.handoff':             ('hand a task to a PERSON - `who` (a name or address that has written here), `note` optional: '
                                  "writes the forward for the owner's yes, nothing is sent from this card; `ref`"),
     'task.merge':               "fold a task into the one it duplicates - `into`: the survivor's ref (TQ-0123); `ref` is the one folded away",
+    'task.ask_agent':           ("ask a trusted teammate's coding agent over Reason Network - `who`: their name or person/session, `text`: "
+                                 'the question; the reply is noted on the task; `ref`'),
     'task.share':               "email what a task's work found - `who`: an address, `about` optional; a draft for the owner's yes, never sent; `ref`",
     'message.retriage':         'triage reads the message on the table again - one it could not sort',
     'task.clarify':             "prepare a question for the task's sender - `text`: the question; it waits for the owner's yes, never sent from here; `ref`",
@@ -352,8 +354,8 @@ BUCKETS = (
     ('task', "change any task - the table's, or one named by ref",
      ('task.update', 'task.set_kind', 'task.set_repo', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.split', 'task.merge', 'task.reopen',
       'task.not_a_task', 'task.complete', 'task.defer', 'task.handoff', 'task.clarify', 'task.share', 'review.approve', 'review.reject')),
-    ('agents', "start, continue, answer or stop a task's agent, and teach where work belongs",
-     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
+    ('agents', "start, continue, answer or stop a task's agent; teach where work belongs",
+     ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember', 'task.ask_agent')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
     ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'review.each', 'button.light', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),

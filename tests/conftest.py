@@ -345,6 +345,8 @@ def isolated_runtime_boundaries():
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_stream_cli.py': return True
         # ...and so does the timed stand-in for claude the Assistant walk-through runs on (tests/assistant_walk.py)
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_claude.py': return True
+        # ...and the stand-in for the owner's own reason-network CLI, never the real internet-facing one (tests/test_reason_network.py)
+        if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_reason_network.py': return True
         return len(args) == 1 and Path(args[0]).resolve() in allowed_files
 
     def git_allowed(argv, kwargs) -> bool:

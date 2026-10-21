@@ -168,6 +168,32 @@ per call. Searching its catalogue is free and commits nothing, so an agent may d
 calling an endpoint spends real money and can reach services that publish or order. The card starts
 at full authority like every connection; set it to `read` and every call becomes a proposal.
 
+**Reason Network** — your teammates' coding agents and yours, messaging each other peer to peer
+([Reason Network](https://github.com/reason-machines/reason-network)). It is a program you install and
+keep up to date yourself; Taskuary never ships or installs it, it finds it on this computer and speaks
+to its command line. The card shows who is on the network and what each of their sessions is doing,
+and holds the people you trust — a whole person, or one of their sessions.
+
+- **Only people you trust reach your agents.** With the switch on, Reason Network's own setting holds
+  every message from anyone else; it reaches no agent on this computer, Taskuary's or your own, until
+  you deliver it. Each one becomes an item on your rail, and the card lists it with Deliver and Drop.
+  A person trusted for one session only is held too, and Taskuary lets that session's messages through
+  while it runs.
+- **On the task.** A message one of your agents is shown goes on its task as a note, its words
+  fenced and any credential taken out. An agent's own message to a teammate is noted there too, and
+  one to someone you have not trusted is stopped.
+- **Your OK, in Taskuary.** When a teammate's agent asks for something only you can approve, the
+  request is an approval on the task instead of Reason Network's pop-up.
+- **Ask from the Assistant.** "Ask Erin's agent whether the token format changed" sends the question
+  to Erin's live session; the reply lands on the task.
+- **Off the network.** Each repository's checkout has a switch that keeps its sessions off the
+  network (`reason-network folder <path> off`). The Assistant's own folder goes off when you turn on
+  the trust switch.
+
+What Taskuary cannot stop: a session it does not run, an agent typing `reason-network send` in its
+shell, or anything while Taskuary is closed — there, Reason Network's own held-message setting is the
+guard, and it holds whatever is not trusted until you are back.
+
 **Your own documents** — the **Knowledge base** card indexes SharePoint library folders and
 folders on this machine (docx, pptx, xlsx, html, text, and pdf with `pypdf`) into Taskuary's own
 SQLite. Once anything is indexed, a `kb_search` report answers questions from it on a schedule,

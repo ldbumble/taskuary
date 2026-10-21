@@ -204,6 +204,10 @@ def block(store=None) -> str:
               'or tools.describe with {"kind": "<tool>"}. When you already know a tool and what it needs, CALL it directly.']
     for name, what, kinds in BUCKETS:
         lines.append(f'  {name} - {what}: {", ".join(signature(k) for k in kinds)}')
+    # ...and every look-up WHERE does not already show, by name: "what is the agent doing?" and "what drafts wait for my yes?" had their
+    # look-ups (agents.now, approvals.list) only behind a `look` bucket the index never named (the 2026-10-20 query walk)
+    shown = {k for _, k, _ in WHERE} | {'tools.list', 'tools.describe'}
+    lines.append('  look - the other look-ups, run at once: ' + ', '.join(k for k in READS if k not in shown))
     lines += ['', 'THE BUTTONS BY NAME (tool "name"/"name in a state") - use only these names:',
               '  ' + ', '.join([f'{k} {_names(k)}' for k in DECISIONS if k in buttons.VERBS and _has(store, k)]
                                + [f'{t} {_names(v)}' for v, t in CHIP_TOOL.items()]),

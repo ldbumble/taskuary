@@ -267,11 +267,12 @@ class SetsFromOneSender(unittest.TestCase):
         self.assertTrue(out['say'].startswith('Closed 2 items from Paula'), out['say'])
         self.assertEqual({s.get_task(t)['Status'] for t in mine}, {'done'}); self.assertEqual(s.get_task(tid)['Status'], 'open')
 
-    def test_the_phone_asks_first(self):
-        s = store(); tid, item = on_table(s); self.two_from(s)
+    def test_the_phone_does_it_too_and_says_so(self):
+        s = store(); tid, item = on_table(s); mine = self.two_from(s)
         with concierge.delivering(concierge.PHONE):
             out, _ = say(s, 'close all from Paula', item['key'], 'CALL: {"kind": "pipe.close", "params": {"select": {"sender": "Paula"}}}')
-        self.assertEqual(out['proposal']['kind'], 'pipe.close')
+        self.assertNotIn('proposal', out); self.assertTrue(out['say'].startswith('Closed 2 items from Paula'))
+        self.assertEqual({s.get_task(t)['Status'] for t in mine}, {'done'})
 
 
 class DraftsInTurnAndAnyButton(unittest.TestCase):

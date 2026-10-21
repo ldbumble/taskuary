@@ -57,8 +57,10 @@ class TargetTests(unittest.TestCase):
     def test_a_named_task_wins_and_an_unknown_one_changes_nothing(self):
         s, tid, mid, item = table()
         s2, other, _, _ = table(s, subject='Another job')
-        p, _ = call(s, 'task.comment', key=item['key'], text='noted', ref=f'TQ-{other:04d}')
-        self.assertEqual(p['target'], other)
+        # a note is the Assistant's to write at once, on the phone too (the owner, 2026-10-20) - on the task the ref names
+        p, out = call(s, 'task.comment', key=item['key'], text='noted', ref=f'TQ-{other:04d}')
+        self.assertIsNone(p); self.assertIn('noted', [c['Body'] for c in s.list_comments(other)])
+        self.assertNotIn('noted', [c['Body'] for c in s.list_comments(tid)])
         p, out = call(s, 'task.comment', text='noted', ref='TQ-9999')
         self.assertIsNone(p); self.assertIn('Name the task', out['say'])
 
@@ -132,16 +134,18 @@ class ToolTests(unittest.TestCase):
 
     def test_a_note_lands_on_the_task(self):
         s, tid, mid, item = table()
-        self.run_card(s, call(s, 'task.comment', key=item['key'], text='Erin wants it by Friday')[0])
+        p, out = call(s, 'task.comment', key=item['key'], text='Erin wants it by Friday')
+        self.assertIsNone(p); self.assertTrue(out['say'].startswith('Added a note to'), out['say'])      # written at once, and said
         self.assertIn('Erin wants it by Friday', [c['Body'] for c in s.list_comments(tid)])
 
     def test_a_checklist_item_is_ticked_by_its_number(self):
         s, tid, mid, item = table()
         s.set_checklist(tid, ['Pull the export log', 'Fix the filter'], 'o') if hasattr(s, 'set_checklist') else \
             s._write_checklist(tid, [{'id': 'a', 'text': 'Pull the export log', 'done': False}, {'id': 'b', 'text': 'Fix the filter', 'done': False}], 'o')
-        self.run_card(s, call(s, 'task.check', key=item['key'], item='1')[0])
+        p, out = call(s, 'task.check', key=item['key'], item='1')
+        self.assertIsNone(p); self.assertTrue(out['say'].startswith('Ticked'), out['say'])
         self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, False])
-        self.run_card(s, call(s, 'task.check', key=item['key'], item='2')[0])
+        call(s, 'task.check', key=item['key'], item='2')
         self.assertEqual([i['done'] for i in s.task_checklist(tid)], [True, True])
         self.assertNotEqual(s.get_task(tid)['Status'], 'done', 'Mark done is the close, never the last box (T16)')
 

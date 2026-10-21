@@ -2166,23 +2166,17 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             from . import remind
             try: back = remind.when(remind.parse(params.get('until')) or '')
             except ValueError as e: raise CallMiss(f'pipe.defer until: {e}. Nothing was changed.')
-        if routes():
-            table_keys = {i['key'] for i in _on_the_table(store, actor) if i.get('key')} or {e.get('key') for e in (it.get('items') or [it]) if e.get('key')}
-            try: done = defer_selected(store, sel, params.get('until'), actor) if kind == 'pipe.defer' else close_selected(store, sel, actor)
-            except ValueError as e: raise CallMiss(f'{kind}: {e}. Nothing was changed.')
-            n = done['done']
-            say_ = ((f"Snoozed {plural(n, 'item')} {_set_words(sel)} until {done['when']}" if kind == 'pipe.defer' else
-                     f"Closed {plural(n, 'item')} {_set_words(sel)}") + ' - ' + ', '.join(_title_cut(t, 50) for t in done['titles'][:3])
-                    + (' and more' if n > 3 else '') + '.' + (f" {plural(done['stuck'], 'item')} would not go." if done['stuck'] else ''))
-            record_related(store, tid, item, 'assistant', say_)
-            off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
-            return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'did': kind}
-        label = (f"Snooze {len(hits)} until {back}" if kind == 'pipe.defer' else f"Close {len(hits)}")
-        shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
-        prop = _propose_raw(store, tid, kind, 0, {'select': sel, 'until': params.get('until'), 'text': text} if kind == 'pipe.defer'
-                            else {'select': sel, 'text': text}, label, f"{plural(len(hits), 'item')} {_set_words(sel)}: {shown}",
-                            WAITS, actor, item)
-        return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
+        # ...on the desk and on a phone alike: nothing in a snooze or a close goes out (the owner, 2026-10-20 - the phone asks only for sends)
+        table_keys = {i['key'] for i in _on_the_table(store, actor) if i.get('key')} or {e.get('key') for e in (it.get('items') or [it]) if e.get('key')}
+        try: done = defer_selected(store, sel, params.get('until'), actor) if kind == 'pipe.defer' else close_selected(store, sel, actor)
+        except ValueError as e: raise CallMiss(f'{kind}: {e}. Nothing was changed.')
+        n = done['done']
+        say_ = ((f"Snoozed {plural(n, 'item')} {_set_words(sel)} until {done['when']}" if kind == 'pipe.defer' else
+                 f"Closed {plural(n, 'item')} {_set_words(sel)}") + ' - ' + ', '.join(_title_cut(t, 50) for t in done['titles'][:3])
+                + (' and more' if n > 3 else '') + '.' + (f" {plural(done['stuck'], 'item')} would not go." if done['stuck'] else ''))
+        record_related(store, tid, item, 'assistant', say_)
+        off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
+        return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'did': kind}
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
@@ -2362,6 +2356,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if tk == 'text': named = named or str(params.get('title') or params.get('text') or '').strip()[:120]
     # ...and a fact is what it says: "Remember it: memory.remember" put the tool's name on the card (real-AI check, 2026-10-18)
     if kind == 'memory.remember': named = named or str(params.get('note') or '').strip()[:120].rstrip('.')    # the line adds its own stop
+    if tk == 'task' and (wrote := _task_writes(store, tid, kind, int(target or 0), params, named, actor)) is not None: return wrote
     if routes(): return _route(store, tid, kind, int(target or 0), params, named, it, item, text, actor)
     # the phone's words: one yes-or-no, whatever the kind
     instant = False
@@ -2385,15 +2380,9 @@ CONN_SAYS = {'connection.pause': 'switch it off', 'connection.resume': 'switch i
 ON_TASK = {'task.check': 'tick it on its checklist', 'task.checklist': 'its checklist is on it'}
 
 
-def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it: dict, table: dict | None, text: str, actor: str) -> dict:
-    """call_turn on the desk (routes): the tool the model picked, as the button that does it - lit on its item, brought up first - or the page
-    that holds it, opened beside the answer. A tool with neither goes back to the model as a miss it can fix by answering in words."""
-    from . import appfacts
-    tk = operations.KINDS[kind][0]
-    if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
-        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
-    if kind == 'script.start':
-        return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
+def _task_writes(store, tid: int, kind: str, target: int, params: dict, named: str, actor: str) -> dict | None:
+    """THE TASK PAGE'S OWN WRITES, run by the Assistant and said - on the desk and on a phone alike (the owner, 2026-10-20: "anything you can do,
+    you can do via the Assistant"; the phone keeps its yes/no only for what goes out). None when the call is not one of them."""
     # A NOTE AND A DUE DAY RUN HERE, said (the owner, 2026-10-20): neither has a button on the row - a note is typed on the task page and the
     # due day had no picker - so "file a note on it" and "set the due date to friday" were refused. Both are the task page's own writes.
     if kind == 'task.comment' and target:
@@ -2432,6 +2421,18 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
             remind.set_due(store, target, c['due'], actor)
             did.append(f"set {named}'s due day to {datetime.strptime(c['due'], '%Y-%m-%d'):%a %d %b}" if c['due'] else f"cleared {named}'s due day")
         if did: return _did(store, tid, _cap(' and '.join(did)) + '.', 'task.update')
+    return None
+
+
+def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it: dict, table: dict | None, text: str, actor: str) -> dict:
+    """call_turn on the desk (routes): the tool the model picked, as the button that does it - lit on its item, brought up first - or the page
+    that holds it, opened beside the answer. A tool with neither goes back to the model as a miss it can fix by answering in words."""
+    from . import appfacts
+    tk = operations.KINDS[kind][0]
+    if kind == 'agent.answer' and it.get('kind') == 'agent' and it.get('asking') and int(it.get('tid') or 0) == target:
+        return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
+    if kind == 'script.start':
+        return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
     if kind == 'memory.remember':
         return _page(store, tid, table, '#settings=memory', 'Opened Settings → Verdicts & notes - add it as a note there; it is used from then on.')
     if tk == 'setting':

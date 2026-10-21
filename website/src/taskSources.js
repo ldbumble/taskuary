@@ -50,6 +50,25 @@ export function previewRows(group, keep = 2, all = false) {
   const hid = ms.slice(keep, ms.length - 1);
   return [...ms.slice(0, keep).map((m) => ({ m })), { gap: hid.length, names: namesOf(hid) }, { m: ms[ms.length - 1] }];
 }
+// EVERY FILE BELONGS TO ITS MESSAGE (the owner, 2026-10-20: a voice note drawn loose under the Came from card, outside the thread):
+// the task detail's attachment rows by MessageId, so each condensed row knows what rode in with it and draws it under itself
+export const filesByMessage = (atts = []) => {
+  const by = new Map();
+  for (const a of atts || []) if (a?.MessageId != null) by.set(a.MessageId, [...(by.get(a.MessageId) || []), a]);
+  return by;
+};
+const AUDIO = /\.(ogg|opus|mp3|m4a|aac|wav|webm|flac|amr)$/i;
+export const isAudioFile = (a) => String(a?.ContentType || a?.content_type || "").startsWith("audio/") || !!a?.is_audio || AUDIO.test(a?.Name || a?.name || "");
+// a condensed row's words: a voice note's transcript without its "(🎤 voice note ...)" mark, and for a message that is only a file
+// what the file is - never "(no text - see the attachment)" or the bridge's hash of a file name
+const VOICE_MARK = /\s*\(🎤 voice note[\s\S]*\)\s*$/i, NO_TEXT = /^\(no text - see the attachment\)$/;
+export function rowText(m = {}, files = []) {
+  const words = String(m.excerpt || "").replace(VOICE_MARK, "").trim();
+  if (words && !NO_TEXT.test(words)) return words;
+  if (m.Subject) return m.Subject;
+  if (files.some(isAudioFile) || VOICE_MARK.test(m.excerpt || "")) return "Voice note";
+  return files.length ? plural(files.length, "attachment") : "(no text)";
+}
 // how many messages the previews leave out - none means there is nothing for "Show all" to add
 export const hidden = (groups, keep = 2) => groups.reduce((n, g) => n + (g.count > keep + 2 ? g.count - keep - 1 : 0), 0);
 

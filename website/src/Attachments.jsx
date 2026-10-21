@@ -28,6 +28,10 @@ const drawable = (a) => a.is_image && a.url && !chrome(a);
 // other app. content_type is the truth; the extension is the fallback for a bridge that sent none.
 const AUDIO_EXT = /\.(ogg|opus|mp3|m4a|aac|wav|webm|flac|amr)$/i;
 const playable = (a) => !!a.url && (a.is_audio || AUDIO_EXT.test(a.name || ""));
+// ...and it is CALLED a voice note: the bridge names the file after the message's id ("3EB0C4...ogg"), which says nothing. A
+// file someone named keeps its name; the stored name stays on hover and on the save.
+const HASHED = /^[0-9a-f]{12,}\.[a-z0-9]{2,5}$/i;
+export const clipName = (a) => (HASHED.test(a?.name || "") || !a?.name ? "Voice note" : a.name);
 const kb = (n) => (!n ? "" : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const KIND = { pdf: "PDF", sheet: "XLSX", excel: "XLSX", csv: "CSV", zip: "ZIP", word: "DOCX", document: "DOCX" };
 const kindOf = (a) => Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
@@ -98,7 +102,7 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
               px: 0.9, py: 0.7, maxWidth: 420 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.4 }}>
                 <GraphicEqIcon sx={{ fontSize: 13, color: "#6f8a6e" }} />
-                <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
+                <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap title={a.name}>{clipName(a)}</Typography>
                 <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
                 <Box component="a" href={attUrl(a, true)} title="save the audio"
                   sx={{ display: "inline-flex", color: FAINT, "&:hover": { color: INK } }}>

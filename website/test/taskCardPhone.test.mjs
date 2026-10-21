@@ -16,7 +16,7 @@ test("a stage heading wraps below sm and its bar takes the whole next line", () 
 });
 // ...and the folded task strip has no bar to wrap any more: the Tasks tab's bar sits under the view (section 1's redesign, 2026-10-16)
 test("the folded task strip wraps on a phone and carries no buttons", () => {
-  const at = src.indexOf('onClick={() => setOpenStage("task")}');
+  const at = src.indexOf('{...pressable(() => setOpenStage("task"))}');
   const strip = src.slice(at, src.indexOf("<ExpandMoreIcon", at));
   assert.match(strip, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
   assert.doesNotMatch(strip, /<Button|<IconButton|<RemindMe/);

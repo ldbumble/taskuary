@@ -33,6 +33,7 @@ import { openAppLink } from "./appLinks.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
 import { useCapabilities } from "./capabilities.js";
+import { FOCUS_RING, pressable } from "./pressable.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
@@ -293,9 +294,9 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           and a closed dropdown hides two of them behind a click */}
       <Box sx={{ display: "flex", gap: 0.25, px: { xs: 1, sm: 3 }, borderBottom: `1px solid ${BORDER}`, overflowX: "auto", scrollbarWidth: "none" }}>
         {KINDS.map((k) => (
-          <Box key={k.key} onClick={() => { setKind(k.key); setErr(""); setOk(""); }} role="tab"
+          <Box key={k.key} {...pressable(() => { setKind(k.key); setErr(""); setOk(""); })} role="tab"
             aria-selected={kind === k.key} title={k.hint}
-            sx={{ display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.5 }, py: 1, cursor: "pointer", flexShrink: 0,
+            sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 0.75, px: { xs: 1, sm: 1.5 }, py: 1, cursor: "pointer", flexShrink: 0,
               fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", mb: "-1px",
               color: kind === k.key ? INK : FAINT,
               borderBottom: `2px solid ${kind === k.key ? ACCENT : "transparent"}`,

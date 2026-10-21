@@ -40,6 +40,7 @@ import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { LIT, lightField, lightStep } from "./connectorStep.js";
+import { FOCUS_RING, pressable } from "./pressable.js";
 
 /* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
    2026-10-21: "it should look like general agent working, not code one"). Its brief is the card's Guide; its hands are the card's
@@ -1413,8 +1414,8 @@ export const ConnCard = ({ c }) => {
   const st = CARD_STATE[connState(c)], extra = st.width - 1;
   const ring = extra > 0 ? `inset 0 0 0 ${extra}px ${st.border}` : "";
   return (
-    <Box onClick={c.planned ? undefined : c.go} data-tq-card={c.key}
-      sx={{ bgcolor: st.bg, border: `1px solid ${st.border}`, boxShadow: ring || "none", borderRadius: 2.5, p: 1.6, boxSizing: "border-box",
+    <Box {...pressable(c.go, !c.planned)} data-tq-card={c.key}
+      sx={{ ...FOCUS_RING, bgcolor: st.bg, border: `1px solid ${st.border}`, boxShadow: ring || "none", borderRadius: 2.5, p: 1.6, boxSizing: "border-box",
         opacity: c.planned ? 0.5 : connState(c) === "off" ? 0.85 : 1, cursor: c.planned ? "default" : "pointer",
         transition: "border-color .15s, box-shadow .15s",
         ...(c.planned ? {} : { "&:hover": { boxShadow: [ring, "0 2px 8px rgba(47,107,79,.12)"].filter(Boolean).join(", ") } }) }}>

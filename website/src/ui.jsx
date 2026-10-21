@@ -49,6 +49,7 @@ import { Logo, hasLogo } from "./logos.jsx";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import { choice, label as btnLabel } from "./buttons.js";   // buttons.json's words; theme.jsx owns `label`
 import { asUtc, setTz, fmtTime } from "./dates.js";
+import { FOCUS_RING, pressable } from "./pressable.js";
 export { agentAssignee, assignedAgent, assigneeLabel } from "./agentIdentity.js";
 import { ROLES, ACTION_COLORS, TAGS, ASSISTANT, ALERT, ALERT_INK, ALERT_TINT, ALERT_BD, BORDER, CATPPUCCIN, TASK_STATUS_COLORS, mono, DIM, FAINT, INK, PANEL, ACCENT2, PANEL2, label } from "./theme.jsx";
 
@@ -1887,8 +1888,8 @@ export const ToRow = ({ to, onSave, disabled }) => {
       ) : (
         <>
           <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{to || "nobody yet"}</Typography>
-          {!disabled && <Typography onClick={() => setOpen(true)} data-tq-to-change
-            sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
+          {!disabled && <Typography {...pressable(() => setOpen(true))} data-tq-to-change
+            sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}>
             change</Typography>}
         </>
       )}
@@ -1926,8 +1927,8 @@ export const CcRow = ({ cc, setCc, channel }) => {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(text); }
                               if (e.key === "Escape") setOpen(false); }} />
       ) : (
-        <Typography onClick={() => setOpen(true)}
-          sx={{ fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
+        <Typography {...pressable(() => setOpen(true))}
+          sx={{ ...FOCUS_RING, fontSize: 11.5, color: "#55697a", cursor: "pointer", fontWeight: 600,
                 "&:hover": { textDecoration: "underline" } }}>
           {(cc || []).length ? "+ someone else" : "+ loop someone in"}
         </Typography>

@@ -92,6 +92,7 @@ import EmailSomeone from "./EmailSomeone.jsx";
 import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
+import { FOCUS_RING, pressable } from "./pressable.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -1627,8 +1628,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     {/* FOLDED - the left half carries what the header cannot: how far the checklist got, and what the task is.
                         The whole strip reopens the task. */}
                     {stage !== "task" && (
-                      <Box onClick={() => setOpenStage("task")}
-                        sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" },
+                      <Box {...pressable(() => setOpenStage("task"))} aria-expanded={false}
+                        sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, cursor: "pointer", flexWrap: { xs: "wrap", sm: "nowrap" },
                           opacity: 0.72, "&:hover": { opacity: 1 } }}>
                         {/* the SAME heading as Agent work and Close out under it - circle, title, then what it holds - where it
                             was a small-caps "Task" label with no number, beside a (1) still up in the header */}
@@ -2574,7 +2575,8 @@ const Fold = ({ title, children }) => (
 // at 390px meant it kept its width by sitting ON the title ("A… w…" under the continue button,
 // the save button cut off at the card's edge, 2026-09-18). Below sm the bar takes the whole next line.
 const WorkflowHeading = ({ number, title, description, chip, tone, folded, onToggle, action, tools }) => (
-  <Box onClick={onToggle} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
+  <Box {...pressable(onToggle)} aria-expanded={onToggle ? !folded : undefined}
+    sx={{ ...FOCUS_RING, display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" },
     cursor: onToggle ? "pointer" : "default", opacity: folded ? 0.72 : 1,
     "&:hover": onToggle ? { opacity: 1 } : undefined }}>
     <Box sx={{ width: 24, height: 24, borderRadius: "50%", bgcolor: tone, color: "#fff",

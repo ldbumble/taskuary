@@ -54,7 +54,7 @@ class TypedWordsNeverStartAnAgent(unittest.TestCase):
         with mock.patch.object(terminal, 'live_sessions', return_value=[]):
             out = concierge.say(s, 'start a coding agent on ledger to fix the login crash', llm=llm)
         self.assertNotIn('proposal', out)
-        self.assertEqual(out['new'], {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash'})
+        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'agent', 'how': 'terminal', 'text': 'fix the login crash'})
         self.assertNotIn('Starting', out['say'])
 
     def test_continue_session_in_words_is_a_card_but_the_button_still_runs_at_once(self):

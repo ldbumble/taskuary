@@ -10,7 +10,7 @@ import { label } from "./buttons.js";
 // conversation - and what you type here is the first thing it hears. Leave it empty to continue as is.
 // IN LINE, LIKE NEW (the owner, 2026-09-30: "shouldn't this show up in line of the assistant ... same as the new box ... with
 // voice note/images"): on the canvas it is a card in the conversation, with the mic and pictures; elsewhere still a popover.
-// `onPress` fires AT THE PRESS, before the server answers, so the rail can move the row to Agents working at once;
+// `onPress` fires AT THE PRESS, before the server answers, so the rail can ring the row's icon at once;
 // `onFail(error)` if it could not continue
 // `initial`: words the box opens holding - the owner's notes when the Assistant lit Continue with them ("rerun it with these notes: ...")
 export default function ContinueBox({ task, anchor, onClose, onDone, inline = false, taskRef = "", onPress, onFail, initial = "" }) {

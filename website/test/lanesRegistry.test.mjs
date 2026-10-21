@@ -37,12 +37,14 @@ test("a row with no band lands where its lane's entry says, every lane", () => {
 test("on you is one answer: the header, the opener's sections, the game's red count", () => {
   const pile = [
     { key: "a", lane: "asked", order_band: 2 }, { key: "y", lane: "yours", order_band: 2 }, { key: "b", lane: "blocked", order_band: 2 },
-    { key: "t", lane: "theirs", order_band: 2 }, { key: "l", lane: "yours", order_band: 2, put_down: true },
-    { key: "f", lane: "fyi", order_band: 4 }, { key: "r", lane: "report", order_band: 3 }, { key: "w", lane: "working", order_band: 5 },
+    { key: "t", lane: "theirs", order_band: 2 }, { key: "l", lane: "yours", order_band: 2, deferred: true },
+    { key: "f", lane: "fyi", order_band: 4 }, { key: "r", lane: "report", order_band: 3 }, { key: "w", lane: "working", order_band: 2 },
     { key: "m", lane: "time", order_band: 1 }, { key: "s", lane: "asked", order_band: 2, settling: true },
   ];
   const you = pile.filter((i) => onYou(i)).map((i) => i.key);
+  // an agent at work and waiting on them are under Tasks but not on you (2026-10-21); For later, reading and a settling row neither
   assert.deepEqual(you, ["a", "y", "b", "m"], "waiting on them, For later, reading, an agent at work and a settling row are not on you");
+  assert.equal(levelOf(pile[7]), "task", "an agent at work is under Tasks");
   assert.equal(statusLine(pile), `${pile.length} in the pipe · 4 on you`, "the header leaves out the lane worded 'on you'");
   assert.deepEqual(pile.filter(needsYou).map((i) => i.key), you);
   const groups = summarize(pile).groups;

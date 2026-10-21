@@ -125,7 +125,7 @@ no brain), and the evidence it cited by id - what it cited, not everything it re
 A thread you wrote on that nobody answered, or a step somebody owes past its day, is **slipped**
 once it has been quiet past that person's usual day: half again their median answer, once the
 ledger has seen them answer three times, and the default from Settings → Advisor until then.
-Someone whose auto-reply says they are away never slips. A slipped row sits inside **On you**, the
+Someone whose auto-reply says they are away never slips. A slipped row sits inside **Tasks**, the
 pipe count says "3 slipped", and when Next brings it up the card offers four answers, each an
 outcome the ledger keeps:
 

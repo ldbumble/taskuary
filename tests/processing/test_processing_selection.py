@@ -299,21 +299,29 @@ def test_captured_surface_commits_exact_item_and_fyi_members_under_one_guard():
     assert all(state["Status"] == "surfaced" for state in states.values())
 
 
-def test_working_or_settling_only_capture_is_pending_and_never_claims_all_done():
+def test_a_working_agents_task_is_walked_like_any_task():
+    # a task an agent is working is under Tasks and the walk takes it in its place (the owner, 2026-10-21)
     cap = captured([
         item("agent:1", lane="working", kind="agent", tid=1),
         item("msg:2", settling=True, mid=2, channel="email"),
         item("meeting:soon", lane="time", kind="meeting", mins=30),
     ])
+    assert cap.selected["key"] == "agent:1"
+
+
+def test_settling_only_capture_is_pending_and_never_claims_all_done():
+    cap = captured([
+        item("msg:2", settling=True, mid=2, channel="email"),
+        item("meeting:soon", lane="time", kind="meeting", mins=30),
+    ])
     assert cap.selected is None
-    assert cap.pending == {"working": 1, "settling": 1, "scheduled": 1}
+    assert cap.pending == {"working": 0, "settling": 1, "scheduled": 1}
 
     value = store()
     with mock.patch.object(concierge, "_brain_for", return_value=None):
         out = concierge.surface(value, selection=cap)
     assert out["item"] is None
     assert out["say"] != concierge.ALL_DONE
-    assert "in progress" in out["say"]
     assert "still being read" in out["say"]
 
 

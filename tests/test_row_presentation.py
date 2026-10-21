@@ -78,7 +78,8 @@ def test_the_phone_draws_the_servers_words():
 
 def test_for_later_says_back_in_once():
     soon = (datetime.now() + timedelta(minutes=200)).strftime('%Y-%m-%d %H:%M:%S')
-    row = {'key': 'l', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Budget tab', 'surfaced': True, 'put_down': True,
+    # For later is Remind me's (the owner, 2026-10-21) - a row Next walked past stays under Tasks
+    row = {'key': 'l', 'lane': 'asked', 'kind': 'asked', 'who': 'Gail Moreno', 'title': 'Budget tab', 'deferred': True,
            'order_band': 2, 'back_at': soon}
     text = ra.who_wants_what([row])
     assert 'FOR LATER · 1' in text and '(back in 3h)' in text, text

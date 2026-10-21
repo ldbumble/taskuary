@@ -1110,7 +1110,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   const nowAt = next === -1 ? (evs.length ? evs.length : -1) : next > 0 ? next : -1;
   // ONE HEADLINE (U6): "Waiting · 30" counted reports and FYI the rows below called nothing to decide - the count is what is
   // on you, and reports and FYI sit apart as reading. Which sections are which is lanes.json's; a section's `you` is its rows that
-  // are on you (summarize - waiting on THEM is under On you but not on you, as the greeting has always said)
+  // are on you (summarize - waiting on THEM, or an agent working, is under Tasks but not on you, as the greeting has always said)
   const cnt = (gs) => gs.reduce((n, g) => n + (g.n ?? g.rows.length), 0), isRead = (g) => !!SECTION[g.key]?.to_read;
   const act = groups.filter((g) => !isRead(g)), read = groups.filter(isRead);
   const onYou = onYouCount(groups), toRead = cnt(read);

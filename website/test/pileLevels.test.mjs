@@ -8,8 +8,8 @@ import { LEVEL_META, LEVEL_ORDER, levelLabel, levelOf, levelsOf } from "../src/f
 // One level per thing triage decided: open work and landed results are not merged into a single name (the owner,
 // 2026-09-07: "why work and reports combined ... just make each one it's own thing").
 test("every level has its own word and its own hint", () => {
-  // the canvas redesign (2026-09-29): On you, Agents working, For later, Reports, Advisor ideas, FYI
-  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "goals", "agents", "later", "reports", "ideas", "fyi"]);
+  // the canvas redesign (2026-09-29), and since 2026-10-21 one Tasks for every open task - no Agents working, no Goals
+  assert.deepEqual(LEVEL_ORDER, ["urgent", "task", "later", "reports", "ideas", "fyi"]);
   for (const level of LEVEL_ORDER) {
     assert.ok(levelLabel(level).length, `${level} needs a word`);
     assert.ok(LEVEL_META[level].hint.length, `${level} needs a hint`);
@@ -21,17 +21,18 @@ test("every level has its own word and its own hint", () => {
 
 test("no level name merges two things", () => {
   for (const level of LEVEL_ORDER) assert.ok(!/[&+]|and/.test(levelLabel(level)), `${levelLabel(level)} names two things`);
-  assert.equal(levelLabel("task"), "on you");
+  assert.equal(levelLabel("task"), "tasks");
   assert.equal(levelLabel("later"), "for later");
   assert.equal(levelLabel("ideas"), "advisor ideas");
-  assert.equal(levelLabel("goals"), "goals");
+  assert.equal(levelLabel("goals"), "", "Goals is gone: a goal with news is under Tasks");
+  assert.equal(levelLabel("agents"), "", "Agents working is gone: a working agent's task is under Tasks");
   assert.equal(levelLabel("reports"), "reports");
 });
 
 // One level for the owner's work, whoever is waiting on it - triage never split those - and a
 // landed result is not work at all (the owner, 2026-09-07).
 test("everything triage called work is one level, and a result is not in it", () => {
-  for (const lane of ["asked", "queued", "broken", "approve", "blocked"]) {
+  for (const lane of ["asked", "queued", "broken", "approve", "blocked", "working", "stopped", "saved"]) {
     assert.equal(levelOf({ lane, order_band: 2 }), "task", lane);
   }
   assert.equal(levelOf({ lane: "report", order_band: 3 }), "reports");
@@ -43,10 +44,11 @@ test("everything triage called work is one level, and a result is not in it", ()
 test("the ends of the list are one level each", () => {
   assert.equal(levelOf({ lane: "time", order_band: 1 }), "urgent");
   assert.equal(levelOf({ lane: "fyi", order_band: 4 }), "fyi");
-  assert.equal(levelOf({ lane: "working", order_band: 5 }), "agents");
+  assert.equal(levelOf({ lane: "working", order_band: 2 }), "task");
+  assert.equal(levelOf({ lane: "working", order_band: 5 }), "task", "a stamp from before is read again, never taken as fyi");
   assert.equal(levelOf({}), "task", "a row with no band still lands in one, so the dock never reads empty");
-  // work you pressed Next on waits at the bottom, beside the agents - still yours, not at the top
-  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true, put_down: true }), "later");
+  // Next moves on and the task stays in Tasks (the owner, 2026-10-21) - only Remind me puts it in For later
+  assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true, put_down: true }), "task");
   // shown and clicked away from is not put aside (2026-10-08: "it moved 1003 automatically to later?")
   assert.equal(levelOf({ lane: "stopped", order_band: 2, surfaced: true }), "task");
   assert.equal(levelOf({ lane: "stopped", order_band: 2 }), "task");
@@ -81,36 +83,37 @@ test("the row on the table stays in the band it was opened from", async () => {
   assert.equal(where(null).a, levelOf(rows[0]));
 });
 
-// AN OWNER SCREENSHOT, 2026-10-20: the task on the table whose coding agent was working was drawn under On you - counted there, at the
-// bottom of it, below rows a day younger - while Agents working listed another task
-test("a working agent's task on the table is under Agents working, and a pinned row sits where the walk's order puts it", async () => {
+// AN OWNER SCREENSHOT, 2026-10-20: the task on the table whose coding agent was working was drawn at the bottom of its section, below
+// rows a day younger. Since 2026-10-21 every open task is under Tasks in the walk's order, its agent working or not
+test("a working agent's task is under Tasks in its place, and a pinned row sits where the walk's order puts it", async () => {
   const { bandsOf } = await import("../src/funnelPile.js");
-  const rows = [{ key: "a", lane: "yours", order_band: 2, since: "2026-10-19 20:00:00" }, { key: "b", lane: "yours", order_band: 2, since: "2026-10-20 09:00:00" },
-    { key: "t", tid: 7, lane: "working", order_band: 5, since: "2026-10-19 08:00:00", why: "An agent is working on this; nothing needs you" }];
+  const rows = [{ key: "t", tid: 7, lane: "working", order_band: 2, since: "2026-10-19 08:00:00", why: "An agent is working on this; nothing needs you" },
+    { key: "a", lane: "yours", order_band: 2, since: "2026-10-19 20:00:00" }, { key: "b", lane: "yours", order_band: 2, since: "2026-10-20 09:00:00" }];
   const bands = (pin) => Object.fromEntries(bandsOf(rows, pin).map((b) => [b.level, b.items.map((i) => i.key)]));
-  // it was opened from On you, then its agent took it up: the pin no longer holds it there
-  assert.deepEqual(bands({ key: "t", level: "task" }), { task: ["a", "b"], agents: ["t"] }, "On you counts only what is on you");
-  // a row pinned from For later sits in On you by its age - first here, a day older than both - never appended at the end
-  const later = [...rows.slice(0, 2), { key: "l", lane: "yours", order_band: 2, put_down: true, since: "2026-10-19 07:00:00" }];
+  assert.deepEqual(bands({ key: "t", level: "task" }), { task: ["t", "a", "b"] });
+  assert.deepEqual(bands(null), { task: ["t", "a", "b"] }, "no section of its own, wherever it is opened from");
+  // a row pinned from For later sits in Tasks by its age - first here, a day older than both - never appended at the end
+  const later = [...rows.slice(1), { key: "l", lane: "yours", order_band: 2, deferred: true, since: "2026-10-19 07:00:00" }];
   assert.deepEqual(bandsOf(later, { key: "l", level: "task" }).find((b) => b.level === "task").items.map((i) => i.key), ["l", "a", "b"]);
-  const mid = [...rows.slice(0, 2), { key: "m", lane: "yours", order_band: 2, put_down: true, since: "2026-10-20 01:00:00" }];
+  const mid = [...rows.slice(1), { key: "m", lane: "yours", order_band: 2, deferred: true, since: "2026-10-20 01:00:00" }];
   assert.deepEqual(bandsOf(mid, { key: "m", level: "task" }).find((b) => b.level === "task").items.map((i) => i.key), ["a", "m", "b"]);
-  // ...and a task pulled onto the table by name with its agent working keeps the agent's lane
+  // ...and a task pulled onto the table by name with its agent working keeps the agent's lane - and its ring - under Tasks
   const { pulledRow, levelOf } = await import("../src/funnelPile.js");
-  assert.equal(levelOf(pulledRow({ key: "task:7", tid: 7, kind: "task", lane: "working", order_band: 5 })), "agents");
+  assert.equal(pulledRow({ key: "task:7", tid: 7, kind: "task", lane: "working", order_band: 2 }).lane, "working");
+  assert.equal(levelOf(pulledRow({ key: "task:7", tid: 7, kind: "task", lane: "working", order_band: 2 })), "task");
   assert.equal(levelOf(pulledRow({ key: "task:8", tid: 8, kind: "task", lane: "fyi", order_band: 4 })), "task", "anything else opened is on you");
 });
 
 // the owner, 2026-09-28: "the work rail still read agents working for a split second into your task, then goes back"
 test("the card on the table never moves its row: the rail's lane and shown mark win", async () => {
   const { placed, levelOf } = await import("../src/funnelPile.js");
-  const row = { key: "a", lane: "working", order_band: 5, kind: "agent", title: "Fix the export" };
-  const stale = { key: "a", lane: "blocked", order_band: 2, surfaced: true, kind: "agent", why: "asked you" };
+  const row = { key: "a", lane: "working", order_band: 2, kind: "agent", title: "Fix the export" };
+  const stale = { key: "a", lane: "blocked", order_band: 2, surfaced: true, put_down: true, kind: "agent", why: "asked you" };
   const drawn = placed(row, stale);
   assert.equal(drawn.lane, "working");
-  assert.equal(drawn.surfaced, undefined);
+  assert.equal(drawn.surfaced, undefined); assert.equal(drawn.put_down, undefined);
   assert.equal(drawn.why, "asked you", "the card still lends its words");
-  assert.notEqual(levelOf(drawn), levelOf(stale));
+  assert.equal(levelOf(drawn), "task", "working or asking, a task is the same section (2026-10-21)");
 });
 
 test("an older rail answer never replaces a newer one", async () => {
@@ -122,12 +125,12 @@ test("an older rail answer never replaces a newer one", async () => {
   assert.equal(refreshPilePresentation(newer, newest), newest);
 });
 
-// FOR LATER holds what Next walked past AND what Remind me put away; ADVISOR IDEAS leaves FYI while it is still an idea
+// FOR LATER holds what Remind me put away (Next leaves a task in Tasks, 2026-10-21); ADVISOR IDEAS leaves FYI while it is an idea
 test("for later and advisor ideas are their own levels", () => {
   assert.equal(levelOf({ lane: "yours", order_band: 2, deferred: true, defer_until: "2099-01-01 08:00" }), "later");
   assert.equal(levelOf({ lane: "forgotten", kind: "idea", order_band: 4 }), "ideas");
   assert.equal(levelOf({ lane: "yours", kind: "idea", order_band: 2, tid: 7 }), "task", "an idea made a task is a task");
-  assert.equal(levelOf({ lane: "working", kind: "idea", order_band: 5, tid: 7 }), "agents");
+  assert.equal(levelOf({ lane: "working", kind: "idea", order_band: 2, tid: 7 }), "task");
 });
 
 test("For later's gutter says how long until it comes back, soonest first", async () => {
@@ -144,11 +147,13 @@ test("For later's gutter says how long until it comes back, soonest first", asyn
   assert.equal(backAt({ defer_until: "2026-10-02 08:00" }), "2026-10-02 08:00");
   assert.equal(backAt({}), null);
   const rows = [
-    { key: "b", lane: "yours", order_band: 2, surfaced: true, put_down: true, back_at: at(300) },
+    { key: "b", lane: "yours", order_band: 2, deferred: true, defer_until: at(300) },
     { key: "a", lane: "yours", order_band: 2, deferred: true, defer_until: at(60) },
-    { key: "c", lane: "yours", order_band: 2, surfaced: true, put_down: true },
+    { key: "c", lane: "yours", order_band: 2, deferred: true },
+    { key: "d", lane: "yours", order_band: 2, surfaced: true, put_down: true, back_at: at(30) },
   ];
   assert.deepEqual(bandsOf(rows).find((b) => b.level === "later").items.map((i) => i.key), ["a", "b", "c"]);
+  assert.deepEqual(bandsOf(rows).find((b) => b.level === "task").items.map((i) => i.key), ["d"], "walked past with Next: still in Tasks");
 });
 
 test("reports, ideas and fyi divide what is left; the rest are never capped", async () => {

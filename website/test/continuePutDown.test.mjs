@@ -1,6 +1,7 @@
-// CONTINUE AS IS (press audit B23b, 2026-10-01): "Continuing" showed at 299 ms but the row stayed under ON YOU until the
-// next pile refresh at 2110 ms. The rail moves the row to Agents working AT THE PRESS now - the put-down pattern Mark done
-// uses (ac051beb) - held until the server's pile has it working, and put back if the continue fails.
+// CONTINUE AS IS (press audit B23b, 2026-10-01): "Continuing" showed at 299 ms but the row stayed as it was until the
+// next pile refresh at 2110 ms. The rail draws the row working AT THE PRESS now - the put-down pattern Mark done
+// uses (ac051beb) - held until the server's pile has it working, and put back if the continue fails. Since 2026-10-21 it stays
+// where it is, under Tasks, its icon ringed: a task does not change section when its agent starts.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -14,11 +15,11 @@ const rows = [
   { key: "processing:c", tid: null, mid: 7, lane: "fyi", order_band: 4 },
 ];
 
-test("asPressed draws a continued task under Agents working and drops one being put down - and nothing else", () => {
+test("asPressed draws a continued task working, in Tasks, and drops one being put down - and nothing else", () => {
   assert.equal(asPressed(rows, {}), rows, "nothing pressed: the server's rows as they are");
   const cont = asPressed(rows, { continuing: 19 });
-  assert.equal(levelOf(cont[0]), "agents");
-  assert.equal(levelOf(rows[0]), "later", "the server's row is not touched");
+  assert.equal(cont[0].lane, "working"); assert.equal(levelOf(cont[0]), "task");
+  assert.equal(rows[0].lane, "saved", "the server's row is not touched");
   assert.deepEqual(cont.slice(1), rows.slice(1));
   const left = asPressed(rows, { leaving: 4 });
   assert.deepEqual(left.map((i) => i.key), ["processing:a", "processing:c"], "a row with no task is never dropped with it");
@@ -33,5 +34,5 @@ test("the walk's Continue moves the row at the press, holds it until the pile ag
   assert.match(view, /onPress=\{\(\) => setContinuingTid\(continueOn\.task\.TaskId\)\}/);
   assert.match(view, /onFail=\{\(\) => setContinuingTid\(null\)\}/);
   assert.match(view, /asPressed\(pile\.items, \{ leaving: leavingTid, continuing: continuingTid \}\)/);
-  assert.match(view, /attentionBand\(row\) === 5\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
+  assert.match(view, /row\.lane === "working"\)\) setContinuingTid\(null\)/, "held until the server's pile has it working");
 });

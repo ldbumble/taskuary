@@ -71,7 +71,8 @@ test("Next draws what its capture names in the same frame as the fold, and the a
   assert.match(view, /const id = keep \? ahead\.id : `a\$\{Date\.now\(\)\}`;/, "the same id: the view stays mounted");
   assert.match(view, /setMsgs\(\(m\) => m\.filter\(\(x\) => x\.id !== rec\.id\)\);\s+const t = rec\.table;/, "a failure puts the table back");
   assert.match(turns, /!m\.ahead && !NOT_ITEM\.has/, "a line drawn ahead is no copy of the item for oneCopy to fold others into");
-  assert.match(view, /i\.key === aheadKey && !i\.settling && i\.lane !== "working"/, "never an item an agent has: the server puts nothing up for it");
+  // ...an item an agent is working included: the walk takes it like any task, and its card is the agent's pane (2026-10-21)
+  assert.match(view, /i\.key === aheadKey && !i\.settling\)/, "an item an agent has is drawn ahead like the rest");
 });
 
 // A ROW CLICKED COLD IS DRAWN AT THE CLICK (owner-approved, 2026-10-20): the old view and its ring stayed up for the whole read

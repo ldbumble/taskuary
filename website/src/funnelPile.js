@@ -122,7 +122,8 @@ export const nextSelectionBody = (capture) => ({
 export const nextMarkerKey = (pile, items, current) => {
   if (hasNextSelection(pile))
     return pile.expected_next_members[0] || pile.expected_next_key || null;
-  const eligible = (item) => !item.settling && item.lane !== "working" && item.key !== current?.key;
+  // ...a task an agent is working included: the walk takes every task in the rail's order (the owner, 2026-10-21)
+  const eligible = (item) => !item.settling && item.key !== current?.key;
   return ((items || []).find((item) => eligible(item) && !item.surfaced)
     || (items || []).find(eligible))?.key || null;
 };
@@ -291,9 +292,8 @@ export const refreshCurrentPresentation = (current, fresh) =>
 //
 // The lane, not the kind, decides. `kind` alone sent a task handed to an agent that never started
 // through `default: "message"` - drawn as "a person wrote something", with no list, no reason and
-// no way to start it (the owner, 2026-09-14). A `working` lane never reaches the walk at all - the
-// pile excludes it until the agent stops or asks - but an item already in front of you can BECOME
-// working while you read it, and then it is the agent's card.
+// no way to start it (the owner, 2026-09-14). A `working` lane is walked like every task (2026-10-21), and an item already in
+// front of you can BECOME working while you read it: either way it is the agent's card.
 export const assistantFocus = (item) => {
   if (!item) return { card: null, lead: "" };
   const who = item.agent || item.working || "the agent";
@@ -377,17 +377,17 @@ export const placed = (row, card) => {
 // ...but an AGENT on the table says what the agent is doing: the walk's shown mark takes a row it is showing out of the pile, and
 // the agent that asked a question while it stood there read "on you" on the rail under a header saying it waited on you (G7)
 const AGENT_LANES = ["blocked", "working", "stopped", "saved"];
-// ...and so does any task whose agent is WORKING, whatever kind of card it came as: it is under Agents working, never on you (2026-10-20)
+// ...and so does any task whose agent is WORKING, whatever kind of card it came as: under Tasks, ring spinning, never on you
 export const pulledRow = (card) => (card?.tid && ((card.kind === "agent" && AGENT_LANES.includes(card.lane)) || card.lane === "working")
   ? { ...card, put_down: false, deferred: false }
   : card?.tid ? { ...card, lane: "yours", order_band: 2, put_down: false, deferred: false } : { ...card });
 // THE RAIL AS PRESSED: a press the server has not answered yet still moves its row (the put-down, ac051beb). `leaving`: the
-// task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn under Agents
-// working - it stayed under On you for the two seconds until the next pile (press audit B23b, 2026-10-01).
+// task being closed or deleted leaves the rail; `continuing`: a task whose session was just continued is drawn working - its
+// ring spinning, where it is under Tasks - not two seconds later with the next pile (press audit B23b, 2026-10-01).
 export const asPressed = (items, { leaving = null, continuing = null } = {}) => (!leaving && !continuing ? items
   : items.filter((i) => !leaving || i.tid !== leaving)
     .map((i) => (continuing && i.tid === continuing
-      ? { ...i, lane: "working", order_band: 5, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
+      ? { ...i, lane: "working", order_band: 2, surfaced: false, put_down: false, deferred: false, working: i.working || i.agent || "agent" } : i)));
 // when a For later row comes back: the server's own clock for it (surfaced_at + task_return_minutes), or its Remind me date
 export const backAt = (item) => item?.back_at || item?.defer_until || null;
 // ...said by timeWords.bandUntil, and every other gutter age by timeWords.band - one rule for how a time reads
@@ -405,11 +405,10 @@ export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).s
 // product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
 // heading is the only thing on the rail that carries a role colour - the dot beside a row is its
 // SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
-export const LEVEL_ROLE = { urgent: "you", task: "you", agents: "working", later: "passed", reports: "info", ideas: "info", fyi: "muted" };
+export const LEVEL_ROLE = { urgent: "you", task: "you", later: "passed", reports: "info", ideas: "info", fyi: "muted" };
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
-// urgent, your task and agents working are NEVER capped: a task behind a "4 more" button is a task
-// you do not do, and the agents band is bounded by how many agents you run. Whatever is left over
+// urgent and tasks are NEVER capped: a task behind a "4 more" button is a task you do not do. Whatever is left over
 // goes to reports, then fyi, each keeping a floor of two - below that a band is a heading and a
 // button, which is worse than absent. If that still overflows nothing is crushed further and the
 // rail scrolls, so the only thing ever below the fold is work, in rank order.
@@ -424,14 +423,12 @@ export const FLOOR = 2;
 const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
 // the walk's clock for a row (funnel._order): oldest first inside a band, reports newest first
 const walkAt = (i) => Date.parse(String(i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
-// `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile)
-// ...but never a row an AGENT HAS TAKEN UP (an owner screenshot, 2026-10-20): the task whose coding agent was working stayed pinned
-// under On you - counted there, worded "an agent is working on this; nothing needs you" - while Agents working listed another. A
-// working agent's task is under Agents working, on the table or not; the ring goes with it.
+// `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile). A task whose agent
+// starts, asks or stops no longer changes band at all: every open task is under Tasks (the owner, 2026-10-21).
 // ...and a pinned row sits in its band WHERE THE WALK'S ORDER PUTS IT: it kept its own lane's place in the server's order, so a row
-// from a later band was drawn under every row of the band it was pinned to - a day-old task at the bottom of On you, below 1h
+// from a later band was drawn under every row of the band it was pinned to - a day-old task at the bottom of its band, below 1h
 export const bandsOf = (items, pin = null) => {
-  const held = (i) => !!pin?.level && i.key === pin.key && levelOf(i) !== "agents";
+  const held = (i) => !!pin?.level && i.key === pin.key;
   return LEVEL_ORDER
     .map((level) => {
       const rows = (items || []).filter((i) => (held(i) ? pin.level : levelOf(i)) === level);

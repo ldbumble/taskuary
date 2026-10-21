@@ -1252,6 +1252,10 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         # sent the owner looking for a question no agent had asked (the owner, 2026-10-14) - its own sentence says what is true
         why = str(item['why']).strip().rstrip('.')
         return f"{item.get('ref') or item['title']}: {_cap(why)}. {_cap(_from_you(store, item))}."
+    # an agent WORKING it, walked to like any task now (2026-10-21): what it is doing, never "waiting on you - answer it below"
+    if item.get('lane') == 'working':
+        who = item.get('working') or item.get('agent') or 'An agent'
+        return f"{_cap(who)} is working on {item.get('ref') or item['title']} - nothing for you until it finishes or asks."
     if item['kind'] == 'agent':
         # ONE sentence per state (lanes.json): the item's `why` when the run said what it needs, else the
         # screen's question. A stall has nothing to answer - saying "answer it below" over a rate limit
@@ -2869,7 +2873,7 @@ def prepare_next(store, selection, token: str) -> dict | None:
     ahead of the press with no write, so the page can draw it the moment Next is pressed. The press still commits and
     answers as it always did; the page compares the two by answer_hash and the committed answer replaces the card when
     they differ. None where the answer cannot be known ahead: nothing selected, a model introducing the item (INTRO_AI),
-    an agent holding the row (the walk moves past it), a batch assembled from the cached pile."""
+    an agent holding the row (its card is the live pane), a batch assembled from the cached pile."""
     item, p = selection.selected, selection.pile
     if item is None or INTRO_AI: return None
     if item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action')): return None
@@ -2951,8 +2955,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             when = ', '.join(f"{i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40)}{' ' + _back_words(i['back_at']) if i.get('back_at') else ''}"
                              for i in waiting[:4])
             # "Nothing new right now" opened a line about nine things still waiting: say the walk is through, then where they are
-            # ...and only what Next or Remind me put there is "under For later": one you looked at and left is still On you
-            aside = all(i.get('put_down') or i.get('deferred') for i in waiting)
+            # ...and only what Remind me put there is "under For later": one Next walked past, or you looked at and left, is still
+            # under Tasks (the owner, 2026-10-21: Next moves on, the task stays)
+            aside = all(i.get('deferred') for i in waiting)
             # ...and in words that are true of how each got there: Next is not "putting aside", and Remind me is not passing (2026-10-17)
             say = (f"That's everything for now. {plural(n, 'thing')} "
                    + (f"{'is' if n == 1 else 'are'} under {funnel.SECTION_WORDS['later']}" if aside else f"you already saw still wait{'s' if n == 1 else ''} on you")
@@ -2980,19 +2985,9 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # `over`: the walk itself ran out (not a name that was not found, not one filter done) - a phone offers the hand-back
         return {'item': None, 'say': say, 'options': [], 'chips': opens or walk_chips(len(left)), 'left': len(p['items']),
                 'exhausted': only if (only and left) else None, 'over': not key and not (only and left)}
-    # an agent has this one now (it started after the pile was built, or the owner just sent it): there is
-    # nothing for the owner to do until it stops, so say so, let it go, and take the next one. It comes
-    # back by itself - as the agent's question, its draft, or its finished job.
-    # ...only on Next. A row the owner PICKED is one they want to see - the agent at work, its pane - not a line saying there is
-    # nothing for them (the owner, 2026-09-30: "task should pull up if you want?"); a named key goes on the table like any other
-    if not key and (item['lane'] == 'working' or (item.get('working') and item['kind'] not in ('agent', 'review', 'action'))):
-        # it stays in the pipe, at the top, in hand - and comes to the front by itself when the agent stops
-        who = item.get('working') or next((t.get('agent') or t.get('label') for t in _live(store) if t.get('taskId') == item['tid']), None) or 'the agent'
-        say = f"{item.get('ref') or item['title']} is with {who} right now - nothing for you until it stops or asks. I'll bring it down then."
-        with guarded():
-            put_down()
-            record_related(store, tid, item, 'assistant', say + ('' if key else ' Moving on.'))
-        return surface(store, None, llm, actor, only, trace, cancel, include_surfaced, exclude) if not key else {'item': None, 'say': say, 'options': [], 'chips': walk_chips(len(p['items'])), 'left': len(p['items'])}
+    # A TASK AN AGENT IS WORKING is walked like any other task, in the rail's order, and goes on the table with its agent's pane
+    # (the owner, 2026-10-21): Next used to say "is with the agent right now" and skip it, so a task jumped out of the walk - and
+    # out of On you, to Agents working - every time its agent started, and back when it stopped.
     # FYIs have no action to take, so the normal walk brings four together. A row explicitly
     # clicked on the Timeline still opens by itself (`key` is set); only Next/Walk batches them.
     if not key and funnel.batchable(item):

@@ -45,8 +45,6 @@
 .tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #fff; background: #827356; border: 1px solid #827356; }
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #fff; background: #7b7366; border: 1px solid #7b7366; }
 .tq-pile-head span.lvl-later, .tq-sum-head span.lvl-later { color: #7b7366; background: transparent; border: 1px dashed #7b7366; }   /* put off: the oat, as an outline */
-.tq-pile-head span.lvl-agents, .tq-sum-head span.lvl-agents { color: #fff; background: #55697a; border: 1px solid #55697a; }
-.tq-pile-head span.lvl-goals, .tq-sum-head span.lvl-goals { color: #fff; background: #55697a; border: 1px solid #55697a; }   /* a goal is slate, like the project mark it wears */
 .tq-pile-head hr { flex: 1 1 auto; border: 0; border-top: 1px solid #ece7e0; margin: 0; }
 .tq-pile-rank { flex-shrink: 0; font: 600 13px/1 'IBM Plex Sans', system-ui, sans-serif; color: #41525f; margin-left: -2px; }
 .tq-pile-head em { font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; font-style: normal; color: #746e64; font-variant-numeric: tabular-nums; }
@@ -129,6 +127,16 @@
    should be there to clean it up"). */
 .tq-pile-row .t { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 22px; }
 .tq-pile-row .logo { display: flex; flex-shrink: 0; }
+/* AN AGENT AT WORK (the owner, 2026-10-21): a thin slate ring spinning round the row's icon while its agent works - it stops when
+   the agent finishes, asks, fails or is stopped. The row's border is the table's alone, so the ring is the icon's. */
+.tq-pile-row .logo.spins { position: relative; }
+.tq-pile-row .logo.spins::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid rgba(85, 105, 122, 0.22);
+  border-top-color: #55697a; animation: tq-agent-ring 1s linear infinite; pointer-events: none; }
+@keyframes tq-agent-ring { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tq-pile-row .logo.spins::after { animation: none; border-color: #55697a; } }   /* a still ring */
+.tq-pile-row .logo .goal { width: 15px; font-size: 13px; line-height: 15px; text-align: center; }
+/* a goal's count beside its title - "· 2 of 5 steps" - in the age column's quiet ink */
+.tq-pile-steps { flex: 0 0 auto; font: 400 11.5px 'IBM Plex Sans', system-ui, sans-serif; color: #746e64; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 500, not 600: at 600 every row shouted equally and the column read as a wall of bold (the owner,
    2026-09-16: "it's all too bold"). 11.5px is the size the TIMELINE tab sets its own subjects in
    (FeedView), and the two rails are the same list read two ways, so they read at one size. And the
@@ -258,13 +266,12 @@
 .tq-day-row.lvl-urgent .dot { background: #8a3646; }
 .tq-day-row.lvl-urgent .n { color: #8a3646; }
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
-.tq-day-row.lvl-agents .dot { background: #55697a; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
 .tq-day-row.lvl-fyi .dot { background: #7b7366; }
 .tq-day-row.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
 /* the day's opener: a card per band, paper and a hairline; the band is the label's DOT, never a tinted card */
-/* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch)
-   dropped FYI alone under the rest, and the row snapped back to four when that band left (the owner, 2026-10-07). A narrow
+/* ONE ROW, however many bands: auto-fit at 170px held four across 822px, so a fifth band (an agent still working at launch, when
+   it had a band of its own) dropped FYI alone under the rest, and the row snapped back to four when that band left (the owner, 2026-10-07). A narrow
    pane wraps them evenly in twos instead. */
 .tq-day-cards { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin: 16px 0 2px; }
 @container (max-width: 640px) { .tq-day-cards { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -280,7 +287,6 @@
 .tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-card.lvl-urgent .dot { background: #8a3646; }
 .tq-day-card.lvl-task .dot { background: #5f7a5f; }
-.tq-day-card.lvl-agents .dot { background: #55697a; }
 .tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #827356; }
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }
 .tq-day-card.lvl-later .dot { background: transparent; border: 1px dashed #7b7366; }
@@ -574,6 +580,9 @@
    word is in the row's tooltip - so the title keeps the room; a wider rail still spells it out */
 .tq-pile-row .card { container-type: inline-size; }
 @container (max-width: 300px) { .tq-pile-word .w { display: none; } .tq-pile-word i { margin-right: 0; } }
+/* ...but a goal's "slipped" is its whole word, and it stays, in red, however narrow the rail (the owner, 2026-10-21) */
+.tq-pile-word.keep .w { display: inline !important; }
+.tq-pile-row .t b.goal-t { min-width: 20%; }   /* ...its title gives way to its count and its word, never the other way round */
 
 /* ── the canvas (the canvas redesign, 2026-09-29) ─────────────────────────────────────────────── */
 /* the item on the table: the Tasks tab's task view, full width of the conversation, the body's own height */

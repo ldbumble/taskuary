@@ -48,7 +48,9 @@
 //             puts another on the table (the 2026-10-19 UI walk, G1: a Board, link or typed open left the rail ringing the item before)
 //   SWAP      a frame that shows a wrong state on the way to the next one (the 2026-10-19 UI walk, G8): after a press, the rail's ring on one
 //             item and the task view on another, a task view standing empty (its task not drawn) past a second, two rail rows drawn
-//             over each other that are not trading places, or a goal's "no steps yet" over steps that then arrive
+//             over each other that are not trading places, or a goal's "no steps yet" over steps that then arrive - and a rail heading
+//             lanes.json does not name, or a working agent's ring under any section but Tasks (or For later, put away with Remind me):
+//             a task does not move between sections when its agent starts, asks or stops (the owner, 2026-10-21)
 //   SEARCH    Enter opened another query's hit, or nothing; focus left elsewhere than what opened; "N of N" over a cut list; a
 //             connection its name did not find or open; no search at a phone's width (the 2026-10-19 UI walk, G9)
 //   OVER      a New ... entry that asks in a dialog drew another document under it, or its Cancel left one open (2026-10-19 UI walk:
@@ -73,6 +75,7 @@ import { fileURLToPath } from "node:url";
 import { launch } from "./browser.mjs";
 import { JARGON_RES } from "./src/words.js";
 import { VERBS, ALL_LABELS, label, verbOfRow, choice } from "./src/buttons.js";
+import { LEVEL_ORDER as SECTION_KEYS } from "./src/lanes.js";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 // no --port: every server takes a port the system says is free - two walks on one box (or a walk beside the browser suite) collided
@@ -286,6 +289,7 @@ async function pageOn(srv, phase) {
   await page.setViewport({ width: 1366, height: 768 });            // a laptop: where "the card is off the screen" happens
   if (throttle > 1) await page.emulateCPUThrottling(throttle);      // CI's runner, on a dev box: what a glide does a few times slower
   await page.evaluateOnNewDocument((t) => { try { localStorage.setItem("taskuary_token", t); } catch { /* none */ } }, srv.token);
+  await page.evaluateOnNewDocument((keys) => { window.__sections = keys; }, SECTION_KEYS);
   await page.evaluateOnNewDocument(swapWatch);
   page.step = phase;
   page.on("pageerror", (e) => note("CRASH", page.step, e.message));
@@ -357,6 +361,16 @@ function swapWatch() {
       }
     }
     for (const k of rest.keys()) if (!here.has(k)) rest.delete(k);           // a row that comes back comes from where it is drawn then
+    // ONE TASKS SECTION (the owner, 2026-10-21): the rail's headings are lanes.json's, and a task an agent is working is ringed where
+    // it is - under Tasks, or For later when Remind me put it away - never a section of its own
+    for (const h of document.querySelectorAll("[data-tq-rail] [data-tq-section-head]")) {
+      const s = h.getAttribute("data-tq-section-head");
+      if (!(window.__sections || []).includes(s)) add("section", `a "${s}" heading lanes.json does not name`);
+    }
+    for (const r of document.querySelectorAll("[data-tq-rail] [data-tq-working]")) {
+      const run = r.closest("[data-tq-run]")?.getAttribute("data-tq-run");
+      if (run && run !== "task" && run !== "later") add("section", `${r.closest("[data-tq-key]")?.getAttribute("data-tq-key")} spins under ${run}`);
+    }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

@@ -1,7 +1,7 @@
 """The shared displayed funnel and captured assistant selection.
 
-Five attention bands promote urgent requests/current or imminent calendar events,
-then owner input/approval, other actionable work/results, FYIs, and working agents.
+Four attention bands promote urgent requests/current or imminent calendar events,
+then every task (owner input/approval, other actionable work, a task an agent is working), results, FYIs.
 Saved triage priority and oldest activity order each band; stable keys break ties.
 Presentation lanes remain available for their existing controls and status copy.
 
@@ -1082,7 +1082,7 @@ def _activity_time(value):
 
 
 def _order(items: list) -> list:
-    """The five levels, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
+    """The four levels, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
     owner, 2026-09-07: "within one level oldest wins first"). A lane sub-rank and the saved priority
     used to sit in between, which put a reply drafted ten minutes ago ahead of an ask from Tuesday:
     "no reason why open task is before a reply drafted". Urgency has a level of its own."""
@@ -1322,10 +1322,14 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
         items = [i for i in items if i not in quiet]
         logger.debug(f'funnel: {len(quiet)} item(s) held back by your standing rules')
     # never more than the owner wants to look at: the rest waits its turn (and its arrivals still land)
-    queue, shelf = [i for i in items if i['lane'] != 'working'], [i for i in items if i['lane'] == 'working']
+    # ...but a task an agent is working is never capped away - and it keeps its place in the order, among the other tasks: it
+    # was shelved after everything else, under a section of its own (the owner, 2026-10-21)
+    queue = [i for i in items if i['lane'] != 'working']
     hidden = max(0, len(queue) - cap) if not keep_surfaced else 0
-    if hidden: queue = queue[:cap]
-    items = [i | {'order_band': _band(i)} for i in queue + shelf]  # same band for rendered cards and alerts
+    if hidden:
+        drop = {id(i) for i in queue[cap:]}
+        items = [i for i in items if id(i) not in drop]
+    items = [i | {'order_band': _band(i)} for i in items]  # same band for rendered cards and alerts
     rev = hashlib.sha1('|'.join(f"{i['key']}:{i['lane']}:{int(bool(i.get('settling')))}" for i in items).encode()).hexdigest()[:12] + f':{hidden}:{len(quiet)}'
     return {'rev': rev, 'items': items, 'hidden': hidden, 'muted': len(quiet),
             'rules': [str(r.get('why') or ' '.join(r.get('words') or []))[:120] for r in rules],
@@ -1649,11 +1653,11 @@ _not_yet = lanes.not_yet
 # row in the walk. "New arrivals still lead" was the rule for every lane, and with fifty unread fyi the one thing actually on
 # the owner was shown once and never came up again (the owner, 2026-09-10). Being shown is not a decision, so it cannot retire
 # the item; only settling it, or later/skip, takes it off the walk - and _eligible's 30-minute cooldown keeps it from coming
-# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Urgent and On you
+# straight back. ON YOU (lanes.on_you) is the wider count the opener and the greeting say: everything under Urgent and Tasks
 # that is the owner's move.
 def leads(item: dict) -> bool:
-    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or On you. A shown
-    row whose lane does not wait on the owner (a saved coding session the owner had just closed) sat FIRST under On you on the rail
+    """May the walk take this row before the rest? Waiting on the owner, unread - or simply drawn under Urgent or Tasks. A shown
+    row whose lane does not wait on the owner (a saved coding session the owner had just closed) sat FIRST under Tasks on the rail
     while the walk went past it to the next unread one (the owner, 2026-10-14: "the first task was skipped"): the rail and the walk
     are one order, so what the rail puts on you is walked in its place."""
     return waits_on_you(item) or not item.get('surfaced') or level_of(item) in ('urgent', 'task')
@@ -1684,7 +1688,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         return capture_selection(store, only=only, exclude=exclude).selected
     from .processing_unread import return_minutes        # the same hour the canonical pile's mark holds
     again = (datetime.now() - timedelta(minutes=return_minutes(store))).strftime('%Y-%m-%d %H:%M:%S')
-    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and i['lane'] != 'working' and not i.get('deferred')
+    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('deferred')
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]

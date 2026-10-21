@@ -27,7 +27,7 @@
       "surfaced": true,
       "put_down": true
     },
-    "later"
+    "task"
   ],
   [
     {
@@ -57,9 +57,25 @@
   [
     {
       "lane": "working",
+      "order_band": 2
+    },
+    "task"
+  ],
+  [
+    {
+      "lane": "working",
       "order_band": 5
     },
-    "agents"
+    "task"
+  ],
+  [
+    {
+      "lane": "blocked",
+      "order_band": 2,
+      "surfaced": true,
+      "put_down": true
+    },
+    "task"
   ],
   [
     {
@@ -111,7 +127,7 @@
       "news": true,
       "surfaced": false
     },
-    "goals"
+    "task"
   ],
   [
     {
@@ -121,7 +137,7 @@
       "news": true,
       "surfaced": false
     },
-    "goals"
+    "task"
   ],
   [
     {

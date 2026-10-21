@@ -191,7 +191,7 @@ def _list_line(store) -> str:
     if items is None: return 'Everything on it is in front of you on the left.'
     yours = sum(map(lanes.on_you, items))
     if not yours: return 'Nothing is on you right now.'
-    return f"{_n(yours, 'thing is', 'things are')} on you - they lead your rail, under ON YOU."
+    return f"{_n(yours, 'thing is', 'things are')} on you - they lead your rail, under {funnel.SECTION_WORDS['task'].upper()}."
 
 
 # THE ADVISOR, SCRIPTED (B17, 2026-10-17): its prompt says JSON, so it got triage's {"intent": "fyi"} and dropped every answer as

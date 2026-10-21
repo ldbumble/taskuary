@@ -190,7 +190,7 @@ def test_the_task_an_ideas_vehicle_carries_is_still_a_row_while_an_agent_works_i
     assert vehicle not in {r['row'].get('MessageId') for r in all_rows}
     assert [(i['kind'], i['lane'], i['tid']) for i in unread['items']] == [('todo', 'yours', tid)]
     working = processing_unread.build(store, live_state=[{'taskId': tid, 'agent': 'claude', 'sid': 'browser-job', 'waiting': False}])
-    assert [(i['lane'], i['order_band'], i['tid']) for i in working['items']] == [('working', 5, tid)]
+    assert [(i['lane'], i['order_band'], i['tid']) for i in working['items']] == [('working', 2, tid)]   # a task, under Tasks (2026-10-21)
 
 
 def test_a_census_that_moved_under_a_settle_is_reconciled_instead_of_refused(store):
@@ -430,7 +430,8 @@ def test_working_to_waiting_uses_same_root_and_never_writes_read_state(store, ag
     working = processing_unread.build(store, live_state=[worker])['items'][0]
     waiting = processing_unread.build(store, live_state=[{**worker, 'waiting': True}])['items'][0]
     assert working['key'] == waiting['key']
-    assert working['order_band'] == 5 and not working['actionable']
+    # one level working or waiting, and walked either way: the row never moves when its agent asks (the owner, 2026-10-21)
+    assert working['order_band'] == 2 and working['actionable']
     assert waiting['order_band'] == 2 and waiting['actionable']
     # an agent on it does not change where it came from: the row keeps its source's mark (2026-09-25)
     assert working['kind'] == 'agent' and working['channel'] == waiting['channel'] == 'email'
@@ -470,7 +471,9 @@ def test_waiting_selection_ignores_idle_clock_but_retains_worker_facts(store, mo
     assert capture_selection(store, now=now).revision == initial.revision
     worker['idle'] = terminal.IDLE_WAITING - 1
     working = capture_selection(store, now=now)
-    assert working.selected is None and working.pending['working'] == 1
+    # ...and working, it is still the walk's item - the same row, now the agent's pane (2026-10-21)
+    assert working.selected['key'] == initial.selected['key'] and working.selected['lane'] == 'working'
+    assert working.pending['working'] == 1
     worker['idle'] = terminal.IDLE_WAITING
     waiting = capture_selection(store, now=now)
     assert waiting.selected['key'] == initial.selected['key']

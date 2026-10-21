@@ -62,8 +62,8 @@ test("every task row says who works it, in the owner's words", () => {
     assert.ok(KIND_OPTIONS.some((o) => o.label === label), `the kind vocabulary is missing ${label}`);
   }
   assert.equal(text.match(/from "\.\/kinds\.js"/g)?.length, 2, "the list and the task page both read kinds.js");
-  // the work rail's heading for band 2 is "on you" since the canvas redesign (2026-09-29) - the same words the
-  // lane itself says on a row (lanes.json `yours`), so the heading and the row cannot disagree
-  assert.equal(LEVEL_META.task.word, "on you", "the rail's band-2 heading is not 'on you'");
-  assert.equal(LEVEL_META.task.word, LANE_META.yours.word, "the heading and the lane it holds say it two ways");
+  // the work rail's heading for band 2 is "tasks" since 2026-10-21 - every open task, an agent on it or not; a row with nobody on it
+  // still says "on you" (lanes.json `yours`), which is what the heading no longer says for it
+  assert.equal(LEVEL_META.task.word, "tasks", "the rail's band-2 heading is not 'tasks'");
+  assert.equal(LANE_META.yours.word, "on you");
 });

@@ -17,7 +17,8 @@ def later(minutes):
 # "back in 2h" (2026-10-01)
 def pile():
     return [{'key': 'msg:1', 'lane': 'asked', 'order_band': 2, 'title': 'Approve the Q3 invoice', 'who': 'Paula Vance'},
-            {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'surfaced': True, 'put_down': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
+            {'key': 'msg:2', 'lane': 'yours', 'order_band': 2, 'deferred': True, 'back_at': later(185), 'title': 'Lease renewal', 'who': 'Ray Colton'},
+            {'key': 'msg:5', 'lane': 'working', 'order_band': 2, 'title': 'Census export', 'working': 'coding'},
             {'key': 'msg:3', 'lane': 'fyi', 'order_band': 4, 'title': 'Quarterly newsletter', 'who': 'Marcus Reed'},
             {'key': 'msg:4', 'lane': 'fyi', 'order_band': 4, 'title': 'Back Tuesday', 'who': 'Gail Moreno'}]
 
@@ -27,10 +28,12 @@ class ForLaterTests(unittest.TestCase):
         text = ra.who_wants_what(pile())
         self.assertIn('FOR LATER · 1', text)
         self.assertIn('Lease renewal (back in 3h)', text)
+        # every open task is under Tasks, the one an agent is working included (the owner, 2026-10-21)
+        self.assertIn('TASKS · 2', text); self.assertNotIn('AGENTS WORKING', text)
 
     def test_the_sections_are_offered_as_picks(self):
         rows = db.section_rows(pile())
-        self.assertEqual([label for label, _ in rows], ['Walk On you', 'Walk For later', 'Walk FYI'])
+        self.assertEqual([label for label, _ in rows], ['Walk Tasks', 'Walk For later', 'Walk FYI'])
         self.assertEqual(rows[-1][1], {'t': 'section', 'section': 'fyi'})
 
 

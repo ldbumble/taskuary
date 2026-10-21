@@ -169,7 +169,7 @@ def test_related_idea_activity_does_not_replace_owned_member_activity():
     assert activity["provenance"] == "idea:11.LastSaid"
 
 
-def test_priority_order_uses_five_attention_levels_then_oldest_and_id():
+def test_priority_order_uses_four_attention_levels_then_oldest_and_id():
     items = [
         _item("working", at="2026-01-01T00:00:00Z", priority="urgent"),
         _item("fyi", at="2026-01-01T00:00:00Z", priority="urgent"),
@@ -191,13 +191,13 @@ def test_priority_order_uses_five_attention_levels_then_oldest_and_id():
 
     page = processing_inventory_page(_snapshot(items), order="priority", facts=facts)
 
-    # one level for everything the owner has to do, a landed result below it, and inside a level the
-    # oldest leads - saved priority is a fact on the row, not a tiebreak (2026-09-07)
+    # one level for every task - an agent working one included (the owner, 2026-10-21) - a landed result below it, and inside a
+    # level the oldest leads - saved priority is a fact on the row, not a tiebreak (2026-09-07)
     assert _ids(page) == [
-        "request", "owner", "action-old-a", "action-new", "action-urgent",
-        "action-old-z", "fyi", "working", "unknown",
+        "request", "owner", "working", "action-old-a", "action-new", "action-urgent",
+        "action-old-z", "fyi", "unknown",
     ]
-    assert [page["items"][i]["inventory_facts"]["attention"]["band"] for i in range(8)] == [1, 2, 2, 2, 2, 3, 4, 5]
+    assert [page["items"][i]["inventory_facts"]["attention"]["band"] for i in range(8)] == [1, 2, 2, 2, 2, 2, 3, 4]
     unknown = page["items"][-1]["inventory_facts"]["attention"]
     assert unknown == {"state": "unknown", "band": None, "signals": [],
                        "diagnostics": ["attention_requires_revision_bound_fact"]}
@@ -229,7 +229,7 @@ def test_waiting_signal_beats_working_signal_for_the_same_item():
 
 
 @pytest.mark.parametrize("ordinary", ["actionable_task", "finished_result", "fyi"])
-def test_working_stays_band_five_when_only_ordinary_attention_is_also_present(ordinary):
+def test_working_is_a_task_level_whatever_else_is_present(ordinary):
     item = _item("working")
     facts = {"working": _fact(item, _signal("working"), _signal(ordinary))}
 
@@ -237,8 +237,9 @@ def test_working_stays_band_five_when_only_ordinary_attention_is_also_present(or
         _snapshot([item]), order="priority", facts=facts
     )["items"][0]["inventory_facts"]["attention"]
 
-    assert attention["band"] == 5
-    assert "working_suppresses_non_owner_attention" in attention["diagnostics"]
+    # a working agent's task is a task (the owner, 2026-10-21): level 2, and nothing about it is suppressed
+    assert attention["band"] == 2
+    assert "working_suppresses_non_owner_attention" not in attention["diagnostics"]
 
 
 def test_urgent_request_still_overrides_working():

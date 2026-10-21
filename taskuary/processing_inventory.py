@@ -28,7 +28,7 @@ _SIGNAL_BAND = {          # the signals already name work and results apart; the
     "actionable_task": 2,
     "finished_result": 3,
     "fyi": 4,
-    "working": 5,
+    "working": 2,        # a task an agent is working is a task, in the same level as the rest (the owner, 2026-10-21)
 }
 _FACT_KEYS = frozenset({"view_revision", "activity", "triage_priority", "attention"})
 _QUERY_REVISION = "canonical-items-v1"
@@ -288,18 +288,13 @@ def _normalize_attention(value: Any, as_of: tuple[int, ...], as_of_aware: bool) 
     if not qualifying:
         return {"state": "unknown", "band": None, "signals": signals,
                 "diagnostics": [*diagnostics, "attention_unknown"]}
-    # the SIGNAL, not its level: owner input and an actionable task share level 2, and only the
-    # first of them outranks a live session (working_suppresses_non_owner_attention, below)
+    # the SIGNAL, not its level: owner input, an actionable task and a live session all share level 2
     kinds = {signal["kind"] for signal in signals if signal["band"] is not None}
     selected_band = attention_band(urgent=1 in qualifying,
                                    owner_wait=bool(kinds & {"owner_input", "owner_approval"}),
-                                   working=5 in qualifying,
+                                   working="working" in kinds,
                                    actionable="actionable_task" in kinds,
                                    result="finished_result" in kinds)
-    # what a live session suppressed, by SIGNAL: an actionable task shares level 2 with owner input
-    # now, and only owner input outranks the session
-    if selected_band == 5 and kinds & {"actionable_task", "finished_result", "fyi"}:
-        diagnostics.append("working_suppresses_non_owner_attention")
     return {"state": "known", "band": selected_band, "signals": signals,
             "diagnostics": diagnostics}
 

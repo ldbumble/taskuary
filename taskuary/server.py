@@ -332,7 +332,7 @@ async def token_gate(request: Request, call_next):
         # string - the same concession websockets already needed
         # ...and an OAuth callback is a redirect from the provider's site: no header can ride on it.
         # It proves itself with the one-time state it was issued (quickbooks_authorize), not the token.
-        file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/'))
+        file_read = request.url.path.startswith(('/api/attachments/', '/api/task-artifacts/', '/api/task-outputs/'))
         if not (file_read and guard.token_matches(request.query_params.get('token'), tok)) \
                 and request.url.path not in ('/api/quickbooks/callback', '/api/zoho/callback', '/api/linkedin/callback'):
             # In JSON, like every other refusal: an HTML body left `detail` undefined, so a tab that
@@ -1673,7 +1673,10 @@ def _assistant_payload(task_id: int, session=None):
     answers = [(str(m.get('createdAt') or ''), m['id']) for m in messages if m['role'] == 'assistant']
     published = [{**r, 'after': next((mid for at, mid in answers if at >= str(r.get('created_at') or '')), None)}
                  for r in (_artifact_row(a) for a in store.list_task_artifacts(task_id) if a.get('Kind') in ('claude_artifact', 'shown'))]
+    from . import outputs
     return {'messages': messages,
+            # the files the agent made for this task (outputs.py): listed on the canvas, and a chip where an answer names one
+            'outputs': outputs.listing(task_id),
             # ONE ENTRY PER CLI, and only the installed ones: this listed a provider per worker
             # profile, so five profiles on Claude read as five brains (the owner, 2026-09-18).
             'providers': general.brain_options(store, keep=general.default_pick(store, task)),
@@ -2796,6 +2799,42 @@ def task_artifact(aid: int, download: bool = False):
     response.headers['Content-Disposition'] = f'{disposition}; filename="{_att_filename(artifact.get("Name"))}"'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
+
+@app.get('/api/task-outputs/{tid}')
+def task_outputs(tid: int):
+    "The files an agent made for this task in its outputs folder (outputs.py), as the page lists them."
+    from . import outputs
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    return {'data': outputs.listing(tid), 'folder': f'scratch/outputs/{task_ref(tid)}'}
+
+
+@app.get('/api/task-outputs/{tid}/{rel:path}')
+def task_output(tid: int, rel: str, download: bool = False, preview: bool = False, sheet: str = ''):
+    """One file from THIS task's outputs folder - a name inside it, never a path out of it (outputs.resolve). `preview` gives a
+    workbook's sheet as rows (outputs.sheet); otherwise the bytes: a picture drawn as itself, text and anything that could run as
+    plain text, the rest as a download under its own name (_NOSCRIPT, as the attachment and artifact routes do)."""
+    from . import outputs
+    if not store.get_task(tid): raise HTTPException(404, 'task not found')
+    path = outputs.resolve(tid, rel)
+    if not path: raise HTTPException(404, f'no file {rel!r} in the outputs of {task_ref(tid)}')
+    if preview:
+        if outputs.PREVIEW.get(path.suffix.lower()) != 'sheet': raise HTTPException(422, 'only a workbook has a sheet preview - open the file itself')
+        if not outputs.can_sheet():
+            raise HTTPException(501, 'No preview on this install (it needs openpyxl) - Download opens it in your spreadsheet app.')
+        try: return outputs.sheet(path, sheet)
+        except Exception as e:
+            logger.info(f'task {tid} output {path.name} not previewed - {e}')
+            raise HTTPException(422, 'This workbook could not be read for a preview - Download it to open it.')
+    ct = outputs.content_type(path.name)
+    low = ct.lower()
+    if download or not (low.startswith(('image/', 'text/')) or low in ('application/json', 'application/pdf')):
+        resp = FileResponse(path, media_type=ct, filename=_att_filename(path.name), content_disposition_type='attachment')
+    else:
+        # in place: a picture as itself, a PDF for the viewer, text (and SVG/HTML, which could run as Taskuary) as plain text
+        media = ct if (low.startswith('image/') or low == 'application/pdf') and low not in _NOSCRIPT else 'text/plain; charset=utf-8'
+        resp = FileResponse(path, media_type=media, filename=_att_filename(path.name), content_disposition_type='inline')
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 @app.post('/api/messages/{mid}/attachments/fetch')
 def fetch_attachments(mid: int):

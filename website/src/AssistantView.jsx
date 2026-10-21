@@ -1002,6 +1002,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const [starting, setStarting] = useState(false);
   const [resetting, setResetting] = useState(false);  // replacing a chat is housekeeping, never an AI turn
   const [work, setWork] = useState([]);              // the turn's tool calls and progress, as they stream
+  const [words, setWords] = useState("");            // ...and the answer's words as they are written - the finished answer replaces them
   const [err, setErrRaw] = useState("");
   const setErr = useCallback((v) => {
     if (typeof v === "string" && DEMO_SAID.has(v)) { setMsgs((m) => [...m, { id: `d${Date.now()}`, role: "assistant", text: v, options: [] }]); return; }
@@ -1165,7 +1166,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   const turnOnce = useCallback(async (body) => {
     turnsBegun.current += 1;
     if (body.mode === "next") body = { ...body, fyi: fyiWant.current };
-    setWork([]);
+    setWork([]); setWords("");
     const stop = new AbortController(); stopRef.current = stop;
     const plain = async () => {
       const endpoint = body.mode === "open" ? "/api/concierge/open" : body.mode === "next" ? "/api/concierge/next" : "/api/concierge/say";
@@ -1190,7 +1191,10 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     if (!res.body) return plain();                    // the static demo, or an older server: the plain door
     const answer = await readTurn(res.body, (ev) => {
+      // the words as the model writes them (agents.spoken: never its CALL line) - drawn at once, replaced by the answer
+      if (ev.type === "words") { setWords(String(ev.detail || "")); return; }
       if (ev.type === "error") {
+        setWords("");
         const error = new Error(ev.error || "The assistant could not answer.");
         error.code = ev.code; error.detail = ev.detail;
         throw error;
@@ -1204,6 +1208,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       if (ev.type === "tool_call" && !/^(ToolSearch|TodoWrite|TaskCreate|TaskUpdate|TaskList|Skill)$/.test(ev.name || ""))
         setWork((w) => [...w, `${ev.name || "tool"} ${toolTarget(ev.detail?.args).slice(0, 90)}`].slice(-6));
     });
+    setWords("");
     if (answer) { setWork([]); return answer; }
     throw new Error("The assistant stopped without an answer.");
   }, []);
@@ -2927,7 +2932,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           {!old && <div className="tq-browse-line" data-tq-run-slot="" style={{ display: "contents" }} />}
           {(busy || phoneBusy || nextComing) && (
             <div className="tq-msg"><div className="avatar"><AssistantMark /></div>
-              <div className="body"><span className="tq-typing"><i /><i /><i /></span>
+              <div className="body">{busy && words ? <div className="tq-words" data-tq-words="">{looksMd(words) ? <Md text={words} /> : words.split("\n").map((p, i) => <p key={i}>{p}</p>)}</div>
+                : <span className="tq-typing"><i /><i /><i /></span>}
                 {/* ...and how long it has been at it, where the dots alone were silent: its own clock, so the chat does not redraw each second */}
                 {busy && answering.current && !DEMO && <WorkingFor />}
                 {/* an answer that hangs had no way out: New chat is refused while one is being written (dock/new 409) */}

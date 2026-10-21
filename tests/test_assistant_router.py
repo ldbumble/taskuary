@@ -292,6 +292,31 @@ class DraftsInTurnAndAnyButton(unittest.TestCase):
         self.assertEqual(out['light']['verb'], 'remove'); self.assertTrue(out['say'].startswith('Lit '))
 
 
+class AConnectorIsItsCard(unittest.TestCase):
+    # "add LinkedIn as a connector", "connect Slack", "hook up my second Outlook" (the owner, 2026-10-20): the catalogue's card, brought up
+    def test_any_catalogue_card_opens_and_says_what_to_do(self):
+        s = store()
+        for typ, title in (('linkedin', 'LinkedIn'), ('slack', 'Slack'), ('quickbooks', 'QuickBooks Online')):
+            out, _ = say(s, f'add {typ} as a connector', None, f'CALL: {{"kind": "connection.create", "params": {{"type": "{typ}"}}}}')
+            self.assertEqual(out['open'], f'#connector={typ}'); self.assertTrue(out['say'].startswith(f'Opened the {title} card'), out['say'])
+        out, _ = say(s, 'connect quickbooks online', None, 'CALL: {"kind": "connection.create", "params": {"type": "QuickBooks Online"}}')
+        self.assertEqual(out['open'], '#connector=quickbooks')
+
+    def test_a_second_one_names_add_another(self):
+        s = store(); s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
+        out, _ = say(s, 'hook up my second outlook', None, 'CALL: {"kind": "connection.create", "params": {"type": "outlook"}}')
+        self.assertEqual(out['open'], '#connector=outlook'); self.assertIn('Add another', out['say'])
+
+    def test_an_unknown_one_is_said_with_the_closest(self):
+        s = store(); seen = []
+        def llm(system, user, **kw):
+            seen.append(user)
+            return 'CALL: {"kind": "connection.create", "params": {"type": "slak"}}' if len(seen) == 1 else 'There is no Slak connector - did you mean Slack?'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'connect slak', llm=llm)
+        self.assertIn('the closest are Slack', seen[1]); self.assertNotIn('open', out)
+
+
 class RunItAgain(unittest.TestCase):
     def test_run_it_again_over_a_good_report_opens_its_page(self):
         s = store()

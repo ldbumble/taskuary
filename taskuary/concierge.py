@@ -2310,6 +2310,21 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             c = appfacts.find_connection(store, name, cid)
             if not c: return _miss('No connection by that name. Connected: ' + ', '.join(x['name'] for x in appfacts.connections(store) if x['active']) + '.')
             params['target'], named = c['connector_id'], c['name']
+        elif kind == 'connection.create' and routes():
+            # ON THE DESK, THE CATALOGUE'S CARD, BROUGHT UP (the owner, 2026-10-20: "add LinkedIn as a connector"): any card the catalogue
+            # has - LinkedIn was refused for not being a connector role - found by its type, title or match words; one already
+            # connected opens with its Add another named; a name the catalogue lacks is said with its closest cards
+            c = catalogue_card(str(params.get('type') or params.get('name') or ''))
+            if not c or c.get('planned'):
+                want = str(params.get('type') or params.get('name') or '').strip()
+                near = ', '.join(x['title'] for x in catalogue_near(want))
+                return _miss(f"There is no {want or 'such'} connector{' yet' if c else ''}{'; the closest are ' + near if near else ''}. "
+                             'Say so in plain words, naming those. Nothing was changed.')
+            ex = store.get_connector_by_type(c['type'])
+            said = (f"Opened your {c['title']} card under Connections - press Add another there to connect a second one." if ex and ex.get('Active')
+                    else f"Opened the {c['title']} card under Connections - follow its steps there to connect it; a key or password goes on the "
+                         'card, never in this chat.')
+            return _page(store, tid, item, f"#connector={c['type']}", said)
         elif kind == 'connection.create':
             # the card OF THAT TYPE, never the item on the table: "connect my Jira" over TQ-0001 fell through to the target line
             # below and its id was saved as a ConnectorId (2026-10-06)
@@ -3315,10 +3330,31 @@ def _compose_llm(store, trace=None, cancel=None):
         logger.warning(f'concierge: no composer brain - {e}'); return None
 
 
+def catalogue_card(name: str) -> dict | None:
+    """The connector catalogue's card a name means - its type, its title or one of its match words, as the catalogue spells them."""
+    from . import connectorcatalog
+    n = ' '.join(str(name or '').lower().replace('_', ' ').split())
+    if not n: return None
+    cs = connectorcatalog.cards()
+    return (next((c for c in cs if c['type'] == n.replace(' ', '_')), None) or next((c for c in cs if c['title'].lower() == n), None)
+            or next((c for c in cs if n in [m.lower() for m in c.get('match') or []]), None))
+
+
+def catalogue_near(name: str, n: int = 3) -> list:
+    """The catalogue's cards closest to a name it does not have - by spelling, over titles and types."""
+    import difflib
+    from . import connectorcatalog
+    cs = [c for c in connectorcatalog.cards() if not c.get('planned')]
+    keys = {c['title'].lower(): c for c in cs} | {c['type']: c for c in cs}
+    hits = difflib.get_close_matches(str(name or '').lower().strip(), list(keys), n=n * 2, cutoff=0.5)
+    return list({id(keys[k]): keys[k] for k in hits}.values())[:n]
+
+
 def sort_setup(store, text: str, llm) -> dict:
     """What kind of set-up the words ask for, by the model: a report, a connection (and to what), or digging."""
     from . import compose
-    types = sorted(store_mod.DEFAULT_ROLES)
+    from . import connectorcatalog
+    types = sorted(set(store_mod.DEFAULT_ROLES) | {c['type'] for c in connectorcatalog.cards() if not c.get('planned')})
     from . import roles
     have = {k: r['title'] for k, r in roles.ROLES.items()}
     try: out = compose._json(llm(SETUP_SORT_SYSTEM, json.dumps({'request': text, 'connector_types': types, 'roles': have}), max_tokens=300)) or {}
@@ -3454,6 +3490,8 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
             return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
         if sort.get('provider'):
+            return call_turn(store, tid, {'kind': 'connection.create', 'params': {'type': sort['provider']}}, item, text, actor)
+        if sort['kind'] == 'connection':
             prov = sort['provider']
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
             return _page(store, tid, item, f'#connector={prov}', f"Opened {name}'s card under Connections - fill it in and test it there. "

@@ -1400,8 +1400,8 @@ def pages_block(store) -> str:
             # ...and the demo has no Setup button (it cannot connect an inbox): there it is said so, never pointed at (verify, 2026-10-19)
             + ('- setup itself has no link and no button here: this is the demo, with invented mail - Taskuary installed on their own computer '
                'is set up with the Setup button at the top; say so\n' if _demo.enabled() else
-               '- setup itself - their AI, their email, the questions about their work - has no link: it is the Setup button at the top of '
-               'the page; say so\n') +
+               '- setup itself - their AI, their main source (email, chat or a task system), the questions about their work - has '
+               'no link: it is the Setup button at the top of the page; say so\n') +
             f"- a report or workflow: #report=<id>{' - ' + reps if reps else ''}; a new report #report=new; a new workflow "
             '#report=new-agent; the workflows #report=workflows\n'
             '- settings: #settings=config, #settings=policies, #settings=memory, #settings=docs (the operator documents), '

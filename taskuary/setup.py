@@ -13,14 +13,13 @@ The first useful result needs your identity, one AI and one source. Model assign
 agents are available afterwards; opening their settings is not a prerequisite for doing work.
 """
 from .llm import AI_TYPES, brain_status
-from . import words
+from . import connectorcatalog, words
 from .firstrun import DISMISSED     # the one "put away" flag (firstrun.dismissed); this module's own is folded into it
 
 # Channels that bring work IN. A report connection or a tool is not a funnel: without one of
-# these the Timeline has nothing to show and never will.
-INBOUND = ('outlook', 'teams', 'slack', 'gmail', 'imap', 'telegram', 'whatsapp', 'imessage', 'discord',
-           'github', 'jira', 'asana', 'monday', 'clickup', 'todoist', 'gitlab', 'azdo',
-           'linear', 'trello', 'notion', 'sentry', 'pagerduty')
+# these the Timeline has nothing to show and never will. The catalogue says which they are (its `sources`):
+# a list kept here left Mattermost, Matrix, Rocket.Chat and Google Chat out of setup's main source.
+INBOUND = connectorcatalog.source_types()
 
 # Retained for callers that specifically need messaging rather than tracker sources.
 MESSAGING = ('outlook', 'teams', 'slack', 'gmail', 'imap', 'telegram', 'whatsapp', 'imessage', 'discord')
@@ -81,7 +80,7 @@ def state(store, first: dict = None) -> dict:
     when the caller already has it.
 
     Where the two used to disagree, the canvas's rule won (2026-10-18): the AI is done when it is PICKED and works, not when some
-    brain happens to answer (firstrun's "step 1 is a choice"); the email is done once the AI is (the rail's order); and the AI is
+    brain happens to answer (firstrun's "step 1 is a choice"); the main source is done once the AI is (the rail's order); and the AI is
     named the way the canvas names it ("Claude", not "claude (CLI)").
 
     `goto` carries a `label` as well as the tab and the position inside it, and the label is what the
@@ -127,12 +126,12 @@ def state(store, first: dict = None) -> dict:
          # ...and with no brain at all, the OTHER road too: an owner with an OpenAI or Azure key and no
          # CLI saw only the CLI door and had nowhere to paste it. Connections opens on its AI group.
          **({'alt': {'tab': 'Connections', 'hash': '', 'label': 'Paste an API key'}} if not ai['type'] else {})},
-        {'key': 'inbound', 'title': 'Connect your email',
-         'why': 'Start with your mailbox - or a work chat if that is where your work arrives. Sign in, '
+        {'key': 'inbound', 'title': 'Connect your main source',
+         'why': 'Where does your work come in? Connect your email, chat or task system - email is the usual one. Sign in, '
                 'test it on its card, and the rest can wait.',
          'done': rail['mail']['done'], 'detail': f"already connected: {', '.join(inbound[:3])}" if inbound else '',
          # the Email section itself, by its one link (words.json) - '' opened Connections at the top, AI first
-         'goto': {'tab': 'Connections', 'hash': words.href('mail').lstrip('#'), 'label': 'Connect your email'}},
+         'goto': {'tab': 'Connections', 'hash': words.href('mail').lstrip('#'), 'label': 'Connect your main source'}},
         {'key': 'sync', 'title': 'Look at your first items',
          'why': 'Taskuary reads what you connected and shows up to five of your newest items here. Open one '
                 'to see how it was sorted and any draft. Everything else is still read - this is only a sample.',

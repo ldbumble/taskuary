@@ -24,7 +24,7 @@ test("setup is the assistant canvas: no dialog opens itself, the chip goes to th
 test("three questions on the Advisor's line, each answered on the Connections page's own cards", () => {
   const fr = read("FirstRun.jsx"), cv = read("ConnectorsView.jsx");
   // the question is the ADVISOR'S line, in its bar over the row (setupLine.js) - one per step, the server's own when the AI is failing
-  assert.match(fr, /lineRef\.current = said \|\| err \|\| \{[\s\S]{0,2600}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.`/, "the question is the Advisor's, one per step");
+  assert.match(fr, /lineRef\.current = said \|\| err \|\| \{[\s\S]{0,3000}other: aiErr \? `\$\{aiErr\} Change AI picks one that does\.`/, "the question is the Advisor's, one per step");
   // ...and nothing while it waits hidden under a page opened during setup (W2)
   assert.match(fr, /useEffect\(\(\) => \{ writeSetupLine\(hidden \? "" : lineRef\.current\); \}\);/);
   assert.match(fr, /className="tq-next"/, "in the Advisor's own line, not a box of our own");

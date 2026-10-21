@@ -102,13 +102,13 @@ def test_the_rail_says_what_is_done_and_what_waits():
     ai = _rows(step='ai')
     assert not ai['ai']['done'] and ai['ai']['open']
     assert not ai['mail']['open'] and ai['mail']['sub'] == 'waits - pick an AI that works first'
-    assert not ai['about']['open'] and ai['about']['sub'] == 'waits - connect your email first'
+    assert not ai['about']['open'] and ai['about']['sub'] == 'waits - connect your main source first'
     assert ai['other']['open'], 'the optional ones never wait'
     reading = _rows(step='reading', about_done=False, brain={'name': 'Claude'}, empty=True)
     assert reading['ai']['sub'] == 'Claude' and reading['mail']['sub'] == 'connected - nothing new yet' and reading['about']['open']
     assert _rows(step='email', dismissed=True)['finish']['done'] is False, 'put away is not finished'
     assert _rows(step='done', about_done=True, dismissed=True)['finish']['done'] is True
-    assert _rows(step='reading', about_done=False)['finish']['sub'] == 'after AI, email and About your work'
+    assert _rows(step='reading', about_done=False)['finish']['sub'] == 'after AI, your main source and About your work'
     assert _rows(step='reading', about_done=True)['finish']['sub'].startswith('ready')
     assert (_rows(more_connected=0, step='done')['other']['done'], _rows(more_connected=3, step='done')['other']['sub']) == (False, '3 connected')
 

@@ -34,7 +34,7 @@ test("setup: every AI card says what happened, never the opposite, and opens aga
   page.on("request", (r) => {
     const p = new URL(r.url()).pathname;
     // the success road: the server's own answer for a key that worked, stood in for here
-    if (succeed && p === "/api/setup/first-run/key") return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, why: "Your key works - it will sort your mail." }) });
+    if (succeed && p === "/api/setup/first-run/key") return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, why: "Your key works - it will sort what comes in." }) });
     // a CLI that is not here: its install is refused, as one with no road would be (nothing is installed by a test)
     if (p === "/api/cli/install") { installs++; return r.respond({ status: 409, contentType: "application/json", body: JSON.stringify({ detail: "no installer can run here" }) }); }
     if (/\/chatgpt\/signin$/.test(p)) return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ flow: "f", url: "about:blank" }) });

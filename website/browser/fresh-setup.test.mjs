@@ -127,3 +127,72 @@ test("setup comes back as it was left from the rail, the Setup chip and Chat - a
   await page.click('[data-tq-setup-step="ai"]'); await back("the rail's step, from the task");
   assert.deepEqual(errors, []);
 });
+
+// THE MAIN SOURCE IS ANY PLACE WORK COMES IN (the owner, 2026-10-21: "they have to connect their main source, normally it's email.
+// Let's update that to any messaging/email/task system (e.g. monday.com) as an option"). A first start with an AI stood in by a key
+// nothing ever calls; a task system connected through setup's own card - its token saved for real, its Test the fixture's fake (the
+// fixture reaches no service): it turns the card on with the account a passing Test would add. The step is the server's own.
+test("a task system alone is the main source: connected on setup's own card, setup moves on to About your work", { timeout: 240000 }, async (t) => {
+  const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
+  const api = (p, body, method = body ? "POST" : "GET") => fetch(`${harness.fixtureApi}${p}`, { method,
+    headers: { "Content-Type": "application/json", "X-Taskuary-Token": harness.token }, body: body && JSON.stringify(body) }).then((r) => r.json());
+  const conns = (await api("/api/connectors")).data, of = (t) => conns.find((c) => c.Type === t);
+  await api("/api/connectors", { ConnectorId: of("anthropic").ConnectorId, Secret: "sk-test-not-a-real-key-000000", Active: true });
+  await api("/api/settings", { name: "triage_ai", value: `connector:${of("anthropic").ConnectorId}` }, "PATCH");
+  const board = of("monday"), tested = [];
+  const page = await harness.newPage(), errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.off("request", page.fixtureRequestGuard);
+  page.on("request", async (r) => {
+    const p = new URL(r.url()).pathname;
+    if (p === `/api/connectors/${board.ConnectorId}/test` && r.method() === "POST") {
+      tested.push(p);
+      await api("/api/sources", { Channel: "monday", Address: "Alex Doyle", ConnectorId: board.ConnectorId, Active: true });
+      await api("/api/connectors", { ConnectorId: board.ConnectorId, Active: true });
+      return r.respond({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, detail: "authenticated as Alex Doyle (alex@northwind.example)" }) });
+    }
+    if (p === "/api/setup/first-run/about/suggest") return r.respond({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ name: "Alex Doyle", org: "Northwind", role: "Operations lead", signature: "", systems: [] }) });
+    page.fixtureRequestGuard(r);
+  });
+  const until = (f, arg, timeout = 30000) => page.waitForFunction(f, { timeout, polling: 200 }, arg).catch(async (e) => {
+    throw new Error(`${e.message} waiting for ${String(f).slice(0, 160)}\n${(await page.evaluate(() => document.body.innerText)).slice(-1500)}`);
+  });
+  const press = (label) => page.evaluate((l) => {
+    const b = [...document.querySelectorAll("button")].find((e) => e.innerText.trim() === l && e.getBoundingClientRect().width > 0 && !e.disabled);
+    b?.click(); return !!b;
+  }, label);
+  await page.goto(harness.ui, { waitUntil: "domcontentloaded", timeout: 90000 });
+  await until(() => /Where does your work come in\? Connect your email, chat or task system/.test(document.querySelector(".tq-next-txt")?.innerText || ""), null, 60000);
+  const rail = await page.evaluate(() => document.querySelector('[data-tq-setup-step="mail"]')?.innerText || "");
+  assert.match(rail, /Your main source/);
+  // email first - the usual one - and the rest of the sources one More away
+  const first = await page.evaluate(() => [...document.querySelectorAll("[data-tq-firstrun] [data-tq-card]")].map((e) => e.getAttribute("data-tq-card")));
+  assert.deepEqual(first.slice(0, 3), ["outlook", "gmail", "imap"].map((t) => `c${of(t).ConnectorId}`), `email leads the shelf: ${first}`);
+  assert.ok(!first.includes(`c${board.ConnectorId}`), "a task system is under More, after email");
+  await page.click("[data-tq-firstrun] [data-tq-shelf-more]");
+  await until((k) => document.querySelector(`[data-tq-firstrun] [data-tq-card="${k}"]`), `c${board.ConnectorId}`);
+  await page.click(`[data-tq-firstrun] [data-tq-card="c${board.ConnectorId}"]`);
+  // the card's own setup, as Connections shows it: the token, Save & continue, then Test
+  await until(() => [...document.querySelectorAll("[data-tq-firstrun] label")].some((l) => /^API token/.test(l.innerText)));
+  await page.evaluate(() => document.getElementById([...document.querySelectorAll("[data-tq-firstrun] label")].find((l) => /^API token/.test(l.innerText)).htmlFor).focus());
+  await page.keyboard.type("not-a-real-token");
+  assert.ok(await press("Save & continue"));
+  await until(() => [...document.querySelectorAll("[data-tq-firstrun] button")].some((b) => b.innerText.trim() === "Test" && b.getBoundingClientRect().width > 0));
+  const saved = (await api("/api/connectors")).data.find((c) => c.ConnectorId === board.ConnectorId);
+  assert.ok(saved.HasSecret, "the token was saved by the card itself");
+  assert.ok(await press("Test"));
+  // passed: the server counts it as the main source, and setup moves on to About your work by itself
+  await until(() => document.querySelector("[data-tq-firstrun-about]"), null, 30000);
+  assert.deepEqual(tested.length, 1);
+  const st = await api("/api/setup/first-run");
+  assert.equal(st.step, "reading"); assert.deepEqual(st.sources.map((s) => s.type), ["monday"]);
+  assert.ok(st.rail.find((r) => r.key === "mail").done, "the main source step is done with no mailbox at all");
+  // ...and the sources step before the job counts it: listed, and That's all my sources can be pressed
+  assert.ok(await press("Skip these questions"));
+  await until(() => document.querySelector('[data-tq-firstrun-about="mailboxes"]'));
+  await until(() => /monday\.com/i.test(document.querySelector("[data-tq-mailboxes]")?.innerText || ""));
+  await until(() => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "That's all my sources" && !b.disabled));
+  assert.match(await page.evaluate(() => document.querySelector(".tq-next-txt").innerText), /One source is connected\./);
+  assert.deepEqual(errors, []);
+});

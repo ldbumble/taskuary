@@ -57,7 +57,7 @@ export default function SetupDone({ onDay, onMore, aiError = "", onChangeAi }) {
       <Confetti />
       <Typography component="h2" sx={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.5, position: "relative", zIndex: 1 }}>Setup complete</Typography>
       <Typography sx={{ color: DIM, fontSize: 15.5, maxWidth: 520, position: "relative", zIndex: 1 }}>
-        Taskuary is reading and sorting your mail. Your day is ready - everything waiting, most important first.</Typography>
+        Taskuary is reading and sorting what came in. Your day is ready - everything waiting, most important first.</Typography>
       <Button variant="contained" disableElevation size="large" onClick={onDay}
         sx={{ fontSize: 18, px: 5, py: 1.5, borderRadius: 2.5, mt: 1, position: "relative", zIndex: 1 }}>Go to my day</Button>
       <Button size="small" onClick={onMore} sx={{ color: DIM, position: "relative", zIndex: 1 }}>Connect more apps first</Button>

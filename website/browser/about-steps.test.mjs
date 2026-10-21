@@ -1,5 +1,5 @@
-// ABOUT YOUR WORK, ON THE RENDERED PAGE (the owner, 2026-10-20): every mailbox is connected before the job is read, and the step that
-// asks for them is never skipped. A first start on a fresh fixture with the AI and the mail stood in for (the setup state is the
+// ABOUT YOUR WORK, ON THE RENDERED PAGE (the owner, 2026-10-20): every source - a mailbox, a chat, a task system (2026-10-21) - is
+// connected before the job is read, and the step that asks for them is never skipped. A first start on a fresh fixture with the AI and the mail stood in for (the setup state is the
 // server's own, with its first two steps marked done); no model is called - the drafts are scripted here.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -42,7 +42,7 @@ async function open(harness, world) {
       // the AI and the mail stood in for: the server's own setup state, its first two steps done and About your work open
       if (p === "/api/setup/first-run" && r.method() === "GET") {
         const st = await real(p);
-        return json(r, 200, { ...st, step: "reading", todo: "about your work", ai_error: "", mail_error: "", mailboxes: world.boxes,
+        return json(r, 200, { ...st, step: "reading", todo: "about your work", ai_error: "", mail_error: "", sources: world.boxes,
           brain: { ...st.brain, ready: true, name: "Your AI" }, frontier: "about", ready: false,
           rail: st.rail.map((x) => ({ ...x, done: ["ai", "mail"].includes(x.key) || x.done, open: true })) });
       }
@@ -64,7 +64,7 @@ async function open(harness, world) {
 const DRAFT = (text) => ({ state: "ready", why: "", text });
 const NONE = { state: "none", why: "", text: "" };
 
-test("About your work: Skip lands on the mailbox step, which cannot be skipped and moves on once a mailbox is in", { timeout: 240000 }, async (t) => {
+test("About your work: Skip lands on the sources step, which cannot be skipped and moves on once a source is in", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
   const world = { boxes: [], drafts: { job: DRAFT("### What my job is\n- I run the month-end close."), style: NONE, soul: NONE } };
   const { page, errors, sent } = await open(harness, world);
@@ -72,16 +72,16 @@ test("About your work: Skip lands on the mailbox step, which cannot be skipped a
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
   assert.equal(await button(page, "Skip these questions"), null, "the mailbox step has no Skip");
-  assert.deepEqual(await button(page, "That's all my mail"), { off: true }, "with no mailbox it cannot move on");
-  assert.match(await line(page), /Connect your email with its card/);
-  assert.ok(await page.$("[data-tq-firstrun] [data-tq-card]"), "the email step's own cards are on it");
+  assert.deepEqual(await button(page, "That's all my sources"), { off: true }, "with no source it cannot move on");
+  assert.match(await line(page), /Connect your email, chat or task system with its card/);
+  assert.ok(await page.$("[data-tq-firstrun] [data-tq-card]"), "the main source step's own cards are on it");
   // a mailbox connected (the card's own setup, read back on the next poll): listed, and the step moves on
-  world.boxes = [{ address: "alex@northwind.example", type: "imap" }];
+  world.boxes = [{ address: "alex@northwind.example", type: "imap", title: "Email" }];
   await until(page, () => /alex@northwind\.example/.test(document.querySelector("[data-tq-mailboxes]")?.innerText || ""), null, 20000);
-  await until(page, () => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "That's all my mail" && !b.disabled));
-  assert.match(await line(page), /One mailbox is connected\. .*Then press That's all my mail\./);
+  await until(page, () => [...document.querySelectorAll("button")].some((b) => b.innerText.trim() === "That's all my sources" && !b.disabled));
+  assert.match(await line(page), /One source is connected\. .*Then press That's all my sources\./);
   await shot(page, "about-mailboxes");
-  assert.ok(await press(page, "That's all my mail"));
+  assert.ok(await press(page, "That's all my sources"));
   await onStep(page, "job");
   // passing it writes the job from every mailbox in - Skip went past the title, so this is the first time it is written
   assert.equal(sent["/api/setup/first-run/about/learn"], 1);
@@ -95,7 +95,7 @@ test("About your work: Skip lands on the mailbox step, which cannot be skipped a
 
 test("About your work: the job, how you write and who you are are drafts to accept, and a failed one says why with Write it again", { timeout: 240000 }, async (t) => {
   const harness = await startHarness({ fresh: true }); t.after(() => harness.close());
-  const world = { boxes: [{ address: "alex@northwind.example", type: "outlook" }, { address: "alex@riverside.example", type: "imap" }],
+  const world = { boxes: [{ address: "alex@northwind.example", type: "outlook", title: "Email" }, { address: "alex@riverside.example", type: "imap", title: "Email" }],
     drafts: { job: DRAFT("## At Northwind (alex@northwind.example)\n\n### What my job is\n- I run the month-end close.\n\n"
       + "## At riverside.example (alex@riverside.example)\n\n### What my job is\n- I keep the volunteer rota."),
     style: { state: "failed", why: "no sent mail to learn from - connect a mailbox", text: "" },
@@ -103,8 +103,8 @@ test("About your work: the job, how you write and who you are are drafts to acce
   const { page, errors, sent } = await open(harness, world);
   assert.ok(await press(page, "Skip these questions"));
   await onStep(page, "mailboxes");
-  assert.match(await line(page), /2 mailboxes are connected\./);
-  assert.ok(await press(page, "That's all my mail"));
+  assert.match(await line(page), /2 sources are connected\./);
+  assert.ok(await press(page, "That's all my sources"));
   await onStep(page, "job");
   assert.deepEqual(world.asked, [["job", "style", "soul"]], "all three drafts are written once every mailbox is in");
   // the job: read as a document, a section per organisation, and accepted as it is

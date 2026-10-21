@@ -191,7 +191,7 @@ class StateTests(unittest.TestCase):
             self.assertEqual(firstrun.state(s)['step'], 'ai', 'installed is not chosen - it may never have signed in')
             s.set_setting('triage_ai', 'cli:claude', 'owner')
             st = firstrun.state(s)
-        self.assertEqual(st['step'], 'email'); self.assertIn('What email do you have?', st['next']); self.assertIn('Claude is ready', st['next'])
+        self.assertEqual(st['step'], 'email'); self.assertIn('Where does your work come in? Connect your email, chat or task system', st['next']); self.assertIn('Claude is ready', st['next'])
 
     def test_step_two_names_the_ai_not_the_profile_that_runs_it(self):
         """A fresh install's brain was the coding profile on claude: step 2 said "<profile> is ready" (a fresh-home run, 2026-10-15).
@@ -226,10 +226,10 @@ class StateTests(unittest.TestCase):
         # the mail read and About your work unanswered: that is the step left, not "reading your mail" (2026-10-17)
         self.assertEqual(done['todo'], 'about your work')
         s.set_setting('triage_ai', 'cli:codex', 'owner')
-        self.assertEqual(at(True, [], [])['todo'], 'connect your email')
+        self.assertEqual(at(True, [], [])['todo'], 'connect your main source')
         self.assertEqual(at(True, ['Work mail'], [])['todo'], 'about your work')
         firstrun.skip_about(s)
-        self.assertEqual(at(True, ['Work mail'], [])['todo'], 'reading your mail')
+        self.assertEqual(at(True, ['Work mail'], [])['todo'], 'reading what came in')
         self.assertEqual(at(True, ['Work mail'], [{'MessageId': 1}])['todo'], '')
 
     def test_the_top_bar_chip_says_what_is_next_from_the_same_state(self):
@@ -239,7 +239,7 @@ class StateTests(unittest.TestCase):
                 return TestClient(server.app).get('/api/setup').json()
         s.set_setting('triage_ai', 'cli:codex', 'owner'); firstrun.skip_about(s)
         out = chip([], [])
-        self.assertEqual((out['step'], out['todo'], out['left']), ('email', 'connect your email', 1))
+        self.assertEqual((out['step'], out['todo'], out['left']), ('email', 'connect your main source', 1))
         # About your work unanswered is a step left too: the chip read plain "Setup" over a survey never seen (2026-10-16)
         s.set_setting(firstrun.ABOUT_KEY, '', 't')
         out = chip(['Work mail'], [{'MessageId': 1}])
@@ -431,7 +431,7 @@ class NonCoderAuditTests(unittest.TestCase):
         self.s.set_setting('triage_ai', 'cli:codex', 'owner')
         a, b, c, d = self.at(inbound=())
         with a, b, c, d, mock.patch.object(server, 'store', self.s):
-            self.assertIn('Connect your email', client.post('/api/setup/first-run/finish').json()['detail'])
+            self.assertIn('Connect your main source', client.post('/api/setup/first-run/finish').json()['detail'])
         a, b, c, d = self.at()
         with a, b, c, d, mock.patch.object(server, 'store', self.s), mock.patch.object(firstrun, 'first_digest'):
             self.assertEqual(client.post('/api/setup/first-run/finish').status_code, 200)
@@ -503,3 +503,73 @@ class NonCoderAuditTests(unittest.TestCase):
         old = datetime.now() - timedelta(hours=firstrun.AI_ERR_HOURS + 1)
         self.s.set_setting('triage_last_error_at', old.isoformat(sep=' ', timespec='seconds'), 'system')
         self.assertEqual(firstrun._ai_error(self.s), '')
+
+
+class MainSourceTests(unittest.TestCase):
+    """THE MAIN SOURCE IS ANY PLACE WORK COMES IN (the owner, 2026-10-21: "they have to connect their main source, normally it's
+    email. Let's update that to any messaging/email/task system (e.g. monday.com) as an option"). Nothing mocked between the
+    connector rows and the step: a card switched on with a source behind it, the same bar the email step had."""
+    def setUp(self):
+        self.s = MemoryStore(); self.s.set_setting('triage_ai', 'cli:codex', 'owner')
+        for p in (mock.patch('taskuary.setup._ai', return_value={'ready': True, 'Name': 'x', 'pick': ''}), mock.patch('taskuary.clis.detect', return_value=[])):
+            p.start(); self.addCleanup(p.stop)
+
+    def on(self, typ, channel, address):
+        c = self.s.get_connector_by_type(typ)
+        self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 'owner')
+        self.s.save_source({'Channel': channel, 'Address': address, 'ConnectorId': c['ConnectorId'], 'Active': 1}, 'owner')
+        return c
+
+    def passes(self, st):
+        rail = {r['key']: r for r in st['rail']}
+        self.assertEqual(st['step'], 'reading'); self.assertTrue(rail['mail']['done']); self.assertTrue(rail['about']['open'])
+        self.assertEqual(st['todo'], 'about your work'); self.assertTrue(st['sources'], 'About your work counts it as connected')
+
+    def test_a_task_system_alone_passes(self):
+        c = self.on('monday', 'monday', 'Alex Doyle')
+        st = firstrun.state(self.s)
+        self.passes(st)
+        self.assertEqual([(x['type'], x['address']) for x in st['sources']], [('monday', c['Name'])])
+
+    def test_setup_finishes_with_no_mailbox_when_a_task_system_is_the_main_source(self):
+        client = TestClient(server.app)
+        with mock.patch.object(server, 'store', self.s), mock.patch.object(firstrun, 'first_digest'):
+            r = client.post('/api/setup/first-run/finish')
+            self.assertEqual(r.status_code, 409); self.assertIn('Connect your main source', r.json()['detail'])
+            self.on('monday', 'monday', 'Alex Doyle'); firstrun.skip_about(self.s)
+            self.assertEqual(firstrun.unfinished(self.s), '')
+            self.assertEqual(client.post('/api/setup/first-run/finish').status_code, 200)
+        self.assertEqual(self.s.get_setting(firstrun.DISMISSED), '1')
+        self.assertTrue(next(r for r in firstrun.state(self.s)['rail'] if r['key'] == 'finish')['done'])
+
+    def test_a_chat_alone_passes(self):
+        self.on('slack', 'slack', '#ops')
+        st = firstrun.state(self.s)
+        self.passes(st); self.assertEqual([x['type'] for x in st['sources']], ['slack'])
+
+    def test_nothing_connected_does_not_pass(self):
+        st = firstrun.state(self.s)
+        self.assertEqual(st['step'], 'email'); self.assertEqual(st['sources'], []); self.assertEqual(st['todo'], 'connect your main source')
+        self.assertFalse(next(r for r in st['rail'] if r['key'] == 'mail')['done'])
+        # ...nor does a card with no source behind it: half-connected delivers nothing (setup._inbound)
+        c = self.s.get_connector_by_type('monday'); self.s.save_connector({'ConnectorId': c['ConnectorId'], 'Active': 1}, 'owner')
+        self.assertEqual(firstrun.state(self.s)['step'], 'email')
+
+    def test_a_mailbox_still_passes(self):
+        self.on('gmail', 'email', 'alex@northwind.example')
+        st = firstrun.state(self.s)
+        self.passes(st); self.assertEqual([(x['type'], x['address']) for x in st['sources']], [('gmail', 'alex@northwind.example')])
+
+    def test_the_choices_are_the_catalogues_with_email_first(self):
+        from taskuary import connectorcatalog
+        from taskuary.channels import CH2SRC
+        types = firstrun.source_types()
+        self.assertEqual(types[:3], ('outlook', 'gmail', 'imap'), 'email first - the usual one')
+        self.assertTrue({'teams', 'slack', 'whatsapp', 'discord', 'monday', 'jira', 'github', 'linear', 'asana'} <= set(types))
+        self.assertEqual(set(types), set(connectorcatalog.source_types()))
+        for t in types:
+            card = connectorcatalog.by_type(t)
+            self.assertFalse(card.get('planned'), t); self.assertIn(t, CH2SRC, f'{t} is offered as a source, so it must be polled')
+        self.assertNotIn('anthropic', types); self.assertNotIn('mssql', types)
+        self.assertEqual(firstrun.state(self.s)['source_types'], types)
+

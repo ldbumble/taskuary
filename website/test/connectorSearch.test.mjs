@@ -49,7 +49,7 @@ test("the LinkedIn card asks in plain words and says where each comes from; AI s
   assert.match(li, /\["Client Secret", "client_secret", "", "The same Auth tab/);
   assert.match(li, /label: "Sign in with LinkedIn"/);
   assert.match(li, /secretHelp: "Nothing to paste here/);
-  assert.match(src, /\) : \(\s*<TextField key=\{key\} label=\{label\} placeholder=\{ph\} helperText=\{help\}/);
+  assert.match(src, /return <TextField label=\{label\} placeholder=\{ph \|\| ""\} helperText=\{help\}/);   // ConfigField: the help under the box
 });
 
 test("Get AI to set it up is a button in the card's own row, and its walk is drawn on the card - no terminal", () => {
@@ -65,7 +65,7 @@ test("Get AI to set it up is a button in the card's own row, and its walk is dra
 });
 
 test("an app's client secret is a masked, write-only box that says it is saved (guard.WRITE_ONLY_CONFIG)", () => {
-  assert.match(src, /\(conn\.WriteOnlyKeys \|\| \[\]\)\.includes\(key\) \? \(\s*<TextField key=\{key\} type="password" data-tq-write-only=\{key\}/);
+  assert.match(src, /if \(!\(conn\?\.WriteOnlyKeys \|\| \[\]\)\.includes\(key\)\)[\s\S]{0,200}return <TextField type="password" data-tq-write-only=\{key\}/);
   assert.match(src, /`\$\{label\} — saved, type to replace`/);
-  assert.match(src, /setCfg\(Object\.fromEntries\(Object\.entries\(cfg\)\.filter\(\(\[k\]\) => !wo\.includes\(k\)\)\)\)/, "typed, then saved, the box empties");
+  assert.match(src, /Object\.fromEntries\(Object\.entries\(cfg\)\.filter\(\(\[k\]\) => !\(conn\?\.WriteOnlyKeys \|\| \[\]\)\.includes\(k\)\)\)/, "typed, then saved, the box empties");
 });

@@ -1234,7 +1234,7 @@ const DATA_META = {
     reuse: { from: "gmail", title: "Reuse the Gmail card's Google client",
       text: "The Gmail card already carries a Google OAuth client id and secret (its calendar fields). Leave those blank here and they are reused — you still mint a refresh token with the Sheets scope, because the calendar one does not cover spreadsheets.",
       clear: ["google_client_id", "google_client_secret"],
-      ok: (c) => { const k = parse(c?.ConfigJson); return !!(c && k.google_client_id && k.google_client_secret); } } },
+      ok: (c) => !!(c && parse(c.ConfigJson).google_client_id && savedOn(c, "google_client_secret")) } },
   /* Files OUT as well as in (files.py) — the first two cards that can put a document somewhere.
      Both ship at authority 'read', so the first save is a proposal on the task; the Authority
      dropdown on the card, or a routing policy for the narrow case, is what stops it asking. */
@@ -1355,6 +1355,22 @@ const WINRM_AGENT = [
 ];
 
 const parse = (s) => { try { return JSON.parse(s || "{}"); } catch { return {}; } };
+// a card's value is there - in its config, or saved write-only and never sent back (guard.WRITE_ONLY_CONFIG: ConfigSaved)
+const savedOn = (c, key) => !!(parse(c?.ConfigJson)[key] || (c?.ConfigSaved || []).includes(key));
+// ONE FIELD OF A CARD'S CONFIG, drawn the same on every card: a write-only one (an app's client secret, a refresh token) is masked
+// and empty once saved, its label saying so - the Gmail card's OAuth secret and refresh token came back readable in plain boxes
+// (the UI audit, 2026-10-21) because only one card drew them masked
+export function ConfigField({ conn, field: [label, key, ph, help], cfg, setCfg, ...rest }) {
+  const onChange = (e) => setCfg({ ...cfg, [key]: e.target.value });
+  if (!(conn?.WriteOnlyKeys || []).includes(key))
+    return <TextField label={label} placeholder={ph || ""} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }} onChange={onChange} {...rest} />;
+  return <TextField type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }} {...rest}
+    label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label} placeholder={ph || ""}
+    helperText={help ? `${help} Write-only: never shown again once saved.` : "Write-only: never shown again once saved."}
+    value={cfg[key] || ""} onChange={onChange} />;
+}
+// ...and a typed one goes back to empty once it is saved: the server holds it now
+export const withoutWriteOnly = (conn, cfg) => Object.fromEntries(Object.entries(cfg).filter(([k]) => !(conn?.WriteOnlyKeys || []).includes(k)));
 const NL = String.fromCharCode(10);
 
 // A card per connection. The dot is read off the status line the card already carries -
@@ -2205,7 +2221,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
       if (secret) body.Secret = secret;
       const { data } = await api.post("/api/connectors", body);
       const d = data.discovery;
-      setSecret(""); reload();
+      setSecret(""); setCfg(withoutWriteOnly(conn, cfg)); reload();
       if (d?.error) setSaveSaid({ ok: false, detail: d.error });     // saved, but the key was refused: the fix is here, not a step on
       else {
         setMsg("saved ✓");
@@ -2270,10 +2286,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         )}
         {(adminFields || ownFields.length > 0) && (
           <>
-            {(adminFields ? m.fields : ownFields).map(([label, key, ph, helper]) => (
-              <TextField key={key} label={label} placeholder={ph || ""} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
-                helperText={helper} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
-            ))}
+            {(adminFields ? m.fields : ownFields).map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg} />)}
             {/* WhatsApp has no secret at all - the bridge holds the pairing, not us */}
             {adminFields && m.secretLabel && (
               <TextField label={conn.HasSecret ? `${m.secretLabel} (saved — type to replace)` : m.secretLabel} type="password"
@@ -2897,7 +2910,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   // Google client) - an offer to reuse nothing is worse than no offer
   const canReuse = !!(meta.reuse && meta.reuse.ok(byType[meta.reuse.from]));
   const useShared = async () => {
-    const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { delete next[k]; });
+    // ...a write-only one is cleared by name (null): left out, the server keeps the one it holds (guard.keep_write_only)
+    const next = { ...cfg }; (meta.reuse.clear || []).forEach((k) => { if ((conn.WriteOnlyKeys || []).includes(k)) next[k] = null; else delete next[k]; });
     setCfg(next); setBusy("save"); setMsg("");
     try {
       await api.post("/api/connectors", { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(next), Active: true });
@@ -2920,8 +2934,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       await api.post("/api/connectors", body);
       ai.saved(put);
       // a write-only value typed is the server's now: the box goes back to empty, its label says saved
-      const wo = conn.WriteOnlyKeys || [];
-      if (wo.some((k) => cfg[k])) setCfg(Object.fromEntries(Object.entries(cfg).filter(([k]) => !wo.includes(k))));
+      if ((conn.WriteOnlyKeys || []).some((k) => cfg[k])) setCfg(withoutWriteOnly(conn, cfg));
       setMsg("saved ✓"); setSecret(""); reload();
     } catch (e) { setTest({ ok: false, detail: e?.response?.data?.detail || "save failed" }); }
     setBusy("");
@@ -2957,16 +2970,8 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
           {/* a field's 4th entry says where to get what it asks for, under the box */}
           {/* ...and a write-only one (an app's client secret, guard.WRITE_ONLY_CONFIG) is masked: once saved the server never sends it
               back, so the box is empty and says it is saved - typed, it replaces the stored one */}
-          {meta.fields.map(([label, key, ph, help]) => (conn.WriteOnlyKeys || []).includes(key) ? (
-            <TextField key={key} type="password" data-tq-write-only={key} autoComplete="new-password" sx={{ bgcolor: "#fff" }}
-              label={(conn.ConfigSaved || []).includes(key) ? `${label} — saved, type to replace` : label}
-              placeholder={ph} helperText={help ? `${help} Write-only: never shown again once saved.` : "Write-only: never shown again once saved."}
-              value={cfg[key] || ""} onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
-          ) : (
-            <TextField key={key} label={label} placeholder={ph} helperText={help} value={cfg[key] || ""} sx={{ bgcolor: "#fff" }}
-              multiline={key === "conn_str"} minRows={key === "conn_str" ? 2 : undefined}
-              onChange={(e) => setCfg({ ...cfg, [key]: e.target.value })} />
-          ))}
+          {meta.fields.map((f) => <ConfigField key={f[1]} conn={conn} field={f} cfg={cfg} setCfg={setCfg}
+            {...(f[1] === "conn_str" && !(conn.WriteOnlyKeys || []).includes(f[1]) ? { multiline: true, minRows: 2 } : {})} />)}
           {!meta.noSecret && <TextField label={conn.HasSecret ? `${meta.secretLabel} — saved, type to replace` : meta.secretLabel}
             type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ bgcolor: "#fff" }}
             helperText={meta.secretHelp || "Write-only: stored server-side, never returned to the browser."} />}

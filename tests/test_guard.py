@@ -177,6 +177,29 @@ class OverTheWireTests(unittest.TestCase):
             server.store.save_connector({'ConnectorId': qb['ConnectorId'], 'ConfigJson': before or '{}'}, 't')
 
 
+class WriteOnlyGoogleCardTests(unittest.TestCase):
+    """The Gmail card's OAuth client secret and calendar refresh token, and the Sheets card's client secret, came back readable in
+    plain boxes on reopen beside a masked App Password (the UI audit, 2026-10-21)."""
+    def test_the_google_cards_hold_their_secrets_back_from_the_browser(self):
+        import json
+        row = {'Type': 'gmail', 'ConfigJson': json.dumps({'address': 'alex@northwind.example', 'google_client_id': 'id',
+                                                          'google_client_secret': 'shh', 'google_refresh_token': 'rt'})}
+        shown = guard.masked_config(row)
+        self.assertEqual(json.loads(shown['ConfigJson']), {'address': 'alex@northwind.example', 'google_client_id': 'id'})
+        self.assertEqual(shown['ConfigSaved'], ['google_client_secret', 'google_refresh_token'])
+        for typ in ('google_sheets', 'google_chat'):
+            self.assertEqual(guard.masked_config({'Type': typ, 'ConfigJson': '{"google_client_secret": "shh"}'})['ConfigSaved'], ['google_client_secret'])
+
+    def test_a_save_keeps_a_secret_it_never_had_replaces_a_typed_one_and_clears_a_null(self):
+        import json
+        old = json.dumps({'google_client_id': 'id', 'google_client_secret': 'shh'})
+        keep = lambda new: json.loads(guard.keep_write_only('google_sheets', json.dumps(new), old))
+        self.assertEqual(keep({'google_client_id': 'id'})['google_client_secret'], 'shh')
+        self.assertEqual(keep({'google_client_id': 'id', 'google_client_secret': ''})['google_client_secret'], 'shh')
+        self.assertEqual(keep({'google_client_id': 'id', 'google_client_secret': 'new'})['google_client_secret'], 'new')
+        self.assertEqual(keep({'google_client_secret': None}), {})          # Reuse the Gmail card's client: cleared by name
+
+
 class AllowListTests(unittest.TestCase):
     """A deny list shut only the doors somebody remembered: POST /api/operations + /execute ran
     review.approve and setting.set for an agent, recorded as the owner, and PUT .../envelope

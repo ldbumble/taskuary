@@ -9127,7 +9127,9 @@ def settings():
 def set_setting(body: SettingBody):
     from . import settings_schema
     if why := settings_schema.refuse(body.name, body.value): raise HTTPException(422, why)
+    prev = store.get_setting(body.name)
     store.set_setting(body.name, body.value, ACTOR)
+    store.audit('setting', 0, 'set', ACTOR, detail={'key': body.name, 'from': prev, 'to': body.value})   # as the chat's setting.set does
     return {'ok': True}
 
 @app.get('/api/assistant/doorways')

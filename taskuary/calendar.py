@@ -114,6 +114,7 @@ def google_events(cfg: dict, start: datetime, end: datetime, tz) -> list:
     out = []
     for e in r.json().get('items') or []:
         if e.get('transparency') == 'transparent' or e.get('status') == 'cancelled': continue
+        if any(a.get('self') and a.get('responseStatus') == 'declined' for a in (e.get('attendees') or [])): continue
         s, en = e.get('start') or {}, e.get('end') or {}
         me = (cfg.get('address') or '').lower()
         out.append({'start': (s.get('dateTime') or s.get('date') or '')[:16].replace('T', ' '),

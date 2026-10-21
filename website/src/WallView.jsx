@@ -144,8 +144,11 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
       setWrapErrors((w) => ({ ...w, [s.sid]: e?.response?.data?.detail || e?.message || "the task did not close" }));
     } finally { mark(false); load(); }
   };
+  // ...a refused close says so on the pane's own status line, the x its retry - it threw and the pane just stayed (the UI audit, 2026-10-21)
   const closeSession = async (c) => {
-    await api.delete(`/api/terminals/${c.sid}`);
+    setWrapErrors((e) => { const n = { ...e }; delete n[c.sid]; return n; });
+    try { await api.delete(`/api/terminals/${c.sid}`); }
+    catch (e) { setWrapErrors((w) => ({ ...w, [c.sid]: e?.response?.data?.detail || e?.message || "the session did not close" })); return; }
     setSessions((ss) => (ss || []).filter((s) => s.sid !== c.sid));
     setOrder((o) => o.filter((sid) => sid !== c.sid));
   };
@@ -258,7 +261,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                       </Box>
                     ) : wrapError ? (
                       <Tooltip title={wrapError}><Typography noWrap sx={{ ...mono, fontSize: 10, color: ROLES.bad.ink }}>
-                        could not finish · {wrapError}
+                        could not close · {wrapError}
                       </Typography></Tooltip>
                     ) : (statusWork || waiting || l?.promptPending || s.promptPending) ? (
                       <WorkLine work={statusWork} who={who} waiting={waiting}

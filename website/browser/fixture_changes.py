@@ -19,6 +19,7 @@ def install_processing_changes(app, store):
         '/api/fixture/processing/unread-activate',
         '/api/fixture/processing/unread-arrivals',
         '/api/fixture/processing/sync-phase',
+        '/api/fixture/task/agent-closed',
     })
 
     def fixture_refuse(method, path):
@@ -31,6 +32,23 @@ def install_processing_changes(app, store):
     demo.refuse = fixture_refuse
 
     sync_token = [None]
+
+    @app.post('/api/fixture/task/agent-closed')
+    def agent_closed(body: dict):
+        """A general task from a scheduled run's failure notice, answered by its agent, which then closed it itself - through the
+        real ending (selfclose.declare), the one a [[TASKUARY-DONE]] line runs. Nobody is owed a reply."""
+        if set(body) != {'answer', 'said'} or not all(isinstance(body[k], str) and len(body[k]) < 2000 for k in body):
+            raise HTTPException(422, 'exact answer and said are required')
+        from taskuary import general, selfclose
+        tid = store.create_task({'Title': 'Check the failed nightly run', 'Kind': 'general', 'Status': 'in_progress', 'Source': 'report'}, 'router')
+        store.add_message({'TaskId': tid, 'Channel': 'report', 'ExternalId': f'fixture-nightly-{tid}', 'ConversationId': f'fixture-nightly-{tid}',
+                           'FromName': 'Nightly report', 'Subject': 'Nightly run failed - org/app', 'BodyText': 'The nightly run failed.',
+                           'Status': 'routed'})
+        store.add_comment(tid, 'owner', general.USER_TYPE, 'Check why the nightly run failed.')
+        store.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, body['answer'])
+        out = selfclose.declare(store, tid, body['said'], 'assistant')
+        if not out.get('closed'): raise HTTPException(409, f"the agent's close was refused: {out.get('why')}")
+        return {'taskId': tid}
 
     @app.post('/api/fixture/processing/sync-phase')
     def sync_phase(body: dict):

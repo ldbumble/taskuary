@@ -60,3 +60,17 @@ def state(store, t: dict, session=None, queued=None) -> str:
 def column(key: str) -> str | None:
     """The Board column a state sits in, or None - a task that is yours, or waiting on them, is not agent work."""
     return next((c for c, keys in BOARD if key in keys), None)
+
+
+def closed_why(store, t: dict, comments=None) -> str | None:
+    """WHO CLOSED IT AND WHY, in one line, for a task its agent closed (the owner, 2026-10-21: "when an agent closes a task and
+    no close out is needed, I have no idea what the agent did and why it closed"). The agent's own done sentence, else the
+    first line of its report. None for an open task, one the owner closed, or one its upstream item ended (`ended` says that)."""
+    if not t or t.get('Status') != 'done': return None
+    ev = finish_evidence(store, t['TaskId'])
+    if not ev or str(ev.get('who') or '').startswith('Its '): return None
+    from .wrapup import is_report, report_body
+    rep = next((report_body(c.get('Body')) for c in reversed(comments if comments is not None else store.list_comments(t['TaskId']) or [])
+                if is_report(c.get('Body'))), '')
+    said = ' '.join(str(ev.get('summary') or '').split()) or next((ln.strip() for ln in rep.splitlines() if ln.strip()), '')
+    return f'Closed by the agent: {said[:300]}' if said else 'Closed by the agent - it said it was finished.'

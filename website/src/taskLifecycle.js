@@ -20,6 +20,15 @@ export const taskPhase = (status) => {
 export const AGENT = { waiting: WORD.blocked, working: WORD.working, saved: WORD.saved, stopped: WORD.stopped, finished: WORD.agentdone,
   idle: WORD.queued };
 
+// THE SERVER'S STATE WHEREVER THE PAGE OPENS: the list's row carries it, and a task opened on the table has no row - its own detail
+// carries the same word (server task_detail). Without it an agent's own close read "stopped and saved" and opened on Close out (2026-10-21).
+export const pageState = (listRow, detail) => listRow?.State || detail?.state || null;
+
+// ...and a CLOSED task with nobody to answer says who closed it and why (the detail's `closedWhy`), never the advice for an open
+// one ("Work it, or write what you found on the task") - on a done task that told the owner nothing (2026-10-21)
+export const closedLine = (task, closedWhy) => task?.Status !== "done" ? null
+  : closedWhy || "Closed. Nobody sent this one, so no reply was owed.";
+
 // `finished`: the agent closed the task itself (the server's state, taskstate.py) - its report is its result, never
 // "stopped and saved" (T6). `handed`: false when no agent was ever given this task - it has no agent state at all, not
 // "waiting to start" (T5).

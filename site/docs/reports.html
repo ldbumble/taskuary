@@ -72,7 +72,7 @@
 <div class="entry on">
       <a class="page" href="./reports" aria-current="page">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="true" aria-label="Hide Reports and the Advisor's sections"></button>
-      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#workflows" data-sec="workflows">Workflows</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
+      <div class="secs"><a class="sec" href="#a-report-is-a-pipeline" data-sec="a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="#sources" data-sec="sources">Sources</a><a class="sec" href="#letting-the-ai-write-the-source-cards" data-sec="letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="#the-ai-pass" data-sec="the-ai-pass">The AI pass</a><a class="sec" href="#where-a-run-goes" data-sec="where-a-run-goes">Where a run goes</a><a class="sec" href="#schedules" data-sec="schedules">Schedules</a><a class="sec" href="#the-advisor" data-sec="the-advisor">The Advisor</a><a class="sec" href="#workflows" data-sec="workflows">Workflows</a><a class="sec" href="#playbooks" data-sec="playbooks">Playbooks</a><a class="sec" href="#stateful-workflows" data-sec="stateful-workflows">Stateful workflows</a><a class="sec" href="#sage-intacct-specifically" data-sec="sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="#api" data-sec="api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -424,6 +424,30 @@ does not hold the next one back.</li>
 <li>The task shows where it came from: the workflow&#39;s mark, <strong>Workflow · its name</strong> and
 <strong>Started by</strong> - its schedule (with the clock, e.g. &quot;Mondays 08:00&quot;), you, the assistant, or your
 phone - in the header and under <strong>Came from</strong>, with a link back to the workflow.</li>
+<li><strong>A mail can start it.</strong> Describe, in words, the mail that should start it under <strong>Start when a
+mail like this arrives</strong> (&quot;a vendor sends an invoice for something we ordered&quot;). Triage is shown
+every such workflow beside your playbooks; when a mail is one, that workflow runs and its run is
+the mail&#39;s task, with the mail filed on it. Its steps read the mail as <code>{{mail.from}}</code>,
+<code>{{mail.subject}}</code> and <code>{{mail.body}}</code> - as data, never pasted into a query. Approvals work as on
+any run. A workflow that hands to an agent is not started by a sender who may not start one by
+themselves; that mail becomes a task of its own that says which workflow it matched.</li>
+<li>A new workflow&#39;s first scheduled run is its next slot - saving one on a Wednesday does not run a
+Monday job straight away. <strong>Run now</strong> runs it now.</li>
+<li>A run of steps with nothing waiting on it is done when its last step runs; a draft it wrote
+waits on its own task, which the step names.</li>
+</ul>
+<h2 id="playbooks">Playbooks<a class="anchor" href="#playbooks" aria-label="Link to this section">#</a></h2>
+<p>The third shelf on the Reports page, beside Reports and Workflows. A <strong>playbook</strong> is how this
+company does one kind of job - when it starts, which connections it uses, the steps, what an agent
+may do alone, what to ask first and what counts as done. Triage matches arriving mail to a
+playbook&#39;s <code>when</code> line, and the agent working that task is handed the playbook.</p>
+<ul>
+<li><strong>New playbook</strong> builds one with AI from a past email or your own words - the draft appears in
+the conversation with its <strong>Approve</strong> - or opens the editor to write it by hand.</li>
+<li>When an agent finishes a kind of job that will recur and no playbook covers it, Taskuary
+proposes one on the task; approve it and the next mail like it is matched.</li>
+<li>Each playbook has an <strong>on/off switch</strong>: off keeps it, and triage stops matching it. Settings →
+How mail is sorted → <strong>Use playbooks</strong> turns them all off at once.</li>
 </ul>
 <h2 id="stateful-workflows">Stateful workflows<a class="anchor" href="#stateful-workflows" aria-label="Link to this section">#</a></h2>
 <p><strong>Monthly Zoho invoices</strong> is the first workflow on the Reports page that is not a query returning
@@ -510,7 +534,7 @@ eyeball, wrong for GL detail.</p>
 
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant-tools"><span>Previous</span>What the Assistant sees</a><a class="pn next" href="./advisor"><span>Next</span>The Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.15 · updated 2026-10-21</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.16 · updated 2026-10-21</p>
   </main>
 </div>
 <script src="./docs.js"></script>

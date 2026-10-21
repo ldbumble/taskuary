@@ -34,8 +34,16 @@ const HASHED = /^[0-9a-f]{12,}\.[a-z0-9]{2,5}$/i;
 export const clipName = (a) => (HASHED.test(a?.name || "") || !a?.name ? "Voice note" : a.name);
 const kb = (n) => (!n ? "" : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 const KIND = { pdf: "PDF", sheet: "XLSX", excel: "XLSX", csv: "CSV", zip: "ZIP", word: "DOCX", document: "DOCX" };
-const kindOf = (a) => Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
+// a LINKED document (linkdocs.py) says what it is by its kind - "Google Sheet" is SHEET, "GitHub issue" ISSUE
+const LINK_KIND = [["sheet", "SHEET"], ["spreadsheet", "SHEET"], ["slides", "SLIDES"], ["presentation", "SLIDES"], ["pdf", "PDF"],
+  ["issue", "ISSUE"], ["pull request", "PR"], ["folder", "FOLDER"], ["page", "PAGE"], ["doc", "DOC"]];
+const kindOf = (a) => a.link ? (LINK_KIND.find(([k]) => String(a.kind || "").toLowerCase().includes(k))?.[1] || "LINK")
+  : Object.entries(KIND).find(([k]) => (a.content_type + " " + a.name).toLowerCase().includes(k))?.[1]
   || (a.name.split(".").pop() || "file").slice(0, 5).toUpperCase();
+// where a chip opens: a file's own bytes here (with the token), a linked document at its own address (never with it)
+const hrefOf = (a) => a.link ? a.external_url : a.url ? attUrl(a, true) : undefined;
+const titleOf = (a) => a.link ? `${a.kind} — ${a.note ? `not read: ${a.note}` : a.read ? (a.rows != null ? `read, ${a.rows} rows` : "read") : "opens where it lives"}`
+  : a.url ? "open it" : "not saved here — open the original message";
 
 // a mail whose body points at a picture it does not carry ([image: ...], cid:) - worth a "look for attachments" offer
 export const mentionsPicture = (body) => /\[(image|cid|inline image)|cid:/i.test(String(body || ""));
@@ -123,15 +131,15 @@ export const Attachments = ({ messageId, canFetch, dense }) => {
           </Typography>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
           {files.map((a) => (
-            <Box key={a.id} component={a.url ? "a" : "div"} href={a.url ? attUrl(a, true) : undefined}
-              target="_blank" rel="noopener" title={a.url ? "open it" : "not saved here — open the original message"}
+            <Box key={a.id} component={hrefOf(a) ? "a" : "div"} href={hrefOf(a)} data-tq-linked-doc={a.link ? "" : undefined}
+              target="_blank" rel={a.link ? "noopener noreferrer" : "noopener"} title={titleOf(a)}
               sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.9, py: 0.4, borderRadius: 1.5,
                 border: `1px solid ${BORDER}`, bgcolor: PANEL2, textDecoration: "none", maxWidth: 260,
-                cursor: a.url ? "pointer" : "default", opacity: a.url ? 1 : 0.6,
-                "&:hover": { borderColor: a.url ? "#d8cfbe" : BORDER } }}>
+                cursor: hrefOf(a) ? "pointer" : "default", opacity: hrefOf(a) ? 1 : 0.6,
+                "&:hover": { borderColor: hrefOf(a) ? "#d8cfbe" : BORDER } }}>
               <Typography variant="caption" sx={{ ...mono, fontSize: 9, fontWeight: 600, color: "#55697a" }}>{kindOf(a)}</Typography>
               <Typography variant="caption" sx={{ color: INK, flex: 1, minWidth: 0 }} noWrap>{a.name}</Typography>
-              <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{kb(a.size)}</Typography>
+              <Typography variant="caption" sx={{ color: FAINT, fontSize: 9.5 }}>{a.link ? (a.note ? "not read" : "") : kb(a.size)}</Typography>
             </Box>
           ))}
         </Box>

@@ -503,6 +503,13 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
             'or what you did. Use ids in FROM HUB to upvote, correct, or comment before reposting.')
 # Old imports/tests may still name this while installations roll forward.
 SOCIAL_LINE = HUB_LINE
+# THE OWNER'S OWN HISTORY FIRST (mailsearch.py): a researcher asked about a colleague's email wrote code of its own to find the mail
+# instead of reading what Taskuary already holds (the owner, 2026-10-21). Told only to a session with a shell, on the owner's task.
+HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
+                'run `taskuary --search "words" --from "name or address" --subject "..." --since YYYY-MM-DD --until YYYY-MM-DD` '
+                '(any of them; each hit prints its id, when, who, subject, thread and a snippet), then `taskuary --message ID` for one '
+                'in full with its thread. That is the way in: never write scripts or code to read a mailbox, mail files or '
+                "Taskuary's database, and never go around it. If the search finds nothing, say so and say what you searched for.")
 
 
 def _turn_only(store, tid: int, text: str) -> str:
@@ -1057,6 +1064,10 @@ class GeneralSession:
                 from . import docsync
                 systems = docsync.agent_systems(self.store)
                 if systems: system = f'{system}\n\n{systems}'
+                # ...and the owner's own mail, which a stranger's task never reads (the route refuses it too: server._owner_history)
+                from . import origin
+                if not is_dock(self.store.get_task(self.task_id)) and origin.of_task(self.store, self.task_id)[0] != 'stranger':
+                    system = f'{system}\n\n{HISTORY_LINE}'
             source_paths = [a.get('Path') for a in _task_files(self.store, self.task_id) if a.get('Path')]
             paths = list(dict.fromkeys(source_paths + list(attachments or [])
                                        + [m.group('path') for m in _IMAGE_PATH.finditer(text)]))

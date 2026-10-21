@@ -210,6 +210,12 @@ def test_a_general_agent_killed_mid_turn_reads_stopped_offers_continue_and_conti
         time.sleep(0.05)
     resumed = _args(fast_fake)[-1]
     assert resumed[resumed.index('--resume') + 1] == sid                # the same conversation, on a new process
+    for _ in range(100):                                                # ...and once its turn is answered, nothing is left live
+        live = general.session_for(tid)
+        if live is None or not live.busy: break
+        time.sleep(0.05)
+    if live: live.close(learn=False)
+    general.drop_session(tid)
 
 
 def test_a_cli_that_dies_again_on_restart_is_said_plainly(fast_fake, monkeypatch):

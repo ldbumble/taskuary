@@ -503,6 +503,11 @@ HUB_LINE = ('The Hub is a high-signal commons, not a task log. Only file a reusa
             'or what you did. Use ids in FROM HUB to upvote, correct, or comment before reposting.')
 # Old imports/tests may still name this while installations roll forward.
 SOCIAL_LINE = HUB_LINE
+# THE TURN IS THE JOB: nothing wakes a general agent once its answer is filed, so background work it would wait on comes back to
+# nobody - "I'm waiting for the walkthrough to finish, then I'll write the brief" ended a researcher's turn (the owner, 2026-10-21)
+FINISH_LINE = ("Finish the job in this turn. Your answer is what the owner gets: nothing wakes you again until they write. Do not start "
+               "background work, sub-agents or jobs you would have to wait on, and never end with \"I'll get back to you\" or \"waiting for "
+               "it to finish\" - wait for it now, or do it now, then answer. If part of it cannot be done, say which part and why.")
 # THE OWNER'S OWN HISTORY FIRST (mailsearch.py): a researcher asked about a colleague's email wrote code of its own to find the mail
 # instead of reading what Taskuary already holds (the owner, 2026-10-21). Told only to a session with a shell, on the owner's task.
 HISTORY_LINE = ("THE OWNER'S HISTORY IS IN TASKUARY - SEARCH IT FIRST. For anything about the owner's mail, messages, tasks or people, "
@@ -585,7 +590,9 @@ def _prompt(store, tid: int) -> tuple[str, str]:
         # doing it, then it will say so").
         "When the job needs an action you have no tool for, say exactly that in one line - name the "
         "action, say it cannot be done from here, and say what you did instead (drafted it, gathered "
-        "what is needed, or found who can). Never leave the job looking attempted when it was not.\n\n"
+        "what is needed, or found who can). Never leave the job looking attempted when it was not.\n"
+        # nothing wakes this session once its answer is filed (hooks.judge_ended reads a turn that ended short)
+        f"{FINISH_LINE}\n\n"
         + (f'{layer}\n\n{TEACH_ME}\n\n' if layer else f'{TEACH_ME}\n\n')
         + f"RULES (AGENT.md - every worker)\n{agent_rules}\n\nASSISTANT STYLE\n{counsel}"
     )
@@ -1032,7 +1039,8 @@ class GeneralSession:
                 # 2026-09-14: "why didn't they show up in the general agent tab?"). Every pty has
                 # been named since TQ-0255 (terminal.py); the chat was the one that was not.
                 from . import browserview, terminal
-                browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid)}
+                from .clis import HEADLESS_ENV
+                browser_env = {**terminal.session_env('assistant', self.task_id, sid=self.sid), **browserview.env(self.sid), **HEADLESS_ENV}
                 # ...but Chrome is only LAUNCHED, and the shell only granted, for a task that asked
                 # for one. A chat that did not is a research session: it reads, it does not run.
                 if self.browser_wanted and browserview.start(self.sid, browserview.last_page(self.task_id) or 'about:blank'):
@@ -1246,6 +1254,11 @@ class GeneralSession:
                     ws.record(self.store, self.task_id, self.sid, 'input_needed', request_id=ws.question_id(g, i) if g else ws.request_id_for(q),
                               text=q, choices=choices, source='api')
             except Exception as e: logger.debug(f'api worker event skipped: {e}')
+            # A TURN THAT ENDED SHORT is not one waiting on the owner: read by the turn judge (hooks.judge_ended), it is filed as the run
+            # failing with its reason, and the session ends with its conversation saved - never parked as "waiting on you"
+            if not asks and closing is None and not is_dock(self.store.get_task(self.task_id)):
+                from . import hooks
+                hooks.judge_ended(self.store, self.task_id, self.sid, reply[:4000], then=lambda: self.close(learn=False, report=False))
             rid = self.store.add_comment(self.task_id, 'assistant', ASSISTANT_TYPE, reply)
             # the turn's working - its tool calls and thinking - was thrown away with the next turn; it is the record now
             from . import sessionrecord

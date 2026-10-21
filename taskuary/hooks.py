@@ -520,6 +520,58 @@ def judge_turn(store, tid: int, sid: str, said: str, brain=None, wait: bool = Fa
     threading.Thread(target=go, daemon=True, name=f'turn-judge-{sid}').start()
 
 
+# ...AND DID A HEADLESS TURN END SHORT? A general agent's CLI is not woken by work it left in the background, so a turn ending "I have
+# the mail side - I'm waiting for the app walkthrough to finish, then I'll write the brief" was filed as its answer, and the task
+# read "researcher answered · agent waiting on you" over a brief that would never come (the owner, 2026-10-21). The same judge reads
+# it - the model, never a phrase list - and a turn that ended without delivering is the run FAILING, with its reason: the one state
+# every surface already reads (workerstate.ended -> failed): R2's "Failed - <reason>" with Try again (funnel.run_failed). `then` ends
+# the session the way a failed turn's does (general.GeneralSession.close, learn=False report=False) - conversation kept, no result filed.
+ENDED_SYSTEM = ('You read the last message an agent wrote before its turn ended. Nothing will wake the agent again until its owner '
+                'writes to it. Decide one thing: did it END WITHOUT DELIVERING what it was asked for, because it says it is still waiting '
+                'on work of its own - something it started in the background, a sub-agent, a job still running - or promises to come '
+                'back with the result later? An answer that delivers the work, a question to the owner, or a plain statement that '
+                'something cannot be done is not that. Reply with JSON only: {"unfinished": true or false, "why": "what it is still '
+                'waiting on, in a few plain words; empty when unfinished is false"}')
+ENDED_WANT = {'type': 'object', 'properties': {'unfinished': {'type': 'boolean'}, 'why': {'type': 'string'}}, 'required': ['unfinished']}
+_ENDED = {}
+BACKGROUND = True          # the suite turns the read off its own thread (tests/conftest.py), as advisor.BACKGROUND; `wait` still reads
+
+
+def ended_short(why: str) -> str:
+    "The failure's reason, as R2's step reads it: \"Failed - It ended its turn still waiting on ...\" (funnel.run_failed), Try again under it."
+    return f"it ended its turn still waiting on {why or 'work of its own'}"
+
+
+def judge_ended(store, tid: int, sid: str, said: str, brain=None, wait: bool = False, then=None):
+    "Read a headless turn's last message for work it left unfinished; record the run as failed, with why, when it did."
+    import hashlib
+    key = (str(sid), hashlib.sha1(said.encode('utf-8', 'replace')).hexdigest())
+    def go():
+        from . import workerstate as ws
+        if key in _ENDED: why = _ENDED[key]
+        else:
+            try:
+                from .llm import build_llm, ask_json
+                b = brain or build_llm(store)
+                if not b: return
+                v = ask_json(b, ENDED_SYSTEM, f"THE AGENT'S LAST MESSAGE:\n{said[-4000:]}", want=ENDED_WANT, need=('unfinished',)).data or {}
+            except Exception as e: logger.debug(f'turn-end judge skipped for {sid}: {e}'); return
+            if not isinstance(v, dict) or not isinstance(v.get('unfinished'), bool): return
+            why = (' '.join(str(v.get('why') or '').split())[:300] or 'work of its own') if v['unfinished'] else ''
+            if len(_ENDED) >= _JUDGED_MAX: _ENDED.pop(next(iter(_ENDED)))
+            _ENDED[key] = why
+        if not why: return
+        # ...only while that turn is still the newest word, as judge_turn: the owner may have written since
+        evs = [e for e in ws.events(store, tid, sid) if e['Kind'] not in ws.NOTES]
+        if not evs or evs[-1]['Kind'] != 'turn_end' or evs[-1].get('Text') != said[:4000]: return
+        ws.record(store, tid, sid, 'failed', text=ended_short(why), source='judge')
+        if then:
+            try: then()
+            except Exception as e: logger.debug(f'task {tid}: the session was not ended after its short turn - {e}')
+    if wait: return go()
+    if BACKGROUND: threading.Thread(target=go, daemon=True, name=f'turn-end-judge-{sid}').start()
+
+
 def _cli(t) -> str:
     return os.path.basename(str((getattr(t, 'argv', None) or [''])[0])).lower()
 

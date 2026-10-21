@@ -2011,7 +2011,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                      its input on screen, Close out one scroll below. A fixed 420px floor in a shorter view put the input and the last
                      lines out of sight. 78px = the title strip + this step's heading + 8px under the chat, less the 26px the view gained. */
                   <Box sx={{ flex: "1 1 0", minHeight: canvas ? "max(240px, calc(100cqh - 78px))" : { xs: 360, md: 420 }, mb: canvas ? 1 : 0,
-                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
+                    display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 },
+                    // ...except while its agent is starting and has said nothing: the room is that one line (GeneralWorkspace `quiet`)
+                    "&:has([data-tq-starting])": { flex: "0 0 auto", minHeight: 0, "& > *": { flex: "0 0 auto" } } }}>
                     <React.Suspense fallback={<Box sx={{ flex: 1, display: "grid", placeItems: "center" }}><CircularProgress size={22} /></Box>}>
                       <GeneralWorkspace key={`${t.TaskId}-${generalRevision}`} task={t} compact onSession={generalSession} onOpenReports={onGoReports}
                         onAnswered={() => { findTerm(selected); onChanged?.(); }}

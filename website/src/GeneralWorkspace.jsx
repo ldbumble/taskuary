@@ -35,6 +35,7 @@ import { dropEcho, forScreen } from "./agentMarkers.js";
 import { hint as btnHint, label as btn } from "./buttons.js";
 import { draftCanSend, useCapabilities } from "./capabilities.js";
 import { placeName } from "./words.js";
+import { starting as startingLine } from "./laneSays.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import ConnectAi from "./ConnectAi.jsx";
@@ -123,10 +124,20 @@ const Thinking = ({ provider }) => (
 //
 // Four facts, said once, above the trail. Nothing here is new information - the trace and the task
 // already carried all of it (agentWork.js).
-const AgentBand = ({ name, provider, work, since }) => {
+const AgentBand = ({ name, provider, work, since, starting = "" }) => {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const doing = doingNow(work), trail = trailText(work);
+  // STARTED, NOTHING SAID YET: one line - "Starting the researcher on Codex…" - and its clock, never a tall empty pane with a spinner at
+  // its foot while the CLI comes up (the owner, 2026-10-21: "it stayed like that for a while")
+  if (starting && !work.steps.length) return (
+    <div className="tq-aui-band" role="status" aria-live="polite" data-tq-starting-line="">
+      <div className="tq-aui-band-head">
+        <span className="tq-aui-band-dot" /><span>{starting}</span>
+        <em>{since ? elapsedText(now - since) : ""}</em>
+      </div>
+    </div>
+  );
   return (
     <div className="tq-aui-band" role="status" aria-live="polite">
       <div className="tq-aui-band-head">
@@ -408,7 +419,7 @@ export function AgentAsks({ asking, name, onAnswer }) {
 
 function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, reportLike = false, drafts = [], onDraftDecided }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, reportLike = false, drafts = [], onDraftDecided, starting = "" }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -546,12 +557,12 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   }, [dock, said, serverBusy, runtime]);
   const closedChat = !dock && ["done", "dropped"].includes(String(task?.Status || ""));
   const atWork = dock || work?.steps?.length ? <Thinking provider={dock ? provider : name} />
-    : <AgentBand name={name} provider={provider} work={work} since={since} />;
+    : <AgentBand name={name} provider={provider} work={work} since={since} starting={starting} />;
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="tq-aui-thread">
         <ThreadPrimitive.Viewport ref={viewport} className="tq-aui-viewport">
-          {!messages?.length && (
+          {!messages?.length && !starting && (
             <div className="tq-aui-welcome">
               <TaskuaryMark size={22} />
               <div>
@@ -803,6 +814,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
   // name the backend that is thinking. The session's own provider is the truth once it has one; on
   // a first turn there is no session yet, so fall back to the one the picker is showing.
   const pickedLabel = (data?.providers || []).find((p) => String(p.id) === String(connectorId))?.label;
+  // STARTED AND SILENT: the agent is on its way and has filed nothing - the pane is that one line high, not the room an answer gets
+  const quiet = !dock && busy && !(data?.messages || []).some((m) => m.role === "assistant");
+  const starting = quiet ? startingLine(name, session?.provider || pickedLabel) : "";
   // the chat IS the workspace, running or not - a session only decides whether a browser sits
   // beside it. It used to be one of four bodies behind a switcher (a fake terminal of the same
   // conversation, a browser button, a numbers panel); a general agent is a chat the way a coding
@@ -833,7 +847,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
         asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
-        reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} />
+        reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
@@ -855,9 +869,9 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
     </Button>
   </>);
   return (
-    <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
+    <Box className={dock ? `tq-aui-dock${dockExpanded ? " tq-aui-dock-expanded" : ""}` : undefined} onPaste={pasted} data-tq-starting={quiet ? "" : undefined} sx={{ border: dock ? 0 : `1px solid ${BORDER}`, borderRadius: dock ? 0 : 1.75, overflow: "hidden", bgcolor: PANEL2,
       minHeight: 0, display: "flex", flexDirection: "column",
-      ...(compact ? { height: "100%" } : { flex: "1 1 auto" }),
+      ...(compact ? { height: quiet ? "auto" : "100%" } : { flex: quiet ? "0 0 auto" : "1 1 auto" }),
       ...(full && !dock ? FULL_SX : null) }}>
       {/* the strip wraps when its box is narrow - a phone, or a half-width Wall pane; scrolled sideways it hid its buttons entirely.
           On the canvas the task's own step heading holds it (toolsAt) and the answer gets the line - until Full screen, which

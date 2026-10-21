@@ -23,7 +23,7 @@ test("no card for words that only share a fragment, and none for plain work", ()
 
 test("New offers the card on its own row, beside the job, and the job still starts if pressed", () => {
   const src = readFileSync(new URL("../src/NewSheet.jsx", import.meta.url), "utf8");
-  assert.ok(src.includes('useVerbs("new-connect"'));
+  assert.ok(src.includes("useVerbs(`new-connect${me}`"));
   assert.ok(src.includes("openAppLink(`#connector=${named.type}`)"));
   assert.ok(src.includes("onWords={setWords}"));
 });

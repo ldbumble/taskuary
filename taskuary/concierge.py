@@ -2054,7 +2054,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         return _new(store, tid, item, str(params.get('kind') or 'general') if kind == 'task.create_from_text' else 'general',
                     str(params.get('text') or text or '').strip())
     if routes() and kind == 'role.apply':
-        return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles - press Set up beside the one you do.")
+        return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
@@ -2273,14 +2273,14 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
     if kind == 'memory.remember':
-        return _page(store, tid, table, '#settings=memory', 'Add it as a note under Verdicts & notes - it is used from then on.')
+        return _page(store, tid, table, '#settings=memory', 'Opened Settings → Verdicts & notes - add it as a note there; it is used from then on.')
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",
-                     f"{r.get('label') or named} is under Settings{' > ' + r['group'] if r.get('group') else ''} - change it there.")
+                     f"Opened Settings{' → ' + r['group'] if r.get('group') else ''} at {r.get('label') or named} - change it there.")
     if tk == 'connector':
         typ = str(params.get('type') or '') or next((c['type'] for c in appfacts.connections(store) if c['connector_id'] == target), '')
-        if typ: return _page(store, tid, table, f'#connector={typ}', f"{named or typ}'s card is under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
+        if typ: return _page(store, tid, table, f'#connector={typ}', f"Opened {named or typ}'s card under Connections - {CONN_SAYS.get(kind, 'change it')} there.")
     on = None
     if tk == 'item' or (tk == 'message' and table and int(table.get('mid') or 0) == target): on = table
     elif tk == 'message' and target: on = funnel.item_for_key(store, f'msg:{target}')
@@ -2289,7 +2289,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         on = table if table and int(table.get('tid') or 0) == t else funnel.item_for_key(store, f'task:{t}') if t else None
     elif tk == 'source' and table and int(table.get('source_id') or 0) == target: on = table
     if tk == 'source' and not on and target:
-        return _page(store, tid, table, f'#report={target}', f"{named or 'The report'} is under Reports - {REPORT_SAYS.get(kind, 'change it')} there.")
+        return _page(store, tid, table, f'#report={target}', f"Opened {named or 'the report'} under Reports - {REPORT_SAYS.get(kind, 'change it')} there.")
     b = (next((FIELD_BUTTON[k] for k in FIELD_BUTTON if params.get(k)), '') if kind == 'task.update'
          else {'coding': 'coding_agent', 'general': 'regular_agent'}.get(str(params.get('kind') or ''), 'mine') if kind == 'task.create_from_message'
          else 'close_note' if kind == 'task.complete' and str(params.get('note') or '').strip() else KIND_BUTTON.get(kind, ''))
@@ -3336,12 +3336,12 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     if routes():
         if sort['kind'] == 'report': return _new(store, tid, item, 'report', ask)
         if sort['kind'] == 'role':
-            return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles - press Set up beside the one you do.")
+            return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
         if sort.get('provider'):
             prov = sort['provider']
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
-            return _page(store, tid, item, f'#connector={prov}', f"{name}'s card is under Connections - fill it in and test it there. "
+            return _page(store, tid, item, f'#connector={prov}', f"Opened {name}'s card under Connections - fill it in and test it there. "
                                                                  'A key or password goes on the card, never in this chat.')
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",
@@ -4066,13 +4066,18 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         # ...in the model's own words when it wrote any: a bare "Next." over a request that asked for something else read as the request
         # ignored (2026-10-20, "Clear all the FYI, please."). An "Ok." says less than Next does, and is not kept
         move_on(store, item['key'], actor)
-        said = reply if len(reply.split()) > 2 else RECEIPTS['next']
+        # ...and on the desk the receipt names what was put down: a bare "Next." is a word, not what it did (the owner, 2026-10-20: "it
+        # should show what it chose to do")
+        said = (reply if len(reply.split()) > 2 else
+                f"Put down {item.get('ref') or _title_cut(str(item.get('title') or 'that one'), 60)} - on to the next." if routes() else RECEIPTS['next'])
         rec('assistant', said)
         return {'say': said, 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
     if decision and verb in ('reply', 'redraft') and target_item:
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does
-        said = RECEIPTS[verb] + closed_note(store, target_item)
+        said = (RECEIPTS[verb] if not routes() else
+                f"{'Drafting a reply' if verb == 'reply' else 'Rewriting the draft'} on {target_item.get('ref') or _title_cut(str(target_item.get('title') or 'it'), 60)}"
+                f" - nothing goes out until you press {buttons.label('approve')}.") + closed_note(store, target_item)
         rec('assistant', said)
         d = {'verb': verb, 'text': decision.get('text') or ''}
         if verb == 'reply' and decision.get('cc'): d['cc'] = decision['cc']            # LOOP THEM IN: the reply copies them (open_reply)
@@ -4095,7 +4100,7 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
                 # "run the AP ageing again" over a good run was answered in words with the page one link away (the 2026-10-20 query walk)
                 if verb == 'rerun' and target_item.get('source_id'):
                     return _page(store, tid, item, f"#report={int(target_item['source_id'])}",
-                                 f"{target_item.get('title') or 'The report'} is under Reports - {REPORT_SAYS['report.run']} there.")
+                                 f"Opened {target_item.get('title') or 'the report'} under Reports - {REPORT_SAYS['report.run']} there.")
                 reply, options = _in_words(llm, system, table, text, verb)
                 rec('assistant', reply)
                 return {'say': reply, 'options': options, 'chips': chips_for(store, item), 'decision': None}

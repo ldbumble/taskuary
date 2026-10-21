@@ -335,17 +335,40 @@ def test_a_graph_that_fails_falls_back_to_the_chat_rule_without_a_crash():
     channels._ORG.clear()                                                    # and no connection at all: the same, quietly
     assert origin.of_message(s, s.get_message(mid))[0] == 'stranger'
 
-def test_a_held_task_from_a_colleague_resolved_since_says_so_on_agent_work():
-    from taskuary import channels, funnel, outbound
+def _held_task(s, tag=True):
     from taskuary.ingest import HOLD_TAG
-    s = _store(); channels._ORG.clear()
     t = s.create_task({'Title': 'Run the export', 'Kind': 'general', 'Status': 'open', 'Assignee': 'agent:assistant'}, 'triage')
-    mid = _old_line(s); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (t, mid)); s.tag_task(t, HOLD_TAG)
+    mid = _old_line(s); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (t, mid))
+    if tag: s.tag_task(t, HOLD_TAG)
     s.add_route(mid, t, 'create', 0.0, "triage: work \u00b7 held for you: Gail Moreno wrote in Teams, and you haven't talked with them "
                 "one-to-one or answered them there, so no agent starts on their words by itself.", [], 'router')
+    return t
+
+def test_a_held_task_from_a_colleague_resolved_since_is_no_longer_held_but_does_not_start_by_itself():
+    from taskuary import channels, funnel, outbound
+    from taskuary.ingest import HOLD_TAG
+    for tag in (True, False):                                     # a chat hold is not always tagged; its route sentence still is stale
+        s = _store(); channels._ORG.clear(); t = _held_task(s, tag)
+        with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', _Graph({'oid-7': GAIL})):
+            st = funnel.idle_state(s, t)
+        assert (st['kind'], st['row']) == ('idle', 'not started yet') and 'talked with' not in st['line'], st
+        assert not s.task_has_tag(t, HOLD_TAG) and not s.get_dispatch(t) and not s.list_runs(t)
+
+def test_a_held_task_whose_sender_cannot_be_resolved_stays_held():
+    from taskuary import channels, funnel, origin, outbound
+    from taskuary.ingest import HOLD_TAG
+    s = _store(); channels._ORG.clear(); t = _held_task(s)
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', _Graph(down=True)):
+        st, o = funnel.idle_state(s, t), origin.of_task(s, t)
+    assert st['kind'] == 'held' and "haven't talked with them" in st['line'] and s.task_has_tag(t, HOLD_TAG) and o[0] == 'stranger'
+
+def test_the_task_list_read_alone_drops_the_stale_hold():
+    from taskuary import channels, origin, outbound
+    from taskuary.ingest import HOLD_TAG
+    s = _store(); channels._ORG.clear(); t = _held_task(s)
     with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', _Graph({'oid-7': GAIL})):
-        line = funnel.idle_state(s, t)['line']
-    assert line.startswith('Waiting for you. Gail Moreno is in your own organisation on Teams.'), line
+        assert origin.of_task(s, t)[0] == 'trusted'
+    assert not s.task_has_tag(t, HOLD_TAG)
 
 def test_discord_and_chat_servers_key_a_sender_by_the_platform_id():
     from datetime import datetime

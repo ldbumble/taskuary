@@ -52,7 +52,18 @@ def of_task(store, tid: int) -> tuple:
         if worse(mo, o) != o: o, why = mo, mwhy
     # a bare UPDATE: a read must not move UpdatedAt/UpdatedBy and reorder the lists
     if (t.get('Origin'), t.get('OriginWhy')) != (o, why): store._exec('UPDATE task SET Origin=?, OriginWhy=? WHERE TaskId=?', (o, why, tid))
+    if o != 'stranger': _drop_stale_hold(store, t, why)
     return o, why
+
+def _drop_stale_hold(store, t: dict, why: str):
+    """A task held as a stranger's whose every sender is trusted since (a Teams colleague resolved after the fact) is no
+    longer held: the row's "held · new sender" goes, and the normal start is offered. Never started for them - that is
+    still the owner's press. A bare UPDATE, like the origin's own, so a read does not reorder the lists."""
+    from .ingest import HOLD_TAG
+    tags = [x for x in re.split(r'[\s,]+', str(t.get('Tags') or '')) if x]
+    if HOLD_TAG not in tags: return
+    store._exec('UPDATE task SET Tags=? WHERE TaskId=?', (','.join(x for x in tags if x != HOLD_TAG) or None, t['TaskId']))
+    store.audit('task', t['TaskId'], 'hold_cleared', 'agent', 'agent', detail={'why': why})
 
 def raise_to(store, tid: int, to: str, actor: str):
     "The owner's say-so: everything on the task so far counts as `to`. A later message is judged on its own."

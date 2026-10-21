@@ -1917,7 +1917,8 @@ def read_op(store, kind: str, params: dict) -> str:
         # ...and its checklist, numbered the way task.check takes it: read without it, "tick off the first item" was
         # answered "there's no checklist on this task" (the replay, 2026-09-25)
         boxes = store.task_checklist(tid)
-        if boxes: out.append('checklist: ' + '; '.join(f"{n}. [{'x' if b.get('done') else ' '}] {b['text']}" for n, b in enumerate(boxes, 1)))
+        if boxes: out.append('checklist: ' + '; '.join(f"{n}. [{'x' if b.get('done') else ' '}] {b['text']}" + (f" (note: {b['note']})" if b.get('note') else '')
+                                                     for n, b in enumerate(boxes, 1)))
         if t.get('RemindAt'): out.append(f"put away until {str(t['RemindAt'])[:10]} ({buttons.label('defer')})")
         for msg in (store.list_messages(tid) or [])[:6]:
             out.append(f"  message {str(msg.get('SentAt') or '')[:16]} from {msg.get('FromName') or msg.get('FromEmail')}: "
@@ -2393,6 +2394,28 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         if not note: raise CallMiss('task.comment needs `text` - the note itself. Nothing was written.')
         store.add_comment(target, actor, 'human', note)
         return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
+    # THE TO-DOS, RUN AND SAID (the owner, 2026-10-20): tick, untick, note one, add some - the task page's own writes
+    if kind == 'task.check' and target:
+        hit = task_contract(store, kind, target, params)['item']
+        note, done = params.get('note'), params.get('done')
+        did = []
+        if note is not None:
+            store.note_checklist_item(target, hit['id'], str(note), actor)
+            did.append(f"Noted on {named}'s \u201c{_title_cut(hit['text'], 60)}\u201d: {_title_cut(str(note), 120)}" if str(note).strip()
+                       else f"Took the note off {named}'s \u201c{_title_cut(hit['text'], 60)}\u201d")
+        if done is not None or note is None:
+            on = str(done if done is not None else True).lower() not in ('false', '0', 'no')
+            from . import slots
+            if on and any(i['id'] == hit['id'] for i in slots.open_(store, target)): slots.drop(store, target, hit['id'], actor)
+            else: store.tick_checklist_item(target, hit['id'], on, actor)
+            did.append(f"{'Ticked' if on else 'Unticked'} \u201c{_title_cut(hit['text'], 60)}\u201d on {named}")
+        return _did(store, tid, '; '.join(did) + '.', 'task.check')
+    if kind == 'task.checklist' and target and params.get('add') and not params.get('items'):
+        add = params['add'] if isinstance(params['add'], list) else [params['add']]
+        new = store.merge_task_checklist(target, [str(x) for x in add], actor)
+        if not new: raise CallMiss(f'{named} already has those to-dos. Say so. Nothing was added.')
+        return _did(store, tid, f"Added {plural(len(new), 'to-do')} to {named}: " + '; '.join(f'\u201c{_title_cut(i["text"], 60)}\u201d' for i in new) + '.',
+                    'task.checklist')
     if kind == 'task.update' and target and not (params.get('priority') or params.get('assignee')):
         from . import remind
         c = task_contract(store, kind, target, params)

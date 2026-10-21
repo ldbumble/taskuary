@@ -72,7 +72,7 @@
 <div class="entry">
       <a class="page" href="./reports">Reports and the Advisor</a>
       <button class="chev" type="button" aria-expanded="false" aria-label="Show Reports and the Advisor's sections"></button>
-      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#workflows">Workflows</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
+      <div class="secs" hidden><a class="sec" href="./reports#a-report-is-a-pipeline">A report is a pipeline</a><a class="sec" href="./reports#sources">Sources</a><a class="sec" href="./reports#letting-the-ai-write-the-source-cards">Letting the AI write the source cards</a><a class="sec" href="./reports#the-ai-pass">The AI pass</a><a class="sec" href="./reports#where-a-run-goes">Where a run goes</a><a class="sec" href="./reports#schedules">Schedules</a><a class="sec" href="./reports#the-advisor">The Advisor</a><a class="sec" href="./reports#workflows">Workflows</a><a class="sec" href="./reports#playbooks">Playbooks</a><a class="sec" href="./reports#stateful-workflows">Stateful workflows</a><a class="sec" href="./reports#sage-intacct-specifically">Sage Intacct, specifically</a><a class="sec" href="./reports#api">API</a></div>
     </div>
 <div class="entry">
       <a class="page" href="./advisor">The Advisor</a>
@@ -148,6 +148,10 @@ is what you see if those cards cannot load.</li>
 <p>Your corrections teach LEARNED.md — style, responsibilities, what deserves a task.</p>
 <p>Every correction you make — editing a draft before sending, rejecting one, reclassifying a task as a question, promoting something triage filed, &#39;Not a task&#39; / &#39;Not our task&#39; — is distilled into LEARNED.md (Settings → Docs): first as a hypothesis with a strength counter and the evidence behind it, promoted into the active profile only once it keeps holding across separate episodes. The active sections ride into every triage call, draft and agent run; SOUL.md always outranks them.</p>
 <p>Rules that would HIDE mail (treat as fyi, never a task) never activate themselves — they wait in the doc&#39;s &#39;Proposed rules&#39; for you to adopt or delete. Off: nothing new is learned; the doc stays as it is and is still injected.</p>
+<h3 id="use-playbooks">Use playbooks<a class="anchor" href="#use-playbooks" aria-label="Link to this section">#</a></h3>
+<p><code>playbooks_enabled</code> · type: switch · default: on</p>
+<p>Triage matches new mail to your playbooks, and agents may propose new ones.</p>
+<p>On: triage is shown every playbook that is switched on, a message that is an instance of one becomes a task worked from it, and a finished job that will recur is proposed as a new playbook for your approval. Off: no playbook is matched or proposed; the playbooks themselves stay on Reports → Playbooks, and a single one can be switched off there instead.</p>
 <h3 id="assistant-tab-brain">Assistant tab brain<a class="anchor" href="#assistant-tab-brain" aria-label="Link to this section">#</a></h3>
 <p><code>concierge_ai</code> · type: brain · set on a card at the top of the page</p>
 <p>Which AI speaks on the Assistant tab and walks you through the pipe. auto = your default coding agent, on its faster, lighter model.</p>
@@ -515,7 +519,7 @@ answer to &quot;why did this happen&quot; and &quot;who did this&quot; for anyth
 
     </article>
     <nav class="pager"><a class="pn prev" href="./phone"><span>Previous</span>On your phone</a><a class="pn next" href="./faq"><span>Next</span>FAQ</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.15 · updated 2026-10-21</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.16 · updated 2026-10-21</p>
   </main>
 </div>
 <script src="./docs.js"></script>

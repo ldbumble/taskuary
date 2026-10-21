@@ -871,6 +871,7 @@ def _assistant_dock_new(background: BackgroundTasks):
         # That can call an AI, so it belongs after the response rather than delaying New chat.
         background.add_task(session.close)
     task, created = general.dock_task(store, ACTOR)
+    _warm_assistant()              # the new chat's CLI starts now, not on its first ask
     return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
             'archivedTaskId': old['TaskId']}
 
@@ -4441,11 +4442,18 @@ def funnel_settle(body: SettleBody):
         out = {**out, 'pile': _pile_along(only=body.only, fyi=body.fyi)}
     return _encoded(out)
 
+def _warm_assistant():
+    """The Assistant's CLI started before it is asked (concierge.warm) - on a thread of its own, so nothing here waits on it."""
+    from . import concierge
+    concierge.warm(store, ACTOR)
+
+
 @app.get('/api/concierge')
 def concierge_state():
     """The conversation as it stands: the dock task, its turns with their cards, the AI choices."""
     from . import concierge, general
     task, _ = general.dock_task(store, ACTOR)
+    _warm_assistant()              # the page is open: its first ask finds the CLI already running
     options = general.provider_options(store)
     pick = concierge.pick(store)
     chosen = next((o for o in options if o['pick'] == pick), None)
@@ -4496,6 +4504,7 @@ def concierge_ai(body: ConciergeAiBody):
     task, _ = general.dock_task(store, ACTOR)
     store.set_setting(f"{concierge.SID_KEY}:{task['TaskId']}", '', ACTOR)
     from . import clipool; clipool.close(f"{concierge.LIVE_KEY}:{task['TaskId']}")   # a new brain is a new process
+    _warm_assistant()              # ...started now, on the brain just chosen
     return {'pick': concierge.pick(store), 'model': body.model or ''}
 
 @app.get('/api/funnel/mutes')

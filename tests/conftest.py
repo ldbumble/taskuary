@@ -343,6 +343,8 @@ def isolated_runtime_boundaries():
                          for name in ('fake_mcp_server.py', 'fake_tui.py', 'fake_acp_server.py')}
         # ...and the fake stream-json CLI takes the flags a real one is launched with (tests/test_clipool.py)
         if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_stream_cli.py': return True
+        # ...and so does the timed stand-in for claude the Assistant walk-through runs on (tests/assistant_walk.py)
+        if args and Path(args[0]).resolve() == Path(__file__).resolve().parent / 'fake_claude.py': return True
         return len(args) == 1 and Path(args[0]).resolve() in allowed_files
 
     def git_allowed(argv, kwargs) -> bool:
@@ -454,6 +456,9 @@ def isolated_runtime_boundaries():
         if real_hook_install_user: patches.enter_context(mock.patch.object(hooks, 'install_user', guarded_hooks_user))
         patches.enter_context(mock.patch.object(browserview, '_listening', guarded_browser_listening))
         patches.enter_context(mock.patch.object(server.app.router, 'lifespan_context', safe_lifespan))
+        # the Assistant's CLI is warmed by the page opening (server._warm_assistant): a test's GET must never start one. Its own
+        # tests call concierge.warm, or patch this back in
+        patches.enter_context(mock.patch.object(server, '_warm_assistant', lambda *a, **k: None))
         yield
 
     # By this point every test server and PTY should have shut down.  Clean only the exact suite

@@ -1134,20 +1134,11 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # trust prompt, so every one of those died before the model was reached (issue #34). The flag
     # only relaxes WHERE codex may run; the sandbox flags decide what it may do.
     if is_codex and '--skip-git-repo-check' not in args: args.append('--skip-git-repo-check')
-    cmd = _resolve_cmd(name) + args
-    # which model works it: profile default, or a per-run override from the UI. The flag
-    # name is configurable because every CLI spells it differently (claude/codex: --model).
-    if profile.get('model'):
-        # 'gpt-5.4@high' spells a codex model and its reasoning level in one pick (climodels)
-        from .climodels import split_pick
-        from .climodels import effort_args
-        m, eff = split_pick(profile['model'])
-        # '@high' is the CLI's own model at that effort (a workflow's effort alone, workflows.brain): no empty model flag
-        cmd += ([profile.get('model_arg') or '--model', m] if m else []) + effort_args(_cli_name(name), eff)
+    cmd = _resolve_cmd(name) + args + _model_args(profile, name)
     # A CONVERSATION KEPT OPEN: the Assistant and the general agent name theirs (`keep_alive`), and claude's
     # stream-json input serves every turn from one process instead of starting the CLI per call (clipool).
     keep = profile.get('keep_alive')
-    if keep and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args):
+    if _keeps(profile, family, args):
         return _run_live(profile, name, cmd, prompt, trace, keep, resume, cancel, extra_env)
     # Keep exec's existing sandbox/config flags, and resume the exact thread.
     if resume: cmd += resume_argv(profile, resume) + (['--json', '-'] if is_codex else [])
@@ -1334,6 +1325,50 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     return out, sid, (diff[:150000] or None)
 
 
+# where the words for the owner stop: the machine lines a turn ends on (concierge.parse_call, parse_options, recover's PICK), a code
+# fence, a card marker, bare JSON - and a last line that may yet become one of them ("CAL" is held until it is not "CALL:")
+_MACHINE = re.compile(r'(?:^|\n)[ \t]*(?:CALL|OPTIONS|PICK)[ \t]*:|```|<!--|(?:^|\n)[ \t]*\{', re.I)
+_MARKS = ('call:', 'options:', 'pick:')
+
+
+def spoken(text: str) -> str:
+    """The part of a half-written answer the owner may already read."""
+    s = str(text or '')
+    if (m := _MACHINE.search(s)): s = s[:m.start()]
+    head, _, last = s.rpartition('\n')
+    tail = last.strip().lower().replace(' ', '')
+    if tail and any(k.startswith(tail) for k in _MARKS): s = head
+    return s.strip()
+
+
+def _model_args(profile: dict, name: str) -> list:
+    """Which model works it: profile default, or a per-run override from the UI. The flag
+    name is configurable because every CLI spells it differently (claude/codex: --model)."""
+    if not profile.get('model'): return []
+    # 'gpt-5.4@high' spells a codex model and its reasoning level in one pick (climodels)
+    from .climodels import split_pick, effort_args
+    m, eff = split_pick(profile['model'])
+    # '@high' is the CLI's own model at that effort (a workflow's effort alone, workflows.brain): no empty model flag
+    return ([profile.get('model_arg') or '--model', m] if m else []) + effort_args(_cli_name(name), eff)
+
+
+def _keeps(profile: dict, family: str, args: list) -> bool:
+    return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
+
+
+def warm_cli(profile: dict, resume: str = None, extra_env: dict = None) -> bool:
+    """Start a kept conversation's process ahead of its first turn (clipool.warm) - the command run_cli's live road would
+    launch for this profile, so that turn finds it running. False for a profile that keeps no conversation (a one-shot
+    brain, a CLI with no stream-json input): there is nothing to have ready."""
+    name = profile.get('cmd', 'claude')
+    args = list(profile.get('args') or preset_args(name) or ['-p'])
+    if not _keeps(profile, _cli_name(name), args): return False
+    from . import clipool
+    try: return clipool.warm(profile['keep_alive'], _resolve_cmd(name) + args + _model_args(profile, name),
+                             cwd=profile.get('cwd'), env=spawn_env(profile, extra_env), resume=resume)
+    except PermissionError as e: raise FileNotFoundError(denied_msg(name, name, e)) from e
+
+
 def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str, resume, cancel, extra_env):
     """run_cli's turn on a conversation's LIVE process: the same trace events, the same errors, the same
     (result, session_id, diff) - with no checkout to diff, since neither the Assistant nor a general agent
@@ -1342,7 +1377,20 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
     cwd = profile.get('cwd')
     trace('prompt', 'prompt_sent_to_agent', prompt)
     trace('tool', 'cli', f'{name} cwd={cwd or os.getcwd()} live={keep}' + (f' resume={resume}' if resume else ''))
+    # THE WORDS AS THEY ARE WRITTEN, for a conversation that asked for them (--include-partial-messages: the Assistant): the page
+    # draws them while the rest is still coming, instead of after the whole answer (the owner, 2026-10-20: "it should respond to
+    # things quickly"). Only what the owner would read - the machine's CALL line never - and the finished answer replaces them.
+    written, drawn = [''], ['']
     def on(j):
+        if j.get('type') == 'stream_event':
+            ev = j.get('event') or {}
+            if ev.get('type') == 'message_start': written[0] = ''
+            d = ev.get('delta') or {}
+            if ev.get('type') == 'content_block_delta' and d.get('type') == 'text_delta':
+                written[0] += str(d.get('text') or '')
+                now = spoken(written[0])
+                if now and now != drawn[0]: drawn[0] = now; trace('words', name, now)
+            return
         if j.get('type') == 'assistant':
             for c in (j.get('message') or {}).get('content') or []:
                 if c.get('type') == 'tool_use':

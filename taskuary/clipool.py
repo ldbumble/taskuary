@@ -120,13 +120,26 @@ def _take(key: str, cmd: list, cwd, env, resume, sig: tuple) -> Live:
         return lv
 
 
+def _sig(cmd, cwd, env) -> tuple:
+    # ...and the environment's NAMES: a session whose token changed kind (a task that became a stranger's: no task proof,
+    # its own token - terminal.stranger_env) must not carry on in a process started with the other one
+    return (tuple(cmd), str(cwd or ''), hash(tuple(sorted(env or {}))))
+
+
+def warm(key: str, cmd: list, *, cwd=None, env=None, resume=None) -> bool:
+    """Start the conversation's process BEFORE its first message, so the CLI's start-up (2.5-4 s of node, settings and auth)
+    is paid while the owner is still reading, not after they type. The same process `run` would take for this key, command
+    and resume id - so the first turn finds it ready. True when one was started; one already live is left as it is."""
+    with _LOCK: had = _POOL.get(key)
+    lv = _take(key, cmd, cwd, env, resume, _sig(cmd, cwd, env))
+    return lv is not had
+
+
 def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resume=None, cancel=None,
         timeout: float = 1200) -> tuple:
     """One turn on the conversation's live process: (result event, raw lines). A process that died between
     turns is started again once, resumed by its id, before the turn fails."""
-    # ...and the environment's NAMES: a session whose token changed kind (a task that became a stranger's: no task proof,
-    # its own token - terminal.stranger_env) must not carry on in a process started with the other one
-    sig = (tuple(cmd), str(cwd or ''), hash(tuple(sorted(env or {}))))
+    sig = _sig(cmd, cwd, env)
     for attempt in (1, 2):
         lv = _take(key, cmd, cwd, env, resume, sig)
         with lv.lock:

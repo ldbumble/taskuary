@@ -139,6 +139,10 @@ class ImapTests(unittest.TestCase):
         self.assertEqual(sent['to'], ['rita@partner.example'])
         self.assertIn('In-Reply-To: <abc123@partner.example>', sent['data'])
         self.assertTrue(out['threaded'])
+        with mock.patch.object(imapmail.smtplib, 'SMTP', FakeSmtp):
+            outbound.reply_to_message(s, {**msg, 'Subject': 'RE: the export is broken'}, 'And the import.')
+        self.assertIn('Subject: RE: the export is broken', sent['data'])
+        self.assertNotIn('Re: RE:', sent['data'])
 
     def test_the_graph_poller_keeps_its_hands_off_imap_sources(self):
         """Both are channel 'email' - without ownership the outlook branch tried to fetch the

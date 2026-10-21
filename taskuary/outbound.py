@@ -774,6 +774,12 @@ def _smtp_box(store, address: str):
     return store.get_connector(hit['ConnectorId'], with_secret=True) if hit else None
 
 
+def re_subject(s) -> str:
+    """"Re: X" for a reply - once: answering "RE: X" or "Re: X" keeps it as it is, not "Re: Re: X"."""
+    s = str(s or '').strip()
+    return s if s.lower().startswith('re:') else f'Re: {s}'.strip()
+
+
 def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = None, attachments: list = None) -> dict:
     """Answer wherever the request came from. The message row carries everything needed:
     the mailbox it arrived in, the Graph id for threading, or the chat id."""
@@ -799,7 +805,7 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
                   if x['Type'] in ('gmail', 'imap') and x['Active']
                   and json.loads(x.get('ConfigJson') or '{}').get('address', '').lower() == box.lower()), None)
         if not c: raise Fixable(f'no mail connection is set up for {box}', *MAIL)
-        return send_smtp(store, c, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
+        return send_smtp(store, c, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
                          body, in_reply_to=msg.get('ConversationId'), cc=cc,
                          attachments=read_attachments(attachments))
     # ...and mail that came in another way (a forward, the push door) leaves through the SMTP mailbox it was addressed to - or
@@ -808,10 +814,10 @@ def reply_to_message(store, msg: dict, body: str, to: list = None, cc: list = No
     smtp = None if ext.startswith('graph:') else _smtp_box(store, msg.get('SourceName')) if ch == 'email' else None
     if smtp:
         from .imapmail import send_smtp
-        return send_smtp(store, smtp, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
+        return send_smtp(store, smtp, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
                          body, cc=cc, attachments=read_attachments(attachments))
     if ch == 'email':
-        return send_email(store, to or [msg.get('FromEmail')], f"Re: {msg.get('Subject') or ''}".strip(),
+        return send_email(store, to or [msg.get('FromEmail')], re_subject(msg.get('Subject')),
                           body, ext[6:] if ext.startswith('graph:') else None, msg.get('SourceName'),
                           _source_connector_id(store, 'email', msg.get('SourceName')), cc=cc,
                           attachments=attachments)

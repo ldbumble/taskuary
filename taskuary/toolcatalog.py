@@ -90,8 +90,10 @@ PURPOSE = {
                                  '`kind`: new_idea | technical_solve | howto | gotcha | decision | system | people, `why_earned`. Only a '
                                  'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '
                                  'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
-    'pipe.clear':               'clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. It only '
-                                'clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule',
+    'pipe.clear':               ('clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all '
+                                 'the FYI" is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
+                                 'and the count said. It only clears: when the owner says "from now on" too, also CALL '
+                                 'preference.exclude_sender or preference.sender_rule'),
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form

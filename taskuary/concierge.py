@@ -2048,9 +2048,6 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                     str(params.get('text') or text or '').strip())
     if routes() and kind == 'role.apply':
         return _page(store, tid, item, '#profiles', "Setting Taskuary up for a job is on Profiles - press Set up beside the one you do.")
-    if routes() and kind == 'pipe.clear':
-        raise CallMiss("Clearing a set of items has no button on the desk - the owner puts each one down with Next or Mark done, and a run of "
-                       f"notices with {buttons.label('next', 'batch')}. Say so in plain words. Nothing was touched.")
     if kind == 'task.create_from_text' and str(params.get('kind') or '') in task_kinds.AGENT:
         verb = 'coding_agent' if params['kind'] == 'coding' else 'regular_agent'
         dec = {'verb': verb, 'text': str(params.get('text') or text or '').strip(),
@@ -2075,6 +2072,9 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)
+        # what is on the table: the walk's own, or the item the turn is about (a batch is its members)
+        table_keys = ({i['key'] for i in _on_the_table(store, actor) if i.get('key')}
+                      or {e.get('key') for e in (it.get('items') or [it]) if e.get('key')})
         if not hits and not any(v not in (None, '', [], False) for v in (sel or {}).values()):
             # a set that names nothing ("mark them all read" with nothing before it) is a question, not "nothing matches"
             say_ = (f"Which ones? {pipe_holds(store)} Say the notices, the reports, everything from one sender - or "
@@ -2090,6 +2090,19 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                     f"{pipe_holds(store)} Say it another way and I'll look again - nothing has been touched.")
             record_related(store, tid, item, 'assistant', say_)
             return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        # ON THE DESK A NAMED SET IS MARKED READ AT ONCE. It had "no button on the desk - the owner puts each one down with Next", and
+        # the model, told so, pressed Next: "Clear all the FYI, please." was answered "Next." with four of ~90 on the table (the owner,
+        # 2026-10-20: "this is clearly broken"). The selector is the owner's own words naming the set, the count is said, nothing is
+        # deleted - search finds every one - and the batch card's All read is this same mark, one card at a time.
+        if routes():
+            done = clear_selected(store, sel, actor)
+            n, shown = done['cleared'], ', '.join(_title_cut(' '.join(str(t).split()), 50) for t in done['titles'][:3])
+            say_ = (f"Marked {plural(n, 'item')} read - {shown}{' and more' if n > 3 else ''}. Search still finds them; nothing was deleted."
+                    + (f" {plural(done['stuck'], 'item')} would not clear." if done['stuck'] else ''))
+            record_related(store, tid, item, 'assistant', say_)
+            # the table among them: the walk moves on, as All read, next does; otherwise the rail is read again (the page's `setting`)
+            off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
+            return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'cleared': n}
         where = ', '.join(f'{k}: {v}' for k, v in sel.items())
         label = f"Clear {len(hits)} from the pipe"
         # ...WHICH ones, on the card, before the yes: a count and a selector were all it said
@@ -2101,9 +2114,8 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # A sweep that takes the table with it has settled the table: the walk moves to the next thing
         # instead of sitting on what it just cleared (the owner, 2026-09-11: "did not move to next
         # after"). The KEY is what the page matches against Current; the server does the settling.
-        table = {i['key'] for i in _on_the_table(store, actor) if i.get('key')}
         held = current_key(store, tid)
-        if held and table and table <= {i['key'] for i in hits}: prop = {**prop, 'key': held, 'settles': True}
+        if held and table_keys and table_keys <= {i['key'] for i in hits}: prop = {**prop, 'key': held, 'settles': True}
         return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
     # everything else acts on ONE thing: the item on the table unless the call named its own target
     for f in toolcatalog.CONTEXT_FILLED:                 # a pile key is ours to supply, never the model's
@@ -4033,9 +4045,12 @@ def _say(store, text: str, key: str = None, llm=None, actor: str = 'owner', trac
         decision = verb = None
     # the two immediate exceptions the owner approved: Next moves the walk (PW-128); a reply DRAFTS (PW-126)
     if decision and verb == 'next' and item:
+        # ...in the model's own words when it wrote any: a bare "Next." over a request that asked for something else read as the request
+        # ignored (2026-10-20, "Clear all the FYI, please."). An "Ok." says less than Next does, and is not kept
         move_on(store, item['key'], actor)
-        rec('assistant', RECEIPTS['next'])
-        return {'say': RECEIPTS['next'], 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
+        said = reply if len(reply.split()) > 2 else RECEIPTS['next']
+        rec('assistant', said)
+        return {'say': said, 'options': [], 'chips': [], 'decision': {'verb': 'next'}}
     if decision and verb in ('reply', 'redraft') and target_item:
         # A CLOSED TASK IS SAID SO: "approve the Fairhaven PO" drafted "Approved" on a task already marked done, and nothing said it
         # was (real-AI check, 2026-10-18). The draft is still theirs to send; it never reopens the task - Reopen task does

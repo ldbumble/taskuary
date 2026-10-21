@@ -140,6 +140,7 @@ class ABrowserJobNeedsHandsTests(unittest.TestCase):
                           'Name': 'Work model', 'ConfigJson': '{"model":"gpt-test"}'}, 'owner')
         return s
 
+    @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_a_task_with_a_browser_defaults_to_a_cli_not_the_api_brain(self):
         s = self._store_with_both()
         plain = s.create_task({'Title': 'Compare the options', 'Kind': 'general', 'Status': 'open'}, 'o')

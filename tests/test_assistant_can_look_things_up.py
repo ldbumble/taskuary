@@ -75,6 +75,7 @@ class AssistantToolsTests(unittest.TestCase):
 
 
 class AssistantProviderTests(unittest.TestCase):
+    @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_the_payload_names_the_provider_the_server_would_choose(self):
         """The picker defaulted to providers[0], which is always a CLI - so a general task with no
         session nominated a CODING agent and sent that as its pick."""

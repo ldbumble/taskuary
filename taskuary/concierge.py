@@ -2101,14 +2101,25 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         # the model, told so, pressed Next: "Clear all the FYI, please." was answered "Next." with four of ~90 on the table (the owner,
         # 2026-10-20: "this is clearly broken"). The selector is the owner's own words naming the set, the count is said, nothing is
         # deleted - search finds every one - and the batch card's All read is this same mark, one card at a time.
+        # ...but never what is ON THE OWNER - a to-do, a draft waiting for its Send, a question: "mark everything read" swept those with the
+        # notices, and each has its own button to put it down. Those stay, and the line says how many.
         if routes():
-            done = clear_selected(store, sel, actor)
-            n, shown = done['cleared'], ', '.join(_title_cut(' '.join(str(t).split()), 50) for t in done['titles'][:3])
+            mine = sum(map(lanes.on_you, hits))
+            hits = [i for i in hits if not lanes.on_you(i)]
+            if not hits:
+                say_ = (f"{plural(mine, 'item')} {'is' if mine == 1 else 'are'} waiting on you - each is put down with its own button, "
+                        "not by a sweep. Nothing has been touched.")
+                record_related(store, tid, item, 'assistant', say_)
+                return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+            cleared = [i for i in hits if _clear_one(store, i['key'], actor, 'cleared by the owner')]
+            _off_the_table(store, cleared, actor)
+            n, shown = len(cleared), ', '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 50) for i in cleared[:3])
             say_ = (f"Marked {plural(n, 'item')} read - {shown}{' and more' if n > 3 else ''}. Search still finds them; nothing was deleted."
-                    + (f" {plural(done['stuck'], 'item')} would not clear." if done['stuck'] else ''))
+                    + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
+                    + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             record_related(store, tid, item, 'assistant', say_)
             # the table among them: the walk moves on, as All read, next does; otherwise the rail is read again (the page's `setting`)
-            off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
+            off = bool(table_keys) and table_keys <= {i['key'] for i in cleared}
             return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'cleared': n}
         where = ', '.join(f'{k}: {v}' for k, v in sel.items())
         label = f"Clear {len(hits)} from the pipe"

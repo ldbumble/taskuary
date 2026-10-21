@@ -1239,7 +1239,8 @@ def fallback(item: dict | None, opening: bool, pile_items: list = None, brain: b
         idle = item.get('why_idle') if item.get('lane') == 'queued' and item['kind'] in ('asked', 'todo') else ''
         if idle: return f"{frm}. No agent has started on it. {idle} From you: {_from_you(store, item)}."   # the moves are its own buttons
         # "the agent removed X" reads; "the agent The PR was reviewed.." did not - a summary that is its own sentence gets a lead-in
-        done = (f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
+        done = (_cap(str(item['why'])) if item.get('closed') and item.get('why') else      # a closed task says what happened, not "fyi"
+                f"it was worked on - {str(item['summary']).strip().rstrip('.')}" if item.get('summary') else
                 'I read it as needing a reply' if item['kind'] == 'review' else 'something is ready to run, waiting for your yes' if item['kind'] == 'action' else
                 _stopped_work(store, item) or ('it needs code work, and nobody has started it yet' if item.get('coding') else 'nothing has been done with it yet')
                 if item['kind'] in ('asked', 'todo')

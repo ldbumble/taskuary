@@ -89,6 +89,8 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 
 **Which playbook.** When the message is plainly an instance of one of the owner's PLAYBOOKS - its `when` line fits - answer `playbook` with its slug; it is then a task worked from that playbook. Mentioning the same systems is not an instance.
 
+**Which workflow.** When the message is plainly the arrival one of the owner's WORKFLOWS A MAIL STARTS waits for - its `when` line fits - answer `workflow` with its name as listed (`workflow-<n>`); that workflow then runs on it, and its run is the task. Same test as a playbook: an instance, not a mention.
+
 **Which repository.** For a task an agent could work from a keyboard, answer `repository` with one of `known_repositories`, from what the request is about, with `repo_reason` saying what in the request points there. `project_context` (the sender's past repository choices) is supporting evidence, not proof: it helps say what a message is about, it never makes an informational message a task, it is never permission to write or send anything, and a tentative link stays tentative. When two are plausible or none fits, answer null with `needs_repo_choice` true and the owner chooses.
 
 ## 5. Describing it
@@ -124,4 +126,4 @@ Each is a sign to weigh; an absent field is not evidence either way.
 
 ## 7. The answer
 
-JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk", "goal": false, "done_when": null, "danger": null, "meet": null} - plus `same_as`, `serves`, `profile`, `playbook`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.
+JSON only: {"intent": "task|reply_only|fyi", "kind": "coding|general|task", "why": "...", "title": "...", "summary": "...", "checklist": ["..."], "outputs": [{"to": "...", "about": "..."}], "urgent": false, "due": "YYYY-MM-DD or null", "sender_class": "person|automated|bulk", "goal": false, "done_when": null, "danger": null, "meet": null} - plus `same_as`, `serves`, `profile`, `playbook`, `workflow`, `repository` / `needs_repo_choice` / `repo_reason`, and for a chat line `relationship` / `related_message_ids` / `existing_task_id` / `same_problem`, whenever the input gives you what they are chosen from.

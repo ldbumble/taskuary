@@ -54,6 +54,10 @@ export const scheduleWords = (s) => s.mode === "every" ? `every ${s.minutes} min
   : s.mode === "monthly" ? `on the ${s.day} of each month at ${s.at}`
   : s.mode === "cron" ? `cron ${s.cron}` : "only when you press Run now";
 
+// ...and when a mail starts it too (workflows.from_mail): the clock alone said "only when you press Run now" over a job a mail starts
+export const runsWords = (s, c) => String(c?.on_mail || "").trim()
+  ? `${s.mode === "manual" ? "" : `${scheduleWords(s)}, and `}when a mail like the one described arrives` : scheduleWords(s);
+
 const Field = ({ label, hint, children }) => (
   <Box sx={{ mb: 2 }}>
     <Typography sx={{ color: INK, fontWeight: 600, fontSize: 13, mb: 0.25 }}>{label}</Typography>
@@ -141,7 +145,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       const { data } = await api.post("/api/sources", { ...(cur ? { SourceId: cur.SourceId } : {}), Channel: "report",
         Address: c.title, ConfigJson: JSON.stringify(c), Active: cur ? !!cur.Active : true });
       await reload();
-      setMsg({ ok: true, text: `Saved — runs ${scheduleWords(sched)}.` }); setRepair(null);
+      setMsg({ ok: true, text: `Saved — runs ${runsWords(sched, cfg)}.` }); setRepair(null);
       if (!cur) onSaved?.(data.sourceId);
       return data.sourceId || cur?.SourceId;
     } catch (e) { setMsg({ ok: false, text: e?.response?.data?.detail || "It could not be saved." }); return null; }
@@ -171,7 +175,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
       {/* the actions, together: what it is doing now, and the three things you can do about it */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 2, mt: -1 }}>
         <Typography variant="body2" sx={{ color: DIM, flex: 1, minWidth: 200 }}>
-          {cur ? `${cur.Active ? "On" : "Off"} · runs ${scheduleWords(sched)}` : `Not saved yet · will run ${scheduleWords(sched)}`}
+          {cur ? `${cur.Active ? "On" : "Off"} · runs ${runsWords(sched, cfg)}` : `Not saved yet · will run ${runsWords(sched, cfg)}`}
         </Typography>
         {cur && <Box sx={{ display: "flex", alignItems: "center" }}>
           <Switch size="small" checked={!!cur.Active} onChange={toggle} />
@@ -273,6 +277,12 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
         <Field label="Done when" hint="what a finished run looks like - and what it says when there was nothing to do">
           <TextField size="small" fullWidth value={cfg.done_when || ""} placeholder='one finance task per duplicate pair; "all clear" when there are none'
             onChange={(e) => set("done_when", e.target.value)} sx={{ bgcolor: "#fff" }} />
+        </Field>
+        {/* A MAIL STARTS IT (the owner, 2026-10-21): said in words, like a playbook's "when" - triage is shown it beside the playbooks
+            and starts this workflow on a mail that is one; the run is that mail's task, and its steps read it as {{mail.subject}} */}
+        <Field label="Start when a mail like this arrives" hint="optional - describe the mail in words; triage starts this workflow when one like it comes in, and the steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}">
+          <TextField size="small" fullWidth value={cfg.on_mail || ""} placeholder="a vendor sends an invoice for something we ordered"
+            onChange={(e) => set("on_mail", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
         <Field label="When it runs">
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>

@@ -218,10 +218,12 @@ WORKFLOW_SYSTEM = (
     '- Schedule with every_minutes, daily_at (HH:MM), or standard five-field cron. daily_at is EVERY day: a weekly, '
     'weekday or monthly ask is cron ("every Monday at 8" is "0 8 * * 1"), and explain must say the same schedule the '
     'config carries. If the owner gives no schedule, use daily_at "08:00" for an agent or cron "0 9 1 * *" for monthly '
-    'invoices and say so.\n'
+    'invoices and say so - unless a mail starts it (on_mail), which needs no clock.\n'
     '- An agent workflow also says, when the request does: "uses" - the ids of the connections it works in, only from '
     'WORKFLOW OPTIONS connections; "ask_first" - what it must ask the owner before doing; "done_when" - what finished '
-    'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page.\n'
+    'looks like, including what a run with nothing to do says; "browser": true when the work is done on a web page; '
+    '"on_mail": when the job starts as a certain mail ARRIVES, that mail described in plain words (triage starts the run when one '
+    'like it comes in, and its steps read it as {{mail.from}}, {{mail.subject}}, {{mail.body}}).\n'
     '- Do not add report-only keys such as sources, ai_prompt, charts, triage, route, watch, delivery, or alerts: a run is a task, '
     'so there is no condition to wait for and nothing for triage to judge.\n\n' + FLOW_RULES)
 
@@ -229,7 +231,7 @@ WORKFLOW_KEYS = {
     'zoho_monthly_invoices': {'type', 'title', 'connector_id', 'customers', 'customer_ids',
                               'every_minutes', 'daily_at', 'cron', 'on_startup'},
     'agent': {'type', 'title', 'agent', 'skill', 'prompt', 'cwd', 'model', 'effort', 'access', 'uses', 'ask_first', 'done_when', 'browser',
-              'flow', 'repair', 'goal', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
+              'flow', 'repair', 'goal', 'on_mail', 'every_minutes', 'daily_at', 'cron', 'on_startup'},
 }
 
 
@@ -315,7 +317,7 @@ def compose_workflow(store, ask: str, llm, answers: dict = None) -> dict:
         cfg = {k: v for k, v in raw.items() if k in WORKFLOW_KEYS[typ]}
         if not str(cfg.get('title') or '').strip(): return {'error': AGAIN.format('a workflow')}
         schedules = [k for k in ('every_minutes', 'daily_at', 'cron', 'on_startup') if cfg.get(k)]
-        if not schedules:
+        if not schedules and not str(cfg.get('on_mail') or '').strip():      # a job a mail starts needs no clock
             cfg['cron' if typ == 'zoho_monthly_invoices' else 'daily_at'] = '0 9 1 * *' if typ == 'zoho_monthly_invoices' else '08:00'
         if typ == 'agent':
             names = {x['name'] for x in options['agent']}

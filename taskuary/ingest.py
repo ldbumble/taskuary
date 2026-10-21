@@ -181,6 +181,15 @@ def _from_row(r: dict, store=None) -> dict:
             **({'file_text': files} if files else {})}
 
 
+def _workflow_menu(store) -> str:
+    """The workflows a mail can start, for triage - shown beside the playbooks, the same way (workflows.mail_menu)."""
+    try:
+        from . import workflows
+        return workflows.mail_menu(store)
+    except Exception as e:
+        logger.debug(f'ingest: workflow menu skipped - {e}'); return ''
+
+
 def _playbook_menu(store=None) -> str:
     """What triage is shown of the owner's playbooks - '' when there are none, so no words are spent."""
     try:
@@ -207,6 +216,33 @@ def auto_start_ok(store, msg: dict, mid: int, kind: str) -> tuple:
         if not auto_code_enabled(cfg): return False, said(f"Starting the coding agent by itself is switched off in {words.name('coding')}.")
     else: return False, said('A person has to do this one, so it is on your list.')
     return senders.known(store, msg, exclude_mid=mid, deep=True)
+
+
+def _start_workflow(store, msg: dict, intent: dict, actor: str, note: str = '') -> dict | None:
+    """Run the workflow triage named for this mail, and file the mail on its run task. None - the mail becomes a task of its own,
+    as it would have - when the workflow is gone or off, or when it would put an AGENT on the words of a sender who may not start
+    one by themselves (auto_start_ok): steps run by code ask for every write below a connection's authority, an agent does not, so
+    that run waits for the owner to start it from the task triage opens, which says which workflow it matched."""
+    from . import flow, workflows
+    sid = str(intent['workflow'])[len(workflows.MAIL_NAME):]
+    src = store.get_source(int(sid)) if sid.isdigit() else None
+    if not src: return None
+    steps = flow.steps_of(workflows.cfg_of(src))
+    agent = not flow.is_flow(workflows.cfg_of(src)) or any(s.get('kind') == 'agent' for s in steps)
+    if agent:
+        ok, why = auto_start_ok(store, msg, msg.get('_mid'), 'general')
+        if not ok:
+            msg['_workflow_held'] = f"Matches the workflow \"{workflows.definition(store, src)['title']}\", which hands it to an agent - {why}"
+            return None
+    out = workflows.from_mail(store, intent['workflow'], msg, actor)
+    if not out: return None
+    tid = out['task_id']
+    mid = _land(store, msg, tid, 'routed')
+    store.add_route(mid, tid, 'attach' if out.get('busy') else 'create', None,
+                    f"triage: starts the workflow \"{out['title']}\" - {intent.get('why') or 'its mail trigger fits'}" + note, [], 'triage',
+                    verdict=_stored_verdict(intent))
+    store.audit('task', tid, 'workflow_from_mail', actor, 'agent', {'from': msg.get('from_email'), 'workflow': intent['workflow'], 'busy': bool(out.get('busy'))})
+    return {'status': 'attached' if out.get('busy') else 'created', 'task_id': tid, 'message_id': mid, 'workflow': intent['workflow']}
 
 
 def held_note(who, kind: str) -> str:
@@ -605,7 +641,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
                              watch=msg.get('watch_for'),
                              # ...and the playbooks: a message that is an instance of one is
                              # tagged with it, and the agent is seeded from it (playbooks.py)
-                             playbooks=_playbook_menu(store), project=project, candidates=candidates, repos=repos or None,
+                             playbooks=_playbook_menu(store), workflows=_workflow_menu(store), project=project, candidates=candidates, repos=repos or None,
                              # ...and WHICH worker, out of the ones this install actually has: the roster is
                              # data the owner edits on the Agents page, never a vocabulary in the prompt
                              profiles=hub_agents.roster(store) or None,
@@ -963,6 +999,11 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                             f"triage: {route_head('fyi')} - {intent.get('why') or 'informational'}" + _notes_note(), [], 'triage',
                             verdict=_stored_verdict(intent))
             return {'status': 'filed', 'task_id': None, 'message_id': mid}
+        # A MAIL THAT STARTS A WORKFLOW (the owner, 2026-10-21): triage named a workflow whose "start when a mail like this arrives"
+        # this is - its run IS the mail's task, by the one road every run takes (workflows.run), approvals as they always are
+        if intent['intent'] == 'task' and intent.get('workflow'):
+            got = _start_workflow(store, msg, intent, actor, _notes_note())
+            if got: return got
         # a question is reply-needed whatever the channel can carry (PW-042): sending capability
         # decides whether the draft can be SENT from here, never whether it is written - it used to
         # be filed on a channel with replies off, a question wearing the "nothing to do" face
@@ -1010,6 +1051,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                                  **({'Tags': _pb.tag(intent['playbook'])} if intent.get('playbook') else {}),
                                  **({'Assignee': f'agent:{role}'} if role else {})}, actor)
         store.audit('task', tid, 'create', actor, 'agent', {'from': msg.get('from_email'), 'reason': r['reason']})
+        if msg.get('_workflow_held'): store.add_comment(tid, 'triage', 'agent', msg['_workflow_held'] + '. It was not started on its own.')
         if intent.get('checklist') and not goal: store.set_task_checklist(tid, intent['checklist'], 'triage')
         if intent.get('due'): remind.set_due(store, tid, intent['due'], actor)     # the day it is due, as triage read it
         if goal:

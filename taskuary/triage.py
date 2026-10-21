@@ -153,7 +153,7 @@ def due_of(j: dict, sent=None) -> str | None:
     except ValueError: base = datetime.now().date()
     return s if base - timedelta(days=7) <= d <= base + timedelta(days=366) else None
 
-def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True) -> dict:
+def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, same=False, goals=False, coding=True, workflows=None) -> dict:
     """The answer's shape as a JSON schema, for the brains whose wire can carry one (llm.ask_json).
 
     Prose asks; a schema binds. Handed this, gpt-5.4 answered `title` and `summary` even when the
@@ -183,6 +183,7 @@ def verdict_schema(repos=None, candidates=None, playbooks=None, profiles=None, s
          'outputs': {'type': ['array', 'null'], 'items': {'type': 'object', 'additionalProperties': False, 'required': ['to', 'about'],
                                                           'properties': {'to': {'type': 'string'}, 'about': {'type': 'string'}}}}}
     if playbooks: p['playbook'] = {'type': ['string', 'null']}
+    if workflows: p['workflow'] = {'type': ['string', 'null']}
     if profiles: p['profile'] = {'type': ['string', 'null']}
     if repos: p.update(repository={'type': ['string', 'null']}, needs_repo_choice={'type': 'boolean'},
                        repo_reason={'type': 'string'})
@@ -546,7 +547,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                     thread: dict = None, watch: str = None, playbooks: str = None,
                     project: dict = None, candidates: list = None, repos: list = None,
                     profiles: str = None, routing_history: list = None, seen: set = None, job: str = None,
-                    coding: bool = True) -> dict:
+                    coding: bool = True, workflows: str = None) -> dict:
     """`job` is JOB.md as job_doc() reads it - what the owner is responsible for, who they serve, what to
     protect. It weighs IMPORTANCE (how much this arrival matters to the job) and never intent; blank until
     the owner wrote or generated something real, so the shipped template never rides in as noise.
@@ -632,6 +633,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # the owner, "why are there items in code in triage? I thought we removed them").
             if watch: system += "\n\nTHE REPORT'S BRIEF - why the owner runs this report and what they watch for:\n" + str(watch)[:1200]
             if playbooks: system += "\n\nPLAYBOOKS - the owner's written procedures, each with the arrival that starts it (when):\n" + str(playbooks)[:3000]
+            if workflows: system += "\n\nWORKFLOWS A MAIL STARTS - the owner's configured jobs, each with the arrival that starts it (when):\n" + str(workflows)[:3000]
             if profiles: system += '\n\nTHE WORKERS - the specialists for non-coding work, each with what it is for:\n' + str(profiles)[:2000]
             # a FACT about this install, not a rule of judgement: no coding tool is connected, so coding is not a kind it has
             if not coding: system += ('\n\nNO CODING TOOL IS CONNECTED on this install: there is no coding agent. Never choose kind '
@@ -685,7 +687,7 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
             # what was left out. Both exist because neither reaches every brain (TQ-0665).
             from .llm import ask_json
             answer = ask_json(llm, system, user, want=verdict_schema(repos, candidates, playbooks, profiles, same=bool(same_ids), goals=bool(goal_steps),
-                                                                     coding=coding),
+                                                                     coding=coding, workflows=workflows),
                               need=('title', 'summary'), **({'max_tokens': TRIAGE_TOKENS} if takes_tokens(llm) else {}),
                               **({'images': images} if images else {}))
             raw_answer, j = answer.raw, answer.data
@@ -709,6 +711,11 @@ def classify_intent(msg: dict, llm=None, soul: str = None, notes: list = None, i
                 pb = str(j.get('playbook') or '').strip().lower()
                 if playbooks and pb and out['intent'] == 'task' and re.search(rf'^- {re.escape(pb)}: ', playbooks, re.M):
                     out['playbook'] = pb
+                # ...and a WORKFLOW the arrival starts (workflows.mail_menu), checked against the lines it was shown the same way:
+                # a name nobody offered starts nothing
+                wf = str(j.get('workflow') or '').strip().lower()
+                if workflows and wf and out['intent'] == 'task' and re.search(rf'^- {re.escape(wf)}: ', workflows, re.M):
+                    out['workflow'] = wf
                 # WHICH WORKER, when one starts: validated against the roster it was actually shown, the
                 # same way the playbook is. A name nobody offered is dropped, and the task falls to the
                 # default profile - a hallucinated worker must not route work anywhere.

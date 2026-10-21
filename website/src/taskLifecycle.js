@@ -131,11 +131,15 @@ export const replySource = (messages = []) => {
 // lanes.json's word for the approve lane - ONE word for a reply and a close-out alike (the owner, 2026-09-27: "it should
 // the same everywhere"), because both are the step that closes the task
 export const READY = WORD.approve;
+// ...and a reply the server REFUSED is not ready to send: the chip read "reply · ready to send" in green over it (the UI audit, 2026-10-21)
+export const NOT_SENT = WORD.not_sent;
 
 export const replyPhase = (reviews = []) => {
   const replyReviews = reviews.filter((review) => review.Kind !== "action");
   const latest = replyReviews[0];
-  if (pendingReplyReview(replyReviews) || reviews.some((r) => r.Status === "pending" && closeoutOf(r))) return READY;
+  const pending = pendingReplyReview(replyReviews);
+  if (pending?.DeliveryState === "failed") return NOT_SENT;
+  if (pending || reviews.some((r) => r.Status === "pending" && closeoutOf(r))) return READY;
   if (sentReplyReview(replyReviews)) return "sent";
   if (latest?.Status === "no_reply") return "not needed";
   return "not drafted";
@@ -163,7 +167,7 @@ export const waitingEmails = (checklist = [], reviews = []) => {
 export const wentOut = (reviews = []) => (reviews || []).some((r) => ["approved", "edited", "sent"].includes(r.Status));
 
 export const focusStage = ({ kind, task, agent, reply, hasSender, proposal, agentSub, emails = 0, news = false, record = false, out = false } = {}) => {
-  if (reply === READY) return "reply";
+  if (reply === READY || reply === NOT_SENT) return "reply";
   // ONE EVENT SEEN TWICE. An agent parked because it PROPOSED something is not two things wanting
   // the page: approving the proposal is what releases it. Opening the agent stage there would show
   // a terminal at a prompt with the thing that unblocks it folded away one card below. Parked on

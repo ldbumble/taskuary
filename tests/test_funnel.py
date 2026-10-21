@@ -435,6 +435,19 @@ class MutedTests(unittest.TestCase):
 
 
 class LanesTests(unittest.TestCase):
+    def test_a_send_the_mail_server_refused_says_not_sent_and_why(self):
+        """It said "ready to send" over a reply the server had turned away, its reason a grey line on the card (UI audit 2026-10-21)."""
+        s = store()
+        t = s.create_task({'Title': 'Lease renewal', 'Kind': 'reply', 'Status': 'waiting'}, 'o')
+        m = mail(s, 'Lease renewal', who='Erin Blake', email='erin@northwind.example', tid=t)
+        rid = s.add_review({'TaskId': t, 'MessageId': m, 'Kind': 'reply', 'DraftText': 'Signed this morning.', 'Status': 'pending',
+                            'Reason': 'Not sent: the mail server refused erin@northwind.example (5.1.1 no such user).'})
+        it = funnel.build(s)['items'][0]
+        self.assertEqual((it['lane'], it.get('not_sent')), ('approve', None))
+        s._exec("UPDATE review SET DeliveryState='failed' WHERE ReviewId=?", (rid,)); funnel.invalidate()
+        it = funnel.build(s)['items'][0]
+        self.assertEqual((it['lane'], it['not_sent'], it['why']), ('approve', True, 'the mail server refused erin@northwind.example (5.1.1 no such user)'))
+
     def test_a_drafted_reply_outranks_a_report_and_the_oldest_in_a_lane_comes_first(self):
         s = store()
         t1 = s.create_task({'Title': 'Fix the export', 'Kind': 'coding', 'Status': 'waiting'}, 'o')

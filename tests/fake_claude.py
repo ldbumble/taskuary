@@ -68,6 +68,7 @@ def turn(prompt: str, n: int):
          'duration_ms': int((time.time() - t) * 1000)})
 
 
+if os.environ.get('FAKE_CLAUDE_BROKEN'): sys.exit(1)          # a CLI half-way through updating itself: it starts and dies
 time.sleep(SPAWN)
 log('ready', spawn=round(time.time() - T0, 3), live=LIVE, args=args)
 if LIVE:

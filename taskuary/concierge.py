@@ -830,6 +830,10 @@ def brain_trouble(error) -> str:
     if _re.search(r'401|403|unauthori[sz]ed|invalid.*(key|token)|signed out|not logged in|login|expired', low):
         return (f"I can't answer right now - my sign-in needs attention ({detail}). Nothing is lost. Sign me back in under "
                 f"{places.name('connections')} and ask again.")
+    from .clipool import RESTART_FAILED
+    if RESTART_FAILED in text:          # it ended, was started again, and ended again - an update in progress, or a broken install
+        return ("My AI tool stopped, and stopped again when I restarted it - it may be updating. Nothing is lost; ask again in a "
+                f"minute. If it keeps happening, check it under {places.name('ai')}.")
     if _re.search(r'timed out|timeout|connection|network|unreachable|502|503|504|500|server error', low):
         return (f"I couldn't get an answer just now - the service didn't respond ({detail}). Nothing is lost; ask again in "
                 "a moment.")

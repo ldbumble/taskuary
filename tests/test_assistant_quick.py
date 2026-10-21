@@ -128,6 +128,38 @@ def test_other_kept_conversations_keep_the_owners_settings(fast_fake, monkeypatc
     assert '--setting-sources' not in args
 
 
+def _live_proc():
+    [lv] = list(clipool._POOL.values())
+    return lv
+
+
+@pytest.mark.parametrize('when', ['between turns', 'before its first turn', 'mid-turn'])
+def test_a_cli_that_dies_is_restarted_and_the_turn_answered_as_if_nothing_happened(fast_fake, monkeypatch, when):
+    """The installed claude updated itself mid-session (the real-CLI walk, 2026-10-21) and every later turn read "Broken pipe".
+    A process that ends - between turns, warmed and never used, or in the middle of a turn - is started once more and the turn
+    sent again: the owner sees the answer, never the failure."""
+    s = _store()
+    if when == 'between turns': concierge.say(s, 'hello')
+    else: concierge.warm(s, wait=True)
+    first = _live_proc()
+    if when == 'mid-turn':
+        monkeypatch.setenv('FAKE_CLAUDE_THINK', '1.0')
+        threading.Timer(0.4, first.p.kill).start()
+    else: first.p.kill(); first.p.wait(5)
+    out = concierge.say(s, "what's waiting on me")
+    assert out['say'] == 'Ten things.' and not out.get('error')
+    assert _live_proc() is not first and _live_proc().alive()
+
+
+def test_a_cli_that_dies_again_on_restart_is_said_plainly(fast_fake, monkeypatch):
+    s = _store()
+    concierge.say(s, 'hello')
+    monkeypatch.setenv('FAKE_CLAUDE_BROKEN', '1')                   # the restart finds the CLI half-updated
+    _live_proc().p.kill(); _live_proc().p.wait(5)
+    out = concierge.say(s, "what's waiting on me")
+    assert out.get('error') and out['say'].startswith('My AI tool stopped, and stopped again when I restarted it')
+
+
 def test_continue_lit_with_notes_carries_them_and_says_so():
     """"Rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI walk, 2026-10-20):
     the light carries them - Continue's box opens holding them - and the line says they go with it. Without notes, as before."""

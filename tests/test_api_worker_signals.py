@@ -54,6 +54,24 @@ class ApiWorkerSignals(unittest.TestCase):
         _, again = self.turn('Which vendor? Acme is cheaper.\n[[TASKUARY-ASK]] Which vendor?')
         self.assertEqual(again.count('Which vendor?'), 1)
 
+    def test_a_short_answer_that_says_done_closes_its_task(self):
+        """A 188-character W-9 reply with [[TASKUARY-DONE]] was refused as "barely printed anything" - a terminal's gate - and
+        the refusal was dropped, so the task sat in progress under an answer saying it was finished (walk 2026-10-21)."""
+        self.fx.message(task_id=self.tid, subject='W-9 please')
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')):
+            sess = general.GeneralSession(self.s, self.tid)
+        self.assertIs(selfclose.blocked(self.s, self.tid, sess), '')
+        sess.n = 10
+        self.assertEqual(selfclose.blocked(self.s, self.tid, sess), '', 'printed length is a terminal gate, not an answer\'s')
+
+    def test_a_refused_close_is_said_on_the_task(self):
+        with mock.patch.object(general, '_selected', return_value=('api:test', 'Test', 'm')):
+            sess = general.GeneralSession(self.s, self.tid)
+        with mock.patch.object(selfclose, 'declare', return_value={'closed': False, 'why': 'self-closing is switched off in Settings'}):
+            sess._close_out('drafted it')
+        self.assertIn('The agent said it was finished, but the task was not closed: self-closing is switched off in Settings.',
+                      [c['Body'] for c in self.s.list_comments(self.tid)])
+
     def test_a_plain_reply_ends_the_turn_and_is_no_hand_raise(self):
         sess, _ = self.turn('Acme is cheaper; Globex ships faster.')
         st = ws.status(self.s, self.tid)

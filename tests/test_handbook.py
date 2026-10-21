@@ -203,6 +203,12 @@ class VotedOn(unittest.TestCase):
         handbook.vote(s, p['LoreId'], -1, 'codex')                      # flipped, not added
         self.assertEqual(s.lore_get(p['LoreId'])['Score'], 0)
 
+    def test_search_gives_the_id_that_vote_and_comment_need(self):
+        s = MemoryStore()
+        p = handbook.post(s, 'The census lives in the old view', 'not the new one', 'census', 'gotcha', 'coding')
+        _, body = handbook.run_hub_search({'store': s, 'query': 'census old view'})
+        self.assertEqual([json.loads(l).get('id') for l in body.splitlines()], [p['LoreId']])
+
     def test_a_post_is_written_down_as_a_hub_post_not_a_lore_post(self):
         s = MemoryStore()
         p = handbook.post(s, 'Invoices from vendor.example arrive on the 3rd', '', 'payables', 'system', 'coding')

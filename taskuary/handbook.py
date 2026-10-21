@@ -348,7 +348,7 @@ def run_handbook_search(cfg):
     try: top = max(1, min(50, int(cfg.get('top') or 6)))
     except (TypeError, ValueError): top = 6
     hits = store.lore_posts(topic=cfg.get('topic'), q=q or None, limit=top, sort='top')
-    rows = [{'topic': h['Topic'], 'kind': h['Kind'], 'title': h['Title'], 'says': h['Body'],
+    rows = [{'id': h['LoreId'], 'topic': h['Topic'], 'kind': h['Kind'], 'title': h['Title'], 'says': h['Body'],
              'by': h['Author'], 'updated': (h['UpdatedAt'] or '')[:16]} for h in hits]
     head, body = rows_out(rows, min(lim, top), unit=f'Hub posts for "{q[:60]}"' if q else 'Hub posts', mine=mine)
     n = store.lore_count()

@@ -1049,14 +1049,32 @@ def _graph_user(tok, oid, cache):
     who = ('Teams user', '')
     try:
         r = requests.get(f'{GRAPH}/users/{oid}', headers={'Authorization': f'Bearer {tok}'}, timeout=20,
-                         params={'$select': 'displayName,mail,userPrincipalName'})
+                         params={'$select': 'displayName,mail,userPrincipalName,userType'})
         if r.status_code == 200:
             j = r.json()
             who = (j.get('displayName') or 'Teams user', j.get('mail') or j.get('userPrincipalName') or '')
+            # a B2B guest sits in the owner's directory with the owner's tenant id - its own type and #EXT# say it is not staff
+            cache[('guest', oid)] = j.get('userType') == 'Guest' or '#ext#' in (j.get('userPrincipalName') or '').lower()
     except requests.RequestException as e:
         logger.debug(f'teams user lookup failed for {oid}: {e}')
     cache[oid] = who
     return who
+
+
+def _token_tenant(tok: str) -> str:
+    "The directory a Graph access token was issued in (its tid claim), '' when it is not a readable JWT. Read, never trusted for auth."
+    try:
+        part = str(tok or '').split('.')[1]
+        return str(json.loads(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4))).get('tid') or '').lower()
+    except (IndexError, ValueError, TypeError, AttributeError): return ''
+
+
+def teams_internal(user: dict, tenant: str, guest: bool = False) -> bool:
+    """Is this Teams sender a member of the owner's own organisation? Graph's from.user carries the sender's tenant; the owner's
+    "Teams should be always safe since it's internal" (2026-10-21) meant colleagues - so the connection's own tenant, and not a
+    guest, nor a federated or anonymous user from outside it."""
+    kind = str(user.get('userIdentityType') or 'aadUser')
+    return bool(tenant) and str(user.get('tenantId') or '').lower() == tenant and kind in ('aadUser', 'onPremiseAadUser') and not guest
 
 
 # A picture in a Teams message is not an attachment. Graph reports attachments: [] and puts
@@ -1126,6 +1144,7 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         except requests.RequestException:
             pass
     feed = _teams_user_delta(tok, since_iso) if user else _teams_delta(tok, upn, since_iso)
+    tenant = _token_tenant(tok)
     for m in reversed(feed):                                       # oldest first, so threads read in order
         user = (m.get('from') or {}).get('user') or {}
         body = _clean((m.get('body') or {}).get('content'))
@@ -1165,8 +1184,11 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'subject': topic or (f'Teams chat with {name}' if kind == 'oneOnOne' else f'Teams {kind}'),
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',
                   'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
-                  'source_name': upn, 'images': images_for_triage(store, atts),
-                  **({'mail_meta': {'dm': True}} if kind == 'oneOnOne' else {})}      # Graph's own chat type, not who has spoken
+                  'source_name': upn, 'images': images_for_triage(store, atts)}
+        # Graph's own chat type, not who has spoken; and whether the sender is staff of the owner's own tenant (senders._chat_known)
+        meta = {**({'dm': True} if kind == 'oneOnOne' else {}),
+                **({'internal': True} if teams_internal(user, tenant, users.get(('guest', user['id']), False)) else {})}
+        if meta: common['mail_meta'] = meta
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
                                     'your message in this chat - kept for context', keep_unmatched=True)

@@ -48,7 +48,9 @@ you have answered them in any chat there (their line, then yours, with nobody el
 you press **Trust this task** on a task they opened. WhatsApp names one person by phone in a direct
 chat and often by another id in a group; Taskuary reads both as the same person. Slack, Teams, Telegram, WhatsApp, iMessage,
 Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
-public rooms only, so there a sender counts only once you vouch for them.
+public rooms only, so there a sender counts only once you vouch for them. Teams is your own
+organisation: a colleague in your Microsoft tenant, or on your own domain, counts from their first
+message. A guest or someone from another organisation in a Teams chat counts like anyone else.
 
 **A name is not an identity.** Your own lines are recognised by how Taskuary stored them, never by a
 display name. A chat sender who calls themselves "You" is still a stranger.

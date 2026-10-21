@@ -135,14 +135,19 @@ def _is_own(msg: dict) -> bool:
     return (msg.get('Direction') or msg.get('direction')) == 'out' or (msg.get('Status') or msg.get('status')) == 'context'
 
 
-def chat_aliases(msg: dict) -> tuple:
-    """The same person's other platform id, as the poller recorded it (mail_meta / MailMetaJson 'alias'): WhatsApp names
-    one person by phone in a direct chat and by LID in a group, and the two must not read as two people."""
+def _chat_meta(msg: dict) -> dict:
+    "What the poller recorded about a chat line: an ingest dict's mail_meta, or a stored row's MailMetaJson."
     meta = msg.get('mail_meta')
     if not isinstance(meta, dict):
         try: meta = json.loads(msg.get('MailMetaJson') or 'null')
         except (TypeError, ValueError): meta = None
-    a = str((meta or {}).get('alias') or '').strip().lower() if isinstance(meta, dict) else ''
+    return meta if isinstance(meta, dict) else {}
+
+
+def chat_aliases(msg: dict) -> tuple:
+    """The same person's other platform id, as the poller recorded it (MailMetaJson 'alias'): WhatsApp names one person by
+    phone in a direct chat and by LID in a group, and the two must not read as two people."""
+    a = str(_chat_meta(msg).get('alias') or '').strip().lower()
     return (a,) if a else ()
 
 
@@ -157,6 +162,11 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     if not on: return False, _said(f'{name or "Someone"} wrote in {room}, where only your own messages start an agent by themselves (Settings).')
     if not who: return False, _said(f'Nobody can tell who wrote this in {room}, so no agent starts on it by itself.')
     if any(store.trusted_sender(ch, k) for k in (who, *alias)): return True, _said(f'You vouched for {name}.')
+    # TEAMS IS INTERNAL (the owner, 2026-10-21: "Teams should be always safe since it's internal"): a colleague in the owner's own
+    # tenant - Graph's word, recorded at ingest (channels.teams_internal) - or on the owner's own domain needs no history. A guest
+    # or a federated user from another organisation is judged like any chat sender.
+    if ch == 'teams' and (_chat_meta(msg).get('internal') or _domain(who) in own_domains(store) - PUBLIC_MAIL):
+        return True, _said(f'{name} is in your own organisation on Teams.')
     how = store.talked_with(ch, who, exclude_mid, alias)
     if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
     if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')

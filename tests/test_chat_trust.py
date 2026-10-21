@@ -220,6 +220,52 @@ def test_teams_keys_an_addressless_sender_by_their_id_and_marks_one_on_one():
     r = _rows(s, 'teams')[0]
     assert r['FromEmail'] == 'teams:oid-7' and _is_dm(r)
 
+# ── TEAMS IS INTERNAL (the owner, 2026-10-21): a colleague in the owner's tenant needs no history; a guest does ──────
+def _jwt(claims):
+    import base64, json
+    b = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip('=')
+    return f"{b({'alg': 'none'})}.{b(claims)}.sig"
+
+TENANT = '11111111-2222-3333-4444-555555555555'
+
+def _teams_line(oid, tenant=TENANT, kind='aadUser', guest=False, chat='group'):
+    from taskuary import channels
+    s = _store(); channels._TEAMS_ME['alex@northwind.example'] = 'me-id'
+    ms = [{'id': oid, 'chatId': 'c1', 'messageType': 'message', 'body': {'content': 'run the export'}, 'createdDateTime': '2026-10-14T09:00:00Z',
+           'from': {'user': {'id': oid, 'displayName': 'Gail Moreno', 'tenantId': tenant, 'userIdentityType': kind}}}]
+    def who(tok, o, cache): cache[('guest', o)] = guest; return ('Gail Moreno', f'{o}@vendor.example')
+    with mock.patch.object(channels, '_teams_delta', return_value=ms), mock.patch.object(channels, '_chat_meta', return_value=('crew', chat)), \
+         mock.patch.object(channels, '_graph_user', side_effect=who), mock.patch.object(channels, 'hosted_images', return_value=[]):
+        channels.ingest_teams_chats(s, 'alex@northwind.example', _jwt({'tid': TENANT}), __import__('datetime').datetime(2026, 10, 14, 8))
+    return s, s._rows("SELECT * FROM message WHERE Channel='teams'")[0]
+
+def test_a_teams_colleague_in_the_owner_s_tenant_is_trusted_without_history():
+    s, r = _teams_line('oid-7')
+    ok, why = senders.known(s, {'channel': 'teams', 'from_email': r['FromEmail'], 'from_name': r['FromName'], 'MailMetaJson': r['MailMetaJson']},
+                            exclude_mid=r['MessageId'])
+    assert ok and why == 'Gail Moreno is in your own organisation on Teams.'
+    assert origin.of_message(s, r)[0] == 'trusted'
+
+def test_a_teams_sender_on_the_owner_s_own_domain_is_trusted():
+    s = _store()
+    assert senders.known(s, {'channel': 'teams', 'from_email': 'erin@northwind.example', 'from_name': 'Erin Blake'})[0]
+
+def test_a_teams_guest_or_outsider_waits_until_the_owner_has_talked_with_them():
+    for kw in ({'guest': True}, {'tenant': '99999999-0000-0000-0000-000000000000'}, {'kind': 'federatedUser'}, {'kind': 'anonymousGuest'}):
+        s, r = _teams_line('oid-9', **kw)
+        assert '"internal"' not in (r['MailMetaJson'] or ''), kw
+        assert origin.of_message(s, r)[0] == 'stranger', kw
+    s, r = _teams_line('oid-9', guest=True, chat='oneOnOne')                  # ...until the owner has answered them
+    s.add_message({'Channel': 'teams', 'ConversationId': r['ConversationId'], 'FromName': 'Gail Moreno', 'FromEmail': r['FromEmail'],
+                   'BodyText': 'also the totals', 'Status': 'routed', 'MailMetaJson': '{"dm": true}'})
+    s.add_message({'Channel': 'teams', 'ConversationId': r['ConversationId'], 'FromName': 'You', 'FromEmail': 'alex@northwind.example',
+                   'BodyText': 'on it', 'Status': 'context', 'Direction': 'out'})
+    assert origin.of_message(s, r)[0] == 'trusted'
+
+def test_a_token_that_is_not_a_jwt_trusts_nobody_by_tenant():
+    from taskuary import channels
+    assert channels._token_tenant('tok') == '' and not channels.teams_internal({'tenantId': TENANT}, '')
+
 def test_discord_and_chat_servers_key_a_sender_by_the_platform_id():
     from datetime import datetime
     from taskuary import devtools, chatservers

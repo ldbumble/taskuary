@@ -26,8 +26,8 @@ HOOKED = ('claude', 'codex', 'devin', 'copilot')
 MARK = '/api/hooks/claude'
 # THE ASK HOOK (the owner, 2026-09-28: "hook is better if it's supported" - measured: a PreToolUse hook that returns
 # updatedInput.answers answers AskUserQuestion, no form drawn). Its own mark, so the event hooks above never replace
-# it; its own command, whose stdout Claude reads as the decision; held up to ASK_WAIT while the owner answers
-# elsewhere, then let go so the form appears in the pane. Claude's own limit on the hook is ASK_TIMEOUT.
+# it; its own command, whose stdout Claude reads as the decision. A stranger's session is held up to ASK_WAIT while the
+# owner answers elsewhere, then let go so the form appears in the pane; the owner's own task is never held (ask). Claude's own limit on the hook is ASK_TIMEOUT.
 ASK_MARK = '/api/hooks/claude/ask'
 ASK_WAIT, ASK_TIMEOUT = 540, 600
 # Claude's events. The last five arrived 2026-09-20 and are the ones the screen could never tell apart:
@@ -574,7 +574,8 @@ def _pane(payload: dict, cli: str = 'claude'):
 
 
 def ask(payload: dict, wait: float = None) -> dict:
-    """AskUserQuestion, before it draws its form: record the questions as one group and HOLD while the owner answers in
+    """AskUserQuestion, before it draws its form: record the questions as one group. The owner's own task: {} at once -
+    Claude draws its form and the owner answers it in the terminal. A stranger's session: HOLD while the owner answers in
     the Assistant or on the phone; answered, return the answers as the tool's input and no form is drawn. Not our
     pane, released, or out of time: {} - Claude draws its form and the terminal answers as it always did."""
     from . import workerstate as ws
@@ -588,6 +589,12 @@ def ask(payload: dict, wait: float = None) -> dict:
     # the questions first, then the hold: a card read between the two must never show "held" with nothing to answer
     for rid, (text, choices) in zip(rids, qs):
         ws.record(st, t.task_id, t.sid, 'input_needed', request_id=rid, text=text, choices=choices, source='hook')
+    # THE OWNER'S OWN TASK IS ASKED IN ITS OWN TERMINAL (the owner, 2026-10-21: "no need to add a layer on the terminal. Just
+    # show the emoji terminal stopped and that will tell the user to answer the question"). Held, the pane sat on "running
+    # PreToolUse hook" looking stuck. Now Claude draws its form at once; the open request just recorded is what puts the
+    # task in the waiting-on-you lane (👋 "asked you: ...") on the rail, the Board and the agent's work line, and PostToolUse
+    # closes it once picked. Only a stranger's session (mode 'auto') is still held for the owner to answer outside it.
+    if getattr(t, 'mode', 'full') != 'auto': return {}
     # ...and held ONLY when the page shows them. Claude sits on "running PreToolUse hook" for as long as this holds, with
     # nothing in the pane, so a hold nobody can see is the agent hung for nine minutes: a question asked again word for
     # word after it was answered (its id is the words, and that id is answered), or a card refused as another run's.

@@ -5,7 +5,8 @@ tested that but i don't believe it would work").
 It did not: the card showed only the newest question, and the pick was typed as words into Claude's form, which
 stands on question 1 and takes a digit. Measured on Claude Code 2.1.283 (memory: askuserquestion-protocol): a
 PreToolUse hook that returns updatedInput.answers answers AskUserQuestion with no form drawn - so an ask from a pane
-of ours is HELD while the owner answers in the Assistant or on the phone. These pin: one group per ask, the hold and
+of ours is HELD while the owner answers in the Assistant or on the phone - a stranger's pane since 2026-10-21; the
+owner's own task is asked in its terminal (test_owner_asks_in_terminal). These pin: one group per ask, the hold and
 its answers, the release, the form's own keys when the form is up, a regular agent's several markers, and the
 install of the hook.
 """
@@ -23,8 +24,9 @@ QS = {'questions': [{'question': 'Which branch?', 'options': [{'label': 'main'},
                     {'question': 'Which size?', 'options': [{'label': 'small'}, {'label': 'large'}]}]}
 
 
-def pane(tid, store, ext_id='sess-1', argv=('claude',)):
-    return SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=list(argv), last=1.0,
+def pane(tid, store, ext_id='sess-1', argv=('claude',), mode='auto'):
+    # a stranger's session: the owner's own task is never held, its question is asked in the terminal (hooks.ask)
+    return SimpleNamespace(sid='run1', mode=mode, alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=list(argv), last=1.0,
                            ext_id=ext_id, resumed_from='', store=store, witness=SimpleNamespace(note=lambda n: None), written=[],
                            write=None)
 

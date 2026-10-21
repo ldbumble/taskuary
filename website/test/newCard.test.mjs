@@ -53,5 +53,5 @@ test("the picker loads the repository list once, lazily, and the words reach it 
   const pick = read("NewRepo.jsx"), sheet = read("NewSheet.jsx");
   assert.equal((pick.match(/api\.get\(/g) || []).length, 1);
   assert.match(pick, /\/api\/repos/);
-  assert.match(sheet, /setTimeout\(\(\) => bus\.current\?\.\(next\), 200\)/);                 // never per key
+  assert.match(sheet, /setTimeout\(\(\) => \{ bus\?\.current\?\.\(next\); onWords\?\.\(next\); \}, 200\)/);   // never per key (and the connector offer hears them too)
 });

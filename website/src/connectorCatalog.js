@@ -14,6 +14,17 @@ for (const c of catalogue.cards) {
 export const PLANNED_CONNECTORS = Object.freeze(grouped);
 export const CATALOGUE = Object.freeze(catalogue.cards);
 export const plannedFor = (category) => PLANNED_CONNECTORS[category] || [];
+// THE CARD THE WORDS NAME (a tester, 2026-10-20: "i want to connect taskuary to linkedin" typed into New's agent job had no way to
+// Connections): a working card whose type or title stands in the words as a whole word - read from the catalogue, never a word list.
+// Only the catalogue's own names count (a match word is used when it carries the type, "outlook mail"), so "online" is never QuickBooks.
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export const connectorNamed = (text, cards = CATALOGUE) => {
+  const t = ` ${String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  if (!t.trim()) return null;
+  const names = (c) => [c.type.replace(/_/g, " "), c.title.toLowerCase(), ...(c.match || []).map((m) => m.toLowerCase()).filter((m) => m.includes(c.type))];
+  const hits = cards.filter((c) => !c.planned && names(c).some((n) => new RegExp(` ${esc(n.replace(/[^a-z0-9]+/g, " ").trim())} `).test(t)));
+  return hits.sort((a, b) => b.title.length - a.title.length)[0] || null;      // "azure openai" over "openai"
+};
 // ONE CARD PER SYSTEM: a planned card is dropped where a card for the same type is already on the page - a live one anywhere, or
 // the same planned type earlier. The server's planned list (reports.PLANNED) and this catalogue are kept apart, and PointClickCare
 // drew twice: once by its catalogue name under Corporate systems, once as a bare "pointclickcare" under Everything else (2026-10-19 UI walk)

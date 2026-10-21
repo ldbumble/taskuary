@@ -28,6 +28,7 @@ import Checkbox from "@mui/material/Checkbox";
 import Composer from "./Composer.jsx";
 import { DRAFT_HASH, handDraft } from "./draftHandoff.js";
 import { useVerbs } from "./actionRow.js";
+import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
@@ -90,7 +91,7 @@ export const EmailRecipients = ({ value, onChange, options, placeholder }) => (
 // discovery, menus, forks, and a MUI dialog; owning this value at the sheet level rebuilt all of
 // that on every keystroke and made an ordinary sentence feel like terminal input over a slow
 // connection. The parent only hears when empty/non-empty changes and reads the value on submit.
-const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics, initial = "" }, ref) {
+const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onReady, bus, pics, initial = "", onWords }, ref) {
   const [value, setValue] = useState(initial);
   const ready = useRef(false);
   // the words the Assistant wrote it up with (concierge._new) count as typed: the button is live from the first render
@@ -104,7 +105,7 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
     const hasText = !!next.trim();
     if (hasText !== ready.current) { ready.current = hasText; onReady(hasText); }
     // the repository picker hears the words on a pause in typing, never per key (only it re-renders, not the card)
-    if (bus?.current) { clearTimeout(timer.current); timer.current = setTimeout(() => bus.current?.(next), 200); }
+    if (bus?.current || onWords) { clearTimeout(timer.current); timer.current = setTimeout(() => { bus?.current?.(next); onWords?.(next); }, 200); }
   };
   // ...and a picture pasted or dropped into it goes with the words (a note to self keeps words only)
   const withPics = pics && kind !== "note";
@@ -188,6 +189,13 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       if (!list.length) setKind((k) => (k === "send" && initialKind === "send" ? "agent" : k));
     }).catch(() => setTargets([]));
   }, [open]);
+  // A CONNECTOR NAMED IN AN AGENT'S JOB is offered its card on the row, beside Start (connectorCatalog.connectorNamed): "connect taskuary
+  // to linkedin" was only ever an agent job, with no way to Connections (a tester, 2026-10-20). The words still go to an agent if pressed.
+  const [words, setWords] = useState(initialText);
+  const named = kind === "agent" ? connectorNamed(words) : null;
+  useVerbs("new-connect", named ? [{ id: "new:open-connector", group: "decide", tone: "s", label: `Open the ${named.title} card`,
+    title: `${named.title} is connected on its own card under Connections - no agent needed`,
+    run: () => { onClose?.(); openAppLink(`#connector=${named.type}`); } }] : [], open && !!named);
   // ...and what it needs is a button on the row, not a sentence pointing at Connections
   useVerbs("new-send", [{ id: "new:connect-sending", group: "decide", tone: "s", label: "Connect a mailbox",
     title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink(place("mail").href) }], open && targetsRead && kind === "send" && !targets.length);
@@ -402,7 +410,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           <Label>{kind === "goal" ? "What does done look like" : kind === "send" ? "What's this about"
             : kind === "agent" ? (how === "general" ? "What should it find out or write" : "What should it do")
             : "What do you want to remember"}</Label>
-          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} />
+          <AboutField ref={aboutRef} kind={kind} how={how} onReady={setHasAbout} bus={said} pics={pics} initial={initialText} onWords={setWords} />
           {kind === "send" && (
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.75 }}>
               Shorthand is fine — this is what you are telling the drafter, not what they read.

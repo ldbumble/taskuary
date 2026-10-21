@@ -21,6 +21,13 @@ test("a playbook review is a save process, not a reply", () => {
   assert.match(shown.context, /nothing will be sent/);
 });
 
+test("a playbook proposed as new names the file its title files it under", () => {
+  // playbooks.write files slug "new" under slugify(title): the card said new.md over a playbook saved as send-our-w-9-....md
+  const review = { Kind: "action", DraftText: JSON.stringify({ action: "write_playbook", slug: "new",
+    text: "# Send our W-9 to a customer who asks\nwhen: a customer asks for our W-9\n" }) };
+  assert.equal(proposalPresentation(review).destination, "Docs → Playbooks → send-our-w-9-to-a-customer-who-asks.md");
+});
+
 test("the editable review body is the playbook markdown, not its action envelope", () => {
   assert.equal(reviewText(playbook), "# Run manual PTO import\nwhen: files are waiting\n");
   assert.equal(reviewText({ Kind: "draft", DraftText: "Thanks." }), "Thanks.");

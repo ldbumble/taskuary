@@ -2277,7 +2277,7 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
             # A RECEIPT, NOT A LIST (the owner, 2026-10-21: "free text should almost never be used in the assistant"): the rail shows what
             # is left; the line counts what went and says it is not gone
             n = len(cleared)
-            say_ = (f"Marked {plural(n, 'item')} read - search still finds them."
+            say_ = (f"Marked {plural(n, 'item')} read - search still finds {'it' if n == 1 else 'them'}."
                     + (f" {plural(len(hits) - n, 'item')} would not clear." if len(hits) > n else '')
                     + (f" {plural(mine, 'item')} waiting on you stay{'s' if mine == 1 else ''} - each has its own button." if mine else ''))
             record_related(store, tid, item, 'assistant', say_)

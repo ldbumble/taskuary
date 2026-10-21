@@ -210,6 +210,9 @@ def block(store=None) -> str:
     Every tool is reachable (tools.list per bucket, tools.describe per tool); only the index rides every turn."""
     lines = [
         'HOW YOU ACT (code reads your last line)',
+        # the owner, 2026-10-21: "free text should almost never be used in the assistant - it should be bringing up UI components"
+        'BRINGING SOMETHING UP IS THE ANSWER: a task, a page, a card or a button the owner asked for comes up with a few words at most',
+        '(under 12) - never what it shows: no sender, story or summary of it beside it. Longer words only answer a real question.',
         'Answer in plain words. To look something up or to do anything, end with ONE line:',
         '  CALL: {"kind": "<tool>", "params": {...}}',
         'A look-up runs at once and answers you. Anything that changes something is the owner\'s to press: Taskuary',

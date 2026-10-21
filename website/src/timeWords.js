@@ -5,6 +5,8 @@
 const ms = (x) => (x instanceof Date ? x.getTime() : typeof x === "number" ? x : new Date(String(x).replace(" ", "T")).getTime());
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many || `${one}s`}`;
+// what came with a task: its files and the documents its messages link to - "6 attachments · 2 links", '' for neither
+export const filesLine = (files, links) => [files && plural(files, "attachment"), links && plural(links, "link")].filter(Boolean).join(" · ");
 // minutes from `at` to `now` - past is positive, ahead negative; null when it is no time at all. `at` may be a stamp, a Date (ui.asUtc
 // hands one over in the server's zone) or epoch ms.
 export const minsSince = (at, now = Date.now()) => {

@@ -293,6 +293,15 @@ def test_a_key_in_a_linked_document_is_scrubbed_and_cannot_close_its_fence(world
     assert KEY not in line and '[redacted:aws-key]' in line and line.count('⟧') == 1
 
 
+def test_the_task_counts_its_links_beside_its_files():
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Bills', 'Summary': 's', 'Kind': 'task', 'Source': 'email'}, 'router')
+    for body in (f'the bills {SHEET} and the issue {ISSUE}', f'again:\n> the bills {SHEET}'):
+        s.add_message({'TaskId': tid, 'Channel': 'email', 'BodyText': body, 'Status': 'routed'})
+    links = s.task_detail(tid)['links']
+    assert [l['label'] for l in links] == ['Google Sheet', 'GitHub issue'] and links[0]['url'] == SHEET
+
+
 def test_an_owner_hand_off_naming_a_link_gives_its_agent_the_document(world):
     s, _ = world
     tid = s.create_task({'Title': 'Go through the bills', 'Summary': f'go through the open bills in {SHEET} and propose what to pay over 90 days',

@@ -151,6 +151,15 @@ def chat_aliases(msg: dict) -> tuple:
     return (a,) if a else ()
 
 
+def _teams_org(store, msg: dict, who: str, vouched: list) -> bool:
+    "Is this Teams sender staff of the owner's own organisation? (senders._chat_known)"
+    from .channels import ORG_REASON, teams_org
+    meta, acct = _chat_meta(msg), str(msg.get('source_name') or msg.get('SourceName') or '')
+    if meta.get('internal') or ORG_REASON in vouched: return True
+    if _domain(who) in (own_domains(store) | {_domain(acct)}) - PUBLIC_MAIL - {''}: return True
+    return 'internal' not in meta and bool(teams_org(store, acct, who))
+
+
 def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     """A chat is trusted per PERSON, not per room: anyone in a connected group chat could start an agent with full
     permissions. The owner's own line; someone the owner has talked with one-to-one in this channel, or answered (their
@@ -161,12 +170,14 @@ def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     name = ' '.join(str(msg.get('from_name') or msg.get('FromName') or '').split()) or who
     if not on: return False, _said(f'{name or "Someone"} wrote in {room}, where only your own messages start an agent by themselves (Settings).')
     if not who: return False, _said(f'Nobody can tell who wrote this in {room}, so no agent starts on it by itself.')
-    if any(store.trusted_sender(ch, k) for k in (who, *alias)): return True, _said(f'You vouched for {name}.')
+    vouched = [r for k in (who, *alias) if (r := store.trusted_sender(ch, k))]
     # TEAMS IS INTERNAL (the owner, 2026-10-21: "Teams should be always safe since it's internal"): a colleague in the owner's own
-    # tenant - Graph's word, recorded at ingest (channels.teams_internal) - or on the owner's own domain needs no history. A guest
-    # or a federated user from another organisation is judged like any chat sender.
-    if ch == 'teams' and (_chat_meta(msg).get('internal') or _domain(who) in own_domains(store) - PUBLIC_MAIL):
-        return True, _said(f'{name} is in your own organisation on Teams.')
+    # organisation needs no history - the directory's word, recorded at ingest or remembered per person (channels.ORG_REASON), or
+    # an address on the owner's own domain or the Teams account's. A line recorded before anyone could tell (no 'internal': Graph
+    # refused the lookup, or it predates 0.3.9.15) is resolved now, once per person (channels.teams_org). A guest or a
+    # federated user from another organisation is judged like any chat sender.
+    if ch == 'teams' and _teams_org(store, msg, who, vouched): return True, _said(f'{name} is in your own organisation on Teams.')
+    if vouched: return True, _said(f'You vouched for {name}.')
     how = store.talked_with(ch, who, exclude_mid, alias)
     if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
     if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')

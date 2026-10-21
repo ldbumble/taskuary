@@ -532,9 +532,9 @@ def no_token_carryover():
     """net's app-only token cache and the Teams mailbox -> object id cache are process-wide: a token one test
     minted would answer the next test's graph_token without its patched POST ever being called."""
     from taskuary import channels, net
-    net.clear(); channels._TEAMS_ME.clear()
+    net.clear(); channels._TEAMS_ME.clear(); channels._ORG.clear()
     yield
-    net.clear(); channels._TEAMS_ME.clear()
+    net.clear(); channels._TEAMS_ME.clear(); channels._ORG.clear()
 
 
 @pytest.fixture(autouse=True)

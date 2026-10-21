@@ -253,7 +253,7 @@ def test_a_teams_sender_on_the_owner_s_own_domain_is_trusted():
 def test_a_teams_guest_or_outsider_waits_until_the_owner_has_talked_with_them():
     for kw in ({'guest': True}, {'tenant': '99999999-0000-0000-0000-000000000000'}, {'kind': 'federatedUser'}, {'kind': 'anonymousGuest'}):
         s, r = _teams_line('oid-9', **kw)
-        assert '"internal"' not in (r['MailMetaJson'] or ''), kw
+        assert not __import__('json').loads(r['MailMetaJson'] or '{}').get('internal'), kw
         assert origin.of_message(s, r)[0] == 'stranger', kw
     s, r = _teams_line('oid-9', guest=True, chat='oneOnOne')                  # ...until the owner has answered them
     s.add_message({'Channel': 'teams', 'ConversationId': r['ConversationId'], 'FromName': 'Gail Moreno', 'FromEmail': r['FromEmail'],
@@ -265,6 +265,87 @@ def test_a_teams_guest_or_outsider_waits_until_the_owner_has_talked_with_them():
 def test_a_token_that_is_not_a_jwt_trusts_nobody_by_tenant():
     from taskuary import channels
     assert channels._token_tenant('tok') == '' and not channels.teams_internal({'tenantId': TENANT}, '')
+
+# ── A COLLEAGUE BY THEIR DIRECTORY ENTRY (2026-10-21): a Teams line often carries only id + name, and Graph's /users answer
+# is what says Member or Guest - through the Teams card's own token, cached; old lines re-resolved on read ──────────────
+class _Graph:
+    "Fake Graph /users/{id}: `users` id -> entry, `refuse` the selects that answer 403, `down` every call fails."
+    def __init__(self, users=None, refuse=(), down=False): self.users, self.refuse, self.down, self.calls = users or {}, refuse, down, []
+    def __call__(self, url, headers=None, params=None, timeout=None):
+        import requests
+        self.calls.append(url)
+        if self.down: raise requests.ConnectionError('graph unreachable')
+        sel, oid = (params or {}).get('$select', ''), url.rsplit('/', 1)[-1]
+        code = 403 if any(x in sel for x in self.refuse) else 200 if oid in self.users else 404
+        j = {k: v for k, v in self.users.get(oid, {}).items() if code == 200 and k in sel.split(',')}
+        return mock.Mock(status_code=code, json=lambda: j)
+
+GAIL = {'displayName': 'Gail Moreno', 'mail': 'gail@northwind.example', 'userPrincipalName': 'gail@northwind.example', 'userType': 'Member'}
+GUEST = {'displayName': 'Gail Moreno', 'mail': 'gail@vendor.example', 'userType': 'Guest',
+         'userPrincipalName': 'gail_vendor.example#EXT#@northwind.example'}
+
+def _bare_line(graph):
+    "A Teams line whose from.user is id + name only, polled with a token that is not a JWT - only the directory can tell."
+    from taskuary import channels
+    s = _store(); channels._TEAMS_ME['alex@northwind.example'] = 'me-id'; channels._ORG.clear()
+    ms = [{'id': 'm1', 'chatId': 'c1', 'messageType': 'message', 'body': {'content': 'run the export'}, 'createdDateTime': '2026-10-14T09:00:00Z',
+           'from': {'user': {'id': 'oid-7', 'displayName': 'Gail Moreno'}}}]
+    with mock.patch.object(channels, '_teams_delta', return_value=ms), mock.patch.object(channels, '_chat_meta', return_value=('crew', 'group')), \
+         mock.patch.object(channels.requests, 'get', graph), mock.patch.object(channels, 'hosted_images', return_value=[]):
+        channels.ingest_teams_chats(s, 'alex@northwind.example', 'tok', __import__('datetime').datetime(2026, 10, 14, 8))
+    return s, s._rows("SELECT * FROM message WHERE Channel='teams'")[0]
+
+def test_a_teams_member_resolved_by_id_is_trusted_though_the_message_names_no_address():
+    s, r = _bare_line(_Graph({'oid-7': GAIL}))
+    assert r['FromEmail'] == 'gail@northwind.example' and '"internal": true' in r['MailMetaJson']
+    assert origin.of_message(s, r) == ('trusted', 'Gail Moreno is in your own organisation on Teams.')
+
+def test_a_sign_in_that_may_not_read_user_type_still_resolves_the_colleague():
+    "User.ReadBasic.All refuses userType outright: the address must not be lost with it (0.3.9.15 lost it)."
+    s, r = _bare_line(_Graph({'oid-7': GAIL}, refuse=('userType',)))
+    assert r['FromEmail'] == 'gail@northwind.example'                        # on the Teams account's own domain
+    assert origin.of_message(s, r)[0] == 'trusted'
+
+def test_a_teams_guest_resolved_by_id_is_not_trusted():
+    s, r = _bare_line(_Graph({'oid-7': GUEST}))
+    assert '"internal": false' in r['MailMetaJson']
+    o, why = origin.of_message(s, r)
+    assert o == 'stranger' and "haven't talked with them" in why
+
+def _old_line(s, key='teams:oid-7'):
+    "A Teams line stored before 0.3.9.15: no sender tenant, no address (the lookup was refused), no 'internal'."
+    return s.add_message({'Channel': 'teams', 'ConversationId': 'teams:c1', 'SourceName': 'alex@northwind.example', 'FromName': 'Gail Moreno',
+                          'FromEmail': key, 'BodyText': 'run the export', 'Status': 'routed'})
+
+def test_a_line_ingested_before_the_fix_is_re_resolved_once_and_remembered():
+    from taskuary import channels, outbound
+    s = _store(); channels._ORG.clear(); mid = _old_line(s); g = _Graph({'oid-7': GAIL})
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', g):
+        assert origin.of_message(s, s.get_message(mid)) == ('trusted', 'Gail Moreno is in your own organisation on Teams.')
+        n = len(g.calls); origin.of_message(s, s.get_message(mid))
+    assert g.calls[0].endswith('/users/oid-7') and len(g.calls) == n                  # asked once
+    assert s.trusted_sender('teams', 'teams:oid-7') == channels.ORG_REASON
+
+def test_a_graph_that_fails_falls_back_to_the_chat_rule_without_a_crash():
+    from taskuary import channels, outbound
+    s = _store(); channels._ORG.clear(); mid = _old_line(s)
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', _Graph(down=True)):
+        o, why = origin.of_message(s, s.get_message(mid))
+    assert o == 'stranger' and "haven't talked with them" in why
+    channels._ORG.clear()                                                    # and no connection at all: the same, quietly
+    assert origin.of_message(s, s.get_message(mid))[0] == 'stranger'
+
+def test_a_held_task_from_a_colleague_resolved_since_says_so_on_agent_work():
+    from taskuary import channels, funnel, outbound
+    from taskuary.ingest import HOLD_TAG
+    s = _store(); channels._ORG.clear()
+    t = s.create_task({'Title': 'Run the export', 'Kind': 'general', 'Status': 'open', 'Assignee': 'agent:assistant'}, 'triage')
+    mid = _old_line(s); s._exec('UPDATE message SET TaskId=? WHERE MessageId=?', (t, mid)); s.tag_task(t, HOLD_TAG)
+    s.add_route(mid, t, 'create', 0.0, "triage: work \u00b7 held for you: Gail Moreno wrote in Teams, and you haven't talked with them "
+                "one-to-one or answered them there, so no agent starts on their words by itself.", [], 'router')
+    with mock.patch.object(outbound, '_graph_token', return_value='tok'), mock.patch.object(channels.requests, 'get', _Graph({'oid-7': GAIL})):
+        line = funnel.idle_state(s, t)['line']
+    assert line.startswith('Waiting for you. Gail Moreno is in your own organisation on Teams.'), line
 
 def test_discord_and_chat_servers_key_a_sender_by_the_platform_id():
     from datetime import datetime

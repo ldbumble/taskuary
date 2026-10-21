@@ -1688,6 +1688,21 @@ def _repeats(line: str, shown: list) -> bool:
     return False
 
 
+def todo_lines(store, tid, cap: int = 6) -> list:
+    """A task's to-dos for a chat: "To do · 2 of 5 done", then each open one by its checklist number, with its note under it."""
+    if not tid: return []
+    try: boxes = store.task_checklist(int(tid))
+    except Exception: return []
+    todo = [(n, b) for n, b in enumerate(boxes, 1) if not isinstance(b.get('out'), dict)]          # an email a task owes is Close out's
+    if not todo: return []
+    left = [(n, b) for n, b in todo if not b.get('done')]
+    out = [f"**To do** · {sum(1 for _, b in todo if b.get('done'))} of {len(todo)} done"]
+    out += [f"{n}. {_cut(b['text'], 140)}" + (f"  _({_cut(b['note'], 140)})_" if b.get('note') else '') for n, b in left[:cap]]
+    if len(left) > cap: out.append(f'... and {len(left) - cap} more')
+    if left: out.append('Say "tick 2", "note on 2: ..." or "add a to-do: ...".')
+    return out
+
+
 def story_block(store, item: dict | None, draft: str = '', say: str = '', full: bool = False) -> str:
     """The quiet part: a header (state · ref), who asked and what they want, then the agent and its evidence.
     `full`: the owner opened this one to READ it - the whole message, not its opening (full_body)."""
@@ -1730,6 +1745,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
         if body and not is_report:
             opening = _plain(body)
             lines.append(_quote(_cut(opening, EXCERPT) if len(opening) > EXCERPT else opening))
+    # THE TASK'S TO-DOS (the owner, 2026-10-20: "anything you can do, you can do via the Assistant" - the phone never showed them): the open
+    # ones, numbered as task.check takes them, each with its note, and how far the list got; "tick 2" / "note on 2: ..." answer them
+    todo = todo_lines(store, it.get('tid'))
+    if todo: lines += [''] + todo
     # the agent: its state and what it found, did and concluded - the evidence the move is decided on
     rep = agent_report(store, it.get('tid'))
     found = rep.get('summary') or ' '.join(str(it.get('summary') or '').split())

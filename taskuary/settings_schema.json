@@ -503,13 +503,6 @@
       "desc": "How many items the pipe shows at once. The rest wait their turn and slide in as you clear it.",
       "help": "Order is kept: an agent waiting on you or a draft for your yes is never the one held back."
     },
-    "task_return_minutes": {
-      "group": "Assistant",
-      "label": "Passed items with no task come back after (minutes)",
-      "type": "number",
-      "desc": "An open task has no clock: Next passes it for the rest of the walk, and when the walk ends or a new one starts it comes up again from the top. This is for the rest - a draft or an agent's question with no task behind it - and for how long a walk paused on the phone is held. 180 (three hours) by default. To put a task away until a date, use Remind me on the task.",
-      "help": "Next does not close anything - the task stays open, under Tasks, and every new walk raises it again until you Mark it done. A task with a Remind me date stays away until that date."
-    },
     "meeting_grace_minutes": {
       "group": "Assistant",
       "label": "A meeting stays on the rail after it starts (minutes)",

@@ -2937,7 +2937,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
         elif not only and waiting:
             # Shown in this walk and still on the rail: a task waiting to start, one an agent left, or a
-            # draft/question, put down less than task_return_minutes ago (180 by default). Next will not repeat
+            # draft/question, put down less than RETURN_MINUTES ago (180). Next will not repeat
             # them yet, so the line must not promise it does - it did ("Say next and I'll take them"), and
             # Next only said it again (the owner, 2026-09-18: "hitting next just confuses it").
             # ...in ONE order for the line and its buttons - what waits on the owner first, then the soonest back: the line named

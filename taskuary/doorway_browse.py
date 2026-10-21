@@ -35,10 +35,10 @@ def held(store, chat: dict | None) -> dict | None:
     try: v = json.loads(store.get_setting(_key(chat)) or 'null')
     except ValueError: return None
     if not (isinstance(v, dict) and v.get('section')): return None
-    from .processing_unread import return_minutes
+    from .processing_unread import RETURN_MINUTES
     try: at = datetime.fromisoformat(str(v.get('at') or ''))
     except ValueError: return None
-    return v if _now() - at <= timedelta(minutes=return_minutes(store)) else None
+    return v if _now() - at <= timedelta(minutes=RETURN_MINUTES) else None
 
 
 def hold(store, chat: dict | None, section: str | None, seen=()):

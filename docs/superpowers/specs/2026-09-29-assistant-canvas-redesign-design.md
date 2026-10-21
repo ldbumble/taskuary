@@ -68,7 +68,7 @@ ideas) — it does not replace it.
   - **For later** — what Next walked past (today's `passed`) **and** tasks put away with Remind me. The gutter shows
     how long until it comes back, in the age gutter's own short form (`< 30m`, `3h`, `2d` — `funnelPile.railAge`
     applied to the return time); sorted soonest first; no sub-headings. Walked-past rows come back after
-    `task_return_minutes`; Remind-me rows at `RemindAt`.
+    `task_return_minutes` (since removed: an open task passes for the rest of the walk); Remind-me rows at `RemindAt`.
   - **Reports**
   - **Advisor ideas** — new level; ideas leave FYI (`levelOf`: `kind === "idea"`). Only while it is still an
     idea: made a task or handed to an agent, it is a task and moves to On you / Agents working like any other;

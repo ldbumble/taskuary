@@ -90,7 +90,7 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
         and not funnel._not_yet(item)
         and item.get("key") not in excluded_keys
         and not excluded_keys.intersection(item.get('aliases', []))
-        # the mark IS the return clock (processing_unread: task_return_minutes) - no second cooldown
+        # the mark IS the return clock (processing_unread: this_walk / RETURN_MINUTES) - no second cooldown
         # here, or the walk would take a waving agent back while the rail still showed it as passed.
         # ...and only a PUT-DOWN mark holds it: Next or Remind me. Shown is not acted on - four open tasks sat
         # under Tasks, each merely shown once, and the walk said there was nothing to walk through (the

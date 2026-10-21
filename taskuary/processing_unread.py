@@ -12,13 +12,10 @@ from datetime import date, datetime, timedelta
 from . import lanes, processing_all, proposals
 
 # How long a row with NO open task behind it - a draft or an agent's question on its own - stays passed after Next, and how long a
-# phone's section walk is held. An open task has no clock any more: Next passes it for the rest of this walk (`this_walk`, below).
+# phone's section walk is held. FIXED, not a setting (the owner, 2026-10-21): it was task_return_minutes, which timed open tasks
+# too; open tasks now pass for the rest of the walk (`this_walk`, below), and what the clock still covers is too small to be a knob.
+# A home that still stores the old setting is simply not read.
 RETURN_MINUTES = 180
-
-
-def return_minutes(store) -> int:
-    try: return max(1, int(store.get_setting('task_return_minutes') or RETURN_MINUTES))
-    except (TypeError, ValueError): return RETURN_MINUTES
 
 
 def query_for(store, only=None, *, history=True):
@@ -457,7 +454,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # "not now", never a way to lose it. `queued` used to sit in the force-unread clause below, which
     # made a task handed to an agent the one row Done could not shift - the same question answered two
     # ways in one column (the owner, 2026-09-15: "why is that one showing up but not 575"). It clears
-    # like the rest now, and the quiet hours (task_return_minutes) bring it back. A Remind me date outranks it.
+    # like the rest now, and the next walk brings it back (it was the quiet hours, task_return_minutes, until 2026-10-21). A Remind me date outranks it.
     # A LOOSE END (sweep.py): the daily check found this open task in no state that moves it - waiting on nobody named, or with
     # no date - and said so on the task's own row. It is the owner's move until the state is fixed, read live here, so a date or
     # a name put on it takes the line off at once; `lane_was` is what the check reads again tomorrow
@@ -569,7 +566,7 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     # ONE CLOCK FOR ALL OF THEM (the owner, 2026-09-23: "promote later after an hour or so unless it's
     # silenced until tomorrow"): an agent waiting on you and a reply ready kept a 30-minute cooldown of their own
     # and the mark for good, so the rail's Passed band and the walk disagreed about when they were back.
-    # The mark is the timer now - task_return_minutes, three hours by default - and Remind me is the silence.
+    # The mark is the timer now - this walk for an open task (2026-10-21), RETURN_MINUTES otherwise - and Remind me is the silence.
     card.pop('surfaced', None); card.pop('surfaced_at', None)
     shown = next((st for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)] if st and st.get('Status') == 'surfaced'), None)
     # ...and 'working': a task an agent is working is forced unread like these, and the walk takes it now (2026-10-21) - without
@@ -651,7 +648,7 @@ def build(store, *, now=None, live_state=None, include_read=False, only=None,
             if attempt == 2 or e.detail.get('code') != 'processing_coverage_pending': raise
     by_id = {item['item_id']: item for item in snapshot['items']}
     states = store.funnel_states()
-    quiet, walk_at = return_minutes(store), walk_started_at(store)
+    quiet, walk_at = RETURN_MINUTES, walk_started_at(store)
     cards = [card_for(store, by_id[row['item_id']], row, live_state, now, states, quiet, walk_at) for row in rows]
     # ...and a task put away with Remind me stays on the rail, in For later, saying its day - it is still open work, and
     # the rail is where open work lives (2026-09-29). It is never actionable, so the walk does not offer it early.

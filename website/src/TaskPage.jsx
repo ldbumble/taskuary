@@ -137,12 +137,20 @@ const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // A CONVERSATION CONDENSED: one line a message - who, the words, when - and "· · · N more" where rows are left out; a row opens its
 // message in full under it. Task's Came from and Close out draw this SAME list (the owner, 2026-10-16: "full chat should be in task
 // (condensed and full). in close out chats condensed version?"), so the two cannot tell one conversation two ways.
-// `files` is each message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
-function ConversationRows({ rows, open, onOpen, files = new Map(), fetchFor = null }) {
-  return rows.map((r, ri) => r.gap ? (
+// THE GAP IS THE WAY IN (the owner, 2026-10-20: "··· 4 more - Gail Moreno, You" sat between the messages and Show all was at the top, where
+// nobody looked): with `onExpand` the line itself opens the whole conversation - the same action as Show all above it. `files` is each
+// message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
+function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null }) {
+  return rows.map((r, ri) => r.gap ? (onExpand ? (
+    <Box key={`gap${ri}`} component="button" type="button" data-tq-conversation-gap="" onClick={onExpand} title="Show the whole conversation"
+      sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
+        color: FAINT, fontSize: 12, py: 0.2, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        "&:hover": { color: INK, bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+      · · · {r.gap} more - {r.names}</Box>
+  ) : (
     <Typography key={`gap${ri}`} variant="caption" sx={{ display: "block", color: FAINT, fontSize: 12, py: 0.2 }} noWrap>
       · · · {r.gap} more - {r.names}</Typography>
-  ) : (
+  )) : (
     <React.Fragment key={r.m.MessageId}>
       <Box component="button" type="button" data-tq-conversation-row="" aria-expanded={open === r.m.MessageId}
         onClick={() => onOpen((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
@@ -1642,7 +1650,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
                                     : <Box sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
                                         <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg}
-                                          files={sourceFiles} fetchFor={fetchFor} /></Box>}
+                                          onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} /></Box>}
                                 </Box>
                               </Box>
                             ))}

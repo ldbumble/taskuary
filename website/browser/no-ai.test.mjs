@@ -21,7 +21,7 @@ test("with no AI the rail says nothing can be sorted, and every no-AI line opens
 
   // THE RAIL: not "All done", and the button is in the message - at EVERY hour. The seeded End of day checkup used to run once its
   // hour had passed and post a normal-looking report over mail that did not exist; a home with nothing to report on now skips it
-  // with the reason (a failed run, the bell's - reports.Skipped), so nothing lands on the rail and the empty-rail message holds.
+  // quietly (reports.NothingToReport: no failed run, no bell), so nothing lands on the rail and the empty-rail message holds.
   await page.waitForSelector("[data-tq-pile-no-ai]", { timeout: 30000 });
   assert.doesNotMatch(await page.evaluate(() => document.body.innerText), /All done/);
   const rail = await page.$eval("[data-tq-pile-no-ai]", (el) => el.innerText);

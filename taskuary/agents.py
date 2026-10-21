@@ -816,7 +816,7 @@ def roster_line(store, a: dict) -> tuple:
     try: prof = json.loads(a.get('Config') or '{}')
     except ValueError: prof = {}
     if prof.get('triage_enabled') is False:
-        return '', 'not offered new work - "Can be given new work from your mail" is off', 'not_offered'
+        return '', 'not offered new work - "Can be given new work from what comes in" is off', 'not_offered'
     purpose = profile_purpose(a['Name'], prof, a.get('Kind') or 'coding')
     if not purpose: return '', 'no purpose set - triage has nothing to choose it by', 'no_purpose'
     if len(purpose) > ROSTER_PURPOSE_MAX: purpose = purpose[:ROSTER_PURPOSE_MAX - 1].rstrip() + '…'

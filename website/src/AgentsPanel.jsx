@@ -246,7 +246,7 @@ export const AgentsPage = ({ onBack, section = "Docs", title = "Manage profiles"
           <MenuItem value="">{draft.kind === "coding" ? "Shared CODING.md" : "Own document with starter instructions"}</MenuItem>
           {[...new Set(["coding", ...Object.entries(agents || {}).map(([n, a]) => a.rules_doc || n), draft.rulesDoc])].filter(Boolean).map((n) => <MenuItem key={n} value={n}>{n.toUpperCase()}.md</MenuItem>)}
         </TextField>
-        <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label="Can be given new work from your mail" />
+        <FormControlLabel control={<Switch checked={draft.triageEnabled} onChange={(e) => setDraft({ ...draft, triageEnabled: e.target.checked })} />} label="Can be given new work from what comes in" />
         <Box><Button variant="contained" disabled={saving || !agents || !draft.name.trim() || (!draft.existing && !!agents?.[draft.name.trim()]) || !connections.some((c) => `cli:${c.name}` === draft.provider) || (draft.triageEnabled && !draft.purpose.trim())} onClick={save}>Save</Button><Button onClick={() => setDraft(null)}>Cancel</Button></Box>
       </Box></DialogContent>
     </Dialog>}

@@ -47,14 +47,14 @@ def _rail_rows(s): return [m for m in s._rows("SELECT * FROM message WHERE Chann
 
 
 # ── nothing to read: a FAILED run with the reason, nothing on the rail ─────────────────────────────
-def test_a_fresh_home_with_nothing_connected_skips_the_checkup_with_the_reason():
+def test_a_fresh_home_with_nothing_connected_and_no_work_skips_the_checkup_quietly():
+    """The owner, 2026-10-21: an empty home is not a fault - no failed run, no bell, nothing on the rail."""
     s = MemoryStore()
     out, run = _run(s)
-    assert out['failed'] and out['message_id'] is None
-    assert run['failed'] and run['error'].startswith('Skipped: nothing is connected'), run['error']
+    assert not out['failed'] and out['message_id'] is None
+    assert not run['failed'] and not run['error'] and run['subject'] == 'End of day checkup — nothing to report on'
     assert not _rail_rows(s)                                   # no normal report over nothing
-    rung = [p for p in problems.collect(s) if p['key'] == f"report:{_checkup(s)['SourceId']}"]
-    assert rung and rung[0]['title'] == 'Report failed: End of day checkup' and 'Skipped' in rung[0]['detail']
+    assert not [p for p in problems.collect(s) if p['key'] == f"report:{_checkup(s)['SourceId']}"]
 
 
 def test_a_home_whose_only_mailbox_is_signed_out_skips_and_says_so():
@@ -77,6 +77,8 @@ def test_two_sources_one_signed_out_runs_over_the_other_with_a_note():
     assert 'Outlook: FAILED' in run['subject'] and 'Slack' in run['subject']
     assert run['error'].startswith('Not read this run: Outlook') and 'signed out' in run['error'], run['error']
     assert 'COULD NOT READ THIS RUN: Outlook' in seen['user'] and 'Budget sign-off for Q4' in seen['user']
+    # ...and on the report's own card, its first line (the rail/canvas reads BodyText)
+    assert s.get_message(out['message_id'])['BodyText'].splitlines()[0] == run['error']
     rung = [p for p in problems.collect(s) if p['key'] == f"report:{_checkup(s)['SourceId']}"]
     assert rung and rung[0]['title'] == 'End of day checkup ran without Outlook' and 'signed out' in rung[0]['detail']
 

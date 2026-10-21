@@ -163,9 +163,9 @@ const PB_BLURB = "How THIS company does one kind of job, for the agent that will
 // months of mail server-side and fills the doc's marked block - hand-written lines
 // outside the markers always survive.
 const GEN = {
-  triage: "reads 3 months of your mailbox — what you answered vs let sit — and writes what matters into the marked block",
+  triage: "reads 3 months of what came in — what you answered vs let sit — and writes what matters into the marked block",
   style: "reads 3 months of your sent mail and distills how you write, including your recurring signature, into the marked block",
-  job: "reads 3 months of your mail both ways — who writes to you, who you write to, what recurs and on what rhythm — and writes what your job actually is into the marked block",
+  job: "reads 3 months of what came in and what you sent — who writes to you, who you write to, what recurs and on what rhythm — and writes what your job actually is into the marked block",
 };
 
 // Your name, in one place. The documents refer to the owner nine times between them; typed

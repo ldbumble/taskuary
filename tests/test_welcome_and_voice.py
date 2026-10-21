@@ -114,7 +114,7 @@ class VoiceTests(unittest.TestCase):
 class GoodbyeTests(unittest.TestCase):
     def test_the_goodbye_names_where_the_mail_waits(self):
         s = store(); s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
-        self.assertEqual(welcome.goodbye(s), "While I'm closed I can't watch your mail, but it waits safely in Outlook. "
+        self.assertEqual(welcome.goodbye(s), "While I'm closed I can't watch what comes in, but it waits safely in Outlook and your other sources. "
                                              "I'll catch up the moment you open me.")
         self.assertIn("can't watch for anything new", welcome.goodbye(store()))
 

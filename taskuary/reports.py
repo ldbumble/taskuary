@@ -1745,6 +1745,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
         if failed_model: raise RuntimeError(failed_model)
         head, summary = render_report(store, cfg, llm, notes=notes)
         subject, body = f'{title} — {head}', summary
+    except NothingToReport as e:
+        return {'message_id': None, 'subject': f'{title} — nothing to report on', 'files': 0, 'said': 0, 'failed': False, 'summary': str(e)}
     except Exception as e:
         # a skip IS its reason ("Skipped: no mailbox is connected"), never "Report error: Skipped: ..."
         head, subject, body = 'FAILED', f'{title} — FAILED', str(e)[:600] if isinstance(e, Skipped) else f'Report error: {str(e)[:500]}'
@@ -1758,6 +1760,8 @@ def _run_report_source(store, src: dict, cfg: dict, llm=None, trigger: str = 'sc
     # send - the run history keeps it and problems.collect reads it from there
     if failed:
         return {'message_id': None, 'subject': subject, 'files': 0, 'said': 0, 'failed': True, 'error': body, 'summary': text[:2000]}
+    # the sources it went without are said on the report itself too, its first line - on the card where it is read (2026-10-21)
+    if notes: text = f'{unread_note(notes)}\n\n{text}'
     d = decide_for(store, cfg, read_result(head, text, failed), report_llm(store, cfg, llm))
     # ONLY A RUN THE TRIAGE LINE SENDS IS TRIAGED (the owner, 2026-10-16, reversing D1 of 2026-09-28): "most reports should not
     # go through triage ... if it's always show up then it's just a report fyi, not a optional if this happens, then triage then
@@ -2015,6 +2019,11 @@ def as_card(cfg: dict) -> dict:
 # reason (the bell's, like any failed run); some of it unreadable is a run over the rest, the rest named on it (`note`).
 class Skipped(RuntimeError):
     """No source this run reads could be read. The message is the whole reason, said to the owner as it is."""
+
+
+class NothingToReport(Skipped):
+    """Nothing is connected and there is nothing of Taskuary's own to report on either. Not a failure (the owner,
+    2026-10-21): the run is kept in the history with this reason, but it is not failed, posts nothing and rings no bell."""
 
 
 def source_title(t: str) -> str:

@@ -3884,7 +3884,7 @@ def _outcome_line(kind: str, p: dict, o: dict | None) -> str:
         if o.get('playbooks_added'): bits.append(f"{plural(len(o['playbooks_added']), 'playbook')} added")
         bits.append('your non-coding mail goes to it' if o.get('mail_routed') else
                     "nothing is sent to it by default, though it is on the list new mail is sorted to, so mail that reads as its work can still "
-                    'reach it - turn off "Can be given new work from your mail" on its profile to stop that' if o.get('on_roster') else
+                    'reach it - turn off "Can be given new work from what comes in" on its profile to stop that' if o.get('on_roster') else
                     'your mail goes where it went before')
         if o.get('ledger_narrowed'): bits.append(f"{o['ledger_narrowed']} is set to read, so nothing reaches it without your click")
         flow = (f" \"{o['workflow_title']}\" is under Reports, switched off. Say run it and I'll start it once - "

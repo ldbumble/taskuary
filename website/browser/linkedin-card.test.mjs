@@ -38,7 +38,9 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
     const u = new URL(r.url()), p = u.pathname, json = (body) => r.respond({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     if (p === "/api/connectors" && r.method() === "POST") { saved = JSON.parse(r.postData() || "{}"); return json({ ok: true, connectorId: li.ConnectorId }); }
     if (p === "/api/connectors" && r.method() === "GET" && saved?.ConfigJson)
-      return json({ ...list, data: list.data.map((c) => c.ConnectorId === li.ConnectorId ? { ...c, ConfigJson: saved.ConfigJson } : c) });
+      // as the server answers (guard.masked_config): the secret held back, said saved
+      return json({ ...list, data: list.data.map((c) => c.ConnectorId === li.ConnectorId ? { ...c, ConfigSaved: ["client_secret"],
+        ConfigJson: JSON.stringify({ client_id: JSON.parse(saved.ConfigJson).client_id }) } : c) });
     if (p === `/api/connectors/${li.ConnectorId}/linkedin/status`)
       return json({ redirect_uri: "http://localhost:7999/api/linkedin/callback", connected: false, has_app: !!saved?.ConfigJson, member: "", days_left: null });
     if (p === `/api/connectors/${li.ConnectorId}/test`) { tested++; return json({ ok: false, ms: 3, detail: "LinkedIn is not signed in yet - save the app's Client ID and Client Secret on the LinkedIn card, then press Sign in with LinkedIn" }); }
@@ -79,6 +81,10 @@ test("LinkedIn: typed finds its card at once, and the card connects in plain ste
   assert.deepEqual(JSON.parse(saved.ConfigJson), { client_id: "test-client-id-0001", client_secret: "test-client-secret-0001" });
   await until(page, () => [...document.querySelectorAll("[data-tq-browse-one] button")].some((x) => /Sign in with LinkedIn/.test(x.innerText) && !x.disabled));
   assert.equal(await signIn(page), "enabled", "saved keys unlock Sign in without reopening the card");
+  // the secret is write-only: a password box, empty again once saved, its label saying it is saved
+  const secretBox = await page.evaluate(() => { const w = document.querySelector('[data-tq-browse-one] [data-tq-write-only="client_secret"]');
+    const i = w?.querySelector("input"); return w && { type: i.type, value: i.value, label: w.querySelector("label")?.innerText.trim() }; });
+  assert.deepEqual(secretBox, { type: "password", value: "", label: "Client Secret — saved, type to replace" });
 
   // 4. Test says plainly what is missing
   await page.evaluate(() => [...document.querySelectorAll("[data-tq-browse-one] button")].find((b) => b.innerText.trim() === "Test").click());

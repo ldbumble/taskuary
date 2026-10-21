@@ -680,6 +680,8 @@ DEFAULT_SETTINGS = {'attach_threshold': '0.42',
                     # an agent may PROPOSE high-impact actions (open a PR, comment publicly,
                     # close an issue, run a tool); each lands on the task for approval
                     'proposals_enabled': '1',
+                    # triage matches mail to the playbooks, and a recurring job is proposed as one (playbooks.menu / draft)
+                    'playbooks_enabled': '1',
                     # once the hub has READ something, say so at the source: mark the mail
                     # seen, the chat read. Off by default - the funnel is a reader, and a
                     # mailbox that empties its own bold rows surprises people. See mark_read()

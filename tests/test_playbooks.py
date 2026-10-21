@@ -83,6 +83,20 @@ done when: the journal entry is posted
         self.assertIn('- bill: Post a card transaction as an AP bill - when: a transaction', m)
         self.assertEqual(playbooks.menu([]), '')
 
+    def test_one_switched_off_is_kept_but_never_offered_and_the_global_switch_stops_them_all(self):
+        """Delete was the only way to stop a playbook matching, and playbooks_enabled ("follow") stopped none (the owner, 2026-10-21)."""
+        playbooks.write('bill', BILL); playbooks.write('onboard', ONBOARD)
+        playbooks.set_on('bill', False)
+        self.assertEqual([(b['slug'], b['enabled']) for b in playbooks.list_all()], [('bill', False), ('onboard', True)])
+        self.assertNotIn('- bill:', playbooks.menu()); self.assertIn('- onboard:', playbooks.menu())
+        self.assertIsNotNone(playbooks.read('bill'))                         # kept for later
+        playbooks.set_on('bill', True); self.assertIn('- bill:', playbooks.menu())
+        s = MemoryStore(); s.set_setting('playbooks_enabled', '0', 'owner')
+        self.assertEqual(playbooks.menu(store=s), '')
+        s.set_setting('playbooks_enabled', '1', 'owner'); self.assertIn('- onboard:', playbooks.menu(store=s))
+        playbooks.set_on('bill', False); playbooks.delete('bill')
+        self.assertNotIn('bill', playbooks.off())                           # a deleted one leaves no stale switch behind
+
     def test_a_slug_never_ends_in_a_hyphen_after_the_cut(self):
         self.assertEqual(playbooks.slugify('x' * 59 + ' onboarding'), 'x' * 59)
         self.assertEqual(playbooks.slugify('  Post a card: transaction!  '), 'post-a-card-transaction')
@@ -275,6 +289,10 @@ class OverTheApi(unittest.TestCase):
         self.assertEqual(r['data'], []); self.assertIn('# Post a card transaction', r['template'])
         r = c.put('/api/playbooks/new', json={'content': BILL}).json()
         self.assertEqual(r['slug'], 'post-a-card-transaction-as-an-ap-bill')
+        self.assertEqual(c.put(f"/api/playbooks/{r['slug']}/enabled", json={'on': False}).json()['enabled'], False)
+        self.assertEqual(c.get('/api/playbooks').json()['data'][0]['enabled'], False)
+        self.assertEqual(c.put('/api/playbooks/nope/enabled', json={'on': False}).status_code, 404)
+        c.put(f"/api/playbooks/{r['slug']}/enabled", json={'on': True})
         self.assertEqual(c.put('/api/playbooks/x', json={'content': 'nothing'}).status_code, 400)
         rows = c.get('/api/playbooks').json()['data']
         self.assertEqual([(b['slug'], b['uses']) for b in rows], [(r['slug'], ['quickbooks', 'teller'])])

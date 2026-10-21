@@ -34,7 +34,7 @@ import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
-import { noteKey, noteOf, progressLine, saveNote } from "./checklist.js";
+import { noteKey, noteOf, progressLine, saveNote, settleTick, withTicks } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
@@ -912,7 +912,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // "Drafting…" until it lands (the owner, 2026-09-24: "it should say spinning as it's waiting on ai to draft reply")
   // ONE NAME (buttons.json): "Write reply", "Open the draft" and "Write another" were three names for the one Reply
   const replyPrimary = labelOfRow("reply");
-  const checklist = detail?.checklist || [];
+  // A TICK DRAWS AT THE CLICK (the owner, 2026-10-20: about a second to respond): the box waited on three round trips in a row - the
+  // operation, its execute, and the task read again - before it moved. Now the press shows at once and the server's answer settles it:
+  // the read that follows replaces the guess, and a refusal puts the box back with the reason. Presses run in order, one at a time,
+  // so two quick ticks land as two and in the order they were made.
+  const [ticks, setTicks] = useState({});
+  const tickChain = useRef(Promise.resolve());
+  useEffect(() => { setTicks({}); }, [selected]);
+  const checklist = withTicks(detail?.checklist, ticks);
   // what the To do list shows: the emails a task owes are Close out's, not boxes to tick here
   const todo = checklist.filter((i) => !i.out);
   // the to-do being noted, and its words while the field is open (checklist.js saveNote; '' takes the note off)
@@ -924,14 +931,20 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     try { await saveNote(api, t.TaskId, i.id, text); loadDetail(t.TaskId); }
     catch (e) { setErr(`That note didn't save - ${opError(e, "Taskuary didn't answer")}. Write it again.`); }
   };
-  const tickItem = async (i) => {
-    try {
-      const data = await runOperation(api, "task.check", t.TaskId, { item: String(checklist.indexOf(i) + 1), id: i.id, done: !i.done });
-      loadDetail(t.TaskId);
-      // the last tick closed it (server: tick_checklist): the list and the rail move with it now,
-      // not on the next poll, or the row you just finished sits there looking open
-      if (data?.closed) { loadTasks(); onChanged?.(); }
-    } catch (e) { setErr(`That box didn't change - ${opError(e, "Taskuary didn't answer")}. Tick it again.`); }
+  const tickItem = (i) => {
+    const tid = t.TaskId, done = !i.done, item = String(checklist.indexOf(i) + 1);
+    setTicks((m) => ({ ...m, [i.id]: done }));
+    const settle = () => setTicks((m) => settleTick(m, i.id, done));
+    tickChain.current = tickChain.current.then(async () => {
+      try {
+        const data = await runOperation(api, "task.check", tid, { item, id: i.id, done });
+        await loadDetail(tid);
+        // the last tick closed it (server: tick_checklist): the list and the rail move with it now,
+        // not on the next poll, or the row you just finished sits there looking open
+        if (data?.closed) { loadTasks(); onChanged?.(); }
+      } catch (e) { setErr(`That box didn't change - ${opError(e, "Taskuary didn't answer")}. Tick it again.`); }
+      settle();
+    });
   };
   // what the folded strip says on its left: the header already has the id, title and state, so
   // this carries the two things it cannot - how far the list got, and what the task is

@@ -36,3 +36,12 @@ export function progressLine(items) {
   const done = items.filter((i) => i.done).length;
   return `${done} of ${n} done${done === n ? " — Mark done when it is really finished" : ""}`;
 }
+
+// A TICK SHOWN BEFORE THE SERVER ANSWERS (the task page, 2026-10-20): `ticks` is { id: done } for presses still in flight, drawn over
+// the list the server last sent; a press is settled - dropped - once its answer is in, unless a newer press on that box replaced it
+export const withTicks = (items, ticks = {}) => (items || []).map((i) => (i.id in ticks ? { ...i, done: ticks[i.id] } : i));
+export const settleTick = (ticks, id, done) => {
+  if (ticks[id] !== done) return ticks;
+  const { [id]: _, ...rest } = ticks;
+  return rest;
+};

@@ -150,7 +150,7 @@ test("a conditional Reports line offers one toggle: let triage judge it when it 
   // the owner, 2026-10-16: "most reports should not go through triage ... if it's always show up then it's just a report fyi", and
   // "the steps that make the work rail conditional should also have option" - a toggle on that line, never a fourth row
   assert.match(source, /export const ROUTE_LINES = \["timeline", "alert", "send", "triage"\]/);
-  assert.match(source, /triage: \["Let Taskuary decide if it needs a task", "sorted like your mail; nothing is made for what an open task already covers"\]/);
+  assert.match(source, /triage: \["Let Taskuary decide if it needs a task", "sorted like everything else that comes in; nothing is made for what an open task already covers"\]/);
   assert.ok(!/escalate to a task/i.test(source), "the toggle does not force a task - triage judges");
   // word for word as reports.LINE_SAYS, which is what the judge is asked
   const reports = readFileSync(fileURLToPath(new URL("../../taskuary/reports.py", import.meta.url)), "utf8");

@@ -1579,7 +1579,7 @@ const VoiceVocabulary = ({ onBack }) => {
             sx={{ fontSize: 11.5, textTransform: "none" }}
             startIcon={genBusy ? <CircularProgress size={12} /> : null}
             title="Read the last three months of mail - who writes, about what - and add the names, systems and acronyms a recogniser would misspell. Your own lines stay.">
-            {genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}
+            {genBusy ? (genWhat || "Reading what came in…") : "Generate from history"}
           </Button>
           <Button variant="contained" disableElevation onClick={save} disabled={busy || genBusy || terms.length > limit || text === onServer}>
             {busy ? "Saving…" : text === onServer ? "Saved" : "Save shared vocabulary"}

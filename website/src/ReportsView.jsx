@@ -314,7 +314,7 @@ export const LINE_SAYS = {
   timeline: ["show it under Reports", "a run to read"],
   alert: ["reach me right away", "the moment it lands, with no Review step"],
   send: ["send it out", "to the people it is addressed to"],
-  triage: ["Let Taskuary decide if it needs a task", "sorted like your mail; nothing is made for what an open task already covers"],
+  triage: ["Let Taskuary decide if it needs a task", "sorted like everything else that comes in; nothing is made for what an open task already covers"],
 };
 // ...and what the model is literally asked, word for word as reports.LINE_SAYS and judge_prompt
 // build it: a rule you cannot read is a rule you cannot trust.

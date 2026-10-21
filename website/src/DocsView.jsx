@@ -688,7 +688,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
                   try { setGenEv((await api.get("/api/doc/generate/status")).data.evidence || null); } catch { /* receipts optional */ }
                 } catch (e) { setGenMsg(e?.response?.data?.detail || "generation failed"); }
                 setGenBusy(false); setGenWhat("");
-              }}>{genBusy ? (genWhat || "Reading your mail…") : "Generate from history"}</Button>
+              }}>{genBusy ? (genWhat || "Reading what came in…") : "Generate from history"}</Button>
           )}
           {docName === "learned" && (
             <Box sx={{ display: "flex", border: "1px solid #e1dcd5", borderRadius: 99, overflow: "hidden", fontSize: 11.5, fontWeight: 600, alignSelf: "center",

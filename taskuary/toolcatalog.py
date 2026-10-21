@@ -94,6 +94,10 @@ PURPOSE = {
                                  'the FYI" is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
                                  'and the count said. It only clears: when the owner says "from now on" too, also CALL '
                                  'preference.exclude_sender or preference.sender_rule'),
+    'pipe.defer':               ('put a SET away until a day - `select` (below) and `until` (as task.defer takes it): "snooze everything '
+                                 'from Gail until Monday" is select sender: Gail. Runs at once and the count is said'),
+    'pipe.close':               ('close a SET at once - `select` (below): each task in it is marked done, each notice read. "Close all '
+                                 'the tasks from Priya" is select sender: Priya. Runs at once and the count is said'),
     'task.setup':               'open a walk-through with the assistant, for a set-up that needs digging first - `text`; `title`: a few words naming the job for the task list',
     # (the owner, 2026-09-07: "are you adding endpoints for report setup and connector setup and
     # taskuary setup. Include that as well"). Each goes down the same handler the tab's own form
@@ -327,7 +331,7 @@ BUCKETS = (
     ('agents', "start, continue, answer or stop a task's agent, and teach where work belongs",
      ('dispatch.prepare', 'agent.continue', 'agent.answer', 'agent.stop', 'routing.remember')),
     ('new', 'new work with no task yet', ('task.create_from_text', 'task.create_from_message', 'task.setup')),
-    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'item.settle', 'message.file', 'message.archive',
+    ('pipe', 'the walk and sets of items, and filing mail', ('pipe.clear', 'pipe.defer', 'pipe.close', 'item.settle', 'message.file', 'message.archive',
                                                             'preference.exclude_sender', 'preference.sender_rule', 'message.retriage')),
     ('reports', 'reports and workflows', ('report.create', 'report.run', 'report.rerun', 'report.pause', 'report.resume',
                                           'report.route', 'report.edit', 'report.delete')),
@@ -337,7 +341,7 @@ BUCKETS = (
 
 
 # what a tool takes, when its registry entry cannot say it: a tool that needs one of several, or takes its words as `text`
-HINTS = {'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
+HINTS = {'pipe.defer': 'select, until', 'pipe.close': 'select', 'hub.publish': 'title, body, topic?, kind?, why_earned?', 'task.update': 'priority|title|assignee|due', 'reply': 'text, cc?', 'redraft': 'text', 'regular_agent': 'text, as?, new?', 'coding_agent': 'text, as?, new?',
          'answer_agent': 'text', 'remember': 'text', 'setup': 'text', 'task.handoff': 'who, note?', 'task.share': 'who, about?', 'task.complete': 'note?',
          'dispatch.prepare': 'kind, instructions?', 'role.apply': 'role, portal?, route_mail?', 'task.check': 'item, done?', 'task.checklist': 'items?, emails?, drop?', 'task.watch': 'what?', 'task.defer': 'until'}
 

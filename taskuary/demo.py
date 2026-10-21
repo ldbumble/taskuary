@@ -85,7 +85,7 @@ ALLOWED_WRITES = (
 LOCAL_OPS = {'task.complete', 'task.reopen', 'task.defer', 'item.settle', 'message.file', 'task.not_a_task', 'message.reply',
              'preference.exclude_sender', 'preference.sender_rule', 'task.let_go', 'task.elsewhere', 'idea.act', 'memory.remember',
              'routing.remember', 'task.split', 'task.update', 'task.check', 'task.checklist', 'task.watch', 'task.comment', 'task.merge',
-             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'script.start'}
+             'review.reject', 'calendar.answer', 'hub.publish', 'pipe.clear', 'pipe.defer', 'pipe.close', 'script.start'}
 
 # The sentences the visitor sees, plain and said as the demo, not as a fault: the page posts them as an ordinary line.
 SENDS = 'This is the demo - nothing is sent. In your own Taskuary this is where you approve it and it goes.'

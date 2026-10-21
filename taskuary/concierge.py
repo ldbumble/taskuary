@@ -1752,6 +1752,44 @@ def _off_the_table(store, cleared: list, actor: str):
     if current_key(store, tid) in keys: set_current(store, tid, None, actor)
 
 
+def _set_words(sel: dict) -> str:
+    """A set, said: "from Gail", "about the export" - what the receipt names so the owner reads which ones."""
+    sel = {k: v for k, v in (sel or {}).items() if v not in (None, '', [], False)}
+    bits = ([f"from {sel['sender']}"] if sel.get('sender') else []) + ([f"about {sel['contains']}"] if sel.get('contains') else []) \
+        + [f"{k}: {v}" for k, v in sel.items() if k not in ('sender', 'contains', 'everything')]
+    return ' '.join(bits) or 'in the pipe'
+
+
+def defer_selected(store, sel: dict, until, actor: str = 'owner') -> dict:
+    """Put every item a selector names away until `until`: a task by its own Remind me (remind.set_reminder), a notice held off the rail
+    until then. What would not go - a closed task, an agent still open on one - is counted, never hidden."""
+    from . import remind
+    at = remind.parse(until)
+    if not at: raise ValueError('say until when - "monday", "friday 2pm", "2 weeks"')
+    hours = max(0.1, (datetime.strptime(at[:19], '%Y-%m-%d %H:%M:%S') - datetime.now()).total_seconds() / 3600)
+    hits, done = select_items(store, sel), []
+    for i in hits:
+        try:
+            if i.get('tid'): remind.set_reminder(store, int(i['tid']), until, actor)
+            funnel.settle(store, i['key'], 'later', actor, hours=hours)
+            done.append(i)
+        except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not put away - {e}")
+    _off_the_table(store, done, actor)
+    return {'done': len(done), 'stuck': len(hits) - len(done), 'when': remind.when(at), 'titles': [i['title'] for i in done][:8]}
+
+
+def close_selected(store, sel: dict, actor: str = 'owner') -> dict:
+    """Close every item a selector names: a task marked done (close_task - its draft dismissed, as Mark done does), a notice read."""
+    hits, done = select_items(store, sel), []
+    for i in hits:
+        try:
+            if i.get('tid'): close_task(store, int(i['tid']), actor)
+            if _clear_one(store, i['key'], actor, 'closed by the owner'): done.append(i)
+        except (ValueError, RuntimeError) as e: logger.warning(f"concierge: {i['key']} was not closed - {e}")
+    _off_the_table(store, done, actor)
+    return {'done': len(done), 'stuck': len(hits) - len(done), 'titles': [i['title'] for i in done][:8]}
+
+
 def clear_selected(store, sel: dict, actor: str = 'owner') -> dict:
     """Mark every item a selector names read. Read, never deleted - they stay on the Timeline."""
     items = select_items(store, sel)
@@ -2082,6 +2120,36 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
         if not hit: raise CallMiss('The roles I can set up: ' + '; '.join(f"{k} ({v['title']})" for k, v in roles.ROLES.items()) + '. Nothing was set up.')
         # a yes/no the model may write as words: anything but an explicit yes keeps the owner's mail where it goes today
         return role_card(store, tid, hit, params.get('portal'), str(params.get('route_mail')).strip().lower() in ('true', 'yes', '1'), item, actor)
+    if kind in ('pipe.defer', 'pipe.close'):
+        sel = params.get('select') or {}
+        hits = select_items(store, sel)
+        if not any(v not in (None, '', [], False) for v in sel.values()):
+            raise CallMiss(f'{kind} needs `select` naming the set - a sender, words, a kind. Nothing was changed.')
+        if not hits:
+            say_ = f"Nothing waiting is {_set_words(sel)}, so nothing was {'put away' if kind == 'pipe.defer' else 'closed'}. {pipe_holds(store)}"
+            record_related(store, tid, item, 'assistant', say_)
+            return {'say': say_, 'options': [], 'chips': chips_for(store, item), 'decision': None}
+        if kind == 'pipe.defer':
+            from . import remind
+            try: back = remind.when(remind.parse(params.get('until')) or '')
+            except ValueError as e: raise CallMiss(f'pipe.defer until: {e}. Nothing was changed.')
+        if routes():
+            table_keys = {i['key'] for i in _on_the_table(store, actor) if i.get('key')} or {e.get('key') for e in (it.get('items') or [it]) if e.get('key')}
+            try: done = defer_selected(store, sel, params.get('until'), actor) if kind == 'pipe.defer' else close_selected(store, sel, actor)
+            except ValueError as e: raise CallMiss(f'{kind}: {e}. Nothing was changed.')
+            n = done['done']
+            say_ = ((f"Snoozed {plural(n, 'item')} {_set_words(sel)} until {done['when']}" if kind == 'pipe.defer' else
+                     f"Closed {plural(n, 'item')} {_set_words(sel)}") + ' - ' + ', '.join(_title_cut(t, 50) for t in done['titles'][:3])
+                    + (' and more' if n > 3 else '') + '.' + (f" {plural(done['stuck'], 'item')} would not go." if done['stuck'] else ''))
+            record_related(store, tid, item, 'assistant', say_)
+            off = bool(table_keys) and table_keys <= {i['key'] for i in hits}
+            return {'say': say_, 'options': [], 'chips': [], 'decision': {'verb': 'next' if off else 'setting'}, 'did': kind}
+        label = (f"Snooze {len(hits)} until {back}" if kind == 'pipe.defer' else f"Close {len(hits)}")
+        shown = '; '.join(_title_cut(' '.join(str(i.get('title') or '').split()), 60) for i in hits[:4])
+        prop = _propose_raw(store, tid, kind, 0, {'select': sel, 'until': params.get('until'), 'text': text} if kind == 'pipe.defer'
+                            else {'select': sel, 'text': text}, label, f"{plural(len(hits), 'item')} {_set_words(sel)}: {shown}",
+                            WAITS, actor, item)
+        return {'say': prop['say'], 'options': [], 'chips': [], 'decision': None, 'proposal': prop}
     if kind == 'pipe.clear':
         sel = params.get('select') or {}
         hits = select_items(store, sel)

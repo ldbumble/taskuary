@@ -1354,6 +1354,12 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # owner's sentence used to sweep whatever it hit (2026-10-08: "all these should not exist as hard coded rules")
         if not p.get('select'): raise HTTPException(422, 'name the set to clear (select) - nothing was cleared')
         return concierge.clear_selected(store, p['select'], ACTOR)
+    if kind in ('pipe.defer', 'pipe.close'):
+        from . import concierge
+        if not p.get('select'): raise HTTPException(422, 'name the set (select) - nothing was changed')
+        try: return (concierge.defer_selected(store, p['select'], p.get('until'), ACTOR) if kind == 'pipe.defer'
+                     else concierge.close_selected(store, p['select'], ACTOR))
+        except ValueError as e: raise HTTPException(422, str(e))
     raise HTTPException(501, f'{kind} has no shared handler yet')
 
 @app.post('/api/operations/{oid}/preview')

@@ -246,6 +246,34 @@ class NotesAndDueDays(unittest.TestCase):
         self.assertEqual(out['light']['verb'], 'priority')
 
 
+class SetsFromOneSender(unittest.TestCase):
+    # "snooze everything from Gail until Monday" and "close all the tasks from Priya" had no tool (the owner approved both, 2026-10-20)
+    def two_from(self, s, who='Paula Vance', email='paula@vendor.example'):
+        return [arrive(s, subject=f'Invoice {n} needs a code', who=who, email=email)['task_id'] for n in (1, 2)]
+
+    def test_snooze_everything_from_one_sender(self):
+        s = store(); tid, item = on_table(s); mine = self.two_from(s)
+        out, _ = say(s, 'snooze everything from Paula until Monday', item['key'],
+                     'CALL: {"kind": "pipe.defer", "params": {"select": {"sender": "Paula"}, "until": "monday 9am"}}')
+        self.assertTrue(out['say'].startswith('Snoozed 2 items from Paula until '), out['say'])
+        self.assertTrue(all(s.get_task(t).get('RemindAt') for t in mine)); self.assertFalse(s.get_task(tid).get('RemindAt'))
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            later = {i.get('tid') for i in funnel.build(s)['items'] if i.get('deferred')}      # under For later, saying their day
+        self.assertEqual(later, set(mine))
+
+    def test_close_all_from_one_sender(self):
+        s = store(); tid, item = on_table(s); mine = self.two_from(s)
+        out, _ = say(s, 'close all the tasks from Paula', item['key'], 'CALL: {"kind": "pipe.close", "params": {"select": {"sender": "Paula"}}}')
+        self.assertTrue(out['say'].startswith('Closed 2 items from Paula'), out['say'])
+        self.assertEqual({s.get_task(t)['Status'] for t in mine}, {'done'}); self.assertEqual(s.get_task(tid)['Status'], 'open')
+
+    def test_the_phone_asks_first(self):
+        s = store(); tid, item = on_table(s); self.two_from(s)
+        with concierge.delivering(concierge.PHONE):
+            out, _ = say(s, 'close all from Paula', item['key'], 'CALL: {"kind": "pipe.close", "params": {"select": {"sender": "Paula"}}}')
+        self.assertEqual(out['proposal']['kind'], 'pipe.close')
+
+
 class RunItAgain(unittest.TestCase):
     def test_run_it_again_over_a_good_report_opens_its_page(self):
         s = store()

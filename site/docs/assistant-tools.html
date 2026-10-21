@@ -130,8 +130,8 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 </tr>
 <tr>
 <td><strong>agents</strong></td>
-<td>start, continue, answer or stop a task&#39;s agent, and teach where work belongs</td>
-<td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value)</td>
+<td>start, continue, answer or stop a task&#39;s agent; teach where work belongs</td>
+<td>dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value), task.ask_agent(who, text)</td>
 </tr>
 <tr>
 <td><strong>new</strong></td>
@@ -355,7 +355,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <li><code>ref</code> (optional) - the task</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
-<p>Start, continue, answer or stop a task&#39;s agent, and teach where work belongs.</p>
+<p>Start, continue, answer or stop a task&#39;s agent; teach where work belongs.</p>
 <h3 id="dispatch-prepare"><code>dispatch.prepare</code><a class="anchor" href="#dispatch-prepare" aria-label="Link to this section">#</a></h3>
 <p>Start an agent on an EXISTING task; a coding task asks which repository when it is not clear.</p>
 <ul>
@@ -385,6 +385,13 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <ul>
 <li><code>field</code> - kind | profile | system</li>
 <li><code>value</code></li>
+</ul>
+<p class="runs">Brings up its button for you to press.</p><h3 id="task-ask-agent"><code>task.ask_agent</code><a class="anchor" href="#task-ask-agent" aria-label="Link to this section">#</a></h3>
+<p>Ask a trusted teammate&#39;s coding agent over Reason Network; the reply is noted on the task.</p>
+<ul>
+<li><code>who</code> - their name or person/session</li>
+<li><code>text</code> - the question</li>
+<li><code>ref</code> (optional) - the task (TQ-0123), when it is not the one on the table</li>
 </ul>
 <p class="runs">Brings up its button for you to press.</p><h2 id="new">New<a class="anchor" href="#new" aria-label="Link to this section">#</a></h2>
 <p>New work with no task yet.</p>
@@ -675,7 +682,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 <p class="runs">Runs at once and changes nothing.</p>
     </article>
     <nav class="pager"><a class="pn prev" href="./assistant"><span>Previous</span>Assistant buttons</a><a class="pn next" href="./reports"><span>Next</span>Reports and the Advisor</a></nav>
-    <p class="stamp">Documentation for Taskuary 0.3.9.17 · updated 2026-10-21</p>
+    <p class="stamp">Documentation for Taskuary 0.3.9.18 · updated 2026-10-21</p>
   </main>
 </div>
 <script src="./docs.js"></script>

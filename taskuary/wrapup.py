@@ -526,7 +526,13 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # when an agent finishes a kind of job for the first time" held for code alone (walk 2026-10-21). Last, as there.
         from . import playbooks
         # a playbook-authoring conversation already proposed its playbook, by hand (playbooks.setup_task): never a second draft of it
-        pbd = None if task.get('SourceRef') == 'assistant:playbook' else playbooks.draft(store, tid, general.conversation_text(store, tid), 'assistant')
+        # ...and it reads what ARRIVED beside what was said: a playbook's `when` is the arriving message, which the conversation
+        # opens on only as triage's one-line title - and the chat alone of a crisp answer fell under playbooks.MIN_SESSION, so a
+        # month-end reconciliation was never even put to the model (walk 2026-10-21)
+        arrived = '\n\n'.join(f"ARRIVED from {m.get('FromName') or m.get('FromEmail') or 'someone'}: {m.get('Subject') or ''}\n"
+                              f"{str(m.get('BodyText') or '')[:3000]}" for m in ((store.task_detail(tid) or {}).get('messages') or [])[:3])
+        job = '\n\n'.join(x for x in (arrived, general.conversation_text(store, tid)) if x)
+        pbd = None if task.get('SourceRef') == 'assistant:playbook' else playbooks.draft(store, tid, job, 'assistant')
         _ended(store, tid, close, actor)
         return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),

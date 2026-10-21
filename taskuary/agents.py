@@ -1432,8 +1432,11 @@ def _run_live(profile: dict, name: str, cmd: list, prompt: str, trace, keep: str
         shown = _live_line(j)
         if shown: trace('live', name, shown)
     try:
+        # a CLI with its tools off (the Assistant deciding: nothing happens until the app carries the decision out) may be sent its
+        # turn again after any end; one with tools may have done work mid-turn, and never is
+        bare = '--tools' in cmd and cmd.index('--tools') + 1 < len(cmd) and cmd[cmd.index('--tools') + 1] == ''
         final, raw = clipool.run(keep, cmd, prompt, on, cwd=cwd, env=spawn_env(profile, extra_env),
-                                 resume=resume, cancel=cancel, timeout=profile.get('timeout', 1200))
+                                 resume=resume, cancel=cancel, timeout=profile.get('timeout', 1200), resend=bare)
     except PermissionError as e:
         raise FileNotFoundError(denied_msg(name, cmd[0] if cmd else '', e)) from e
     except RuntimeError as e:

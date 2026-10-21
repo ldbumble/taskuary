@@ -29,7 +29,12 @@ class Ended(RuntimeError):
     """The process went away mid-turn: its stderr, for the caller's error message."""
 
 
+class Gone(Ended):
+    """...before the turn's message reached it: nothing of the turn ran, so sending it again repeats nothing."""
+
+
 RESTART_FAILED = 'the AI tool stopped, and stopped again when it was restarted'
+MID_TURN = 'the agent stopped in the middle of its turn - nothing was sent again, as it may have done part of the work; Continue picks it up'
 
 
 class Live:
@@ -58,11 +63,12 @@ class Live:
 
     def turn(self, prompt: str, on_event, cancel=None, timeout: float = 1200) -> tuple:
         """Send one message and read until its `result`. Returns (result event, raw lines)."""
-        # a process that went away while idle - killed, or its CLI updated itself under it - refuses the message: that is an end too
+        # a process that went away while idle - killed, or its CLI updated itself under it - never gets the message: Gone, not mid-turn
+        if not self.alive(): raise Gone(f'the CLI was gone before the message reached it (exit {self.p.poll()})')
         try:
             self.p.stdin.write(json.dumps({'type': 'user', 'message': {'role': 'user', 'content': prompt}}) + '\n')
             self.p.stdin.flush()
-        except (OSError, ValueError) as e: raise Ended(f'the CLI was gone before the message reached it ({e})')
+        except (OSError, ValueError) as e: raise Gone(f'the CLI was gone before the message reached it ({e})')
         raw, end = [], time.time() + timeout
         while True:
             if cancel is not None and cancel.is_set():
@@ -142,9 +148,11 @@ def warm(key: str, cmd: list, *, cwd=None, env=None, resume=None) -> bool:
 
 
 def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resume=None, cancel=None,
-        timeout: float = 1200) -> tuple:
+        timeout: float = 1200, resend: bool = False) -> tuple:
     """One turn on the conversation's live process: (result event, raw lines). A process that died between
-    turns is started again once, resumed by its id, before the turn fails."""
+    turns is started again once, resumed by its id, before the turn fails. `resend`: a turn with no side effects (a CLI
+    with its tools off - the Assistant deciding) is sent again after ANY end, mid-turn included; one that may have done
+    work mid-turn never is (MID_TURN)."""
     sig = _sig(cmd, cwd, env)
     for attempt in (1, 2):
         lv = _take(key, cmd, cwd, env, resume, sig)
@@ -159,6 +167,8 @@ def run(key: str, cmd: list, prompt: str, on_event, *, cwd=None, env=None, resum
                 # (the real-CLI walk, 2026-10-21) - and a warmed process killed before its first turn is the same case. Only a second end
                 # is the caller's, said plainly (RESTART_FAILED).
                 if attempt == 2: raise Ended(f'{RESTART_FAILED} ({e})') from e
+                # ...but a turn that may have DONE something - an agent with tools, part-way through - is never sent twice
+                if not resend and not isinstance(e, Gone): raise Ended(f'{MID_TURN} ({e})') from e
                 logger.info(f'clipool: {key} ended - reopening it{" on " + resume if resume else ""} and sending the turn again')
             except Exception:
                 with _LOCK:

@@ -7,9 +7,9 @@ from taskuary import concierge
 from tests import assistant_queries as Q
 
 # what no tool or desk button does today - a new tool takes its ask off this list on purpose (ASK OWNER before building one)
-UNSUPPORTED = {'snooze everything from Ruth until Monday', 'close all the tasks from Priya', 'archive all the read mail', 'approve all the drafts',
-               'file a note on it: waiting on the bank', 'set the due date to friday', 'use dark mode', 'mark all the approvals as done',
-               'make the font bigger', 'kill all the agents'}
+UNSUPPORTED = {'archive all the read mail', 'use dark mode', 'make the font bigger', 'kill all the agents'}
+# ...and the row buttons a phone chat cannot reach - each opens something only a screen has (the diff, a second agent's form, a file picker)
+PHONE_UNREACHABLE = {'review_changes', 'run_another', 'attach'}
 
 
 class EverydayAsks(unittest.TestCase):
@@ -17,9 +17,22 @@ class EverydayAsks(unittest.TestCase):
     def setUpClass(cls): cls.rows = Q.run_all()
 
     def test_there_are_enough_of_them_in_every_category(self):
-        self.assertGreaterEqual(len(self.rows), 120)
+        self.assertGreaterEqual(len(self.rows), 180)
         cats = {r['q'].cat for r in self.rows}
-        self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short'})
+        self.assertEqual(cats, {'navigation', 'bulk', 'item', 'question', 'settings', 'agents', 'reports', 'chat', 'typos', 'short',
+                                'bring-up', 'connectors', 'phone'})
+
+    def test_every_row_action_is_reachable_on_the_desk_and_all_but_the_screens_own_on_a_phone(self):
+        self.assertEqual({v for v, d, p in Q.reach() if not d}, set())
+        self.assertEqual({v for v, d, p in Q.reach() if not p}, PHONE_UNREACHABLE)
+
+    def test_every_answer_that_acts_says_what_it_did(self):
+        for r in self.rows:
+            with self.subTest(ask=r['q'].text): self.assertNotEqual(r['ideal']['grade'], 'silent', r['ideal']['say'][:200])
+
+    def test_every_bring_up_opens_its_exact_target(self):
+        for r in (r for r in self.rows if r['q'].cat == 'bring-up'):
+            with self.subTest(ask=r['q'].text): self.assertIn(r['q'].expect, r['ideal']['got'])
 
     def test_taskuarys_road_does_what_a_good_answer_asked(self):
         for r in self.rows:

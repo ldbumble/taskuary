@@ -30,11 +30,11 @@ class Q:
     `tools`: what in the real prompt could satisfy it - () when nothing can (unsupported), including a tool the catalogue has but the desk
     has no button for. `demo`: the scripted demo line that fits - reply | report | list | out (beyond a script). `freq`: how often an owner
     would say it, 1-5 - ranks the unsupported list."""
-    def __init__(self, cat, text, table, ideal, expect, tools=None, demo='out', freq=3, sort=None, live=None, note=''):
+    def __init__(self, cat, text, table, ideal, expect, tools=None, demo='out', freq=3, sort=None, live=None, note='', phone=False):
         self.cat, self.text, self.table, self.expect, self.demo, self.freq, self.sort = cat, text, table, expect, demo, freq, sort
-        self.live, self.note = live, note        # live: the task whose agent session is running; note: why it is graded as it is
+        self.live, self.note, self.phone = live, note, phone      # live: the task whose agent session runs; note: why it grades so; phone: a phone chat
         self.ideal = ideal if isinstance(ideal, list) else [ideal]
-        kinds = [json.loads(a[6:])['kind'] for a in self.ideal if a.startswith('CALL: ')]
+        kinds = [json.loads(a[6:])['kind'] for a in self.ideal if isinstance(a, str) and a.startswith('CALL: ')]
         self.tools = tuple(kinds[:1]) if tools is None else tuple(tools)
 
 
@@ -67,11 +67,11 @@ CASES = [
       note='what is on the owner is never swept by typed words: each has its own button, and the line says so'),
     Q('bulk', 'clear them all', 'todo', c('pipe.clear', select={}), 'words', tools=('pipe.clear',), freq=3),
     Q('bulk', 'stop sending me mail from Platform Updates', 'fyi', c('not_ours_sender'), 'light:not_ours', tools=('not_ours_sender', 'preference.exclude_sender'), freq=3),
-    Q('bulk', 'snooze everything from Ruth until Monday', 'todo', 'There is no way to put a set away at once - each one has its own Remind me.', 'words', tools=(), freq=3),
-    Q('bulk', 'close all the tasks from Priya', 'todo', 'Each task closes on its own Mark done - there is no bulk close.', 'words', tools=(), freq=2),
+    Q('bulk', 'snooze everything from Ruth until Monday', 'todo', c('pipe.defer', select={'sender': 'Ruth'}, until='monday 9am'), 'did:pipe.defer', freq=3),
+    Q('bulk', 'close all the tasks from Priya', 'todo', c('pipe.close', select={'sender': 'Priya'}), 'did:pipe.close', freq=2),
     Q('bulk', 'archive all the read mail', 'todo', 'Read mail is already off the rail - it stays on the Timeline.', 'words', tools=(), freq=2),
-    Q('bulk', 'approve all the drafts', 'review', 'Each draft is sent from its own Send - read each before it goes.', 'words', tools=(), freq=2),
-    Q('bulk', 'mark all the approvals as done', 'review', 'Each one is closed with its own Mark done.', 'words', tools=(), freq=1),
+    Q('bulk', 'approve all the drafts', 'review', c('review.each'), 'light:approve', freq=2),
+    Q('bulk', 'mark all the approvals as done', 'review', c('pipe.close', select={'kind': 'review'}), 'did:pipe.close', freq=1),
     # ── item actions over the table ──
     Q('item', 'reply to this', 'todo', c('reply'), 'draft:reply', demo='reply', freq=5),
     Q('item', 'tell Marcus I will look at it this afternoon', 'todo', c('reply', text='I will look at it this afternoon'), 'draft:reply', freq=5),
@@ -98,10 +98,12 @@ CASES = [
     Q('item', 'skip this one', 'todo', c('next'), 'next', freq=4),
     Q('item', 'remember that Marcus owns the bank feed', 'todo', c('remember', text='Marcus owns the bank feed'), 'open:#settings=memory', freq=2),
     Q('item', 'split this into two tasks', 'todo', c('task.split', text='the bank feed; the 4,180 gap'), 'light:split', freq=1),
-    Q('item', 'file a note on it: waiting on the bank', 'todo', [c('task.comment', text='waiting on the bank'), 'Notes go on the task page.'], 'words',
-      tools=(), freq=2, note='task.comment is in the catalogue but has no button on the desk: refused, answered in words'),
-    Q('item', 'set the due date to friday', 'todo', [c('task.update', due='friday'), 'The due day is set on the task page.'], 'words',
-      tools=(), freq=2, note='task.update `due` has no picker on the row (priority and assign do): refused, answered in words'),
+    Q('item', 'file a note on it: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=2),
+    Q('item', 'set the due date to friday', 'todo', c('task.update', due='friday'), 'did:task.update', freq=2),
+    Q('item', 'tick the second to-do', 'todo', c('task.check', item='2'), 'did:task.check', freq=3),
+    Q('item', 'note on the first to-do: the bank has it', 'todo', c('task.check', item='1', note='the bank has it'), 'did:task.check', freq=2),
+    Q('item', 'add a to-do: call the bank', 'todo', c('task.checklist', add=['call the bank']), 'did:task.checklist', freq=3),
+    Q('item', 'press Review changes', 'todo', c('button.light', button='remove'), 'light:remove', freq=1, note='any row button, by name'),
     Q('item', 'reopen it', 'todo', c('task.reopen', ref='TQ-0015'), 'light:reopen', freq=2),
     Q('item', 'delete this', 'todo', c('task.not_a_task'), 'light:remove', freq=2),
     # ── questions ──
@@ -190,6 +192,73 @@ CASES = [
     Q('short', 'done.', 'todo', c('close'), 'light:close', freq=4),
 ]
 
+def find(query, title_hint=''):
+    """The good answer to "bring X up": app.find, then the candidate it lists first, linked - the deterministic part is the index's ranking."""
+    def pick(user):
+        m = re.search(r'link it as (\[[^\]]+\]\(#[^)]+\))', user)
+        return f'Here: {m.group(1)}' if m else 'I could not find it.'
+    return [c('app.find', query=query), pick]
+
+
+BRING_UP = [
+    ('turn off the sound', 'sound', '#settings=config&group=Notifications&key=hand_sound'),
+    ('where do I change my signature', 'signature', '#settings=config&group=Replies&key=email_signature'),
+    ('the sync interval', 'sync interval', '#settings=config&group=Sync%20%26%20startup&key=poll_minutes'),
+    ('desktop notifications', 'desktop notification', '#settings=config&group=Notifications&key=hand_desktop'),
+    ('which AI does triage', 'triage brain', '#settings=config&group=How%20mail%20is%20sorted&key=triage_ai'),
+    ('the assistant model', 'assistant model', '#settings=config&group=How%20mail%20is%20sorted&key=concierge_model'),
+    ('stop marking mail read in my inbox setting', 'mark read source', '#settings=config&group=Sync%20%26%20startup&key=mark_read_enabled'),
+    ('how many days back it catches up', 'catch-up window', '#settings=config&group=Sync%20%26%20startup&key=startup_sync_days'),
+    ('the FYI batching setting', 'fyi read together', '#settings=config&group=Assistant&key=fyi_batch'),
+    ('my second Outlook', 'outlook', '#connector=outlook'),
+    ('LinkedIn', 'linkedin', '#connector=linkedin'),
+    ('the database card', 'database', '#connector=database'),
+    ('the Gmail card', 'gmail', '#connector=gmail'),
+    ('my bank feed', 'bank feed', '#connector=teller'),
+    ('the IMAP mailbox card', 'imap', '#connector=imap'),
+    ('WhatsApp connection', 'whatsapp', '#connector=whatsapp'),
+    ('the Jira card', 'jira', '#connector=jira'),
+    ('the voice AI section', 'voice', '#connections=AI%20%E2%80%94%20voice'),
+    ('my email connections', 'email connections', '#connections=Email'),
+    ('the AP ageing report', 'AP ageing', '#report=4'),
+    ('the end of day report', 'end of day', '#report=2'),
+    ('the headcount report', 'headcount', '#report=3'),
+    ('my workflows', 'workflows', '#report=workflows'),
+    ('my SOUL doc', 'soul', '#settings=docs&doc=soul'),
+    ('what it learned', 'learned', '#settings=docs&doc=learned'),
+    ('the audit log', 'audit log', '#settings=audit'),
+    ('agent profiles', 'profiles', '#profiles'),
+    ('the routing rules', 'routing policies', '#settings=policies'),
+    ('check for updates', 'updates', '#settings=updates'),
+    ('the Hub', 'hub', '#hub'),
+]
+CASES += [Q('bring-up', t, None, find(q), f'link:{h}', freq=4) for t, q, h in BRING_UP]
+CASES += [
+    Q('connectors', 'add LinkedIn as a connector', None, c('connection.create', type='linkedin'), 'open:#connector=linkedin', freq=3),
+    Q('connectors', 'connect Slack', None, c('connection.create', type='slack'), 'open:#connector=slack', freq=3),
+    Q('connectors', 'set up QuickBooks', None, c('connection.create', type='QuickBooks Online'), 'open:#connector=quickbooks', freq=3),
+    Q('connectors', 'I want to hook up my second Outlook', None, c('connection.create', type='outlook'), 'open:#connector=outlook', freq=3),
+    Q('connectors', 'conect gmial', None, c('connection.create', type='gmail'), 'open:#connector=gmail', freq=2, note='a misspelling: the model reads it'),
+    Q('connectors', 'connect Frobnitz', None, [c('connection.create', type='frobnitz'), 'There is no Frobnitz connector.'], 'words', freq=1,
+      note='an unknown one: the miss names the closest cards'),
+]
+# THE PHONE (the owner, 2026-10-20): every act a desk row offers reachable from a phone chat too - the task page's writes at once, an act
+# on an item answered yes or no, a send never without its yes
+PHONE = [
+    Q('phone', 'tick 2', 'todo', c('task.check', item='2'), 'did:task.check', freq=4, phone=True),
+    Q('phone', 'note on 1: the bank has it', 'todo', c('task.check', item='1', note='the bank has it'), 'did:task.check', freq=3, phone=True),
+    Q('phone', 'add a to-do: call the bank', 'todo', c('task.checklist', add=['call the bank']), 'did:task.checklist', freq=3, phone=True),
+    Q('phone', 'note on the task: waiting on the bank', 'todo', c('task.comment', text='waiting on the bank'), 'did:task.comment', freq=3, phone=True),
+    Q('phone', 'snooze everything from Ruth until Monday', 'todo', c('pipe.defer', select={'sender': 'Ruth'}, until='monday 9am'), 'did:pipe.defer', freq=3, phone=True),
+    Q('phone', 'close all from Priya', 'todo', c('pipe.close', select={'sender': 'Priya'}), 'did:pipe.close', freq=2, phone=True),
+    Q('phone', 'mark this done', 'todo', c('close'), 'proposal:task.complete', freq=4, phone=True),
+    Q('phone', 'remind me tomorrow', 'todo', c('task.defer', until='tomorrow 9am'), 'proposal:task.defer', freq=4, phone=True),
+    Q('phone', 'send it', 'review', c('approve'), 'proposal:review.approve', freq=4, phone=True),
+    Q('phone', 'reply to this', 'todo', c('reply'), 'draft:reply', freq=4, phone=True, demo='reply'),
+    Q('phone', 'approve all the drafts', 'review', c('review.each'), 'card', freq=2, phone=True),
+]
+CASES += PHONE
+
 # not tools, but roads the prompt carries all the same: a link to a page (pages_block), plain words, the desk's numbered action words
 ROADS = {'pages': 'APP PAGES', 'words': 'Answer in plain words', 'digit': None}
 
@@ -198,7 +267,9 @@ def _scripted(answers, seen):
     left = list(answers)
     def llm(system, user, **kw):
         seen.append((system, user))
-        return left.pop(0) if left else 'Ok.'
+        if not left: return 'Ok.'
+        a = left.pop(0)
+        return a(user) if callable(a) else a
     return llm
 
 
@@ -209,6 +280,8 @@ def _world():
     s = MemoryStore()
     with mock.patch.object(terminal, 'live_sessions', return_value=[]): demo.seed(s)
     for k in ('learn_enabled', 'auto_draft_enabled'): s.set_setting(k, '0', 't')
+    s.set_task_checklist(1, ['pull the bank feed', 'find the 4,180', 'send Marcus the answer'], 'owner')
+    s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')
     funnel.invalidate()
     return s
 
@@ -227,6 +300,15 @@ def _guards(stack, sort=None, live=None):
     stack.enter_context(mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: sorted_))
 
 
+# THE ACT, SAID (the owner, 2026-10-20: "it should show what it chose to do"): an answer that acted or lit leads with what it did - never a
+# bare word. A proposal on a phone is its question; a look-up's answer and a link are the model's own words.
+ACTS = ('Lit ', 'Opened ', 'Marked ', 'Wrote ', 'Put down ', 'Drafting ', 'Rewriting ', 'Snoozed ', 'Closed ', 'Added ', 'Set ', 'Noted ',
+        'Ticked ', 'Unticked ', 'Took ', 'Renamed ', 'Brought up ')
+def said_what(say: str, got: list, q) -> bool:
+    acted = [g for g in got if g.split(':')[0] in ('light', 'open', 'new', 'next', 'draft', 'cleared', 'did')]
+    return not acted or say.startswith(ACTS) and len(say.split()) > 3
+
+
 def outcomes(out: dict, reads: list) -> list:
     """What the turn did, as words a case can expect."""
     o = []
@@ -238,6 +320,8 @@ def outcomes(out: dict, reads: list) -> list:
     elif d in ('reply', 'redraft'): o.append(f'draft:{d}')
     elif d: o.append(f'decision:{d}')
     if out.get('cleared') is not None: o.append('cleared')
+    if out.get('did'): o.append(f"did:{out['did']}")
+    if out.get('card') or out.get('opened') or out.get('item'): o.append('card')
     if out.get('proposal'): o.append(f"proposal:{out['proposal'].get('kind')}")
     o += [f'read:{k}' for k in reads]
     o += [f'link:{h}' for h in re.findall(r'\]\((#[^)]+)\)', out.get('say') or '')]
@@ -257,6 +341,7 @@ def ideal_turn(q: Q) -> dict:
         _guards(st, q.sort, q.live)
         st.enter_context(mock.patch.object(concierge, '_read', read))
         err = None
+        if q.phone: st.enter_context(concierge.delivering(concierge.PHONE))
         try: out = concierge.say(s, q.text, key=TABLES[q.table], llm=_scripted(q.ideal, seen))
         except Exception as e: out, err = {'say': f'RAISED {type(e).__name__}: {e}'}, e
     heard = next((l[len(concierge.OWNER_SAYS):] for _, u in seen[:1] for l in u.splitlines() if l.startswith(concierge.OWNER_SAYS)), '')
@@ -267,6 +352,7 @@ def ideal_turn(q: Q) -> dict:
     elif err: grade = 'wrong'
     elif say.strip() == concierge.RECEIPTS['next'] and q.expect != 'next': grade = 'bare-Next'
     elif any(m in say for m in MISSES) and q.expect not in ('words',): grade = 'wrong'
+    elif not said_what(say, got, q): grade = 'silent'
     elif any(g.startswith(q.expect) for g in got): grade = 'right'
     else: grade = 'wrong'
     carried = [t for t in q.tools if (t in prompt if t not in ROADS else (ROADS[t] is None or ROADS[t] in prompt))]
@@ -304,13 +390,13 @@ def run_all() -> list:
 
 def table(rows) -> str:
     cats = list(dict.fromkeys(r['q'].cat for r in rows))
-    out = ['IDEAL brain, Taskuary\'s road (right / wrong / unsupported / bare-Next) | DEMO brain (right / wrong)']
+    out = ['IDEAL brain, Taskuary\'s road (right / wrong / unsupported / bare-Next / silent) | DEMO brain (right / wrong)']
     for cat in cats + ['ALL']:
         rs = [r for r in rows if cat in ('ALL', r['q'].cat)]
         g, d = Counter(r['ideal']['grade'] for r in rs), Counter(r['demo']['grade'] for r in rs)
-        out.append(f"  {cat:<11} {len(rs):>3}  ideal {g['right']:>3} / {g['wrong']:>2} / {g['unsupported']:>2} / {g['bare-Next']:>2}"
+        out.append(f"  {cat:<11} {len(rs):>3}  ideal {g['right']:>3} / {g['wrong']:>2} / {g['unsupported']:>2} / {g['bare-Next']:>2} / {g['silent']:>2}"
                    f"   demo {d['right']:>3} / {d['wrong'] + d['bare-Next']:>2}")
-    bad = [r for r in rows if r['ideal']['grade'] in ('wrong', 'bare-Next')]
+    bad = [r for r in rows if r['ideal']['grade'] in ('wrong', 'bare-Next', 'silent')]
     if bad: out += ['', 'IDEAL WRONG:'] + [f"  [{r['q'].cat}] {r['q'].text!r} expect {r['q'].expect} got {r['ideal']['got']} - {r['ideal']['say'][:160]!r}" for r in bad]
     dbad = [r for r in rows if r['demo']['grade'] != 'right']
     if dbad: out += ['', 'DEMO WRONG:'] + [f"  [{r['q'].cat}] {r['q'].text!r} wants {r['q'].demo} got {r['demo']['line']} - {r['demo']['say'][:110]!r}" for r in dbad]
@@ -319,7 +405,20 @@ def table(rows) -> str:
     un = sorted((r for r in rows if r['ideal']['grade'] == 'unsupported'), key=lambda r: -r['q'].freq)
     if un: out += ['', 'UNSUPPORTED (no tool, or no button on the desk), most common first:'] + [
         f"  {r['q'].freq}  {r['q'].text!r}" + (f"  - {r['q'].note}" if r['q'].note else '') for r in un]
+    out += ['', 'ROW ACTIONS (desk / phone):'] + [f"  {v:<16} desk: {d or '-':<22} phone: {p or 'UNREACHABLE'}" for v, d, p in reach()]
     return '\n'.join(out)
+
+
+def reach() -> list:
+    """Every button a desk row can draw, and the road that reaches it from the Assistant on the desk and from a phone chat. The desk lights
+    any row button (button.light); a phone has no rows, so it reaches an act only by the decision or tool that IS it."""
+    from taskuary import buttons, concierge, toolcatalog
+    rows = []
+    for v, d in buttons.VERBS.items():
+        if not d.get('row') or v == 'fix': continue          # fix is a failure's own way out, worn by the failure
+        tool = v if v in toolcatalog.DECISIONS else toolcatalog.CHIP_TOOL.get(v) or concierge.PICKER_TOOL.get(v)
+        rows.append((v, tool or 'button.light', tool or ''))
+    return rows
 
 
 if __name__ == '__main__':

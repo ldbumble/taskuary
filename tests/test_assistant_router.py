@@ -107,10 +107,48 @@ class DeskRoutes(unittest.TestCase):
         s = store()
         out, spawn = say(s, 'research which payroll vendors integrate with Payworth', None,
                          'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
-        self.assertEqual(out['new'], {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth'})
+        self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')},
+                         {'kind': 'agent', 'how': 'general', 'text': 'which payroll vendors integrate with Payworth'})
         self.assertIn(buttons.label('regular_agent'), out['say']); self.assertNotIn('below', out['say'])
         spawn.assert_not_called()
         self.assertEqual([t for t in s.list_tasks() if 'Payworth' in str(t.get('Title'))], [])
+
+    def test_the_line_that_wrote_into_new_says_what_its_card_started(self):
+        # "Wrote it into New - Send to agent there starts it." stood over a researcher already working, with no New card left under it:
+        # the card's press started TQ-n and took the card away (the owner, 2026-10-21). The press says the line again as what it did.
+        from fastapi.testclient import TestClient
+        from taskuary import general, server
+        s = store()
+        out, _ = say(s, "look at Gail Moreno's mail about the renewal and brief me before the meeting", None,
+                     'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "brief me on the renewal mail from Gail Moreno"}}')
+        line = out['new']['line']
+        dock = general.dock_task(s)[0]['TaskId']
+        s.upsert_agent('researcher', 'research', 'cli', '{}')
+        self.assertTrue(any(c['CommentId'] == line and c['Body'].startswith('Wrote it into New') for c in s.list_comments(dock)))
+        tid = s.create_task({'Title': 'Brief me on the renewal mail from Gail Moreno', 'Kind': 'general', 'Assignee': 'agent:researcher'}, 'owner')
+        started = {'dispatch': 'assistant', 'agent': 'Codex', 'started': True, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=started):
+            got = TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'agent': 'researcher', 'said': line}).json()
+        said = f'Started TQ-{tid:04d} with the researcher on Codex.'
+        self.assertEqual(got['said'], said)
+        self.assertEqual(next(c['Body'] for c in s.list_comments(dock) if c['CommentId'] == line), said)
+
+    def test_a_start_that_did_not_happen_leaves_the_line_and_no_other_line_is_rewritten(self):
+        from fastapi.testclient import TestClient
+        from taskuary import server
+        s = store()
+        out, _ = say(s, 'research which payroll vendors integrate with Payworth', None,
+                     'CALL: {"kind": "task.create_from_text", "params": {"kind": "general", "text": "which payroll vendors integrate with Payworth"}}')
+        line = out['new']['line']
+        tid = s.create_task({'Title': 'Payroll vendors', 'Kind': 'general'}, 'owner')
+        other = s.add_comment(tid, 'assistant', 'assistant', 'not a chat line')
+        refused = {'dispatch': 'needs_repo', 'started': False, 'existing': False, 'taskId': tid, 'ref': f'TQ-{tid:04d}'}
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=refused):
+            self.assertNotIn('said', TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'said': line}).json())
+        ok = {**refused, 'dispatch': 'assistant', 'started': True}
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.server._dispatch_task_to_its_agent', return_value=ok):
+            self.assertNotIn('said', TestClient(server.app).post(f'/api/tasks/{tid}/dispatch', json={'kind': 'general', 'said': other}).json())
+        self.assertEqual(next(c['Body'] for c in s.list_comments(tid) if c['CommentId'] == other), 'not a chat line')
 
     def test_a_button_the_row_does_not_draw_is_never_named(self):
         # a task's row has no Not ours: "Press Not ours" was said over it, lit nothing, and the model was never told (verify, 2026-10-19)
@@ -188,7 +226,7 @@ class DeskRoutes(unittest.TestCase):
         sorts = iter([{'kind': 'report', 'why': 'a check'}, {'kind': 'connection', 'provider': 'quickbooks', 'why': 'their books'}])
         with mock.patch.object(concierge, '_compose_llm', return_value=lambda *a, **k: json.dumps(next(sorts))):
             out, _ = say(s, 'every Monday send me the overdue invoices', None, 'CALL: {"kind": "setup", "params": {"text": "every Monday send me the overdue invoices"}}')
-            self.assertEqual(out['new'], {'kind': 'report', 'how': '', 'text': 'every Monday send me the overdue invoices'})
+            self.assertEqual({k: out['new'][k] for k in ('kind', 'how', 'text')}, {'kind': 'report', 'how': '', 'text': 'every Monday send me the overdue invoices'})
             out, _ = say(s, 'connect our books', None, 'CALL: {"kind": "setup", "params": {"text": "connect our books"}}')
             self.assertEqual(out['open'], '#connector=quickbooks&step=1')
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])

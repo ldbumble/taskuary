@@ -420,6 +420,8 @@ class DispatchBody(BaseModel):
     # step - a task nobody had pressed - while the goal's card showed the error under a line that never moved (the matrix's verify,
     # 2026-10-20). `via` is the goal the press was made on; a failed start is left there, where it was pressed and is read.
     via: int | None = None
+    # the Assistant's "Wrote it into New" line whose card this press is: said again as what it started (concierge.said_started)
+    said: int | None = None
 class PolicyBody(BaseModel):
     PolicyId: int | None = None; Name: str | None = None; Kind: str | None = None
     Pattern: str | None = None; Action: str | None = None; Reason: str | None = None
@@ -2262,6 +2264,10 @@ def dispatch_task(task_id: int, body: DispatchBody, background: BackgroundTasks)
     try:
         out = _dispatch_task_to_its_agent(task_id, body, background)
         if isinstance(out, dict) and (out.get('started') or out.get('existing')): _start_went(_pressed_on(task_id, body))
+        if isinstance(out, dict) and body.said:
+            from . import concierge
+            said = concierge.said_started(store, body.said, out)
+            if said: out = {**out, 'said': said}
         return out
     except HTTPException as e:
         # a repository the agent cannot open - none chosen, several plausible, a path that is gone - is a

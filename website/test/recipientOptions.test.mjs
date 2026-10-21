@@ -6,7 +6,7 @@ import {
 
 const options = Array.from({ length: 12 }, (_, i) => ({
   to: `chat-${i}`,
-  name: i === 10 ? "Ashgrove Night Shift" : `Conversation ${i}`,
+  name: i === 10 ? "Northwind Night Shift" : `Conversation ${i}`,
   hint: i === 11 ? "Finance leadership" : `${i + 1} messages`,
 }));
 
@@ -15,7 +15,7 @@ test("a fresh recipient picker only shows the five newest options", () => {
 });
 
 test("typing searches every option, not only the five visible recents", () => {
-  assert.deepEqual(recipientOptions(options, "ashgrove").map((x) => x.to), ["chat-10"]);
+  assert.deepEqual(recipientOptions(options, "northwind").map((x) => x.to), ["chat-10"]);
   assert.deepEqual(recipientOptions(options, "FINANCE leadership").map((x) => x.to), ["chat-11"]);
   assert.deepEqual(recipientOptions(options, "chat-9").map((x) => x.to), ["chat-9"]);
 });
@@ -35,5 +35,5 @@ test("email recipients can be selected, typed, pasted as a list, and deduplicate
 
 test("a typed address is offered alongside searchable known contacts", () => {
   assert.equal(emailRecipientOptions(options, "outside@example.com")[0], "outside@example.com");
-  assert.deepEqual(emailRecipientOptions(options, "Ashgrove").map((x) => x.to), ["chat-10"]);
+  assert.deepEqual(emailRecipientOptions(options, "Northwind").map((x) => x.to), ["chat-10"]);
 });

@@ -35,7 +35,7 @@ COMPOSE_SYSTEM = (
     'You are writing a message the owner is about to send. It is NOT a reply - nothing arrived; '
     'they are starting this conversation, and the brief below is what they told you it is about.\n'
     'Turn the brief into the actual message. The brief is shorthand between the owner and you '
-    '("the census numbers he asked for, plus why Ashgrove moved") - the recipient must never see '
+    '("the census numbers he asked for, plus why Site 7 moved") - the recipient must never see '
     'the shorthand, only the message it stands for.\n'
     'Output ONLY the message body: no subject line, no "Draft:", no markdown, no notes about '
     'what you did.\n'

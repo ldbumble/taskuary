@@ -239,13 +239,13 @@ const P_AGENT = `<div class="abar"><b>claude finished and closed itself</b><span
     <span class="cd">›</span> Bash <span class="ch">census --by-facility --q3</span><br>
     <span class="co">&nbsp;&nbsp;14 facilities, Jul–Sep → census-q3.xlsx</span><br>
     <span class="cd">›</span> Read <span class="ch">reports/census-q3.xlsx</span><br>
-    <span class="cd">&nbsp;&nbsp;Riverbend −4.2, Ashgrove +5.1 — both outside the usual band</span><br>
+    <span class="cd">&nbsp;&nbsp;Site 3 −4.2, Site 7 +5.1 — both outside the usual band</span><br>
     <span class="cd">›</span> Bash <span class="ch">taskuary --done "pulled Q3 census for all 14 sites"</span>
   </div>
   <div class="files"><span class="file">reports/census-q3.xlsx</span></div>`;
 
 const P_REPLY = `<div class="pendline">${state("reply")}<span>Written by the agent from what it found. Nothing has been sent.</span></div>
-  <div class="draft">Marcus — attached, Q3 census by facility for all 14 sites (Jul–Sep). Riverbend and Ashgrove both moved more than four points, so I flagged those two rows. Shout if the board pack wants the monthly split instead of the quarter.</div>`;
+  <div class="draft">Marcus — attached, Q3 census by facility for all 14 sites (Jul–Sep). Site 3 and Site 7 both moved more than four points, so I flagged those two rows. Shout if the board pack wants the monthly split instead of the quarter.</div>`;
 
 const TRAYS = {
   msg: `<div class="acts"><div class="btn p">Send it to an agent</div><div class="btn">Reply to this</div>
@@ -270,7 +270,7 @@ const ROWS = [
   { day: "Today", t: "9:42 AM", ch: "teams", from: "Dana Whitfield", s: "working",
     subj: "resident refund still on the ledger", blurb: "<b>TQ-0261</b> · claude, 6 min in · taskuary/intacct.py" },
   { day: "Today", t: "9:31 AM", ch: "self", from: "You", s: "mine",
-    subj: "chase the Ashgrove AP replacement Tuesday", blurb: "<b>your own note</b> · nothing is working it, and nothing will" },
+    subj: "chase the Payworth AP replacement Tuesday", blurb: "<b>your own note</b> · nothing is working it, and nothing will" },
   { day: "Today", t: "9:18 AM", ch: "github", from: "taskuary/taskuary", s: "waving",
     subj: "CI failed on master — test_terminal", blurb: "<b>TQ-0260</b> · it asked you something 4 minutes ago" },
   { day: "Today", t: "9:04 AM", ch: "self", from: "Board", s: "working",
@@ -283,7 +283,7 @@ const ROWS = [
   { day: "Today", t: "8:12 AM", ch: "email", from: "ap@vendorco.io", s: "held",
     subj: "Invoice 4471 — payment details changed", blurb: "first mail from this address · nothing started" },
   { day: "Yesterday", t: "6:04 PM", ch: "whatsapp", from: "Priya Raman", s: "done",
-    subj: "Ashgrove wifi dropping east wing", blurb: "<b>TQ-0257</b> · closed · reply sent 6:39 PM" },
+    subj: "Site 7 wifi dropping east wing", blurb: "<b>TQ-0257</b> · closed · reply sent 6:39 PM" },
 ];
 
 const caret = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>`;
@@ -494,7 +494,7 @@ writeFileSync(join(DIR, "New.dc.html"), page(`
       </div>
       <div class="field"><label>To</label><div class="inp">Marcus Bell &lt;m.bell@…&gt;</div></div>
       <div class="field"><label>What's this about</label>
-        <div class="inp">the census numbers he asked for, plus why Ashgrove moved</div></div>
+        <div class="inp">the census numbers he asked for, plus why Site 7 moved</div></div>
       <div class="field"><label>And then</label>
         <div class="forks">
           <div class="fork on"><b>Draft it and show me</b>

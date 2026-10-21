@@ -308,6 +308,7 @@ def _has(store, v: str) -> bool:
 
 # WHERE THINGS ARE: the owner's question, and the look-up that answers it - an example CALL each.
 WHERE = (
+    ('anything in the app to BRING UP - a setting, a connector card, a page, a report', 'app.find', {'query': 'signature'}),
     ('what is waiting on the owner', 'pipe.list', {}),
     ("a task's story - messages, notes, agent and draft", 'task.read', {'ref': 'TQ-0123'}),
     ('mail or chat about something, however old', 'timeline.search', {'contains': 'invoice', 'days': 60}),
@@ -317,8 +318,6 @@ WHERE = (
     ('how something is done here - a policy, a system, a site', 'knowledge.search', {'query': 'PO limit'}),
     ('how Taskuary itself works', 'docs.search', {'query': 'remind me'}),
     ('reports and workflows', 'reports.list', {}),
-    ('a setting', 'setting.read', {'label': 'auto-drafts'}),
-    ('connections', 'connections.list', {}),
     ('agents, profiles and which brain does what', 'agents.list', {}),
     ('the repositories a coding agent can work in', 'repos.list', {}),
     ("the owner's meetings", 'calendar.read', {'from': 'tomorrow'}),
@@ -390,6 +389,9 @@ def bucket_list(name: str) -> str:
 # (the owner, 2026-09-07: "read should be immediate, yes it can take time since it's searching").
 # A read never moves what is on the table: asking about another task must not hijack the walk.
 READS = {
+    'app.find':         ('bring ANYTHING in the app up by words - a setting, a connector card (the catalogue\'s and the owner\'s own, by name), a '
+                         'page, a report or workflow, a document: `query`, the words that name it ("sound", "signature", "second outlook"). '
+                         'It returns the best candidates with their links: link the one that fits, [its name](its link), and it opens'),
     'task.read':        'everything on one task - its summary, status, the messages on it, what agents said and did. `ref`: TQ-0401 (or `id`)',
     'timeline.search':  ('find messages anywhere in the history, however old - takes the same SELECT fields below, plus `limit`; here '
                          '`contains` matches the subject, the sender AND the body, best match first. Returns m-numbers, refs, senders, '
@@ -461,7 +463,7 @@ def is_read(kind: str) -> bool: return kind in READS
 def valid(kind: str, params: dict) -> str:
     """'' when this CALL is one the registry actually runs, otherwise why not."""
     if kind in READS:
-        need = {'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
+        need = {'app.find': ('query',), 'task.read': ('ref', 'id'), 'report.read': ('title', 'source_id'), 'timeline.search': (),
                 'reports.list': (), 'settings.list': (), 'setting.read': ('key', 'label'),
                 'connections.list': (), 'connection.read': ('name', 'connector_id'), 'agents.list': (),
                 'knowledge.search': ('query',), 'tasks.list': (), 'asks.list': (), 'message.read': ('mid', 'id'),

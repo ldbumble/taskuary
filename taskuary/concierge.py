@@ -1926,6 +1926,13 @@ def read_op(store, kind: str, params: dict) -> str:
         for c in (store.list_comments(tid) or [])[-8:]:
             out.append(f"  {c.get('Actor')} ({c.get('ActorType')}) {str(c.get('CreatedAt') or '')[:16]}: {_cut(c.get('Body') or '', 500)}")
         return NEWLINE.join(out)
+    # THE APP, INDEXED (search.places): the candidates and the link each opens - the model links the one that fits
+    if kind == 'app.find':
+        from . import search
+        hits = search.places(store, str(p.get('query') or ''))
+        if not hits: return f"Nothing in the app is called that ({p.get('query')!r}). Try the one word that names it."
+        return NEWLINE.join(f"{h['title']} ({h['type']}{' - ' + h['where'] if h.get('where') else ''}{', ' + h['sub'] if h.get('sub') else ''}): link it as "
+                            f"[{h['title']}]({h['href']})" for h in hits)
     # THE APP ITSELF, by name - appfacts reads the tables the tabs read. A miss lists what exists, so
     # the second try finds it; an id is printed with every row, so the next call can be exact.
     if kind == 'report.read':

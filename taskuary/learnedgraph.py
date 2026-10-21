@@ -159,7 +159,7 @@ def graph(store) -> dict:
     where demotions and deletions come from. Deleted lines come from history alone."""
     doc = store.get_doc('learned') or ''
     ls, log = lines(doc), reflect_log(store)
-    hist = store.learned_history()
+    hist, named = store.learned_history(), _named(store)
     by_key = {}
     for h in hist: by_key.setdefault(h['Key'], []).append(h)
     out = []
@@ -179,7 +179,7 @@ def graph(store) -> dict:
         if steps and steps[-1]['score'] != l['score']: steps.append({'date': None, 'score': l['score'], 'ev': None, 'effect': 0, 'action': 'now'})
         people = {(e.get('key') or e.get('label') or '')[:40] for e in evs if e.get('kind') == 'verdict'}
         eff = effective(l, log)
-        out.append({**l, 'evidence': evs, 'steps': steps, 'effective': eff,
+        out.append({**l, 'text': named(l.get('text')), 'evidence': evs, 'steps': steps, 'effective': eff,
                     'eligible': l['status'] == 'hypothesis' and eff >= PROMOTE_AT and len(dated) >= 3 and len(people) >= 2})
     live_keys = {l['key'] for l in ls}
     deleted = []
@@ -188,7 +188,7 @@ def graph(store) -> dict:
         last = hs[-1]
         if last['Action'] != 'deleted': continue
         contradictions = [h for h in hs if h['Action'] == 'demoted']
-        deleted.append({'key': k, 'text': last['Text'], 'status': 'deleted', 'score': 0, 'deleted_at': last['At'],
+        deleted.append({'key': k, 'text': named(last['Text']), 'status': 'deleted', 'score': 0, 'deleted_at': last['At'],
                         'contradictions': [{'date': h['At'], 'ev': h['Ev']} for h in contradictions]})
     used = {e for l in ls for e in l['ev']}
     loose = [{'id': f"mem{m['MemoryId']}", 'kind': 'verdict', 'date': m.get('CreatedAt'), 'label': m.get('Note') or '', 'scope': m.get('Scope'), 'key': m.get('ScopeKey')}
@@ -214,10 +214,18 @@ SAYS = {'born': 'New guess', 'strengthened': 'Seen again', 'promoted': 'Now a ru
         'merged': 'Merged into a line that says the same', 'faded': 'Faded - nothing confirmed it for a while', 'deleted': 'Removed'}
 
 
+def _named(store):
+    """A line as the owner reads it: LEARNED.md keeps {{owner_first}} where the name goes (learn.moves writes it so), and the
+    What changed list showed "{{owner_first}} presses Next" raw (the UI audit, 2026-10-21)."""
+    from .store import render_doc
+    who = store.owner()
+    return lambda text: render_doc(text, who)
+
+
 def changes(store, days: int = 30) -> list:
     """The history of the last `days`, newest first: [{at, action, says, text, status, score}]."""
     since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-    rows = [h for h in store.learned_history() if str(h.get('At') or '') >= since]
-    return [{'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': h['Text'],
+    rows, named = [h for h in store.learned_history() if str(h.get('At') or '') >= since], _named(store)
+    return [{'at': h['At'], 'action': h['Action'], 'says': SAYS.get(h['Action'], h['Action']), 'text': named(h['Text']),
              'status': h['Status'], 'score': h['Score']} for h in reversed(rows)]
 

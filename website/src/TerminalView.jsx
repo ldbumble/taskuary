@@ -824,7 +824,7 @@ export const ThemeHint = ({ cli = "" }) => (
     palette — light ones first (GitHub Light is the default; Catppuccin Latte, Solarized Light, One Light), then the
     dark ones (Catppuccin Mocha, Dracula, Tokyo Night, Gruvbox, One Dark). That restyles codex and any other CLI,
     since a TUI paints with the terminal's colors.
-    {(!cli || cli === "claude") && <>
+    {cli === "claude" && <>
       {" "}Claude Code paints its own colours, so the next Claude session you start opens in its light or dark theme to
       match — one already running keeps the theme it opened with. A custom theme you chose with /theme is left alone.
     </>}

@@ -26,7 +26,8 @@ def can_resume(store, pick):
     # over ACP the id is the protocol's own (session/new) and session/load is how it is picked back up:
     # devin has no argv resume flag and still reloads its sessions, yet the id it returned was dropped
     # on the floor and the row saved NativeId '' (measured 2026-09-20)
-    return bool(resume_argv(prof, 'x')) or bool(prof.get('acp'))
+    try: return bool(resume_argv(prof, 'x', store)) or bool(prof.get('acp'))
+    except ValueError: return False          # agents.NoAI: nothing runs it, so nothing resumes
 
 
 def previous_work(store, limit=5):

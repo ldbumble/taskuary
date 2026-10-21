@@ -269,15 +269,27 @@ def run_agent(cfg):
     # owner, 2026-09-10: a workflow is not code, so it should not always go to the coding agent). An unnamed
     # workflow runs on the default brain - a CLI tool, no profile - since default_agent is now the coding profile.
     from . import agents as hub_agents
-    name = str(cfg.get('agent') or hub_agents.default_brain(store)).strip()
+    # the agent it names, else the one resolver's CLI (agents.resolve_brain) - and with no CLI at all, the AI connection there is:
+    # an install with only an API card runs its reports too (the owner, 2026-10-21)
+    pick = '' if cfg.get('agent') else hub_agents.resolve_brain(store, 'coding')
+    name = str(cfg.get('agent') or (pick[4:] if pick.startswith('cli:') else '')).strip()
     # Agent-backed reports are read-only even when their source lives in a repository folder.
     # Only the Workflows door persists this explicit grant; executor type alone grants nothing.
     writes = cfg.get('access') == 'write'
-    llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
-                       cli_tools=writes, read_only=not writes, research=not writes)
+    llm = None
+    if name:
+        try: llm = make_cli_llm(store, name, cfg.get('model') or None, cwd=cfg.get('cwd') or None,
+                                cli_tools=writes, read_only=not writes, research=not writes)
+        except hub_agents.NoAI: llm = None
+    if llm is None:
+        api = pick if pick.startswith('connector:') else hub_agents.resolve_brain(store, 'general')
+        if api.startswith('connector:'):
+            from .llm import build_llm
+            llm = build_llm(store, pick=api, model=cfg.get('model') or None, research=True)
+            name = name or 'your AI connection'
     if llm is None:
         from . import words
-        raise RuntimeError(f"no CLI agent named {name!r} - add one under {words.name('ai_apps')}")
+        raise RuntimeError(f"{hub_agents.NO_AI} to run this report - connect one on {words.name('ai_apps')}")
     # Long workflows promoted from an assistant conversation live in Taskuary's neutral skill
     # store. Expand them into the prompt so one skill works through Claude, Codex, Gemini, or any
     # custom CLI. A skill that is not there remains the provider's normal `/skill-name` command.

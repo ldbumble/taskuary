@@ -105,7 +105,7 @@ class HeldAskTests(Base):
     def test_the_three_hooks_of_one_ask_name_the_same_questions(self):
         th, _ = self.ask_in_background()
         # the permission prompt of the same tool call arrives too: the same requests, not three more
-        hooks.receive({'hook_event_name': 'PermissionRequest', 'tool_name': 'AskUserQuestion', 'session_id': 'sess-1', 'cwd': CWD, 'tool_input': QS})
+        hooks.receive({'hook_event_name': 'PermissionRequest', 'tool_name': 'AskUserQuestion', 'session_id': 'sess-1', 'cwd': CWD, 'tool_input': QS}, cli='claude')
         self.assertEqual(len(ws.question_group(self.s, self.t)), 3)
         ws.release(self.tid); th.join(2)
 

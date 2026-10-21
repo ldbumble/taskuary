@@ -50,6 +50,8 @@ test("the theme note rides with the pane, and Claude Code's own /theme stays cla
   const term = read("TerminalView.jsx");
   assert.match(term, /export const ThemeHint = \(\{ cli = "" \}\)/);
   assert.match(term, /cli === "claude"/);      // codex paints with the terminal; it has no /theme
+  // ...and an UNKNOWN cli is not claude: the note is Claude's only when the pane is Claude's
+  assert.doesNotMatch(term, /!cli \|\| cli === "claude"/);
 });
 
 test("the agents page offers it on a row Taskuary can set up", () => {

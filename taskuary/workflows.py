@@ -192,8 +192,9 @@ def brain(store, cfg: dict, task: dict = None) -> dict:
     pick, label, dflt = base if not want or want == base[0] else general._selected(store, pick=want)
     if runs_on(cfg) == 'coding' and not pick.startswith('cli:'):
         # ...a coding run needs a terminal, which an API brain has not: the coding CLI, on its own main model
-        key = hub.default_brain(store); pick = f'cli:{key}' if key else ''
-        dflt = str(((conf.get('cli_connections') or {}).get(key) or {}).get('model') or '')
+        # ...and with no coding tool at all it stays on the AI connection it has: the general agent works it (terminal._as_general)
+        key = hub.resolve_brain(store, 'coding', cli_only=True)[4:]
+        if key: pick, dflt = f'cli:{key}', str(((conf.get('cli_connections') or {}).get(key) or {}).get('model') or '')
     key = hub.brain_key(store, pick, conf) if pick.startswith('cli:') else ''
     cli = _cli_of(conf, key) if key else ''
     tool = _tool(cli) if cli else str(label or '').replace(' (API)', '') or 'no AI connected'

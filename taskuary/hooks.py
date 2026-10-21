@@ -65,7 +65,7 @@ MIN_VERSION = (2, 0, 0)
 SESSION_GOES_ON = ('clear', 'resume', 'complete')
 
 
-def cli_version(cmd: str = 'claude') -> str | None:
+def cli_version(cmd: str) -> str | None:
     """`claude --version` -> '2.1.3'; None when the CLI is not there or will not say."""
     import shutil
     path = shutil.which(cmd) or cmd
@@ -133,7 +133,7 @@ def token_arg(token: str, home: str = None) -> str:
     return f' -H "@{header_file(token, home)}"' if token else ''
 
 
-def command(base: str, token: str = '', cli: str = 'claude', home: str = None) -> str:
+def command(base: str, token: str, cli: str, home: str = None) -> str:
     """Claude's hook: POST the event. curl.exe by name on Windows (bare `curl` is a PowerShell alias for
     Invoke-WebRequest there). -m 3: a hook must never hold the agent. stdin -> body. -o to the null
     device (not a shell redirect: PowerShell has no /dev/null) - a hook's stdout is read by Claude as a
@@ -183,7 +183,7 @@ def session_hooks(token: str = None, base: str = None) -> dict:
     """Claude's hooks for ONE session's --settings: the events and the ask hook, for an instance that may not write them
     user-wide (user_wide). Claude ADDS a --settings file's hooks to the user's (origin.SETTINGS_HOOKS_MERGE)."""
     base, token = base or base_url(), agent_token() if token is None else token
-    ev = {'type': 'command', 'command': command(base, token), 'timeout': 5}
+    ev = {'type': 'command', 'command': command(base, token, 'claude'), 'timeout': 5}
     d = {e: [{'hooks': [ev]}] for e in EVENTS}
     d['PreToolUse'] = [{'matcher': 'AskUserQuestion', 'hooks': [{'type': 'command', 'command': ask_command(base, token), 'timeout': ASK_TIMEOUT}]},
                        {'matcher': REASON_MATCH, 'hooks': [{'type': 'command', 'command': reason_command(base, token), 'timeout': ASK_TIMEOUT}]}]
@@ -229,7 +229,7 @@ def install_user(cli: str, base: str = None, token: str = None, home: str = None
         events, mark = DEVIN_EVENTS, '/api/hooks/devin'
     elif cli == 'claude':
         p = Path(home) / '.claude' / 'settings.json'
-        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, home=th), 'timeout': 5}
+        entry = {'type': 'command', 'command': command(base or base_url(), agent_token() if token is None else token, 'claude', home=th), 'timeout': 5}
         events, mark = EVENTS, MARK
     else:
         p = Path(home) / '.codex' / 'hooks.json'
@@ -307,7 +307,7 @@ def install(cwd: str, base: str = None, token: str = '', cmd: str = None) -> boo
     hooks = cur.setdefault('hooks', {})
     if not isinstance(hooks, dict): hooks = cur['hooks'] = {}
     before = json.dumps(cur, sort_keys=True)
-    _merge(hooks, EVENTS, {'type': 'command', 'command': command(base, token), 'timeout': 5}, MARK)
+    _merge(hooks, EVENTS, {'type': 'command', 'command': command(base, token, 'claude'), 'timeout': 5}, MARK)
     if json.dumps(cur, sort_keys=True) == before: return False
     try: _write_json(p, cur)
     except OSError as e:
@@ -531,7 +531,7 @@ def _same_dir(a: str, b: str) -> bool:
     except OSError: return os.path.normcase(os.path.normpath(str(a or ''))) == os.path.normcase(os.path.normpath(str(b or '')))
 
 
-def receive(payload: dict, cli: str = 'claude') -> dict:
+def receive(payload: dict, cli: str) -> dict:
     """A hook fired: find the session it belongs to (same checkout, same CLI, most recently active unless
     already bound to this CLI session id) and hand its observations to the witness."""
     from . import terminal as term, witness
@@ -583,7 +583,7 @@ def receive(payload: dict, cli: str = 'claude') -> dict:
     return {'bound': True, 'sid': t.sid}
 
 
-def _pane(payload: dict, cli: str = 'claude'):
+def _pane(payload: dict, cli: str):
     """The live pane this hook's session is BOUND to - never a free one: an ask is held only for a pane of ours."""
     from . import terminal as term
     cwd, sid = str(payload.get('cwd') or ''), str(payload.get('session_id') or '')
@@ -599,7 +599,7 @@ def ask(payload: dict, wait: float = None) -> dict:
     pane, released, or out of time: {} - Claude draws its form and the terminal answers as it always did."""
     from . import workerstate as ws
     if str(payload.get('tool_name') or '') != 'AskUserQuestion': return {}
-    t = _pane(payload)
+    t = _pane(payload, 'claude')            # AskUserQuestion is Claude's own tool, asked through Claude's hook
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     qs, g = _questions(payload), _group(payload)
@@ -649,7 +649,7 @@ def run_sid(payload: dict, tid: int) -> str:
     days with nothing to answer (task 10 live check). The pane bound to this payload, else the task's live session,
     else - a headless run, no session of ours - the CLI's id, which workerstate keeps while no live run owns the task."""
     from . import workerstate as ws
-    t = _pane(payload)
+    t = _pane(payload, 'claude')            # the permit hook is Claude's (origin.session_settings)
     if t and t.task_id == tid: return str(t.sid)
     live = ws._live(tid)
     return str(live.sid) if live else str(payload.get('session_id') or '')

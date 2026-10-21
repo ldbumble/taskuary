@@ -8,6 +8,7 @@ answered, the third one gone (the wall, 2026-08-31).
 
 A person who asks a second question mid-sentence expects to be answered next. So it queues.
 """
+import json
 import threading
 import time
 import unittest
@@ -137,6 +138,7 @@ class OneConversationNotTwentyTests(unittest.TestCase):
         self.tid = self.s.create_task({'Title': 'chat', 'Kind': 'general'}, 'o')
         self.sess = general.GeneralSession(self.s, self.tid)
         self.sess.pick, self.sess.provider = 'cli:claude', 'coding'
+        self.s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude'}))     # the CLI the pick names - none, and nothing resumes
 
     def _brain(self, sid='sess-1', fail_on_resume=False):
         seen = []

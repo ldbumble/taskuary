@@ -64,4 +64,4 @@ def test_claude_version_caches_only_a_success(monkeypatch):
         if isinstance(o, BaseException): raise o
         return o
     monkeypatch.setattr(origin.subprocess, 'run', run); monkeypatch.setattr(agents, '_resolve_cmd', lambda c: ['claude.exe'])
-    assert origin._claude_version() == () and origin._claude_version() == (2, 1, 300) and origin._claude_version() == (2, 1, 300)
+    assert origin._claude_version('claude') == () and origin._claude_version('claude') == (2, 1, 300) and origin._claude_version('claude') == (2, 1, 300)

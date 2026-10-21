@@ -88,13 +88,14 @@ def refused(e: Refusal) -> RefusedForStranger: return RefusedForStranger(str(e))
 
 _ver = {}   # resolved command -> version, SUCCESSFUL parses only: a transient failure must be retried, not remembered as "too old"
 
-def _claude_version(cmd: str = 'claude') -> tuple:
+def _claude_version(cmd: str) -> tuple:
     """Cached on success, per binary: launch_mode runs on every start and `claude --version` takes about a second - and two
     profiles may launch two different claudes, so one's version must not answer for the other's."""
     # through the launch's own resolver: a bare 'claude' never finds npm's claude.cmd on Windows (CreateProcess adds only
     # .exe), and every stranger task was refused as "too old" beside a 2.1.299 that launched fine (task 10 live check)
     from .agents import _resolve_cmd
-    try: argv = tuple(_resolve_cmd(cmd or 'claude'))
+    if not cmd: return ()                    # no command, no version - never a claude probed in its place
+    try: argv = tuple(_resolve_cmd(cmd))
     except OSError: return ()
     if argv in _ver: return _ver[argv]
     try: out = subprocess.run([*argv, '--version'], capture_output=True, text=True, timeout=20).stdout
@@ -110,7 +111,7 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     if not tid or of_task(store, tid)[0] != 'stranger': return 'full'
     cli = clis._base(cli)
     if cli not in clis.AUTO: raise Refusal(no_reviewer(store))
-    if cli == 'claude' and _claude_version(cmd or 'claude') < MIN_CLAUDE:
+    if cli == 'claude' and _claude_version(cmd or cli) < MIN_CLAUDE:      # `cli` IS claude here - the CLI's own name
         raise Refusal("a stranger's task needs Claude Code 2.1.295 or later (its hooks must refuse when Taskuary cannot answer)")
     return 'auto'
 
@@ -180,7 +181,7 @@ def session_settings(store, tid: int, theme: str = '') -> str:
     if theme: d['theme'] = theme
     from . import config, guard, hooks
     if not hooks.user_wide():          # no user-wide hooks report this session (a demo, a second home): its own do, with its own token
-        ev = {'type': 'command', 'command': hooks.command(hooks.base_url(), guard.stranger_token(config.load()['server'], tid)), 'timeout': 5}
+        ev = {'type': 'command', 'command': hooks.command(hooks.base_url(), guard.stranger_token(config.load()['server'], tid), 'claude'), 'timeout': 5}
         for e in hooks.EVENTS: d['hooks'].setdefault(e, []).append({'hooks': [ev]})
     p = home() / 'sessions'; p.mkdir(parents=True, exist_ok=True)
     f = p / f'{task_ref(tid)}.json'; f.write_text(json.dumps(d, indent=1), encoding='utf-8')

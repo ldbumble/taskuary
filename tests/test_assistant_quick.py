@@ -175,6 +175,43 @@ def test_an_agent_with_tools_killed_mid_turn_is_never_sent_its_turn_again(fast_f
     assert len(turns()) == n + 1                                     # sent once, never again
 
 
+def test_a_general_agent_killed_mid_turn_reads_stopped_offers_continue_and_continue_resumes_it(fast_fake, monkeypatch):
+    """After its CLI dies part-way through a turn the turn is not sent again - so the session ends, its conversation saved: the task
+    reads stopped (taskstate), the detail says how the run ended (runEnded, which draws the bar's Continue: taskWorkspace.barContinues),
+    and Continue (/continue-work) picks that same conversation back up on a new process."""
+    import time
+    from taskuary import server, taskstate, workerstate
+    s = MemoryStore()
+    s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']}))
+    tid = s.create_task({'Title': 'Research the vendor', 'Kind': 'general', 'Status': 'open'}, 'owner')
+    conn = {'cmd': 'claude', 'args': ['-p', '--dangerously-skip-permissions', '--output-format', 'stream-json', '--verbose']}
+    monkeypatch.setattr(agents, 'connection_brains', lambda store, cfg=None: [('claude', conn)])     # Claude Code connected
+    monkeypatch.setenv('FAKE_CLAUDE_THINK', '1.0')
+    sess = general.start_session(s, tid, pick='cli:claude')
+    assert sess.send_prompt('look the vendor up')
+    sid = sess.cli_sid
+    lv = _live_proc()
+    threading.Timer(0.4, lv.p.kill).start()
+    with pytest.raises(RuntimeError, match='stopped in the middle of its turn'):
+        sess.send_prompt('now write it up')
+    assert len(_args(fast_fake)) == 1                                # nothing started again, not even as a fresh conversation
+    for _ in range(50):
+        if not sess.alive: break
+        time.sleep(0.05)
+    assert not sess.alive and workerstate.ended(s, tid) == 'failed'
+    assert taskstate.state(s, s.get_task(tid)) == 'stopped'
+    monkeypatch.setattr(server, 'store', s)
+    c = TestClient(server.app)
+    assert c.get(f'/api/tasks/{tid}').json()['runEnded'] == 'failed'
+    assert c.post(f'/api/tasks/{tid}/continue-work', json={}).json()['continued']
+    for _ in range(100):
+        args = _args(fast_fake)
+        if len(args) == 2 and any('"ev": "turn"' in l and '"n": 1' in l for l in fast_fake.read_text().splitlines()[-3:]): break
+        time.sleep(0.05)
+    resumed = _args(fast_fake)[-1]
+    assert resumed[resumed.index('--resume') + 1] == sid                # the same conversation, on a new process
+
+
 def test_a_cli_that_dies_again_on_restart_is_said_plainly(fast_fake, monkeypatch):
     s = _store()
     concierge.say(s, 'hello')

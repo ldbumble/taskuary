@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:taskuary/web/assets/GameScene-DELECewY.js
 import{r as Xe,k as be,T as Ke,ak as $s,al as Dh,an as _c,ap as Zr,X as ci,aj as jr,Y as vc,dF as xc}from"./index-C-wrrUh-.js";/**
+========
+import{r as Xe,k as be,T as Ke,ak as $s,al as Dh,an as _c,ap as Zr,X as ci,aj as jr,Y as vc,dF as xc}from"./index-BdxW8Uac.js";/**
+>>>>>>>> c6081b09 (A general agent whose CLI died mid-turn reads stopped, offers Continue on its row, and Continue resumes it):taskuary/web/assets/GameScene-BrjNTWzU.js
  * @license
  * Copyright 2010-2025 Three.js Authors
  * SPDX-License-Identifier: MIT

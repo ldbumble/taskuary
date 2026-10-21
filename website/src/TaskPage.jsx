@@ -78,7 +78,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 // Recover once automatically; a real module error still reaches the view boundary on retry.
 import { autostartPlan, isGeneralKind } from "./autostart.js";
 import { adviceKeyFor, suggestion } from "./advice.js";
-import { agentWorkspaceMode } from "./taskWorkspace.js";
+import { agentWorkspaceMode, barContinues } from "./taskWorkspace.js";
 import { ASK_TAG } from "./newTask.js";
 import { completionFact, completionLine, waitingEmails, wentOut,
   AGENT, agentPhase, focusStage, generalAnswered, hasCorrespondent, ownerControlsCompletion, pendingProposals, pendingReplyReview, replyPhase, replySource, sentElsewhere, sentReplyReview, sessionWord, taskPhase, unsentReplyReview,
@@ -981,7 +981,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...but a general agent's open card already has its composer under the bar, and what you type there continues the same
   // conversation (/assistant) - a second door to one room (the owner, 2026-09-29: "why do we need continue session if
   // it's still open?"). A coding agent keeps it: that button reopens its own CLI session, which nothing else here does.
-  const barContinue = canContinue && !isGeneral;
+  const barContinue = barContinues({ canContinue, isGeneral, ended: detail?.runEnded });   // ...and a general run that ended under it
   // STOP AND SAVE ONLY WHILE THERE IS SOMETHING TO STOP (owner-approved, 2026-10-20): it stood on the row of an agent that was
   // already stopped (G7), and then of one that had failed, finished or been cut off by a restart. A session that has ENDED offers
   // what applies - Continue, Run another, Mark done, the write-up's own actions - and the live row keeps its Stop and save.

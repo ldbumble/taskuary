@@ -9,7 +9,7 @@
 // assistant's own chat. All of them land on the Timeline at the minute the button was
 // pressed. Nothing here sends: "Send something" produces a DRAFT the owner approves, which is
 // the one send path the app has and the only one that respects the per-channel reply switches.
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton,
   TextField, Typography,
@@ -193,11 +193,14 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   // to linkedin" was only ever an agent job, with no way to Connections (a tester, 2026-10-20). The words still go to an agent if pressed.
   const [words, setWords] = useState(initialText);
   const named = kind === "agent" ? connectorNamed(words) : null;
-  useVerbs("new-connect", named ? [{ id: "new:open-connector", group: "decide", tone: "s", label: `Open the ${named.title} card`,
+  // each sheet registers as ITSELF: the Feed's closed dialog and the chat's open card both said "new-send", one cleared what the
+  // other put, and every put re-drew both - the Send something tab died in that loop (React #185, the UI audit 2026-10-21)
+  const me = useId();
+  useVerbs(`new-connect${me}`, named ? [{ id: "new:open-connector", group: "decide", tone: "s", label: `Open the ${named.title} card`,
     title: `${named.title} is connected on its own card under Connections - no agent needed`,
     run: () => { onClose?.(); openAppLink(`#connector=${named.type}`); } }] : [], open && !!named);
   // ...and what it needs is a button on the row, not a sentence pointing at Connections
-  useVerbs("new-send", [{ id: "new:connect-sending", group: "decide", tone: "s", label: "Connect a mailbox",
+  useVerbs(`new-send${me}`, [{ id: "new:connect-sending", group: "decide", tone: "s", label: "Connect a mailbox",
     title: "Sending needs a mailbox or a chat with replies on", run: () => openAppLink(place("mail").href) }], open && targetsRead && kind === "send" && !targets.length);
 
   const chanTargets = (targets.find((t) => t.channel === channel)?.to) || [];

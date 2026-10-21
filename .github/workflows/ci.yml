@@ -129,7 +129,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        passes: ["walk", "sweep", "faults", "cards,links,based", "search,table"]
+        passes: ["walk", "sweep", "faults", "cards,links,based", "search,table,stopsave"]
     name: walk (${{ matrix.passes }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30

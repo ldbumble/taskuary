@@ -237,8 +237,8 @@ def task_email(store, tid: int, to: str, about: str, cc: list = None, subject: s
     (the owner, 2026-10-09: "even though i started it from the new button i want to be able to create email to send to
     someone and notify it's done"; then "add from mailbox picker and teams/chat too"). The AI writes it from the owner's words
     and what the work actually found; it becomes one of the task's outputs (slots.py), so it waits in Close out like any of
-    them, and the task closes once it is sent. An email can carry `files` ((name, bytes) pairs), CC and the mailbox it goes
-    FROM; a chat message (`to` is the chat id, `name` what to call it) carries only its words. Nothing is sent here."""
+    them, and sending it leaves the task open (slots._left) - Mark done closes it. An email can carry `files` ((name, bytes)
+    pairs), CC and the mailbox it goes FROM; a chat message (`to` is the chat id, `name` what to call it) carries only its words. Nothing is sent here."""
     from . import outbound, slots, verdicts
     task = store.get_task(tid)
     if not task: raise ValueError('no such task')

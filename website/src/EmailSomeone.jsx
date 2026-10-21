@@ -2,8 +2,8 @@
 // i want to be able to create email to send to someone and notify it's done ... choose sender/attachments/draft message with
 // ai"; then "add from mailbox picker and teams/chat too"). An email - From, To, CC, which of the task's files ride on it - or a
 // chat message into one chat; and what it should say. The AI writes it from those words AND what the work found
-// (outbox.task_email). It waits in Close out as one of the task's outputs - edit it, attach more, Approve & send - and the task
-// closes once it is sent. Nothing is sent from here.
+// (outbox.task_email). It waits in Close out as one of the task's outputs - edit it, attach more, Send - and the task
+// stays open until Mark done (slots._left). Nothing is sent from here.
 import React, { useEffect, useState } from "react";
 import { Autocomplete, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
   MenuItem, Select, TextField, Typography } from "@mui/material";
@@ -65,7 +65,7 @@ export default function EmailSomeone({ open, task, detail, onClose, onDrafted })
       <DialogContent sx={{ pt: "8px !important", display: "flex", flexDirection: "column", gap: 1.6 }}>
         <Typography variant="body2" sx={{ color: DIM }}>
           The AI writes a short summary of what this task's work delivered, for the person you pick. It waits in Close out for you
-          to edit and approve - nothing is sent now - and the task closes once it is sent.
+          to edit and send - nothing is sent now. Sending it leaves the task open until you Mark done.
         </Typography>
         {targets.length > 1 && (
           <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap" }}>

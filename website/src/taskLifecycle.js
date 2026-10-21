@@ -59,15 +59,20 @@ export const pendingReplyReview = (reviews = []) =>
 // what closes this task, said under the task bar: the reply, its emails (slots.py), or the triaged work itself
 // `noSender`: a task the owner typed has nobody to answer, and its card said "sending the reply closes it" under
 // "Nobody sent this one, so there is nobody to answer" - the one way out it named did not exist
-export const completionLine = (manual, owesEmails, noSender = false) => !manual
-  ? "Automatic task. When its work is done, Taskuary may close it and prepare the reply."
-  : owesEmails ? "You control completion. Ending an agent run leaves this task open; it closes when its emails are sent or dropped."
+// ONE PROMISE, THE CODE'S (the UI audit, 2026-10-21: the header said "closes itself", Close out "never closes", Send out results
+// "closes once it is sent"): no send closes a task - the reply's, or the last of its emails (slots._left) - only Mark done does. The
+// one thing that closes a task by itself is its agent saying done on a task nobody is owed an answer on (wrapup.wrap, selfclose)
+const closesItself = (manual, owesEmails, noSender) => !manual && noSender && !owesEmails;
+export const completionLine = (manual, owesEmails, noSender = false) => closesItself(manual, owesEmails, noSender)
+  ? "Automatic task. When its agent says it is done, Taskuary closes it."
+  : !manual ? "Automatic task. When its agent is done, Taskuary prepares the reply; sending it leaves the task open - Mark done closes it."
+  : owesEmails ? "You control completion. Ending an agent run leaves this task open, and so does sending its emails - Mark done closes it."
   : noSender ? "You control completion. Ending an agent run leaves this task open; press Mark done when it's finished."
   : "You control completion. Ending an agent run leaves this task open, and so does sending the reply - Mark done closes it.";
 // ...and the same answer as a FACT on the settings row, beside the pills it belongs with: the sentence above sat
 // right-aligned across two lines and explained ("Hate the why. Just tell me what." - the owner); it is the tooltip now.
-export const completionFact = (manual, owesEmails, noSender = false) => !manual ? "closes itself when the work is done"
-  : owesEmails ? "closes when its emails are sent" : "closes when you mark it done";
+export const completionFact = (manual, owesEmails, noSender = false) => closesItself(manual, owesEmails, noSender)
+  ? "closes itself when its agent is done" : "stays open until you Mark done";
 export const slotReviews = (reviews = []) => (reviews || []).filter((review) => review.Kind === "slot");
 // what one Approve all may send: drafted, addressed, and asked for - never an address the agent added on its own
 export const bulkSendable = (items = [], reviews = []) => {

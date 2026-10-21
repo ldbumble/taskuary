@@ -637,7 +637,7 @@ def reason(payload: dict, wait: float = None) -> dict:
     from . import reasonnet
     tool = str(payload.get('tool_name') or '')
     if not tool.startswith(reasonnet.TOOL): return {}
-    t = _pane(payload)
+    t = _pane(payload, 'claude')            # Reason's hook is only installed for Claude (reasonnet: Claude takes its MCP, no hooks)
     st = getattr(t, 'store', None) if t else None
     if not t or not st: return {}
     return reasonnet.pre_tool(st, t.task_id, run_sid(payload, t.task_id), tool[len(reasonnet.TOOL):], payload.get('tool_input') or {}, wait)

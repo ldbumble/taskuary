@@ -2489,7 +2489,7 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
     if kind == 'memory.remember':
-        return _page(store, tid, table, '#settings=memory', 'Opened Settings → Verdicts & notes - add it as a note there; it is used from then on.')
+        return _page(store, tid, table, '#settings=memory', f"Opened {places.name('memory')} - add it as a note there; it is used from then on.")
     if tk == 'setting':
         r = next((x for x in appfacts.settings(store) if x['key'] == params.get('setting')), None) or {}
         return _page(store, tid, table, f"#settings=config&group={quote(r.get('group') or '')}&key={quote(str(params.get('setting') or ''))}",

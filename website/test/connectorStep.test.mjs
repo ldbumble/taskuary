@@ -35,5 +35,9 @@ test("the link asks for the step, and the card lights it held in view", () => {
   const css = readFileSync(new URL("../src/assistantView.css", import.meta.url), "utf8");
   assert.ok(css.includes(".MuiInputBase-root[data-tq-setup-lit]"));
   const server = readFileSync(new URL("../../taskuary/concierge.py", import.meta.url), "utf8");
-  assert.ok(server.includes(STEP_SAID), "the server says the words the page fills in");
+  // the receipt carries the safety point in its few words now ("keys go there, never in chat", 2026-10-21) - the card lights its step
+  // itself, and a line without the step words is left as it is
+  assert.ok(server.includes("keys go there, never in chat"), "the receipt keeps the safety point");
+  assert.equal(finishLine("Opened the LinkedIn card - keys go there, never in chat.", { kind: "button", text: "Sign in" }),
+    "Opened the LinkedIn card - keys go there, never in chat.");
 });

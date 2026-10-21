@@ -65,6 +65,23 @@ class NewChatTests(unittest.TestCase):
             self.assertEqual(s.get_message(m)['Status'], 'routed'); self.assertEqual(s.get_task(t)['Status'], 'open')
 
 
+class ContinueChatTests(unittest.TestCase):
+    """An earlier chat could only be read: no box, no way back into it, and the one way forward on the panel was the
+    Advisor's "New task" - so going back to where a conversation left off meant making a task of it."""
+    def test_continue_reopens_the_earlier_chat_and_archives_today(self):
+        s = store(); old = chat(s, 'can I connect to linkedin', days=1)
+        today = chat(s, 'what is waiting?', archive=False)
+        with mock.patch.object(server, 'store', s), mock.patch.dict(terminal.SESSIONS, {}, clear=True),              mock.patch.object(server, '_warm_assistant', lambda: None):
+            c = TestClient(server.app)
+            out = c.post(f'/api/concierge/chats/{old}/continue').json()
+            self.assertEqual((out['task']['TaskId'], out['archivedTaskId']), (old, today))
+            self.assertEqual(general.dock_task(s)[0]['TaskId'], old)                                   # the live chat again
+            self.assertEqual(s.get_task(today)['Status'], 'done'); self.assertTrue(general.chat_rows(s, today))  # archived, kept
+            self.assertIn('can I connect to linkedin', concierge._turns(s, old))                        # the next turn reads it
+            self.assertEqual(c.post(f'/api/concierge/chats/{old}/continue').json()['task']['TaskId'], old)  # already live: no-op
+            self.assertEqual(c.post(f'/api/concierge/chats/{real_task(s)[0]}/continue').status_code, 404)  # a real task is no chat
+
+
 class HistoryIsReadOnlyTests(unittest.TestCase):
     def test_listing_and_opening_old_chats_writes_nothing_and_pages(self):
         s = store()

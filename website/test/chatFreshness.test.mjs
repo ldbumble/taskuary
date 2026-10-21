@@ -27,8 +27,9 @@ test("an open Assistant always pulls durable provider corrections", () => {
 });
 
 test("New chat clears immediately without impersonating an AI turn or accepting stale polls", () => {
-  const block = view.slice(view.indexOf("const newChat = async"), view.indexOf("const openOld", view.indexOf("const newChat = async")));
-  assert.ok(block.indexOf("setMsgs([])") < block.indexOf('api.post("/api/assistant/dock/new"'));
+  const block = view.slice(view.indexOf("const swapChat = async"), view.indexOf("const openOld", view.indexOf("const swapChat = async")));
+  assert.ok(block.indexOf("setMsgs([])") < block.indexOf("api.post(path"));
+  assert.match(block, /const newChat = \(\) => swapChat\("\/api\/assistant\/dock\/new"\)/);
   assert.doesNotMatch(block, /setBusy\(/);
   assert.match(block, /chatEpoch\.current \+= 1/);
   assert.match(block, /cancelDeferredChat\(\)/);

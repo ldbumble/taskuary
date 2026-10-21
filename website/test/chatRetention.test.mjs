@@ -13,9 +13,16 @@ test("the chats panel pages with a cursor and offers earlier chats", () => {
   assert.match(view, /params: \{ limit: 25, before: chatsNext \}/);
   assert.match(view, /setChatsNext\(data\.next \|\| null\)/);
   assert.match(view, />Earlier chats<\/button>/);
-  const newChat = view.slice(view.indexOf("const newChat = async"), view.indexOf("const openOld"));
-  assert.match(newChat, /api\.post\("\/api\/assistant\/dock\/new"/);
+  const newChat = view.slice(view.indexOf("const swapChat = async"), view.indexOf("const openOld"));
+  assert.match(newChat, /swapChat\("\/api\/assistant\/dock\/new"\)/);
   assert.doesNotMatch(newChat, /surface\(|turn\(\{ mode/);                     // a blank chat waits for the owner
+});
+
+// an earlier chat could only be read - going back to where it left off meant making a task of it (TQ-1161)
+test("an earlier chat can be continued, through the same swap New chat uses", () => {
+  const view = read("AssistantView.jsx");
+  assert.match(view, /const continueOld = \(\) => old && swapChat\(`\/api\/concierge\/chats\/\$\{old\.taskId\}\/continue`\)/);
+  assert.match(view, /onClick=\{continueOld\}[^>]*>Continue this chat<\/button>/);
 });
 
 test("the retention knob is on the Assistant page of Settings", () => {

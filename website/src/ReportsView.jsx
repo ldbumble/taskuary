@@ -25,7 +25,7 @@ import { NL, SOURCE_KEYS, WORKFLOW_TYPES, addField, isWorkflowConfig, showValue,
 import { ASSISTANT, GRADIENT, PANEL2, BORDER, DIM, FAINT, INK, ACCENT2, card, mono, PILL_COLORS, ALERT, ALERT_INK } from "./theme.jsx";
 import { TASKUARY_CARDS, cardLabel, cardsLine, cardsOf, costLine, promptSources, sourceKey, tokenOf } from "./assistantBlocks.js";
 import { ChannelIcon, StatusDot, timeAgo, Crumb, Empty, FilterPills, SideRail, ConfirmDelete } from "./ui.jsx";
-import WorkflowEditor from "./WorkflowEditor.jsx";
+import WorkflowEditor, { SchedulePicker, scheduleOf, withSchedule } from "./WorkflowEditor.jsx";
 import RunSteps from "./RunSteps.jsx";
 import { asSteps, runWords } from "./workflowFlow.js";
 import Composer from "./Composer.jsx";
@@ -1127,6 +1127,13 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
   // owner would have filled in, and nothing exists until they preview it and press save
   const saved = cur ? { ...BLANK, ...parse(cur.ConfigJson) } : { ...BLANK, ...(draft || {}) };
   const [cfg, setCfg] = useState(saved);
+  // WHEN IT RUNS, as the workflow editor holds it: the picker's shape, written back into the config as the one key the scheduler reads
+  const [sched, setSchedState] = useState(() => scheduleOf(saved));
+  const setSched = (f) => {
+    const next = typeof f === "function" ? f(sched) : f;
+    setSchedState(next);
+    setCfg((c) => ({ ...withSchedule(c, next), on_startup: next.mode === "manual" ? c.on_startup : false }));
+  };
   const [srcs, setSrcs] = useState(toSources(saved));   // the funnel's inputs, in order
   // the Assistant's OWN data sources: a system it checks without a saved report standing behind it
   // ...and Taskuary's own cards sit in that same list (type "taskuary"). A report saved before
@@ -1643,27 +1650,20 @@ function ReportWizard({ sourceId, sources, types, connectors, reload, onBack, on
           <StepButton onClick={() => setStep(2)}>Schedule & save</StepButton>
           <StepContent>
             <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center", flexWrap: "wrap" }}>
-              <TextField label="every N minutes" type="number" value={cfg.every_minutes || ""} sx={{ bgcolor: "#fff", width: 140 }}
-                onChange={(e) => setCfg({ ...cfg, every_minutes: e.target.value, daily_at: "", cron: "", on_startup: false })} />
-              <TextField label="daily at HH:MM" value={cfg.daily_at || ""} sx={{ bgcolor: "#fff", width: 140 }}
-                onChange={(e) => setCfg({ ...cfg, daily_at: e.target.value, every_minutes: "", cron: "", on_startup: false })} />
-              <TextField label="cron" value={cfg.cron || ""} sx={{ bgcolor: "#fff", width: 190 }}
-                helperText={cfg.cron ? cronText(cfg.cron) : ""}
-                placeholder="0 8 * * 1-5"
-                title="Standard 5-field cron. A slot missed while the app was closed fires once on reopen."
-                onChange={(e) => setCfg({ ...cfg, cron: e.target.value, every_minutes: "", daily_at: "", on_startup: false })} />
+              {/* the workflow editor's own picker (B3): a free "daily at HH:MM" box saved "7am", which the scheduler cannot read */}
+              <SchedulePicker sched={sched} setSched={setSched} cron={cfg.cron} />
               <Box sx={{ display: "flex", alignItems: "center" }}
                 title="It's local — opening the app IS a schedule. Runs once per launch, after the startup catch-up.">
                 <Switch checked={!!cfg.on_startup}
-                  onChange={(e) => setCfg({ ...cfg, on_startup: e.target.checked,
-                    ...(e.target.checked ? { every_minutes: "", daily_at: "", cron: "" } : {}) })} />
+                  onChange={(e) => { if (e.target.checked) setSchedState({ mode: "manual" });
+                    setCfg({ ...(e.target.checked ? withSchedule(cfg, { mode: "manual" }) : cfg), on_startup: e.target.checked }); }} />
                 <Typography variant="caption" sx={{ color: DIM }}>or on app startup</Typography>
               </Box>
               <Button variant="contained" disableElevation onClick={save} disabled={!cfg.title}
                 title={cfg.title ? "" : `the ${workflow ? "workflow" : "report"} needs a title - step 1`}>Save {workflow ? "workflow" : "report"}</Button>
             </Box>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>
-              Pick one. Everything blank = it only runs when you press Run now.
+              A time missed while the app was closed runs once when it opens.
             </Typography>
             {!!cfg.watch_for && (
               <Box sx={{ mt: 1.25 }}>

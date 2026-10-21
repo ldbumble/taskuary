@@ -1473,6 +1473,25 @@ def schedule_words(cfg: dict) -> str:
     return ' + '.join(p for p in parts if p) or 'no schedule - run it by hand'
 
 
+def schedule_error(cfg: dict) -> str | None:
+    """Why the scheduler could not run this clock, in plain words - or None when it can. A report saved with "daily at 7am" was
+    confirmed "saved - enabled and scheduled" and then never ran at 7, because _daily_slot cannot read "7am" (the 2026-10-21 UI
+    audit, B3). The editors pick the time from a list now; this is the same rule at the door, so no other road saves one either."""
+    if cfg.get('daily_at') and _daily_slot(cfg, datetime.now()) is None:
+        return f'"{cfg["daily_at"]}" is not a time the schedule can read - pick one like 07:00'
+    if cfg.get('every_minutes'):
+        try: ok = float(cfg['every_minutes']) > 0
+        except (TypeError, ValueError): ok = False
+        if not ok: return f'"{cfg["every_minutes"]}" is not a number of minutes'
+    if cfg.get('cron'):
+        p = str(cfg['cron']).split()
+        try:
+            if len(p) != 5: raise ValueError
+            for f, (lo, hi) in zip(p, ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))): _cron_field(f, lo, hi)
+        except ValueError: return f'"{cfg["cron"]}" is not a schedule the app can read - five fields, like 0 8 * * 1-5'
+    return None
+
+
 def runs_per_day(cfg: dict) -> float:
     """How many times this report fires in an average day - the multiplier on one run's token cost,
     for the Assistant's cost card (/api/assistant/blocks).

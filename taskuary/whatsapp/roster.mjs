@@ -9,30 +9,37 @@ const timestamp = (value) => {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 };
 
-const contactName = (contact = {}) => String(
-  contact.name || contact.verifiedName || contact.notify || ""
-).trim();
+// `name` is what the owner saved them as in their address book - the name they search by. The others
+// are what the person calls themselves, and only stand in until (or unless) a saved name arrives.
+const savedName = (contact = {}) => String(contact.name || "").trim();
+const ownName = (contact = {}) => String(contact.verifiedName || contact.notify || "").trim();
 
 export function createChatRoster() {
   const chats = new Map();
-  const names = new Map();
+  const names = new Map(), saved = new Map();
+  const nameOf = (jid) => saved.get(jid) || names.get(jid) || "";
 
   const ensure = (jid) => {
     jid = String(jid || "").trim();
     if (!isChat(jid)) return null;
     if (!chats.has(jid)) chats.set(jid, {
-      jid, group: jid.endsWith("@g.us"), name: names.get(jid) || "", last: 0, n: 0
+      jid, group: jid.endsWith("@g.us"), name: nameOf(jid), last: 0, n: 0
     });
     return chats.get(jid);
   };
 
+  // A SAVED CONTACT IS A CHAT YOU CAN PICK, whether or not it has written since the bridge started:
+  // with no history downloaded, a person used to appear only once they wrote, and then as a bare
+  // number - so search by their name found nobody and only the phone number did (2026-10-21).
+  // A profile name alone never adds a row: every participant of every group carries one.
   const upsertContact = (contact = {}) => {
-    const name = contactName(contact);
-    if (!name) return;
-    for (const jid of [contact.id, contact.jid].filter(Boolean)) {
-      names.set(String(jid), name);
-      const row = chats.get(String(jid));
-      if (row) row.name = name;
+    const name = savedName(contact), own = ownName(contact);
+    for (const jid of [contact.id, contact.jid].filter(Boolean).map(String)) {
+      if (name) saved.set(jid, name);
+      else if (own) names.set(jid, own);
+      else continue;
+      const row = name && !jid.endsWith("@g.us") ? ensure(jid) : chats.get(jid);
+      if (row) row.name = nameOf(jid);
     }
   };
 
@@ -46,7 +53,7 @@ export function createChatRoster() {
     // hands us the participant list; it was simply thrown away here. Absent stays absent, so an
     // older roster reads as "unknown" rather than as "nobody".
     if (Array.isArray(chat.participants)) row.people = chat.participants.length;
-    const name = String(chat.name || chat.subject || names.get(row.jid) || "").trim();
+    const name = String((!row.group && saved.get(row.jid)) || chat.name || chat.subject || names.get(row.jid) || "").trim();
     if (name) row.name = name;
     row.last = Math.max(row.last, timestamp(chat.conversationTimestamp),
       timestamp(chat.lastMessageRecvTimestamp), timestamp(chat.last));
@@ -56,7 +63,7 @@ export function createChatRoster() {
     const row = ensure(message.key?.remoteJid || message.jid);
     if (!row) return;
     const fromMe = !!(message.key?.fromMe ?? message.fromMe);
-    if (!row.group && !fromMe && message.pushName) row.name = String(message.pushName).trim();
+    if (!row.group && !fromMe && message.pushName && !saved.has(row.jid)) row.name = String(message.pushName).trim();
     row.last = Math.max(row.last, timestamp(message.messageTimestamp || message.ts));
     row.n += 1;
   };
@@ -79,7 +86,7 @@ export function createChatRoster() {
       if (!isChat(jid)) continue;
       const row = rows.get(jid) || { jid, group: jid.endsWith("@g.us"), name: "", last: 0, n: 0 };
       row.last = Math.max(row.last, timestamp(item.last));
-      if (!row.name && item.name) row.name = String(item.name).trim();
+      if (!row.name) row.name = String(item.name || nameOf(jid)).trim();
       rows.set(jid, row);
     }
     return [...rows.values()].sort((a, b) => b.last - a.last || a.name.localeCompare(b.name)

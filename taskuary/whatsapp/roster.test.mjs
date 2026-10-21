@@ -55,3 +55,26 @@ test("a group carries how many people are in it, and an older row stays unknown"
   assert.equal(by.Jogging, 3);
   assert.equal("people" in roster.list().find((r) => r.name === "The Northwind Team"), false);
 });
+
+test("an address-book contact is a searchable chat before anyone writes, under the name the owner saved", () => {
+  // the bridge downloads no history, so a person only ever arrived as a bare number the first
+  // time they wrote - search by name found nobody, by phone number found them (2026-10-21)
+  const roster = createChatRoster();
+  roster.upsertContact({ id: "15550100200@s.whatsapp.net", name: "Ray Colton" });
+  roster.upsertContact({ id: "15550100300@s.whatsapp.net", notify: "a group participant's profile name" });
+  roster.upsertContact({ id: "8000@lid", name: "no number to write to" });
+  assert.deepEqual(roster.list(), [
+    { jid: "15550100200@s.whatsapp.net", group: false, name: "Ray Colton", last: 0, n: 0 }
+  ]);
+});
+
+test("the saved name outlives the profile name a message carries", () => {
+  const roster = createChatRoster();
+  roster.upsertContact({ id: "15550100200@s.whatsapp.net", name: "Ray Colton" });
+  roster.observeMessage({ key: { remoteJid: "15550100200@s.whatsapp.net", fromMe: false },
+    pushName: "R", messageTimestamp: 300 });
+  roster.upsertContact({ id: "15550100200@s.whatsapp.net", notify: "R" });
+  roster.upsertChat({ id: "15550100200@s.whatsapp.net", name: "R", conversationTimestamp: 400 });
+  assert.equal(roster.list()[0].name, "Ray Colton");
+  assert.equal(roster.list()[0].last, 400);
+});

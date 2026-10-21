@@ -300,8 +300,13 @@ def _advice(text: str) -> str:
 ANSWERS = ((re.compile(r'\b(draft|reply|respond|answer|write)\b', re.I),
             'Open the item and press Reply - the draft lands on the task, and nothing goes out until you say yes. In the demo the drafts '
             'are written ahead of time; in your own Taskuary your own AI writes them from the thread.'),
-           (re.compile(r'\b(report|every (morning|day|week)|schedule|weekly|daily)\b', re.I), CANNED[2]),
-           (re.compile(r"\b(list|plate|today|waiting|on me|on you|next|todo|to do|tasks?)\b", re.I), 'I looked at your list. {list}'))
+           # ...and each line fires on what IS that ask, never a word it happens to share: "run the end of day report" was told "give me the
+           # schedule", and "when is my next meeting", "put it on my list" and "show me the new starter task" were all read the rail's count
+           # (the 2026-10-20 query walk, tests/assistant_queries.py). A schedule asks for the report line; a question about the pile, the count.
+           (re.compile(r'\b(every (morning|day|night|week|month|monday|tuesday|wednesday|thursday|friday|weekday)|each (morning|day|week)'
+                       r'|schedule|weekly|daily|nightly)\b', re.I), CANNED[2]),
+           (re.compile(r"\b(on me|on you|on my plate|what'?s on my list|what do i have|my day|what'?s next"
+                       r"|how many (open )?(tasks|things))\b", re.I), 'I looked at your list. {list}'))
 OUT_OF_SCRIPT = ('In the demo I answer from a script, so that one is beyond me - in your own Taskuary your own AI answers it. '
                  'Ask me what is on your list, or to draft a reply.')
 

@@ -219,7 +219,7 @@ sys.argv =['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '$
   const env = { ...process.env, TASKUARY_HOME: home, TASKUARY_ALLOW_TEST_HOME: "1", ...(faults ? { TASKUARY_FAULTS: "1" } : { TASKUARY_DEMO: "1" }) };
   delete env[faults ? "TASKUARY_DEMO" : "TASKUARY_FAULTS"];
   const srv = spawn("python", ["-c", launchPy], { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] });
-  let errTail = ""; srv.stderr.on("data", (d) => { errTail = (errTail + d).slice(-1500); });
+  let errTail = ""; srv.stderr.on("data", (d) => { errTail = (errTail + d).slice(-6000); });
   const base = `http://127.0.0.1:${p}`;
   let token = "";
   for (let i = 0; i < 90 && !token; i++) {
@@ -237,7 +237,9 @@ sys.argv =['taskuary'${faults ? "" : ", '--demo'"}, '--no-browser', '--port', '$
   const H = { "X-Taskuary-Token": token, "Content-Type": "application/json" };
   const api = async (method, path, body) => { const r = await fetch(`${base}${path}`, { method, headers: H, body: body ? JSON.stringify(body) : undefined }); return r.json().catch(() => ({})); };
   if (faults) await api("POST", "/api/setup/dismiss", { dismissed: true });
-  return { base, token, api, stop: () => { if (!keep) srv.kill(); } };
+  // ...and where the server's own last traceback stands, for a CALLS 500 to say where it broke (CI keeps no server log)
+  const where = () => errTail.split(/\r?\n/).filter((l) => /^\s*File "|Error\b|Exception\b/.test(l)).slice(-5).map((l) => l.trim()).join(" | ");
+  return { base, token, api, where, stop: () => { if (!keep) srv.kill(); } };
 }
 
 // ── a page on it: the owner's token put where a launch key would (the demo refuses minting one), the rules' listeners attached ──
@@ -260,7 +262,9 @@ async function pageOn(srv, phase) {
     const body = await r.json().catch(() => ({}));
     if (r.status() === 403 && body?.demo) return;                    // the demo saying no, as the demo: an ordinary line
     if ([...page.expect].some((x) => u.pathname.includes(x))) return;
-    note("CALLS", page.step, `${r.request().method()} ${u.pathname} answered ${r.status()}${body?.detail ? ` - "${String(body.detail).slice(0, 80)}"` : ""}`);
+    if (r.status() >= 500) await wait(300);                           // the traceback reaches stderr just after the answer
+    note("CALLS", page.step, `${r.request().method()} ${u.pathname} answered ${r.status()}${body?.detail ? ` - "${String(body.detail).slice(0, 80)}"` : ""}`
+      + (r.status() >= 500 && srv.where?.() ? ` - server: ${srv.where().slice(-600)}` : ""));
   });
   await page.goto(`${srv.base}/`, { waitUntil: "load" });
   await wait(6000);

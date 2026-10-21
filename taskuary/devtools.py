@@ -233,7 +233,7 @@ def test_discord(store, c) -> str:
 _DM = {}
 def is_dm(channel: str, room: str, kind) -> bool:
     """Did the PLATFORM call this room one-to-one - `kind()` reads the room's own type. senders trusts a chat sender the
-    owner has talked with alone (store.talked_one_to_one), and only this mark says alone: who has spoken proves nothing.
+    owner has talked with alone (store.talked_with), and only this mark says alone: who has spoken proves nothing.
     A room's type never changes, so it is asked once; a read that fails says no, and is asked again next poll."""
     if (channel, room) not in _DM:
         try: _DM[channel, room] = bool(kind())

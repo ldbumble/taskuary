@@ -135,18 +135,32 @@ def _is_own(msg: dict) -> bool:
     return (msg.get('Direction') or msg.get('direction')) == 'out' or (msg.get('Status') or msg.get('status')) == 'context'
 
 
+def chat_aliases(msg: dict) -> tuple:
+    """The same person's other platform id, as the poller recorded it (mail_meta / MailMetaJson 'alias'): WhatsApp names
+    one person by phone in a direct chat and by LID in a group, and the two must not read as two people."""
+    meta = msg.get('mail_meta')
+    if not isinstance(meta, dict):
+        try: meta = json.loads(msg.get('MailMetaJson') or 'null')
+        except (TypeError, ValueError): meta = None
+    a = str((meta or {}).get('alias') or '').strip().lower() if isinstance(meta, dict) else ''
+    return (a,) if a else ()
+
+
 def _chat_known(store, msg: dict, ch: str, exclude_mid, on: bool) -> tuple:
     """A chat is trusted per PERSON, not per room: anyone in a connected group chat could start an agent with full
-    permissions. The owner's own line; someone the owner has talked with one-to-one in this channel; or someone the
-    owner vouched for (release, Trust this task). Switched off, only the owner."""
+    permissions. The owner's own line; someone the owner has talked with one-to-one in this channel, or answered (their
+    line, then the owner's, in any of its chats - store.talked_with); or someone the owner vouched for (release, Trust this
+    task). Being in a room the owner is in counts for nothing. Switched off, only the owner."""
     if _is_own(msg): return True, _said('These are your own words.')
-    who, room = chat_key(msg), channel_name(ch)
+    who, room, alias = chat_key(msg), channel_name(ch), chat_aliases(msg)
     name = ' '.join(str(msg.get('from_name') or msg.get('FromName') or '').split()) or who
     if not on: return False, _said(f'{name or "Someone"} wrote in {room}, where only your own messages start an agent by themselves (Settings).')
     if not who: return False, _said(f'Nobody can tell who wrote this in {room}, so no agent starts on it by itself.')
-    if store.trusted_sender(ch, who): return True, _said(f'You vouched for {name}.')
-    if store.talked_one_to_one(ch, who, exclude_mid): return True, _said(f'You talk with {name} one-to-one on {room}.')
-    return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one there, {NOBODY}.")
+    if any(store.trusted_sender(ch, k) for k in (who, *alias)): return True, _said(f'You vouched for {name}.')
+    how = store.talked_with(ch, who, exclude_mid, alias)
+    if how == 'dm': return True, _said(f'You talk with {name} one-to-one on {room}.')
+    if how == 'answered': return True, _said(f'You have answered {name} on {room} before.')
+    return False, _said(f"{name} wrote in {room}, and you haven't talked with them one-to-one or answered them there, {NOBODY}.")
 
 
 def vouch(store, rows) -> None:

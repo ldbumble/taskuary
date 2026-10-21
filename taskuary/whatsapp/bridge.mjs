@@ -52,6 +52,13 @@ let openedAt = 0, lastDisconnect = "";
 const text = (m) => m.conversation || m.extendedTextMessage?.text
   || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || "";
 const context = (m) => Object.values(m || {}).find((v) => v?.contextInfo)?.contextInfo;
+// WhatsApp names one person twice: by phone in a direct chat and, in a group, often by LID. Whichever form the key's
+// sender is not, Baileys may carry beside it - sent on as `senderAlt`, so Taskuary knows the group member it answered
+// for weeks is the person it talks with directly, not a stranger (2026-10-20).
+const senderAlt = (k) => {
+  const s = k.participant || k.remoteJid || "";
+  return [k.participantPn, k.participantLid, k.senderPn, k.senderLid].find((x) => x && x !== s) || "";
+};
 
 const reconnectStatus = () => ({
   attempt: reconnectAttempt, paused: reconnectPaused, at: reconnectAt, reason: lastDisconnect
@@ -215,7 +222,7 @@ async function connect() {
       const [doc, docMime] = await grab(dm, "application/octet-stream",
         () => (String(dm?.fileName || "").split(".").pop() || "bin").slice(0, 8).toLowerCase());
       messages.push({ seq: ++seq, id: m.key.id, jid: m.key.remoteJid,
-        sender: m.key.participant || m.key.remoteJid, group: m.key.remoteJid?.endsWith("@g.us"),
+        sender: m.key.participant || m.key.remoteJid, senderAlt: senderAlt(m.key), group: m.key.remoteJid?.endsWith("@g.us"),
         name: m.pushName || "", text: body, ts: Number(m.messageTimestamp) || Math.floor(Date.now() / 1000),
         fromMe: !!m.key.fromMe, quoted, key: m.key, // quote routes phone answers; key is for read receipts
         audio, mime, seconds: Number(am?.seconds) || 0, voice: !!am?.ptt, image, imageMime,

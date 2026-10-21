@@ -15,5 +15,5 @@ test("the second door is a general agent, not the assistant's thread", () => {
 
 test("it asks the hand-off's three questions and dispatches them as general work", () => {
   assert.match(ns, /generalBrains=\{generalBrains\} brainsRead=\{agentsRead\} pick=\{pick\}/);
-  assert.ok(ns.includes('/dispatch`, general\n            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }'));
+  assert.ok(ns.includes('/dispatch`, { ...(general\n            ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }'));
 });

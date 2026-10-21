@@ -118,7 +118,7 @@ const NoSubject = ({ onOpenCard }) => { useEffect(() => { onOpenCard?.(null); },
 
 // One browse card on the chat line: which area, and its state ({section, open}) - the view keeps the rest.
 // `live` is false once a newer browse card is posted, so only one detail is ever mounted.
-export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose }) {
+export default function CanvasBrowse({ area, state, onState, live, onOpenCard, onNavigate, onOpenTask, onReopen, onClose, onSaid }) {
   const frame = (props) => <BrowseFrame {...props} live={live} onOpenCard={onOpenCard} onReopen={onReopen} />;
   const common = { browse: frame, browseState: state, onBrowseState: onState };
   if (!live) return frame({ title: AREA_TITLES[area] });
@@ -127,7 +127,8 @@ export default function CanvasBrowse({ area, state, onState, live, onOpenCard, o
   if (area === "new") return (
     // ...written up by the Assistant when a typed ask was new work (concierge._new): its tab and its words, its own button to press
     <Box data-tq-browse="new"><NoSubject onOpenCard={onOpenCard} /><NewSheet key={`${state?.kind || ""}|${state?.text || ""}`} inline open onClose={onClose}
-      onOpenTask={onOpenTask} initialKind={state?.kind || "send"} initialHow={state?.how || ""} initialText={state?.text || ""} /></Box>
+      onOpenTask={onOpenTask} initialKind={state?.kind || "send"} initialHow={state?.how || ""} initialText={state?.text || ""}
+      line={state?.line} onSaid={(text) => onSaid?.(state?.aid, text)} /></Box>
   );
   return (
     <Box data-tq-browse={area}>

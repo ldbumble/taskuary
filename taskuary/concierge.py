@@ -1086,8 +1086,25 @@ def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
     press = buttons.label(verb) if verb else {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it'}[kind]
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     said = f"Wrote it into New - {press} there starts it."
-    record(store, tid, 'assistant', said)
-    return {'say': said, 'options': [], 'chips': [], 'decision': None, 'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000]}}
+    # `line`: this line's id, which the card's press says again as what it started (said_started)
+    line = record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': [], 'decision': None,
+            'new': {'kind': kind, 'how': how, 'text': str(text or '').strip()[:2000], 'line': line}}
+
+
+def said_started(store, cid, out: dict) -> str:
+    """The chat's "Wrote it into New" line said again as what its card STARTED. Its Send to agent starts the task and takes the card away,
+    and the line stood over a researcher already working, promising a press nobody had left to make (the owner, 2026-10-21: every acting
+    answer says what it did). '' - and nothing rewritten - when nothing started or `cid` is not one of the Assistant's own chat lines."""
+    if not (out.get('started') or out.get('existing')) or not str(cid or '').isdigit(): return ''
+    row = next(iter(store._rows('SELECT * FROM comment WHERE CommentId=?', (int(cid),))), None)
+    if not row or row['Actor'] != 'assistant' or not general.is_dock(store.get_task(row['TaskId'])): return ''
+    general_ = out.get('dispatch') == 'assistant'
+    who = general.assigned_role(store, store.get_task(int(out['taskId'])) or {}) if general_ else out.get('agent')
+    said = (f"Started {out.get('ref') or task_ref(out['taskId'])}" + (f" with the {who}" if who else '')
+            + (f" on {out['agent']}" if general_ and out.get('agent') else '') + '.')
+    rewrite(store, int(cid), said)
+    return said
 
 
 def _answer_now(store, tid: int, table: dict | None, target: int, said: str, actor: str) -> dict:

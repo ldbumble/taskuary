@@ -148,7 +148,8 @@ const AboutField = React.memo(forwardRef(function AboutField({ kind, how, onRead
 
 // `inline`: the card the sidebar's New button posts into the conversation (the canvas redesign) - the same tabs and fields,
 // drawn in the conversation's own width instead of a dialog over the page. Without it the dialog stays for any other door.
-export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "" }) {
+// `line`: the Assistant's line that wrote this card (concierge._new) - its press says that line again as what it started (`onSaid`)
+export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = false, initialKind = "send", initialHow = "", initialText = "", line = null, onSaid }) {
   const [kind, setKind] = useState(initialKind);
   const said = useRef(null);      // the words, for the repository picker (see NewRepo)
   const repoPick = useRef(null);  // what the picker says to use, read on submit
@@ -269,14 +270,15 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
           // `needs_repo` with started: false, and this announced "is on it in a live session" over
           // the top of it (the owner, 2026-09-22: "hit the new button with coding agent but it did
           // not start"). One reading of a dispatch answer, the same one every other surface uses.
-          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, general
+          ({ data: out } = await api.post(`/api/tasks/${data.taskId}/dispatch`, { ...(general
             ? { kind: "general", agent: role || null, pick: pick || null, model: model || null }
-            : { agent: agent || null, brain: brain || null, model: model || null }));
+            : { agent: agent || null, brain: brain || null, model: model || null }), ...(line ? { said: line } : {}) }));
         } catch (e) {
           // ...and the line says the task is there: "nothing started" over a task already filed sent the owner to press again
           throw { response: { data: { detail: `${data.ref} is filed but did not start - ${String(e?.response?.data?.detail || "the start was refused").replace(/\.$/, "")}. Press ${verb} to try it again.` } } };
         }
         filed.current = null;
+        if (out?.said) onSaid?.(out.said);
         setOk(`${data.ref} — ${outcomeOf(out).text}.`);
         aboutRef.current?.clear(); setHasAbout(false); pics.clear(); onDone?.(); onOpenTask?.(data.taskId);
       } else if (kind === "goal") {
@@ -300,7 +302,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics, line, onSaid]);
 
   // ...and no live session without a coding tool the owner chose (owner-approved, 2026-10-21): Send to coding agent stays disabled
   const noCodingTool = kind === "agent" && how === "terminal" && (!agentsRead || !codingReady);

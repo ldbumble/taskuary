@@ -22,6 +22,6 @@ test("Board opens the Board; Chat and Game are the Assistant, walked or not", ()
 
 test("the Board's New task opens on New's agent tab", () => {
   const sheet = read("NewSheet.jsx");
-  assert.match(sheet, /initialKind = "send", initialHow = "", initialText = "" \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
+  assert.match(sheet, /initialKind = "send", initialHow = "", initialText = "", line = null, onSaid \}\) \{\n  const \[kind, setKind\] = useState\(initialKind\);/);
   assert.match(sheet, /setKind\(initialKind\); \}, \[open, initialKind\]\);/);
 });

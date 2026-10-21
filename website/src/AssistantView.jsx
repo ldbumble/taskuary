@@ -817,7 +817,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     <div className={`tq-browse-line${canvas?.browsing === m.id ? " tq-canvas-live" : ""}`} data-tq-browse-line={m.area}>
       <CanvasBrowse area={m.area} state={m.state || {}} live={canvas?.browsing === m.id}
         onState={(state) => actions.browseState(m.id, state)} onOpenCard={actions.openCard} onReopen={() => actions.browse(m.area, m.state)}
-        onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} />
+        onNavigate={actions.navigate} onOpenTask={actions.openTask} onClose={() => actions.browseClose(m.id)} onSaid={actions.said} />
     </div>
   );
   if (m.role === "receipt") return (
@@ -2017,7 +2017,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       else {
         // THE ASSISTANT ROUTES (the owner, 2026-10-19: "it should just surface the correct button"): an act comes back as the row's own button
         // to light (`light`), the page that holds it (`open`) or a new job written into New (`new`) - never a card to confirm, and nothing runs
-        setMsgs((m) => [...m, { id: `a${Date.now()}`, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
+        const aid = `a${Date.now()}`;
+        setMsgs((m) => [...m, { id: aid, role: "assistant", text: data.say, options: data.options || [], chips: data.chips || [] }]);
         // a connector card brought up lights its first step - the line is finished with what it lit ("press Sign in with LinkedIn")
         if (String(data.say || "").includes(STEP_SAID)) {
           const done = (e) => { window.removeEventListener(LIT, done); setMsgs((m) => m.map((x) => (x.text === data.say ? { ...x, text: finishLine(x.text, e.detail) } : x))); };
@@ -2029,7 +2030,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // ...a reply that carries `open` has decided for itself: "" is the app's own words (no AI), whose links are to press
         const page = "open" in data ? data.open : firstAppLink(data.say);
         if (page) openAppLink(page);
-        if (data.new) browseRef.current?.("new", data.new);
+        // ...its line rides with it (`aid`): the card's Send to agent says it again as what it started (concierge.said_started)
+        if (data.new) browseRef.current?.("new", { ...data.new, aid });
         const l = lightOf(data.light);
         if (l) {
           setLit(l);
@@ -2759,6 +2761,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     browseState: (id, state) => { navHow.current = "push"; holdBottom.current = true; setMsgs((m) => m.map((x) => (x.id === id ? { ...x, state } : x))); },
     browse: (area, state) => browse(area, state),
     browseClose: (id) => setMsgs((m) => m.filter((x) => x.id !== id)),    // the New card, closed: its line goes
+    // ...and pressed: the line that wrote it says what it started, as the server now has it (a reload reads the same words)
+    said: (id, text) => { if (id && text) setMsgs((m) => m.map((x) => (x.id === id ? { ...x, text } : x))); },
     openCard,
     walk: walkTo, walkSaved, walkRestart, chip: runChip, busy: busy || resetting || !!handoff,
     handedTo: handoff ? ((state?.doorways || []).find((d) => d.channel === handoff.channel)?.label || handoff.channel) : "",

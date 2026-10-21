@@ -40,7 +40,7 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   const at = view.indexOf("const send = async"), body = view.slice(at, view.indexOf("const sendEmoji", at));
   assert.doesNotMatch(body, /proposalOf|runProposal|prop\?\.auto|kind: "proposal"/);
   assert.match(body, /const l = lightOf\(data\.light\);/);
-  assert.match(body, /if \(data\.new\) browseRef\.current\?\.\("new", data\.new\);/);
+  assert.match(body, /if \(data\.new\) browseRef\.current\?\.\("new", \{ \.\.\.data\.new, aid \}\);/);
   assert.match(body, /const page = "open" in data \? data\.open : firstAppLink\(data\.say\);/);
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
   assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: `Read the draft, then press \$\{btn\("approve"\)\} when you're sure\.`, key: `review:\$\{data\.reviewId\}`/);

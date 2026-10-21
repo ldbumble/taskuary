@@ -78,7 +78,8 @@ test("the task page opens exactly one stage and lets you open the others by hand
   const source = taskSource();
   // a session that fills the page IS the agent stage; stepping back from it (peek) opens the task
   // stage, the one that says what the task is and where it came from (2026-09-18)
-  assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| \(peek \? "task" : focusStage\(/);
+  // ...Stop and save pressed here (or its write-up running) holds Close out open until the draft stands in the block's place
+  assert.match(source, /const stage = sessionView \? "agent" : \(openStage \|\| \(pressedHere \|\| writeup \? "reply" : peek \? "task" : focusStage\(/);
   assert.match(source, /setOpenStage\(null\)/);
   assert.match(source, /onToggle: stage === name \? null : \(\) => setOpenStage\(name\)/);   // the open one is not a control                                     // a new task recomputes its own focus
   for (const name of ["agent", "reply"]) {

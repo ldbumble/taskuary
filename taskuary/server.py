@@ -1572,6 +1572,8 @@ def task_detail(task_id: int):
             'batchOutside': batch_outside,
             # ...and what ended it upstream (a merge, a close): Close out says that instead of an empty reply nobody is owed
             'ended': _ended_line(task_id, d.get('comments')),
+            # ...and Stop and save's write-up, running or just ended: Close out draws its stage until the draft replaces it (writeup.state)
+            'writeup': _writeup_state(task_id),
             # ...and a BATCH's items, in ranked order, each with what the agent found and where it stands (batch.py)
             # (Warn: what ranking judged its text tries to make an agent do - a warning on the row, rank._order)
             'batch': [{k: i.get(k) for k in ('Place', 'Title', 'Link', 'State', 'Result', 'Overlap', 'EndedWhy', 'Propose', 'Fix', 'FixLink', 'Warn')}
@@ -1579,6 +1581,11 @@ def task_detail(task_id: int):
             # ...and whether that ended session can be REOPENED rather than replaced. The id itself
             # stays here: the page needs to know a conversation is waiting, not how to address it.
             'resumable': {'sid': rs['Sid'], 'agent': rs['Agent'], 'cwd': rs['Cwd'], 'at': rs['CreatedAt']} if rs else None}
+
+
+def _writeup_state(task_id: int):
+    from . import writeup
+    return writeup.state(task_id)
 
 
 def _ended_line(task_id: int, comments=None):

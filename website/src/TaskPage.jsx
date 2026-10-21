@@ -29,7 +29,8 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "./api";
 import { openReply as draftReply } from "./replyDraft.js";   // the component's own openReply below would shadow it, and call itself
 import { opError, runOperation } from "./taskOps.js";
-import { ClosingCard, completeTask, writeUpThenClose } from "./closeAgent.jsx";
+import { ClosingCard, WriteupBlock, completeTask, writeUpThenClose } from "./closeAgent.jsx";
+import { writeupView } from "./writeupState.js";
 import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
@@ -371,12 +372,21 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [waitText, setWaitText] = useState("");
   const [wrapping, setWrapping] = useState(false);   // declared up here: the poll effect below reads it
   const [wrapped, setWrapped] = useState(null);      // the closing report, shown where the session was
-  // Stop and save's write-up, running on the server: {id, n} - the task and how many notes it had at the press. It is over when a
-  // report or the write-up's failure lands after those (writeup.py says either on the task)
+  // Stop and save's write-up, running on the server: {id, n, job} - the task, how many notes it had at the press, and the job the
+  // press started. Close out draws it (writeupView: the job's own stage, from the detail's `writeup`) until the draft replaces it.
   const [writingUpAt, setWritingUpAt] = useState(null);
-  const writingUp = writingUpAt && !(detail?.comments || []).slice(writingUpAt.n)
-    .some((c) => /^(?:(?:AGENT|CODER) REPORT|The write-up of this session did not finish)/.test(String(c.Body || "").trimStart())) ? writingUpAt.id : null;
-  const setWritingUp = (id) => setWritingUpAt(id ? { id, n: (detail?.comments || []).length } : null);
+  const pressedHere = writingUpAt?.id === selected ? writingUpAt : null;
+  const writeup = writeupView({ pressed: pressedHere, server: detail?.task?.TaskId === selected ? detail?.writeup : null,
+    comments: detail?.comments, review: pendingReplyReview(detail?.reviews || []) });
+  const writingUp = writeup?.state === "pending" ? selected : null;
+  // ...and Close out is brought into view at the press, once it has drawn
+  const closeOutRef = useRef(null);
+  const [seekCloseOut, setSeekCloseOut] = useState(false);
+  useEffect(() => {
+    if (!seekCloseOut) return undefined;
+    const f = requestAnimationFrame(() => { closeOutRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }); setSeekCloseOut(false); });
+    return () => cancelAnimationFrame(f);
+  }, [seekCloseOut]);
   // Once a live session disappears, its report and reply draft are still being filed. Keep
   // checking briefly so the page cannot freeze forever on the pre-close status it last saw.
   const sessionSettleUntil = useRef(0);
@@ -523,22 +533,30 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // separate control, because what the work was worth is the owner's verdict and not the run's.
   // THE WRITE-UP RUNS BEHIND THE PRESS (writeup.py, 2026-10-20): the server harvests the session and answers at once; the
   // report lands on the task when the job has written it (the poll below reads it), and a failure is said on the task.
+  // ...and the agent is put down AT THE PRESS, Close out opened with the write-up's pending block in it (the owner, 2026-10-21: "it
+  // looks frozen"): the harvest the press waits for is the block's first step, not a pause with the pane still up.
   const wrapUp = async () => {
-    if (!canWrap) return;
-    const id = selected;
-    setErr("");
+    if (!canWrap && !pressedHere) return;          // ...a write-up that failed here is tried again on the session it left open
+    const id = selected, n = (detail?.comments || []).length, sid = term?.sid || pressedHere?.sid || null;
+    setErr(""); setWritingUpAt({ id, n, sid }); setTerm(null); setSeekCloseOut(true);
     try {
-      await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
+      const { data } = await api.post(`/api/tasks/${id}/wrap`, { close: false, background: true });
       loadTasks(); onChanged?.();
       if (stale(id)) return;                    // moved on meanwhile: the report is on the task's history
-      setWritingUp(id); setTerm(null); loadDetail(id);
-    } catch (e) { if (!stale(id)) setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again."); }
+      setWritingUpAt({ id, n, sid, job: data?.job || "?" }); loadDetail(id);   // "?": no job named - the task's notes say when it is done
+    } catch (e) {
+      if (stale(id)) return;
+      setWritingUpAt(null); findTerm(id);      // nothing was written up: the session comes back as it was
+      setErr(e?.response?.data?.detail || "Could not save the agent's work - press Stop and save again.");
+    }
   };
   // Pausing is not finishing: no report, no reply draft, the task stays open. What it worked
   // out becomes a handover note that gets typed into the NEXT session, because a pty has no
   // resumable id - killing the session used to throw all of that away.
   useEffect(() => {
     setWrapping(false); setWrapped(null);
+    // a press on another task is that task's: back on it, a job still writing is read from the server's own word (detail.writeup)
+    setWritingUpAt((w) => (w?.id === selected ? w : null));
     setAskSenderOpen(false); setSenderQuestion(""); setAskingSender(false); setOpeningReply(false);
     setOpenStage(null);
   }, [selected]);
@@ -643,6 +661,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   useEffect(() => {
     const live = detail?.session;
     if (!live?.alive || live.taskId !== selected) return;
+    // ...never the session Stop and save is writing up: its pty lives until the report is safe, and adopting it put the agent back
+    if (pressedHere?.sid && live.sid === pressedHere.sid) return;
     if (live.sid !== term?.sid) setTerm(live);
     else if (liveWord !== sessionWord(term)) setTerm((was) => (was?.sid === live.sid ? { ...was, ...live } : was));
   }, [detail?.session, term?.sid, selected, liveWord]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -996,7 +1016,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // A RUN OF STEPS WITH NO AGENT STEP (workflows.of_task by_code): code ran it, so there is no Agent work to open - the steps are on
   // the task, under where it came from. A session that did start (an older run, a hand-started agent) still shows.
   const codeRun = !!fromWorkflow?.byCode && !term?.alive && !generalStarted && !detail?.transcript && !report;
-  const stage = sessionView ? "agent" : (openStage || (peek ? "task" : focusStage({
+  // ...and Stop and save pressed here holds Close out open - writing, failed or drafted - so the draft replaces the pending block where
+  // it stood, never a jump to whichever step the computed focus picks once the job is done
+  const stage = sessionView ? "agent" : (openStage || (pressedHere || writeup ? "reply" : peek ? "task" : focusStage({
     kind: t?.Kind, task: taskState, agent: codeRun ? null : agentState, reply: replyState, hasSender: !!replyMessage,
     // what the agent is parked ON decides whether the proposal or the agent opens: an agent
     // waiting for approval is released by the very proposal sitting in stage 3
@@ -1955,7 +1977,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box sx={{ ...card, ...step, mt: 0, p: 1.5, py: stage === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
+                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, mt: 0, p: 1.5, py: stage === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -1995,7 +2017,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       ✓ {btn("close")}{t.ClosedAt ? ` ${ago(t.ClosedAt)}` : ""}</Typography>
                     {closedNote && <Typography variant="body2" sx={{ color: DIM, mt: 0.25, whiteSpace: "pre-wrap" }}>{closedNote}</Typography>}
                   </Box>}
-                  {stage === "reply" && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
+                  {/* STOP AND SAVE'S WRITE-UP, where its draft will stand (writeupState.js): the job's own stage until the draft
+                      replaces this block in place - or, if it stopped, that it did, with Try again and the reply button */}
+                  {stage === "reply" && writeup && <WriteupBlock view={writeup} hasReply={!!replyMessage} onRetry={canWrap || pressedHere ? wrapUp : null}
+                    onDraft={() => openReply(true)} draftLabel={replyPrimary} />}
+                  {stage === "reply" && !writeup && ((pendingReview || proposals.length || replyMessage || owesEmails || ended || sentOutside.length) ? (
                     <Box sx={{ mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
                       {/* THE CONVERSATION OVER THE DRAFT (the owner, 2026-10-15: "add it to close out too"), CONDENSED: the latest lines of the
                           conversation being answered, newest first - the draft answers the top one - and the rest a click away in Task. The

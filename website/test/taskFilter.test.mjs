@@ -104,7 +104,7 @@ test("with a live session, X steps back to the task first and the session keeps 
   // the task card, the reply card, context & history and earlier runs all come back while peeking
   // (the steps are sections of one card since the 2026-10-06 cleanup - `...card, ...step` - the gates are the same)
   for (const gate of [/\{!sessionView && \(\s*<Box sx=\{\{ \.\.\.card, \.\.\.step/, /\{!sessionView && <Fold title=\{`Context & history/,
-    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box sx=\{\{ \.\.\.card, \.\.\.step, mt: 0, p: 1\.5, py: stage === "reply"/]) {
+    /\{!sessionView && detail\.runs\.length > 0/, /\{!sessionView && <Box ref=\{closeOutRef\} data-tq-closeout="" sx=\{\{ \.\.\.card, \.\.\.step, mt: 0, p: 1\.5, py: stage === "reply"/]) {
     assert.match(source, gate);
   }
   assert.doesNotMatch(source, /\{!term\?\.alive && <Fold title=\{`Context & history/, "no gate left on the raw flag");

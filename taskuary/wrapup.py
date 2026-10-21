@@ -521,8 +521,14 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
                              # say what the task IS: a proposal left for the owner keeps it waiting (finish), not done
                              else ' The task waits for your answer to what the agent proposed.' if close and (store.get_task(tid) or {}).get('Status') == 'waiting'
                              else ' Marked the task done.' if close else ''))
+        # ...and the playbook question, asked of THIS worker too. Only the coding ending asked it, so the jobs playbooks are for -
+        # a bill, a W-9, a month-end reconciliation, all general work - never drafted one: "the first real one is drafted for you
+        # when an agent finishes a kind of job for the first time" held for code alone (walk 2026-10-21). Last, as there.
+        from . import playbooks
+        # a playbook-authoring conversation already proposed its playbook, by hand (playbooks.setup_task): never a second draft of it
+        pbd = None if task.get('SourceRef') == 'assistant:playbook' else playbooks.draft(store, tid, general.conversation_text(store, tid), 'assistant')
         _ended(store, tid, close, actor)
-        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [],
+        return {'wrap': 'done', 'taskId': tid, 'report': last, 'proposed': [pbd] if pbd else [],
                 'drafting': bool(fin.get('drafting')), 'can_send': bool(fin.get('can_send')),
                 'send_block': fin.get('send_block') or '', 'freshness': fin.get('freshness') or 'unchecked'}
     if harvested:          # harvested already - by a write-up that was interrupted (writeup.resume): the session is gone

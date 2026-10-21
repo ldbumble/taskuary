@@ -45,7 +45,8 @@ def poll_gitlab(store, c, since, llm=None, file_only=False) -> int:
              + [('merge request', m) for m in _gitlab(c, '/merge_requests', scope='assigned_to_me', updated_after=after, per_page=CAP)])
     for kind, i in items:
         who = (i.get('author') or {})
-        proj = '/'.join(str(i.get('web_url') or '').split('/')[3:5]) or 'GitLab'
+        # a project in a nested group is group/sub/project: everything between the host and '/-/'
+        proj = '/'.join(str(i.get('web_url') or '').split('/-/')[0].split('/')[3:]) or 'GitLab'
         n += ingest_tracker(store, file_only=file_only, msg={
             'external_id': f"gitlab:{kind[0]}{i['id']}", 'channel': 'gitlab',
             'subject': f"{'!' if kind[0] == 'm' else '#'}{i.get('iid')} {i.get('title') or ''}".strip(),

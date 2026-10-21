@@ -51,6 +51,16 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(prop['steps'][-1]['score'], 5)                                            # then 'now' catches the tag up
         self.assertEqual(g['promote_at'], 4)
 
+    def test_the_owner_reads_a_line_with_their_name_never_the_placeholder(self):
+        """What changed showed "{{owner_first}} presses Next" raw (the UI audit, 2026-10-21): the doc keeps the hole, the reader fills it."""
+        s = seeded(); s.set_setting('owner_name', 'Alex Doyle', 't')
+        learnedgraph.record(s, '', DOC, 'reflect')
+        said = [c['text'] for c in learnedgraph.changes(s, days=36500)] + [l['text'] for l in learnedgraph.graph(s)['lines']]
+        self.assertTrue(any(t.startswith('Alex avoids') for t in said), said)
+        self.assertFalse([t for t in said if '{{' in t])
+        from taskuary import since
+        self.assertNotIn('{{', since.learned(s)['latest'])
+
     def test_history_records_gains_losses_and_deaths(self):
         s = seeded()
         new = (DOC.replace('[s:5 | ev: mem32, task56 | seen: 2026-08-27]', '[s:4 | ev: mem32, task56 | seen: 2026-08-27]')

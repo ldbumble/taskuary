@@ -22,6 +22,7 @@ def _n(store, q, p): return int((store._one(q, p) or {}).get('n') or 0)
 
 
 from .timewords import plural as _plural
+from .learnedgraph import _named
 
 
 def overnight(store, now: datetime = None) -> dict:
@@ -59,7 +60,7 @@ def learned(store, now: datetime = None) -> dict:
     rows = store._rows("SELECT Text, Action FROM learned_history WHERE At>=? AND Action IN ('born','promoted') ORDER BY Id DESC", (since,))
     n = len(rows)
     return {'line': f"Learned this week: {_plural(n, 'new thing')} about how you work." if n else '', 'n': n,
-            'latest': rows[0]['Text'] if rows else ''}
+            'latest': _named(store)(rows[0]['Text']) if rows else ''}
 
 
 CARDS = 3

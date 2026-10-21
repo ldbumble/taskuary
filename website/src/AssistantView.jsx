@@ -2498,7 +2498,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     catch (e) { setErr(errText(e)); }
     setChatsLoading(false);
   };
-  const newChat = async () => {
+  // New chat and Continue on an earlier one are the same swap: the server changes which chat is live, the page redraws it
+  const swapChat = async (path) => {
     if (busy || resetting || turnFlight.current) return;
     chatEpoch.current += 1;
     resettingRef.current = true;
@@ -2513,7 +2514,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setOld(null); setChatsOpen(false);
     setState((s) => s ? { ...s, messages: [] } : s);
     try {
-      await api.post("/api/assistant/dock/new", null, { timeout: 30000 });
+      await api.post(path, null, { timeout: 30000 });
       await loadState();
       resettingRef.current = false;
       setResetting(false);
@@ -2528,6 +2529,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setErr(errText(e));
     }
   };
+  const newChat = () => swapChat("/api/assistant/dock/new");
+  // an earlier chat could only be read - going back to where it left off meant making a task of it (TQ-1161)
+  const continueOld = () => old && swapChat(`/api/concierge/chats/${old.taskId}/continue`);
   const openOld = async (c) => {
     if (c.open) { setOld(null); setChatsOpen(false); return; }
     try { const { data } = await api.get(`/api/concierge/chats/${c.taskId}`); setOld({ ...c, messages: data.messages || [] }); setChatsOpen(false); }
@@ -2894,7 +2898,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
           onClick={() => { setAiEl(null); openAppLink(state?.providers?.length ? AI_DEFAULTS : place("ai").href); }}>
           {state?.providers?.length ? `Choose which AI does what - ${place("ai_defaults").name}` : "Connect an AI"}</button>}
       </Popover>
-      {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span><button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}
+      {old && <div className="tq-old-banner"><span>You are reading an earlier chat.</span>
+        <button type="button" className="tq-chip" onClick={continueOld} disabled={busy || resetting}>Continue this chat</button>
+        <button type="button" className="tq-chip" onClick={() => setOld(null)}>Back to today</button></div>}
       {chatsOpen && (
         <div className="tq-chats">
           <div className="tq-chats-head">Chats<span style={{ flex: 1 }} /><IconButton aria-label="Close past chats" size="small" onClick={() => setChatsOpen(false)}><CloseIcon sx={{ fontSize: 16 }} /></IconButton></div>

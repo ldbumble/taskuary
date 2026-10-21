@@ -860,6 +860,16 @@ def _assistant_dock_new(background: BackgroundTasks):
     starts with no messages. Reviews and tasks are separate workspace state and remain available.
     """
     from . import general
+    old = _archive_dock(background)
+    task, created = general.dock_task(store, ACTOR)
+    _warm_assistant()              # the new chat's CLI starts now, not on its first ask
+    return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
+            'archivedTaskId': old['TaskId']}
+
+
+def _archive_dock(background: BackgroundTasks) -> dict:
+    """Put the live guide conversation away - New chat, and Continue on an earlier one."""
+    from . import general
     old, _created = general.dock_task(store, ACTOR)
     session = general.session_for(old['TaskId'])
     if session and session.busy:
@@ -874,10 +884,7 @@ def _assistant_dock_new(background: BackgroundTasks):
         # Closing is also the conservative point where the Hub may retain hard-earned knowledge.
         # That can call an AI, so it belongs after the response rather than delaying New chat.
         background.add_task(session.close)
-    task, created = general.dock_task(store, ACTOR)
-    _warm_assistant()              # the new chat's CLI starts now, not on its first ask
-    return {'task': task, 'ref': task_ref(task['TaskId']), 'created': created,
-            'archivedTaskId': old['TaskId']}
+    return old
 
 class ChecklistTick(BaseModel):
     done: bool = True
@@ -4608,6 +4615,26 @@ def concierge_chat(tid: int):
     t = store.get_task(tid)
     if not t or not general.is_dock(t): raise HTTPException(404, 'no such chat')
     return {'task': t, 'messages': concierge.history(store, tid)}
+
+@app.post('/api/concierge/chats/{tid}/continue')
+def concierge_chat_continue(tid: int, background: BackgroundTasks):
+    """Pick an earlier chat back up: today's is archived and that one is the live chat again. An earlier chat could only be
+    read, and the one way forward on the panel was the Advisor's "New task" - going back to where a conversation left off
+    meant making a task of it (TQ-1161). Its model session went with the archive; every turn carries CONVERSATION SO FAR
+    from the chat's own rows, so the next one picks up from what was said."""
+    from . import general
+    from .processing_navigation import chat_change
+    t = store.get_task(tid)
+    if not t or not general.is_dock(t): raise HTTPException(404, 'no such chat')
+    with chat_change(store):
+        live, _ = general.dock_task(store, ACTOR)
+        if live['TaskId'] == tid: return {'task': live, 'ref': task_ref(tid), 'archivedTaskId': None}
+        old = _archive_dock(background)
+        store.update_task(tid, {'Status': 'open'}, ACTOR)
+        store.set_setting('assistant_dock_task_id', str(tid), ACTOR)
+        store.audit('task', tid, 'continue_assistant_dock', ACTOR)
+        _warm_assistant()
+        return {'task': store.get_task(tid), 'ref': task_ref(tid), 'archivedTaskId': old['TaskId']}
 
 @app.post('/api/concierge/next')
 def concierge_next(body: SurfaceBody = None):

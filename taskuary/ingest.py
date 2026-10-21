@@ -577,9 +577,16 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     if msg.get('idea_context'): thread = {**thread, 'idea_context': msg['idea_context']}
     # ...and what the files on it SAY (attachtext): the invoice's total, the contract's clause - scrubbed, fenced, and within
     # attachtext.MESSAGE_CHARS beside the body's own budget; the later files are what a long attachment set loses first
-    if msg.get('file_text'):
+    # ...and the documents its body LINKS to (linkdocs): the shared sheet of bills is the ask as much as an attached one. A held
+    # message read back off its row already carries them (attachtext.of_message); a fresh one is read here, before the row exists
+    files = list(msg.get('file_text') or [])
+    if not any(e.get('link') for e in files):
+        from . import linkdocs
+        try: files += linkdocs.entries(store, msg)
+        except Exception as e: logger.debug(f'linked documents skipped for triage: {e}')
+    if files:
         from . import attachtext
-        if got := attachtext.lines(msg['file_text']): thread = {**thread, 'attached_files': got}
+        if got := attachtext.lines(files): thread = {**thread, 'attached_files': got}
     # ...and what the ASSISTANT has already said about this thread (a chase it suggested,
     # an ask it flagged, and what the owner did with it) - the other brain's last word
     from .assistant import said_about

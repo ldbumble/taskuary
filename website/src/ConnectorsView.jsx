@@ -2187,6 +2187,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [secret, setSecret] = useState("");
   const [newSrc, setNewSrc] = useState("");
+  const [chatNames, setChatNames] = useState({});   // WhatsApp jid -> chat name, from WaChats' roster
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
@@ -2308,7 +2309,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
-        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} />}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setChatNames} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -2328,7 +2329,9 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
             <StatusDot ok={!!s.Active} />
-            <Typography sx={{ ...mono, color: INK, fontSize: 13 }} noWrap>{s.Address}</Typography>
+            {/* a group's address is "120363…@g.us": a list of those could not say which chats were the ones added */}
+            {chatNames[s.Address] && <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{chatNames[s.Address]}</Typography>}
+            <Typography sx={{ ...mono, color: chatNames[s.Address] ? FAINT : INK, fontSize: chatNames[s.Address] ? 11 : 13 }} noWrap>{s.Address}</Typography>
             {conn.Type === "outlook" && <MailFolders conn={conn} s={s} reload={reload} />}
             {String(s.Owner || "").startsWith("discovered:") && (
               <Typography variant="caption" sx={{ color: FAINT }} noWrap>
@@ -3510,7 +3513,7 @@ const WaPair = ({ conn, reload }) => {
 
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
-const WaChats = ({ conn, mine, reload, onNavigate }) => {
+const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
   const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
@@ -3524,9 +3527,10 @@ const WaChats = ({ conn, mine, reload, onNavigate }) => {
   const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
-    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr(""); }
+    try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr("");
+      onRoster?.(Object.fromEntries((data.data || []).filter((r) => r.name).map((r) => [r.jid, r.name]))); }
     catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
-  }, [conn.ConnectorId]);
+  }, [conn.ConnectorId, onRoster]);
   useEffect(() => { load(); }, [load]);
   const loadStanding = useCallback(async () => {
     try {

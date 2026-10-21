@@ -356,7 +356,7 @@ class BrainTests(unittest.TestCase):
         patcher = mock.patch('taskuary.agents.default_pick', return_value='cli:claude'); patcher.start(); self.addCleanup(patcher.stop)   # whatever this machine has installed
         self.assertEqual(concierge.pick(s), 'cli:claude'); self.assertTrue(concierge.is_cli(s))
         seen = {}
-        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None, extra_args=None):
+        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None, extra_args=None, user_settings=True):
             seen.update(name=name, model=model, cwd=cwd, resume=resume, keep=keep, extra=extra_args)
             def llm(system, user, max_tokens=0, images=None):
                 seen['system'] = system; llm.session_id = 'sess-1'; return 'Dana wants the file - the draft is below.'
@@ -608,7 +608,7 @@ class FastLaneTests(unittest.TestCase):
         s.upsert_agent('coding', 'coding', 'cli', '{}')
         patcher = mock.patch('taskuary.agents.default_pick', return_value='cli:claude'); patcher.start(); self.addCleanup(patcher.stop)
         calls = []
-        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None, extra_args=None):
+        def fake_make(store_, name, model=None, cwd=None, trace=None, cancel=None, resume=None, keep=None, extra_args=None, user_settings=True):
             calls.append(cwd); f = lambda *a, **k: 'Dana wrote on email.'; f.session_id = ''; return f
         t, m, r = drafted(s)
         with mock.patch.object(concierge.llm_mod, 'make_cli_llm', fake_make):

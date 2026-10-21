@@ -101,6 +101,33 @@ def test_a_brain_with_no_partial_flag_streams_no_words(fast_fake):
     assert 'words' not in seen
 
 
+def _args(log):
+    return [json.loads(l)['args'] for l in log.read_text().splitlines() if '"ev": "ready"' in l]
+
+
+@pytest.mark.parametrize('old', [False, True])
+def test_the_assistants_cli_reads_no_user_settings_and_an_older_cli_runs_as_before(fast_fake, monkeypatch, old):
+    """The owner, 2026-10-21: the Assistant's CLI runs without their user-level Claude settings - their user-wide hooks POST to the
+    app on every prompt and stop, 0.3-0.5 s a turn. A claude whose --help has no --setting-sources runs without it, and answers."""
+    monkeypatch.setattr(agents, '_FLAGS', {})
+    if old: monkeypatch.setenv('FAKE_CLAUDE_OLD', '1')
+    s = _store()
+    assert concierge.say(s, "what's waiting on me")['say'] == 'Ten things.'
+    [args] = _args(fast_fake)
+    assert (args[args.index('--setting-sources') + 1] == 'project,local') if not old else '--setting-sources' not in args
+
+
+def test_other_kept_conversations_keep_the_owners_settings(fast_fake, monkeypatch):
+    """Coding and general agents keep their hooks: only the brain that asks (the Assistant's) leaves them out."""
+    monkeypatch.setattr(agents, '_FLAGS', {})
+    from taskuary import llm
+    s = MemoryStore()
+    s.upsert_agent('claude', 'general', 'cli', json.dumps({'cmd': 'claude', 'args': ['-p', '--output-format', 'stream-json', '--verbose']}))
+    assert llm.make_cli_llm(s, 'claude', keep='general:9')('SYS', 'hello')
+    [args] = _args(fast_fake)
+    assert '--setting-sources' not in args
+
+
 def test_continue_lit_with_notes_carries_them_and_says_so():
     """"Rerun the agent with these notes: use the new template" lit Continue and dropped the notes (the real-CLI walk, 2026-10-20):
     the light carries them - Continue's box opens holding them - and the line says they go with it. Without notes, as before."""

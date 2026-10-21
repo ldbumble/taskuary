@@ -173,7 +173,8 @@ def fast_args(cli: str) -> list:
 
 def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, trace=None, cancel=None,
                  resume=None, cli_tools: bool = False, extra_env: dict = None, read_only: bool = None,
-                 research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None):
+                 research: bool = False, gear: str = 'light', keep: str = None, extra_args: list = None, task_id=None,
+                 user_settings: bool = True):
     """A CLI agent as the classifier: prompt in on stdin, JSON out. The repo working dir
     is dropped - triage is about the message, not about any checkout.
 
@@ -187,6 +188,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     # a CONVERSATION that stays open between turns (clipool) - the Assistant's chat, a general agent's task
     if keep: prof['keep_alive'] = keep
+    # ...and without the owner's user-level CLI settings and hooks, for the brain that asks (the Assistant's: agents._own_settings)
+    if not user_settings: prof['user_settings'] = False
     # `read_only` is explicit for scheduled reports: a folder tells the agent where it may READ,
     # not whether it may write. None preserves the older caller contract where a cwd meant hands.
     no_hands = read_only if read_only is not None else not (cwd or cli_tools)

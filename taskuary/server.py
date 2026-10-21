@@ -5309,6 +5309,13 @@ def save_source(body: SourceBody):
             ok, why = flow.validate(store, flow_cfg)
             if not ok: raise HTTPException(422, f'The steps cannot be saved yet: {why}.')
     sid = store.save_source(fields, ACTOR)
+    # A NEW WORKFLOW STARTS ON ITS NEXT SLOT, not on the next tick. A source never run is due at once (reports.is_due) - right
+    # for a report you want to see, wrong for a job that opens tasks and drafts mail: a weekly Monday workflow saved on a
+    # Wednesday ran seconds later, beside the editor's "Saved - runs Mon at 08:00", and again beside its own Save & run now -
+    # two laptop tasks, two approvals (walk 2026-10-21). Run now is the door for running it now.
+    if not was and channel == 'report':
+        from . import workflows
+        if workflows.is_workflow(store.get_source(sid)): store.touch_source(sid)
     # SWITCHING SOMETHING ON MUST LOOK BACK. The watermark advances on every poll, including
     # polls that deliberately read nothing from this source (a repo whose issues were 'off',
     # a chat not yet approved) - so flipping it on would otherwise only ever catch what

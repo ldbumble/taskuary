@@ -61,14 +61,14 @@ class TheOwnersQuestion(Base):
 
     def test_picked_in_the_pane_it_is_no_longer_waiting(self):
         hooks.ask(payload(), wait=30)
-        hooks.receive(payload('PostToolUse', tool_response={'answers': {Q: 'main'}}))
+        hooks.receive(payload('PostToolUse', tool_response={'answers': {Q: 'main'}}), 'claude')
         self.assertEqual(ws.status(self.s, self.tid)['requests'], [])
         self.assertIsNone(term.worker_fields(self.s, self.t)['state'])
 
     def test_a_permission_prompt_is_never_held_either_and_waves_too(self):
         """Claude's own "Do you want to proceed?" on the owner's task: observed, never answered or held by Taskuary."""
         out = hooks.receive({'hook_event_name': 'PermissionRequest', 'tool_name': 'Bash', 'session_id': 'sess-1', 'cwd': CWD,
-                             'tool_input': {'command': 'npm install'}})
+                             'tool_input': {'command': 'npm install'}}, 'claude')
         self.assertNotIn('hookSpecificOutput', out)
         self.assertEqual(ws.HELD, {})
         w = term.worker_fields(self.s, self.t)

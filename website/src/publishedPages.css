@@ -17,3 +17,10 @@
 .tq-published-table th, .tq-published-table td { border-bottom: 1px solid #eee9df; padding: 4px 10px; text-align: left; white-space: nowrap; }
 .tq-published-table th { position: sticky; top: 0; background: #faf8f4; color: #4d514b; font-weight: 600; }
 .tq-aui-agent-body .tq-published { margin: 8px 0 2px; }
+/* a file the agent made for the task (taskOutputs.js): a workbook's sheets as tabs over the table, plain text as itself */
+.tq-published-file { cursor: default; }
+.tq-published-tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-top: 1px solid #e3ddd2; overflow-x: auto; background: #faf8f4; }
+.tq-published-tabs button { border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; background: none; padding: 4px 10px; font: inherit; font-size: 11.5px; color: #8a8d86; cursor: pointer; white-space: nowrap; }
+.tq-published-tabs button.on { background: #fff; border-color: #e3ddd2; color: #4d514b; font-weight: 600; }
+.tq-published-tabs + .tq-published-table { border-top: 0; }
+.tq-published-text { margin: 0; border-top: 1px solid #e3ddd2; padding: 10px 14px; max-height: min(70vh, 640px); overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }

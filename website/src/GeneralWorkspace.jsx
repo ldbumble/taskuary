@@ -26,6 +26,7 @@ import { agentName, workOf, doingNow, trailText, turnStart, elapsedText } from "
 import { Md } from "./md.jsx";
 import PublishedPages from "./PublishedPages.jsx";
 import { placeShown } from "./shownPages.js";
+import { outputRefs, outputRow, uncited } from "./taskOutputs.js";
 import { SessionPane } from "./TerminalView.jsx";
 import { BORDER, DIM, FAINT, INK, PANEL, PANEL2, mono } from "./theme.jsx";
 import "./generalWorkspace.css";
@@ -163,7 +164,18 @@ const AgentBand = ({ name, provider, work, since }) => {
 // wore the concierge's name.
 const AgentNameCtx = React.createContext("Taskuary");
 
-const AssistantText = ({ text }) => <Md text={text} />;
+// A FILE THE ANSWER NAMES IS A FILE YOU CAN OPEN (taskOutputs.js): Codex's citation marker, a link or a path into this task's
+// outputs folder comes out of the words and sits under them with Preview and Download. A Codex answer printed the raw marker, and
+// asked to send the workbook it wrote a link to an /outputs/ address the server never had - a 404 (outputs.py).
+const OutputsCtx = React.createContext(null);
+const AssistantText = ({ text }) => {
+  const at = React.useContext(OutputsCtx);
+  const { text: said, files } = at ? outputRefs(text, at.tid) : { text, files: [] };
+  return <>
+    {!!said && <Md text={said} />}
+    {!!files.length && <PublishedPages pages={files.map((f) => outputRow(at.tid, f, at.listed))} />}
+  </>;
+};
 const AssistantReasoning = ({ text: raw }) => { const text = forScreen(raw); return text ? (
   <details className="tq-aui-progress" open>
     <summary>Agent progress</summary>
@@ -810,7 +822,10 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
   const placed = placeShown(data?.published, shownMessages);     // no hook: this sits below the loading return
   const thread = (
     <AgentNameCtx.Provider value={name}><ShownCtx.Provider value={placed.by}>
-      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages} published={placed.foot}
+    <OutputsCtx.Provider value={dock ? null : { tid: task.TaskId, listed: data?.outputs }}>
+      {/* ...and every other file in the task's outputs folder - one no answer names - at the foot, with what it published or showed */}
+      <AssistantThread key={task.TaskId} revision={revision} task={task} messages={shownMessages}
+        published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
         onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
@@ -819,6 +834,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
         reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} />
+    </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
   const tools = (<>

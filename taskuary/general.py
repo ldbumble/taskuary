@@ -1004,7 +1004,8 @@ class GeneralSession:
                     self.resume_notice = 'Continuing from the saved conversation with the selected provider.'
                     self._remember_session()
             if not self.pick:
-                raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai_apps')} to run this task")
+                # ...in plain words: the AI CLI agents page's own name read "CLI agent" on the failed card (the 2026-10-21 audit, R2)
+                raise RuntimeError(f"{NO_AI} - connect one on {words.name('ai')} to run this task")
             if echo and as_owner: self._emit(f'\x1b[1;34myou>\x1b[0m {text}\r\n')
             if as_owner: self.store.add_comment(self.task_id, 'owner', USER_TYPE, text)
             system, user = _prompt(self.store, self.task_id)
@@ -1109,7 +1110,7 @@ class GeneralSession:
             # gear it shares with triage (aidefaults). See the 2026-09-16 spec.
             build_args['gear'] = 'light' if is_dock(self.store.get_task(self.task_id)) else 'main'
             brain = llm_mod.build_llm(self.store, **build_args)
-            if not brain: raise RuntimeError('the selected AI connector is unavailable')
+            if not brain: raise RuntimeError('the AI chosen for this is not available - pick another, or connect it again')
             if self.cli_sid:
                 # an opening turn's 'turn' IS the instruction, which the history never saw
                 user = _turn_only(self.store, self.task_id, text) if as_owner else text
@@ -1269,6 +1270,12 @@ class GeneralSession:
             # saved conversation back up; a session left open over a dead process offered Stop and save on nothing (2026-10-21)
             from .clipool import MID_TURN
             if MID_TURN in str(e): threading.Timer(0.1, self.close, kwargs={'learn': False}).start()
+            # A FAILED TURN IS SAID AS A FAILURE (owner-approved, 2026-10-21): left open, the session read alive and not busy - "waiting
+            # on you" on the card, the rail and the Board over an agent that never ran. It ends here, its conversation kept, so every
+            # surface reads its last word (workerstate.ended: failed) and the step offers Try again. A turn the owner stopped is not a
+            # failure, and the dock is the app's own chat, not a run.
+            elif not cancel.is_set() and not is_dock(self.store.get_task(self.task_id)):
+                threading.Timer(0.1, self.close, kwargs={'learn': False, 'report': False}).start()
             raise
         finally:
             self.busy, self.last = False, time.time()
@@ -1304,7 +1311,7 @@ class GeneralSession:
         c.set()
         return True
 
-    def close(self, learn=True):
+    def close(self, learn=True, report=True):
         # Coding sessions already ask this at wrap. General sessions used to bypass that branch,
         # so everything the assistant learned about the business disappeared with the chat even
         # though the Hub explicitly holds more than technical facts. A session boundary is the
@@ -1327,7 +1334,7 @@ class GeneralSession:
                     hub.learn_from_session(self.store, self.task_id, transcript, 'assistant', llm=brain)
                 except Exception as e:
                     logger.debug(f'hub: assistant conversation {self.task_id} learned nothing - {e}')
-        if was_alive and not is_dock(task): report_note(self.store, self.task_id)
+        if was_alive and report and not is_dock(task): report_note(self.store, self.task_id)     # a failed turn files no result
         self.alive, self.ended = False, time.time()
         if was_alive:
             from . import browserview

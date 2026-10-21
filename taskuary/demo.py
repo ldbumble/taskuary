@@ -233,7 +233,9 @@ DONE = {'approve': ADVICE['approve'], 'reply': ADVICE['reply'], 'close': 'The wo
 # blind; a send refused for its ADDRESS is fixed at the address, never redrafted; a draft promising what nothing shows is written again,
 # never sent; an issue with a traceback goes to an agent; someone quiet past their day is chased. The script reads the prompt's own
 # lines for these - the real Advisor reads their meaning.
-AGENT_RAN = {'fix': "{what} - {label} is the way past it.", 'new_task': "{what}: {why}. Make it a task to fix that first."}
+# ...a general agent's run is tried again (advisor.offered's Try again - it is offered no New task); a coding agent's is made a task
+AGENT_RAN = {'fix': "{what} - {label} is the way past it.", 'new_task': "{what}: {why}. Make it a task to fix that first.",
+             'continue': "{what}: {why}. {label} runs it once more."}
 BOUNCED = {'fix': 'The address was refused - {label} is the way past it.', 'new_task': 'The address was refused - fix the address, not the words.'}
 _BOUNCE = re.compile(r'no such user|unknown recipient|recipient\w* refused|refused [^\s]+@|bounced', re.I)
 _PROMISE = re.compile(r"\b(?:sending\b[^.]*\bnow|attached|goes out in|payment run|paid on)\b", re.I)

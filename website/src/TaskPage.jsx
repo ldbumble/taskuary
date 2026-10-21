@@ -93,6 +93,7 @@ import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
 import { FOCUS_RING, pressable } from "./pressable.js";
+import { place } from "./words.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
 
 const GeneralWorkspace = React.lazy(lazyGeneral("GeneralWorkspace"));   // the guard lives in lazyGeneral.js
@@ -1045,7 +1046,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // this carries the two things it cannot - how far the list got, and what the task is
   const foldedFacts = [checklist.length ? progressLine(checklist) : "", kindLabel(t?.Kind || "task"),
     t?.Assignee ? assigneeLabel(t.Assignee) : "", repoOf(t) || ""].filter(Boolean).join(" · ");
-  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory
+  // ...and a run that FAILED was started, whether or not its first turn got as far as the conversation: with no AI to run on it
+  // never did, and the row offered Send to agent as if nothing had been tried (owner-approved, 2026-10-21: Try again)
+  const failedRun = !term?.alive && (detail?.runEnded === "failed" || detail?.agentStory?.kind === "failed");
+  const generalStarted = isGeneral && (!!term?.alive || hasGeneralHistory || failedRun
     || String(t?.Tags || "").split(/[\s,]+/).includes(ASK_TAG));
   // ONE BAR, THE SAME BAR. The Task and Reply cards both open with [ primary ] | [ named ]
   // [ named ] ... fact, and the Agent card alone answered with a row of default-size buttons UNDER
@@ -1216,19 +1220,35 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (!stale(id)) setGeneralRevision((n) => n + 1);
     Promise.all([loadDetail(id), loadTasks()]).then(() => onChanged?.());
   };
+  // A RUN THAT FAILED IS TRIED AGAIN, NOT CONTINUED (owner-approved, 2026-10-21): the step says "Failed - <why>", Try again runs it
+  // once more on the same conversation at the press, and the place that fixes it - Connect an AI - is the filled move when it has one
+  const runFix = failedRun ? detail?.agentStory?.fix || null : null;
+  const tryAgain = async () => {
+    const id = selected;
+    if (!id || startingAgent) return;
+    setStartingAgent("resume"); setErr(""); setStartFail(null);
+    try { await api.post(`/api/tasks/${id}/continue-work`, { note: null }); continued(); }
+    catch (e) {
+      if (!stale(id)) { const msg = e?.response?.data?.detail || e?.message || "It could not start again."; setErr(msg); setStartFail({ ...failOf(e), text: msg, again: tryAgain }); }
+    } finally { if (!stale(id)) setStartingAgent(""); }
+  };
+  const continueWord = startingAgent === "resume" ? (failedRun ? "Trying again…" : "Continuing…") : failedRun ? btn("try_again") : labelOfRow("continue");
+  const continuePress = (e, a) => (failedRun ? tryAgain() : setContinueAt(a || e?.currentTarget));
   // THE BAR THE AGENT CARD ACTS THROUGH, built here so it can ride inside the heading beside the
   // chip - where the Task and Reply strips keep theirs. Group one is THIS session, group two is
   // another one, and exactly one move is filled. It is an element, not a component: the handlers
   // it calls are declared just above, and a component defined mid-render remounts on every keystroke.
   const agentBarRow = (
     <Box onClick={(e) => e.stopPropagation()} sx={{ display: "flex", alignItems: "center", gap: 0.8, flexWrap: "wrap" }}>
-      {barContinue && <Button size="small" variant="contained" disableElevation disabled={!!startingAgent} sx={primaryBtn}
-        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
-        title={isGeneral
+      {runFix && <Button size="small" variant="contained" disableElevation sx={primaryBtn} data-tq-run-fix=""
+        onClick={() => openAppLink(runFix.href)}>{runFix.label}</Button>}
+      {barContinue && <Button size="small" variant={runFix ? "outlined" : "contained"} disableElevation disabled={!!startingAgent} sx={runFix ? barBtn : primaryBtn}
+        startIcon={startingAgent === "resume" ? <CircularProgress size={12} /> : failedRun ? <RefreshIcon sx={{ fontSize: 16 }} /> : <HistoryIcon sx={{ fontSize: 16 }} />}
+        title={failedRun ? btnHint("try_again") : isGeneral
           ? "Reopens the saved provider conversation and continues from its existing context."
           : `Reopens ${detail?.resumable?.agent}'s own session in ${detail?.resumable?.cwd}. It still has what it read, changed and asked.`}
-        onClick={(e) => setContinueAt(e.currentTarget)}>
-        {startingAgent === "resume" ? "Continuing…" : labelOfRow("continue")}</Button>}
+        onClick={continuePress}>
+        {continueWord}</Button>}
       {!isGeneral && <>
         {canContinue && <Divider orientation="vertical" flexItem sx={{ mx: 0.4, my: 0.6, borderColor: BORDER }} />}
         <Button size="small" variant={canContinue ? "outlined" : "contained"} disableElevation
@@ -1353,8 +1373,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
         ...(liveCodingSession ? [{ id: "diff", group: "agent", label: labelOfRow("diff"), run: () => setDiffOpen(true), title: hintOfRow("diff") }] : []),
         ...(pendingReview ? [stopSave] : []),
         ...(notDone ? [runAnother] : []),
-      ] : continueHere ? [{ id: "continue", group: "agent", lead: !pendingReview, label: startingAgent === "resume" ? "Continuing…" : labelOfRow("continue"), disabled: !!startingAgent,
-        run: (e, a) => setContinueAt(a || e?.currentTarget), title: hintOfRow("continue") }]
+      ] : continueHere ? [
+        // ...not a second Connect an AI on the canvas: with no AI the Advisor's own strip carries it, lit (words.json advice_none)
+        ...(runFix && !(inRow && runFix.href === place("ai").href) ? [{ id: "fix", group: "decide", tone: "p", label: runFix.label, run: () => openAppLink(runFix.href), title: btnHint("fix") }] : []),
+        { id: "continue", group: "agent", lead: !pendingReview && !runFix, label: continueWord, disabled: !!startingAgent,
+          run: continuePress, title: failedRun ? btnHint("try_again") : hintOfRow("continue") }]
       : sendGeneral ? [{ id: "send-general", group: "agent", lead: !pendingReview, label: startingAgent === "general" ? "Starting…" : labelOfRow("send-general"),
         disabled: !!startingAgent, run: startGeneralAgent,
         // ON THE BAR, not in the Agent work card (the owner, 2026-10-05: "send to agent on general task should be on bottom not inline");
@@ -1835,7 +1858,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}
                               startIcon={startingAgent === "resume" ? <CircularProgress size={11} /> : <HistoryIcon sx={{ fontSize: 14 }} />}
                               title={detail?.resumable ? `Reopens ${detail.resumable.agent}'s own session in ${detail.resumable.cwd}.` : "Picks its conversation back up."}
-                              onClick={(e) => setContinueAt(e.currentTarget)}>{labelOfRow("continue")}</Button>
+                              onClick={continuePress}>{continueWord}</Button>
                           ) : (
                             <Button size="small" variant="contained" disableElevation
                               sx={{ fontSize: 11, minHeight: 26, py: 0, px: 1.25 }}

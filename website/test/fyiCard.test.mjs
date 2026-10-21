@@ -73,5 +73,7 @@ test("a paused assistant task exposes resume instead of pretending nobody has wo
   // with a note for the agent (T14, 2026-09-25)
   assert.match(tasks, /labelOfRow\("continue"\)/);
   assert.match(tasks, /<ContinueBox task=\{t\} anchor=\{continueAt\}/);
-  assert.match(tasks, /onClick=\{\(e\) => setContinueAt\(e\.currentTarget\)\}/);
+  // ...the press opens that box - except over a run that FAILED, which is tried again at once (owner-approved, 2026-10-21)
+  assert.match(tasks, /continuePress = \(e, a\) => \(failedRun \? tryAgain\(\) : setContinueAt\(a \|\| e\?\.currentTarget\)\)/);
+  assert.match(tasks, /onClick=\{continuePress\}/);
 });

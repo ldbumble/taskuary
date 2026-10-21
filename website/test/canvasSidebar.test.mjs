@@ -29,7 +29,7 @@ test("the stack sits above the filter, which takes the whole row and says what i
 test("a section heading walks that section; its chevron alone opens a capped band", () => {
   const view = src("AssistantView.jsx");
   assert.match(view, /data-tq-section-head=\{level\}/);
-  assert.match(view, /onClick=\{\(\) => onSection\(level\)\}/);
+  assert.match(view, /\{\.\.\.pressable\(\(\) => onSection\(level\)\)\}/);   // a click, or Enter/Space from the keyboard (pressable.js)
   assert.match(view, /e\.stopPropagation\(\)/);
 });
 

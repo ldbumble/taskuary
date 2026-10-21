@@ -89,6 +89,7 @@ import { fmtDate, fmtTime } from "./dates.js";
 import { noteWrite } from "./wrote.js";
 import { LIT, STEP_SAID, finishLine } from "./connectorStep.js";
 import { revealRing } from "./railReveal.js";
+import { pressable } from "./pressable.js";
 import "./assistantView.css";
 
 // Which walk-through this tab was in. Per-browser and deliberately thin - one task id - because the
@@ -618,18 +619,18 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 back up or a tiny arrow"). */}
             {/* THE HEADING WALKS ITS SECTION (the canvas redesign, 2026-09-29): its first row goes on the table and Next
                 stays inside it until it is empty. Opening a capped band is the chevron's job alone now. */}
-            <div className={`tq-pile-head${folds ? " folds" : ""}`} data-tq-section-head={level} role="button"
+            <div className={`tq-pile-head${folds ? " folds" : ""}`} data-tq-section-head={level}
               title={`Walk ${levelLabel(level)} - ${LEVEL_META[level]?.hint || ""}`}
-              onClick={() => onSection(level)}>
+              {...pressable(() => onSection(level))}>
               {/* each band its own SUBTLE tint (the owner, 2026-09-28: "now all the pills are the same. make them subtly
                   different") - light red for your task, never the loud one; urgent alone keeps its colour */}
               <span className={`lvl-${level}`}>{levelLabel(level)}</span>
-              {folds && <i className="fold" role="button" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length + extra}`}
-                onClick={(e) => { e.stopPropagation(); if (!open && extra) onMoreFyi?.(); setOpened((cur) => {
+              {folds && <i className="fold" title={open ? `Collapse ${levelLabel(level)}` : `Show all ${rows.length + extra}`} aria-expanded={open}
+                {...pressable((e) => { e.stopPropagation(); if (!open && extra) onMoreFyi?.(); setOpened((cur) => {
                   const next = new Set(cur);
                   if (next.has(level)) next.delete(level); else next.add(level);
                   return next;
-                }); }}>{open ? "▾" : "▸"}</i>}
+                }); })}>{open ? "▾" : "▸"}</i>}
               <hr /><em>{rows.length + extra}</em>
             </div>
             <div className="tq-pile-stack" style={{ height: stackHeight }}>

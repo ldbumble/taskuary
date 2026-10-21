@@ -50,6 +50,11 @@ test("New > Send something with no mailbox draws, and offers the mailbox", { tim
     assert.match(text, /Nothing here can send yet/);
     assert.ok(await page.$$eval("button", bs => bs.some(b => b.textContent.trim() === "Connect a mailbox")), "the mailbox is offered on the row");
     assert.deepEqual(errors.filter(e => /#185|Maximum update depth/i.test(e)), []);
+    // ...and every tab is a keyboard stop: Tab reaches the next one, Enter opens it (the UI audit, 2026-10-21: the six tabs were mouse-only)
+    await page.$$eval("[data-tq-new] [role=tab]", tabs => tabs.find(t => t.getAttribute("aria-selected") === "true").focus());
+    await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
+    await page.waitForFunction(() => { const tabs = [...document.querySelectorAll("[data-tq-new] [role=tab]")], i = tabs.findIndex(t => t.textContent.includes("Send something"));
+      return tabs[i + 1]?.getAttribute("aria-selected") === "true"; }, { timeout: 5000 });
   } finally {
     await browser?.close();
     if (vite.exitCode === null) { vite.kill(); await Promise.race([new Promise(resolve => vite.once("exit", resolve)), delay(3000)]); }

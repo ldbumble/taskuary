@@ -89,7 +89,7 @@ test("the task page opens exactly one stage and lets you open the others by hand
   // the Task card has no WorkflowHeading of its own since the page header became its heading
   // (2026-09-16): folded, it renders its own strip, and that strip is what opens it again
   assert.ok(source.includes(`stage !== "task" && (`), "the task card must render a folded strip");
-  assert.ok(source.includes(`onClick={() => setOpenStage("task")}`), "stage task must open by hand");
+  assert.ok(source.includes(`{...pressable(() => setOpenStage("task"))}`), "stage task must open by hand, by click or key");
   assert.ok(source.includes(`stage === "task" &&`), "stage task body must be gated");
 });
 

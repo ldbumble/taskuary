@@ -49,3 +49,17 @@ def test_a_playbook_drafted_in_the_chat_is_handed_to_the_chat_with_its_approve()
     assert json.loads(p['playbookDrafts'][0]['DraftText'])['action'] == 'write_playbook'
     s.decide_review(made['reviewId'], 'rejected', None, 'owner', '')
     assert payload(s, tid)['playbookDrafts'] == []
+
+
+def test_an_agent_asking_from_a_terminal_on_a_general_task_has_its_question_in_the_canvas():
+    """W6 (the UI audit, 2026-10-21): "Agent asked you something" over an empty canvas - the snapshot read the question off the task's
+    conversation session only, and an agent asking from a terminal on the task had none, so its question lived in the rail's hover."""
+    from taskuary import terminal, workerstate
+    s = MemoryStore(); tid = s.create_task({'Title': 'Reconcile the export', 'Kind': 'general', 'Status': 'in_progress'}, 't')
+    workerstate.record(s, tid, 'p1', 'working')
+    workerstate.record(s, tid, 'p1', 'input_needed', text='Keep the inter-company rows, or drop them?', choices=['Keep', 'Drop'])
+    pty = mock.Mock(task_id=tid, sid='p1', alive=True, mode='terminal')
+    with mock.patch.dict(terminal.SESSIONS, {'p1': pty}):
+        asked = payload(s, tid)['asking']
+    assert asked['text'] == 'Keep the inter-company rows, or drop them?' and asked['choices'] == ['Keep', 'Drop'] and asked['sid'] == 'p1'
+    assert payload(s, tid)['asking'] is None, 'nothing live on the task: nothing is asking'

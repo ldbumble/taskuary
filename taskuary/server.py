@@ -1683,7 +1683,9 @@ def _assistant_payload(task_id: int, session=None):
             # offered have been recorded since PW-225 and nothing ever showed them: the workspace got
             # the prose ("tell me when you're signed in") and the two choices it named were never
             # clickable anywhere (2026-09-15). The chip said "needs you"; the question did not.
-            'asking': _workerstate().asking_of(store, session) if session else None,
+            # ...from WHICHEVER run is live on the task: an agent asking from a terminal on a general task drew "Agent asked you
+            # something" over an empty canvas, its question only in the rail row's hover (the UI audit's W6, 2026-10-21)
+            'asking': (_workerstate().asking_of(store, asker) if (asker := session or _workerstate()._live(task_id)) else None),
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
             # conversation draws each under the answer that made it, and lists any it cannot place at its foot
             'published': published,

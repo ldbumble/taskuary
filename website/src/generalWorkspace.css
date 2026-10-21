@@ -17,6 +17,16 @@
 .tq-aui-report-action > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tq-aui-report-action b { color: #4d514b; font-size: 12px; }
 .tq-aui-report-action span { color: #858078; font-size: 10.5px; }
+/* WHAT THE AGENT ASKED, with its answer box (AgentAsks, the UI audit's W6): the amber of a raised hand; the choices and the box wrap
+   under the question at any width */
+.tq-aui-asking { width: 100%; box-sizing: border-box; margin: 2px auto 10px; padding: 10px 12px; border: 1px solid #d8c9a8; border-left: 3px solid #b08b4f;
+  border-radius: 11px; background: #fbf7ee; display: flex; flex-direction: column; gap: 8px; }
+.tq-aui-asking b { color: #4d514b; font-size: 12px; }
+.tq-aui-asking-q { color: #3f423d; font-size: 13px; white-space: pre-wrap; }
+.tq-aui-asking-choices { display: flex; gap: 6px; flex-wrap: wrap; }
+.tq-aui-asking-box { display: flex; gap: 8px; align-items: center; }
+.tq-aui-asking-box .MuiInputBase-root { background: #fff; font-size: 13px; }
+.tq-aui-asking-err { color: #8a2f2f; font-size: 11.5px; }
 /* the question keeps a readable width and the choices WRAP below it - unshrinkable choices beside a long question squeezed
    it to one word a line in a half-width chat (the 2026-10-08 portal run) */
 .tq-aui-progress { margin: 0 0 8px; border: 1px dashed #ddd7cd; border-radius: 9px; color: #77766f; font-size: 11.5px; }

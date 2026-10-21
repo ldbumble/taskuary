@@ -63,11 +63,15 @@ test("the offer to schedule the workflow waits for the answer it is offering to 
   assert.match(view, /!dock && reportLike && !serverBusy && !asking && messages\?\.some/);
 });
 
-// the owner, 2026-10-19: "inline we have the agent to talk to, no need to intermediate" - its question is in its own answer,
-// and the reply goes in the composer; only the WhatsApp doorway relays a question with its choices
-test("the general agent's question is not repeated as a card with answer buttons", () => {
+// THE QUESTION IS ON THE AGENT'S CANVAS WITH ITS ANSWER BOX (owner-approved, the UI audit's W6, 2026-10-21): "Agent asked you something"
+// stood over a pane that never showed what, the question only in the rail row's hover. The conversation's own agent takes the answer as
+// its next message; an agent asking from a terminal on the task gets it through the worker's answer road
+test("the general agent's question is drawn in its canvas with a box that answers it", () => {
   const view = read("GeneralWorkspace.jsx");
-  assert.doesNotMatch(view, /tq-aui-asking|onAnswer|answerAsk/);
+  assert.match(view, /\{!dock && asking && <AgentAsks asking=\{asking\} name=\{name\} onAnswer=\{onAnswer\} \/>\}/);
+  assert.match(view, /setOwnPrompt\(\{ id: `ask:\$\{req\.request_id\}`, text \}\)/);
+  assert.match(view, /api\.post\(`\/api\/tasks\/\$\{task\.TaskId\}\/worker\/answer`, \{ request_id: req\.request_id, text \}\)/);
+  assert.match(view, /data\.asking\.request_id !== answered/, "answered here, it goes at once - the snapshot still carries it");
 });
 
 test("the working dots animate from the general workspace's own stylesheet", () => {

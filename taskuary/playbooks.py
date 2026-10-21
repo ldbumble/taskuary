@@ -18,7 +18,7 @@ Three consumers, none of which re-reads the mail to second-guess triage:
   approving it files the playbook, and the second such job matches it. Nothing is ever filed
   without the owner's click, for the same reason a bill is not posted without one.
 """
-import json, re
+import json, re, time
 from pathlib import Path
 from loguru import logger
 
@@ -151,8 +151,10 @@ def about_code(pb: dict) -> bool:
     return bool(CODE_SYSTEMS & set(uses_of(pb)))
 
 
-def read(slug: str) -> str | None:
+def read(slug: str, deleted: bool = False) -> str | None:
+    """The page, or None - a deleted one too, unless `deleted` asks for it: to everything but Restore it is gone."""
     p = folder() / f'{slugify(slug)}.md'
+    if not deleted and slugify(slug) in deleted_at(): return None
     return p.read_text(encoding='utf-8') if p.is_file() else None
 
 
@@ -163,13 +165,68 @@ def write(slug: str, text: str) -> str:
     slug = slugify(slug) if slug and slug != 'new' else slugify(pb['title'])
     d = folder(); d.mkdir(parents=True, exist_ok=True)
     (d / f'{slug}.md').write_text(str(text).rstrip() + '\n', encoding='utf-8')
+    if slug in deleted_at(): _forget(slug); set_on(slug, True)       # a new one under a deleted one's name starts fresh, and on
     return slug
 
 
-def delete(slug: str) -> bool:
-    p = folder() / f'{slugify(slug)}.md'
-    if not p.is_file(): return False
-    p.unlink(); set_on(slug, True); return True
+# DELETE IS AT ONCE, AND RECOVERABLE (the owner, 2026-10-21: no "are you sure" on an action). The file stays where it is and a
+# stamp beside it says when it was deleted: triage, the shelf and the cards stop seeing it, Recently deleted lists it, and Restore
+# drops the stamp - the words, the on/off switch and the shelf order (its mtime) come back exactly. KEEP_DAYS later purge() unlinks it.
+DELETED_FILE, KEEP_DAYS = '_deleted.json', 30
+
+
+def deleted_at() -> dict:
+    try: return {str(k): float(v) for k, v in (json.loads((folder() / DELETED_FILE).read_text(encoding='utf-8')) or {}).items()}
+    except (OSError, ValueError, TypeError, AttributeError): return {}
+
+
+def _save_deleted(m: dict):
+    d = folder(); d.mkdir(parents=True, exist_ok=True)
+    (d / DELETED_FILE).write_text(json.dumps(m, sort_keys=True), encoding='utf-8')
+
+
+def _forget(slug: str):
+    m = deleted_at()
+    if m.pop(slugify(slug), None) is not None: _save_deleted(m)
+
+
+def delete(slug: str, now: float = None) -> bool:
+    s, m = slugify(slug), deleted_at()
+    if s in m or not (folder() / f'{s}.md').is_file(): return False
+    m[s] = time.time() if now is None else now; _save_deleted(m); return True
+
+
+def restore(slug: str) -> bool:
+    s = slugify(slug)
+    if s not in deleted_at() or not (folder() / f'{s}.md').is_file(): return False
+    _forget(s); return True
+
+
+def recently_deleted(now: float = None) -> list:
+    """The Recently deleted list, newest first: what Restore can still bring back, and when it goes for good."""
+    now, out = time.time() if now is None else now, []
+    for s, at in sorted(deleted_at().items(), key=lambda kv: -kv[1]):
+        text = read(s, deleted=True)
+        if text is None: continue
+        pb, end = parse(text), at + KEEP_DAYS * 86400
+        out.append({'slug': s, 'title': pb['title'] or s, 'when': pb['when'], 'deleted_at': at, 'purge_at': end,
+                    'days_left': max(0, int((end - now) // 86400))})
+    return out
+
+
+def purge(now: float = None) -> list:
+    """Unlink what was deleted KEEP_DAYS ago - on startup and in the daily housekeeping. The slugs it purged."""
+    now, m = time.time() if now is None else now, deleted_at()
+    gone = []
+    for s, at in list(m.items()):
+        if now - at < KEEP_DAYS * 86400: continue
+        try: (folder() / f'{s}.md').unlink(missing_ok=True)
+        except OSError: continue
+        m.pop(s); gone.append(s)
+    if gone:
+        _save_deleted(m)
+        for s in gone: set_on(s, True)                                  # a purged one leaves no stale switch behind
+    return gone
 
 
 # ONE PLAYBOOK SWITCHED OFF, KEPT FOR LATER (the owner, 2026-10-21): delete was the only way to stop one matching. Which are off
@@ -192,11 +249,12 @@ def set_on(slug: str, on: bool) -> bool:
 
 
 def list_all() -> list:
-    """Every playbook on disk, oldest first, each parsed - the shelf, the cards and triage all read this."""
+    """Every playbook on disk and not deleted, oldest first, each parsed - the shelf, the cards and triage all read this."""
     d = folder()
     if not d.is_dir(): return []
-    out, shut = [], off()
+    out, shut, gone = [], off(), deleted_at()
     for p in sorted(d.glob('*.md'), key=lambda p: p.stat().st_mtime):
+        if p.stem in gone: continue
         try: text = p.read_text(encoding='utf-8')
         except OSError: continue
         pb = parse(text)

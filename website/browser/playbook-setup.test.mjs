@@ -3,48 +3,51 @@ import test from 'node:test';
 import { mkdir } from 'node:fs/promises';
 import { startHarness } from './harness.mjs';
 
-test('Deleting a saved playbook requires confirmation and keeps failures visible', { timeout: 120000 }, async (t) => {
+test('Deleting a playbook is at once, keeps a failure visible, and Recently deleted brings it back', { timeout: 120000 }, async (t) => {
   const harness = await startHarness(); t.after(() => harness.close());
-  const page = await harness.newPage(), deletes = [];
+  const page = await harness.newPage(), deletes = [], restores = [];
   let fail = true;
-  let books = [{ slug: 'item-report', title: 'Prepare item numbers', when: 'a request for numbers', uses: [] }];
+  const book = { slug: 'item-report', title: 'Prepare item numbers', when: 'a request for numbers', uses: [], enabled: false };
+  let books = [book], deleted = [];
   page.off('request', page.fixtureRequestGuard);
   page.on('request', (request) => {
     const path = new URL(request.url()).pathname; let data, status = 200;
-    if (path === '/api/playbooks') data = { data: books, template: '# New playbook\nwhen: a request' };
+    if (path === '/api/playbooks') data = { data: books, deleted, keep_days: 30, template: '# New playbook\nwhen: a request' };
     if (path === '/api/playbooks/item-report') {
       if (request.method() === 'DELETE') {
         deletes.push(path);
         if (fail) { status = 500; data = { detail: 'The playbook file is locked.' }; }
-        else { books = []; data = { ok: true }; }
+        else { books = []; deleted = [{ slug: book.slug, title: book.title, when: book.when, days_left: 29 }]; data = { ok: true }; }
       } else data = { content: '# Prepare item numbers\nwhen: a request for numbers' };
+    }
+    if (path === '/api/playbooks/item-report/restore' && request.method() === 'POST') {
+      restores.push(path); books = [book]; deleted = []; data = { ok: true, slug: book.slug };
     }
     if (data) return request.respond({ status, contentType: 'application/json', body: JSON.stringify(data) });
     page.fixtureRequestGuard(request);
   });
   await page.goto(`${harness.ui}#playbook=item-report`, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => [...document.querySelectorAll('textarea')].some((el) => el.value.includes('# Prepare item numbers')));
   await click(page, 'Delete');
-  await page.waitForSelector('[role="dialog"]');
-  assert.match(await page.$eval('[role="dialog"]', (el) => el.innerText), /Prepare item numbers/);
-  assert.deepEqual(deletes, [], 'opening the dialog must not delete');
-  await click(page, 'Cancel');
-  await page.waitForSelector('[role="dialog"]', { hidden: true });
-  assert.deepEqual(deletes, [], 'Cancel must not delete');
-  await click(page, 'Delete');
-  await page.waitForSelector('[role="dialog"]');
-  await page.keyboard.press('Escape');
-  await page.waitForSelector('[role="dialog"]', { hidden: true });
-  assert.deepEqual(deletes, [], 'Escape must not delete');
-  await click(page, 'Delete'); await click(page, 'Delete playbook');
-  await page.waitForFunction(() => document.querySelector('[role="dialog"]')?.innerText.includes('file is locked'));
-  assert.equal(deletes.length, 1);
-  assert.equal(await page.$$eval('textarea', (els) => els.some((el) => el.value.includes('# Prepare item numbers'))), true);
+  await page.waitForFunction(() => document.body.innerText.includes('file is locked'));
+  assert.equal(deletes.length, 1, 'Delete sends at once - no confirm in between');
+  assert.equal(await page.$('[role="dialog"]'), null, 'no "are you sure" dialog');
+  assert.equal(await page.$$eval('textarea', (els) => els.some((el) => el.value.includes('# Prepare item numbers'))), true,
+    'a failed delete leaves the words open');
   fail = false;
-  await click(page, 'Delete playbook');
-  await page.waitForSelector('[role="dialog"]', { hidden: true });
+  await click(page, 'Delete');
+  await page.waitForSelector('[data-tq-playbook-deleted="item-report"]');
   assert.equal(deletes.length, 2);
-  // the editor is opened from Reports -> Playbooks, and a deleted one goes back to that shelf (not to a blank editor's Discard)
-  await page.waitForFunction(() => document.body.innerText.includes('No playbooks yet') && !document.querySelector('[data-tq-playbook]'));
+  assert.equal(await page.$('[role="dialog"]'), null);
+  assert.equal(await page.$('[data-tq-playbook="item-report"]'), null, 'it leaves the list');
+  assert.match(await page.evaluate(() => document.body.innerText), /No playbooks yet/, 'the emptied shelf still says so above Recently deleted');
+  assert.match(await page.$eval('[data-tq-playbooks-deleted]', (el) => el.innerText), /Recently deleted[\s\S]*Prepare item numbers[\s\S]*29 days/);
+  await click(page, 'Restore');
+  await page.waitForSelector('[data-tq-playbook="item-report"]');
+  assert.deepEqual(restores, ['/api/playbooks/item-report/restore']);
+  assert.equal(await page.$('[data-tq-playbooks-deleted]'), null, 'Recently deleted empties when nothing is in it');
+  assert.equal(await page.$eval('[data-tq-playbook="item-report"] input[type="checkbox"]', (el) => el.checked), false,
+    'it comes back as it was - still switched off');
 });
 
 async function click(page, label, exact = true) {

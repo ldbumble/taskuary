@@ -30,7 +30,8 @@ def test_a_group_member_the_owner_never_talked_with_alone_is_a_stranger():
     mid = _line(s, 'slack:group', 'Ray Colton')
     ok, why = senders.known(s, _msg('Ray Colton'), exclude_mid=mid)
     # a whole sentence: who, which channel (capitalised), and what follows from it (the owner, 2026-10-16)
-    assert not ok and why == "Ray Colton wrote in Slack, and you haven't talked with them one-to-one there, so no agent starts on their words by itself."
+    assert not ok and why == ("Ray Colton wrote in Slack, and you haven't talked with them one-to-one or answered them there, "
+                              "so no agent starts on their words by itself.")
 
 def test_the_same_person_after_a_one_to_one_conversation_with_the_owner_is_trusted():
     s = _store(); _mine(s, 'slack:group'); _line(s, 'slack:group', 'Gail Moreno')
@@ -153,6 +154,48 @@ def test_whatsapp_marks_a_direct_chat_as_one_to_one_and_a_group_not():
     with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
         messengers.poll_whatsapp(s, s.get_connector_by_type('whatsapp', with_secret=True), s.list_sources(), llm=None)
     assert [_is_dm(r) for r in _rows(s, 'whatsapp')] == [True, False]
+
+# ── worked with: the owner ANSWERING someone in a group counts, sitting in the room with them does not (2026-10-20) ──
+def test_a_group_member_the_owner_has_answered_is_worked_with():
+    s = _store(); t = s.create_task({'Title': 'a', 'Kind': 'coding', 'Source': 'whatsapp'}, 'router')
+    g = 'whatsapp:120363@g.us'
+    _line(s, g, 'Gail Moreno', ch='whatsapp', FromEmail='whatsapp:155'); _mine(s, g, ch='whatsapp')      # weeks ago: she wrote, the owner answered
+    _line(s, g, 'Gail Moreno', ch='whatsapp', FromEmail='whatsapp:155', tid=t)
+    ok, why = senders.known(s, _msg('Gail Moreno', g, ch='whatsapp', from_email='whatsapp:155'))
+    assert ok and why == 'You have answered Gail Moreno on WhatsApp before.'
+    assert origin.of_task(s, t)[0] == 'trusted'
+
+def test_answering_someone_else_in_the_room_does_not_vouch_for_them():
+    s = _store(); g = 'slack:group'
+    _line(s, g, 'Ray Colton'); _line(s, g, 'Gail Moreno'); _mine(s, g)       # the owner answered Gail, after Ray had spoken
+    mid = _line(s, g, 'Ray Colton')
+    assert not senders.known(s, _msg('Ray Colton', g), exclude_mid=mid)[0]
+    assert senders.known(s, _msg('Gail Moreno', g), exclude_mid=mid)[0]
+
+def test_the_owner_answering_their_only_line_is_not_judged_on_that_line():
+    s = _store(); g = 'slack:group'; mid = _line(s, g, 'Ray Colton'); _mine(s, g)
+    assert not senders.known(s, _msg('Ray Colton', g), exclude_mid=mid)[0]  # the message under judgement never vouches for itself
+
+def test_whatsapp_s_phone_and_lid_forms_are_one_person():
+    s = _store(); g, d = 'whatsapp:120363@g.us', 'whatsapp:155@s.whatsapp.net'
+    _dm(s, d, 'Gail Moreno', ch='whatsapp'); s._exec("UPDATE message SET FromEmail='whatsapp:155' WHERE ConversationId=?", (d,))
+    _mine(s, d, ch='whatsapp')                                               # the direct chat names her by phone...
+    meta = {'alias': 'whatsapp:155'}                                         # ...the group by LID, with the phone beside it
+    assert senders.known(s, _msg('Gail Moreno', g, ch='whatsapp', from_email='whatsapp:9917', mail_meta=meta))[0]
+    assert not senders.known(s, _msg('Gail Moreno', g, ch='whatsapp', from_email='whatsapp:9917'))[0]
+
+def test_whatsapp_records_the_bridge_s_other_id_as_the_alias():
+    s = MemoryStore(); cid = s.get_connector_by_type('whatsapp')['ConnectorId']; s.save_connector({'ConnectorId': cid, 'Active': 1}, 'o')
+    s.save_source({'Channel': 'whatsapp', 'Address': '120363@g.us', 'ConnectorId': cid, 'Active': 1}, 'o')
+    feed = {'seq': 2, 'messages': [{'seq': 1, 'id': 'a', 'jid': '120363@g.us', 'group': True, 'sender': '9917@lid',
+                                    'senderAlt': '155@s.whatsapp.net', 'name': 'Gail', 'text': 'hey', 'ts': 1755700000},
+                                   {'seq': 2, 'id': 'b', 'jid': '120363@g.us', 'group': True, 'sender': '166@s.whatsapp.net',
+                                    'senderAlt': '166@s.whatsapp.net', 'name': 'Ray', 'text': 'hi', 'ts': 1755700001}]}
+    with mock.patch.object(messengers, '_wa', lambda c_, p, body=None: feed):
+        messengers.poll_whatsapp(s, s.get_connector_by_type('whatsapp', with_secret=True), s.list_sources(), llm=None)
+    r = _rows(s, 'whatsapp')
+    assert r[0]['FromEmail'] == 'whatsapp:9917' and senders.chat_aliases(r[0]) == ('whatsapp:155',) and not _is_dm(r[0])
+    assert senders.chat_aliases(r[1]) == ()                                  # the same id twice is no alias
 
 def test_slack_marks_a_dm_channel_as_one_to_one():
     from taskuary import channels

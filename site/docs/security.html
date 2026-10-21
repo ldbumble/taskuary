@@ -133,7 +133,7 @@ picked as the triage brain at all (Cursor, Copilot, Kimi, OpenCode and custom co
 <p><strong>A stranger does not start an agent.</strong> A message opens a task, but an agent starts on it by itself
 only when the sender passes <strong>Settings → Coding agent → Who may start a worker without you</strong>: your own
 domain, someone you have written to before, or, in a chat you connected, someone you have talked with
-one-to-one or vouched for. Everyone else&#39;s task waits for you to press Start. Earlier mail <em>from</em>
+one-to-one, answered there, or vouched for. Everyone else&#39;s task waits for you to press Start. Earlier mail <em>from</em>
 someone never counts. A stranger&#39;s second message is still a stranger&#39;s.</p>
 <p><strong>A forged address is not a familiar one.</strong> Taskuary reads the receiving server&#39;s
 Authentication-Results. A From address that fails DMARC or DKIM is a stranger&#39;s, however familiar it
@@ -141,8 +141,10 @@ looks. Mail your own Exchange passed on its composite check stays trusted, and m
 all is judged by the rules above.</p>
 <p><strong>Chat is trusted per person, not per room.</strong> A sender is known by the platform&#39;s own id, never a
 display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
-counts once the platform calls your conversation with them one-to-one and you have replied in it, or
-once you press <strong>Trust this task</strong> on a task they opened. Slack, Teams, Telegram, WhatsApp, iMessage,
+counts once the platform calls your conversation with them one-to-one and you have replied in it, once
+you have answered them in any chat there (their line, then yours, with nobody else between), or once
+you press <strong>Trust this task</strong> on a task they opened. WhatsApp names one person by phone in a direct
+chat and often by another id in a group; Taskuary reads both as the same person. Slack, Teams, Telegram, WhatsApp, iMessage,
 Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
 public rooms only, so there a sender counts only once you vouch for them.</p>
 <p><strong>A name is not an identity.</strong> Your own lines are recognised by how Taskuary stored them, never by a

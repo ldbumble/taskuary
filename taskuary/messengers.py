@@ -240,6 +240,11 @@ def _wa_sender_id(jid: str) -> str:
     """Stable stored identity without making a provider JID look like an email address."""
     return 'whatsapp:' + str(jid or '').partition('@')[0].split(':', 1)[0]
 
+def _wa_alias(m: dict) -> str:
+    "The sender's other WhatsApp id (bridge senderAlt: phone beside LID), stored like from_email - '' when it is the same one."
+    alt = _wa_sender_id(m['senderAlt']) if m.get('senderAlt') else ''
+    return alt if alt != 'whatsapp:' and alt != _wa_sender_id(m.get('sender') or m.get('jid')) else ''
+
 
 def wa_test(store, c) -> str:
     st = _wa(c, '/status')
@@ -519,6 +524,9 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
                 atts.append({'id': f"doc:{m.get('id')}", 'name': name, 'contentType': mime,
                              'size': len(data), 'contentBytes': base64.b64encode(data).decode()})
         ext_id = f"whatsapp:{jid}:{m.get('id')}"
+        # a person's JID, not a group's, is the one-to-one mark; `alias` is the same person's other id (phone vs LID), so
+        # the group member the owner answers is the one they talk with directly (senders.chat_aliases)
+        meta = {**({} if m.get('group') or jid.endswith('@g.us') else {'dm': True}), **({'alias': a} if (a := _wa_alias(m)) else {})}
         r = ingest_message(store, file_only=file_only or not transcribed, msg={
             'external_id': ext_id, 'channel': 'whatsapp',
             'subject': None, 'body': body or '(no text - see the attachment)',
@@ -530,7 +538,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
             'conversation_id': f'whatsapp:{jid}',
             'sent_at': datetime.fromtimestamp(m.get('ts') or 0).strftime('%Y-%m-%d %H:%M:%S'),
             'source_name': ('group chat' if m.get('group') else m.get('name')) or 'WhatsApp',
-            **({} if m.get('group') or jid.endswith('@g.us') else {'mail_meta': {'dm': True}}),    # a person's JID, not a group's
+            **({'mail_meta': meta} if meta else {}),
             'images': images_for_triage(store, atts), **files_for_triage(atts),
             **({'file_reason': f'voice note - not transcribed: {why[:160]}'} if not transcribed else {})}, llm=llm)
         n += r['status'] != 'duplicate'

@@ -33,7 +33,7 @@ picked as the triage brain at all (Cursor, Copilot, Kimi, OpenCode and custom co
 **A stranger does not start an agent.** A message opens a task, but an agent starts on it by itself
 only when the sender passes **Settings → Coding agent → Who may start a worker without you**: your own
 domain, someone you have written to before, or, in a chat you connected, someone you have talked with
-one-to-one or vouched for. Everyone else's task waits for you to press Start. Earlier mail *from*
+one-to-one, answered there, or vouched for. Everyone else's task waits for you to press Start. Earlier mail *from*
 someone never counts. A stranger's second message is still a stranger's.
 
 **A forged address is not a familiar one.** Taskuary reads the receiving server's
@@ -43,8 +43,10 @@ all is judged by the rules above.
 
 **Chat is trusted per person, not per room.** A sender is known by the platform's own id, never a
 display name anyone can copy. Being a member of a group you connected counts for nothing. Someone
-counts once the platform calls your conversation with them one-to-one and you have replied in it, or
-once you press **Trust this task** on a task they opened. Slack, Teams, Telegram, WhatsApp, iMessage,
+counts once the platform calls your conversation with them one-to-one and you have replied in it, once
+you have answered them in any chat there (their line, then yours, with nobody else between), or once
+you press **Trust this task** on a task they opened. WhatsApp names one person by phone in a direct
+chat and often by another id in a group; Taskuary reads both as the same person. Slack, Teams, Telegram, WhatsApp, iMessage,
 Mattermost, Google Chat and Discord say which conversations are one-to-one. Rocket.Chat is read from
 public rooms only, so there a sender counts only once you vouch for them.
 

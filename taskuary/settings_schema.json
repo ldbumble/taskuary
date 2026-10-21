@@ -353,7 +353,7 @@
         },
         "trust_non_email": {
           "label": "people you talk with in chats",
-          "help": "Someone you have talked with one-to-one in that chat app, or vouched for - not everyone in a group you joined. In Slack, Telegram, Discord and the chat servers Taskuary cannot see your own lines, so there it is only the people you vouched for. Off, only your own words count."
+          "help": "Someone you have talked with one-to-one in that chat app, answered there, or vouched for - not everyone in a group you joined. In Slack, Telegram, Discord and the chat servers Taskuary cannot see your own lines, so there it is only the people you vouched for. Off, only your own words count."
         }
       },
       "desc": "An inbound message can open a task AND start the agent on it unattended. These are the three rules that allow it; a sender matching none of them still gets triaged and lands on the Board, and only the unattended start waits for your click.",

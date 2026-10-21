@@ -5000,23 +5000,39 @@ class SQLiteStore:
                                        AND (o.Status='context' OR o.Direction='out'))
                              OR EXISTS (SELECT 1 FROM review r WHERE r.MessageId=m.MessageId AND r.Status IN ('approved','edited','sent')))
                              LIMIT 1""", (mailbox, email, exclude_mid or 0, mailbox, mailbox)) is not None
-    def talked_one_to_one(self, channel: str, who: str, exclude_mid=None) -> bool:
-        """Has the owner talked with `who` alone in this chat channel: a conversation the PLATFORM called one-to-one
-        (the poller's {'dm': true} on their line - who has spoken proves nothing, a group's one talker looks alone),
-        with the owner's own line AFTER one of theirs (other than exclude_mid), and nobody else's. `who` is
-        senders.chat_key's key - their address or platform id, else their name."""
-        if not (channel and who): return False
+    def talked_with(self, channel: str, who: str, exclude_mid=None, aliases=()):
+        """How the owner has talked with `who` in this chat channel, or None. 'dm': a conversation the PLATFORM called
+        one-to-one (the poller's {'dm': true} on their line - who has spoken proves nothing, a group's one talker looks
+        alone), with the owner's own line AFTER one of theirs (other than exclude_mid), and nobody else's. 'answered':
+        in any conversation, a group too, the owner's own line came next after one of theirs with nobody else between -
+        the owner answering THEM, not a room the owner happens to be in (2026-10-20: weeks of replies in a group chat
+        still read "someone you haven't worked with"). `who` is senders.chat_key's key - their address or platform id,
+        else their name; `aliases` the same person's other ids (WhatsApp's phone and LID forms), matched against a
+        row's key and its MailMetaJson alias alike."""
+        keys = sorted({str(x).strip().lower() for x in (who, *aliases) if str(x or '').strip()})
+        if not (channel and keys): return None
         k = "LOWER(TRIM(COALESCE(NULLIF(TRIM({0}.FromEmail),''), NULLIF(TRIM({0}.FromName),''), '')))"
+        qs = ','.join('?' * len(keys))
+        them = (f"({k} IN ({qs}) OR LOWER(COALESCE(CASE WHEN json_valid({{0}}.MailMetaJson) "
+                f"THEN json_extract({{0}}.MailMetaJson, '$.alias') END, '')) IN ({qs}))")
         # code sets these; a sender who calls themselves 'You' is not the owner (ingest.is_ours reads names, this must not)
         mine = "(COALESCE({0}.Status,'')='context' OR COALESCE({0}.Direction,'')='out')"
-        return self._one(f"""SELECT 1 x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
-                               AND NOT {mine.format('m')} AND {k.format('m')}=LOWER(?)
-                               AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
-                               AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
-                                           AND o.MessageId>m.MessageId AND {mine.format('o')})
-                               AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
-                                               AND NOT {mine.format('x')} AND {k.format('x')}<>LOWER(?))
-                             LIMIT 1""", (channel, exclude_mid or 0, who.strip(), who.strip())) is not None
+        head = f"""SELECT 1 x FROM message m WHERE m.Channel=? AND m.ConversationId IS NOT NULL AND m.MessageId<>?
+                   AND NOT {mine.format('m')} AND {them.format('m')}"""
+        args = (channel, exclude_mid or 0, *keys, *keys, *keys, *keys)
+        if self._one(f"""{head} AND (CASE WHEN json_valid(m.MailMetaJson) THEN json_extract(m.MailMetaJson, '$.dm') END)=1
+                         AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
+                                     AND o.MessageId>m.MessageId AND {mine.format('o')})
+                         AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
+                                         AND NOT {mine.format('x')} AND NOT {them.format('x')})
+                       LIMIT 1""", args) is not None: return 'dm'
+        if self._one(f"""{head} AND EXISTS (SELECT 1 FROM message o WHERE o.Channel=m.Channel AND o.ConversationId=m.ConversationId
+                                     AND o.MessageId>m.MessageId AND {mine.format('o')}
+                                     AND NOT EXISTS (SELECT 1 FROM message x WHERE x.Channel=m.Channel AND x.ConversationId=m.ConversationId
+                                                     AND x.MessageId>m.MessageId AND x.MessageId<o.MessageId
+                                                     AND NOT {mine.format('x')} AND NOT {them.format('x')}))
+                       LIMIT 1""", args) is not None: return 'answered'
+        return None
     def trusted_sender(self, mailbox: str, email: str):
         r = self._one('SELECT * FROM sender_trust WHERE LOWER(Mailbox)=LOWER(?) AND LOWER(Address)=LOWER(?)', (mailbox or '', email or ''))
         return r['Reason'] if r else None

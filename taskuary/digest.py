@@ -428,7 +428,7 @@ def gather(store, days: int = DAYS) -> str:
     # these quote mail subjects, which is exactly what got recycled into a fake pending
     # review once - the header says plainly that nothing here is live work
     _block(out, 'VERDICTS GIVEN THIS WINDOW (already durable in memory - standing rules, NOT open work,\n'
-                'and the mail they quote is already decided):',
+                'and what they quote is already decided):',
            (f"  [{m.get('Scope')}:{m.get('ScopeKey') or '*'}] {(m.get('Note') or '')[:110]}" for m in notes[:12]))
     _block(out, 'WHAT THE ASSISTANT ALREADY RAISED (its posts in the window, with their state and your replies):',
            A.raised(store, span))

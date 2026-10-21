@@ -292,18 +292,20 @@ def _text(ev: dict, read=(), unread=()) -> str:
 
 
 def brief(store, hours: int = HOURS, unread: list = None) -> tuple:
-    """(head, evidence) for one run - or Skipped, with the reason, when there is truly nothing to report on: nothing
-    that can be read is connected AND Taskuary itself holds no work in the window or open. A connection that cannot be
+    """(head, evidence) for one run. Skipped, loudly, when the only connections there are cannot be read and Taskuary
+    holds no work; NothingToReport, quietly, when nothing is connected at all and Taskuary holds no work in the window
+    or open - an empty home is not a fault (the owner, 2026-10-21). A connection that cannot be
     read is named on the run (`unread` collects (label, why) for run_report_source) and the run goes on over the rest;
     a connected source with nothing in the window is a normal, quiet run - zero items is a result."""
-    from .reports import Skipped
+    from .reports import NothingToReport, Skipped
     srcs = sources(store)
     try: ev = collect(store, hours)
     except sqlite3.Error as e: raise Skipped(f"Skipped: Taskuary's own data could not be read - {e}") from e
     good, bad = [x for x in srcs if x['ok']], [x for x in srcs if not x['ok']]
     if not good and not has_any(ev):
         if bad: raise Skipped('Skipped: ' + '; '.join(f"{x['label']} could not be read ({x['why']})" for x in bad))
-        raise Skipped(f"Skipped: nothing is connected and Taskuary has no work in the last {ev['hours']} hours or still open")
+        # nothing connected and nothing done is not a failure to tell anyone about (the owner, 2026-10-21): a quiet skip
+        raise NothingToReport(f"Nothing to report on: nothing is connected and Taskuary has no work in the last {ev['hours']} hours or still open")
     if unread is not None: unread += [(x['label'], x['why']) for x in bad]
     read = list(dict.fromkeys(x['label'] for x in good))
     head = f"the last {ev['hours']} hours of {_and([*read, 'your Taskuary work'])}" + ''.join(f" · {x['label']}: FAILED" for x in bad)

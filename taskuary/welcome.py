@@ -77,7 +77,7 @@ def goodbye(store, busy: list = None) -> str:
     stop = (f"Closing stops the work on {_refs(busy)} - {'it goes' if len(busy) == 1 else 'they go'} back on your list, and nothing "
             "starts again until you say so. ") if busy else ''
     home = mail_home(store)
-    if home: return stop + f"While I'm closed I can't watch your mail, but it waits safely in {home}. I'll catch up the moment you open me."
+    if home: return stop + f"While I'm closed I can't watch what comes in, but it waits safely in {home} and your other sources. I'll catch up the moment you open me."
     return stop + "While I'm closed I can't watch for anything new. " + ('' if busy else 'Nothing is lost - ') + "I'll catch up the moment you open me."
 
 def closing(store, now: datetime = None) -> str:

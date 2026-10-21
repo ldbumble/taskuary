@@ -43,7 +43,7 @@ export function digestSections(text) {
     if (mapped) { section(mapped[1]); wrap = /:$/.test(line) ? 0 : 3; continue; }
     if (emojiHeading(line)) { section(line.trim().replace(/[:\s]+$/, "")); continue; }
     // This is the second line of one legacy internal heading, not a digest item.
-    if (/^\s*and the mail they quote is already decided\):?$/i.test(line)) continue;
+    if (/^\s*and (?:the mail|what) they quote is already decided\):?$/i.test(line)) continue;
     const item = cleanItem(line);
     if (!item || /^\(none\)$/i.test(item)) continue;
     if (!current) section("📊 At a glance");

@@ -208,7 +208,7 @@ const META = {
       "Run Test (POST {base}/api/connectors/{cid}/test{hdr}). A 403 naming Chat.Read.All means the tenant has not been granted the protected API - report that as the blocker, it is not something to retry. Otherwise turn the connector on and say SETUP DONE."] },
   slack: { group: "Messaging", channel: "slack", srcLabel: "Channel IDs", srcPh: "C0123456789",
     fields: [pollSecondsField("slack")], secretLabel: "bot token (xoxb-…)",
-    desc: "Ingest Slack channels with a bot token - messages come in and are sorted like your mail.",
+    desc: "Ingest Slack channels with a bot token - messages come in and are sorted like everything else that comes in.",
     howto: ["Create a Slack app (api.slack.com/apps) → OAuth & Permissions → bot token scopes: channels:history, channels:read.",
       "Install the app to your workspace and invite the bot to the channels to ingest (/invite @yourbot).",
       "Paste the xoxb- bot token under Credentials (write-only).",
@@ -311,7 +311,7 @@ const META = {
   jira: { group: "Project management", channel: "jira", srcLabel: "Site", srcPh: "yourteam.atlassian.net",
     fields: [["site URL (https://yourteam.atlassian.net)", "base_url"], ["account email (the one the token belongs to)", "email"]],
     secretLabel: "API token",
-    desc: "Jira issues ASSIGNED TO YOU come in and are sorted like your mail — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
+    desc: "Jira issues ASSIGNED TO YOU come in and are sorted like everything else that comes in — 'assigned in Jira' and 'asked by email' end up in the one funnel.",
     howto: ["Create an API token: id.atlassian.com → Security → Create API token.",
       "Enter the site URL and the account email under Credentials, paste the token (write-only).",
       "Test authenticates as you and adds the site under Sources.",
@@ -320,7 +320,7 @@ const META = {
   asana: { group: "Project management", channel: "asana", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "Personal Access Token",
-    desc: "Asana tasks ASSIGNED TO YOU come in and are sorted like your mail, linking back to Asana.",
+    desc: "Asana tasks ASSIGNED TO YOU come in and are sorted like everything else that comes in, linking back to Asana.",
     howto: ["Create a Personal Access Token: app.asana.com/0/my-apps → Create new token.",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test authenticates, finds your workspace and adds it under Sources.",
@@ -329,7 +329,7 @@ const META = {
   monday: { group: "Project management", channel: "monday", srcLabel: "Account", srcPh: "added by Test",
     fields: [["board ids to watch, comma-separated (blank = your 25 most recently used boards)", "board_ids"]],
     secretLabel: "API token",
-    desc: "Monday.com items ASSIGNED TO YOU (any People column naming you) come in and are sorted like your mail.",
+    desc: "Monday.com items ASSIGNED TO YOU (any People column naming you) come in and are sorted like everything else that comes in.",
     howto: ["Get an API token: your avatar → Developers → My access tokens (admin tokens work too).",
       "Paste it under Credentials (write-only). Test authenticates and remembers who 'you' are.",
       "Monday has no assigned-to-me API, so the poll walks boards and keeps items whose People column names you — blank config walks your 25 most recently used boards; list board ids to pin it down (the number in the board's URL).",
@@ -338,7 +338,7 @@ const META = {
   clickup: { group: "Project management", channel: "clickup", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "API token (starts pk_)",
-    desc: "ClickUp tasks ASSIGNED TO YOU come in and are sorted like your mail, with their list, status and priority.",
+    desc: "ClickUp tasks ASSIGNED TO YOU come in and are sorted like everything else that comes in, with their list, status and priority.",
     howto: ["Get a personal API token: Settings → Apps → API Token → Generate. It starts pk_ and does not expire.",
       "Paste it under Credentials (write-only). ClickUp wants the token raw, so don't add 'Bearer' — Taskuary handles the header.",
       "Test authenticates, remembers who 'you' are and which Workspace to walk, and adds it under Sources.",
@@ -347,7 +347,7 @@ const META = {
   todoist: { group: "Project management", channel: "todoist", srcLabel: "Account", srcPh: "added by Test",
     fields: [["filter query (blank = (today | overdue))", "filter"]],
     secretLabel: "API token",
-    desc: "The Todoist tasks a filter says are live — due today and overdue by default — come in and are sorted like your mail.",
+    desc: "The Todoist tasks a filter says are live — due today and overdue by default — come in and are sorted like everything else that comes in.",
     howto: ["Get your API token: avatar → Settings → Integrations → Developer → copy the API token.",
       "Paste it under Credentials (write-only).",
       "Todoist is a personal list, so most tasks have no assignee and 'assigned to me' would match only shared projects. The poll asks a FILTER QUERY instead — what Todoist itself says is live.",
@@ -357,7 +357,7 @@ const META = {
   gitlab: { group: "Developer", channel: "gitlab", srcLabel: "Instance", srcPh: "added by Test",
     fields: [["instance URL (blank = https://gitlab.com)", "base_url"]],
     secretLabel: "Personal Access Token (scope: read_api)",
-    desc: "GitLab issues and merge requests ASSIGNED TO YOU come in and are sorted like your mail — gitlab.com or your own instance.",
+    desc: "GitLab issues and merge requests ASSIGNED TO YOU come in and are sorted like everything else that comes in — gitlab.com or your own instance.",
     howto: ["Create a Personal Access Token: avatar → Preferences → Access tokens, scope read_api.",
       "Self-hosted? Enter the instance URL; blank means gitlab.com.",
       "Paste the token (write-only). Test authenticates as you and adds the instance under Sources.",
@@ -366,7 +366,7 @@ const META = {
   azdo: { group: "Developer", channel: "azdo", srcLabel: "Organization", srcPh: "added by Test",
     fields: [["organization URL (https://dev.azure.com/yourorg)", "org_url"]],
     secretLabel: "Personal Access Token (Work Items: Read)",
-    desc: "Azure DevOps work items ASSIGNED TO YOU come in and are sorted like your mail.",
+    desc: "Azure DevOps work items ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
     howto: ["Create a PAT: User settings (top right) → Personal access tokens → New, scope Work Items: Read.",
       "Enter the organization URL (https://dev.azure.com/yourorg) and paste the PAT (write-only).",
       "Test authenticates and reports how many projects the token can see.",
@@ -376,7 +376,7 @@ const META = {
     fields: [["organization slug (first path segment of your Sentry URLs)", "org"],
       ["base URL (blank = https://sentry.io; set for self-hosted)", "base_url"]],
     secretLabel: "auth token (org:read + event:read)",
-    desc: "New unresolved Sentry errors come in and are sorted like your mail — production breakage joins the same funnel as the mail about it.",
+    desc: "New unresolved Sentry errors come in and are sorted like everything else that comes in — production breakage joins the same funnel as the messages about it.",
     howto: ["Create an auth token: Sentry → Settings → Auth Tokens (scopes org:read, event:read).",
       "Enter the organization slug — the first path segment in your Sentry URLs.",
       "Paste the token (write-only). Test authenticates and adds the org under Sources.",
@@ -384,7 +384,7 @@ const META = {
   pagerduty: { group: "Developer", channel: "pagerduty", srcLabel: "Account", srcPh: "added by Test",
     fields: [],
     secretLabel: "API token",
-    desc: "Open PagerDuty incidents (triggered / acknowledged) come in and are sorted like your mail.",
+    desc: "Open PagerDuty incidents (triggered / acknowledged) come in and are sorted like everything else that comes in.",
     howto: ["Get an API token: PagerDuty → Integrations → API Access Keys (a read-only key is enough).",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test probes the incidents API and adds the account under Sources.",
@@ -392,7 +392,7 @@ const META = {
   linear: { group: "Project management", channel: "linear", srcLabel: "Workspace", srcPh: "added by Test",
     fields: [],
     secretLabel: "API key",
-    desc: "Linear issues ASSIGNED TO YOU come in and are sorted like your mail.",
+    desc: "Linear issues ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
     howto: ["Create a personal API key: Linear → Settings → Security & access → Personal API keys.",
       "Paste it under Credentials (write-only) — that is all the config.",
       "Test authenticates as you and adds the workspace under Sources.",
@@ -401,7 +401,7 @@ const META = {
   trello: { group: "Project management", channel: "trello", srcLabel: "Account", srcPh: "added by Test",
     fields: [["API key (trello.com/power-ups/admin → your Power-Up → API key)", "api_key"]],
     secretLabel: "token (generate it from the API key page)",
-    desc: "Open Trello cards ASSIGNED TO YOU come in and are sorted like your mail.",
+    desc: "Open Trello cards ASSIGNED TO YOU come in and are sorted like everything else that comes in.",
     howto: ["Get an API key: trello.com/power-ups/admin → create a Power-Up if you have none → API key.",
       "On that same page use the Token link to authorize and copy the token.",
       "Enter the API key under Credentials and paste the token (write-only).",
@@ -417,7 +417,7 @@ const META = {
   discord: { group: "Messaging", channel: "discord", srcLabel: "Channel IDs", srcPh: "1234567890123456789",
     fields: [pollSecondsField("discord")],
     secretLabel: "bot token",
-    desc: "Watch Discord channels with a bot — messages come in and are sorted like your mail, and approved replies post back to the channel.",
+    desc: "Watch Discord channels with a bot — messages come in and are sorted like everything else that comes in, and approved replies post back to the channel.",
     howto: ["Create an app at discord.com/developers → Bot → Reset Token, and turn ON the Message Content intent.",
       "Invite the bot to your server with permission to read (and send, for replies in) the channels you'll watch.",
       "Paste the bot token under Credentials (write-only).",
@@ -434,7 +434,7 @@ const META = {
   mattermost: { group: "Messaging", channel: "mattermost", srcLabel: "Channel IDs", srcPh: "4xp9fdt7pbgiijzwbn3qf6qc4c",
     fields: [["server url", "base_url", "https://chat.yourcompany.com"], pollSecondsField("mattermost")],
     secretLabel: "personal access token (write-only)",
-    desc: "Your own Mattermost server — watched channels come in and are sorted like your mail, and approved replies post back into the channel.",
+    desc: "Your own Mattermost server — watched channels come in and are sorted like everything else that comes in, and approved replies post back into the channel.",
     howto: ["An admin turns on personal access tokens: System Console → Integrations → Integration Management.",
       "Your Profile → Security → Personal Access Tokens → Create. Paste it under Credentials (write-only).",
       "Enter the server url (https://chat.yourcompany.com — no /api/v4, that is added).",
@@ -460,7 +460,7 @@ const META = {
   matrix: { group: "Messaging", channel: "matrix", srcLabel: "Room IDs", srcPh: "!AbCdEf:matrix.org",
     fields: [["homeserver url (blank = matrix.org)", "base_url", "https://matrix-client.matrix.org"], pollSecondsField("matrix")],
     secretLabel: "access token (write-only)",
-    desc: "Any Matrix homeserver — matrix.org or your own. Rooms come in and are sorted like your mail and replies go back as your account, not a bot.",
+    desc: "Any Matrix homeserver — matrix.org or your own. Rooms come in and are sorted like everything else that comes in and replies go back as your account, not a bot.",
     howto: ["In Element: Settings → Help & About → Advanced → Access Token. Copy it.",
       "Paste it under Credentials (write-only). Leave the homeserver blank for matrix.org.",
       "Add each room ID under Sources — Room Settings → Advanced → Internal room ID (!AbCdEf:matrix.org).",
@@ -474,7 +474,7 @@ const META = {
       ["Google OAuth client secret (blank = reuse the Gmail card's)", "google_client_secret"],
       pollSecondsField("google_chat")],
     secretLabel: "Google refresh token (write-only)",
-    desc: "Google Chat spaces come in and are sorted like your mail, replies back into the space. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two.",
+    desc: "Google Chat spaces come in and are sorted like everything else that comes in, replies back into the space. Reuses the Gmail card's OAuth client, so there is one registration in Google Cloud rather than two.",
     howto: ["In Google Cloud: enable the Google Chat API on the project whose OAuth client you use (the Gmail card's, if you have one).",
       "Run the OAuth consent flow with scopes chat.messages and chat.spaces.readonly, and paste the refresh token under Credentials (write-only).",
       "Leave the client id and secret blank to reuse the Gmail card's; fill them only for a separate project.",
@@ -3385,7 +3385,7 @@ const BULK_HELP = (
     <Typography variant="body2" sx={{ fontSize: 12.5, lineHeight: 1.55 }}>
       Value is <b>words first</b>: addressed to you or merely cc’d, how many people, whether a colleague has
       already replied, urgency, who the author is on a code host. With two or more waiting, one call to the
-      AI that sorts your mail orders the head of the queue and adds its own reason. You see that order on the Board’s
+      AI that sorts what comes in orders the head of the queue and adds its own reason. You see that order on the Board’s
       Queued column.
     </Typography>
   </Box>
@@ -4023,8 +4023,8 @@ const InboundStep = ({ conn, m, mine, reload }) => {
             2 · PER REPO — WHAT ISSUES AND PRS DO
           </Typography>
           <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5, mb: 0.5 }}>
-            <b>tasks</b> = sorted like your mail, <b>feed</b> = shown to read only, <b>replies</b> (issues) = the issues
-            themselves are ignored but a person commenting on one is sorted like your mail, <b>off</b> = ignored.
+            <b>tasks</b> = sorted like everything else that comes in, <b>feed</b> = shown to read only, <b>replies</b> (issues) = the issues
+            themselves are ignored but a person commenting on one is sorted like everything else that comes in, <b>off</b> = ignored.
             The third picker says <b>whose</b> items may start a coding agent by themselves: <b>team</b> =
             owners, members and collaborators; <b>contributors</b> adds anyone who has had a change merged;
             <b>anyone</b> = every author. Everyone else’s items still become tasks for you to promote.

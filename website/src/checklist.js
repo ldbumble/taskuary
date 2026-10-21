@@ -19,6 +19,17 @@ export const toggleItem = (items, id) => {
   return items.map((i) => (i.id === id ? { ...i, done: !i.done } : i));
 };
 
+// A NOTE ON ONE TO-DO (the owner, 2026-10-20): kept with the box on the server (PATCH .../checklist/<id>/note, '' takes it off), shown
+// in a muted line under its words. The inline field saves on Enter or when it loses focus, and Escape leaves the note as it was.
+export const noteOf = (item) => String(item?.note || "").trim();
+export const notePath = (taskId, itemId) => `/api/tasks/${taskId}/checklist/${encodeURIComponent(itemId)}/note`;
+export const saveNote = (api, taskId, itemId, text) => api.patch(notePath(taskId, itemId), { note: String(text || "").trim() });
+export const noteKey = (e, { save, cancel }) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); return true; }
+  if (e.key === "Escape") { e.preventDefault(); cancel(); return true; }
+  return false;
+};
+
 export function progressLine(items) {
   const n = (items || []).length;
   if (!n) return "";

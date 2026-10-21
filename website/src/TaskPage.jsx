@@ -34,7 +34,7 @@ import { agentName } from "./agentWork.js";
 import { lazyGeneral } from "./lazyGeneral.js";
 import { outcomeOf } from "./dispatchOutcome.js";
 import { FailWays, failOf } from "./failure.jsx";
-import { progressLine } from "./checklist.js";
+import { noteKey, noteOf, progressLine, saveNote } from "./checklist.js";
 import { fmtDate, fmtTime } from "./dates.js";
 import { deliveryCc, deliveryFiles, replyContext } from "./replyDelivery.js";
 import { sizeText } from "./replyFiles.js";
@@ -894,6 +894,15 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const checklist = detail?.checklist || [];
   // what the To do list shows: the emails a task owes are Close out's, not boxes to tick here
   const todo = checklist.filter((i) => !i.out);
+  // the to-do being noted, and its words while the field is open (checklist.js saveNote; '' takes the note off)
+  const [noting, setNoting] = useState(null), [noteText, setNoteText] = useState("");
+  const putNote = async (i, text) => {
+    if (noting !== i.id) return;
+    setNoting(null);
+    if (String(text || "").trim() === noteOf(i)) return;
+    try { await saveNote(api, t.TaskId, i.id, text); loadDetail(t.TaskId); }
+    catch (e) { setErr(`That note didn't save - ${opError(e, "Taskuary didn't answer")}. Write it again.`); }
+  };
   const tickItem = async (i) => {
     try {
       const data = await runOperation(api, "task.check", t.TaskId, { item: String(checklist.indexOf(i) + 1), id: i.id, done: !i.done });
@@ -1541,14 +1550,28 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       {!t?.DoneWhen && todo.length > 0 && (
                         <Part label="To do" sub={`${todo.filter((i) => i.done).length} of ${todo.length}`} subTitle={progressLine(todo)} data-tq-todo="">
                           {todo.map((i) => (
-                            <Box key={i.id} onClick={() => tickItem(i)}
-                              sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
-                                borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" } }}>
-                              <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
-                                sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
-                              <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
-                                {i.text}
-                              </Typography>
+                            <Box key={i.id}>
+                              <Box onClick={() => tickItem(i)}
+                                sx={{ display: "flex", alignItems: "center", gap: 0.6, px: 0.75, ml: -0.75, py: 0.15,
+                                  borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: "#faf8f4" }, "&:hover [data-tq-todo-note-add]": { opacity: 1 } }}>
+                                <Checkbox size="small" checked={!!i.done} onChange={() => {}} tabIndex={-1}
+                                  sx={{ p: 0.25, pointerEvents: "none", color: "rgba(0,0,0,.54)", "&.Mui-checked": { color: "#6f8a6e" } }} />
+                                <Typography variant="body2" sx={{ color: i.done ? FAINT : INK, textDecoration: i.done ? "line-through" : "none", lineHeight: 1.6 }}>
+                                  {i.text}
+                                </Typography>
+                                {/* THE TO-DO'S NOTE (the owner, 2026-10-20): a quiet word on the row opens the field under it - the row itself still ticks */}
+                                {noting !== i.id && !noteOf(i) && <Link component="button" type="button" underline="hover" data-tq-todo-note-add=""
+                                  onClick={(e) => { e.stopPropagation(); setNoting(i.id); setNoteText(""); }}
+                                  sx={{ ml: "auto", fontSize: 11.5, color: FAINT, opacity: 0, "&:focus-visible": { opacity: 1 } }}>note</Link>}
+                              </Box>
+                              {noting === i.id
+                                ? <TextField autoFocus fullWidth size="small" placeholder="A note on this to-do" value={noteText} data-tq-todo-note-field=""
+                                    onChange={(e) => setNoteText(e.target.value)} onBlur={() => putNote(i, noteText)}
+                                    onKeyDown={(e) => noteKey(e, { save: () => putNote(i, noteText), cancel: () => setNoting(null) })}
+                                    sx={{ ml: 3.5, width: "calc(100% - 28px)", mb: 0.4, "& .MuiInputBase-root": { fontSize: 12 } }} />
+                                : noteOf(i) && <Typography variant="caption" data-tq-todo-note="" onClick={() => { setNoting(i.id); setNoteText(noteOf(i)); }}
+                                    sx={{ display: "block", ml: 3.5, color: DIM, fontSize: 12, lineHeight: 1.45, cursor: "text", overflowWrap: "anywhere" }}>
+                                    {noteOf(i)}</Typography>}
                             </Box>
                           ))}
                         </Part>

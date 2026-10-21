@@ -1091,7 +1091,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
         if t == 'switch': v = '1' if v.lower() in ('1', 'true', 'on', 'yes') else '0' if v.lower() in ('0', 'false', 'off', 'no') else None
         elif t == 'number':
             if settings_schema.refuse(key, v): v = None         # '--5', 'nan', 'inf', -5 get the same sentence as 'often'
-            elif v: v = str(int(float(v)))                      # ...and blank is the default
+            elif v: n = float(v); v = str(int(n)) if n.is_integer() else str(n)   # 0.6 stays 0.6; blank is the default
         elif t == 'select': v = v if v in [str(o) for o in (meta.get('options') or [])] else None
         if v is None: raise HTTPException(422, f"{meta['label']} takes {'on or off' if t == 'switch' else 'a number, 0 or more' if t == 'number' else 'one of ' + ', '.join(str(o) for o in meta.get('options') or [])} - not {raw!r}")
         prev = store.get_setting(key)

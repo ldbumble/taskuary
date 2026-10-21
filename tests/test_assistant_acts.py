@@ -133,6 +133,12 @@ class ActsTests(unittest.TestCase):
         self.assertEqual(self.s.get_settings()['poll_minutes'], '10')
         self.assertIsNone(self._turn('setting.set', label='warp drive', value='on').get('proposal'))
 
+    def test_a_decimal_setting_keeps_its_decimals(self):
+        concierge.run_proposal(self.s, self._turn('setting.set', setting='kb_semantic_min', value='0.6')['proposal'])
+        self.assertEqual(self.s.get_settings()['kb_semantic_min'], '0.6')
+        concierge.run_proposal(self.s, self._turn('setting.set', setting='poll_minutes', value='15.0')['proposal'])
+        self.assertEqual(self.s.get_settings()['poll_minutes'], '15')
+
     def test_connections_pause_resume_and_test(self):
         cid = next(c['connector_id'] for c in __import__('taskuary.appfacts', fromlist=['x']).connections(self.s) if c['name'] == 'Alex mailbox')
         concierge.run_proposal(self.s, self._turn('connection.pause', name='alex mailbox')['proposal'])

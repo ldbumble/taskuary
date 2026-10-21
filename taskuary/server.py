@@ -3392,16 +3392,11 @@ def mine_message(mid: int, body: MineBody = None, background: BackgroundTasks = 
     store.audit('task', tid, 'mine', ACTOR, detail={'message_id': mid, 'subject': m.get('Subject')})
     return {'taskId': tid, 'ref': task_ref(tid)}
 
-@app.post('/api/messages/{mid}/chat')
 def chat_message(mid: int, background: BackgroundTasks = None):
-    """"Talk this one through": the message becomes a `general` task and the assistant's chat
-    opens on it with the question already asked.
-
-    The THIRD door, beside /mine (a plain task, yours, nothing works it) and /dispatch (a coding
-    session). Triage could already rule a message `general` - and `general` means the assistant's
-    chat - but the Timeline had no way to act on that verdict: the only dispatch control on a row
-    opened a CLI. A road the classifier can take and the screen cannot is a road that does not
-    exist."""
+    """The message becomes a `general` task and the assistant's chat opens on it with the question
+    already asked - the road a reclassify to `general` and a `task.create_from_message` of kind
+    general take. Its own door (POST /api/messages/{id}/chat, the old row panel's "Talk it through")
+    went with that panel."""
     m = store.get_message(mid)
     if not m: raise HTTPException(404, 'message not found')
     _learn_promotion(m, background)

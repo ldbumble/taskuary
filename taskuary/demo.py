@@ -98,7 +98,7 @@ REFUSALS = (
     (r'^/api/(tools/run|agents/[^/]+/test)', 'This is the demo - nothing runs, because there are no real systems here to run against.'),
     (r'^/api/(reviews?/\d+/(send|decide)|tasks/\d+/(handoff|clarify)|board/send|messages/\d+/send)', SENDS),
     (r'^/api/(terminals|agents)(/|$)|^/api/tasks/\d+/(dispatch|code|continue|continue-session|continue-work|resume)$'
-     r'|^/api/messages/\d+/(dispatch|chat)$', STARTS),
+     r'|^/api/messages/\d+/dispatch$', STARTS),
     (r'^/api/(sync|ingest|poll|msauth|hooks)', 'This is the demo - no mail is fetched; what you see was written in advance.'),
     (r'^/api/(doc|soul|semantic|reports?/[^/]*/(run|preview))', 'This is the demo - editing your documents and running reports are switched off.'),
 )

@@ -230,6 +230,24 @@ def test_a_broken_flow_cannot_be_saved():
     assert good.status_code == 200
 
 
+def test_a_new_workflow_waits_for_its_next_slot_and_a_new_report_still_runs_at_once():
+    """A weekly workflow saved on a Wednesday ran on the next tick, beside "Saved - runs Mon at 08:00", and again beside its
+    own Save & run now: two laptop tasks and two approvals (walk 2026-10-21). A report keeps its first run straight away."""
+    s = MemoryStore()
+    every_midnight = {'cron': '0 0 * * *'}           # its last slot is always already behind us
+    with mock.patch.object(server, 'store', s):
+        c = TestClient(server.app)
+        wf = c.post('/api/sources', json={'Channel': 'report', 'Address': 'Weekly', 'ConfigJson': json.dumps(
+            {'type': 'agent', 'access': 'write', 'title': 'Weekly', 'prompt': 'draft the summary', **every_midnight})}).json()['sourceId']
+        rp = c.post('/api/sources', json={'Channel': 'report', 'Address': 'Read', 'ConfigJson': json.dumps(
+            {'type': 'taskuary', 'title': 'Read', **every_midnight})}).json()['sourceId']
+        edited = c.post('/api/sources', json={'SourceId': wf, 'Address': 'Weekly (renamed)'}).json()['sourceId']
+    src = s.get_source(wf)
+    assert src['LastPolledAt'] and not reports.is_due(workflows.cfg_of(src), src['LastPolledAt'])
+    assert s.get_source(rp)['LastPolledAt'] is None and reports.is_due({'type': 'taskuary', **every_midnight}, None)
+    assert edited == wf
+
+
 # ── test this step ──────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_testing_a_step_reads_for_real_and_never_writes(db):
     s = MemoryStore()

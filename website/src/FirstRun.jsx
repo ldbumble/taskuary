@@ -381,6 +381,8 @@ export default function FirstRun({ onWalk, onFinish, onChanged, revisit = false 
     : fix?.name === ai.name ? ["failing", fix.fix === "signin" ? "Needs sign-in" : fix.fix === "install" ? "Not installed - press Install"
       : ["update", "retry"].includes(fix.fix) ? "Signed in · not answering" : !ai.installed ? noInstall : "Not answering"]
     : st.step !== "ai" && st.brain.name === ai.title ? ["on", "Your AI - it sorts your mail"]
+    // ...one whose test failed is not connected, and is not lit once another card is the pick (firstrun.FAILED; the UI audit, 2026-10-21)
+    : ai.failed && ai.installed ? ["off", "Didn't pass the test - pick it to try again"]
     // connected on the Connections page, just not the one sorting the mail: it read "Not set up" (the owner, 2026-10-16)
     : ai.connected ? ["on", "Connected - pick it to make it your AI"]
     : ["off", ai.installed ? "On this computer - pick it to check it works" : ai.install ? "Not installed - pick it to install" : noInstall]);
@@ -521,7 +523,8 @@ ${fix.detail || ""}`, screen: "Setup",
   const found = st.ais.filter((a) => a.installed);
   // ...and THE LINE NAMES IT by the words the screen draws: the card's title, the button's own label, the row verb's
   lineRef.current = said || err || {
-    ai: (!browse && fix?.why) || (signing ? "Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done." : "") || (aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? `What AI do you have? ${!litCard
+    // ...a sign-in running says its own line: the last card's failure stood over it and read as if ChatGPT had failed (the UI audit, 2026-10-21)
+    ai: (signing ? "Finish signing in to ChatGPT in your browser - Taskuary carries on by itself when you're done." : "") || (!browse && fix?.why) ||(aiErr ? `${aiErr} Pick another AI - it is checked on a test email first.` : st.step === "ai" ? `What AI do you have? ${!litCard
       ? (found.length === 1 ? `${found[0].title} is on this computer - pick it if that is the one you use, or pick any other` : "Pick the one you use")
       : litCard.state === "on" ? `${litCard.title} is connected here - pick ${litCard.title} to make it your AI`
       : litCard.state === "failing" ? `${litCard.title} didn't work last time - pick ${litCard.title} to try again, or pick another`

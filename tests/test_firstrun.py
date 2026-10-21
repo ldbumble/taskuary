@@ -66,6 +66,25 @@ class ChooseAiTests(unittest.TestCase):
             firstrun.choose_cli(self.s, self.cfg, 'codex')
             self.assertIsNone(firstrun.state(self.s)['fix'])
 
+    def test_a_cli_that_failed_its_test_is_not_called_connected_until_it_passes(self):
+        """The connection is saved before the test, so a CLI that failed read "Connected - pick it to make it your AI" once another
+        card was picked (the UI audit, 2026-10-21)."""
+        state = lambda: next(a for a in firstrun.state(self.s)['ais'] if a['name'] == 'codex')
+        linked = mock.patch('taskuary.config.load', return_value={'cli_connections': {'codex': {'cmd': 'codex'}}})
+        quiet = [mock.patch('taskuary.setup._ai', return_value={'ready': True, 'Name': 'x', 'pick': ''}),
+                 mock.patch('taskuary.setup._inbound', return_value=[]), mock.patch('taskuary.setup._first_items', return_value=[])]
+        for p in quiet: p.start()
+        try:
+            with detect(), mock.patch.object(agents, 'run_cli', side_effect=RuntimeError('not logged in')):
+                firstrun.choose_cli(self.s, self.cfg, 'codex')
+            self.s.set_setting(firstrun.FIX, '', 'owner')                 # another card was picked: the line moved on
+            with detect(), linked: self.assertEqual((state()['connected'], state()['failed']), (False, True))
+            with detect(), mock.patch.object(agents, 'run_cli', return_value=('ok', None, None)):
+                firstrun.choose_cli(self.s, self.cfg, 'codex')
+            with detect(), linked: self.assertEqual((state()['connected'], state()['failed']), (True, False))
+        finally:
+            for p in quiet: p.stop()
+
     def test_a_pick_that_works_closes_the_sign_in_task_it_left(self):
         """Sign in opens the CLI on a "Set up" task; it stayed under On you after the AI worked."""
         from taskuary import clisetup

@@ -226,6 +226,35 @@ class DraftedOnClose(unittest.TestCase):
             out = wrapup.wrap(s, tid, close=False, actor='owner')
         self.assertIn('write_playbook', [p['action'] for p in out['proposed']])
 
+    def _chat(self, s, **task):
+        """A general-work conversation long enough to be a job: what a non-code playbook is drafted from."""
+        from taskuary import general
+        tid = s.create_task({'Title': 'Reconcile the October cash shortfall', 'Kind': 'general', **task}, 't')
+        s.add_comment(tid, 'owner', general.USER_TYPE, 'The October bank balance does not tie to the ledger - we are $412.50 short. ' * 4)
+        s.add_comment(tid, 'assistant', general.ASSISTANT_TYPE, 'Matched every statement line to the register: two card fees sat in '
+                      'the wrong period and one deposit is in transit. Three adjusting entries are listed for your yes. ' * 4)
+        return tid
+
+    def test_a_general_conversation_is_asked_too(self):
+        """The jobs playbooks are FOR are general work - a bill, a W-9, a reconciliation - and only the coding ending asked
+        (walk 2026-10-21: a month-end reconciliation closed itself with no proposal; no brain call was even made)."""
+        from taskuary import wrapup
+        s = MemoryStore(); tid = self._chat(s)
+        llm, seen = _llm_saying({'playbook': {'slug': 'reconcile-cash', 'text': ONBOARD.replace('# Onboard a new hire in the directory',
+                                                                                              '# Reconcile a month-end cash shortfall')}})
+        with mock.patch('taskuary.llm.build_llm', return_value=llm), mock.patch('taskuary.handbook.enabled', return_value=False):
+            out = wrapup.wrap(s, tid, close=True, actor='assistant')
+        self.assertEqual([p['action'] for p in out['proposed']], ['write_playbook'])
+        self.assertIn('two card fees', seen['user'])                       # drafted from the conversation itself
+        self.assertIsNotNone(proposals.playbook_pending(s, tid))
+
+    def test_a_playbook_setup_conversation_is_not_asked_again(self):
+        from taskuary import wrapup
+        s = MemoryStore(); tid = self._chat(s, SourceRef='assistant:playbook')
+        with mock.patch('taskuary.llm.build_llm', return_value=lambda *a, **k: 1 / 0), mock.patch('taskuary.handbook.enabled', return_value=False):
+            out = wrapup.wrap(s, tid, close=True, actor='owner')
+        self.assertEqual(out['proposed'], [])
+
 
 class OverTheApi(unittest.TestCase):
     def setUp(self): _clean()

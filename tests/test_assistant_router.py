@@ -268,6 +268,21 @@ class ClearingASet(unittest.TestCase):
         self.assertEqual(fyis(s), [])
         self.assertEqual(out['decision'], {'verb': 'next'})
 
+    def test_a_set_never_sweeps_what_waits_on_the_owner(self):
+        # "mark everything read" swept the to-dos and the drafts waiting for a Send with the notices: each of those is put down with its
+        # own button. The notices go; what is on the owner stays, and the line says so
+        s = store(); tid, item = on_table(s); notices(s, 3)
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'mark everything read', key=item['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"everything": true}}}')
+            self.assertEqual(fyis(s), [])
+            self.assertEqual([i['tid'] for i in funnel.build(s)['items']], [tid])
+        self.assertIn('Marked 3 items read', out['say']); self.assertIn('1 item waiting on you', out['say'])
+        self.assertEqual(out['decision'], {'verb': 'setting'})
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'clear the to-dos', key=item['key'], llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"lane": "yours"}}}')
+            self.assertEqual([i['tid'] for i in funnel.build(s)['items']], [tid])
+        self.assertNotIn('cleared', out); self.assertIn('own button', out['say'])
+
     def test_next_keeps_the_words_the_model_said_with_it(self):
         s = store(); tid, item = on_table(s)
         out, _ = say(s, 'can I see the next one, this can wait', item['key'], 'This one can wait - here is the next.\nCALL: {"kind": "next", "params": {}}')

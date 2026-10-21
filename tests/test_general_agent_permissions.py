@@ -118,6 +118,22 @@ class SqlReadIsReadTests(unittest.TestCase):
         out, cx = self.run_tool(MemoryStore(), {'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'}, scope='write')
         self.assertTrue(out['ok'], out); self.assertEqual(cx.committed, 1)
 
+    def test_the_card_that_was_checked_is_the_card_that_runs(self):
+        s = MemoryStore()
+        card = lambda host, scope: s.save_connector({'Type': 'mssql', 'Name': host, 'Active': 1, 'Roles': 'report,tool', 'Scope': scope,
+                                                     'ConfigJson': json.dumps({'server': host, 'database': 'UserDb',
+                                                                               'driver': 'ODBC Driver 18 for SQL Server'})}, 'test')
+        for o in s.connectors_by_type('mssql'): s.save_connector({'ConnectorId': o['ConnectorId'], 'Active': 0}, 'test')
+        card('admin.northwind.example', 'admin'); ro = card('readonly.northwind.example', 'read')
+        seen, cx = [], FakeCx()
+        def connect(cs, *a, **k): seen.append(next(h for h in ('admin.', 'readonly.') if h in cs)); return cx
+        with mock.patch.object(server, 'store', s), mock.patch('taskuary.mssql._connect', connect):
+            out = TestClient(server.app).post('/api/tools/run', json={'type': 'mssql', 'connector_id': ro,
+                                                                      'query': 'INSERT INTO t VALUES (1); SELECT 1 AS n'}).json()
+        self.assertTrue(out['ok'], out)
+        self.assertEqual(seen, ['readonly.'])
+        self.assertEqual(cx.committed, 0)
+
     def test_a_report_never_writes(self):
         cx = FakeCx()
         with mock.patch('taskuary.mssql._connect', return_value=cx):

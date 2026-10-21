@@ -30,6 +30,8 @@ test("a task its agent closed opens on Agent work, saying who closed it and why"
   await page.waitForSelector("[data-tq-closeout]", { timeout: 20000 });
   await page.waitForFunction((said) => document.querySelector("[data-tq-closed-why]")?.textContent === `Closed by the agent: ${said}`,
     { timeout: 20000 }, SAID);
+  // the reason line comes with the task's details; the agent's write-up is its own read and can land a beat later (CI, 2026-10-21)
+  await page.waitForFunction((head) => document.body.innerText.includes(head), { timeout: 20000 }, ANSWER.slice(0, 60));
 
   const seen = await page.evaluate(() => {
     const heading = (title) => [...document.querySelectorAll("[aria-expanded], [role=button], div")]

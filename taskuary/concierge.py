@@ -1035,6 +1035,12 @@ def _lit(store, tid: int, table: dict | None, it: dict, verb: str) -> dict:
                       'ref': it.get('ref') or ''}}
 
 
+def _did(store, tid: int, said: str, kind: str) -> dict:
+    """A write the Assistant ran itself, said in the past tense - and the rail read again (the page's `setting`), since it changed."""
+    record(store, tid, 'assistant', said)
+    return {'say': said, 'options': [], 'chips': [], 'decision': {'verb': 'setting'}, 'did': kind}
+
+
 def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
     """An act whose button lives on a page: that page, opened beside the answer (appLinks), and where to press on it - said by the page's
     name, never "beside this", so the line is still true after a reload, when nothing is beside it."""
@@ -2272,6 +2278,22 @@ def _route(store, tid: int, kind: str, target: int, params: dict, named: str, it
         return _answer_now(store, tid, table, target, str(params.get('text') or text or '').strip(), actor)
     if kind == 'script.start':
         return _new(store, tid, table, 'report', '') if 'report' in str(params.get('name') or '') else surface(store, None, None, actor)
+    # A NOTE AND A DUE DAY RUN HERE, said (the owner, 2026-10-20): neither has a button on the row - a note is typed on the task page and the
+    # due day had no picker - so "file a note on it" and "set the due date to friday" were refused. Both are the task page's own writes.
+    if kind == 'task.comment' and target:
+        note = str(params.get('text') or '').strip()[:4000]
+        if not note: raise CallMiss('task.comment needs `text` - the note itself. Nothing was written.')
+        store.add_comment(target, actor, 'human', note)
+        return _did(store, tid, f"Added a note to {named}: \u201c{_title_cut(note, 120)}\u201d.", 'task.comment')
+    if kind == 'task.update' and target and not (params.get('priority') or params.get('assignee')):
+        from . import remind
+        c = task_contract(store, kind, target, params)
+        title, did = str(params.get('title') or '').strip()[:200], []
+        if title: store.update_task(target, {'Title': title}, actor); did.append(f'renamed {named} \u201c{title}\u201d')
+        if c.get('due') is not None:
+            remind.set_due(store, target, c['due'], actor)
+            did.append(f"set {named}'s due day to {datetime.strptime(c['due'], '%Y-%m-%d'):%a %d %b}" if c['due'] else f"cleared {named}'s due day")
+        if did: return _did(store, tid, _cap(' and '.join(did)) + '.', 'task.update')
     if kind == 'memory.remember':
         return _page(store, tid, table, '#settings=memory', 'Opened Settings → Verdicts & notes - add it as a note there; it is used from then on.')
     if tk == 'setting':

@@ -226,6 +226,26 @@ class TheModelIsToldTheRow(unittest.TestCase):
             with concierge.delivering(concierge.PHONE): self.assertIn(f'"{buttons.label("not_ours")}"', concierge.table_actions(s, item))
 
 
+class NotesAndDueDays(unittest.TestCase):
+    # neither has a button on the row; both are the task page's own writes, run and said (the owner, 2026-10-20)
+    def test_a_note_is_added_and_said(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'file a note on it: waiting on the bank', item['key'], 'CALL: {"kind": "task.comment", "params": {"text": "waiting on the bank"}}')
+        self.assertEqual(out['did'], 'task.comment'); self.assertTrue(out['say'].startswith(f'Added a note to TQ-{tid:04d}'), out['say'])
+        self.assertIn('waiting on the bank', [c.get('Body') for c in s.list_comments(tid)])
+
+    def test_the_due_day_is_set_and_said(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'set the due date to friday', item['key'], 'CALL: {"kind": "task.update", "params": {"due": "friday"}}')
+        self.assertEqual(out['did'], 'task.update'); self.assertIn(f"Set TQ-{tid:04d}'s due day to Fri", out['say'])
+        self.assertTrue(str(s.get_task(tid).get('DueAt') or ''))
+
+    def test_priority_still_lights_its_picker(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'make it urgent', item['key'], 'CALL: {"kind": "task.update", "params": {"priority": "urgent"}}')
+        self.assertEqual(out['light']['verb'], 'priority')
+
+
 class RunItAgain(unittest.TestCase):
     def test_run_it_again_over_a_good_report_opens_its_page(self):
         s = store()

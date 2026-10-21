@@ -116,8 +116,8 @@ def collect_setup_draft(store, task_id, reply):
         # the draft is drawn right under this answer with its Approve (the assistant payload's playbookDrafts): say where, and what
         # Approve does - "Draft ready on the task (rv12)" pointed at a Close out the live chat hid (the owner, 2026-10-21)
         from . import words
-        outcome = (f"Your playbook draft is below. Edit it if you like - Approve saves it to {words.name('playbooks')}, and triage "
-                   "starts matching new mail against its when line." if queued
+        # (the card under it says what Approve does - saved to Reports -> Playbooks, matched by triage - so this line does not again)
+        outcome = ("Your playbook draft is below - edit it if you like, then Approve it." if queued
                    else f"The draft could not be queued. Check that \"Use playbooks\" is on in {words.name('sorting')}.")
     except (ValueError, TypeError) as e:
         outcome = f'The draft could not be queued: {e} Ask the assistant to correct it.'

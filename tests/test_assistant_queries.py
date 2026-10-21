@@ -36,7 +36,7 @@ class EverydayAsks(unittest.TestCase):
             with self.subTest(ask=r['q'].text):
                 opened = next(g for g in r['ideal']['got'] if g.startswith('open:'))
                 if 'Add another' in r['ideal']['say']: self.assertNotIn('&step=1', opened)
-                else: self.assertTrue(opened.endswith('&step=1')); self.assertIn('its first step is lit there', r['ideal']['say'])
+                else: self.assertTrue(opened.endswith('&step=1')); self.assertIn('keys go there, never in chat', r['ideal']['say'])
 
     def test_every_bring_up_opens_its_exact_target(self):
         for r in (r for r in self.rows if r['q'].cat == 'bring-up'):

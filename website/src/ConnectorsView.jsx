@@ -2187,7 +2187,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
   const [cfg, setCfg] = useState(parse(conn.ConfigJson));
   const [secret, setSecret] = useState("");
   const [newSrc, setNewSrc] = useState("");
-  const [chatNames, setChatNames] = useState({});   // WhatsApp jid -> chat name, from WaChats' roster
+  const [roster, setRoster] = useState(new Set());   // WhatsApp jids WaChats lists - each with its own switch there
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
@@ -2309,7 +2309,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             one place: the <b>Inbound — what becomes work</b> step below.
           </Typography>
         )}
-        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setChatNames} />}
+        {conn.Type === "whatsapp" && <WaChats conn={conn} mine={mine} reload={reload} onNavigate={onNavigate} onRoster={setRoster} toggle={toggleSource} />}
         {conn.Type === "telegram" && (
           <>
             <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 1, maxWidth: 560 }}>
@@ -2326,12 +2326,12 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
             </Button>
           </>
         )}
-        {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*")).map((s) => (
+        {/* a WhatsApp chat the roster lists is switched on its named row up there; this list keeps what was typed by hand -
+            a group's address is "120363…@g.us", and a list of those could not say which chats they were (TQ-1158) */}
+        {mine.filter((s) => !(conn.Type === "telegram" && s.Address === "*") && !(conn.Type === "whatsapp" && roster.has(s.Address))).map((s) => (
           <Box key={s.SourceId} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1, borderBottom: `1px solid ${BORDER}`, flexWrap: "wrap" }}>
             <StatusDot ok={!!s.Active} />
-            {/* a group's address is "120363…@g.us": a list of those could not say which chats were the ones added */}
-            {chatNames[s.Address] && <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }} noWrap>{chatNames[s.Address]}</Typography>}
-            <Typography sx={{ ...mono, color: chatNames[s.Address] ? FAINT : INK, fontSize: chatNames[s.Address] ? 11 : 13 }} noWrap>{s.Address}</Typography>
+            <Typography sx={{ ...mono, color: INK, fontSize: 13 }} noWrap>{s.Address}</Typography>
             {conn.Type === "outlook" && <MailFolders conn={conn} s={s} reload={reload} />}
             {String(s.Owner || "").startsWith("discovered:") && (
               <Typography variant="caption" sx={{ color: FAINT }} noWrap>
@@ -3513,7 +3513,7 @@ const WaPair = ({ conn, reload }) => {
 
 /* ── WhatsApp: the paired account's reachable roster, offered as sources. The catch-all covers
    direct chats; a group only comes into Taskuary once its JID is explicitly added. ── */
-const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
+const WaChats = ({ conn, mine, reload, onNavigate, onRoster, toggle }) => {
   const saveConn = useSaveConnector(reload);
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState("");
@@ -3523,12 +3523,13 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
   // "there are too many .. where is the myself one")
   const [q, setQ] = useState("");
   const [all, setAll] = useState(false);
+  const [kind, setKind] = useState("All");
   const [standing, setStanding] = useState(null);   // the phone_assistant setting
   const SHOWN = 8;
   const guideJid = String(parse(conn.ConfigJson).assistant_chat || parse(conn.ConfigJson).notify_chat || "");
   const load = useCallback(async () => {
     try { const { data } = await api.get(`/api/connectors/${conn.ConnectorId}/wa/chats`); setRows(data.data); setErr("");
-      onRoster?.(Object.fromEntries((data.data || []).filter((r) => r.name).map((r) => [r.jid, r.name]))); }
+      onRoster?.(new Set((data.data || []).map((r) => r.jid))); }
     catch (e) { setRows([]); setErr(e?.response?.data?.detail || "could not reach the bridge"); }
   }, [conn.ConnectorId, onRoster]);
   useEffect(() => { load(); }, [load]);
@@ -3539,9 +3540,16 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
     } catch { setStanding(null); }
   }, []);
   useEffect(() => { loadStanding(); }, [loadStanding]);
-  const have = new Set(mine.map((s) => s.Address));
-  const add = async (jid) => {
-    await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); reload();
+  // PICKING IS ONE SWITCH PER CHAT (Gabi, 2026-10-21: "make it easier to select which names/groups you want to add"): it was an
+  // "Add as source" button per row, and turning one off meant finding its bare jid in a second list under this one
+  const src = Object.fromEntries(mine.map((s) => [s.Address, s]));
+  const [adding, setAdding] = useState("");
+  const flip = async (jid) => {
+    if (src[jid]) return toggle(src[jid]);
+    setAdding(jid); setErr("");
+    try { await api.post("/api/sources", { Channel: "whatsapp", Address: jid, ConnectorId: conn.ConnectorId, Active: true }); await reload(); }
+    catch (e) { setErr(e?.response?.data?.detail || "could not add that chat"); }
+    setAdding("");
   };
   /* Choosing the chat and granting the standing permission used to be ONE click - the button wrote
      assistant_chat and switched phone_assistant on behind it - so "which chat is it" and "when may
@@ -3563,11 +3571,13 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
   };
   // yours, then the one already in the funnel, then the rest as they come
   const needle = q.trim().toLowerCase();
-  const found = (rows || []).filter((r) => !needle
-    || `${r.name || ""} ${r.jid}`.toLowerCase().includes(needle));
+  const isGroup = (r) => r.group && !r.self;
+  const found = (rows || []).filter((r) => (kind === "All" || (kind === "Groups") === isGroup(r)) && (!needle
+    || `${r.name || ""} ${r.jid}`.toLowerCase().includes(needle)));
   const ranked = [...found].sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0)
     || (b.jid === guideJid ? 1 : 0) - (a.jid === guideJid ? 1 : 0));
-  const shown = all || needle ? ranked : ranked.slice(0, SHOWN);
+  // a chat already coming in is always on screen - this list is now the only place its switch is
+  const shown = all || needle ? ranked : ranked.filter((r, i) => i < SHOWN || src[r.jid]);
   // only a chat that is the owner ALONE may be the assistant's: a group must never be able to
   // command it, and an answer about the owner's mail must never land where others are reading
   // (remote_assistant.is_private, which the server has already applied to `self`)
@@ -3595,11 +3605,14 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
       </Typography>
       <Typography variant="caption" sx={{ color: FAINT, display: "block", mb: 0.75 }}>
         Chats reachable through this paired account. Groups are loaded from WhatsApp; direct chats appear once Taskuary or the
-        bridge has seen them. A <b>group</b> joins the funnel only when you add it here.
+        bridge has seen them. Switch a chat on and it comes in; a <b>group</b> joins the funnel only when you switch it on here.
         <Button size="small" onClick={load} sx={{ ml: 1, fontSize: 11, textTransform: "none", py: 0 }}>refresh</Button>
       </Typography>
-      <TextField size="small" fullWidth value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 0.75, bgcolor: "#fff" }}
-        placeholder="search your chats by name or number" />
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.75, flexWrap: "wrap" }}>
+        <FilterPills options={["All", "People", "Groups"]} value={kind} onChange={setKind} />
+        <TextField size="small" value={q} onChange={(e) => setQ(e.target.value)} sx={{ flex: 1, minWidth: 200, bgcolor: "#fff" }}
+          placeholder="search your chats by name or number" />
+      </Box>
       {err && <Typography variant="caption" sx={{ color: "#6b2733", display: "block" }}>✗ {err}</Typography>}
       {rows && !rows.length && !err && <Typography variant="caption" sx={{ color: FAINT }}>no reachable chats loaded yet — refresh, or send a message in a direct chat</Typography>}
       {shown.map((r) => (
@@ -3613,13 +3626,14 @@ const WaChats = ({ conn, mine, reload, onNavigate, onRoster }) => {
             <Typography variant="caption" sx={{ ...mono, color: FAINT, fontSize: 10.5 }} noWrap>{r.jid} · {r.n} msg · {r.last}{r.snippet ? ` · “${r.snippet}”` : ""}</Typography>
           </Box>
           {guideJid === r.jid && <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ assistant chat</Typography>}
-          {have.has(r.jid) ? <Typography variant="caption" sx={{ color: "#47654a", fontWeight: 600 }}>✓ source</Typography>
-            : <Button size="small" variant="outlined" onClick={() => add(r.jid)} sx={{ fontSize: 11.5, whiteSpace: "nowrap" }}>Add as source</Button>}
+          {adding === r.jid ? <CircularProgress size={14} sx={{ mx: 1.5 }} />
+            : <Switch size="small" checked={!!src[r.jid]?.Active} onChange={() => flip(r.jid)}
+                inputProps={{ "aria-label": `${r.name || r.jid} comes in` }} />}
         </Box>
       ))}
-      {!needle && !all && ranked.length > SHOWN && (
+      {!needle && !all && ranked.length > shown.length && (
         <Button size="small" onClick={() => setAll(true)} sx={{ fontSize: 11.5, mt: 0.5 }}>
-          show the other {ranked.length - SHOWN} chats
+          show the other {ranked.length - shown.length} chats
         </Button>
       )}
       {needle && !ranked.length && rows?.length ? (

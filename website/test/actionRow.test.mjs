@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { press, put, rowOf } from "../src/actionRow.js";
+import { press, put, rowNow, rowOf } from "../src/actionRow.js";
 
 const v = (id, group, extra = {}) => ({ id, group, tone: "s", label: id, title: "", disabled: false, why: "", promote: true, lead: false, ...extra });
 const filled = (r) => [...r.decide, ...r.agent, r.next].filter((x) => x && x.tone === "p").map((x) => x.id);
@@ -330,4 +330,24 @@ test("the Advisor's own button for a move the row lacks is the dark one; a 409 s
   assert.match(strip, /status === 409 \? "This changed - here's the updated suggestion\."/);
   assert.doesNotMatch(strip, /note\.model/, "no model names in the Why? box");
   assert.doesNotMatch(strip, /e\.label \|\| e\.id/, "no evidence ids in the Why? box");
+});
+
+// issue 263 / the UI audit (2026-10-21): two mounted copies of one card registered under one name, cleared each other's verbs on
+// every put, re-drew each other forever and React stopped the app (#185). Each copy is now its own owner, and the row shows one
+// button per id however many copies carry it.
+test("two copies of a card carrying the same verb show one button, and either going leaves the other's", () => {
+  const v = (n) => ({ id: "t263:send", label: "Send", group: "decide", run: () => n });
+  put("t263-card:r1:", [v(1)]); put("t263-card:r2:", [v(2)]);
+  assert.equal(rowNow().list.filter((x) => x.id === "t263:send").length, 1);
+  put("t263-card:r2:", null);
+  assert.equal(rowNow().list.filter((x) => x.id === "t263:send").length, 1);
+  put("t263-card:r1:", null);
+  assert.equal(rowNow().list.filter((x) => x.id === "t263:send").length, 0);
+});
+
+test("every mounted card registers under its own key, never a name another copy shares", () => {
+  const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "../src/actionRow.js"), "utf8");
+  const body = src.slice(src.indexOf("export function useVerbs"), src.indexOf("}", src.indexOf("export function useVerbs")) + 1);
+  assert.match(body, /useId\(\)/);
+  assert.doesNotMatch(body, /put\(owner,/);
 });

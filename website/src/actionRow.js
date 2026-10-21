@@ -2,7 +2,7 @@
 // one row above the chat line (ActionRow.jsx) draws them, in the same place for every item. A verb is the card's own handler,
 // unchanged: the row calls the LATEST one, so a press costs what the old button cost and nothing in the card re-renders for it.
 // Only a change in what the row SHOWS (a label, a disabled flag, a verb arriving or going) wakes the row; a fresh closure does not.
-import React, { useEffect, useSyncExternalStore } from "react";
+import React, { useEffect, useId, useSyncExternalStore } from "react";
 import { label, liveVerb, verbOfRow } from "./buttons.js";
 
 // verb: { id, label, group: "decide" | "agent" | "more" | "next", tone: "p" | "s" | "q", title, disabled, why, run(event, anchorEl) }
@@ -19,7 +19,9 @@ export function put(owner, verbs, ref = "") {
   old.forEach((v) => { if (live.get(v.id) === v) live.delete(v.id); });   // not one a newer owner has since taken over
   if (verbs?.length) { owners.set(owner, { verbs, ref }); verbs.forEach((v) => live.set(v.id, v)); } else owners.delete(owner);
   const all = [...owners.values()];
-  const next = { list: all.flatMap((o) => o.verbs).map(view), ref: all.map((o) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
+  // one button per id: two mounted copies of a card (each its own owner, see useVerbs) carry the same verbs
+  const seen = new Set(), list = all.flatMap((o) => o.verbs).filter((v) => !seen.has(v.id) && seen.add(v.id)).map(view);
+  const next = { list, ref: all.map((o) => o.ref).find(Boolean) || "" }, s = JSON.stringify(next);
   if (s === sig) return;
   sig = s; snap = next; subs.forEach((f) => f());
 }
@@ -62,9 +64,12 @@ export function useHost(on) {
 }
 
 // a card registers its verbs on every render (cheap: one stringify) and clears them when it goes; `ref` names the item they act on
+// Each mounted card registers as ITSELF: two copies under one name (a closed dialog and an open card, the opener and the chat)
+// cleared each other's verbs on every put, every put re-drew both, and React gave up (#185 - issue 263, the UI audit 2026-10-21)
 export function useVerbs(owner, verbs, on = true, ref = "") {
-  useEffect(() => { put(owner, on ? verbs : null, ref); });
-  useEffect(() => () => put(owner, null), [owner]);
+  const key = owner + useId();
+  useEffect(() => { put(key, on ? verbs : null, ref); });
+  useEffect(() => () => put(key, null), [key]);
 }
 
 // A CARD'S OWN MOVE IS A <Button> IT DRAWS (Send, Answer, Open the connection...): read it once into a row verb - its label, its onClick,

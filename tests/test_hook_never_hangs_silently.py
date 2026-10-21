@@ -13,8 +13,9 @@ CWD = r'C:\code\repo'
 ONE = {'questions': [{'question': 'Which branch should I base this on?', 'options': [{'label': 'main'}, {'label': 'dev'}]}]}
 
 
-def pane(tid, store, sid='run1', ext='sess-1'):
-    return SimpleNamespace(sid=sid, alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=['claude'], last=1.0,
+def pane(tid, store, sid='run1', ext='sess-1', mode='auto'):
+    "a stranger's session (mode 'auto'): the one session whose ask is still held - the owner's own is asked in its terminal"
+    return SimpleNamespace(sid=sid, mode=mode, alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=['claude'], last=1.0,
                            ext_id=ext, resumed_from='', store=store, witness=SimpleNamespace(note=lambda n: None), n=0,
                            tail=lambda n=3: ['✻ Pondering… (esc to interrupt)'], status_tail=lambda n=6: ['✻ Pondering… (esc to interrupt)'])
 

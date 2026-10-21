@@ -3809,7 +3809,8 @@ def task_record(tid: int):
 
 @app.post('/api/hooks/claude/ask')
 async def cli_hook_ask(payload: dict):
-    """Claude's AskUserQuestion, BEFORE it draws its form (hooks.ask): held here - a worker thread, up to hooks.ASK_WAIT -
+    """Claude's AskUserQuestion, BEFORE it draws its form (hooks.ask): recorded, and on the owner's own task let go at once
+    so the form is asked in the terminal. A stranger's session is held here - a worker thread, up to hooks.ASK_WAIT -
     while the owner answers in the Assistant or on the phone, then the answers are this hook's reply. {} lets Claude
     draw its own form; so does anything that goes wrong - a hook must never trouble the agent.
 

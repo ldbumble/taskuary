@@ -25,8 +25,9 @@ PERMISSION = ['Bash command', '  rm -rf build/', 'Do you want to proceed?',
               '  3. No, and tell Claude what to do differently (esc)']
 
 
-def pane(tid, store, working=True):
-    t = SimpleNamespace(sid='run1', alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=['claude'], last=1.0,
+def pane(tid, store, working=True, mode='auto'):
+    # a stranger's session: the owner's own task is never held, its question is asked in the terminal (hooks.ask)
+    t = SimpleNamespace(sid='run1', mode=mode, alive=True, task_id=tid, cwd=CWD, agent='coding', label='coding', argv=['claude'], last=1.0,
                         ext_id='sess-1', resumed_from='', store=store, witness=SimpleNamespace(note=lambda n: None), written=[],
                         n=0, tail=lambda n=3: ['✻ Pondering… (esc to interrupt)'], status_tail=lambda n=6: ['✻ Pondering… (esc to interrupt)'])
     t.write = t.written.append

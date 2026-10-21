@@ -5359,8 +5359,11 @@ def save_source(body: SourceBody):
     was = store.get_source(fields['SourceId']) if fields.get('SourceId') else None
     # a workflow's steps are checked before they are kept: a broken list would only fail on its first scheduled run (flow.validate)
     if fields.get('ConfigJson') and channel == 'report':
-        try: flow_cfg = json.loads(fields['ConfigJson']).get('flow')
-        except (ValueError, AttributeError): flow_cfg = None
+        try: rcfg = json.loads(fields['ConfigJson']) or {}; flow_cfg = rcfg.get('flow')
+        except (ValueError, AttributeError): rcfg, flow_cfg = {}, None
+        # a clock the scheduler cannot read is refused, never saved as "scheduled" (reports.schedule_error, B3)
+        from .reports import schedule_error
+        if isinstance(rcfg, dict) and (why := schedule_error(rcfg)): raise HTTPException(422, f'Not saved: {why}.')
         if flow_cfg is not None:
             from . import flow
             ok, why = flow.validate(store, flow_cfg)

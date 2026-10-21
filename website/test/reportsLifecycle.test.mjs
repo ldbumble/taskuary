@@ -181,5 +181,6 @@ test("a report with no schedule wears a red border and says it only runs by hand
   assert.ok(!source.includes('.join(" + ") || "daily"'));
   assert.match(source, /const unscheduled = !sched && !workflowOverview;/);
   assert.match(source, /No schedule — it only runs when you press Run now\./);
-  assert.match(source, /Everything blank = it only runs when you press Run now\./);
+  // ...and the editor's picker says it as its first choice (B3: the free boxes and their "Everything blank" caption are gone)
+  assert.match(readFileSync(new URL("../src/WorkflowEditor.jsx", import.meta.url), "utf8"), /Only when I press Run now/);
 });

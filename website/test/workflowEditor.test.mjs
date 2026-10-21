@@ -53,3 +53,15 @@ test("Reports offers New report and New workflow together, whichever list is ope
   assert.doesNotMatch(view, /section === "workflows" \? \{ key: "new-agent"/);
   assert.ok(view.includes(">New report</Button>") && view.includes(">New workflow</Button>"));
 });
+
+// B3 (the 2026-10-21 UI audit): the report editor's free "daily at HH:MM" box saved "7am", which the scheduler cannot read
+test("a report's schedule is the workflow editor's picker, never a free time box", () => {
+  const view = read("ReportsView.jsx");
+  assert.ok(src.includes("export const SchedulePicker"), "the picker is one component");
+  assert.ok(/<SchedulePicker sched=\{sched\}/.test(src) && /<SchedulePicker sched=\{sched\}/.test(view), "both editors draw it");
+  assert.ok(!view.includes('label="daily at HH:MM"') && !view.includes('label="every N minutes"'), "no free box for the time");
+  // every choice it offers comes back out as a key the scheduler reads (tests/test_report_schedule_saved.py reads the same shapes)
+  assert.deepEqual(withSchedule({}, { mode: "daily", at: "07:00" }), { daily_at: "07:00" });
+  assert.deepEqual(withSchedule({}, { mode: "weekly", at: "08:00", days: [3, 1] }), { cron: "0 8 * * 1,3" });
+  assert.deepEqual(withSchedule({}, { mode: "monthly", at: "09:30", day: 1 }), { cron: "30 9 1 * *" });
+});

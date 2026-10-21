@@ -66,6 +66,36 @@ const Field = ({ label, hint, children }) => (
   </Box>
 );
 
+// WHEN IT RUNS: one picker for a workflow and a report alike (the 2026-10-21 UI audit, B3) - the report's free "daily at HH:MM" box
+// saved "7am", which the scheduler cannot read. Every choice here writes a key it can (withSchedule); Custom keeps cron for the rest.
+export const SchedulePicker = ({ sched, setSched, cron = "" }) => (
+  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+    <Select size="small" value={sched.mode} onChange={(e) => setSched((s) => ({ at: s.at || "08:00", days: s.days || [1], day: s.day || 1,
+      minutes: s.minutes || 60, cron: s.cron || cron || "", mode: e.target.value }))} sx={{ minWidth: 190, bgcolor: "#fff", fontSize: 13 }}>
+      <MenuItem value="manual" sx={{ fontSize: 13 }}>Only when I press Run now</MenuItem>
+      <MenuItem value="daily" sx={{ fontSize: 13 }}>Every day</MenuItem>
+      <MenuItem value="weekly" sx={{ fontSize: 13 }}>Every week</MenuItem>
+      <MenuItem value="monthly" sx={{ fontSize: 13 }}>Every month</MenuItem>
+      <MenuItem value="every" sx={{ fontSize: 13 }}>Every few minutes</MenuItem>
+      <MenuItem value="cron" sx={{ fontSize: 13 }}>Custom (cron)</MenuItem>
+    </Select>
+    {sched.mode === "weekly" && DAYS.map((d, i) => {
+      const on = (sched.days || []).includes(i);
+      return <Chip key={d} size="small" label={d} variant={on ? "filled" : "outlined"} color={on ? "primary" : "default"}
+        onClick={() => setSched((s) => ({ ...s, days: on ? s.days.filter((x) => x !== i) : [...(s.days || []), i] }))} />;
+    })}
+    {sched.mode === "monthly" && <TextField size="small" type="number" label="day" value={sched.day}
+      inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "#fff" }}
+      onChange={(e) => setSched((s) => ({ ...s, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) }))} />}
+    {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label="at" value={sched.at}
+      sx={{ width: 120, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
+    {sched.mode === "every" && <TextField size="small" type="number" label="minutes" value={sched.minutes}
+      sx={{ width: 110, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
+    {sched.mode === "cron" && <TextField size="small" label="cron" value={sched.cron} placeholder="0 8 * * 1"
+      sx={{ width: 160, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, cron: e.target.value }))} />}
+  </Box>
+);
+
 
 export default function WorkflowEditor({ sourceId, sources, connectors, types, draft, reload, onBack, onSaved, note, composer, lastRun,
   lastRunRec, fixRun, onFixTaken, onReport }) {
@@ -285,31 +315,7 @@ export default function WorkflowEditor({ sourceId, sources, connectors, types, d
             onChange={(e) => set("on_mail", e.target.value)} sx={{ bgcolor: "#fff" }} />
         </Field>
         <Field label="When it runs">
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-            <Select size="small" value={sched.mode} onChange={(e) => setSched((s) => ({ at: s.at || "08:00", days: s.days || [1], day: s.day || 1,
-              minutes: s.minutes || 60, cron: s.cron || cfg.cron || "", mode: e.target.value }))} sx={{ minWidth: 190, bgcolor: "#fff", fontSize: 13 }}>
-              <MenuItem value="manual" sx={{ fontSize: 13 }}>Only when I press Run now</MenuItem>
-              <MenuItem value="daily" sx={{ fontSize: 13 }}>Every day</MenuItem>
-              <MenuItem value="weekly" sx={{ fontSize: 13 }}>Every week</MenuItem>
-              <MenuItem value="monthly" sx={{ fontSize: 13 }}>Every month</MenuItem>
-              <MenuItem value="every" sx={{ fontSize: 13 }}>Every few minutes</MenuItem>
-              <MenuItem value="cron" sx={{ fontSize: 13 }}>Custom (cron)</MenuItem>
-            </Select>
-            {sched.mode === "weekly" && DAYS.map((d, i) => {
-              const on = (sched.days || []).includes(i);
-              return <Chip key={d} size="small" label={d} variant={on ? "filled" : "outlined"} color={on ? "primary" : "default"}
-                onClick={() => setSched((s) => ({ ...s, days: on ? s.days.filter((x) => x !== i) : [...(s.days || []), i] }))} />;
-            })}
-            {sched.mode === "monthly" && <TextField size="small" type="number" label="day" value={sched.day}
-              inputProps={{ min: 1, max: 28 }} sx={{ width: 80, bgcolor: "#fff" }}
-              onChange={(e) => setSched((s) => ({ ...s, day: Math.min(28, Math.max(1, Number(e.target.value) || 1)) }))} />}
-            {["daily", "weekly", "monthly"].includes(sched.mode) && <TextField size="small" type="time" label="at" value={sched.at}
-              sx={{ width: 120, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, at: e.target.value }))} />}
-            {sched.mode === "every" && <TextField size="small" type="number" label="minutes" value={sched.minutes}
-              sx={{ width: 110, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, minutes: e.target.value }))} />}
-            {sched.mode === "cron" && <TextField size="small" label="cron" value={sched.cron} placeholder="0 8 * * 1"
-              sx={{ width: 160, bgcolor: "#fff" }} onChange={(e) => setSched((s) => ({ ...s, cron: e.target.value }))} />}
-          </Box>
+          <SchedulePicker sched={sched} setSched={setSched} cron={cfg.cron} />
         </Field>
         <Box component="details" sx={{ mt: 1, borderTop: `1px solid ${BORDER}`, pt: 1.5 }}>
           <Box component="summary" sx={{ cursor: "pointer", color: DIM, fontSize: 12.5, fontWeight: 600 }}>More</Box>

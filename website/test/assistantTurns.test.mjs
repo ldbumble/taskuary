@@ -138,3 +138,21 @@ test("a line that replaced an item's older line keeps that line's id through eve
   assert.equal(m.at(-1).card.key, "processing:b", "the item the walk brought last is the last line - the one on the table");
   assert.equal(m.filter((x) => x.card?.key === "processing:a").length, 1);
 });
+
+// On the desk an item comes up under a few words naming only its kind: three reports in a row each say "Next up: a report.", and the
+// second's durable turn matched the first's bubble - its card replaced the first's, and the report the walk left had no line (RECEIPT)
+test("two lines with the same words but different items are two turns", () => {
+  const card = (key, title) => ({ kind: "report", key, title });
+  const local = [
+    { id: "a1", role: "assistant", text: "Next up: a report.", card: card("report:1", "Tickets by day"), done: true },
+    { id: "a2", role: "assistant", text: "Next up: a report.", card: card("report:2", "Ageing by vendor") },
+  ];
+  const durable = [
+    { id: 501, role: "assistant", text: "Next up: a report.", card: card("report:2", "Ageing by vendor") },
+    { id: 500, role: "assistant", text: "Next up: a report.", card: card("report:1", "Tickets by day") },
+  ];
+  const { messages, added } = mergeDurableTurns(local, durable);
+  assert.deepEqual(messages.map((m) => [m.id, m.commentId, m.card.title]), [["a1", 500, "Tickets by day"], ["a2", 501, "Ageing by vendor"]]);
+  assert.equal(messages[0].done, true);
+  assert.deepEqual(added, []);
+});

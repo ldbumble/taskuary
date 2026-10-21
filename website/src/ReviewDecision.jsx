@@ -255,7 +255,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
     ] : proposal ? [
       { id: no("approve"), label: busy ? proposal.busyLabel : proposal.approveLabel, tone: "p", disabled: busy || (proposal.kind === "closeout" && blocked), run: () => decide("approve"),
         why: proposal.kind === "closeout" && blocked ? gh.reason.split(" - ")[0] : "",
-        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
+        title: proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook" ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
           : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it` : "Run the proposed action; nothing is sent to the sender" },
     ] : !canSendIt ? [
       // ...and with the box emptied it copies nothing: the line judged over the draft said "copy it to where the question came from"
@@ -433,7 +433,7 @@ export default function ReviewDecision({ review: r, closeout, onChanged, onOpenT
           <Button size="small" variant={solid} disableElevation disabled={busy || (proposal.kind === "closeout" && blocked)}
             onClick={() => decide("approve")}
             title={proposal.kind === "closeout" && blocked ? gh.reason : proposal.kind === "playbook"
-              ? "Save this process in Docs → Playbooks; nothing is sent to the sender"
+              ? "Save this process in Reports → Playbooks; nothing is sent to the sender"
               : proposal.kind === "closeout" ? `${proposal.approveLabel} - the text above goes with it`
               : "Run the proposed action; nothing is sent to the sender"}>
             {busy ? proposal.busyLabel : proposal.approveLabel}

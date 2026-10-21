@@ -1995,7 +1995,7 @@ function ConnectorIdentity({ conn, reload, onCreated, addOnly = false }) {
 /* ── "Remove connection" on every detail page: wipes creds/config, turns sources off ── */
 /* The second door to a playbook (docs/beyond-code.md): the card is where you look for "what does
    this thing do for us", so it lists every playbook whose `uses:` line names this connection, and
-   opens each in Settings → Docs (#playbook=<slug>), where the words are edited. */
+   opens each on Reports → Playbooks (#playbook=<slug>), where the words are edited. */
 function CardPlaybooks({ type }) {
   const [books, setBooks] = useState(null);
   useEffect(() => {

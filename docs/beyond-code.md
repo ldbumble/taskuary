@@ -29,14 +29,14 @@ Where the current design falls short is (2): there is one playbook, CODING.md, a
 
 ## Creating a playbook with AI
 
-In **Docs → Playbooks**, **New playbook** opens guided setup. Choose **Use a past email** to
+In **Reports → Playbooks**, **New playbook** opens guided setup. Choose **Use a past email** to
 search imported incoming mail (including older, filed requests), or **Start from scratch** to
 describe the workflow. An email is optional reference material; its original task and routing
 stay intact. A connector's **New playbook** link carries that connection into the same dialog.
 
 **Set up with AI** starts a saved general assistant conversation using your configured provider.
 The assistant helps define the trigger, connections, steps, approval rules, and finished result.
-Its draft goes to **Review**, where you can edit and approve it before it becomes a playbook.
+Its draft appears in the conversation with its **Approve**; edit it there, and approving files it as a playbook.
 You can close setup and resume from **Tasks**, or choose **Write manually** for the markdown editor.
 The public demo illustrates this flow with clearly labelled scripted replies.
 
@@ -46,7 +46,7 @@ You do not enumerate a million tasks. You let the company's playbooks accrete, o
 job**, the first time each is done - the way Social accretes facts.
 
 **A playbook** is a markdown file under `~/.taskuary/playbooks/<slug>.md` (beside the operator
-documents, versioned like them). It has two doors: a *Playbooks* shelf on the Docs tab, where they
+documents, versioned like them). It has two doors: a *Playbooks* shelf on the Reports page, where they
 are read and edited like SOUL.md, and a *Playbooks* section on each connector card listing the
 ones whose `uses:` line names that connection - the QuickBooks card shows every job that posts to
 the books. One file, two doors; the connector is where you look for "what does this thing do for

@@ -90,7 +90,7 @@ export const proposalPresentation = (review) => {
       context: amend ? "What the outcome ledger counted about this kind of work, added to its playbook · nothing is sent"
         : "Playbook proposal · nothing will be sent to the conversation",
       destinationLabel: "Save to",
-      destination: `Docs → Playbooks → ${slug}.md`,
+      destination: `Reports → Playbooks → ${slug}.md`,         // where playbooks live (PlaybookShelf.jsx)
       approveLabel: APPROVE,
       busyLabel: "saving…",
       rejectLabel: "Discard proposal",

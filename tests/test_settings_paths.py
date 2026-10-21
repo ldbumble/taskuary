@@ -18,7 +18,7 @@ def _places():
     view, smap = (SRC / 'SettingsView.jsx').read_text(encoding='utf-8'), (SRC / 'settingsMap.js').read_text(encoding='utf-8')
     pages = re.findall(r'\w+: \{ title: "([^"]+)", icon:', view)
     secs = [x for arr in re.findall(r'export const \w+_SECTIONS = \[([^\]]*)\]', smap) for x in re.findall(r'"([^"]+)"', arr)]
-    return s, set(s['groups']) | set(pages) | set(secs) | {'Profiles', 'Playbooks'} | {k['label'] for k in s['knobs'].values()}
+    return s, set(s['groups']) | set(pages) | set(secs) | {'Profiles'} | {k['label'] for k in s['knobs'].values()}
 
 
 WORDS = ROOT / 'taskuary' / 'words.json'

@@ -35,6 +35,7 @@ import { ideaCounted, ideaWord } from "./lanes.js";   // an Advisor line's kind,
 import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
+import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -346,6 +347,7 @@ const LINE_CHIP = { timeline: "Reports", alert: "reached you", send: "sent out",
 // one report its own editor - drawn through the canvas's frame instead of this tab's rail.
 export default function ReportsView({ browse = null, browseState = {}, onBrowseState = null }) {
   const [sources, setSources] = useState(null);
+  const pbs = usePlaybooks();          // the third shelf: Reports / Workflows / Playbooks (PlaybookShelf.jsx)
   const [types, setTypes] = useState([]);
   const [connectors, setConnectors] = useState([]);
   const [syncing, setSyncing] = useState(false);
@@ -564,14 +566,16 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
     const openSource = sources.find((x) => x.SourceId === browseState.open);
     // a link names a number, not a shelf (#report=<id>, a failed run's Fix it): a workflow opens under Workflows, where it lives
     const section = openSource && isWorkflowSource(openSource) ? "workflows" : browseState.section ?? null;
-    const back = () => { setDraft(null); load(); onBrowseState?.({ ...browseState, section, open: null }); };
+    const back = () => { setDraft(null); load(); pbs.load(); onBrowseState?.({ ...browseState, section, open: null }); };
+    const pbSlug = pbOpen(browseState.open), pbBook = pbs.books.find((b) => b.slug === pbSlug);
     const sectionRows = section === "workflows" ? workflowSources : section === "reports" ? reportSources : [];
     // a link to a report that has since been removed: the list, and why - never an empty editor saving to a missing id
     const missing = typeof browseState.open === "number" && !sources.some((x) => x.SourceId === browseState.open);
     return browse({
       title: "Reports", wide: true,
-      summary: `${plural(reportSources.length, "report")} · ${plural(workflowSources.length, "workflow")} · reports read and summarise, workflows write`,
+      summary: `${plural(reportSources.length, "report")} · ${plural(workflowSources.length, "workflow")} · ${plural(pbs.books.length, "playbook")} · reports read and summarise, workflows write, playbooks say how a kind of job is done`,
       sections: [{ key: "reports", label: "Reports", n: reportSources.length }, { key: "workflows", label: "Workflows", n: workflowSources.length },
+        { key: "playbooks", label: "Playbooks", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
         { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }],
@@ -582,7 +586,11 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           : key === "new-invoices" || key === "new-agent" ? { section: "workflows", open: key } : { section: key, open: null });
       },
       // the tab's own tools, beside its list: run what is due, and describe one for the AI to draft
-      tools: section && browseState.open == null ? (
+      tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
+        <NewPlaybook key={browseState.newFor || ""} connectorType={browseState.newFor || ""} onDone={pbs.load}
+          onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
+        {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
+      : section && browseState.open == null ? (
         <Box sx={{ mt: 1.5, display: "flex", flexDirection: "column", gap: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <Button size="small" variant="outlined" disableElevation onClick={syncNow} disabled={syncing}
@@ -596,13 +604,17 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
           }} />}
         </Box>
       ) : null,
-      cards: sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
-      detail: browseState.open != null && !missing ? wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid })) : null,
+      cards: section === "playbooks" ? pbs.books.map((b) => ({ key: `pb-${b.slug}`, node: <PlaybookRow b={b}
+          onOpen={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}${b.slug}` })} onToggle={(on) => pbs.setOn(b.slug, on)} /> }))
+        : sectionRows.map((x) => ({ key: String(x.SourceId), node: row(x) })),
+      detail: browseState.open != null && !missing ? (pbSlug != null ? <PlaybookDetail key={pbSlug} slug={pbSlug} onGone={back} />
+        : wizard(back, (sid) => onBrowseState?.({ ...browseState, open: sid }))) : null,
       onBack: back,
-      openLabel: browseState.open === "new-report" ? "a new report being set up (Reports)"
+      openLabel: pbSlug != null ? (pbSlug === "new" ? "a new playbook being written (Reports - Playbooks)" : `the playbook "${pbBook?.title || pbSlug}" (Reports - Playbooks), its words open`)
+        : browseState.open === "new-report" ? "a new report being set up (Reports)"
         : openSource ? (section === "workflows" ? `the workflow "${titleOf(openSource)}" (Workflows), its steps open`
           : `the report "${titleOf(openSource)}" (Reports), its editor open`) : "",
-      empty: section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
+      empty: section === "playbooks" ? (pbs.err || (pbs.loaded ? PB_EMPTY : "Reading the playbooks…")) : section === "workflows" ? "No workflows yet - + New workflow describes one and sets it up." : "No reports yet - + New report walks you through one.",
       note: missing ? `That report (#${browseState.open}) is not here any more - these are the ones there are.` : "",
     });
   }

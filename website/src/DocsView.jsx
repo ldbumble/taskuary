@@ -223,7 +223,9 @@ const OwnerCard = () => {
 // shelf. `onCatalog` hands the rail the lists it has to draw - the profiles and playbooks on disk.
 // catalogOnly: mounted unseen only to report the shelf (the canvas's Docs list) - it must not act on a link, or it opens a
 // dialog the list's own card is about to unmount
-export default function DocsView({ sel = null, onSel = null, onCatalog = null, catalogOnly = false }) {
+// `onGone`: the page that opened ONE playbook (Reports -> Playbooks) is told when it is deleted or a new one discarded - it goes back
+// to its list instead of this page opening another playbook in its place
+export default function DocsView({ sel = null, onSel = null, onCatalog = null, catalogOnly = false, onGone = null }) {
   const rail = !!onSel;
   const [manageProfiles, setManageProfiles] = useState(false);
   const [createProfile, setCreateProfile] = useState(false);
@@ -388,7 +390,9 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   useEffect(() => {
     const fromHash = () => {
       const m = /playbook=([\w:.-]+)/.exec(window.location.hash || "");
-      if (!m || catalogOnly) return;
+      // ...where a page drives it (rail), the link is that page's: Reports -> Playbooks opens the playbook it names (canvasLinks)
+      // and its address IS #playbook=<slug> - read here too, it opened a second New playbook dialog over the editor
+      if (!m || catalogOnly || rail) return;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       const [what, type] = m[1].split(":");
       if (what === "new") { setSection("playbooks"); setNewPlaybook({ connectorType: type || "" }); return; }
@@ -396,7 +400,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
     };
     fromHash(); window.addEventListener("hashchange", fromHash);
     return () => window.removeEventListener("hashchange", fromHash);
-  }, [openPb, catalogOnly]);
+  }, [openPb, catalogOnly, rail]);
 
   const save = async () => {
     if (isPb(docName)) {
@@ -423,6 +427,7 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
   const removePb = async () => {
     const slug = pbSlug(docName);
     if (slug === "new") {
+      if (onGone) { onGone(); return; }
       if (books[0]) await openPb(books[0].slug);
       else setDocs((d) => ({ ...d, "pb:new": tpl }));
       return;
@@ -438,7 +443,9 @@ export default function DocsView({ sel = null, onSel = null, onCatalog = null, c
       try { await api.delete(`/api/playbooks/${slug}`); }
       catch (e) { if (e?.response?.status !== 404) throw e; }
       const next = books.find((b) => b.slug !== slug);
-      await loadBooks(); await openPb(next?.slug || "new");
+      await loadBooks();
+      if (onGone) { setDeletePlaybook(null); onGone(); return; }
+      await openPb(next?.slug || "new");
       setDeletePlaybook(null);
     } catch (e) {
       setDeleteError(e?.response?.data?.detail || "Could not delete this playbook. Please try again.");

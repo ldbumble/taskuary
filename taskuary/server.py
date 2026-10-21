@@ -7194,7 +7194,7 @@ def put_doc(name: str, body: DocBody):
     return {'ok': True}
 
 # ── playbooks: the fourth operator document, one file per kind of job (playbooks.py) ──────
-# Read by the Docs section's Playbooks shelf and by every connector card (filtered by `uses`). Agents
+# Read by the Reports page's Playbooks shelf and by every connector card (filtered by `uses`). Agents
 # may GET these; writing is the owner's (guard.py denies agent tokens) - an agent PROPOSES one.
 @app.get('/api/playbooks')
 def list_playbooks():

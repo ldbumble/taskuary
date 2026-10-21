@@ -54,7 +54,8 @@ test("the address of a place reads back as the same place", () => {
     ["settings", { section: "config", open: "Sync & startup", knob: "poll_minutes" }], ["settings", { section: "policies", open: "policies" }],
     ["settings", { section: "docs", open: "d:learned", view: "changes" }], ["settings", { section: "profiles", open: null }],
     ["reports", { section: "reports", open: 17 }], ["reports", { section: "reports", open: "new-report" }], ["reports", { section: "workflows", open: null }],
-    ["reports", { section: "workflows", open: "new-agent" }], ["hub", {}], ["new", {}],
+    ["reports", { section: "workflows", open: "new-agent" }], ["reports", { section: "playbooks", open: null }],
+    ["reports", { section: "playbooks", open: "pb:weekly-close" }], ["hub", {}], ["new", {}],
   ];
   for (const [area, state] of places) {
     const h = hashFor(area, state), req = canvasRequestFromHash(h);
@@ -64,7 +65,8 @@ test("the address of a place reads back as the same place", () => {
   }
   // two spellings of one place are one place; a run's Fix is an act, never a step Back asks again
   assert.equal(placeOf("#connector="), placeOf("#connections"));
-  assert.equal(placeOf("#playbook=weekly-close"), "#settings=playbooks");
+  assert.equal(placeOf("#playbook=weekly-close"), "#playbook=weekly-close");
+  assert.equal(placeOf("#settings=playbooks"), "#report=playbooks");
   assert.equal(placeOf("#report=17&fix=9"), "#report=17");
   // a message link is a place until the canvas writes the table's own address over it (a reload then lands on that table)
   assert.equal(placeOf("#msg=4"), "#msg=4");

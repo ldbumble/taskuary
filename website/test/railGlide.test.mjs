@@ -20,7 +20,7 @@ test("a row joining a band waits for the glide, a reordered row starts from wher
   const view = src("AssistantView.jsx");
   assert.match(view, /falls\(i\.key\) \? "landing" : entering\.has\(i\.key\) \? "entering" : ""/);
   assert.match(view, /style=\{\{ top: falls\(i\.key\) \? -ROW_H : top \}\}/);
-  assert.match(view, /Math\.abs\(at - top\) < 0\.5 \? \[el, p\.top, p\.h\]/, "a moved node is sent back to where it stood");
+  assert.match(view, /const d = was\.has\(k\) && drawn\?\.get\(k\);\n\s+if \(d\) return \[el, \.\.\.d\];/, "a moved node is sent back to where it was drawn");
   assert.match(view, /const arrivalsOf = \(was\) => \(was\?\.size \? arrivals\(was, items\) : new Set\(\)\);/, "after an empty rail nothing falls at once");
 });
 
@@ -30,8 +30,20 @@ test("a row joining a band waits for the glide, a reordered row starts from wher
 test("a change of course mid-glide restarts every row's top and height from one frame", () => {
   const view = src("AssistantView.jsx");
   assert.match(view, /if \(!moved \|\| !was\.size\) return;/, "only when a row's rest changed - a re-render alone must not restart the glide");
-  assert.match(view, /: \[el, at, parseFloat\(cs\.height\)\]/, "every row, read before any is written");
+  assert.match(view, /return \[el, parseFloat\(cs\.top\), parseFloat\(cs\.height\)\];/, "every row, read before any is written");
   assert.match(view, /el\.style\.transitionProperty = "opacity, transform"; el\.style\.top = `\$\{top\}px`; el\.style\.height = `\$\{h\}px`;/,
     "top and height held where drawn, a fade left running");
   assert.match(view, /el\.style\.transitionProperty = ""; el\.style\.top = `\$\{top\}px`; el\.style\.height = "";/);
+});
+
+// ...FROM WHERE IT IS DRAWN, read before React changes the page: read after, a row React moved had lost its glide and was sent back
+// to where it was last going - a ringed row moved to the top of its band mid-glide came back full height over the row under it
+// (CI, the walk's faults pass, 2026-10-21). getSnapshotBeforeUpdate is the one hook that runs before the change.
+test("where every row is drawn is read before the commit changes the page", () => {
+  const view = src("AssistantView.jsx");
+  assert.match(view, /class BeforeCommit extends React\.Component \{\n\s+getSnapshotBeforeUpdate\(\) \{ this\.props\.take\(\); return null; \}/);
+  assert.match(view, /<BeforeCommit take=\{takeDrawn\} \/>/);
+  assert.match(view, /drawnAt\.current\.set\(`\$\{el\.closest\("\[data-tq-run\]"\)\?\.dataset\.tqRun\} \$\{el\.dataset\.tqKey\}`, \[parseFloat\(cs\.top\), parseFloat\(cs\.height\)\]\);/);
+  // ...and only when a rest changes: a commit that moves nothing reads nothing
+  assert.match(view, /now\.size === was\.size && \[\.\.\.now\]\.every\(/);
 });

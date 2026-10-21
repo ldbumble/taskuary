@@ -610,9 +610,10 @@ async function faults() {
     await fault(f); page.step = `faults ${f}`; await fresh();
     page.expect.add("/dispatch");                                      // its status is the subject here, judged by WAYOUT and WORDS
     // every task row in turn until one offers Send to agent: the rail's order follows the clock, so the first 📋 row was a task with
-    // no Send to agent when CI ran just after midnight (2026-10-19)
+    // no Send to agent when CI ran just after midnight (2026-10-19) - and a coding issue whose folder the task already names when CI ran
+    // after midnight UTC (2026-10-21). The rows are taken in the order of their keys: the same task at any hour
     let started = false;
-    for (const r of (await look(page)).rail.filter((x) => /📋/.test(x.text))) {
+    for (const r of (await look(page)).rail.filter((x) => /📋/.test(x.text)).sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }))) {
       if (!(await openItem(page, r.key))) continue;
       // the coding agent by its own button where the row splits Send to agent in two, else Send to agent and the card's question
       if (await pressVerb(page, "coding_agent")) { started = "coding"; break; }
@@ -623,7 +624,10 @@ async function faults() {
     // the card's question, when it asks which agent - in its answer's words, or with the coding agent's own button (CI, 2026-10-19)
     if (started !== "coding" && !(await clickText(page, choice("agent", "coding_agent")))) await clickText(page, label("coding_agent"));
     await wait(5000);
-    await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : label("pick_repo"), (x) => /coding tool/i.test(x.word)]);
+    // ...a folder that is not there is answered by where the code is - in whichever words that button says: "Change where the code is"
+    // once the task names a folder, the one that was not there (CI, 2026-10-21: the census issue led the rail after midnight UTC)
+    const whereCode = (x) => byLabel[x.word] === "pick_repo";
+    await wayOut(page.step, [aFix, f === "nocli" ? "Connect a coding tool" : whereCode, (x) => /coding tool/i.test(x.word)]);
     page.expect.delete("/dispatch"); await fault("");
   }
   // no AI at all: the strip asks for one, with the button that connects it

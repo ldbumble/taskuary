@@ -25,6 +25,9 @@ export const CLOSEOUT = {
 };
 export const closeoutOf = (review) => CLOSEOUT[proposalFrom(review)?.action] || null;
 
+// a playbook's file name from its title - playbooks.slugify's rule: lower case, every other run of characters one "-", cut, trimmed
+const slugify = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 60).replace(/^-+|-+$/g, "");
+
 // a proposal whose words ARE a playbook page: a new one (the agent's on-close draft) or the ledger's block on one (build step 5)
 export const PAGES = new Set(["write_playbook", "amend_playbook"]);
 
@@ -59,7 +62,10 @@ export const proposalPresentation = (review) => {
   }
   if (PAGES.has(proposal?.action)) {
     const title = String(proposal.text || "").match(/^#\s+(.+)$/m)?.[1]?.trim();
-    const slug = String(proposal.slug || "playbook").trim();
+    // "new" (or none) is filed under its TITLE (playbooks.write -> slugify), so that is the file it names: the card said new.md
+    // over a W-9 playbook the approve then saved as send-our-w-9-to-a-customer-who-asks.md (walk 2026-10-21)
+    const given = String(proposal.slug || "").trim();
+    const slug = (given && given !== "new" ? given : slugify(title)) || "playbook";
     const amend = proposal.action === "amend_playbook";
     return {
       kind: "playbook",

@@ -5748,16 +5748,33 @@ def connector_ai_setup(cid: int, body: AiSetupBody):
     c = store.get_connector(cid)
     # WhatsApp pairs itself (Node check, bridge auto-start, QR on the card); an agent here only sat on the bridge process
     if c and c['Type'] == 'whatsapp': raise HTTPException(422, 'WhatsApp needs no agent: the Pair with your phone box does the setup itself')
-    try: return aisetup.start(store, cfg['server'], cid, body.guide, body.fields, body.secret_label, body.agent, body.model, ACTOR, body.agent_steps)
+    # the GENERAL agent walks the card (aisetup.start_walk, the owner 2026-10-21) - not a coding CLI in a terminal
+    try: return aisetup.start_walk(store, cid, _walk_ctx(body), ACTOR)
     except (ValueError, RuntimeError, FileNotFoundError) as e: raise HTTPException(422, str(e))
+
+def _walk_ctx(body): return {'guide': body.guide or [], 'fields': body.fields or [], 'secret_label': body.secret_label or '', 'agent_steps': body.agent_steps or []}
 
 @app.get('/api/connectors/{cid}/ai-setup')
 def connector_ai_setup_live(cid: int):
-    """Reattach: the card reloads, the agent is still there. `ready` says whether an AI app could take a
-    new one, so the card can say where to get one instead of a button that only answers "not found" (B10)."""
-    try: aisetup.runner(store); why = ''
-    except ValueError as e: why = str(e)
-    return {'session': aisetup.live_for(store, cid), 'ready': not why, 'why': why}
+    """The card's walk as it stands - its steps, what the agent is doing now, the step it needs from the person - and `ready`:
+    whether any brain could take a new one, so the card can say where to get one instead of a button that only answers
+    "not found" (B10)."""
+    why = aisetup.ready_why(store)
+    return {**aisetup.walk_view(store, cid), 'ready': not why, 'why': why}
+
+class AiSetupTurn(AiSetupBody): text: str = ''; saved: list[str] = []
+
+@app.post('/api/connectors/{cid}/ai-setup/say')
+def connector_ai_setup_say(cid: int, body: AiSetupTurn):
+    """The person answered the walk: words typed on the card, or the fields they just saved there."""
+    try: return aisetup.walk_said(store, cid, _walk_ctx(body), body.text, body.saved)
+    except ValueError as e: raise HTTPException(409, str(e))
+
+@app.post('/api/connectors/{cid}/ai-setup/done')
+def connector_ai_setup_done(cid: int):
+    t = aisetup.walk_task(store, cid)
+    if not t: return {'wrap': 'none'}
+    return aisetup.finish_walk(store, t['TaskId'], ACTOR)
 
 # ── Sign in with ChatGPT (taskuary/chatgptauth.py): the owner's ChatGPT plan as a brain, no API key ──
 def _chatgpt_card(cid):

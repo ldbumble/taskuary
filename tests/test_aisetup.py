@@ -47,88 +47,109 @@ class PromptTests(unittest.TestCase):
         self.assertNotIn('STEPS FOR YOU', q); self.assertIn('doing the machine-side parts yourself', q); self.assertIn('never hand the owner a command', q)
 
 
-def _setups(cid): return [t for t in server.store.list_tasks(active_only=True) if t.get('Kind') == 'setup' and t.get('Tags') == f'connector:{cid}']
+class WalkTests(unittest.TestCase):
+    """The owner, 2026-10-21: "it should look like general agent working, not code one, for AI setup". The button starts the
+    GENERAL agent on a general task - no terminal, no repository - with the card's Guide as its brief and the card's tools as
+    its hands, and its steps are drawn on the card. The brain here is a fake that answers in turn."""
+    FIELDS = [['Client ID', 'client_id'], ['Client Secret', 'client_secret'], ['API version (optional)', 'version']]
+    BODY = {'guide': ['Create an app at developer.linkedin.com/apps.', 'Paste its Client ID and Client Secret.'],
+            'fields': FIELDS, 'secret_label': 'Access token'}
 
-
-class EndpointTests(unittest.TestCase):
     def setUp(self):
-        terminal.SESSIONS.clear()
+        from taskuary import general, llm
+        terminal.SESSIONS.clear(); aisetup.WALKS.clear()
+        self.cid = server.store.get_connector_by_type('linkedin')['ConnectorId']
+        server.store.save_connector({'ConnectorId': self.cid, 'ConfigJson': '{}', 'Secret': ''}, 'test')
         for t in server.store.list_tasks(active_only=True):
-            if t.get('Kind') == 'setup': server.store.delete_task(t['TaskId'])
-        # the CLI is "here" unless a test says otherwise: whether claude is on THIS box's PATH is not what these pin
-        self.found = mock.patch('taskuary.agents._resolve_cmd', return_value=['claude']); self.found.start()
-    def tearDown(self): self.found.stop(); terminal.SESSIONS.clear()
+            if t.get('SourceRef') == aisetup.WALK_REF: server.store.update_task(t['TaskId'], {'Status': 'done'}, 'test')
+        self.replies, self.seen = [], []
+        def brain(system, user, **kw):
+            self.seen.append((system, user)); return self.replies.pop(0) if self.replies else 'Waiting for you.'
+        brain.takes_web = False
+        fake = [{'id': 'connector:9999', 'pick': 'connector:9999', 'type': 'openai', 'label': 'Fake brain (API)', 'model': 'm', 'connector_id': 9999}]
+        for p in (mock.patch.object(general, 'provider_options', return_value=fake),
+                  mock.patch.object(llm, 'build_llm', return_value=brain),
+                  mock.patch.object(aisetup, '_spawn', side_effect=lambda fn, store, cid, tid, *a: fn(store, cid, tid, *a)),
+                  mock.patch.object(terminal, 'open_session', side_effect=AssertionError('a walk opens no terminal'))):
+            p.start(); self.addCleanup(p.stop)
+        self.addCleanup(terminal.SESSIONS.clear)
 
-    def test_the_button_opens_a_session_on_a_setup_task_and_reattaches_to_it(self):
-        cid = _slack()['ConnectorId']
-        made = []
-        def fake_open(store, agent, tid, repo, cwd, rows, cols, actor, model, seed_fn=None):
-            t = FakeTerm('s1', tid); terminal.SESSIONS['s1'] = t; made.append((agent, cwd, seed_fn(cwd))); return t
-        with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
-            r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE, 'fields': FIELDS, 'secret_label': 'bot token'}).json()
-        self.assertEqual((r['sid'], r['existing']), ('s1', False))
-        tk = server.store.get_task(r['taskId'])
-        self.assertEqual((tk['Kind'], tk['Status'], tk['Tags']), ('setup', 'in_progress', f'connector:{cid}'))
-        self.assertTrue(tk['Title'].startswith('Set up '))
-        agent, cwd, seed = made[0]
-        self.assertEqual(agent, 'coding'); self.assertIn('1. Create a Slack app', seed); self.assertNotIn('Do NOT call the Taskuary API', seed)
-        self.assertFalse(terminal.SESSIONS['s1'].keep_transcript)                                    # tokens get typed here: no transcript filed
-        # the card reloads: the same session comes back, and a second click does not start a second agent
-        self.assertEqual(c.get(f'/api/connectors/{cid}/ai-setup').json()['session']['sid'], 's1')
-        with mock.patch.object(terminal, 'open_session', side_effect=AssertionError('must not open a second one')):
-            self.assertTrue(c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE}).json()['existing'])
-        # Done on a setup task: close, mark done, no report / proposals / reply draft
-        with mock.patch.object(terminal, 'close') as cl:
-            self.assertEqual(c.post(f"/api/tasks/{r['taskId']}/wrap", json={}).json(), {'wrap': 'done', 'taskId': r['taskId']})
-        cl.assert_called_once_with('s1')
-        self.assertEqual(server.store.get_task(r['taskId'])['Status'], 'done')
-        self.assertFalse(any(str(x.get('Body', '')).startswith('AGENT REPORT') for x in server.store.list_comments(r['taskId'])))
+    def view(self): return c.get(f'/api/connectors/{self.cid}/ai-setup').json()
 
-    def test_no_agent_is_said_not_500ed(self):
-        cid = _slack()['ConnectorId']
-        r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE, 'agent': 'nobody'})
-        self.assertEqual(r.status_code, 422); self.assertIn('nobody', r.json()['detail'])
-        self.assertEqual(c.post('/api/connectors/999999/ai-setup', json={'guide': GUIDE}).status_code, 422)
+    def test_the_button_starts_the_general_agent_and_its_step_is_on_the_card(self):
+        from taskuary import general
+        self.replies = ['This needs a LinkedIn app of yours, and its two keys.\n'
+                        '[[TASKUARY-CARD-ASK: client_id]] Open developer.linkedin.com/apps, create an app, then paste its Client ID here.']
+        r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
+        tk = server.store.get_task(r['session']['taskId'])
+        self.assertEqual((tk['Kind'], tk['SourceRef'], tk['Tags']), ('general', aisetup.WALK_REF, f'connector:{self.cid}'))
+        sess = general.session_for(tk['TaskId'])
+        self.assertEqual(getattr(sess, 'mode', ''), 'assistant')                     # the general agent's session, not a pty
+        system, _user = self.seen[0]
+        self.assertIn('CONNECTING A CARD', system); self.assertIn('1. Create an app at developer.linkedin.com/apps.', system)
+        self.assertIn('Client ID (key client_id)', system); self.assertIn("THE CARD'S TOOLS", system)
+        self.assertIn('set: nothing; empty: client_id, client_secret, version', system)
+        self.assertNotIn('(what each is, and where it is on this machine', system)      # no repository map
+        self.assertNotIn('[[TASKUARY-DONE]]', system); self.assertNotIn('REPLYING FOR THE OWNER', system)   # it owes nobody a reply
+        v = self.view()
+        self.assertTrue(v['ready'])
+        self.assertEqual(v['ask'], {'field': 'client_id', 'label': 'Client ID',
+                                    'text': 'Open developer.linkedin.com/apps, create an app, then paste its Client ID here.'})
+        said = [s['text'] for s in v['steps'] if s['kind'] == 'agent'][-1]
+        self.assertIn('paste its Client ID here', said); self.assertNotIn('TASKUARY-CARD', said)
+        # pressed again: the same walk, not a second
+        self.assertTrue(c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()['existing'])
 
-    def test_no_ai_app_here_makes_no_task_and_says_where_to_get_one(self):
-        """A new install without any AI CLI: each press of the card's biggest button left one more
-        empty "Set up Outlook mail" in progress and answered "command not found: claude" (B10).
-        The CLI is resolved first now - nothing to hand the setup to, no task, and a sentence with
-        a next step. The card asks the same question up front and can hide the button."""
-        cid = _slack()['ConnectorId']
-        self.found.stop()
-        with mock.patch('taskuary.agents._resolve_cmd', side_effect=FileNotFoundError("'claude' not found on PATH - is the CLI installed?")), \
-             mock.patch.object(terminal, 'open_session', side_effect=AssertionError('nothing to start')):
-            for _ in range(2):
-                r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE})
-                self.assertEqual(r.status_code, 422)
-                self.assertIn('AI CLI agents', r.json()['detail']); self.assertNotIn('PATH', r.json()['detail'])
-            self.assertEqual(_setups(cid), [])
-            g = c.get(f'/api/connectors/{cid}/ai-setup').json()
-            self.assertEqual((g['session'], g['ready']), (None, False)); self.assertIn('AI CLI agents', g['why'])
-        self.found.start()
-        self.assertEqual(c.get(f'/api/connectors/{cid}/ai-setup').json()['ready'], True)
+    def test_the_agent_saves_a_field_and_runs_test_and_the_card_shows_each(self):
+        from taskuary import channels
+        self.replies = ['I will set the version.\n[[TASKUARY-CARD-SAVE: version = 202609]]\n[[TASKUARY-CARD-TEST]]',
+                        'LinkedIn is connected.\n[[TASKUARY-CARD-DONE]]']
+        with mock.patch.object(channels, 'test_connector', return_value={'ok': True, 'detail': 'signed in as Alex Doyle'}) as tested:
+            c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+        tested.assert_called_once_with(server.store, self.cid)
+        self.assertEqual(json.loads(server.store.get_connector(self.cid)['ConfigJson'])['version'], '202609')
+        self.assertIn("The card's Test passed: signed in as Alex Doyle", self.seen[1][1])        # the result went back to the agent
+        v = self.view()
+        done = [s['text'] for s in v['steps'] if s['kind'] == 'done']
+        self.assertIn('Saved on the card: API version (optional)', done)
+        self.assertIn('Test passed: signed in as Alex Doyle', done)
+        self.assertTrue(v['done'])
 
-    def test_a_dead_session_s_task_is_reused_not_doubled(self):
-        """The pane died (the CLI crashed, the app restarted): the task stayed in progress, and the
-        next press made a second one beside it. clisetup reuses the open task (TQ-0726); so does this."""
-        cid = _slack()['ConnectorId']
-        n = iter(range(100))
-        def fake_open(store, agent, tid, repo, cwd, rows, cols, actor, model, seed_fn=None):
-            t = FakeTerm(f's{next(n)}', tid); terminal.SESSIONS[t.sid] = t; return t
-        with mock.patch.object(terminal, 'open_session', side_effect=fake_open):
-            a = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE}).json()
-            terminal.SESSIONS[a['sid']].alive = False
-            b = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE}).json()
-        self.assertEqual(b['taskId'], a['taskId']); self.assertNotEqual(b['sid'], a['sid'])
-        self.assertEqual(len(_setups(cid)), 1)
+    def test_the_agent_may_not_save_a_secret(self):
+        self.replies = ['[[TASKUARY-CARD-SAVE: client_secret = abc]]\n[[TASKUARY-CARD-SAVE: Secret = tok]]']
+        c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+        row = server.store.get_connector(self.cid, with_secret=True)
+        self.assertNotIn('client_secret', json.loads(row['ConfigJson'])); self.assertFalse(row.get('Secret'))
+        self.assertTrue(any(s['kind'] == 'failed' and 'yours to paste' in s['text'] for s in self.view()['steps']))
 
-    def test_a_cli_that_will_not_start_leaves_no_task_behind(self):
-        """Found is not always runnable - a shim whose target is gone fails in the spawn itself. The
-        task this press made goes with it, and the owner reads what to do rather than the pty's words."""
-        cid = _slack()['ConnectorId']
-        with mock.patch.object(terminal, 'open_session', side_effect=FileNotFoundError('The command was not found or was not executable: claude')):
-            for _ in range(2):
-                r = c.post(f'/api/connectors/{cid}/ai-setup', json={'guide': GUIDE})
-                self.assertEqual(r.status_code, 422); self.assertIn('AI CLI agents', r.json()['detail'])
-        self.assertEqual(_setups(cid), [])
+    def test_what_the_person_saves_or_says_on_the_card_is_the_agents_next_turn(self):
+        self.replies = ['[[TASKUARY-CARD-ASK: client_id]] Paste the Client ID.', 'Thanks - now the secret.', 'It is on the Auth tab.']
+        c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+        server.store.save_connector({'ConnectorId': self.cid, 'ConfigJson': json.dumps({'client_id': 'app-id'})}, 'test')
+        c.post(f'/api/connectors/{self.cid}/ai-setup/say', json={**self.BODY, 'saved': ['Client ID']})
+        self.assertIn('The person saved these on the card: Client ID', self.seen[1][1])
+        self.assertIn('set: client_id; empty: client_secret, version', self.seen[1][0])          # the card's state, read fresh
+        self.assertNotIn('app-id', self.seen[1][0])                                                # keys, never values
+        c.post(f'/api/connectors/{self.cid}/ai-setup/say', json={**self.BODY, 'text': 'where is the secret?'})
+        kinds = [(s['kind'], s['text']) for s in self.view()['steps']]
+        self.assertIn(('done', 'You saved on the card: Client ID'), kinds)
+        self.assertIn(('you', 'where is the secret?'), kinds)
+        self.assertEqual(kinds[-1], ('agent', 'It is on the Auth tab.'))
+
+    def test_no_brain_makes_no_task_and_says_where_to_get_one(self):
+        from taskuary import general
+        with mock.patch.object(general, 'provider_options', return_value=[]):
+            r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY)
+            self.assertEqual(r.status_code, 422); self.assertIn('AI CLI agents', r.json()['detail'])
+            self.assertIsNone(aisetup.walk_task(server.store, self.cid))
+            self.assertEqual(self.view()['ready'], False)
+
+    def test_done_closes_the_walk_and_its_task_and_wrap_takes_the_same_road(self):
+        from taskuary import general
+        r = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
+        tid = r['session']['taskId']
+        self.assertEqual(c.post(f'/api/connectors/{self.cid}/ai-setup/done').json(), {'wrap': 'done', 'taskId': tid})
+        self.assertEqual(server.store.get_task(tid)['Status'], 'done')
+        self.assertIsNone(general.session_for(tid)); self.assertIsNone(self.view()['session'])
+        r2 = c.post(f'/api/connectors/{self.cid}/ai-setup', json=self.BODY).json()
+        self.assertEqual(c.post(f"/api/tasks/{r2['session']['taskId']}/wrap", json={}).json()['wrap'], 'done')

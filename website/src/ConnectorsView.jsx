@@ -39,83 +39,129 @@ import { label as btnLabel } from "./buttons.js";
 import { noun, placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
-import { LIT, lightStep } from "./connectorStep.js";
+import { LIT, lightField, lightStep } from "./connectorStep.js";
 
-/* ── Get AI to set it up: the card's Guide becomes the coding agent's prompt, in a live terminal ON
-   the card (taskuary/aisetup.py). The agent asks here for what only a human can fetch, saves it onto
-   the card through the API and runs Test until it passes - and it is a task on the Board meanwhile. ── */
+/* ── Get AI to set it up: the GENERAL agent walks the person through the card (taskuary/aisetup.py start_walk - the owner,
+   2026-10-21: "it should look like general agent working, not code one"). Its brief is the card's Guide; its hands are the card's
+   own - put a value it knows onto the card, run Test, ask the person for one step. A BUTTON in the card's own row, and the walk
+   on the card under it: what it is doing now, the step it needs from you with that field lit, and what is done. The task is on
+   the Board behind it. ── */
 // opens Connections > AI CLI agents from inside a card - the door the "no AI app here" line points at
 const AgentsDoor = createContext(null);
-const AiSetup = ({ conn, steps, fields = [], secretLabel = "", agentSteps = [], reload }) => {
-  const [sess, setSess] = useState(null);
+function useAiWalk({ conn, steps = [], fields = [], secretLabel = "", agentSteps = [], reload, onAsk }) {
+  const [walk, setWalk] = useState(null);
+  const [ready, setReady] = useState({ ok: true, why: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [ready, setReady] = useState({ ok: true, why: "" });
-  const openAgents = useContext(AgentsDoor);
-  useEffect(() => {           // the card reloads, the agent is still there: reattach
-    let alive = true;
-    api.get(`/api/connectors/${conn.ConnectorId}/ai-setup`).then(({ data }) => {
-      if (!alive) return;
-      if (data.session) setSess(data.session);
-      if (data.ready === false) setReady({ ok: false, why: data.why || "" });
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [conn.ConnectorId]);
-  // No AI app on this computer: the button could only answer "not found" (and used to leave an empty
-  // task per press - B10). Say what it needs and open the page that provides it instead.
-  if (!sess && !ready.ok) return (
-    <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-      <TerminalIcon sx={{ fontSize: 18, color: FAINT }} />
-      <Box sx={{ flex: 1, minWidth: 240 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up — needs an AI app on this computer</Typography>
-        <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
-          {ready.why || `Set one up under ${placeName("ai_apps")}, or follow the Guide tab and fill the card yourself.`}
-        </Typography>
-      </Box>
-      {openAgents && <Button size="small" variant="outlined" onClick={openAgents}>Set up an AI app</Button>}
-    </Box>
-  );
-  const start = async () => {
+  const cid = conn.ConnectorId;
+  const ctx = { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "", agent_steps: agentSteps || [] };
+  const take = (data) => { setWalk(data?.session ? data : null); if (data?.ready !== undefined) setReady({ ok: data.ready !== false, why: data.why || "" }); };
+  const load = useCallback(async () => {
+    if (!cid) return;
+    try { take((await api.get(`/api/connectors/${cid}/ai-setup`)).data); } catch { /* the card still works without it */ }
+  }, [cid]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+  // the walk is followed while it is open: the agent answers on its own thread, and a Test it ran changes the card
+  const open = walk?.session?.taskId, finished = !!walk?.done;
+  useEffect(() => { if (!open) return undefined; const id = setInterval(load, 2000); return () => clearInterval(id); }, [open, load]);
+  useEffect(() => { if (finished) reload?.(); }, [finished]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const asked = walk?.ask?.label || walk?.ask?.field || "";
+  useEffect(() => { if (asked) onAsk?.(walk.ask); }, [asked, walk?.ask?.text]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const post = async (path, body, fail) => {
     setBusy(true); setErr("");
-    try {
-      const { data } = await api.post(`/api/connectors/${conn.ConnectorId}/ai-setup`,
-        { guide: steps || [], fields: (fields || []).map(([l, k]) => [l, k]), secret_label: secretLabel || "", agent_steps: agentSteps || [] });
-      setSess(data);
-    } catch (e) { setErr(e?.response?.data?.detail || "could not start the agent"); }
+    try { const { data } = await api.post(`/api/connectors/${cid}/ai-setup${path}`, body); if (data?.session !== undefined) take(data); }
+    catch (e) { setErr(e?.response?.data?.detail || fail); }
     setBusy(false);
   };
-  const done = async () => {
-    try { await api.post(`/api/tasks/${sess.taskId}/wrap`, {}); } catch { /* the session may already be gone */ }
-    setSess(null); reload?.();
+  return {
+    walk, ready, busy, err,
+    start: () => post("", ctx, "could not start the AI setup"),
+    // what you saved on the card, or said on it, is the agent's next turn
+    saved: (labels) => (walk && labels.length ? post("/say", { ...ctx, saved: labels }, "the AI did not hear that") : null),
+    say: (text) => post("/say", { ...ctx, text }, "the AI did not hear that"),
+    done: async () => { await post("/done", {}, "could not close the AI setup"); setWalk(null); reload?.(); },
   };
-  const ref = sess?.taskId ? `TQ-${String(sess.taskId).padStart(4, "0")}` : "";
+}
+
+// the button, in the card's own row beside Save and Test - outlined, never the card's one filled button
+function AiWalkButton({ ai }) {
+  if (ai.walk) return <Button variant="outlined" disabled={ai.busy} onClick={ai.done} data-tq-ai-setup="done">Done — stop the AI setup</Button>;
   return (
-    <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 1 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
-        <TerminalIcon sx={{ fontSize: 18, color: DIM }} />
-        <Box sx={{ flex: 1, minWidth: 240 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: 13, color: INK }}>Get AI to set it up</Typography>
-          <Typography variant="caption" sx={{ color: DIM, lineHeight: 1.5, display: "block" }}>
-            Optional - the card below connects without it. Your coding agent takes the Guide as its prompt, asks you here for
-            anything only you can fetch, saves it onto this card and runs Test until it passes. It sits on the Board as a task while it works.
+    <Button variant="outlined" disabled={ai.busy || !ai.ready.ok} onClick={ai.start} data-tq-ai-setup="start"
+      title={ai.ready.ok ? "Optional - the AI walks you through this card, a step at a time" : ai.ready.why}
+      startIcon={ai.busy ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
+      {ai.busy ? "starting…" : "Get AI to set it up"}
+    </Button>
+  );
+}
+
+const STEP_MARK = { done: ["✓", "#47654a"], failed: ["✗", "#6b2733"], agent: ["•", DIM], you: ["›", FAINT] };
+// the walk, on the card under its buttons: what is done, what the AI is doing now, the one step it needs from you (its field lit)
+function AiWalk({ ai }) {
+  const openAgents = useContext(AgentsDoor);
+  const box = useRef(null);
+  const [text, setText] = useState("");
+  const w = ai.walk;
+  const label = w?.ask?.label || "";
+  useEffect(() => {
+    if (!label || !box.current) return undefined;
+    const root = box.current.closest("[data-tq-connector-scope]") || box.current.parentElement;
+    let stop = () => {};
+    const t = setTimeout(() => { stop = lightField(root, label); }, 150);     // after the tab it asked for has drawn
+    return () => { clearTimeout(t); stop(); };
+  }, [label, w?.ask?.text]);
+  // no brain to hand it to: say where to get one, rather than a button that only answers "not found" (B10)
+  if (!w && !ai.ready.ok) return (
+    <Typography variant="caption" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", lineHeight: 1.5 }}>
+      Get AI to set it up needs an AI first. {ai.ready.why || `Set one up under ${placeName("ai_apps")}.`}
+      {openAgents && <Button size="small" onClick={openAgents}>Set up an AI app</Button>}
+    </Typography>
+  );
+  if (!w) return ai.err ? <Alert severity="error" sx={{ fontSize: 12.5 }}>{ai.err}</Alert> : null;
+  const send = () => { if (text.trim()) { ai.say(text.trim()); setText(""); } };
+  return (
+    <Box ref={box} data-tq-ai-walk={w.session.taskId} sx={{ p: 1.5, border: `1px solid ${BORDER}`, borderRadius: 2, bgcolor: PANEL2, display: "flex", flexDirection: "column", gap: 0.75 }}>
+      <Typography variant="caption" sx={{ color: FAINT, fontWeight: 600, letterSpacing: 0.5 }}>
+        AI SETUP · {w.session.ref} on the Board
+      </Typography>
+      {w.steps.map((s, i) => (
+        <Box key={i} data-tq-walk-step={s.kind} sx={{ display: "flex", gap: 1, alignItems: "baseline" }}>
+          <Box component="span" sx={{ color: STEP_MARK[s.kind]?.[1] || DIM, fontWeight: 700, width: 12, flexShrink: 0 }}>{STEP_MARK[s.kind]?.[0] || "•"}</Box>
+          <Typography variant="body2" sx={{ color: s.kind === "you" ? DIM : INK, whiteSpace: "pre-wrap", fontStyle: s.kind === "you" ? "italic" : "normal" }}>
+            {s.kind === "you" ? `You: ${s.text}` : s.text}
           </Typography>
         </Box>
-        {sess ? (
-          <>
-            <Typography variant="caption" sx={{ color: FAINT }}>{ref} on the Board</Typography>
-            <Button size="small" variant="outlined" onClick={done}>Done — close the session</Button>
-          </>
-        ) : (
-          // OUTLINED, not the page's one filled button (the owner, 2026-10-21): it read as the way to connect, and pressing it
-          // put a coding session on the Board where Sign in with LinkedIn was all it took
-          <Button variant="outlined" disabled={busy} onClick={start}
-            startIcon={busy ? <CircularProgress size={12} /> : <BoltIcon sx={{ fontSize: 15 }} />}>
-            {busy ? "starting…" : "Get AI to set it up"}
-          </Button>
-        )}
+      ))}
+      {w.busy && (
+        <Typography variant="body2" data-tq-walk-now="" sx={{ color: DIM, display: "flex", alignItems: "center", gap: 1 }}>
+          <CircularProgress size={12} /> {w.now || "Working on the next step…"}
+        </Typography>
+      )}
+      {w.ask && !w.busy && (
+        <Box data-tq-walk-ask={w.ask.field || "-"} sx={{ p: 1, borderRadius: 1.5, bgcolor: "#fff", border: `1px solid ${BORDER}` }}>
+          <Typography variant="body2" sx={{ color: INK }}><b>Your step:</b> {w.ask.text}</Typography>
+          {label && <Typography variant="caption" sx={{ color: DIM }}>The {label} box is lit above - paste it there and press Save.</Typography>}
+        </Box>
+      )}
+      {w.done && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>✓ Set up - Test passed on this card. Press Done to close the AI setup.</Typography>}
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <TextField size="small" fullWidth value={text} onChange={(e) => setText(e.target.value)} placeholder="Answer or ask the AI… (never paste a key here - it goes in its box)"
+          onKeyDown={(e) => { if (e.key === "Enter") send(); }} sx={{ bgcolor: "#fff" }} inputProps={{ "data-tq-walk-say": "" }} />
+        <Button variant="outlined" disabled={!text.trim() || ai.busy} onClick={send}>Send</Button>
       </Box>
-      {err && <Alert severity="error" sx={{ fontSize: 12.5 }}>{err}</Alert>}
-      {sess && <TerminalPane sid={sess.sid} height={360} />}
+      {ai.err && <Alert severity="error" sx={{ fontSize: 12.5 }}>{ai.err}</Alert>}
+    </Box>
+  );
+}
+
+// a card whose Save and Test sit inside its own steps (the channel cards, SQL Server, WinRM): the button and the walk together, as
+// the card's last row under its form
+const AiSetup = (props) => {
+  const ai = useAiWalk(props);
+  return (
+    <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 1, alignItems: "flex-start", maxWidth: 720 }}>
+      <AiWalkButton ai={ai} />
+      <Box sx={{ alignSelf: "stretch" }}><AiWalk ai={ai} /></Box>
     </Box>
   );
 };
@@ -2398,7 +2444,6 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
           It sits above the agent box too: one sign-in is the whole setup, the agent is the long road (B10) */}
       {MS_SIGNIN.includes(conn.Type) && <Box sx={{ mb: 2 }}><MsSignIn conn={conn} cfg={cfg} reload={reload} onSignedIn={() => setStep(m.srcLabel ? 2 : 3)} /></Box>}
       {conn.Type === "chatgpt" && <Box sx={{ mb: 2 }}><ChatGptSignIn conn={conn} cfg={cfg} reload={reload} /></Box>}
-      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       {conn.Type === "whatsapp" && <Box sx={{ mb: 2 }}><WaPair conn={conn} reload={reload} /></Box>}
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>{m.desc}</Typography>
       <UnderTabs tabs={conn.Type === "whatsapp" ? ["Setup", "Guide"] : ["Setup", "Guide", "Agent"]} value={tab} onChange={setTab} />
@@ -2414,6 +2459,7 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         </Stepper>
       )}
       {tab === "Guide" && <Steps steps={m.howto || []} />}
+      {conn.Type !== "whatsapp" && <AiSetup conn={conn} steps={m.howto || []} fields={m.fields || []} secretLabel={m.secretLabel} agentSteps={m.agent || []} reload={reload} />}
       <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} />
@@ -2430,7 +2476,6 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
-      <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         The connection only — build the scheduled reports (query + AI summary) under Reports.
       </Typography>
@@ -2438,6 +2483,7 @@ function MssqlDetail({ conn, drivers, reload, onBack, onCreated }) {
       {tab === "Agent" && <AgentTab steps={MSSQL_AGENT} />}
       {tab === "Connection" && <MssqlConnection conn={conn} drivers={drivers} reload={reload} />}
       {tab === "Guide" && <Steps steps={MSSQL_HOWTO} />}
+      <AiSetup conn={conn} steps={MSSQL_HOWTO} agentSteps={MSSQL_AGENT} reload={reload} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
@@ -2543,7 +2589,6 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
-      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         Run PowerShell ON a machine you can RDP into (your Windows credentials) — the connection only;
         build the scheduled reports under Reports.
@@ -2566,6 +2611,7 @@ function WinrmDetail({ conn, reload, onBack, onCreated }) {
           {!test && conn.LastError && <Typography variant="body2" sx={{ color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>}
         </Box>
       )}
+      <AiSetup conn={conn} steps={WINRM_HOWTO} fields={[["machine name", "host"]]} agentSteps={WINRM_AGENT} reload={reload} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={onBack} />
     </Box>
@@ -2838,6 +2884,9 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
   const [test, setTest] = useState(null);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
+  // the AI setup: its button in the row below, its walk under it; a field it asks for brings the Connection tab up to be lit
+  const ai = useAiWalk({ conn: conn || {}, steps: meta.howto || [], fields: meta.fields || [], secretLabel: meta.secretLabel,
+    agentSteps: meta.agent || [], reload, onAsk: (a) => { if (a?.field) setTab("Connection"); } });
   if (!conn) return null;
   const objects = (sources || []).filter((s) => s.Channel === conn.Type && s.ConnectorId === conn.ConnectorId);
   // the borrow offer: only when the OTHER card actually has something to lend (a tenant app, a
@@ -2860,7 +2909,12 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     try {
       const body = { ConnectorId: conn.ConnectorId, ConfigJson: JSON.stringify(cfg), Active: true };
       if (secret) body.Secret = secret;
+      // what this press put on the card, by its label - the AI setup is told (never the values)
+      const was = parse(conn.ConfigJson);
+      const put = [...meta.fields.filter(([, k]) => String(cfg[k] ?? "") !== String(was[k] ?? "")).map(([l]) => l),
+        ...(secret ? [meta.secretLabel] : [])];
       await api.post("/api/connectors", body);
+      ai.saved(put);
       // a write-only value typed is the server's now: the box goes back to empty, its label says saved
       const wo = conn.WriteOnlyKeys || [];
       if (wo.some((k) => cfg[k])) setCfg(Object.fromEntries(Object.entries(cfg).filter(([k]) => !wo.includes(k))));
@@ -2880,7 +2934,6 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
     <Box sx={{ maxWidth: 980, mx: "auto" }}>
       <Crumb section="Connections" onBack={onBack} title={conn.Name} />
       <ConnectorIdentity conn={conn} reload={reload} onCreated={onCreated} />
-      <AiSetup conn={conn} steps={meta.howto || []} fields={meta.fields || []} secretLabel={meta.secretLabel} agentSteps={meta.agent || []} reload={reload} />
       <Typography variant="body2" sx={{ color: DIM, mb: 1.5 }}>
         {meta.desc} The connection only — build the scheduled reports under Reports.
       </Typography>
@@ -2928,6 +2981,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
                 setBusy(""); reload();
               }}>{busy === a.label ? <CircularProgress size={12} /> : a.label}</Button>
             ))}
+            <AiWalkButton ai={ai} />
             {msg && <Typography variant="body2" sx={{ color: "#47654a", fontWeight: 600 }}>{msg}</Typography>}
           </Box>
           {meta.search && <KbSearch conn={conn} />}
@@ -2938,6 +2992,7 @@ function DataDetail({ conn: savedConn, meta, sources: savedSources = [], reload,
       {tab === "Connection" && meta.discovers && (
         <CloudObjects conn={conn} meta={meta} objects={objects} reload={reload} />
       )}
+      <Box sx={{ maxWidth: 720, mt: 1.5 }}><AiWalk ai={ai} /></Box>
       <SaveBar draft={draft} labels={DRAFT_LABELS} words={DRAFT_WORDS} />
       <CardPlaybooks type={conn.Type} />
       <RemoveConnection conn={conn} reload={reload} onBack={leave} />

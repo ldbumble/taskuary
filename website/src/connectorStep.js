@@ -51,3 +51,16 @@ export function lightStep(root, onLit, ms = 6000) {
   const stop = setTimeout(() => mo.disconnect(), ms);
   return () => { clearTimeout(stop); mo.disconnect(); lit?.removeAttribute("data-tq-setup-lit"); };
 }
+
+// THE FIELD THE AI SETUP ASKS FOR, LIT (the owner, 2026-10-21: "paste the Client ID here" with the field lit): the box whose label is
+// `label` - or starts with it, as a saved secret's "— saved, type to replace" does - outlined and held in view; returns the cleanup
+export const fieldMatches = (text, label) => !!label && (text === label || String(text || "").startsWith(`${label} `) || String(text || "").startsWith(`${label} —`));
+export function lightField(root, label) {
+  if (!root || !label) return () => {};
+  const c = candidates(root).find((x) => x.kind === "field" && fieldMatches(x.text, label));
+  const el = c && (c.lit || c.el);
+  if (!el) return () => {};
+  el.setAttribute("data-tq-setup-lit", "light");
+  focusPlace(el, () => el);
+  return () => el.removeAttribute("data-tq-setup-lit");
+}

@@ -212,8 +212,8 @@ class TurnTests(unittest.TestCase):
         drafted(s)
         first = concierge.surface(s, llm=lambda *a, **k: 'first')
         again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])      # Next, as the page presses it
-        # ...walked past, it is still under Tasks - Next moves on, the task stays (the owner, 2026-10-21)
-        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you already saw still waits on you - TQ-\d+ back in \d+h\. Open it now if you want it sooner\.$")
+        # ...walked past, it is still under Tasks - Next moves on, the task stays, and the next walk starts with it (the owner, 2026-10-21)
+        self.assertIsNone(again['item']); self.assertRegex(again['say'], r"^That's everything for now\. 1 thing you already saw still waits on you - TQ-\d+\. The next walk starts with it, or open it now\.$")
         # ...and the way to it NOW is a button naming it - a Next under this line only said it again (2026-09-23)
         self.assertEqual([c['verb'] for c in again['chips']], ['open'])
         self.assertTrue(again['chips'][0]['label'].startswith('Open TQ-'))

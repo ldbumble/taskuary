@@ -144,7 +144,7 @@ These never close a task:
 - **Stop and save**: stops the agent and writes its report; the task stays open.
 - **Reject** a draft: the draft is rejected; the task is untouched. A close-out card has no Reject - its reply is edited in place.
 - **Send back to the agent**: the task's agent picks up again with your note; the card returns when it stops.
-- **Next**: it moves the walk; open work comes back after `task_return_minutes`.
+- **Next**: it moves the walk; an open task comes up again when the walk ends or a new one starts.
 - **Remind me**: the task is put away until a day (`remind.py`), then back on the rail that morning.
 
 ## Removed

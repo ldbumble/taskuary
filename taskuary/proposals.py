@@ -92,7 +92,7 @@ SETTING_ALLOW = {
     'poll_minutes': 'how often the mailboxes are read',
     'funnel_hours': 'how far back the pipe reaches',
     'funnel_max': 'how much the pipe holds at once',
-    'task_return_minutes': 'how long an open task you cleared stays quiet before it comes back',
+    'task_return_minutes': 'how long a passed item with no task behind it stays quiet before it comes back',
     'timeline_fade': 'how old rows dim on the work rail',
     'calendar_enabled': 'read your calendar',
     'learn_enabled': 'learn from your verdicts',

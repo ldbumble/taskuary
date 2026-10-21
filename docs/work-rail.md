@@ -29,7 +29,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   R["On the rail"] --> A{"What happened?"}
-  A -->|Next, on your open work| P["Still under Tasks,<br/>the walk skips it"] -->|after 3 hours, or a new message| R
+  A -->|Next, on your open work| P["Still under Tasks,<br/>the walk skips it"] -->|the next walk, or a new message| R
   A -->|Next, on anything else| G["Off"] -->|a new message, note or edit on it| R
   A -->|Mark done| D["Off"] -->|THEY write after the close| R
   A -->|Remind me| M["Upcoming in Tasks"] -->|07:00 on the day, saying why| R
@@ -45,10 +45,10 @@ flowchart LR
 |---|---|---|
 | R1 | Older than 14 days falls off, whatever it is - search Tasks for it. A task you put away with Remind me comes back on its day however old it is (the morning note is new activity). The 14 days is display only; nothing is deleted | keep |
 | R2 | An urgent item with no task behind it leaves on Next. A draft with no task is rare (a setting change waiting for a yes, a report's outgoing message) | keep |
-| R3 | Urgent work is walked past on Next and offered again after 3 hours, like the rest | keep |
+| R3 | Urgent work is walked past on Next and offered again in the next walk, like the rest | keep |
 | R4 | A draft decided anywhere (sent, rejected, no reply) and an idea you dismissed leave the rail, until they write again | built |
 | R5 | Withdrawn messages, auto-replies and threads where yours is the last word are hidden - Settings, "Hide auto-replies and answered threads", on by default. A message a rule ignored still shows | built |
-| R6 | A stopped agent is walked past on Next and offered again after 3 hours; Mark done closes it | built |
+| R6 | A stopped agent is walked past on Next and offered again in the next walk; Mark done closes it | built |
 | R7 | Remind me puts away a live agent or a paused conversation too, until its day | built |
 | R8 | "Stop showing me these" is the Assistant's tools (Not ours from now on, a rule in Settings), never a phrase list | built |
 | R9 | Silencing a sender for good is Not ours → from now on | as it is |

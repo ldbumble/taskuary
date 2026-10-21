@@ -1043,7 +1043,10 @@ class MemoryTests(unittest.TestCase):
     def test_next_on_your_own_task_leaves_it_in_passed_not_gone(self):
         """The owner, 2026-09-23: "i thought if you hit next it goes to passed section?" - Next read an open
         task and the rail dropped it for the hour. It is still theirs: on the rail, marked shown (Passed),
-        not offered again by the walk, and not counted as waiting on a decision."""
+        not offered again by the walk, and not counted as waiting on a decision.
+
+        ...for the rest of THIS walk (the owner, 2026-10-21): here it was the last thing, so the walk ran out and the next one
+        starts with it again - under Tasks, offered, no mark."""
         from taskuary import concierge, processing_unread
         s, settle = self._canonical()
         t = s.create_task({'Title': 'Month-end close is short', 'Kind': 'general', 'Status': 'open'}, 'o')
@@ -1055,8 +1058,9 @@ class MemoryTests(unittest.TestCase):
             self.assertEqual(first['item']['tid'], t)
             again = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=first['item']['key'])
             self.assertIsNone(again['item'])                                                  # the walk does not bring it straight back
+            self.assertIn('next walk starts with it', again['say'])
             rail = [i for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
-        self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(True, False)])   # ...but it is on the rail, in Passed
+        self.assertEqual([(bool(i.get('surfaced')), i['actionable']) for i in rail], [(False, True)])   # ...on the rail, the next walk's first
         self.assertEqual(s.get_task(t)['Status'], 'open')
 
     def test_a_task_opened_but_not_passed_is_still_walked_first(self):
@@ -1078,7 +1082,7 @@ class MemoryTests(unittest.TestCase):
     def test_next_on_a_task_back_from_its_quiet_hours_puts_it_down_again(self):
         """The owner, 2026-09-30: "i hit next why is this still showing in on you tasks?" - the receipt kept the FIRST read,
         so once that was three hours old the task was `back` for good: Next read it again, recorded nothing, and it stayed
-        on you. A look again moves the receipt's clock."""
+        on you. A look again moves the receipt's clock. (Back is a new walk now, not three hours - 2026-10-21.)"""
         from taskuary import concierge, processing_unread
         s, settle = self._canonical()
         t = s.create_task({'Title': 'Complete the raise paperwork', 'Kind': 'task', 'Status': 'open'}, 'o')
@@ -1089,10 +1093,11 @@ class MemoryTests(unittest.TestCase):
                         for i in processing_unread.build(s, live_state=[])['items'] if i.get('tid') == t]
         with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
             key = concierge.surface(s, llm=lambda *a, **k: 'never')['item']['key']
-            s._exec("UPDATE processing_read_receipt SET ReadAt=?", (ago(4),)); funnel.invalidate()   # that read was 4 hours ago
+            s._exec("UPDATE processing_read_receipt SET ReadAt=?", (ago(4),))                       # that read was 4 hours ago...
+            s.set_setting(processing_unread.WALK_KEY, ago(2), 't'); funnel.invalidate()            # ...in a walk since over
             self.assertEqual(card(), [(True, False, True)])                                       # ...so it is back on you
             funnel.settle(s, key, 'surfaced', read=True, put_down=True); funnel.invalidate()       # Next, now (what move_on writes)
-        self.assertEqual(card(), [(False, True, False)])                                          # put down again: For later
+        self.assertEqual(card(), [(False, True, False)])                                          # put down again, for this walk
 
     def test_a_task_its_agent_finished_shows_once_as_a_result(self):
         """"same for finished agent task?" - an agent that closed its task left nothing on the rail: the result

@@ -44,8 +44,8 @@ flowchart LR
 - **Nothing runs from a sentence alone.** A button or a typed ask becomes a card; the card's button runs it.
   The exceptions run at once because they can be undone from the receipt: Next, Mark done, Save and end
   session, Remind me, and settings, reports and connections changed by name.
-- **Next is the only "not now".** Open work you pass with Next comes back after `task_return_minutes`
-  (three hours). A date is the task's own **Remind me** (`remind.py`); on that morning a note on the task
+- **Next is the only "not now".** An open task you pass with Next stays under Tasks for the rest of the walk;
+  when the walk ends or a new one starts, it comes up again from the top (no clock). A date is the task's own **Remind me** (`remind.py`); on that morning a note on the task
   brings it back.
 - **Reply on a finished agent** is for the one that left no draft. A pull request's result offers none.
 - **Close out is one word for every system** (the owner, 2026-09-27: "if we have button to close out per system it

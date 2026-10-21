@@ -128,10 +128,11 @@ class TheModelIsToldTheActionsOnTheTable(unittest.TestCase):
         s, a, b, item = two_tasks()
         llm, seen = scripted('Ok.')
         ask(s, 'hm', item['key'], llm)
-        chips = concierge.chips_for(s, item)
-        self.assertTrue(chips)
+        # on the desk the row's own buttons - what a typed act can light; a phone's chat draws the chips (test_assistant_router)
+        rows = concierge.row_buttons(s, item)
+        self.assertTrue(rows)
         self.assertIn('ACTIONS FOR THE ITEM ON THE TABLE', seen[0])
-        for c in chips: self.assertIn(f'"{c["label"]}"', seen[0])
+        for c in rows: self.assertIn(f'"{c["label"]}"', seen[0])
 
     def test_a_drafts_send_button_is_named_as_approve(self):
         lines = concierge.table_actions(None, {'kind': 'review', 'key': 'review:1', 'rid': 1, 'tid': 1, 'lane': 'review'},

@@ -916,6 +916,8 @@ def chips_for(store, item: dict | None, first: str = None) -> list:
 
 # the chips whose verb is not itself a decision tool, and the tool each one is
 CHIP_TOOL = toolcatalog.CHIP_TOOL
+# ...and a task row's pickers, each the tool that sets what it picks (toolcatalog.PAGE_ONLY says so to the model)
+PICKER_TOOL = {'priority': 'task.update', 'assign': 'task.update', 'change_kind': 'task.set_kind', 'pick_repo': 'task.set_repo'}
 
 def table_actions(store, item: dict | None, chips: list = None) -> str:
     """THE BUTTONS UNDER THE LINE, BY NAME. The model was told the action words "are already chosen for this item" and
@@ -923,9 +925,14 @@ def table_actions(store, item: dict | None, chips: list = None) -> str:
     redraft (the 2026-10-01 press audit). This is the payload - what is offered and the tool each one is; how to match
     the owner's words to it, and when to ask instead, is COUNSEL's."""
     if not item: return ''
-    chips = chips_for(store, item) if chips is None else chips
+    # ON THE DESK, THE ROW'S OWN BUTTONS - what a typed act can light (row_buttons). The chips under the line are not what a task's
+    # view draws: "this is not ours" over TQ-0001 was told Not ours was its action, chose it, and was refused at the light because the
+    # task's row has no Not ours - its Remove - not a task was never named (the 2026-10-20 query walk). A phone draws the chips.
+    if chips is None:
+        chips = chips_for(store, item)
+        if routes() and store is not None: chips = row_buttons(store, item) + [c for c in chips if c.get('verb') == 'next']
     def what(v):
-        tool = v if v in toolcatalog.DECISIONS else CHIP_TOOL.get(v)
+        tool = v if v in toolcatalog.DECISIONS else CHIP_TOOL.get(v) or PICKER_TOOL.get(v)
         said = toolcatalog.DECISIONS.get(v) or toolcatalog.PURPOSE.get(tool or '', '')
         return f"{tool}: {_cut(' '.join(str(said).split()), 160)}" if tool else "the card's own button"
     rows = [f'  "{c["label"]}" = {what(c["verb"])}' for c in chips if c.get('verb')]

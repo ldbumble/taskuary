@@ -212,6 +212,20 @@ def notices(s, n=9):
 def fyis(s): return [i for i in funnel.build(s)['items'] if i.get('kind') == 'fyi']
 
 
+class TheModelIsToldTheRow(unittest.TestCase):
+    def test_a_task_on_the_table_names_its_rows_buttons_not_the_chips(self):
+        # "this is not ours" over a task chose Not ours - the chips said it was an action - and the light refused it: the task's row has
+        # Remove - not a task, which the model was never told (the 2026-10-20 query walk)
+        s = store(); tid, item = on_table(s)
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            said = concierge.table_actions(s, item)
+            self.assertIn(f'"{buttons.label("remove")}" = task.not_a_task', said)
+            self.assertIn(f'"{buttons.label("priority")}" = task.update', said)
+            self.assertNotIn(f'"{buttons.label("not_ours")}"', said)
+            self.assertIn(f'"{buttons.label("next")}" = next', said)
+            with concierge.delivering(concierge.PHONE): self.assertIn(f'"{buttons.label("not_ours")}"', concierge.table_actions(s, item))
+
+
 class ClearingASet(unittest.TestCase):
     """"Clear all the FYI, please." was answered "Next." with a 4-FYI batch on the table and ~90 still on the rail (the owner, 2026-10-20:
     "this is clearly broken"). The desk told the model a set had no button - "the owner puts each one down with Next" - so it pressed Next.

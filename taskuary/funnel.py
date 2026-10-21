@@ -620,6 +620,15 @@ def idle_state(store, tid) -> dict:
         if said.startswith('github items queue') and str(msg.get('Channel') or '') == 'github':
             from .ingest import gh_hold_why
             said = gh_hold_why(store, {'source_name': msg.get('SourceName'), 'body': msg.get('BodyText')})
+        # the route kept the stranger rule's words from when it arrived; a sender trusted SINCE (a Teams colleague resolved
+        # after the fact, channels.teams_org) must not still read "you haven't talked with them"
+        from .ingest import HOLD_TAG
+        if HOLD_TAG in [x.strip() for x in tags.split(',')]:
+            from .origin import of_message
+            o, why = of_message(store, msg)
+            if o == 'trusted':
+                return out('held', f'Waiting for you. {_sentence(why)} That was not known when this came in, so it did not start by itself.' + old,
+                           'held for you - not started')
         return out('held', f'Waiting for you. {_sentence(said)}' + old, 'held for you - not started')
     if not auto_code_enabled(store) and (t.get('Kind') or '') == 'coding':
         return out('held', f'Waiting for you. Starting {agent} by itself is switched off, so it waits for you.' + old,

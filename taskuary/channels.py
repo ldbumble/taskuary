@@ -1053,18 +1053,65 @@ def _graph_user(tok, oid, cache):
     notes, skip-sender rules and the whole triage funnel key on."""
     if oid in cache: return cache[oid]
     who = ('Teams user', '')
-    try:
-        r = requests.get(f'{GRAPH}/users/{oid}', headers={'Authorization': f'Bearer {tok}'}, timeout=20,
-                         params={'$select': 'displayName,mail,userPrincipalName,userType'})
-        if r.status_code == 200:
-            j = r.json()
-            who = (j.get('displayName') or 'Teams user', j.get('mail') or j.get('userPrincipalName') or '')
-            # a B2B guest sits in the owner's directory with the owner's tenant id - its own type and #EXT# say it is not staff
-            cache[('guest', oid)] = j.get('userType') == 'Guest' or '#ext#' in (j.get('userPrincipalName') or '').lower()
-    except requests.RequestException as e:
-        logger.debug(f'teams user lookup failed for {oid}: {e}')
+    j = _directory_user(tok, oid)
+    if j:
+        who = (j.get('displayName') or 'Teams user', j.get('mail') or j.get('userPrincipalName') or '')
+        # a B2B guest sits in the owner's directory with the owner's tenant id - its own type and #EXT# say it is not staff
+        cache[('guest', oid)] = org_member(j) is False
+        cache[('user', oid)] = j
     cache[oid] = who
     return who
+
+
+def _directory_user(tok, who) -> dict:
+    """The directory entry for an AAD object id (or a UPN), {} when Graph will not say. userType is not in the basic profile
+    User.ReadBasic.All grants, and asking for it there is refused outright (403) - which since 0.3.9.15 cost every Teams sender
+    their address too, so a refusal asks again for the basic profile alone."""
+    h = {'Authorization': f'Bearer {tok}'}
+    try:
+        for sel in ('displayName,mail,userPrincipalName,userType', 'displayName,mail,userPrincipalName'):
+            r = requests.get(f'{GRAPH}/users/{who}', headers=h, timeout=20, params={'$select': sel})
+            if r.status_code == 200: return r.json() or {}
+            if r.status_code not in (400, 403): break
+    except (requests.RequestException, ValueError) as e:
+        logger.debug(f'teams user lookup failed for {who}: {e}')
+    return {}
+
+
+def org_member(j: dict, own_dom: str = ''):
+    """Is this directory entry staff of the owner's own organisation? True / False, None when Graph's answer cannot tell. Asked
+    through the owner's own token, so the entry IS in the owner's directory: a Member is staff, a Guest (userType, #EXT# in the
+    UPN) is not. Without userType (the basic profile), an address on the owner's own Teams domain is staff."""
+    if not j: return None
+    upn = str(j.get('userPrincipalName') or '').lower()
+    if j.get('userType') == 'Guest' or '#ext#' in upn: return False
+    if j.get('userType') == 'Member': return True
+    d = str(j.get('mail') or upn).rsplit('@', 1)[-1].lower() if '@' in str(j.get('mail') or upn) else ''
+    return True if own_dom and d == own_dom.lower() else None
+
+
+ORG_REASON = 'in your own organisation on Teams'
+_ORG, _ORG_RETRY = {}, 600           # (teams account, sender key) -> (verdict, when): a failed lookup is asked again after 10 min
+
+def teams_org(store, account: str, key: str):
+    """Re-resolve a Teams sender recorded before the organisation was (Graph refused the lookup, or the line predates
+    0.3.9.15): their directory entry through the Teams card's own token. True / False, None when it cannot be told - and the
+    caller then keeps the ordinary chat rule. A member is remembered (sender_trust), so the network is asked once per person."""
+    key = str(key or '').strip().lower()
+    if not key: return None
+    if store.trusted_sender('teams', key) == ORG_REASON: return True
+    hit = _ORG.get((account, key))
+    if hit and (hit[0] is not None or time.time() - hit[1] < _ORG_RETRY): return hit[0]
+    verdict = None
+    try:
+        from .outbound import _graph_token, _source_connector_id
+        tok = _graph_token(store, 'teams', _source_connector_id(store, 'teams', account))
+        who = key[6:] if key.startswith('teams:') else key if '@' in key else ''
+        if who: verdict = org_member(_directory_user(tok, who), str(account or '').rsplit('@', 1)[-1] if '@' in str(account or '') else '')
+    except Exception as e: logger.debug(f'teams sender {key} not re-resolved: {e}')
+    _ORG[(account, key)] = (verdict, time.time())
+    if verdict: store.remember_trust('teams', key, ORG_REASON)
+    return verdict
 
 
 def _token_tenant(tok: str) -> str:
@@ -1191,10 +1238,14 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
                   'body': body[:20000], 'conversation_id': f'teams:{cid}',
                   'sent_at': _local(m.get('createdDateTime') or ''), 'source_link': m.get('webUrl'),
                   'source_name': upn, 'images': images_for_triage(store, atts)}
-        # Graph's own chat type, not who has spoken; and whether the sender is staff of the owner's own tenant (senders._chat_known)
-        meta = {**({'dm': True} if kind == 'oneOnOne' else {}),
-                **({'internal': True} if teams_internal(user, tenant, users.get(('guest', user['id']), False)) else {})}
+        # Graph's own chat type, not who has spoken; and whether the sender is staff of the owner's own organisation
+        # (senders._chat_known): the directory's own word first - the message's from.user often carries only id and name -
+        # then the message's tenant. Recorded only when told, so a line nobody could judge is re-resolved on read (teams_org).
+        org = org_member(users.get(('user', user['id'])) or {}, upn.rsplit('@', 1)[-1] if '@' in upn else '')
+        if org is None and tenant and user.get('tenantId'): org = teams_internal(user, tenant, users.get(('guest', user['id']), False))
+        meta = {**({'dm': True} if kind == 'oneOnOne' else {}), **({'internal': org} if org is not None else {})}
         if meta: common['mail_meta'] = meta
+        if org and user['id'] != me: store.remember_trust('teams', (addr or f"teams:{user['id']}").lower(), ORG_REASON)
         if user['id'] == me:                       # your own chat lines are context, never work
             n += ingest_own_message(store, {**common, 'from_name': 'You', 'from_email': upn},
                                     'your message in this chat - kept for context', keep_unmatched=True)

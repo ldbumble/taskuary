@@ -88,7 +88,7 @@ import AgentStory, { StoryChip } from "./AgentStory.jsx";
 import { STORY_CHIP, startLabel, storyPlace, storyShown } from "./agentStory.js";
 import PublishedPages, { isPublished } from "./PublishedPages.jsx";
 import EmailSomeone from "./EmailSomeone.jsx";
-import { ago, plural } from "./timeWords.js";
+import { ago, filesLine, plural } from "./timeWords.js";
 import { KIND_OPTIONS, KINDS, kindLabel, shortKind } from "./kinds.js";
 import { openAppLink } from "./appLinks.js";
 import { heldSteps, heldTask, heldTerm, heldWait, keepTask, keepTerms } from "./taskDetail.js";
@@ -1616,8 +1616,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           its message in full under it, as the old disclosure did. */}
                       <Part label="Came from" sub={fromWorkflow && !sources.length ? "a workflow run" : cameFromLabel(sources).replace(/^Came from · /, "").replace(" in ", " · ")} data-tq-came-from="">
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", "&:empty": { display: "none" } }}>
-                          {!!detail.attachments?.length && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
-                            label={plural(detail.attachments.length, "attachment")}
+                          {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
+                            label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
                           {expands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}

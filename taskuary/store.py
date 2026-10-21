@@ -5474,6 +5474,11 @@ class SQLiteStore:
         message and outlive it."""
         return self._rows('SELECT * FROM route WHERE MessageId=? ORDER BY RouteId', (mid,))
 
+    def _links(self, task_id) -> list:
+        from . import linkdocs
+        try: return linkdocs.of_task(self, task_id)
+        except Exception as e: logger.debug(f'task {task_id}: linked documents not listed - {e}'); return []
+
     def task_detail(self, task_id):
         t = self.get_task(task_id)
         if not t: return None
@@ -5481,6 +5486,8 @@ class SQLiteStore:
         return {'task': {**t, 'ChecklistMd': self.checklist_markdown(task_id)}, 'ref': task_ref(task_id), 'messages': msgs,
                 'checklist': self.task_checklist(task_id),
                 'attachments': [a for m in msgs for a in self.list_attachments(m['MessageId'])],
+                # ...and the documents its messages LINK to (linkdocs), once each - counted beside the files ("6 attachments · 2 links")
+                'links': [{k: d[k] for k in ('id', 'label', 'url')} for d in self._links(task_id)],
                 'artifacts': self.list_task_artifacts(task_id),
                 'routes': self.list_routes(task_id), 'comments': self.list_comments(task_id),
                 'runs': self.list_runs(task_id), 'audit': self.list_audit('task', task_id),

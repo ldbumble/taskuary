@@ -15,3 +15,13 @@ test("its chip says its kind and, on hover, whether it was read and why not", ()
   assert.match(src, /\["sheet", "SHEET"\]/);
   assert.match(src, /not read: \$\{a\.note\}/);
 });
+
+test("the task's counter counts linked documents beside its files", async () => {
+  const { filesLine } = await import("../src/timeWords.js");
+  assert.equal(filesLine(6, 2), "6 attachments · 2 links");
+  assert.equal(filesLine(1, 0), "1 attachment");
+  assert.equal(filesLine(0, 1), "1 link");
+  assert.equal(filesLine(0, 0), "");
+  const page = fs.readFileSync(new URL("../src/TaskPage.jsx", import.meta.url), "utf8");
+  assert.match(page, /label=\{filesLine\(detail\.attachments\?\.length \|\| 0, detail\.links\?\.length \|\| 0\)\}/);
+});

@@ -62,6 +62,17 @@ test("Show all on a chat draws the back-and-forth in Came from; an email thread 
   assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");
 });
 
+// THE GAP IS THE WAY IN (the owner, 2026-10-20: "··· 4 more - Gail Moreno, You" between the messages, and Show all at the top where they
+// never looked): the line itself opens the conversation - a real button, so a keyboard reaches it - doing what Show all does
+test("the '··· N more' line in Came from opens the whole conversation, the same action as Show all", () => {
+  const rows = page.slice(page.indexOf("function ConversationRows("), page.indexOf("// the repo is a filter like the others"));
+  assert.match(rows, /r\.gap \? \(onExpand \? \(\s*<Box key=\{`gap\$\{ri\}`\} component="button" type="button" data-tq-conversation-gap="" onClick=\{onExpand\}/);
+  assert.match(rows, /"&:focus-visible": \{ outline: `2px solid \$\{ACCENT\}`, outlineOffset: 1 \} \}\}>\s*· · · \{r\.gap\} more - \{r\.names\}<\/Box>/);
+  assert.match(cameFrom, /onExpand=\{\(\) => setShowAll\(true\)\}/);
+  assert.match(cameFrom, /onClick=\{\(\) => setShowAll\(\(v\) => !v\)\}/, "Show all at the top is the same switch");
+  assert.doesNotMatch(closeOut, /onExpand=/, "Close out's gap stays a count - the whole conversation is in Task");
+});
+
 test("Close out draws the conversation it answers condensed - the same rows as Task - and points to Task for the whole", () => {
   assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
   assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);

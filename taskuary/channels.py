@@ -291,7 +291,7 @@ def test_connector(store, cid: int) -> dict:
             probe = ({'url': 'https://example.com'} if c['Type'] in PAGE_READERS
                      else {'actor': 'apify~hello-world'} if c['Type'] == 'apify'
                      else {'query': 'taskuary local-first ai task hub', 'num': 1})
-            head, _body = REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1}))
+            head, _body = REGISTRY[c['Type']](resolve_cfg(store, {**probe, 'type': c['Type'], 'max_rows': 1, 'connector_id': cid}))
             detail = f'{c["Type"]} answered: {head}'
         elif c['Type'] in ('jira', 'asana', 'monday', 'clickup', 'todoist'):
             from . import pm
@@ -312,7 +312,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'database':
             from .db import test as db_test
             from .reports import database_connection
-            r = db_test(database_connection(store))
+            r = db_test(database_connection(store, cid))
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
         elif c['Type'] in ('aws', 'azure'):
@@ -321,7 +321,7 @@ def test_connector(store, cid: int) -> dict:
             # mode picker (report by default - nothing is polled until you say so)
             from .reports import aws_connection, azure_connection
             mod = __import__(f'taskuary.{c["Type"]}', fromlist=['x'])
-            conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store)
+            conn_cfg = (aws_connection if c['Type'] == 'aws' else azure_connection)(store, cid)
             r = mod.test(conn_cfg)
             if not r['ok']: raise RuntimeError(r['error'])
             detail = r['detail']
@@ -346,7 +346,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'intacct':
             from .intacct import probe
             from .reports import intacct_connection
-            detail = probe(intacct_connection(store))
+            detail = probe(intacct_connection(store, cid))
         elif c['Type'] == 'quickbooks':
             from .quickbooks import probe, connection
             detail = probe(connection(store, cid))
@@ -378,11 +378,11 @@ def test_connector(store, cid: int) -> dict:
             detail = markets.probe_alpaca(_card(store, 'alpaca', 'secret_key', cid))
         elif c['Type'] == 'prometheus':
             from .reports import run_prometheus, prometheus_connection
-            head, _ = run_prometheus({**prometheus_connection(store), 'query': 'vector(1)', 'max_rows': 1})
+            head, _ = run_prometheus({**prometheus_connection(store, cid), 'query': 'vector(1)', 'max_rows': 1})
             detail = f'query OK ({head}) - build the reports under Reports'
         elif c['Type'] == 'datadog':
             from .reports import datadog_connection
-            dd = datadog_connection(store)
+            dd = datadog_connection(store, cid)
             site = (dd.get('site') or 'datadoghq.com').strip()
             r = requests.get(f'https://api.{site}/api/v1/validate', timeout=20,
                              headers={'DD-API-KEY': dd.get('api_key') or ''})
@@ -442,7 +442,7 @@ def test_connector(store, cid: int) -> dict:
         elif c['Type'] == 'treg':
             from .treg import run_treg_tools
             from .reports import resolve_cfg
-            head, _body = run_treg_tools(resolve_cfg(store, {'type': 'treg_tools', 'max_rows': 5}))
+            head, _body = run_treg_tools(resolve_cfg(store, {'type': 'treg_tools', 'max_rows': 5, 'connector_id': cid}))
             detail = f'treg answered: {head}'
         elif c['Type'] in DB_ENGINES:
             # SELECT 1 through the real driver: a card that cannot reach the server, or is missing

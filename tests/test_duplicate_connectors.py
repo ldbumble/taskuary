@@ -78,6 +78,19 @@ class DuplicateConnectors(unittest.TestCase):
             outbound.reply_to_message(store, msg, 'resolved')
         send.assert_called_once_with(store, '222', 'resolved', second)
 
+    def test_testing_the_second_card_of_a_type_tests_that_card(self):
+        from taskuary import channels
+        store = SQLiteStore(':memory:')
+        first = store.get_connector_by_type('prometheus')['ConnectorId']
+        store.save_connector({'ConnectorId': first, 'Active': 1,
+                              'ConfigJson': json.dumps({'base_url': 'https://metrics-a.northwind.example'})}, 'test')
+        second = store.save_connector({'Type': 'prometheus', 'Name': 'Staging', 'Active': 1,
+                                       'ConfigJson': json.dumps({'base_url': 'https://metrics-b.northwind.example'})}, 'test')
+        asked = []
+        with mock.patch('taskuary.reports.run_prometheus', lambda cfg: asked.append(cfg.get('base_url')) or ('1 row', '')):
+            channels.test_connector(store, second)
+        self.assertEqual(asked, ['https://metrics-b.northwind.example'])
+
 
 if __name__ == '__main__':
     unittest.main()

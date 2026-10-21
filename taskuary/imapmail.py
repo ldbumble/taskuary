@@ -274,6 +274,11 @@ def sent_folder(M, strict=False) -> str:
     return next((lower[w.lower()] for w in SENT_NAMES if w.lower() in lower), '')
 
 
+def thread_key(msg):
+    """The thread a mail belongs to: the first of References, else In-Reply-To (some clients send only that), else its own id."""
+    return next(iter((msg.get('References') or msg.get('In-Reply-To') or msg.get('Message-ID') or '').split()), '')[:200] or None
+
+
 def sent_window(c, days: int, cap: int = 300, progress=None) -> list:
     """What this mailbox has SENT in the last `days`, oldest first, each as
     {subject, body, sent_at, to, conversation_id, external_id}. [] when there is no Sent folder.
@@ -305,7 +310,7 @@ def sent_window(c, days: int, cap: int = 300, progress=None) -> list:
                 out.append({'external_id': f'imap-sent:{user}:{uid}', 'subject': _dec(msg.get('Subject')),
                             'body': body[:20000], 'sent_at': when, 'to': _hdr_addrs(msg, 'To'),
                             'from_email': user,
-                            'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None})
+                            'conversation_id': thread_key(msg)})
             except Exception as e:
                 logger.debug(f'imap: sent uid {uid} skipped - {e}')
         return out
@@ -598,7 +603,7 @@ def poll_sent(store, M, user: str, last_uid: int, days: int, state: dict = None)
             'channel': 'email', 'source_name': user,
             'subject': _dec(msg.get('Subject')), 'body': body[:20000], 'from_email': user, 'sent_at': when,
             # the SAME thread key the inbound side derives, or the reply lands on nothing
-            'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None},
+            'conversation_id': thread_key(msg)},
             'your reply on this thread - kept for context')
     def progress(uid, holes):
         state['uid'], state['holes'] = uid, set(holes)
@@ -721,7 +726,7 @@ def poll_imap(store, c, sources: list, llm=None, file_only=False, backfill_days:
                     'from_name': frm_name or frm_addr, 'from_email': frm_addr,
                     'to': _hdr_addrs(msg, 'To'), 'cc': _hdr_addrs(msg, 'Cc'),
                     # References threads replies the way Graph's conversationId does
-                    'conversation_id': (msg.get('References') or msg.get('Message-ID') or '').split()[0][:200] or None,
+                    'conversation_id': thread_key(msg),
                     'sent_at': sent_at, 'source_name': user}
                 from .calendar import tz_of
                 incoming.update(protocol_marks(msg, me=(user,), tz=tz_of(store)))

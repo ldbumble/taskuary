@@ -65,6 +65,16 @@ class ImapTests(unittest.TestCase):
         with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
             self.assertEqual(imapmail.poll_imap(s, c2, [], llm=None), 0)          # watermark holds
 
+    def test_a_reply_with_only_in_reply_to_joins_its_thread(self):
+        s, c = self._store()
+        reply = __import__('email').message_from_bytes(_mime(subj='Re: the export is broken', body='any news?\n'))
+        reply.replace_header('Message-ID', '<def456@partner.example>'); reply['In-Reply-To'] = '<abc123@partner.example>'
+        fake = FakeImap({101: _mime(), 102: reply.as_bytes()})
+        with mock.patch.object(imapmail.imaplib, 'IMAP4_SSL', return_value=fake):
+            imapmail.poll_imap(s, c, [], llm=None)
+        rows = s._rows("SELECT ConversationId FROM message WHERE Channel='email' ORDER BY MessageId")
+        self.assertEqual([r['ConversationId'] for r in rows], ['<abc123@partner.example>'] * 2)
+
     def test_the_mailbox_is_left_untouched_unless_the_switch_is_on(self):
         s, c = self._store()
         fake = FakeImap({101: _mime()})

@@ -254,6 +254,8 @@ def stranger_denied(method: str, path: str, query, tid: int, owner_of) -> str:
         # Not /merge-candidates (other tasks' titles), /repos (checkouts on this machine), /steps (child tasks),
         # /split/suggest (a model call on a GET) or /assistant (the install's brains).
         if re.fullmatch(rf'/api/tasks/{int(tid)}(/({"|".join(STRANGER_TASK_READS)}))?', path): return ''
+        # ...and the files its own agent made for it (outputs.py) - the route confines the name to that task's folder
+        if re.fullmatch(rf'/api/task-outputs/{int(tid)}(/.+)?', path): return ''
         if f := _STRANGER_FILE.match(path):
             return '' if owner_of('attachment' if f[1] == 'attachments' else 'artifact', int(f[2])) == int(tid) else STRANGER_WHY
         return STRANGER_WHY

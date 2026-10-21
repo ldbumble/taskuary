@@ -32,12 +32,14 @@ def _home(conns=(), tests=None, settings=None, connector=None):
 def world(tmp_path, monkeypatch):
     """Patches the doors a run goes through: which CLIs are on this machine (`installed`), what a CLI run was asked to start
     (`ran`, by command), and what an API brain was built for (`api`)."""
-    w = {'installed': set(), 'ran': [], 'api': []}
+    w = {'installed': set(), 'ran': [], 'api': [], 'signed_out': set()}
     def resolve(cmd):
         if Path(str(cmd)).name in w['installed']: return [str(cmd)]
         raise FileNotFoundError(f'{cmd} not found on PATH')
     def run_cli(prof, prompt, trace, resume=None, cancel=None, extra_env=None):
-        w['ran'].append({'cmd': prof.get('cmd'), 'args': list(prof.get('args') or [])}); return 'Here is what I found.', 'sid-1', ''
+        w['ran'].append({'cmd': prof.get('cmd'), 'args': list(prof.get('args') or [])})
+        if prof.get('cmd') in w['signed_out']: raise RuntimeError(agents.signed_out_msg('assistant', 'Not logged in', prof['cmd']))
+        return 'Here is what I found.', 'sid-1', ''
     def make_llm(typ, conf, secret):
         w['api'].append(typ)
         return lambda system, user, **kw: 'Here is what I found.'
@@ -56,7 +58,7 @@ def _run(s, cfg, tid):
     """Start the task's general agent and send one turn, as Start does; what it said, or the error it failed with."""
     with mock.patch.object(config, 'load', lambda: cfg):
         clic.sync(cfg, s)
-        sess = general.GeneralSession(s, tid)
+        sess = _run.sess = general.GeneralSession(s, tid)
         try: return sess.send_prompt('Go ahead.', echo=False)
         except Exception as e: return f'error: {e}'
 
@@ -166,3 +168,50 @@ def test_a_role_row_that_names_no_cli_is_never_read_as_claude(world):
         clic.sync(cfg, s)
         assert 'cmd' not in json.loads(s.get_agent('researcher')['Config'])
         assert llm.make_cli_llm(s, 'researcher') is None
+
+
+# ── A machine an older start already pinned to claude heals on upgrade ───────────────────────────────────────────────
+def _pinned(writer='migration'):
+    """claude saved as the default and the general brain by a start before this fix - not by the person - beside a Codex that
+    passed its test; claude is on the machine but not signed in, and nothing has tested it."""
+    s, cfg = _home(('claude', 'codex'), tests={'codex': True})
+    for k, v in (('default_brain', 'claude'), ('assistant_ai', 'cli:claude'), ('triage_ai', 'cli:claude')): s.set_setting(k, v, writer)
+    return s, cfg
+
+
+@pytest.mark.parametrize('writer', ['migration', ''], ids=['adopted', 'unmarked'])
+def test_startup_clears_a_saved_claude_that_is_not_signed_in_and_the_researcher_runs_on_codex(world, writer):
+    world['installed'] |= {'codex', 'claude'}; world['signed_out'] |= {'claude'}
+    s, cfg = _pinned(writer)
+    asked = []
+    with mock.patch.object(config, 'load', lambda: cfg),          mock.patch('taskuary.clisetup.signed_in', side_effect=lambda name: asked.append(name) or name != 'claude'):
+        assert set(agents.heal_brains(s)) == {'default_brain', 'assistant_ai', 'triage_ai'}       # what startup runs
+    assert asked == ['claude'] and agents.cli_tests(s)['claude'] is False                       # asked once, and remembered
+    _run(s, cfg, _researcher(s))
+    assert [r['cmd'] for r in world['ran']] == ['codex']
+
+
+def test_a_launch_that_finds_a_saved_claude_signed_out_moves_to_codex_for_the_next_try(world):
+    """No probe at startup (it could not tell): the first start fails on claude, says so - and Try again runs on codex."""
+    world['installed'] |= {'codex', 'claude'}; world['signed_out'] |= {'claude'}
+    s, cfg = _pinned()
+    tid = _researcher(s)
+    first = _run(s, cfg, tid)
+    assert "claude isn't signed in" in first
+    with mock.patch.object(config, 'load', lambda: cfg): again = _run.sess.send_prompt('Try again.', echo=False)
+    assert not again.startswith('error') and [r['cmd'] for r in world['ran']] == ['claude', 'codex']
+    assert not s.get_setting('default_brain') and not s.get_setting('assistant_ai')
+
+
+def test_a_claude_the_person_picked_stays_and_says_it_is_not_signed_in(world):
+    world['installed'] |= {'codex', 'claude'}; world['signed_out'] |= {'claude'}
+    s, cfg = _pinned('owner')
+    with mock.patch.object(config, 'load', lambda: cfg), mock.patch('taskuary.clisetup.signed_in', return_value=False) as probe:
+        assert agents.heal_brains(s) == [] and not probe.called
+    tid = _researcher(s)
+    said = _run(s, cfg, tid)
+    assert "claude isn't signed in" in said and 'Set it up' in said, said
+    with mock.patch.object(config, 'load', lambda: cfg), pytest.raises(RuntimeError, match="claude isn't signed in"):
+        _run.sess.send_prompt('Try again.', echo=False)
+    assert [r['cmd'] for r in world['ran']] == ['claude', 'claude']          # never quietly another AI
+    assert s.get_setting('assistant_ai') == 'cli:claude'

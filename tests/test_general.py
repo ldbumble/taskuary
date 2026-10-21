@@ -53,6 +53,7 @@ class SharedSessionTests(unittest.TestCase):
         self.assertEqual(first['type'], 'out')
         self.assertIn('Taskuary assistant', first['data'])
 
+    @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_setup_walkthrough_uses_a_tool_cli_and_starts_its_own_browser(self):
         store = MemoryStore()
         connect_cli(self, claude={

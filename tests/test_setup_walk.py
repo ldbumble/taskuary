@@ -161,10 +161,12 @@ class WalkBrainTests(unittest.TestCase):
         self.assertEqual(general.walk_pick(s, SETUP), pick)
         self.assertEqual(general.walk_pick(s, SETUP), concierge.pick(s))
 
+    @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_with_nothing_chosen_it_is_the_default_cli_not_codex(self):
         s = self.connect(store())
         self.assertEqual(general.walk_pick(s, SETUP), 'cli:claude')
 
+    @mock.patch('taskuary.agents.runs_here', lambda p: bool((p or {}).get('cmd')))   # the CLI it connects counts as installed: CI has none on PATH
     def test_a_browser_task_still_needs_hands_so_an_api_choice_falls_to_the_default_cli(self):
         # a repeat workflow on the API brain answered "opening the secure area cannot be done from
         # here" (2026-09-15): only a CLI can run agent-browser

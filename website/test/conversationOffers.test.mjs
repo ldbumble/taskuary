@@ -1,15 +1,10 @@
-// What the conversation offers under an answer is decided by what PRODUCED it (the owner, 2026-10-21), and a playbook drafted in it is
-// approved in it - the server says which (taskuary/server.py _assistant_payload: reportLike, playbookDrafts); the page only draws it.
+// A playbook drafted in the conversation is approved in it (the owner, 2026-10-21) - the server says which (taskuary/server.py
+// _assistant_payload: playbookDrafts); the page only draws it.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
 const src = fs.readFileSync(new URL("../src/GeneralWorkspace.jsx", import.meta.url), "utf8");
-
-test("Make recurring report stands only where the server says data produced the answer", () => {
-  assert.match(src, /!dock && reportLike && !serverBusy && !asking/);
-  assert.match(src, /reportLike=\{!!data\?\.reportLike\}/);
-});
 
 test("a playbook drafted in the chat is drawn in the chat with its Approve and what Approve does", () => {
   assert.match(src, /drafts\.map\(\(r\) => <ReviewDecision key=\{r\.ReviewId\} review=\{r\}/);

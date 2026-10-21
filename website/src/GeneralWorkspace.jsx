@@ -8,7 +8,6 @@ import { Alert, Box, Button, Chip, CircularProgress, IconButton, MenuItem, Selec
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import CloseIcon from "@mui/icons-material/Close";
 import SendIcon from "@mui/icons-material/ArrowUpward";
-import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import OpenInFullIcon from "@mui/icons-material/OpenInFull";
 import CloseFullscreenIcon from "@mui/icons-material/CloseFullscreen";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -388,9 +387,9 @@ export function AgentAsks({ asking, name, onAnswer }) {
   );
 }
 
-function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach, onReport, reportBusy,
+function AssistantThread({ task, messages, published, onAsked, onStop, selectionRef, attachmentsRef, onSent, onStarted, onClearAttachments, onAttach,
   dock = false, dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
-  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, reportLike = false, drafts = [], onDraftDecided, starting = "" }) {
+  serverBusy = false, provider, name = "Taskuary", work, since, revision = 0, asking, onAnswer, drafts = [], onDraftDecided, starting = "" }) {
   // "working" is only ever true on a WORK window. In the dock nothing below changes at all: the
   // dock is the assistant that helps you run Taskuary, not an agent doing a job (the owner,
   // 2026-09-08: "make sure the ux doesnt change or the general assistants").
@@ -550,15 +549,6 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
               {drafts.map((r) => <ReviewDecision key={r.ReviewId} review={r} onChanged={onDraftDecided} />)}
             </Box>
           )}
-          {/* WORTH RUNNING AGAIN only under an answer reading data produced - decided by what produced it, never its words
-              (general.report_like: a report's or a workflow's run, or a look-up through the tool door) */}
-          {!dock && reportLike && !serverBusy && !asking && messages?.some((m) => m.role === "assistant") && (
-            <div className="tq-aui-report-action">
-              <div><b>Worth running again?</b><span>Creates a daily report from this workflow; adjust its cadence in Reports.</span></div>
-              <Button size="small" variant="outlined" startIcon={<EventRepeatIcon sx={{ fontSize: 15 }} />}
-                disabled={reportBusy} onClick={onReport}>{reportBusy ? "Creating…" : "Make recurring report"}</Button>
-            </div>
-          )}
           </ThreadPrimitive.If>
         </ThreadPrimitive.Viewport>
           <div className="tq-aui-footer">
@@ -602,7 +592,7 @@ function AssistantThread({ task, messages, published, onAsked, onStop, selection
   );
 }
 
-export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, compact = false, dock = false, toolsAt = null,
+export function GeneralWorkspace({ task, onSession, onAnswered, compact = false, dock = false, toolsAt = null,
   dockExpanded = false, prompt, onPromptUsed, onBusyChange, onDockNavigate, onDockChanged,
   onDockNewChat }) {
   const [data, setData] = useState(null);
@@ -612,10 +602,8 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
   const [revision, setRevision] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [ownPrompt, setOwnPrompt] = useState(null);
   const [answered, setAnswered] = useState("");          // the question this card answered (AgentAsks)
-  const [reportBusy, setReportBusy] = useState(false);
   // the whole window, where it stands - the dock is exempt, it has its own expand
   const { full, toggle: toggleFull } = useFullScreen();
   const [newChatBusy, setNewChatBusy] = useState(false);
@@ -649,7 +637,7 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
 
   useEffect(() => {
     let live = true;
-    setData(null); setError(""); setNotice(""); setAttachments([]); setNewChatBusy(false); setConfirmNewChat(false);
+    setData(null); setError(""); setAttachments([]); setNewChatBusy(false); setConfirmNewChat(false);
     // Looking at a general task is not sending it to an agent. Load saved state only; the first
     // actual message (or an explicit Send to agent action) starts the regular agent.
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => live && accept(r.data)).catch((e) => live && setError(errText(e)));
@@ -725,17 +713,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
   const refresh = useCallback(() => {
     api.get(`/api/tasks/${task.TaskId}/assistant`).then((r) => accept(r.data)).catch(() => {});
   }, [accept, task.TaskId]);
-  const makeReport = async () => {
-    setError(""); setNotice(""); setReportBusy(true);
-    try {
-      const { data: made } = await api.post(`/api/tasks/${task.TaskId}/assistant/report`, {
-        pick: connectorId || null, model: model || null,
-      });
-      if (onOpenReports) onOpenReports(made.sourceId);
-      else setNotice(`Created “${made.title}” in Reports.`);
-    } catch (e) { setError(errText(e)); }
-    finally { setReportBusy(false); }
-  };
   const pasted = (e) => {
     const images = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
     if (images.length) { e.preventDefault(); upload(images); }
@@ -790,12 +767,12 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
         published={dock ? placed.foot : [...placed.foot, ...uncited(data?.outputs, shownMessages.filter((m) => m.role === "assistant").map(textOf), task.TaskId)]}
         onAsked={dropAsk} onStop={stopRun} selectionRef={selectionRef}
         attachmentsRef={attachmentsRef} onSent={sent} onStarted={started} onClearAttachments={clearAttachments}
-        onAttach={() => fileRef.current?.click()} onReport={makeReport} reportBusy={reportBusy}
+        onAttach={() => fileRef.current?.click()}
         dock={dock} dockExpanded={dockExpanded} prompt={ownPrompt || prompt} onPromptUsed={promptUsed}
         asking={asking} onAnswer={answerAsk}
         onBusyChange={onBusyChange} onDockNavigate={onDockNavigate} onDockChanged={onDockChanged}
         serverBusy={busy} provider={session?.provider || pickedLabel} name={name} work={work} since={since}
-        reportLike={!!data?.reportLike} drafts={data?.playbookDrafts || []} onDraftDecided={refresh} starting={starting} />
+        drafts={data?.playbookDrafts || []} onDraftDecided={refresh} starting={starting} />
     </OutputsCtx.Provider>
     </ShownCtx.Provider></AgentNameCtx.Provider>
   );
@@ -875,7 +852,6 @@ export function GeneralWorkspace({ task, onSession, onAnswered, onOpenReports, c
         </Box>
       )}
       {error && <Alert severity="error" sx={{ borderRadius: 0, py: 0 }}>{error}</Alert>}
-      {notice && <Alert severity="success" onClose={() => setNotice("")} sx={{ borderRadius: 0, py: 0 }}>{notice}</Alert>}
       {dock && busy && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.5, bgcolor: PANEL2,
           borderBottom: `1px solid ${BORDER}` }}>

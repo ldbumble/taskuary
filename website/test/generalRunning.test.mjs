@@ -42,7 +42,7 @@ test("a turn the SERVER started before this pane opened is still a turn in fligh
   // exactly like a walk that never started (the owner, 2026-09-14).
   const view = read("GeneralWorkspace.jsx");
   assert.match(view, /const busy = !!data\?\.session\?\.busy \|\| !!data\?\.starting;/);
-  const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const makeReport"));
+  const poll = view.slice(view.indexOf("const busy ="), view.indexOf("const pasted ="));
   assert.match(poll, /if \(!busy\) return undefined;/, "one definition of work in flight drives the poll");
   assert.match(poll, /api\.get\(`\/api\/tasks\/\$\{task\.TaskId\}\/assistant`\)/);
 });
@@ -56,11 +56,6 @@ test("the picker names the brain that is actually answering, not the one it open
   const accept = view.slice(at, view.indexOf("onSession]);", at));
   assert.match(accept, /payload\?\.session\?\.pick/, "a live session's own pick wins over what the picker opened on");
   assert.doesNotMatch(accept, /setConnectorId\(\(old\) => old \|\| String\(provider\.id\)\);\s*$/m);
-});
-
-test("the offer to schedule the workflow waits for the answer it is offering to repeat, and for any question it asked", () => {
-  const view = read("GeneralWorkspace.jsx");
-  assert.match(view, /!dock && reportLike && !serverBusy && !asking && messages\?\.some/);
 });
 
 // THE QUESTION IS ON THE AGENT'S CANVAS WITH ITS ANSWER BOX (owner-approved, the UI audit's W6, 2026-10-21): "Agent asked you something"

@@ -278,7 +278,7 @@ export default function WallView({ onOpenTask, onOpenReports, refresh = 0, activ
                 <Box sx={{ flex: 1, minHeight: 0, p: 0.75, display: "flex", flexDirection: "column", "& > *": { flex: 1, minHeight: 0 } }}>
                   {s.mode === "assistant"
                     ? <React.Suspense fallback={<CircularProgress size={18} sx={{ m: "auto" }} />}>
-                        <GeneralWorkspace task={{ ...t, TaskId: s.taskId }} onSession={load} onOpenReports={onOpenReports} compact />
+                        <GeneralWorkspace task={{ ...t, TaskId: s.taskId }} onSession={load} compact />
                       </React.Suspense>
                     : <TerminalPane sid={s.sid} height="100%" onExit={load} />}
                 </Box>

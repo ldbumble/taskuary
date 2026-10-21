@@ -190,7 +190,7 @@ class DeskRoutes(unittest.TestCase):
             out, _ = say(s, 'every Monday send me the overdue invoices', None, 'CALL: {"kind": "setup", "params": {"text": "every Monday send me the overdue invoices"}}')
             self.assertEqual(out['new'], {'kind': 'report', 'how': '', 'text': 'every Monday send me the overdue invoices'})
             out, _ = say(s, 'connect our books', None, 'CALL: {"kind": "setup", "params": {"text": "connect our books"}}')
-            self.assertEqual(out['open'], '#connector=quickbooks')
+            self.assertEqual(out['open'], '#connector=quickbooks&step=1')
         self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
 
     def test_the_phone_keeps_its_text_yes_or_no(self):
@@ -299,9 +299,9 @@ class AConnectorIsItsCard(unittest.TestCase):
         s = store()
         for typ, title in (('linkedin', 'LinkedIn'), ('slack', 'Slack'), ('quickbooks', 'QuickBooks Online')):
             out, _ = say(s, f'add {typ} as a connector', None, f'CALL: {{"kind": "connection.create", "params": {{"type": "{typ}"}}}}')
-            self.assertEqual(out['open'], f'#connector={typ}'); self.assertTrue(out['say'].startswith(f'Opened the {title} card'), out['say'])
+            self.assertEqual(out['open'], f'#connector={typ}&step=1'); self.assertTrue(out['say'].startswith(f'Opened the {title} card'), out['say'])
         out, _ = say(s, 'connect quickbooks online', None, 'CALL: {"kind": "connection.create", "params": {"type": "QuickBooks Online"}}')
-        self.assertEqual(out['open'], '#connector=quickbooks')
+        self.assertEqual(out['open'], '#connector=quickbooks&step=1')
 
     def test_a_second_one_names_add_another(self):
         s = store(); s.save_connector({'Type': 'outlook', 'Name': 'Work mail', 'Active': 1}, 't')

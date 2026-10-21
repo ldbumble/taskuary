@@ -2324,9 +2324,10 @@ def call_turn(store, tid: int, call: dict, item: dict | None, text: str, actor: 
                              'Say so in plain words, naming those. Nothing was changed.')
             ex = store.get_connector_by_type(c['type'])
             said = (f"Opened your {c['title']} card under Connections - press Add another there to connect a second one." if ex and ex.get('Active')
-                    else f"Opened the {c['title']} card under Connections - follow its steps there to connect it; a key or password goes on the "
-                         'card, never in this chat.')
-            return _page(store, tid, item, f"#connector={c['type']}", said)
+                    else f"Opened the {c['title']} card under Connections - its first step is lit there. A key or password goes on the card, "
+                         'never in this chat.')
+            # &step=1: the card lights its first real step and the page finishes the line with it (connectorStep.js STEP_SAID)
+            return _page(store, tid, item, f"#connector={c['type']}" + ('' if ex and ex.get('Active') else '&step=1'), said)
         elif kind == 'connection.create':
             # the card OF THAT TYPE, never the item on the table: "connect my Jira" over TQ-0001 fell through to the target line
             # below and its id was saved as a ConnectorId (2026-10-06)

@@ -30,6 +30,14 @@ class EverydayAsks(unittest.TestCase):
         for r in self.rows:
             with self.subTest(ask=r['q'].text): self.assertNotEqual(r['ideal']['grade'], 'silent', r['ideal']['say'][:200])
 
+    def test_a_connector_brought_up_to_connect_lights_its_first_step(self):
+        # the card opens with &step=1, and the line names the lit step once the page has lit it (website/src/connectorStep.js)
+        for r in (r for r in self.rows if r['q'].cat == 'connectors' and r['q'].expect.startswith('open:')):
+            with self.subTest(ask=r['q'].text):
+                opened = next(g for g in r['ideal']['got'] if g.startswith('open:'))
+                if 'Add another' in r['ideal']['say']: self.assertNotIn('&step=1', opened)
+                else: self.assertTrue(opened.endswith('&step=1')); self.assertIn('its first step is lit there', r['ideal']['say'])
+
     def test_every_bring_up_opens_its_exact_target(self):
         for r in (r for r in self.rows if r['q'].cat == 'bring-up'):
             with self.subTest(ask=r['q'].text): self.assertIn(r['q'].expect, r['ideal']['got'])

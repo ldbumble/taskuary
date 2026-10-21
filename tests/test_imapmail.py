@@ -143,6 +143,8 @@ class ImapTests(unittest.TestCase):
             outbound.reply_to_message(s, {**msg, 'Subject': 'RE: the export is broken'}, 'And the import.')
         self.assertIn('Subject: RE: the export is broken', sent['data'])
         self.assertNotIn('Re: RE:', sent['data'])
+        self.assertIn('\nDate: ', sent['data'])
+        self.assertRegex(sent['data'], r'\nMessage-ID: <[^>]+@myco\.example>')
 
     def test_the_graph_poller_keeps_its_hands_off_imap_sources(self):
         """Both are channel 'email' - without ownership the outlook branch tried to fetch the

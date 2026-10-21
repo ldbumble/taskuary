@@ -121,14 +121,14 @@ class HookWiringTests(unittest.TestCase):
     def test_a_hook_binds_to_the_claude_session_in_that_checkout(self):
         a = self._fake('a', 1, last=time.time() - 60); b = self._fake('b', 2)             # two claudes, same checkout: the active one gets it
         self._fake('x', 3, argv=['codex'])                                               # codex never takes a claude hook
-        hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'})   # a pane's own CLI opens with it
-        r = hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'PostToolUse', 'tool_name': 'Edit', 'tool_input': {'file_path': r'C:\repo\a.py'}})
+        hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'}, cli='claude')   # a pane's own CLI opens with it
+        r = hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'PostToolUse', 'tool_name': 'Edit', 'tool_input': {'file_path': r'C:\repo\a.py'}}, cli='claude')
         # `closing` says whether this event handed the session to selfclose (Stop only)
         self.assertEqual(r, {'bound': True, 'sid': 'b'}); self.assertEqual(b.ext_id, 'S1'); self.assertEqual(b.witness.tool['name'], 'Edit')
         a.last = time.time()                                                             # a wakes up - but S1 stays bound to b
-        hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'})
+        hooks.receive({'session_id': 'S1', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'}, cli='claude')
         self.assertTrue(b.witness.done_at); self.assertIsNone(a.witness.done_at)
-        self.assertEqual(hooks.receive({'session_id': 'S9', 'cwd': r'C:\elsewhere', 'hook_event_name': 'Stop'}), {'bound': False})
+        self.assertEqual(hooks.receive({'session_id': 'S9', 'cwd': r'C:\elsewhere', 'hook_event_name': 'Stop'}, cli='claude'), {'bound': False})
 
     def test_a_hook_never_trips_over_the_assistant_session_beside_it(self):
         """A general chat is not a pty: no argv, no checkout, so no hook can ever be its own. Reading
@@ -139,8 +139,8 @@ class HookWiringTests(unittest.TestCase):
         chat = general.GeneralSession(server.store, tid)
         term.SESSIONS[chat.sid] = chat
         coding = self._fake('h1', 4)
-        hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'})   # a pane's own CLI opens with it
-        r = hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'})
+        hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'SessionStart', 'source': 'startup'}, cli='claude')   # a pane's own CLI opens with it
+        r = hooks.receive({'session_id': 'S3', 'cwd': CWD, 'hook_event_name': 'Stop', 'last_assistant_message': 'done'}, cli='claude')
         self.assertEqual((r.get('bound'), r.get('sid')), (True, 'h1'))
         self.assertTrue(coding.witness.done_at)
 

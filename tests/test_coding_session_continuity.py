@@ -36,7 +36,7 @@ def test_a_claude_hook_files_its_session_id_before_the_pane_ever_closes(tmp_path
     store = MemoryStore(); tid = task(store); t = pane(store, tid, str(tmp_path))
     with mock.patch.dict(terminal.SESSIONS, {t.sid: t}, clear=True):
         bound = hooks.receive({'session_id': 'claude-thread', 'cwd': str(tmp_path),
-                               'hook_event_name': 'SessionStart', 'source': 'startup'})
+                               'hook_event_name': 'SessionStart', 'source': 'startup'}, cli='claude')
     assert bound['bound'] and t.ext_id == 'claude-thread'
     assert store.resumable_session(tid)['ExtId'] == 'claude-thread'
 

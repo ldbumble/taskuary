@@ -97,7 +97,7 @@ def runner(store, agent: str = None) -> str:
     if not row: raise ValueError(f'no CLI agent named {agent!r} - add one under {words.name("ai_apps")} first')
     profile = term.with_brain(json.loads(row.get('Config') or '{}'), hub.brain_command(store, agent))
     # the same brain open_session falls back to for a role naming no CLI - a ready one, never claude by default
-    if not profile.get('cmd'): profile = term.with_brain(profile, hub.brain_command(store, agent, want=hub.default_brain(store)))
+    if not profile.get('cmd'): profile = term.with_brain(profile, hub.resolved_command(store, 'coding'))
     if not profile.get('cmd'): raise ValueError(NO_AI)
     try: hub._resolve_cmd(profile['cmd'])
     except FileNotFoundError: raise ValueError(NO_AI) from None

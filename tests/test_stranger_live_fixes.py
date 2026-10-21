@@ -51,7 +51,7 @@ def test_a_claude_that_is_not_installed_reads_as_no_version_and_is_not_cached(mo
     monkeypatch.setattr(origin, '_claude_version', _real_version); monkeypatch.setattr(origin, '_ver', {})
     def gone(name): raise FileNotFoundError(name)
     monkeypatch.setattr(agents, '_resolve_cmd', gone)
-    assert origin._claude_version() == () and origin._ver == {}
+    assert origin._claude_version('claude') == () and origin._ver == {}
 
 def test_launch_mode_hands_the_profile_s_own_command_to_the_check(monkeypatch, tmp_path):
     got = []; monkeypatch.setattr(origin, '_claude_version', lambda cmd='claude': got.append(cmd) or (2, 1, 300))

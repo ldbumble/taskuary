@@ -16,7 +16,7 @@ class AgentSourceTests(unittest.TestCase):
     def setUp(self):
         self.s = MemoryStore()
         self.s.upsert_agent('coding', 'coding', 'cli', json.dumps({'cmd': 'claude', 'cwd': 'C:/elsewhere'}))
-        self.s.set_setting('default_brain', 'claude', 'test')     # an unnamed workflow runs on the brain, never the coding profile
+        self.s.set_setting('default_brain', 'claude', 'owner')     # an unnamed workflow runs on the brain, never the coding profile
 
     def _fake_cli(self, calls):
         def make(store, name, model=None, cwd=None, **_kwargs):

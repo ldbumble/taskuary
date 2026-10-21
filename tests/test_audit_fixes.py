@@ -157,7 +157,7 @@ class AgentTests(unittest.TestCase):
             t = SimpleNamespace(sid='a', alive=True, task_id=1, cwd='C:/repo', argv=['claude'], agent='coding', label='coding', last=time.time(),
                                 started='2026-09-02 09:00:00', witness=witness.Witness(), ext_id='S1', files=lambda: [], tail=lambda n=3: [], store=None)
             term.SESSIONS['a'] = t
-            self.assertEqual(hooks.receive({'session_id': 'S2', 'cwd': 'C:/repo', 'hook_event_name': 'Stop', 'last_assistant_message': 'done'}), {'bound': False})
+            self.assertEqual(hooks.receive({'session_id': 'S2', 'cwd': 'C:/repo', 'hook_event_name': 'Stop', 'last_assistant_message': 'done'}, cli='claude'), {'bound': False})
             self.assertEqual(t.ext_id, 'S1')
         finally: term.SESSIONS.clear(); term.SESSIONS.update(keep)
 
@@ -258,7 +258,7 @@ class DoorTests(unittest.TestCase):
 
     def test_f16_a_hook_still_reaches_us_with_the_agents_token(self):
         """The hook is a curl from inside the checkout: no Origin, and the agent token in a header."""
-        cmd = hooks.command('http://127.0.0.1:7787', 'agent-tok')
+        cmd = hooks.command('http://127.0.0.1:7787', 'agent-tok', 'claude')
         self.assertIn(f'-H "@{hooks.header_file("agent-tok")}"', cmd)        # by file: never on the command line
         r = c.post('/api/hooks/claude', json={'hook_event_name': 'Stop', 'session_id': 'nope'},
                    headers={'X-Taskuary-Token': server.cfg['server']['agent_token']})

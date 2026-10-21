@@ -33,6 +33,7 @@ def world(tmp_path, monkeypatch):
     """Patches the doors a run goes through: which CLIs are on this machine (`installed`), what a CLI run was asked to start
     (`ran`, by command), and what an API brain was built for (`api`)."""
     w = {'installed': set(), 'ran': [], 'api': [], 'signed_out': set()}
+    w['run_cli'] = agents.run_cli                  # the real one, for the test that follows a command down it
     def resolve(cmd):
         if Path(str(cmd)).name in w['installed']: return [str(cmd)]
         raise FileNotFoundError(f'{cmd} not found on PATH')
@@ -167,7 +168,7 @@ def test_a_role_row_that_names_no_cli_is_never_read_as_claude(world):
     with mock.patch.object(config, 'load', lambda: cfg):
         clic.sync(cfg, s)
         assert 'cmd' not in json.loads(s.get_agent('researcher')['Config'])
-        assert llm.make_cli_llm(s, 'researcher') is None
+        with pytest.raises(agents.NoAI, match='No AI is connected'): llm.make_cli_llm(s, 'researcher')
 
 
 # ── A machine an older start already pinned to claude heals on upgrade ───────────────────────────────────────────────
@@ -215,3 +216,112 @@ def test_a_claude_the_person_picked_stays_and_says_it_is_not_signed_in(world):
         _run.sess.send_prompt('Try again.', echo=False)
     assert [r['cmd'] for r in world['ran']] == ['claude', 'claude']          # never quietly another AI
     assert s.get_setting('assistant_ai') == 'cli:claude'
+
+
+# ── One resolver behind every launch road that names no CLI ──────────────────────────────────────────────────────
+def _roads(s, world):
+    """What each launch road resolves a profile that names no CLI to - by the command it ends up running."""
+    from taskuary import terminal
+    bare, out = {'kind': 'research'}, {}
+    out['with_cmd'] = agents.with_cmd(bare, s)['cmd']
+    out['resume_argv'] = agents.resume_argv(bare, 'abc', s)
+    for name, call in (('run_cli', lambda: world['run_cli'](bare, 'hi', lambda *a: None, store=s)),
+                       ('run_acp', lambda: agents.run_acp(bare, 'hi', lambda *a: None, store=s))):
+        with mock.patch.object(agents, '_resolve_cmd', side_effect=FileNotFoundError('stop here')) as r:
+            try: call()
+            except Exception: pass
+            out[name] = Path(str(r.call_args[0][0])).name if r.called else None
+    world['ran'].clear()
+    llm.make_cli_llm(s, 'researcher')('sys', 'hi')
+    out['make_cli_llm'] = world['ran'][-1]['cmd']
+    with mock.patch.object(terminal, 'Term') as term, mock.patch.dict(terminal.SESSIONS, {}, clear=True):
+        terminal.open_session(s, 'researcher', cwd=str(Path.cwd()))
+        out['open_session'] = Path(str(term.call_args[0][0][0])).name
+    return out
+
+
+def test_a_codex_only_home_resolves_every_launch_road_to_codex(world):
+    world['installed'] |= {'codex'}
+    s, cfg = _home(('codex',), tests={'codex': True})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        got = _roads(s, world)
+    assert got == {'with_cmd': 'codex', 'resume_argv': ['resume', 'abc'], 'run_cli': 'codex', 'run_acp': 'codex',
+                   'make_cli_llm': 'codex', 'open_session': 'codex'}
+
+
+def test_the_brain_named_in_settings_wins_over_another_ready_cli(world):
+    world['installed'] |= {'codex', 'gemini'}
+    s, cfg = _home(('codex', 'gemini'), tests={'codex': True, 'gemini': True}, settings={'default_brain': 'gemini'})
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert agents.resolve_brain(s, 'coding') == 'cli:gemini'
+        got = _roads(s, world)
+    assert {v for k, v in got.items() if k != 'resume_argv'} == {'gemini'}
+
+
+def test_a_connector_only_home_resolves_to_the_connector_and_a_pane_says_it_needs_a_coding_tool(world):
+    from taskuary import terminal
+    s, cfg = _home(connector='hipaa_ai')
+    cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert agents.resolve_brain(s, 'general') == agents.resolve_brain(s, 'coding') == f'connector:{cid}'
+        assert agents.resolve_brain(s, 'coding', cli_only=True) == ''
+        with pytest.raises(agents.NoAI) as e: terminal.open_session(s, 'researcher', cwd=str(Path.cwd()))
+    assert 'needs a coding tool - connect one' in str(e.value) and 'claude' not in str(e.value).lower()
+
+
+def test_a_home_with_nothing_resolves_to_nothing():
+    s, cfg = _home(())
+    with mock.patch.object(config, 'load', lambda: cfg):
+        assert agents.resolve_brain(s, 'general') == ''
+        with pytest.raises(agents.NoAI, match='No AI is connected'): agents.with_cmd({}, s)
+    with pytest.raises(agents.NoAI): agents.with_cmd({})          # no store, no command: never a claude in its place
+    assert origin._claude_version('') == ()
+
+
+# ── A connector-only home runs every kind of work ─────────────────────────────────────────────────────────────────
+class _Now:
+    "A thread that runs where it is started - the test reads what the turn did."
+    def __init__(self, target, args=(), **kw): self.go = lambda: target(*args)
+    def start(self): self.go()
+
+
+def test_a_connector_only_home_runs_a_coding_task_as_the_general_agent_on_the_connector(world):
+    from taskuary import terminal
+    s, cfg = _home(connector='hipaa_ai')
+    tid = s.create_task({'Title': 'Fix the invoice export', 'Kind': 'coding', 'Status': 'open', 'OriginBase': 'owner'}, 'owner')
+    with mock.patch.object(config, 'load', lambda: cfg), mock.patch.object(terminal, 'threading', mock.Mock(Thread=_Now)),          mock.patch.dict(terminal.SESSIONS, {}, clear=True):          # the session it opens is this test's, never the next one's
+        clic.sync(cfg, s)
+        out = terminal.start_on_task(s, tid)
+    assert out['general'] and s.get_task(tid)['Kind'] == 'general'
+    assert world['ran'] == [] and world['api'] == ['hipaa_ai']
+    assert not any('claude' in str(c.get('Body') or '').lower() for c in s.list_comments(tid))
+
+
+def test_a_connector_only_home_triages_answers_and_runs_reports_and_workflows_on_the_connector(world):
+    from taskuary import concierge, reports, workflows
+    s, cfg = _home(connector='hipaa_ai')
+    cid = s.get_connector_by_type('hipaa_ai')['ConnectorId']
+    with mock.patch.object(config, 'load', lambda: cfg):
+        clic.sync(cfg, s)
+        assert llm.effective_pick(s) == f'connector:{cid}' and llm.build_llm(s)       # triage
+        assert concierge.pick(s) == f'connector:{cid}'                                  # the Assistant
+        said, body = reports.run_agent({'store': s, 'prompt': 'Summarise the week for Alex Doyle'})
+        assert 'claude' not in (said + body).lower()
+        for runs in ('general', 'coding'):
+            assert workflows.brain(s, {'runs_on': runs})['pick'] == f'connector:{cid}'
+    assert world['ran'] == [] and world['api'][-1] == 'hipaa_ai'
+
+
+# ── The invariant ────────────────────────────────────────────────────────────────────────────────────────────────
+def test_no_launch_road_defaults_a_missing_cli_to_any_one_cli():
+    """A run that names no CLI asks the one resolver (agents.resolve_brain); no road may put a CLI of its own choosing in the
+    gap. Said as the shapes such a default takes, not as a list of places - a new road that grows one fails here."""
+    import re
+    shapes = [r"get\(\s*'cmd'\s*,\s*'[a-z-]+'\s*\)", r"get\('cmd'\)\s*or\s*'[a-z-]+'", r"\bcmd\s+or\s+'[a-z-]+'",
+              r"\b(?:cli|cmd)\s*:\s*str\s*=\s*'[a-z-]+'"]
+    bad = [f'{p.name}:{i}: {l.strip()}' for p in sorted(Path(agents.__file__).parent.glob('*.py'))
+           for i, l in enumerate(p.read_text(encoding='utf-8').splitlines(), 1) if any(re.search(x, l) for x in shapes)]
+    assert bad == []

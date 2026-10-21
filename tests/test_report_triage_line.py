@@ -206,6 +206,7 @@ class WorkflowRoadTests(unittest.TestCase):
     def setUp(self):
         self.s = s = MemoryStore(); _brain(s)
         s.upsert_agent('coding', 'cli', 'local', json.dumps({'cmd': 'codex'}))
+        s.set_setting('default_brain', 'codex', 'owner')          # the CLI the report runs on: with none, it says "No AI is connected"
         s.set_setting('general_auto_enabled', '1', 't'); s.set_setting('coding_auto_enabled', '1', 't')
         self.tid = s.create_task({'Title': 'Fix the Northwind import', 'Kind': 'general', 'Status': 'open'}, 'o')
 

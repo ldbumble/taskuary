@@ -322,7 +322,7 @@ class WorkflowsAreNotCodeTests(unittest.TestCase):
     def test_an_unnamed_workflow_goes_to_the_default_brain_not_the_coding_profile(self):
         from taskuary import reports
         s = seeded(store())
-        s.set_setting('default_brain', 'codex', 'test')
+        s.set_setting('default_brain', 'codex', 'owner')     # the person's pick: a brain saved for them that does not run is not one (agents.stale)
         seen = {}
         def fake_cli(store_, name, model=None, **kw):
             seen['name'] = name
@@ -350,6 +350,7 @@ class WorkflowsAreNotCodeTests(unittest.TestCase):
         from taskuary import reports
         s = seeded(store())
         s.save_doc('coding', 'CODING RULES: work only in the repository.', 'test')
+        s.set_setting('default_brain', 'codex', 'owner')      # a brain to run on: with none, a report says "No AI is connected"
         seen = {}
         def fake_cli(store_, name, model=None, **kw):
             return lambda system, user, **k: seen.update(ask=user) or 'done'

@@ -188,9 +188,8 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     prof = {k: v for k, v in json.loads(row.get('Config') or '{}').items() if k not in ('cwd', 'cwd_map')}
     # A ROLE'S ROW THAT NAMES NO CLI (synced before any brain was chosen) runs on the brain chosen for it, else on a ready one - it
     # used to run `claude` by default, on a machine where the person had only set up Codex (2026-10-21). No brain: no CLI brain.
-    if not prof.get('cmd'):
-        prof = {**prof, **(hub_agents.brain_command(store, agent_name) or hub_agents.brain_command(store, agent_name, want=hub_agents.default_brain(store)))}
-        if not prof.get('cmd'): return None
+    if not prof.get('cmd'): prof = {**prof, **hub_agents.brain_command(store, agent_name)}      # the role's own brain first
+    prof = hub_agents.with_cmd(prof, store)            # ...else the one resolver's; NoAI when nothing is connected
     # a CONVERSATION that stays open between turns (clipool) - the Assistant's chat, a general agent's task
     if keep: prof['keep_alive'] = keep
     # ...and without the owner's user-level CLI settings and hooks, for the brain that asks (the Assistant's: agents._own_settings)
@@ -211,7 +210,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
         from .clis import preset_args, readonly_args, report_read_args
         from . import config
         restrict = report_read_args if research else readonly_args
-        prof['args'] = restrict(prof.get('cmd', 'claude'), list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']))
+        prof['args'] = restrict(prof['cmd'], list(prof.get('args') or preset_args(prof['cmd']) or ['-p']))
         scratch = config.home() / 'scratch'; scratch.mkdir(exist_ok=True)
         prof['cwd'] = cwd or str(scratch)
     # The ACP road is for the general agent's tool-using runs only. `no_hands` is exactly the
@@ -230,7 +229,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             if stranger_mode in ('auto', 'look'): sd = str(origin.stranger_dir(task_id))
         except origin.Refusal as e: raise origin.refused(e)
         from .clis import preset_args
-        c = prof.get('cmd', 'claude'); args = list(raw_args or preset_args(c) or ['-p'])
+        c = prof['cmd']; args = list(raw_args or preset_args(c) or ['-p'])
         if stranger_mode == 'auto':
             # its folder is its cwd already; --add-dir says so to Claude whatever cwd a resume or a profile brings (R25)
             prof['args'] = clis.auto_args(c, args) + ['--add-dir', sd, '--settings', origin.session_settings(store, task_id)]
@@ -246,7 +245,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
     if not no_hands: prof.setdefault('acp_ok', True)
     if extra_args:
         from .clis import preset_args
-        prof['args'] = list(prof.get('args') or preset_args(prof.get('cmd', 'claude')) or ['-p']) + list(extra_args)
+        prof['args'] = list(prof.get('args') or preset_args(prof['cmd']) or ['-p']) + list(extra_args)
     # WHICH GEAR this job rides. Session work - coding and general alike - takes the MAIN model;
     # the light gear is for the one-message jobs (triage, drafts, summaries, the digest). A
     # general worker session used to fall through to light whenever no main model was set, so
@@ -313,7 +312,7 @@ def make_cli_llm(store, agent_name: str, model: str = None, cwd: str = None, tra
             # ON TOP of the args run_cli would have used - a profile with none gets the preset there, hands and all,
             # and a bare [flag, path] would have replaced it (no -p, no stream-json)
             from .clis import preset_args
-            base = list(prof.get('args') or preset_args(prof.get('cmd') or 'claude') or ['-p'])
+            base = list(prof.get('args') or preset_args(prof['cmd']) or ['-p'])
             run_prof, prompt = {**prof, 'args': base + [flag, str(path)]}, user
         return run_prof, prompt
     def warm(system) -> bool:
@@ -439,6 +438,10 @@ def _build_llm(store, pick=None, model=None, trace=None, cancel=None, resume=Non
                                     research=research, gear=gear, keep=chosen_keep, task_id=task_id)
             # a BACKUP that cannot run a stranger's task is no backup for it; the first brain's refusal is the answer
             except origin_mod.RefusedForStranger:
+                if first: raise
+                return None
+            # ...nor is a backup with no CLI to run on (agents.NoAI)
+            except hub_agents.NoAI:
                 if first: raise
                 return None
         want = candidate[10:] if candidate.startswith('connector:') else None

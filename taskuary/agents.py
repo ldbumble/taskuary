@@ -426,18 +426,18 @@ def _with_id(args: list, sid: str) -> list:
     return out if any('{id}' in str(a) for a in args) else out + [sid]
 
 
-def resume_argv(profile: dict, sid: str) -> list:
+def resume_argv(profile: dict, sid: str, store=None) -> list:
     """How this CLI is told to pick its OWN conversation back up - empty when it cannot, which is
     the honest answer for gemini, cursor and devin until each one can also be told WHICH session it
     had. A profile's own resume_args wins: the owner configured it for a CLI we do not ship."""
     if not sid: return []
-    args = profile.get('resume_args') or RESUME_ARGS.get(_cli_name(profile.get('cmd', 'claude')))
+    args = profile.get('resume_args') or RESUME_ARGS.get(_cli_name(with_cmd(profile, store)['cmd']))
     return _with_id(list(args), sid) if args else []
 
 
-def assign_argv(profile: dict, sid: str) -> list:
+def assign_argv(profile: dict, sid: str, store=None) -> list:
     """The argv tail that NAMES a new conversation - empty when this CLI names its own."""
-    args = ASSIGN_ARGS.get(_cli_name(profile.get('cmd', 'claude')))
+    args = ASSIGN_ARGS.get(_cli_name(with_cmd(profile, store)['cmd'])) if sid else None
     return _with_id(list(args), sid) if (args and sid) else []
 
 
@@ -522,6 +522,49 @@ def heal_brains(store, probe: bool = True) -> list:
     for n in gone: store.set_setting(n, '', 'migration')
     if gone: logger.info(f"cleared brains saved for the person that do not run here: {', '.join(gone)} - a start falls back to a ready one")
     return gone
+
+
+# ONE ANSWER TO "WHICH AI RUNS THIS" when a run names none (the owner, 2026-10-21: "check everywhere in the codebase where claude
+# is default. It should never be that way"). In order: (1) the brain set in Settings for this kind of run, (2) a CLI that is
+# connected, starts here and did not fail its test (ready_brains), (3) a connected API connector, where the run can use one -
+# (4) else nothing, and the run says "No AI is connected". Every launch road that used to read a missing command as claude asks here.
+NO_AI = 'No AI is connected'
+NEEDS_CLI = 'needs a coding tool - connect one'
+BRAIN_SETTING = {'coding': 'default_brain', 'general': 'assistant_ai', 'triage': 'triage_ai', 'assistant': 'concierge_ai'}
+
+class NoAI(ValueError): "Nothing connected can run this - the reason a start shows, naming no AI the person does not have."
+
+
+def resolve_brain(store, kind: str = 'general', cli_only: bool = False) -> str:
+    """'cli:<key>', 'connector:<id>' or '' - see above. `cli_only` for a run that cannot exist without a terminal."""
+    name = BRAIN_SETTING.get(kind, 'assistant_ai')
+    v = '' if stale(store, name) else str(store.get_setting(name) or '').strip()
+    if v and name == 'default_brain': v = f'cli:{v}'
+    if v.isdigit(): v = f'connector:{v}'
+    # the person's own pick is taken at its word - one that does not start says so when it is started, never swapped behind them
+    if v.startswith('cli:') and (picked(store, name) or v[4:] in dict(connection_brains(store))): return v
+    if v.startswith('connector:') and not cli_only: return v
+    k = next(iter(ready_brains(store)), '')
+    if k: return f'cli:{k}'
+    c = None if cli_only else ready_connector(store)
+    return f"connector:{c['ConnectorId']}" if c else ''
+
+
+def resolved_command(store, kind: str = 'coding') -> dict:
+    "The command fields of the CLI resolve_brain names for a run that needs one - {} when none is connected."
+    p = resolve_brain(store, kind, cli_only=True)
+    return brain_command(store, '', want=p[4:]) if p else {}
+
+
+def with_cmd(profile: dict, store=None, kind: str = 'coding') -> dict:
+    """The profile with the command it runs: its own, else the resolver's (`store` needed for that). A launch with no CLI is a bug
+    upstream - it raises NoAI, never runs claude."""
+    profile = dict(profile or {})
+    if profile.get('cmd'): return profile
+    from .cli_connections import COMMAND_FIELDS
+    fill = resolved_command(store, kind) if store is not None else {}
+    if not fill.get('cmd'): raise NoAI(f'{NO_AI} - this run {NEEDS_CLI}')
+    return {**{k: v for k, v in profile.items() if k not in COMMAND_FIELDS}, **fill}
 
 
 def ready_brains(store) -> list:
@@ -1101,7 +1144,7 @@ def repair_role_assignees(store) -> int:
     return fixed
 
 
-def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
+def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless turn over ACP. Returns (result, session_id, diff) - run_cli's own contract, so
     nothing upstream can tell which road a run took.
 
@@ -1112,7 +1155,7 @@ def run_acp(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     It fails loudly on purpose. There is no fallback to the argv road: a silent fallback would
     hide which of the two is broken, and this transport is new.
     """
-    name = profile.get('cmd', 'claude')
+    profile = with_cmd(profile, store); name = profile['cmd']
     cmd = _resolve_cmd(name) + list(profile.get('acp') or [])
     if profile.get('model'):
         from .climodels import split_pick
@@ -1175,7 +1218,7 @@ def spawn_env(profile: dict, extra_env: dict = None) -> dict:
     return child_env({**base, **(extra_env or {})})
 
 
-def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None):
+def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, extra_env: dict = None, store=None):
     """One headless invocation of the configured CLI, output STREAMED line by line into
     the run trace so the Board shows the agent working live. claude's stream-json events
     render as readable tool/text lines; any other CLI's plain stdout streams as-is.
@@ -1188,8 +1231,8 @@ def run_cli(profile: dict, prompt: str, trace, resume: str = None, cancel=None, 
     # that speaks the protocol natively. Everything else - triage, the drafter, coding sessions,
     # every pane - stays on the argv road below. See docs/acp-transport.md.
     if profile.get('acp') and profile.get('acp_ok'):
-        return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env)
-    name = profile.get('cmd', 'claude')
+        return run_acp(profile, prompt, trace, resume=resume, cancel=cancel, extra_env=extra_env, store=store)
+    profile = with_cmd(profile, store); name = profile['cmd']
     family = _cli_name(name)
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     # Codex's normal exec output is human prose with no boundary between commands, searches,
@@ -1452,11 +1495,11 @@ def _keeps(profile: dict, family: str, args: list) -> bool:
     return bool(profile.get('keep_alive')) and family == 'claude' and 'stream-json' in args and ('-p' in args or '--print' in args)
 
 
-def warm_cli(profile: dict, resume: str = None, extra_env: dict = None) -> bool:
+def warm_cli(profile: dict, resume: str = None, extra_env: dict = None, store=None) -> bool:
     """Start a kept conversation's process ahead of its first turn (clipool.warm) - the command run_cli's live road would
     launch for this profile, so that turn finds it running. False for a profile that keeps no conversation (a one-shot
     brain, a CLI with no stream-json input): there is nothing to have ready."""
-    name = profile.get('cmd', 'claude')
+    profile = with_cmd(profile, store); name = profile['cmd']
     args = list(profile.get('args') or preset_args(name) or ['-p'])
     if not _keeps(profile, _cli_name(name), args): return False
     from . import clipool

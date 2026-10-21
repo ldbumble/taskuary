@@ -3,11 +3,11 @@ import json, os, tempfile
 from taskuary import hooks
 
 def test_the_token_is_a_file_in_taskuarys_home_never_on_the_command_line():
-    for cmd in (hooks.command('http://127.0.0.1:1', 'sekrit-tok'), hooks.ask_command('http://127.0.0.1:1', 'sekrit-tok')):
+    for cmd in (hooks.command('http://127.0.0.1:1', 'sekrit-tok', 'claude'), hooks.ask_command('http://127.0.0.1:1', 'sekrit-tok')):
         assert 'sekrit-tok' not in cmd and 'X-Taskuary-Token' not in cmd
         f = cmd.split('-H "@')[1].split('"')[0]
         assert open(f, encoding='utf-8').read() == 'X-Taskuary-Token: sekrit-tok\n' and '\\' not in f
-    assert 'X-Taskuary-Token' not in hooks.command('http://127.0.0.1:1', '') and '@' not in hooks.command('http://127.0.0.1:1', '').split('@-')[0]
+    assert 'X-Taskuary-Token' not in hooks.command('http://127.0.0.1:1', '', 'claude') and '@' not in hooks.command('http://127.0.0.1:1', '', 'claude').split('@-')[0]
 
 def test_two_tokens_two_files_and_a_rewrite_changes_nothing():
     a, b = hooks.header_file('one'), hooks.header_file('two')

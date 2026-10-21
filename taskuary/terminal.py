@@ -83,7 +83,8 @@ SEED_ARGV = {
 
 def seed_argv(profile: dict, seed: str):
     """The argv tail that hands the CLI its first prompt directly - None when only typing can."""
-    name = os.path.basename(str(profile.get('cmd') or 'claude')).lower()
+    from .agents import with_cmd
+    name = os.path.basename(str(with_cmd(profile)['cmd'])).lower()
     return next((f(seed) for k, f in SEED_ARGV.items() if k in name), None)
 
 
@@ -868,10 +869,11 @@ def agent_argv(profile: dict, model: str = None) -> list:
     """Interactive invocation of a configured CLI: its command, its own flags minus the pipe
     ones, and the model flag the headless runner uses (`model_arg`, e.g. codex wants -m).
     `interactive_args` in the profile replaces the lot, for CLIs that need a subcommand."""
-    from .agents import _resolve_cmd
+    from .agents import _resolve_cmd, with_cmd
     from .clis import preset_args
-    argv = _resolve_cmd(profile.get('cmd') or 'claude')
-    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile.get('cmd') or 'claude'))
+    profile = with_cmd(profile)
+    argv = _resolve_cmd(profile['cmd'])
+    argv += list(profile['interactive_args']) if profile.get('interactive_args') else interactive_args(profile.get('args') or preset_args(profile['cmd']))
     # 'gpt-5.5@high' is a model and its effort in one pick (climodels), and '@high' the CLI's own model at that effort: the pane
     # takes each in its CLI's own flag, as the headless runner does - `--model opus@high` is a model no CLI has
     from .climodels import effort_args, split_pick
@@ -946,7 +948,7 @@ def pretrust(cwd: str, agent: str = '', home: str = None) -> bool:
     """Answer the first-run dialogs for `cwd` in ~/.claude.json. True when something was written.
     Only claude asks these, and only about a directory: nothing else in the file is touched, and a
     file we cannot read or parse is left exactly as it is."""
-    if not cwd or 'claude' not in str(agent or 'claude').lower(): return False
+    if not cwd or 'claude' not in str(agent or '').lower(): return False        # only when the CLI IS claude
     path = os.path.join(home or os.path.expanduser('~'), '.claude.json')
     try:
         cfg = json.loads(open(path, encoding='utf-8').read()) if os.path.exists(path) else {}
@@ -1057,12 +1059,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
         from . import agents as _hub
         # an explicit brain is the OWNER's choice at the picker and outranks the setting
         profile = with_brain(profile, _hub.brain_command(store, agent, want=brain))
-        # ...and a role whose row names no CLI runs on a READY brain (agents.ready_brains), never on claude by default
-        if not profile.get('cmd'): profile = with_brain(profile, _hub.brain_command(store, agent, want=_hub.default_brain(store)))
+        # ...and a role whose row names no CLI runs on the one resolver's CLI (agents.resolve_brain), never on claude by default.
+        # A pane cannot exist without a terminal, so here an API connector is no answer: it says it needs a coding tool.
+        if not profile.get('cmd'): profile = with_brain(profile, _hub.resolved_command(store, 'coding'))
         if not profile.get('cmd'):
-            from .general import NO_AI
             from . import words
-            raise ValueError(f"{NO_AI} - connect one on {words.name('ai_apps')} to start {agent}")
+            raise _hub.NoAI(f"{_hub.NO_AI} that can open a terminal - {agent} {_hub.NEEDS_CLI} on {words.name('ai_apps')}")
         label = agent
     else:
         label = 'shell'
@@ -1127,12 +1129,12 @@ def open_session(store, agent: str = None, task_id: int = None, repo: str = None
     # differ per CLI, and the typed road is the one verified against every TUI here.
     from .agents import assign_argv, resume_argv
     if agent and resume:
-        argv = codex_resume_model(list(argv) + resume_argv(profile, resume), model or profile.get('model'))
+        argv = codex_resume_model(list(argv) + resume_argv(profile, resume, store), model or profile.get('model'))
     # ...and for a NEW one, name it ourselves where the CLI allows (agents.ASSIGN_ARGS). Learning
     # an id afterwards leaves a window - a pane killed inside it was gone for good - and it has to
     # guess WHICH session a hook or a log belongs to. A name we chose has neither problem.
     assigned = str(uuid.uuid4()) if agent and not resume else ''
-    named = assign_argv(profile, assigned) if assigned else []
+    named = assign_argv(profile, assigned, store) if assigned else []
     argv, assigned = (list(argv) + named, assigned) if named else (argv, '')
     if agent:
         try: pretrust(cwd, ' '.join(str(a) for a in argv))     # no first-run dialog to park on
@@ -2179,6 +2181,25 @@ def guess_repo(store, tid: int, profile: dict) -> tuple:
     return (known[0], 'the only repository there is') if len(known) == 1 else (None, 'triage named no repository - choose one')
 
 
+def _as_general(store, tid: int, instruction: str = None, actor: str = 'owner') -> dict:
+    """A task that would have gone to a coding agent, on an install with no coding tool: the general agent works it on the AI
+    connection there is. It becomes general work - what triage already makes of a coding verdict here (agents.coding_ready)."""
+    from . import general
+    t = store.get_task(tid) or {}
+    if not general.handles(t): store.update_task(tid, {'Kind': 'general'}, actor)
+    session = general.start_session(store, tid, actor=actor)
+    store.add_comment(tid, 'router', 'agent', f'No coding tool is connected, so the general agent works this on {session.provider}.')
+    if not general.history(store, tid):
+        ask = str(instruction or t.get('Summary') or t.get('Title') or '').strip()
+        if ask: threading.Thread(target=_ask_quietly, args=(session, ask, tid), daemon=True, name=f'general-{tid}').start()
+    return {**session.info(), 'taskId': tid, 'existing': False, 'general': True}
+
+
+def _ask_quietly(session, ask: str, tid: int):
+    try: session.send_prompt(ask)
+    except Exception as e: logger.warning(f'task {tid}: the general agent could not take the work - {e}')     # said on the task by the turn
+
+
 def start_on_task(store, tid: int, agent: str = '', model: str = None, instruction: str = None,
                   actor: str = 'owner', cwd: str = None, _chain: list = None, resume: str = None,
                   brain: str = None, instruction_theirs: bool = False) -> dict:
@@ -2209,6 +2230,11 @@ def start_on_task(store, tid: int, agent: str = '', model: str = None, instructi
     # a saved conversation belongs to the CLI that held it: a backup harness handed an id it has
     # never heard of would either refuse to start or quietly begin a blank session under its name
     if resume: chain = chain[:1]
+    # NO CODING TOOL HERE, BUT AN AI CONNECTION: the work still runs - as the general agent on that connection (the owner,
+    # 2026-10-21: "if not a coding agent that should work as well"). Only a pane the owner asked for by name needs a terminal.
+    if not brain and not resume and not _chain and not hub_agents.resolved_command(store, 'coding') \
+            and hub_agents.resolve_brain(store, 'general').startswith('connector:'):
+        return _as_general(store, tid, instruction, actor)
     agent = agent or hub_agents.coding_role(store)      # no profile named: the one whose kind is coding
     row = store.get_agent(agent or '')
     if not row:

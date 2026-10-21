@@ -834,6 +834,9 @@ class SQLiteStore:
         if path != ':memory:':
             self._rail_cx = sqlite3.connect(path, check_same_thread=False, timeout=5.0)
             self._rail_cx.row_factory = sqlite3.Row
+        # Its own lock, not the writer's: threads share sqlite3's cached statement for the same SQL, so two
+        # concurrent reads reset each other's and one gets no row back (a 500 on the walk's table chip, 2026-10-21).
+        self._rail_lock = threading.Lock()
         self.lock = threading.RLock()
         self.idlock = threading.Lock()     # create_task: allocate-and-insert as one step (self.lock is per statement)
         if path != ':memory:':
@@ -3243,7 +3246,7 @@ class SQLiteStore:
         file open on Windows and its temporary directory cannot be removed. Under the store's lock: a background thread
         mid-query (the reply watch's judge, 2026-10-11) had its connection closed beneath it and the process died with an
         access violation - after this, a late reader gets sqlite's "closed database" error instead."""
-        with self.lock:
+        with self.lock, self._rail_lock:
             for cx in (self._rail_cx, self.cx):
                 try:
                     if cx is not None: cx.close()
@@ -3255,7 +3258,8 @@ class SQLiteStore:
         process invalidates it as surely as this process's own do. None when the table is not there."""
         sql = 'SELECT COALESCE(MAX(Id),0) FROM processing_dirty_row'
         try:
-            if self._rail_cx is not None: return self._rail_cx.execute(sql).fetchone()[0]
+            if self._rail_cx is not None:
+                with self._rail_lock: return self._rail_cx.execute(sql).fetchone()[0]
             with self.lock: return self.cx.execute(sql).fetchone()[0]
         except sqlite3.OperationalError: return None
 
@@ -3270,13 +3274,14 @@ class SQLiteStore:
         if rail is not None and rail['day'] != as_of[:10]: rail = None          # the window moves at midnight
         if rail is not None and self._rail_cx is not None:
             # nothing new since the rail was read: serve it without the writer lock (see __init__)
-            cur = self._rail_cx.cursor()
-            try:
-                if processing_rail.dirty_since(cur, rail['mark'])[1] == ():
-                    return self._rail_snapshot(rail, as_of, history_days, projection_live, worker_revision,
-                                               self._processing_reconcile_status_cursor(cur))
-            finally:
-                cur.close()
+            status = None
+            with self._rail_lock:
+                cur = self._rail_cx.cursor()
+                try:
+                    if processing_rail.dirty_since(cur, rail['mark'])[1] == (): status = self._processing_reconcile_status_cursor(cur)
+                finally:
+                    cur.close()
+            if status is not None: return self._rail_snapshot(rail, as_of, history_days, projection_live, worker_revision, status)
         with self._processing_read() as cur:
             top, rows = (0, None) if rail is None else processing_rail.dirty_since(cur, rail['mark'])
             if rail is None or rows is None:

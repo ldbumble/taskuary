@@ -1,12 +1,11 @@
 """Every door that should open a conversation opens the SAME one, and it closes properly.
 
-There are three ways to start a chat and one way to start a coding session, and until now nobody
+There are two ways to start a chat and one way to start a coding session, and until now nobody
 had walked any of them end to end - the routes were tested for what they CREATE, not for whether
 the thing they create is a working conversation that closes and reports back.
 
 The doors:
   + New -> "Just talk it through"   POST /api/tasks  {Kind: general, Tags: ask:assistant}
-  a Timeline row -> "Talk it through"   POST /api/messages/{id}/chat
   an invite -> "Prepare me for it"      POST /api/calendar/prep
   a Timeline row -> "Send it to a coding agent"   POST /api/messages/{id}/dispatch
 
@@ -57,21 +56,9 @@ class EveryDoorOpensTheSameChat(unittest.TestCase):
                                          'Kind': 'general', 'Tags': ASK}).json()['taskId']
         self._assert_is_a_chat(tid, '+ New')
 
-    def test_a_timeline_row_talk_it_through(self):
-        d = c.post(f'/api/messages/{_msg()}/chat', json={}).json()
-        self._assert_is_a_chat(d['taskId'], '/messages/:id/chat')
-        self.assertTrue(d['chat'])
-
     def test_an_invite_prepare_me_for_it(self):
         d = c.post('/api/calendar/prep', json=EVENT).json()
         self._assert_is_a_chat(d['taskId'], '/calendar/prep')
-
-    def test_the_chat_door_is_idempotent_on_the_same_message(self):
-        """Pressing it twice must not make a second task for the same row."""
-        mid = _msg('asked twice', 'body')
-        first = c.post(f'/api/messages/{mid}/chat', json={}).json()['taskId']
-        second = c.post(f'/api/messages/{mid}/chat', json={}).json()['taskId']
-        self.assertEqual(first, second)
 
 
 class TheDoorsThatAreNotChats(unittest.TestCase):

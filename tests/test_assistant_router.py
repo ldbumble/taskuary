@@ -201,6 +201,52 @@ class DeskRoutes(unittest.TestCase):
         self.assertNotIn('below', out['say'])
 
 
+def notices(s, n=9):
+    for k in range(n):
+        m = s.add_message({'ExternalId': f'n{k}', 'ConversationId': f'n{k}', 'Channel': 'email', 'Subject': f'Trainly weekly {k}', 'FromName': 'Trainly',
+                           'FromEmail': 'news@vendor.example', 'SentAt': ago(k + 2), 'BodyText': 'this week', 'Status': 'filed'})
+        s.add_route(m, None, 'file', None, 'triage: fyi', [], 'triage')
+    funnel.invalidate()
+
+
+def fyis(s): return [i for i in funnel.build(s)['items'] if i.get('kind') == 'fyi']
+
+
+class ClearingASet(unittest.TestCase):
+    """"Clear all the FYI, please." was answered "Next." with a 4-FYI batch on the table and ~90 still on the rail (the owner, 2026-10-20:
+    "this is clearly broken"). The desk told the model a set had no button - "the owner puts each one down with Next" - so it pressed Next.
+    A named set is the owner's own words naming exactly what to mark read: it is marked read at once and the line says how many."""
+    def test_clear_all_the_fyi_marks_every_fyi_read_and_says_how_many(self):
+        s = store(); tid, item = on_table(s); notices(s)
+        self.assertEqual(len(fyis(s)), 9)
+        said = []
+        def llm(system, user, **kw):
+            said.append(user)
+            return 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}}}' if len(said) == 1 else 'CALL: {"kind": "next", "params": {}}'
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'Clear all the FYI, please.', key=item['key'], llm=llm)
+        self.assertEqual(fyis(s), [])
+        self.assertEqual([i['tid'] for i in funnel.build(s)['items']], [tid])                 # the task on the table stays
+        self.assertIn('9', out['say']); self.assertNotEqual(out['say'], concierge.RECEIPTS['next'])
+        self.assertIn('search', out['say'].lower())
+        self.assertNotIn('proposal', out); self.assertEqual(proposals(s), [])
+        self.assertEqual(len(said), 1, 'the set ran on the first CALL - no miss sent the model to Next')
+
+    def test_a_cleared_table_moves_the_walk_on(self):
+        s = store(); notices(s, 3)
+        key = fyis(s)[0]['key']
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]):
+            out = concierge.say(s, 'mark all the fyi read', key=key, llm=lambda *a, **k: 'CALL: {"kind": "pipe.clear", "params": {"select": {"kind": "fyi"}}}')
+        self.assertEqual(fyis(s), [])
+        self.assertEqual(out['decision'], {'verb': 'next'})
+
+    def test_next_keeps_the_words_the_model_said_with_it(self):
+        s = store(); tid, item = on_table(s)
+        out, _ = say(s, 'can I see the next one, this can wait', item['key'], 'This one can wait - here is the next.\nCALL: {"kind": "next", "params": {}}')
+        self.assertEqual(out['decision'], {'verb': 'next'})
+        self.assertEqual(out['say'], 'This one can wait - here is the next.')
+
+
 class NoTakeItBack(unittest.TestCase):
     def test_no_button_is_called_take_it_back(self):
         self.assertNotIn('take_back', buttons.VERBS)

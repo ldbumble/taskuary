@@ -191,3 +191,10 @@ def test_an_owner_session_s_reply_goes_with_the_session_token(monkeypatch):
     monkeypatch.setattr('requests.post', lambda url, **kw: sent.update(url=url, **kw) or _Resp())
     _run(monkeypatch, '--reply', 'hi')
     assert sent['headers'] == {'X-Taskuary-Token': env['TASKUARY_TOKEN'], guard.TASK_HDR: env[guard.TASK_ENV]}
+
+def test_a_comment_on_a_hub_post_that_is_not_there_says_so_and_files_nothing(monkeypatch, capsys):
+    from taskuary.store import MemoryStore
+    s = MemoryStore(); monkeypatch.setattr('taskuary.store.SQLiteStore', lambda *a, **k: s)
+    _run(monkeypatch, '--comment', '99999', '--body', 'more')
+    assert 'no Hub entry #99999' in capsys.readouterr().out
+    assert s.lore_comments(99999) == []

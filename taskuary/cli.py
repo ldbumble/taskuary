@@ -384,6 +384,7 @@ def main():
             try:
                 if args.comment:
                     if not args.body.strip(): print('nothing to add - put the text in --body'); return
+                    if not store.lore_get(lid): print(f'no Hub entry #{lid}'); return
                     store.lore_comment(lid, args.body.strip()[:handbook.BODY_MAX], who)
                     print(f'added to #{lid}'); return
                 p = handbook.vote(store, lid, 1 if args.upvote else -1, who)

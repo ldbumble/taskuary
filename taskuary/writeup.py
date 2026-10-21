@@ -7,8 +7,12 @@ agent's last word, before anything may close the pty - saves that harvest, then 
 close, the same close every surface takes (the task.complete operation). It survives the page going away. A close pressed
 anywhere while a job runs for its task waits here for the job (wait_for) - it never ends the session before it is harvested.
 A job cut short by a restart is finished from its saved harvest at startup (resume). A write-up that fails still closes when
-the press was a close, and says why on the task."""
-import json, os, threading, time
+the press was a close, and says why on the task.
+
+WHAT IT IS DOING NOW IS SAID (the owner, 2026-10-21: "open the Close out right away and show the reply is being created"): the job
+names its stage as it reaches it - reading the session, writing the report, drafting the reply - and the task page's Close out
+draws that, from here, until the draft replaces it. state() is what the task's detail carries; every stage is a task-changed."""
+import json, os, threading, time, uuid
 from loguru import logger
 
 PREFIX = 'writeup_job:'                 # setting name per task: the job's record, until it is done
@@ -16,9 +20,40 @@ FAILED = 'The write-up of this session did not finish'
 _JOBS: dict = {}                        # task id -> threading.Event, set when that task's job is done
 _LOCK = threading.Lock()
 _HERE = threading.local()               # set on a job's own thread: its own close must not wait for itself
+_STATE: dict = {}                       # task id -> {job, stage, running, error, close}: the last job's stage, kept once it ends
+# the stages, in the order the job reaches them (wrapup.wrap names each); a job that ends is `done` or `failed`
+STAGES = ('reading', 'report', 'reply', 'learning', 'closing')
 
 
 def in_job() -> bool: return bool(getattr(_HERE, 'on', False))
+
+
+def state(tid):
+    "The task's write-up as the page draws it - {job, stage, running, error, close} - or None when none ran in this process."
+    with _LOCK: st = _STATE.get(int(tid))
+    return dict(st) if st else None
+
+
+def _set(tid, job, **kw):
+    with _LOCK:
+        st = _STATE.get(int(tid))
+        if st is None or st.get('job') != job: return
+        st.update(kw)
+    try:
+        from . import live; live.emit(live.TASK, taskId=int(tid))
+    except Exception: pass
+
+
+def stage(tid, name: str) -> None:
+    "The job writing this task up has reached `name` (STAGES). Said only from the job's own thread - a wrap outside one says nothing."
+    if getattr(_HERE, 'tid', None) != int(tid) or not getattr(_HERE, 'job', None): return
+    _set(tid, _HERE.job, stage=name)
+
+
+def _begin(tid, stage_: str, close: bool) -> str:
+    job = uuid.uuid4().hex[:12]
+    with _LOCK: _STATE[int(tid)] = {'job': job, 'stage': stage_, 'running': True, 'error': '', 'close': bool(close)}
+    return job
 
 
 def running(tid) -> bool:
@@ -54,24 +89,26 @@ def start(store, tid: int, *, close: bool, actor: str = 'owner', no_reply: bool 
     tid = int(tid)
     if not store.get_task(tid): raise ValueError('this session is not on a task')
     with _LOCK:
-        if tid in _JOBS and not _JOBS[tid].is_set(): return {'wrap': 'started', 'taskId': tid, 'already': True}
+        if tid in _JOBS and not _JOBS[tid].is_set():
+            return {'wrap': 'started', 'taskId': tid, 'already': True, 'job': (_STATE.get(tid) or {}).get('job')}
         done = _JOBS[tid] = threading.Event()
+    job = _begin(tid, 'reading', close)
     record = _save(store, tid, {'close': bool(close), 'actor': actor, 'no_reply': bool(no_reply), 'sid': sid})
     harvested = threading.Event()
     def run():
-        try: _run(store, tid, record, harvest_done=harvested)
+        try: _run(store, tid, record, harvest_done=harvested, job=job)
         finally:
             harvested.set(); done.set()
     threading.Thread(target=run, name=f'writeup-{tid}', daemon=True).start()
     harvested.wait(30)                  # the press returns once the session is harvested and saved - seconds before any AI answers
-    return {'wrap': 'started', 'taskId': tid}
+    return {'wrap': 'started', 'taskId': tid, 'job': job}
 
 
-def _run(store, tid, record, harvested: dict = None, harvest_done=None):
+def _run(store, tid, record, harvested: dict = None, harvest_done=None, job: str = None):
     from . import wrapup, live
     close, actor = record.get('close'), record.get('actor') or 'owner'
     failed = ''
-    _HERE.on = True
+    _HERE.on, _HERE.tid, _HERE.job = True, int(tid), job
     def saved(h):
         _save(store, tid, record, h)
         if harvest_done: harvest_done.set()
@@ -84,10 +121,12 @@ def _run(store, tid, record, harvested: dict = None, harvest_done=None):
     finally:
         if harvest_done: harvest_done.set()
     try:
-        if close: _close(store, tid, actor, failed)
+        if close: stage(tid, 'closing'); _close(store, tid, actor, failed)
         elif failed: store.add_comment(tid, actor, 'human', f'{FAILED}: {failed}')
     finally:
         store.set_setting(PREFIX + str(int(tid)), '', actor)
+        if job: _set(tid, job, running=False, stage='failed' if failed else 'done', error=failed)
+        _HERE.tid = _HERE.job = None
         try: live.emit(live.TASK, taskId=tid)        # the page that left the task, or stayed on it, reads it again
         except Exception: pass
 
@@ -118,9 +157,10 @@ def resume(store) -> int:
                 with open(record['harvest'], encoding='utf-8') as f: harvest = json.load(f)
             except OSError: harvest = None
         with _LOCK: done = _JOBS[tid] = threading.Event()
-        def run(tid=tid, record=record, harvest=harvest, done=done):
+        job = _begin(tid, 'report' if harvest else 'closing', record.get('close'))
+        def run(tid=tid, record=record, harvest=harvest, done=done, job=job):
             try:
-                if harvest: _run(store, tid, record, harvested=harvest)
+                if harvest: _run(store, tid, record, harvested=harvest, job=job)
                 else:
                     _HERE.on = True
                     actor = record.get('actor') or 'owner'
@@ -128,6 +168,7 @@ def resume(store) -> int:
                     if record.get('close'): _close(store, tid, actor, why)
                     else: store.add_comment(tid, actor, 'human', f'{FAILED}: {why}')
                     store.set_setting(PREFIX + str(tid), '', actor)
+                    _set(tid, job, running=False, stage='failed', error=why)
             finally: done.set()
         threading.Thread(target=run, name=f'writeup-resume-{tid}', daemon=True).start(); n += 1
     return n

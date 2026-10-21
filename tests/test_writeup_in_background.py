@@ -51,7 +51,7 @@ def world(monkeypatch, tmp_path):
         return s, tid
     yield make, order
     for p in stack: p.stop()
-    writeup._JOBS.clear()
+    writeup._JOBS.clear(); writeup._STATE.clear()
 
 
 def press_close_today(c, tid):
@@ -71,6 +71,7 @@ def test_mark_done_in_the_background_leaves_what_the_two_requests_left(world):
     assert writeup.wait_for(tid, 30); wrapup.forget(tid)
     assert rows(s) == today
     assert (s.get_task(tid) or {}).get('Status') == 'done'
+    assert writeup.state(tid)['close'] is True, 'a close says so: Close out does not wait on it, the task leaves the table'
 
 
 def test_stop_and_save_in_the_background_leaves_what_it_left(world):
@@ -126,4 +127,59 @@ def test_a_restart_mid_job_finishes_from_the_saved_harvest(world):
     assert (s.get_task(tid) or {}).get('Status') == 'done'
     assert any(str(x.get('Body') or '').startswith(wrapup.REPORT) for x in s.list_comments(tid))
     assert not s.get_setting(writeup.PREFIX + str(tid))
+    wrapup.forget(tid)
+
+
+# WHAT THE WRITE-UP IS DOING NOW (the owner, 2026-10-21): Stop and save opens Close out at once, and its pending block says the job's
+# real stage - read from the job, never a timer - until the draft replaces it.
+def stages_of(monkeypatch):
+    seen, real = [], writeup._set
+    def spy(tid, job, **kw):
+        real(tid, job, **kw); st = writeup.state(tid) or {}
+        if not seen or seen[-1] != (st.get('stage'), st.get('running')): seen.append((st.get('stage'), st.get('running')))
+    monkeypatch.setattr(writeup, '_set', spy)
+    return seen
+
+
+def test_stop_and_save_says_each_stage_it_reaches_and_the_detail_carries_it(world, monkeypatch):
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app); seen = stages_of(monkeypatch)
+    r = c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'background': True}).json()
+    assert r['job'] and writeup.wait_for(tid, 30)
+    assert seen == [('report', True), ('reply', True), ('learning', True), ('done', False)]
+    assert c.get(f'/api/tasks/{tid}').json()['writeup'] == {'job': r['job'], 'stage': 'done', 'running': False, 'error': '', 'close': False}
+    wrapup.forget(tid)
+
+
+def test_the_press_answers_while_the_job_writes_and_the_detail_says_where_it_is(world):
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app)
+    gate = threading.Event()
+    def slow(system, user, **kw): gate.wait(10); return brain(system, user, **kw)
+    with mock.patch('taskuary.llm.build_llm', return_value=slow):
+        r = c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'background': True}).json()
+        st = c.get(f'/api/tasks/{tid}').json()['writeup']
+        assert st['job'] == r['job'] and st['running'] and st['stage'] in ('reading', 'report')
+        assert c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'background': True}).json()['job'] == r['job'], 'a second press joins it'
+        gate.set(); assert writeup.wait_for(tid, 30)
+    assert writeup.state(tid)['stage'] == 'done'
+    wrapup.forget(tid)
+
+
+def test_a_write_up_that_fails_says_failed_and_why(world):
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app)
+    with mock.patch('taskuary.session_artifacts.coding', side_effect=RuntimeError('disk full')):
+        c.post(f'/api/tasks/{tid}/wrap', json={'close': False, 'background': True})
+        assert writeup.wait_for(tid, 30)
+    st = c.get(f'/api/tasks/{tid}').json()['writeup']
+    assert st['stage'] == 'failed' and not st['running'] and 'disk full' in st['error']
+    wrapup.forget(tid)
+
+
+def test_a_wrap_outside_a_job_says_no_stage(world):
+    make, _ = world
+    s, tid = make(); c = TestClient(server.app)
+    c.post(f'/api/tasks/{tid}/wrap', json={'close': False})
+    assert writeup.state(tid) is None and c.get(f'/api/tasks/{tid}').json()['writeup'] is None
     wrapup.forget(tid)

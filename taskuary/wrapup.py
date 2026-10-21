@@ -506,6 +506,7 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
         # The conversation IS this worker's transcript, so it is what the responder drafts from.
         fin = {}
         if task.get('Status') not in ('done', 'dropped'):
+            _stage(tid, 'reply')
             fin = finish(store, tid, {'summary': last}, None, 'assistant',
                          reply_source(general.conversation_text(store, tid), final_message or last),
                          owner_done=close and actor == 'owner', keep_open=not close, no_reply=no_reply) or {}
@@ -532,6 +533,11 @@ def wrap(store, tid: int, close: bool = True, actor: str = 'owner', sid: str = N
     # again, and twice more - two AGENT REPORTs, the second from a screen already gone. A wrap of a session being wrapped now does
     # nothing; one wrapped before only closes the task, if this caller asks for that and it is still open.
     return _wrap_once(store, tid, task, close, actor, sid, final_message, no_reply, text, agent, found, cut)
+
+
+def _stage(tid, name):
+    "The background write-up running this ending says where it is (writeup.stage); any other caller says nothing."
+    from . import writeup; writeup.stage(tid, name)
 
 
 def _harvest(store, tid, final_message) -> tuple:
@@ -673,6 +679,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     ahead = _ask_ahead(store, [
         _question(handbook.learn_from_session, store, tid, text, agent, repo=term.repo_tag(task) or '') if handbook.enabled(store) else None,
         _question(playbooks.draft, store, tid, text, agent)])
+    _stage(tid, 'report')
     rep = report_from_transcript(store, tid, text, agent, final_message='' if cut else final_message)
     report = resolution_text(rep)
     # SAVE FIRST, close after (PW-231/233): the result and the final answer land before the pty goes. A save that fails raises here - the session stays, the report is
@@ -705,6 +712,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # still decides is whether the TASK ends with the run (finish's keep_open).
     fin = {}
     if (store.get_task(tid) or {}).get('Status') not in ('done', 'dropped'):
+        _stage(tid, 'reply')
         fin = finish(store, tid, rep, None, agent, reply_source(text, '' if cut else final_message),
                      owner_done=close and actor == 'owner', keep_open=not close, no_reply=no_reply) or {}
         if close:
@@ -713,6 +721,7 @@ def _wrap_session(store, tid, task, close, actor, sid, final_message, no_reply, 
     # session work out anything still true next month? Usually not, and "not" is the answer it
     # is told to give (handbook.py). A failure here never stops a task closing - and it waits until the task's status is set:
     # run between the pty closing and finish(), its AI call left the task in_progress with no session (TQ-1112 shape).
+    _stage(tid, 'learning')           # ...the reply is filed: Close out draws it now, while the two last questions are asked
     if handbook.enabled(store):
         try: handbook.learn_from_session(store, tid, text, agent, repo=term.repo_tag(task) or '', llm=_answered(store, ahead))
         except Exception as e: logger.debug(f'handbook: nothing filed for task {tid} - {e}')

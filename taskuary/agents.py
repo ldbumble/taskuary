@@ -277,7 +277,8 @@ def signed_out_msg(name: str, why: str, cmd: str = '') -> str:
     from . import cliinstall, words
     cli = cliinstall.recipe_for(cmd) or name
     how = _LOGIN_HOW.get(cli, f"run `{cli}` and sign in again")
-    return (f"{name} is signed out on this machine ({why.strip()[:160]}). Press Set it up on "
+    # named by the AI, not the profile: "coding isn't signed in" says nothing about which sign-in to do
+    return (f"{cli} isn't signed in on this machine ({why.strip()[:160]}). Press Set it up on "
             f"{words.name('ai_apps')} and sign in there in the pane that opens - or {how} in a terminal.")
 
 
@@ -479,6 +480,49 @@ def cli_tests(store) -> dict:
 
 def record_cli_test(store, key: str, ok: bool):
     if key: store.set_setting(CLI_TESTS, json.dumps({**cli_tests(store), str(key): bool(ok)}), 'system')
+
+# THE BRAIN SETTINGS A START READS, and who wrote each: 'owner' is the person's own pick (setup, Settings, the Assistant tab);
+# anything else - 'migration' from adopt_brain_setting and migrate_brain_settings, blank - was saved FOR them.
+HEALED = ('default_brain', 'triage_ai', 'concierge_ai', 'assistant_ai', 'judge_ai')
+
+def picked(store, name: str) -> bool: return store.setting_writer(name) == 'owner'
+
+def _cli_in(name: str, value) -> str:
+    "The CLI key one brain setting names - `codex` from default_brain's `codex` or a slot's `cli:codex` - else ''."
+    v = str(value or '').strip()
+    if name == 'default_brain': return v
+    return v[4:] if v.startswith('cli:') and ',' not in v else ''
+
+def stale(store, name: str) -> bool:
+    "A brain saved for the person - never picked by them - that is not ready here (ready_brains): it must not keep winning."
+    k = _cli_in(name, store.get_setting(name))
+    return bool(k) and not picked(store, name) and k not in ready_brains(store)
+
+def owners_pick(store, pick: str) -> bool:
+    "Is this `cli:` pick one the person chose themselves, in a brain setting?"
+    k = str(pick or '')[4:] if str(pick or '').startswith('cli:') else ''
+    return bool(k) and any(picked(store, n) and _cli_in(n, store.get_setting(n)) == k for n in HEALED)
+
+def heal_brains(store, probe: bool = True) -> list:
+    """An upgrade must HEAL a machine an older start already pinned: adopt_brain_setting saved the first connected CLI - a claude
+    never signed in, beside the Codex the person had set up - and every general task kept starting on it (2026-10-21). A brain saved
+    FOR the person that is not ready is cleared, so a start falls back by ready_brains; one the person PICKED stays, and its own
+    failure says so. `probe` asks a saved-for-them CLI with no test on record whether it is signed in (clisetup.signed_in, its own
+    status command) - once: the answer is recorded. Returns the settings cleared."""
+    if probe:
+        from . import clisetup
+        from .cli_connections import cli_key
+        conns = dict(connection_brains(store))
+        for n in HEALED:
+            k = _cli_in(n, store.get_setting(n))
+            if not k or picked(store, n) or k in cli_tests(store) or k not in conns: continue
+            ok = clisetup.signed_in(cli_key(conns[k].get('cmd')) or k)
+            if ok is not None: record_cli_test(store, k, ok)
+    gone = [n for n in HEALED if stale(store, n)]
+    for n in gone: store.set_setting(n, '', 'migration')
+    if gone: logger.info(f"cleared brains saved for the person that do not run here: {', '.join(gone)} - a start falls back to a ready one")
+    return gone
+
 
 def ready_brains(store) -> list:
     """The connected CLIs a brain nobody chose may fall back to: starts here, last test not failed; passed ones first."""

@@ -65,6 +65,8 @@ try:
     # tasks routed to a CLI back when naming a worker named a brain (the 2026-09-16 spec)
     # name the brain this install is already running, once - the line that moves it onto the
     # brain layer, and onto exactly what it ran yesterday
+    # first: a brain an older start saved FOR the person that does not run here goes, so the adoption below picks a ready one
+    hub_agents.heal_brains(store)
     if hub_agents.adopt_brain_setting(store):
         from loguru import logger as _log
         _log.info(f"the brain layer is on: default_brain = {store.get_setting('default_brain')}")

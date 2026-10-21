@@ -251,9 +251,10 @@ def _prove(store) -> str:
     return said.get('e', '')
 
 
-def _brains(store) -> dict: return {k: store.get_setting(k) or '' for k in BRAINS + ('default_brain',)}
+# ...with WHO wrote each: restoring a brain saved for the person as 'owner' would make it look picked (agents.picked)
+def _brains(store) -> dict: return {k: (store.get_setting(k) or '', store.setting_writer(k) or 'migration') for k in BRAINS + ('default_brain',)}
 def _restore(store, was: dict):
-    for k in BRAINS + ('default_brain',): store.set_setting(k, was.get(k, ''), 'owner')
+    for k in BRAINS + ('default_brain',): store.set_setting(k, *was.get(k, ('', 'migration')))
 
 
 def _everywhere(store, pick: str, cli: str = ''):
@@ -416,7 +417,7 @@ def choose_connector(store, cid: int) -> dict:
     title = 'ChatGPT' if c.get('Type') == 'chatgpt' else (c.get('Name') or c.get('Type'))
     # the sign-in's own adoption (server.chatgpt_poll makes it the brain when none is chosen) is undone on a failure below: a brain
     # that does not answer moved setup on to email, and every mail after it failed
-    was = {k: v for k, v in _brains(store).items() if v != f'connector:{cid}'}
+    was = {k: v for k, v in _brains(store).items() if v[0] != f'connector:{cid}'}
     out = test_connector(store, cid)
     if out.get('ok'):
         _everywhere(store, f'connector:{cid}')

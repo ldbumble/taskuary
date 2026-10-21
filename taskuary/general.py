@@ -161,6 +161,13 @@ def brain_options(store, keep: str = '') -> list:
     return out
 
 
+def _failed(store, pick: str) -> bool:
+    "A `cli:` pick whose CLI failed its test, and that the person did not choose themselves: a task's saved conversation on it is not resumed."
+    from . import agents as hub_agents
+    p = str(pick or '')
+    return p.startswith('cli:') and hub_agents.cli_tests(store).get(p[4:]) is False and not hub_agents.owners_pick(store, p)
+
+
 def _cli_of_pick(store, pick: str) -> str:
     "The CLI family a `cli:` pick runs - 'codex' - read off the row it launches."
     from . import agents as hub_agents
@@ -234,8 +241,10 @@ def default_pick(store, task: dict = None) -> str:
 def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str, str]:
     options = provider_options(store)
     explicit = bool(pick or connector_id is not None or model)
-    wanted = str(pick or (f'connector:{connector_id}' if connector_id else '')
-                 or store.get_setting('assistant_ai') or '')
+    from . import agents as hub_agents
+    # a general brain saved FOR the person that is not ready here is no choice of theirs (agents.stale) - it must not keep winning
+    own = '' if hub_agents.stale(store, 'assistant_ai') else store.get_setting('assistant_ai')
+    wanted = str(pick or (f'connector:{connector_id}' if connector_id else '') or own or '')
     if wanted and ':' not in wanted and wanted.isdigit(): wanted = f'connector:{wanted}'
     if not wanted:                                     # blank = the default brain (agents.default_pick), as everywhere
         from . import agents as hub_agents
@@ -249,7 +258,6 @@ def _selected(store, connector_id=None, model=None, pick=None) -> tuple[str, str
     # what was asked for, else ONLY an AI that is ready - a connector, or a CLI that starts here and did not fail its test
     # (agents.ready_brains). It used to be options[0]: the first CLI connected, which was claude on a machine where the
     # person had set up Codex, and every researcher task started on a claude that was signed out (2026-10-21).
-    from . import agents as hub_agents
     ready = {f'cli:{k}' for k in hub_agents.ready_brains(store)}
     choice = next((o for o in options if o['pick'] == wanted), None) \
         or next((o for o in options if o.get('type') != 'cli' or o['pick'] in ready), None)
@@ -791,7 +799,7 @@ class GeneralSession:
         saved = store.saved_session(task_id) or {}
         if connector_id is None and not pick:
             # the task's ROLE is not a candidate here - it names the instructions, never the brain
-            if any(o['pick'] == saved.get('Pick') for o in provider_options(store)): pick = saved['Pick']
+            if any(o['pick'] == saved.get('Pick') for o in provider_options(store)) and not _failed(store, saved['Pick']): pick = saved['Pick']
         if model is None and (pick or (f'connector:{connector_id}' if connector_id else '')) == saved.get('Pick'):
             model = saved.get('Model') or None
         self.pick, self.provider, self.model = _selected(store, connector_id, model, pick)
@@ -827,6 +835,23 @@ class GeneralSession:
         from . import continuity
         self.store.save_session(self.task_id, self.pick, self.model, self.cli_sid,
                                 continuity.context_key(self.store, self.pick, self.model))
+
+    def _unusable(self, e):
+        """A CLI that is not signed in failed its test, as far as a brain nobody chose is concerned: it is recorded, a brain saved
+        FOR the person on it is cleared (agents.heal_brains), and - unless the person picked it - this session moves to a ready brain,
+        so Try again starts there. A brain they picked stays: its failure has said which sign-in to do."""
+        from . import agents as hub_agents
+        if not (self.pick.startswith('cli:') and hub_agents._SIGNED_OUT.search(str(e))): return
+        try:
+            hub_agents.record_cli_test(self.store, self.pick[4:], False)
+            hub_agents.heal_brains(self.store, probe=False)
+            if hub_agents.owners_pick(self.store, self.pick): return
+            chosen = _selected(self.store)
+            if chosen[0] and chosen[0] != self.pick:
+                self.pick, self.provider, self.model = chosen
+                self.cli_sid = ''
+                self._remember_session()
+        except Exception as skipped: logger.debug(f'could not move task {self.task_id} off an unusable brain: {skipped}')
 
     def select_provider(self, connector_id=None, model=None, pick=None):
         from . import continuity
@@ -1226,6 +1251,7 @@ class GeneralSession:
         except Exception as e:
             self._remember_trace('error', 'assistant', {'result': str(e), 'is_error': True})
             self._emit(f'\x1b[1;31merror>\x1b[0m {e}\r\n\r\n')
+            self._unusable(e)
             # A TURN THAT DIED IS NOT A TURN STILL RUNNING. The turn opened with a `working`
             # event and, on this road, closed with nothing - so `working` stayed the last word
             # and the task wore "Agent is working" over a CLI that had exited two seconds in.

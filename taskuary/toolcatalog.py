@@ -92,7 +92,7 @@ PURPOSE = {
                                  'reusable discovery reached through real work, or a developed idea with its reasons - never a transcript, '
                                  'a task log or a routine answer. When the owner asks to save something there, or a turn clearly earns it'),
     'pipe.clear':               ('clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all '
-                                 'the FYI" is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
+                                 'the FYI" and "mark the FYI read" - one FYI on the table or many - are this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once '
                                  'and the count said. It only clears: when the owner says "from now on" too, also CALL '
                                  'preference.exclude_sender or preference.sender_rule'),
     'pipe.defer':               ('put a SET away until a day - `select` (below) and `until` (as task.defer takes it): "snooze everything '
@@ -270,7 +270,10 @@ _DECIDE = {
     'block_sender':    'an exclusion rule in Settings: the sender never reaches triage again - only when they ask for a rule',
     'not_ours_kind':   "an Advisor idea only: put it down AND no more ideas like it - the Advisor's next run reads that",
     'close':           'the task behind the item is finished',
-    'next':            'move on to the next thing',
+    # PUT DOWN IS NOT READ (the real-CLI walk, 2026-10-20): "mark the FYI read" over one FYI chose Next - "it needs nothing, so Next clears it".
+    # Next marks nothing; words that mark read or clear name a set, and that is pipe.clear
+    'next':            'move on to the next thing - this one is put down, still theirs, marked nothing. Never for "mark ... read" or '
+                       '"clear ..." - those name a set: pipe.clear',
     'answer_agent':    'answer the agent waiting on the owner - `text`',
     'stop_agent':      "save and end the agent's session on the item",
     'rerun':           'run the report on the table again',

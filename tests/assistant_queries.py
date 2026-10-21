@@ -58,6 +58,8 @@ CASES = [
     # ── bulk: sets of items ──
     Q('bulk', 'Clear all the FYI, please.', 'todo', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
     Q('bulk', 'mark all the fyi read', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
+    # one FYI on the table is still "the FYI": marking read names the set, never Next (the real-CLI walk, 2026-10-20)
+    Q('bulk', 'mark the FYI read', 'fyi', c('pipe.clear', select={'kind': 'fyi'}), 'cleared', freq=5),
     Q('bulk', 'mark everything read', 'todo', c('pipe.clear', select={'everything': True}), 'cleared', freq=3),
     Q('bulk', 'clear all the reports', 'todo', c('pipe.clear', select={'category': 'report'}), 'cleared', freq=4),
     Q('bulk', 'get rid of everything from Platform Updates', 'todo', c('pipe.clear', select={'sender': 'Platform Updates'}), 'cleared', freq=3),

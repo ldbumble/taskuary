@@ -302,10 +302,15 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
   const load = useCallback(() => api.get(`/api/tasks/${task.TaskId}/steps`).then((r) => { setSteps(r.data.steps || []); setStepsFailed(false); })
     .catch(() => setStepsFailed(true)), [task.TaskId]);
   useEffect(() => { load(); }, [load, task.UpdatedAt]);
-  const start = async (s) => { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); };
   // EVERY PRESS LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the step doors are the task tools' own road (taskOps.runOperation) -
   // recorded, and said in the chat when this goal is on the Assistant's table
   const [stepErr, setStepErr] = useState("");
+  // A STEP THAT DID NOT START SAYS SO under the steps, its button the retry - it threw past the page and nothing moved (the UI audit, 2026-10-21)
+  const start = async (s) => {
+    setStepErr("");
+    try { const { data } = await api.post(`/api/tasks/${task.TaskId}/steps/${s.id}/start`); load(); onChanged?.(); onOpenTask?.(data.taskId); }
+    catch (e) { setStepErr(opError(e, `Step ${(steps || []).indexOf(s) + 1} didn't start - press ${btn("regular_agent")} again.`)); }
+  };
   const op = async (kind, params, fallback) => {
     setStepErr("");
     try { await runOperation(api, kind, task.TaskId, params); return true; } catch (e) { setStepErr(opError(e, fallback)); return false; }
@@ -327,8 +332,16 @@ function GoalSteps({ task, onOpenTask, onChanged }) {
     load(); onChanged?.();
   };
   // RE-PLAN: the AI writes the steps again from the goal's words; a step already started keeps its place (server.plan_goal)
+  // ...which needs an AI: with none it said "Planning…" and nothing came, and a refused press said nothing at all (the UI audit, 2026-10-21)
   const [replanning, setReplanning] = useState(false);
-  const replan = async () => { setReplanning(true); try { await api.post(`/api/tasks/${task.TaskId}/read-ask`, { goal: true }); } finally { setTimeout(() => { setReplanning(false); load(); onChanged?.(); }, 4000); } };
+  const caps = useCapabilities();
+  const replan = async () => {
+    setStepErr("");
+    if (caps.ai === false) { setStepErr("No AI is connected, so nothing can write the steps - add them below, or connect an AI under Connections."); return; }
+    setReplanning(true);
+    try { await api.post(`/api/tasks/${task.TaskId}/read-ask`, { goal: true }); setTimeout(() => { setReplanning(false); load(); onChanged?.(); }, 4000); }
+    catch (e) { setReplanning(false); setStepErr(opError(e, "Re-plan didn't start - press it again.")); }
+  };
   const list = steps || [], done = list.filter((s) => s.done).length;
   return (
     <Box sx={{ mt: 0.85, maxWidth: 900 }}>
@@ -456,6 +469,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [senderQuestion, setSenderQuestion] = useState("");
   // "this one is mine" - the verdict that used to be a silent dropdown (TQ-0501)
   const [askingSender, setAskingSender] = useState(false);
+  const [askErr, setAskErr] = useState("");      // said IN the Ask sender box: the page's own line sat behind the dialog, unseen
+  useEffect(() => { if (askSenderOpen) setAskErr(""); }, [askSenderOpen]);
   const [openingReply, setOpeningReply] = useState(false);
   const [openStage, setOpenStage] = useState(null);   // a stage you opened by hand, overriding the computed focus
   const [diff, setDiff] = useState(null);
@@ -889,9 +904,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       ? `Report · ${sourceMessage.SourceName}` : "";
   const askSender = async () => {
     const text = senderQuestion.trim();
-    if (!selected || !sourceMessage?.MessageId || !text || askingSender) return;
+    if (!selected || !text || askingSender) return;
+    // ...a task with no message behind it has no sender to ask: said in the box, where the press was (the UI audit, 2026-10-21)
+    if (!sourceMessage?.MessageId) { setAskErr("This task has no message behind it, so there is no sender to ask."); return; }
     const id = selected;
-    setAskingSender(true); setErr("");
+    setAskingSender(true); setErr(""); setAskErr("");
     try {
       await runOperation(api, "task.clarify", id, { text, message_id: sourceMessage.MessageId });
       if (stale(id)) return;
@@ -899,7 +916,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       await Promise.all([loadDetail(id), loadTasks()]);
       onChanged?.();
     } catch (e) {
-      if (!stale(id)) setErr(opError(e, "Could not prepare the question for the sender"));
+      if (!stale(id)) setAskErr(opError(e, "Could not prepare the question for the sender"));
     } finally { if (!stale(id)) setAskingSender(false); }
   };
   const openReply = async (generate = false) => {
@@ -2475,6 +2492,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
           <TextField autoFocus fullWidth multiline minRows={3} label="Question for the sender"
             value={senderQuestion} onChange={(e) => setSenderQuestion(e.target.value)}
             placeholder="Which distribution spreadsheet and which dashboard should I use?" />
+          {askErr && <Alert severity="error" sx={{ mt: 1.5, py: 0.25, fontSize: 12.5 }}>{askErr}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAskSenderOpen(false)} disabled={askingSender}>Cancel</Button>

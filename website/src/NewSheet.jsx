@@ -32,6 +32,7 @@ import { connectorNamed } from "./connectorCatalog.js";
 import { openAppLink } from "./appLinks.js";
 import { place } from "./words.js";
 import { label as btn } from "./buttons.js";
+import { useCapabilities } from "./capabilities.js";
 
 const KINDS = [
   { key: "send",   mark: "✉️", label: "Send something", hint: "a message you start, drafted in your voice and approved by you" },
@@ -170,6 +171,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
   const [when, setWhen] = useState("");
   // a goal (spec 2026-10-12): what done looks like is the words above; by when, who is involved, and whether the AI plans the steps
   const [by, setBy] = useState(""); const [who, setWho] = useState(""); const [plan, setPlan] = useState(true);
+  const noAi = useCapabilities().ai === false;
 
   useEffect(() => { if (!open) return; setErr(""); setOk(""); setKind(initialKind); }, [open, initialKind]);
   useEffect(() => {
@@ -254,8 +256,10 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
         const { data } = await api.post("/api/tasks", { Title: title, Summary: who ? `${about}\nInvolved: ${who}` : about,
           DoneWhen: about.slice(0, 1000), DueAt: by || null, Kind: "task", Tags: "goal" });
         // the model writes the steps (server.plan_goal); "Track it" leaves the boxes to you
-        if (plan) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
-        setOk(`${data.ref} — ${plan ? "planning the steps; they land on the task in a moment." : "on your rail; add the steps on the task."}`);
+        if (plan && !noAi) api.post(`/api/tasks/${data.taskId}/read-ask`, { goal: true }).catch(() => null);
+        // ...and with no AI nothing plans them: it promised steps that never came (the UI audit, 2026-10-21)
+        setOk(`${data.ref} — ${!plan ? "on your rail; add the steps on the task." : noAi ? "on your rail. No AI is connected, so nothing can plan the steps - add them on the task."
+          : "planning the steps; they land on the task in a moment."}`);
         aboutRef.current?.clear(); setHasAbout(false); setBy(""); setWho(""); onDone?.(); onOpenTask?.(data.taskId);
       } else {
         const { data } = await api.post("/api/notes", { title: about.slice(0, 300), body: "", when: when || null });
@@ -264,7 +268,7 @@ export default function NewSheet({ open, onClose, onDone, onOpenTask, inline = f
       }
     } catch (e) { setErr(e?.response?.data?.detail || "That did not go through"); }
     setBusy(false);
-  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, onDone, onOpenTask, onClose, pics]);
+  }, [kind, channel, to, emailTo, cc, mode, how, agent, brain, model, role, pick, when, by, who, plan, noAi, onDone, onOpenTask, onClose, pics]);
 
   const canGo = hasAbout && (kind !== "send" || (channel && (channel === "email" ? emailTo.length : to.trim())));
   // a hand-off is the one Send to agent / Send to coding agent (buttons.json); the others are this form's own words

@@ -101,6 +101,21 @@ def test_steps_with_no_ai_run_without_any_model_and_every_step_is_recorded(db):
     assert json.loads(s.get_setting(f"report_last_run:{src['SourceId']}"))['steps'][0]['rows'] == 1
 
 
+def test_a_run_whose_draft_waits_on_its_own_task_is_done(db):
+    """The draft is answered on its own task; counting its review kept the run "not started yet" after every step ran (walk
+    2026-10-21). A write waiting for the yes on THIS task still keeps it open."""
+    s = MemoryStore()
+    src = source(s, [read_dupes(db), {'id': 's2', 'kind': 'draft', 'label': 'Tell Erin', 'to': 'erin@northwind.example', 'about': '{{s1}}'}])
+    tid = run_task(s, src)
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 41, 'taskId': tid + 100, 'ref': 'TQ-0999', 'draft': 'Hi'}):
+        flow.execute(s, src, tid, 'manual', llm=no_model)
+    assert s.get_task(tid)['Status'] == 'done'
+    tid2 = run_task(s, src)
+    with mock.patch('taskuary.outbox.compose', return_value={'reviewId': 42, 'taskId': tid2, 'ref': 'TQ', 'draft': 'Hi'}):
+        flow.execute(s, src, tid2, 'manual', llm=no_model)
+    assert s.get_task(tid2)['Status'] != 'done'                      # its own review waits here
+
+
 def test_a_token_that_names_nothing_is_left_visible_and_said():
     ctx = flow.context({'inputs': {'site': 'North'}}, 'schedule')
     warns = []

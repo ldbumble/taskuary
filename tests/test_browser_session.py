@@ -191,9 +191,11 @@ class TheShapeOfThePageTests(unittest.TestCase):
 
 class StartingItTests(unittest.TestCase):
     def test_it_is_bound_to_the_session_and_restored_from_the_owners_own_cookies(self):
+        # open once it was launched, however often it is asked: a counted list of answers ran dry when a thread an earlier test
+        # left behind asked too (StopIteration on CI, 2026-10-21)
         seen = {}
         with mock.patch.object(bv.shutil, 'which', return_value='ab'), \
-             mock.patch.object(bv, 'state', side_effect=[{'open': False}, {'open': True}]), \
+             mock.patch.object(bv, 'state', side_effect=lambda *a, **kw: {'open': 'cmd' in seen}), \
              mock.patch.object(bv.spawn, 'popen', side_effect=lambda cmd, **kw: seen.update(cmd=cmd)):
             self.assertTrue(bv.start('abc123', 'https://portal.example'))
         self.assertEqual(seen['cmd'][:5], ['ab', '--session', 'tq-abc123', '--restore', bv.RESTORE_KEY])

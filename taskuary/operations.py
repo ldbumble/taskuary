@@ -71,6 +71,9 @@ KINDS = {
     'review.reject':            ('review', (), None),
     'hub.publish':              ('text', ('title', 'body'), None),   # the Assistant's Hub envelope, as a tool (2026-09-25)
     'pipe.clear':               ('pipe', (), None),          # `text` OR `select` - a sentence, or a named set
+    # ...and a named set put away until a day, or closed - "snooze everything from Gail until Monday" (the owner, 2026-10-20)
+    'pipe.defer':               ('pipe', ('until',), None),
+    'pipe.close':               ('pipe', (), None),
     'task.setup':               ('text', ('text',), None),
     # ...and what the chat sets up through the tabs' own roads (concierge.setup_turn, PW-194): a report, a connection
     'report.create':            ('report', ('config',), None),

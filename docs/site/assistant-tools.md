@@ -13,7 +13,7 @@ the button that does it, lit, or the page that holds it. On a phone it asks yes 
 | **task** | change any task - the table's, or one named by ref | task.update(priority/title/assignee/due), task.set_kind(kind), task.set_repo(repo), task.check(item, done?), task.checklist(items?, emails?, drop?), task.watch(what?), task.comment(text), task.split(text), task.merge(into), task.reopen, task.not_a_task, task.complete(note?), task.defer(until), task.handoff(who, note?), task.clarify(text), task.share(who, about?), review.approve, review.reject |
 | **agents** | start, continue, answer or stop a task's agent, and teach where work belongs | dispatch.prepare(kind, instructions?), agent.continue, agent.answer(text), agent.stop, routing.remember(field, value) |
 | **new** | new work with no task yet | task.create_from_text(kind, text), task.create_from_message(kind), task.setup(text) |
-| **pipe** | the walk and sets of items, and filing mail | pipe.clear, item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
+| **pipe** | the walk and sets of items, and filing mail | pipe.clear, pipe.defer(select, until), pipe.close(select), item.settle(verb), message.file, message.archive, preference.exclude_sender(scope), preference.sender_rule, message.retriage |
 | **reports** | reports and workflows | report.create(config), report.run, report.rerun, report.pause, report.resume, report.route(line, how), report.edit(config), report.delete |
 | **app** | settings, connections, roles, scripts and kept facts | setting.set(setting, value), connection.create(type, name), role.apply(role, portal?, route_mail?), connection.test, connection.pause, connection.resume, script.start(name), memory.remember(note), hub.publish(title, body, topic?, kind?, why_earned?) |
 | **look** | look-ups - they run at once and change nothing | task.read, timeline.search, tasks.list, asks.list, message.read, sender.read, docs.search, agents.now, approvals.list, pipe.list, calendar.read, activity.list, errors.list, memory.list, rules.list, missed.check, report.read, reports.list, settings.list, setting.read, connections.list, connection.read, agents.list, repos.list, tools.list, tools.describe, knowledge.search |
@@ -455,6 +455,23 @@ The walk and sets of items, and filing mail.
 Clear a SET of items from the pipe at once - takes `select` (below); read, never deleted. "Clear all the FYI" is this with kind: fyi, never next. Their words naming the set are the press: it is marked read at once and the count said. It only clears: when the owner says "from now on" too, also CALL preference.exclude_sender or preference.sender_rule.
 
 - `select` - below
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `pipe.defer`
+
+Put a SET away until a day. Runs at once and the count is said.
+
+- `select` - below
+- `until` - (as task.defer takes it): "snooze everything from Gail until Monday" is select sender: Gail
+
+<p class="runs">Brings up its button for you to press.</p>
+
+### `pipe.close`
+
+Close a SET at once. "Close all the tasks from Priya" is select sender: Priya. Runs at once and the count is said.
+
+- `select` - (below): each task in it is marked done, each notice read
 
 <p class="runs">Brings up its button for you to press.</p>
 

@@ -1644,7 +1644,7 @@ def _workerstate():
 
 
 def _assistant_payload(task_id: int, session=None):
-    from . import general
+    from . import general, proposals as _proposals
     task = store.get_task(task_id)
     if not task: raise HTTPException(404, 'task not found')
     if not general.handles(task):
@@ -1673,6 +1673,13 @@ def _assistant_payload(task_id: int, session=None):
             # pages its Claude session published (claude_artifacts) and files it chose to show (selfclose.SHOW_LINE) - the
             # conversation draws each under the answer that made it, and lists any it cannot place at its foot
             'published': published,
+            # "Worth running again?" only under an answer reading data produced (general.report_like)
+            'reportLike': general.report_like(store, task_id),
+            # A PLAYBOOK DRAFTED IN THIS CONVERSATION IS APPROVED IN IT (the owner, 2026-10-21): "Draft ready on the task" pointed at
+            # Close out, which a live session hides - Approve was reachable only after Stop and save, which nothing said to press
+            'playbookDrafts': [r for r in store._rows("SELECT * FROM review WHERE TaskId=? AND Kind='action' AND Status='pending' "
+                                                       "ORDER BY ReviewId", (task_id,))
+                               if _proposals._action(r) in ('write_playbook', 'amend_playbook')],
             'session': session.info(tail=3) if session else None}
 
 @app.get('/api/tasks/{task_id}/assistant')

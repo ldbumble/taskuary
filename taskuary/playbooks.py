@@ -113,8 +113,11 @@ def collect_setup_draft(store, task_id, reply):
         queued = next(({'reviewId': r['ReviewId']} for r in store.list_reviews('pending')
                        if r['TaskId'] == task_id and r.get('DraftText') == json.dumps(draft)), None)
         queued = queued or proposals.queue(store, task_id, draft, 'assistant')
-        outcome = (f"Draft ready on the task (rv{queued['reviewId']}). You can edit it before approving."
-                   if queued else 'The draft could not be queued. Check that playbooks are enabled in Settings.')
+        # the draft is drawn right under this answer with its Approve (the assistant payload's playbookDrafts): say where, and what
+        # Approve does - "Draft ready on the task (rv12)" pointed at a Close out the live chat hid (the owner, 2026-10-21)
+        outcome = ("Your playbook draft is below. Edit it if you like - Approve saves it to Reports → Playbooks, and triage starts "
+                   "matching new mail against its when line." if queued
+                   else 'The draft could not be queued. Check that "Use playbooks" is on in Settings → How mail is sorted.')
     except (ValueError, TypeError) as e:
         outcome = f'The draft could not be queued: {e} Ask the assistant to correct it.'
     return visible.rstrip() + '\n\n' + outcome

@@ -14,7 +14,8 @@ from unittest import mock
 
 # (title or key fragment, ok verbs, never verbs, prompt needs)
 CASES = [
-    ('Month-end close is short', {'reply', 'regular_agent'}, {'not_ours', 'close'}, ['POSSIBLE DUPLICATES', 'Reconcile the August GL export']),
+    # a possible duplicate an agent is on: the lit button agrees with the line - never Reply over "it may already be covered" (C2, 2026-10-21)
+    ('Month-end close is short', {'defer', 'regular_agent'}, {'not_ours', 'close', 'reply'}, ['POSSIBLE DUPLICATES', 'Reconcile the August GL export']),
     ('New starter on Monday', {'reply', 'regular_agent'}, {'not_ours'}, []),
     ('did the overnight import finish', {'close'}, {'not_ours', 'approve'}, ['It finished at 04:10']),
     ('Invoice 88213', {'redraft'}, {'approve'}, ["Friday's payment run", 'ATTACHED TO THE DRAFT: nothing']),

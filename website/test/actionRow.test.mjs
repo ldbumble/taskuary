@@ -351,3 +351,13 @@ test("every mounted card registers under its own key, never a name another copy 
   assert.match(body, /useId\(\)/);
   assert.doesNotMatch(body, /put\(owner,/);
 });
+
+// THE LIT BUTTON FOLLOWS THE LINE (the UI audit's C2, 2026-10-21): a running agent's Stop and save darkens itself only while the
+// Advisor has said nothing at all. Once the strip says something - "An agent is working on this - it says when it needs you", or
+// "Connect an AI" - the button lit is that line's move, and Stop and save stays outlined: it invited stopping an agent that needed nothing.
+test("a working agent's Stop and save is dark only when the strip says nothing; a line lights its own move", () => {
+  const list = [v("save-end", "agent", { fill: true }), v("done", "more", { promote: false }), v("next", "next")];
+  assert.deepEqual(filled(rowOf({ ref: "", list })), ["save-end"], "nothing said: the row's own move");
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "next" })), ["next"], "'it says when it needs you': Next, and only Next");
+  assert.deepEqual(filled(rowOf({ ref: "", list }, { verb: "ai" })), [], "'Connect an AI': its own chip is the move, nothing on the row");
+});

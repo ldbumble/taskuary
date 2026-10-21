@@ -11,7 +11,7 @@ import TaskPage from "./TaskPage.jsx";
 import ActionRow, { AdviceNone, AdvisorNext } from "./ActionRow.jsx";
 import api from "./api.js";
 import { onLive } from "./live.js";
-import { adviceKeyFor, adviceShown } from "./advice.js";
+import { adviceKeyFor, adviceShown, stripWord } from "./advice.js";
 import { onPressed, useHost, useVerbs } from "./actionRow.js";
 import { adviceRead } from "./tableState.js";
 import { hint as btnHint, label as btnLabel } from "./buttons.js";
@@ -79,7 +79,8 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
   const [read, asking] = useItemAdvice(card, phone);
   // the Assistant's lit button outranks the Advisor's line, as it does over the composer (assistantLight.js)
   const advised = lit ? null : adviceShown(read, { key: card.key, lane: card.lane }, busy);
-  const none = !lit && !advised && !busy && read?.none && read.none !== "no_ai" ? read : null;
+  // ...and the strip's word and the button it lights are ONE decision, the dock's (advice.stripWord, the UI audit's C2)
+  const { none, pick } = stripWord({ speaks: true, busy, shown: advised, lit, advice: read, key: card.key, lane: card.lane });
   return (
     <>
     {pin && <Box aria-hidden sx={{ position: "fixed", inset: 0, zIndex: 1349, bgcolor: "#f6f4f1" }} />}
@@ -117,7 +118,7 @@ export default function CanvasItem({ card, height, expanded, onExpand, onNext, b
         {!lit && !advised && !none && !busy && asking && card.lane !== "working" && (
           <div className="tq-next" role="status" data-tq-advice-thinking=""><div className="tq-next-txt">Thinking about this one…</div></div>)}
         <AdvisorNext advice={advised} onPropose={onPropose} /><AdviceNone advice={none} /></div>
-        <ActionRow inline advised={lit || advised || none} /></div>}
+        <ActionRow inline advised={pick} /></div>}
     </Box>
     </>
   );

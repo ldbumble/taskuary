@@ -12,7 +12,8 @@ test("no AI connected: the strip says it once and its one button opens Connectio
   assert.match(view, /Connect an AI to get a suggestion on each item/);
   assert.match(view, /openAppLink\(place\("ai"\)\.href\)\}>Connect an AI<\/button>/);
   // ...and the capability says so too: one answer for "is an AI connected" (capabilities.js)
-  assert.match(view, /caps\.ai === false \|\| \(advice\?\.none === "no_ai" && advice\.for === table\.key\)/);
+  assert.match(view, /aiOff: caps\.ai === false,/);
+  assert.match(read("advice.js"), /aiOff \|\| \(advice\?\.none === "no_ai" && advice\.for === key\)/);
 });
 
 test("a press refused as changed reads the advice again and says so (B6)", () => {

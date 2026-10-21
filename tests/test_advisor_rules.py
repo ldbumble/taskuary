@@ -34,6 +34,17 @@ def test_the_scripted_advisor_never_continues_a_failed_run():
     assert got['verb'] == 'new_task' and 'not reachable' in got['line']
 
 
+def test_a_possible_duplicate_an_agent_is_on_never_lights_reply():
+    """The line said "TQ-0006 may already cover it, and an agent is on that" over a dark Reply (the UI audit's C2, 2026-10-21): the
+    button and the line are one answer, so the verb agrees with what the line says - Remind me, else nothing."""
+    assert f"the verb is never {buttons.label('reply')}" in advisor.SYSTEM
+    dup = 'POSSIBLE DUPLICATES - other open tasks with its sender:\n- TQ-0006 in_progress: Reconcile the export (same sender) - an agent is on it'
+    got = ask('reply (Reply), close (Mark done), defer (Remind me)', dup)
+    assert got['verb'] == 'defer' and 'TQ-0006' in got['line']
+    assert ask('reply (Reply), close (Mark done)', dup)['verb'] is None, 'no Remind me offered: nothing lit, nothing said'
+    assert ask('reply (Reply), close (Mark done), defer (Remind me)', 'PREVIEW: can you look?')['verb'] == 'reply', 'no duplicate: Reply'
+
+
 def test_a_bounced_address_is_fixed_never_redrafted():
     bounce = 'WHAT FAILED: the reply was not sent - the mail server refused erin@northwind.example (5.1.1 no such user)'
     assert ask('new_task (New task to fix this), approve (Send), redraft (Redraft)', bounce)['verb'] == 'new_task'

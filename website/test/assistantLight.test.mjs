@@ -45,8 +45,9 @@ test("a typed turn draws no proposal card and runs nothing: it lights, opens a p
   // "send Erin the answer": the draft lands in the item's own reply box, and its Send is lit - drafting is not sending
   assert.match(view, /setLit\(\{ verb: "approve", label: btn\("approve"\), line: `Read the draft, then press \$\{btn\("approve"\)\} when you're sure\.`, key: `review:\$\{data\.reviewId\}`/);
   // the lit act outranks the Advisor's line, which would name another button; any press puts it out
-  assert.match(view, /<ActionRow advised=\{litNow \|\| shownAdvice \|\| noneSaid \|\| setupLit\} \/>/);
+  assert.match(view, /<ActionRow advised=\{stripPick \|\| setupLit\} \/>/);
   assert.match(view, /const shownAdvice = table\.speaks && !litNow \?/);
+  assert.match(src("advice.js"), /pick: lit \|\| shown \|\| none/, "the light first, then the line, then the reason there is none (advice.stripWord)");
   assert.match(view, /useEffect\(\(\) => onPressed\(\(\) => setLit\(null\)\), \[\]\);/);
 });
 
@@ -60,7 +61,7 @@ test("the lit button's line is the strip's, over the composer and on a phone's o
   assert.match(view, /\{table\.speaks && !!litNow && <div className="tq-next" role="status" data-tq-advice="lit"><div className="tq-next-txt">\{litNow\.line\}<\/div><\/div>\}/);
   assert.match(view, /\{table\.speaks && !litNow && !shownAdvice && !noneSaid && !changed && !busy && asking === onTable/, "no Thinking under it");
   assert.match(view, /lit: litNow,/);
-  assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{lit \|\| advised \|\| none\} \/>/);
+  assert.match(src("CanvasItem.jsx"), /<ActionRow inline advised=\{pick\} \/>/);
 });
 
 test("the setting the Assistant names opens with its knob outlined", async () => {

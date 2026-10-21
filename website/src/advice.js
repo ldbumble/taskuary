@@ -32,3 +32,16 @@ export function adviceShown(advice, item, busy) {
   if (!advice?.verb || !advice.line || busy || !item?.key || advice.for !== item.key) return null;
   return item.lane === "working" ? null : advice;
 }
+
+/* WHAT THE STRIP SAYS AND WHAT THE ROW LIGHTS, ONE DECISION (the UI audit's C2, 2026-10-21): the strip asked to "Connect an AI" while the
+   row lit Stop and save over an agent at work, which needed nothing - the line and the button were chosen in two places. Here the strip's
+   word is chosen once and `pick` is what ActionRow lights for it. An agent at work outranks a missing AI: nothing about a working agent
+   needs an AI, so its line is "it says when it needs you" with Next, never Connect an AI over a dark Stop and save.
+   `shown`/`lit`: the Advisor's line and the Assistant's light, already read for the item on the table; `aiOff`: caps.ai === false. */
+export function stripWord({ speaks, busy, shown = null, lit = null, aiOff = false, advice = null, key = "", lane = "" } = {}) {
+  const working = lane === "working";
+  const noAi = !!speaks && !busy && !shown && !lit && !working && (aiOff || (advice?.none === "no_ai" && advice.for === key));
+  const none = !speaks || busy || shown || noAi || lit ? null
+    : advice?.none && advice.for === key && !(working && advice.none === "no_ai") ? advice : working ? { none: "working", for: key } : null;
+  return { noAi, none, pick: lit || shown || none || (noAi ? { none: "no_ai", for: key } : null) };
+}

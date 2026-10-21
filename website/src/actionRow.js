@@ -146,7 +146,9 @@ export function rowOf({ list, ref }, pick = null) {
   // ...WITH ONE EXCEPTION, the owner's (2026-10-20): while an agent is RUNNING its row's Stop and save is dark with no Advisor line -
   // the Advisor stays quiet over a working agent, and the one move there is ending it. A verb asks for that with `fill`; it is
   // marked `own` so the dead-end walk's DARK rule can tell it from the Advisor's
-  if (!advised) agent = agent.map((v) => (v.fill ? { ...v, tone: "p", own: true } : v));
+  // ...and only while the strip says NOTHING: under a line ("it says when it needs you", "Connect an AI") the line's own move is the lit
+  // one, and a dark Stop and save beside it invited stopping an agent that needed nothing (the UI audit's C2, 2026-10-21; advice.stripWord)
+  if (!advised && !pick) agent = agent.map((v) => (v.fill ? { ...v, tone: "p", own: true } : v));
   // MARK DONE IS ALWAYS ON THE BAR, beside Next - never behind More (the owner, 2026-10-06: "mark done should show next to next on every
   // single task not inside the more button"). With no decision waiting it leads the bar; dark only when it is the advice.
   const done = more.find((v) => v.id === "done");

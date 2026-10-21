@@ -293,7 +293,11 @@ def _advice(text: str) -> str:
     line = said[verb].format(label=offered[verb], what=what[:1].upper() + what[1:]) if verb else ''
     # ...and like the real one it reads the tasks that may already cover the ask: an agent already on one is said, never a second answer blind
     dup = re.search(r'^- (TQ-\d+) [^\n]*an agent is on it$', text.split('POSSIBLE DUPLICATES', 1)[1], re.M) if 'POSSIBLE DUPLICATES' in text else None
-    if verb == 'reply' and dup: line = f'Someone is waiting - {dup[1]} may already cover it, and an agent is on that.'
+    # ...and the button agrees with the line (advisor.SYSTEM): never Reply over "it may already be covered" - Remind me, to look again once
+    # that agent is done, else nothing (the UI audit's C2, 2026-10-21)
+    if verb == 'reply' and dup:
+        verb = 'defer' if 'defer' in offered else None
+        line = f'{dup[1]} may already cover this, and an agent is on it - look again later.' if verb else ''
     return json.dumps({'verb': verb, 'line': line, 'evidence': []})
 
 

@@ -52,3 +52,4 @@ flowchart LR
 | 13 | The rail is read to the model by its SECTIONS (`pipe.list`), each row with its lane | grouped by lane, For later - a section, not a lane - was answered "nothing is parked in Later" |
 | 14 | The walk's end offers **Walk me through my tasks** first; the new walk shows every open task again from the top (2026-10-22) | the end offered only its Opens, and outside a hand-off nothing started a new walk |
 | 15 | Remind me's receipt carries no **Bring it back now** on the phone (2026-10-22) | the undo for one task rode under the next task's card |
+| 16 | A card's first line says where it is in its section - "📋 on you · TQ-0004 · 4 of 19"; a section of one says nothing (2026-10-22) | a long walk gave no sense of how far it had come |

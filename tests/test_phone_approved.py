@@ -59,4 +59,23 @@ class EndOfWalkTests(PhoneCase):
         self.assertIn('Next', again[-1][1])
 
 
+class PositionTests(PhoneCase):
+    """A11: a long walk gave no sense of progress. Each card's first line says where it is in its section: "📋 on you · TQ-0001 · 1 of 3"."""
+    channel = 'telegram'
+
+    def test_each_card_says_where_it_is_in_its_section(self):
+        _two_asks(self.f)
+        self.f._work('Printer on 3 is jammed again', subject='Printer on 3 is jammed again', from_name=RAY[0], from_email=RAY[1],
+                     body='The big printer on floor 3 is jammed again, can someone call the vendor?', sent_at=self.f.ago(hours=1))
+        self.ph.ready()
+        firsts = [text_of(self.ph.walk()).split('\n')[0]] + [text_of(self.ph.tap('Next')).split('\n')[0] for _ in range(2)]
+        for n, line in enumerate(firsts, 1): self.assertRegex(line, rf'^\S+ on you · TQ-\d{{4}} · {n} of 3$', firsts)
+
+    def test_a_section_of_one_says_nothing(self):
+        self.f._work('Printer on 3 is jammed again', subject='Printer on 3 is jammed again', from_name=RAY[0], from_email=RAY[1],
+                     body='The big printer on floor 3 is jammed again, can someone call the vendor?', sent_at=self.f.ago(hours=1))
+        self.ph.ready()
+        self.assertNotIn(' of 1', text_of(self.ph.walk()).split('\n')[0])
+
+
 if __name__ == '__main__': unittest.main()

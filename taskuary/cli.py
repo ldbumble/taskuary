@@ -90,7 +90,8 @@ def _open_private(url):
     seconds until the page spends it."""
     cmd = _http_browser() if '?k=' in url else None
     if not cmd: return webbrowser.open(url)
-    try: subprocess.Popen(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))))
+    from . import spawn
+    try: spawn.bare(_with_target(cmd, str(launchkey.via_file(url, config.home() / 'launch'))))
     except OSError: webbrowser.open(url)          # a stale registration - the browser uninstalled: still a window, as before
 
 def _open_keyed(url):

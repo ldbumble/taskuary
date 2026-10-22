@@ -318,7 +318,9 @@ def main():
     argv = sys.argv[1:]
     from taskuary.logs import setup as setup_logs
     setup_logs('--debug' in argv)
-    port = int(argv[argv.index('--port') + 1]) if '--port' in argv else None
+    from taskuary import unpack           # imported here, on the main thread (the import-lock note above)
+    threading.Thread(target=unpack.sweep_stale, daemon=True, name='unpack-sweep').start()   # old _MEI folders a sweeper missed
+    port =int(argv[argv.index('--port') + 1]) if '--port' in argv else None
 
     def filed():
         """Whatever just failed, next to the data - never an error dialog."""
@@ -400,6 +402,16 @@ def main():
     return 0 if server is None or stop_server(server) != 'timeout' else 1
 
 
+def leave(code) -> int:
+    """The exe's last word: the lifespan has stopped what the server started, so the unpack folder is handed to a
+    quiet sweeper rather than to the bootloader, whose answer to a straggler is a dialog (unpack.py)."""
+    try:
+        from taskuary import unpack
+        unpack.handoff()
+    except Exception as e: logger.debug(f'leaving: no handoff - {e}')
+    return code or 0
+
+
 if __name__ == '__main__':
-    sys.exit(main() or 0)
+    sys.exit(leave(main()))
 

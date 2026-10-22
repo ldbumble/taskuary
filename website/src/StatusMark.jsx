@@ -13,10 +13,10 @@ import "./statusMark.css";
 // are done, in the bad ink when it slipped (`status` then only colours it)
 export function StatusLogo({ status, agent = "", className = "", wears = true, progress = null, children }) {
   const st = status, spins = !!st?.spins, goal = progress != null;
-  const ring = goal ? "progress" : wears && st && !spins ? st.ring || "none" : "";
+  const ring = goal ? "progress" : wears && st ? st.ring || "none" : "";
   const said = st && !goal ? statusLabel(st, agent) : undefined;
   return (
-    <span className={["tq-mark", className, spins && !goal ? "spins" : "", ring && ring !== "none" ? `rg-${ring}` : "",
+    <span className={["tq-mark", className, spins && !goal ? "spins" : "", ring && !["none", "spin"].includes(ring) ? `rg-${ring}` : "",
       st?.role && wears ? `rl-${st.role}` : ""].filter(Boolean).join(" ")}
       style={goal ? { "--p": Math.round(Math.max(0, Math.min(1, progress)) * 100) } : undefined}
       data-tq-working={spins && !goal ? "" : undefined} data-tq-status={!goal && st?.key || undefined} data-tq-ring={ring || undefined}

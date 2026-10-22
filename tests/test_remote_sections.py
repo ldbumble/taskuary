@@ -54,14 +54,17 @@ class SectionWalkTests(unittest.TestCase):
         for p in self.patches: p.stop()
 
     def test_a_section_pick_walks_that_section_and_next_stays_in_it_until_it_is_empty(self):
-        self.assertEqual(ra.run_act(self.s, {'t': 'section', 'section': 'fyi'}, None), 'shown msg:3')
-        self.assertEqual(ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:3'}), 'shown msg:4')
+        # (the first line: a pick's answer with nothing to tap gets the way on under it - 2026-10-22)
+        self.assertEqual(ra.run_act(self.s, {'t': 'section', 'section': 'fyi'}, None).splitlines()[0], 'shown msg:3')
+        self.assertEqual(ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:3'}).splitlines()[0], 'shown msg:4')
         done = ra.run_act(self.s, {'t': 'next'}, {'key': 'msg:4'})
         self.assertTrue(done.startswith('FYI done.'), done)
         self.assertEqual(self.shown, ['msg:3', 'msg:4', None], 'then the normal walk takes over')
 
     def test_an_empty_section_says_so(self):
-        self.assertEqual(ra.run_act(self.s, {'t': 'section', 'section': 'reports'}, None), 'Nothing in Reports right now.')
+        said = ra.run_act(self.s, {'t': 'section', 'section': 'reports'}, None)
+        self.assertEqual(said.splitlines()[0], 'Nothing in Reports right now.')
+        self.assertIn('Walk me through my tasks', said, 'and never a dead end')
 
 
 class BrowseTests(unittest.TestCase):

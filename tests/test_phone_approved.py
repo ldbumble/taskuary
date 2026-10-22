@@ -572,6 +572,23 @@ class UrgentMidWalkTests(PhoneCase):
         self.assertIn('Payroll file rejected', got); self.assertNotIn('New since you started', got)
 
 
+class NoPickEndsTests(PhoneCase):
+    """Found while building (the owner's principle - no dead ends): "no, leave it" under a yes/no answered "Left it - nothing moved." with
+    nothing to tap. A pick's answer that offers nothing gets the way on: back to the card on the table, the walk, everything else."""
+    brain = staticmethod(lambda said: 'Ok.\n' + call('pipe.clear', select={'kind': 'fyi'}) if 'clear' in said.lower() else 'Ok.')
+
+    def test_no_leave_it_comes_back_to_the_card(self):
+        for subj in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=subj)
+        a, b = _two_asks(self.f); self.ph.ready()
+        first = text_of(self.ph.walk())
+        ref = next(f'TQ-{t:04d}' for t in (a, b) if f'TQ-{t:04d}' in first)
+        self.ph.type('clear all the FYI')
+        got = self.ph.tap('no, leave it')
+        self.assertIn('Left it - nothing moved.', text_of(got))
+        self.assertEqual(got[-1][1][:2], [f'Back to {ref}', 'Walk me through my tasks'], got[-1][1])
+        self.assertIn(ref, text_of(self.ph.tap(f'Back to {ref}')))
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

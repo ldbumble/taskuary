@@ -1473,7 +1473,16 @@ def _settle(store, prop: dict, item: dict | None, actor: str) -> str:
 def run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
     """One numbered pick, run the way the desktop's button runs it - never through the model."""
     from . import funnel
-    with funnel.showing(act.get('rev')): return _run_act(store, act, item, actor)
+    with funnel.showing(act.get('rev')): said = _run_act(store, act, item, actor)
+    # ...and NO PICK ENDS IN A DEAD END (the owner, 2026-10-22: "doesn't drop them in dead ends"): "Left it - nothing moved.", "Dropped -
+    # that email will not go.", "Nothing in Reports right now." went out with nothing to tap. Each carries the way on: back to the card
+    # on the table, the walk, everything else
+    if said and not _CHOICES_BLOCK.search(said):
+        from . import general
+        try: tid = general.dock_task(store, actor)[0]['TaskId']
+        except Exception: tid = None
+        said = turn_text({'say': said, 'item': None}, store=store, extra=_way_on(store, tid))
+    return said
 
 
 def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:

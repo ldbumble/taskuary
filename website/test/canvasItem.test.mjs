@@ -12,7 +12,7 @@ test("an item with a task behind it is shown by TaskPage; a proposal, a batch or
   // (JSX cannot load under bare node - the rule is read from the source)
   assert.match(item, /export const showsTask = \(card, kind\) => !!card\?\.tid && !\["proposal", "setup", "walk", "brief", "fyis", "meeting"\]\.includes\(kind\)/);
   assert.match(view, /if \(live && canvas && m\.card && showsTask\(c, kind\) && !foldedNow\) return \(/);
-  assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\} canvas active/);
+  assert.match(item, /<TaskPage taskId=\{card\.tid\} title=\{card\.title \|\| ""\} rail=\{card\} canvas active/);
 });
 
 // HARD REQUIREMENT 1: no terminal redraw corruption. The view's box is the chat body's height in BOTH states - Expand

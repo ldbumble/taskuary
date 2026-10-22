@@ -51,49 +51,34 @@ test("one verb for removing a task: the button and its hover say Remove (U13); t
   assert.doesNotMatch(page, /triage is taught|stay on the Timeline/);
 });
 
-test("the header says what triage made of it in one plain sentence (the kind pill's tooltip), and the kind hints carry no coding words", async () => {
+test("From's last line says what triage made of it in one plain sentence, and the kind hints carry no coding words", async () => {
   const page = src("TaskPage.jsx");
-  assert.match(page, /\{ key: "kind", text: what\.replace[^\n]*\n\s+title: sortedLine\(facts, kind\) \}/);
-  assert.match(page, /p\.key === "kind" \? \{ "data-tq-sorted": "" \}/);
+  assert.match(page, /<Box data-tq-sorted="" title=/);
+  assert.match(page, /\{triageSays\(facts, t\?\.Kind \|\| "task", triaged\.why\)\}/);
   for (const jargon of ["without a repository", "the configured CLI", "the model triage uses", "harness"]) assert.ok(!page.includes(jargon), jargon);
-  // sortedLine is pure: read it out of the source and run it
-  const body = page.slice(page.indexOf("const SAID ="), page.indexOf("const FACT_TONE"));
-  const { sortedLine } = await import(`data:text/javascript,${encodeURIComponent(body.replace("export const sortedLine", "export const sortedLine"))}`);
+  const { sortedLine, triageSays } = await import("../src/taskSources.js");
   const pills = (o) => Object.entries(o).map(([key, value]) => ({ key, value }));
   assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "task", who: "an agent · general", priority: "normal" }) }, "general"),
     "Sorted as: a task for an assistant · normal priority");
   assert.equal(sortedLine({ triaged: true, pills: pills({ intent: "reply", priority: "high" }) }, "reply"), "Sorted as: a reply to send · high priority");
   assert.equal(sortedLine({ triaged: false, pills: pills({ priority: "normal" }) }, "task"), "A task for you · normal priority");
+  // ...and the why triage recorded rides at its end: "Sorted as: <what> · <priority> · <why>"
+  assert.equal(triageSays({ triaged: true, pills: pills({ intent: "reply", priority: "normal" }) }, "reply", "  she asks for half an hour\n on a named day "),
+    "Sorted as: a reply to send · normal priority · she asks for half an hour on a named day");
+  assert.equal(triageSays({ triaged: true, pills: pills({ intent: "task", priority: "high" }) }, "coding", ""), "Sorted as: a task for your coding tool · high priority");
 });
 
-// THE HEADER IS ONE ROW (the owner, 2026-10-21): "TQ-1156  <title>" and, under it, "Sorted as: ... | closes itself when the work is done"
-// took two. The triage facts are pills beside the title now - kind and priority first, so a narrow header keeps them and folds the rest
-test("the task header has no second line: the triage facts are pills on the title's row, most telling first", async () => {
+// THE HEADER IS ONE ROW, AND NO CHIPS (the redesign, owner-approved 2026-10-21): the ref, the title, and at the right the status - the
+// rail's own mark and word for this task (railStatus.js) - then Expand and the X. What triage made of it is the last line of From.
+test("the task header has no chips: its one pill is the status, the rail's own mark and word", () => {
   const page = src("TaskPage.jsx");
   const head = page.slice(page.indexOf("<Box data-tq-task-head"), page.indexOf("{/* a flex column so the terminal takes exactly"));
   assert.ok(head.length > 100, "the header strip is found");
-  // one row: the strip holds the title's flex row and nothing under it - no Sorted-as line, no completion line, no playbook line
-  assert.doesNotMatch(head, /sortedLine\(|completionFact\(|data-tq-triage-facts=""|\{workContext && <Typography/);
-  assert.match(head, /\{headPillsOn && <HeadPills pills=\{headFacts\}/);
-  assert.match(page, /data-tq-head-pills="" sx=\{\{ display: "flex", flexWrap: "wrap"[^\n]*\n\s+height: 18, overflow: "hidden"/, "one pill high: a pill with no room never makes a row");
-  assert.match(page, /flex: headPillsOn && !headControls \? "0 100 auto" : 1/, "the title gives way before the pills");
-  // headPills is pure: run it
-  const body = page.slice(page.indexOf("const SAID ="), page.indexOf("const FACT_TONE"));
-  const { headPills } = await import(`data:text/javascript,${encodeURIComponent(body)}`);
-  const facts = (o, extra = []) => ({ triaged: true, pills: [...Object.entries(o).map(([key, value]) => ({ key, value })), ...extra] });
-  const done = { fact: "closes itself when the work is done", line: "Automatic task." };
-  const ps = headPills(facts({ intent: "task", priority: "normal", repo: "org/app" }), "coding", done, "Playbook · Month end");
-  assert.deepEqual(ps.map((p) => p.key), ["kind", "priority", "repo", "completion", "context"]);
-  assert.deepEqual(ps.map((p) => p.text), ["task for your coding tool", "normal priority", "in org/app", "closes itself when the work is done", "Playbook · Month end"]);
-  assert.equal(ps[0].title, "Sorted as: a task for your coding tool · in org/app · normal priority");
-  assert.deepEqual(ps.slice(0, 2).map((p) => p.short), ["coding tool", "normal"], "a phone's pills say it in a word");
-  // an urgent priority and a held repository are warnings, and lead the tail
-  const urgent = headPills(facts({ intent: "reply" }, [{ key: "priority", value: "urgent", tone: "alert" },
-    { key: "repo", label: "Repository", value: "none - not started", tone: "alert" }]), "reply");
-  assert.deepEqual(urgent.map((p) => [p.key, p.tone || ""]), [["kind", ""], ["priority", "alert"], ["repo", "alert"]]);
-  assert.equal(urgent[0].text, "reply to send");
+  assert.doesNotMatch(head, /HeadPills|headPills|data-tq-fact|LifecycleChip|sortedLine\(|completionFact\(|<Chip/);
+  assert.match(head, /<StatusPill status=\{status\} agent=\{agentName\(t\)\}/);
+  assert.match(page, /const status = taskStatus\(\{ live: term\?\.alive \? \{ alive: true, waiting: agentState === AGENT\.waiting \} : null, rail, state: rowState \}\);/);
+  assert.doesNotMatch(page, /export const headPills|function HeadPills/);
 });
-
 // the owner, 2026-10-19: "never get between a coder and their coding cli" - the question drawn over the terminal behind Show details is gone
 // ...and NO "Answer it" on the row (owner-approved, 2026-10-20: "we don't need that button"): the question is answered in the pane
 // right above it. Stop and save stands in its place on a LIVE session - working, idle after its turn, or asking - and leads the row,

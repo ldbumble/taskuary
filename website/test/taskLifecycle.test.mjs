@@ -116,8 +116,8 @@ test("closing the task never hides behind a fold, and a finished chat can be clo
   assert.ok(source.includes('onClick={wrapUp}>{labelOfRow("save-end")}</Button>'), "the live session's close-out");
   assert.ok(!source.includes(">Save result<") && !source.includes('label: "Save result"'));
   assert.ok(!source.includes("Save this conversation's result") && !source.includes("Save stopped run result"));
-  // interrupted work says so on the task page, not only in the list row
-  assert.match(source, /interruptedTask && <Chip/);
+  // interrupted work says so on the task page, not only in the list row - on the status pill's hover now (the redesign, 2026-10-21)
+  assert.match(source, /note=\{interruptedTask \? INTERRUPTED : ""\}/);
 });
 
 test("the agent heading says what the agent is doing, not that a session exists", () => {

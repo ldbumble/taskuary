@@ -1121,6 +1121,29 @@ def teams_org(store, account: str, key: str):
     return verdict
 
 
+_MEMBER = {}
+
+def teams_member(store, account: str, conversation_id: str, key: str) -> dict:
+    """{'tenant', 'email'} of a Teams sender, read from the chat's member list through the Teams card's token - a directory lookup
+    404s for someone outside the owner's organisation, the chat's members still name them (2026-10-22). {} when it cannot be told."""
+    key, cid = str(key or '').strip().lower(), str(conversation_id or '')
+    uid = key[6:] if key.startswith('teams:') else ''
+    if not cid.startswith('teams:') or not (uid or '@' in key): return {}
+    if (account, cid, key) in _MEMBER: return _MEMBER[(account, cid, key)]
+    out = {}
+    try:
+        from .outbound import _graph_token, _source_connector_id
+        tok = _graph_token(store, 'teams', _source_connector_id(store, 'teams', account))
+        r = requests.get(f'{GRAPH}/chats/{cid[6:]}/members', headers={'Authorization': f'Bearer {tok}'}, timeout=20)
+        if r.status_code != 200: logger.info(f'teams: the members of a chat could not be read ({r.status_code})')
+        for m in ((r.json() or {}).get('value') or []) if r.status_code == 200 else []:
+            if (uid and str(m.get('userId') or '').lower() == uid) or (not uid and str(m.get('email') or '').lower() == key):
+                out = {'tenant': str(m.get('tenantId') or '').lower(), 'email': str(m.get('email') or '').lower()}; break
+    except Exception as e: logger.info(f"teams: a sender's organisation could not be read - {e}")
+    _MEMBER[(account, cid, key)] = out
+    return out
+
+
 def _token_tenant(tok: str) -> str:
     "The directory a Graph access token was issued in (its tid claim), '' when it is not a readable JWT. Read, never trusted for auth."
     try:
@@ -1250,7 +1273,9 @@ def ingest_teams_chats(store, upn: str, tok: str, since, llm=None, file_only=Fal
         # then the message's tenant. Recorded only when told, so a line nobody could judge is re-resolved on read (teams_org).
         org = org_member(users.get(('user', user['id'])) or {}, upn.rsplit('@', 1)[-1] if '@' in upn else '')
         if org is None and tenant and user.get('tenantId'): org = teams_internal(user, tenant, users.get(('guest', user['id']), False))
-        meta = {**({'dm': True} if kind == 'oneOnOne' else {}), **({'internal': org} if org is not None else {})}
+        meta = {**({'dm': True} if kind == 'oneOnOne' else {}), **({'internal': org} if org is not None else {}),
+                # ...and which organisation they are in, whenever Graph says: what "Trust their organisation" is matched on
+                **({'tenant': str(user['tenantId']).lower()} if user.get('tenantId') else {})}
         if meta: common['mail_meta'] = meta
         if org and user['id'] != me: store.remember_trust('teams', (addr or f"teams:{user['id']}").lower(), ORG_REASON)
         if user['id'] == me:                       # your own chat lines are context, never work

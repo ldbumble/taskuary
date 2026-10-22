@@ -1740,6 +1740,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                               }}>
                               {strangerLine(detail).trust}
                             </Link>
+                            {/* ...or their whole organisation (the owner, 2026-10-22: "hit trust domain and then all users from that domain are
+                                good"): everyone at that domain, by mail or Teams, from now on (senders.trust_org) */}
+                            {strangerLine(detail).trustOrg && <>{" · "}
+                            <Link component="button" underline="hover" data-tq-trust-org="" sx={{ fontSize: 12.5, verticalAlign: "baseline" }}
+                              onClick={async () => {
+                                try { await runOperation(api, "task.trust", selected, { scope: "org" }); loadDetail(selected); loadTasks(); onChanged?.(); }
+                                catch (e) { setErr(`That didn't go through - ${opError(e, "Taskuary didn't answer")}.`); }
+                              }}>
+                              {strangerLine(detail).trustOrg}
+                            </Link></>}
                           </Typography>
                         )}
                         {/* ...and what its words read as trying to make an agent do: one line, before anyone presses Start */}

@@ -6,5 +6,5 @@ export const strangerLine = (d) => {
   if (d?.origin?.origin !== "stranger") return null;
   const ours = /^written by Taskuary/i.test(d.origin.why || "");
   return { text: `${ours ? "Written by Taskuary from what it read" : "From someone you haven't worked with here yet"} - anything risky waits for your OK`,
-    trust: ours ? "Trust it" : "Trust them", why: d.origin.why || "", danger: d.origin.danger || null };
+    trust: ours ? "Trust it" : "Trust them", trustOrg: ours ? null : "Trust their organisation", why: d.origin.why || "", danger: d.origin.danger || null };
 };

@@ -1207,7 +1207,7 @@ def _run_kind(op: dict, background: BackgroundTasks):
     if kind == 'task.clarify':
         return clarify_with_sender(tid, ClarifyBody(body=str(p.get('text') or ''), message_id=int(p['message_id']) if str(p.get('message_id') or '').isdigit() else None))
     # the owner vouching for a stranger's task (origin.raise_to) - a page press only: not in toolcatalog.PURPOSE, so no chat can vouch
-    if kind == 'task.trust': return task_trust(tid)
+    if kind == 'task.trust': return task_trust(tid, str(p.get('scope') or ''))
     if kind == 'agent.continue': return continue_work(tid, ContinueBody(note=str(p.get('note') or '') or None))
     if kind == 'review.reject': return decide(tid, DecideBody(verb='reject'), background)
     if kind == 'hub.publish':
@@ -1542,14 +1542,19 @@ def worker_release(task_id: int):
 
 
 @app.post('/api/tasks/{task_id}/trust')
-def task_trust(task_id: int):
+def task_trust(task_id: int, scope: str = ''):
     """The owner vouches for everything on this task so far (origin.raise_to). Not on guard.AGENT_WRITES, so a session
-    cannot vouch for itself; a stranger who writes afterwards lowers it again."""
-    from . import origin
+    cannot vouch for itself; a stranger who writes afterwards lowers it again. `scope` 'org': for the sender's whole organisation
+    (senders.trust_org) - everyone at that domain, by mail or Teams, from now on."""
+    from . import origin, senders
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
-    origin.raise_to(store, task_id, 'trusted', ACTOR)
+    org = None
+    if scope == 'org':
+        try: org = senders.trust_org(store, task_id, ACTOR)
+        except ValueError as e: raise HTTPException(422, str(e))
+    else: origin.raise_to(store, task_id, 'trusted', ACTOR)
     o, why = origin.of_task(store, task_id)
-    return {'origin': o, 'why': why}
+    return {'origin': o, 'why': why, **({'org': org} if org else {})}
 
 def _calendar_of(task_id: int):
     from . import calwrite

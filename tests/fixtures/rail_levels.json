@@ -4,7 +4,7 @@
       "lane": "time",
       "order_band": 1
     },
-    "urgent"
+    "task"
   ],
   [
     {
@@ -52,7 +52,7 @@
       "order_band": 1,
       "surfaced": true
     },
-    "urgent"
+    "task"
   ],
   [
     {

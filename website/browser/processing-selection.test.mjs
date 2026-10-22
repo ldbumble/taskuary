@@ -208,9 +208,9 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
       { timeout: 15000 }, ordering.titles.urgent);
     assert.equal(await title(page, "current"), currentAfterRetry, "urgent promotion cannot replace Current");
     // the LEVEL, then the oldest inside it - saved priority is a fact on the row, not a tiebreak
-    // (the owner, 2026-09-07: "within one level oldest wins first"). urgent earns level 1; the
-    // other three are all the owner's task, so the 60-minute one leads the 3- and the 2-minute one.
-    const expectedOrder = [ordering.titles.urgent, ordering.titles.old, ordering.titles.new, ordering.titles.high];
+    // (the owner, 2026-09-07: "within one level oldest wins first"). All four are the owner's task, and the urgent one, the
+    // newest, sits at its arrival place, shaded - there is no Urgent section (2026-10-22) - while Next still takes it first.
+    const expectedOrder = [ordering.titles.old, ordering.titles.new, ordering.titles.high, ordering.titles.urgent];
     await page.waitForFunction((wanted) => {
       const titles = [...document.querySelectorAll('.tq-pile-row .card b')].map(n => n.textContent.trim());
       return wanted.every(label => titles.includes(label));

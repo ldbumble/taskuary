@@ -13,8 +13,8 @@ and an Advisor post are told apart at a glance. Calendar entries show the meetin
 row for the full message, its attachments, what triage decided and why, any drafted reply, and
 the actions available on it.
 
-Beside the Timeline, the **work rail** holds what is actually waiting on you, under Urgent, Tasks,
-For later, Reports, Advisor ideas and FYI. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
+Beside the Timeline, the **work rail** holds what is actually waiting on you, under Tasks,
+For later, Reports, Advisor ideas and FYI - an urgent row is shaded in its place, and Next takes it first. Tasks is every open task, an agent working on it or not - a ring spins round the icon of
 one an agent is working, and the row stays where it is when the agent asks or stops. A thread or a step gone quiet past that person's usual day is
 *slipped*, inside Tasks, with Chase, Let it go, They answered elsewhere and Remind me under it (see [The Advisor](advisor#what-was-not-followed-up)).
 A finished or closed item gets no row: the rail is what still wants something from you, never a history. See [The work rail](tasks-and-agents#the-work-rail) for what

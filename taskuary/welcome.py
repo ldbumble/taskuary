@@ -105,7 +105,7 @@ def settled(store, since: datetime) -> int:
                       "AND COALESCE(Tags,'') NOT LIKE ?", (_stamp(since), f'%{DOCK_TAG}%'))
     return int((row[0] if row else {}).get('n') or 0)
 
-# WHAT NEEDS YOU IS THE RAIL'S OWN ANSWER (lanes.on_you): Urgent and On you, never "waiting on them", which is on somebody else.
+# WHAT NEEDS YOU IS THE RAIL'S OWN ANSWER (lanes.on_you): Tasks that are on you, never "waiting on them", which is on somebody else.
 # A lane list of its own here drifted from the funnel: a stopped agent and a failed check were the owner's on the rail and
 # missing from the greeting, so the morning after a close said "Nothing needs you yet" over both (B3, 2026-10-11). It also
 # counted For later, which the opening card beside it does not (U6, 2026-10-17) - the greeting says the card's number now.

@@ -1087,7 +1087,7 @@ export function DayCards({ groups, onSection }) {
       {(groups || []).map((g) => (
         <button key={g.key} type="button" className={`tq-day-card lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
           <span className="top"><span className="lbl"><i className="dot" />{g.word}</span><b>{g.n ?? g.rows.length}</b></span>
-          <span className="who">{gistOf(g)}</span>
+          <span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span>
         </button>
       ))}
     </div>
@@ -1118,7 +1118,7 @@ export function DayOpener({ groups = [], onSection, top = null, loading = false 
   const onYou = onYouCount(groups), toRead = cnt(read);
   const row = (g) => (
     <button key={g.key} type="button" className={`tq-day-row lvl-${g.key}`} onClick={() => onSection?.(g.key)} title={`Walk me through ${g.word}`}>
-      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
+      <i className="dot" /><b className="lbl">{g.word}</b><span className="who">{g.urgent ? `${g.urgent} urgent · ` : ""}{gistOf(g)}</span><b className="n">{loading ? "…" : g.n ?? g.rows.length}</b>
     </button>
   );
   // THE WHOLE CARD FROM THE FIRST DAY (the owner, 2026-10-15: "on first startup it should show the full card - say calendar missing if

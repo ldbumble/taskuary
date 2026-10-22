@@ -19,7 +19,9 @@ class SectionTests(unittest.TestCase):
     def test_the_sections_are_lanes_json_s(self):
         self.assertEqual(remote_assistant.LEVEL_ORDER, tuple(s['key'] for s in VOCAB['sections']))
         self.assertEqual(funnel.SECTION_WORDS, {s['key']: s['word'] for s in VOCAB['sections']})
-        self.assertEqual(funnel.ALERT_MIN, next(s['minutes'] for s in VOCAB['sections'] if s['key'] == 'urgent'))
+        # no Urgent section (the owner, 2026-10-22): an urgent row is drawn in Tasks, and the meeting's minutes live on `urgent`
+        self.assertNotIn('urgent', funnel.SECTION_WORDS)
+        self.assertEqual(funnel.ALERT_MIN, VOCAB['urgent']['minutes'])
 
     def test_a_row_with_no_band_lands_where_its_lane_says_and_the_server_band_agrees(self):
         for l in VOCAB['lanes']:
@@ -31,7 +33,7 @@ class SectionTests(unittest.TestCase):
         self.assertEqual(funnel._band({'lane': 'yours', 'urgent_request': True}), 1)
 
     def test_owner_lanes_and_what_a_new_walk_raises_are_read_off_the_lanes(self):
-        self.assertEqual(set(processing_unread.OWNER_LANES), {l['key'] for l in VOCAB['lanes'] if l['section'] in ('urgent', 'task')})
+        self.assertEqual(set(processing_unread.OWNER_LANES), {l['key'] for l in VOCAB['lanes'] if l['section'] == 'task'})
         self.assertEqual(set(processing_unread.RAISED_BY_NEW_WALK), {l['key'] for l in VOCAB['lanes'] if l.get('waits')})
 
 

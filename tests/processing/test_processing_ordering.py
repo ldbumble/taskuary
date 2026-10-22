@@ -82,31 +82,32 @@ def test_the_owners_work_is_one_level_oldest_first_and_a_result_is_not_in_it():
     assert rows == before
 
 
-def test_reports_read_newest_first_under_todays_brief():
-    """Oldest-first is for work: whatever has waited longest goes first. A report is only news, and
-    yesterday's evening checkup sat above this morning's error check (the owner, 2026-10-02: "why are
-    these out of order? oldest first?"). Today's brief still leads; a report with no time stays last."""
+def test_reports_read_oldest_first_under_todays_brief():
+    """Reports go oldest first like every other section (the owner, 2026-10-22: "reports should go oldest first like everything
+    else" - they were newest first from 2026-10-02). Today's brief still leads; a report with no time stays last."""
     rows = [item("evening", "report", at=stamp(-14 * 60)), item("check", "report", at=stamp(-20)),
             item("brief", "report", at=stamp(-25), brief_today=True), item("undated", "report", at=""),
             item("noon", "report", at=stamp(-4 * 60)), item("old-ask", "asked", at=stamp(-60)), item("ask", "asked", at=stamp(-1))]
     rows[3]["when"] = ""
-    assert [row["key"] for row in funnel._order(rows)] == ["old-ask", "ask", "brief", "check", "noon", "evening", "undated"]
+    assert [row["key"] for row in funnel._order(rows)] == ["old-ask", "ask", "brief", "evening", "noon", "check", "undated"]
 
 
-def test_age_alone_orders_one_level_and_urgency_earns_a_level_instead():
+def test_age_alone_orders_one_level_and_urgency_never_moves_a_row():
     """Saved priority used to reorder rows inside a level, which put a draft from ten minutes ago
     ahead of an ask from Tuesday (the owner, 2026-09-07: "no reason why open task is before a reply
-    drafted"). Urgency is not a tiebreak: an urgent request has a level of its own."""
+    drafted"). Urgency is not a tiebreak, and since 2026-10-22 not a level either: an urgent request sits in Tasks at its
+    arrival place, shaded, and Next takes it first (funnel_selection.below)."""
     rows = [item("low", "asked", priority="low", at=stamp(-90)),
             item("unknown", "asked", priority="ASAP", at=stamp(-100)),
             item("normal", "asked", at=stamp(-80)),
             item("urgent", "asked", priority="urgent", at=stamp(-1)),
             item("high", "asked", priority="high", at=stamp(-2))]
     assert [row["key"] for row in funnel._order(rows)] == ["unknown", "low", "normal", "high", "urgent"]
-    # ...and the same rows, with the request triage actually called urgent, lead from level 1
+    # ...and the same rows, with the request triage actually called urgent, keep their places: band 1 is a shade, not a section
     promoted = [{**row, "urgent_request": row["key"] == "urgent"} for row in rows]
-    assert [row["key"] for row in funnel._order(promoted)][0] == "urgent"
+    assert [row["key"] for row in funnel._order(promoted)] == ["unknown", "low", "normal", "high", "urgent"]
     assert funnel._band(promoted[3]) == 1 and funnel._band(promoted[0]) == 2
+    assert funnel.level_of(promoted[3]) == "task" and funnel.lanes.is_urgent(promoted[3])
 
 
 def test_equal_activity_uses_stable_keys_and_missing_or_invalid_activity_is_last():
@@ -155,8 +156,9 @@ def test_time_critical_items_lead_waits_and_scheduled_items_do_not_raise_urgency
             item("meeting", "time", kind="meeting", calendar_ready=True, mins=15),
             item("working", "working", kind="todo", priority="urgent")]
     ordered = funnel._order(rows)
-    # one level for the owner's work, and inside it these share an age, so the stable key orders them
-    assert [row["key"] for row in ordered] == ["meeting", "urgent", "current", "scheduled", "wait", "working"]
+    # one level for the owner's work - the urgent rows too, shaded in place (2026-10-22) - and inside it these share an age, so
+    # the stable key orders them
+    assert [row["key"] for row in ordered] == ["current", "meeting", "scheduled", "urgent", "wait", "working"]
     assert [row["key"] for row in funnel.more_urgent(ordered, "current")] == ["meeting", "urgent"]
     assert [row["key"] for row in funnel.more_urgent(ordered, "scheduled")] == ["meeting", "urgent"]
     assert "scheduled" not in [row["key"] for row in funnel.more_urgent(ordered, "working")]

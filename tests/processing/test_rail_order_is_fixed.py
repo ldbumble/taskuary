@@ -148,12 +148,13 @@ def test_the_bottom_ends_the_walk_names_what_was_skipped_and_the_next_walk_start
     assert again['item'] and again['item'].get('tid') == tids[0], 'the next walk did not start at the top'
 
 
-def test_urgent_is_the_one_section_next_goes_back_up_to():
-    """A meeting inside fifteen minutes or an escalated sender cannot wait for the bottom of the list: walkable, it is taken first."""
+def test_urgent_is_the_one_row_next_goes_back_up_to():
+    """A meeting inside fifteen minutes or an escalated sender cannot wait for the bottom of the list: walkable, it is taken first. It
+    has no section of its own (2026-10-22) - it sits in Tasks at its arrival place - and it skips the line from there."""
     from taskuary.funnel_selection import below
     row = lambda key, band, h: {'key': key, 'lane': 'asked', 'kind': 'asked', 'order_band': band, 'arrived_at': ago(h * 60)}
     items = funnel._order([row('task:3', 2, 1), row('urgent:1', 1, 0), row('task:1', 2, 5), row('task:2', 2, 3)])
-    assert keys(items) == ['urgent:1', 'task:1', 'task:2', 'task:3']
-    assert keys(below(items, items[1:], 'task:2')) == ['task:3']
+    assert keys(items) == ['task:1', 'task:2', 'task:3', 'urgent:1']
+    assert keys(below(items, [i for i in items if not lanes.is_urgent(i)], 'task:2')) == ['task:3']
     assert keys(below(items, items, 'task:2')) == ['urgent:1', 'task:3']
     assert below(items, items, None) is None, 'a walk with nothing on the table and no place starts at the top'

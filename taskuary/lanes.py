@@ -17,13 +17,16 @@ LEVEL_ORDER = tuple(s['key'] for s in SECTIONS)
 SECTION_WORDS = {s['key']: s['word'] for s in SECTIONS}
 LEVEL_OF_BAND = {s['band']: s['key'] for s in SECTIONS if s['band']}
 BAND_OF = {k: b for b, k in LEVEL_OF_BAND.items()}
-ALERT_MIN = SECTION['urgent']['minutes']
+# URGENT IS A SHADE, NOT A SECTION (the owner, 2026-10-22): its band is drawn in Tasks, at its arrival place
+URGENT = VOCAB['urgent']
+LEVEL_OF_BAND[URGENT['band']] = URGENT['section']
+ALERT_MIN = URGENT['minutes']
 ON_YOU_SECTIONS = tuple(s['key'] for s in SECTIONS if s.get('on_you'))
 TO_READ_SECTIONS = tuple(s['key'] for s in SECTIONS if s.get('to_read'))
 # blocked on the owner's answer or yes: what leads the walk, and what a new walk raises again
 WAITS = tuple(k for k, l in LANE.items() if l.get('waits'))
-# the owner's move on the rail - Urgent or Tasks by its lane - which Next leaves on the rail rather than dropping
-OWNER_LANES = tuple(k for k, l in LANE.items() if l.get('section') in ('urgent', 'task'))
+# the owner's move on the rail - Tasks by its lane - which Next leaves on the rail rather than dropping
+OWNER_LANES = tuple(k for k, l in LANE.items() if l.get('section') == 'task')
 KIND = VOCAB['item_kinds']
 MAIL_KINDS = tuple(k for k, v in KIND.items() if v.get('mail'))
 AGENT_KINDS = tuple(k for k, v in KIND.items() if v.get('agent'))
@@ -38,7 +41,7 @@ def lane_section(lane) -> str: return (LANE.get(lane) or {}).get('section') or '
 
 
 def not_yet(item: dict) -> bool:
-    """A meeting on the timeline with nothing to say about it YET: it enters two hours out, and is Urgent only inside ALERT_MIN."""
+    """A meeting on the timeline with nothing to say about it YET: it enters two hours out, and is urgent only inside ALERT_MIN."""
     if item.get('kind') != 'meeting': return False
     if 'calendar_ready' in item: return not item['calendar_ready']
     return item.get('mins') is not None and item['mins'] > ALERT_MIN
@@ -52,18 +55,28 @@ def band_of(item: dict) -> int:
     l, sec = LANE.get(lane) or {}, lane_section(lane)
     # a task an agent FINISHED is still a task - On you until Next reads it, never a report (the owner, 2026-09-24); an unjudged
     # row the retry gave up on is nobody's to judge now, so it is the owner's
-    return attention_band(urgent=sec == 'urgent' or bool(l.get('urgent_request') and item.get('urgent_request')),
+    return attention_band(urgent=bool(l.get('urgent') or (l.get('urgent_request') and item.get('urgent_request'))),
                           owner_wait=bool(l.get('waits')),
                           actionable=sec == 'task' or kind == 'agentdone' or (lane == 'unjudged' and bool(item.get('held'))),
                           result=sec == 'reports')
 
 
+def stamped_band(item: dict) -> int:
+    band = item.get('order_band')
+    # ...a stamp from before working agents joined Tasks (band 5, "Agents working") is read again, never taken as fyi
+    return band if isinstance(band, int) and 1 <= band <= 4 else band_of(item)
+
+
+def is_urgent(item: dict) -> bool:
+    """URGENT - a meeting inside ALERT_MIN, an ask triage called urgent, an escalated sender: no section of its own (the owner,
+    2026-10-22), it sits in Tasks at its arrival place, shaded, and Next takes it first (funnel_selection.below). lanes.js isUrgent."""
+    return stamped_band(item) == URGENT['band']
+
+
 def level_of(item: dict) -> str:
     """The rail section a row is drawn in - website/src/lanes.js levelOf is the same rule, and tests/fixtures/rail_levels.json
     holds both to the same answers."""
-    band = item.get('order_band')
-    # ...a stamp from before working agents joined Tasks (band 5, "Agents working") is read again, never taken as fyi
-    if not (isinstance(band, int) and 1 <= band <= 4): band = band_of(item)
+    band = stamped_band(item)
     # A GOAL is one row and never gone: under Tasks while it has news you have not walked past, For later - scheduled to come
     # back on its next news - once you have (spec 2026-10-12). `surfaced` is the Passed mark: a read open task stays unread on
     # purpose, so unread cannot be the signal.
@@ -80,7 +93,7 @@ def waits_on_you(item: dict) -> bool: return bool((LANE.get(item.get('lane')) or
 
 
 def on_you(item: dict, level: str = None) -> bool:
-    """ON YOU, the one answer the opener's headline, the greeting and the header all give: drawn under Urgent or Tasks, and in a
+    """ON YOU, the one answer the opener's headline, the greeting and the header all give: drawn under Tasks, and in a
     lane that is the owner's move - waiting on THEM, or an agent working, sits under Tasks as the owner's task, but it is on
     somebody else."""
     if item.get('settling'): return False

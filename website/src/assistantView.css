@@ -37,10 +37,9 @@
 .tq-pile-head .fold:hover { background: #ece7e0; }
 .tq-pile-head span { font: 600 10.5px 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase;
   white-space: nowrap; padding: 2px 10px; border-radius: 99px; border: 1px solid #e2dbcf; color: #6e685f; background: #f3efe8; }
-/* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance, and only urgent is loud */
+/* one tint per band, all quiet: the band says what KIND of thing sits under it at a glance */
 /* SOLID PILLS, WHITE WORDS, FIVE COLOURS (the owner, 2026-10-06: variant C, "the pill should be dark and text white like the
    number 3"). theme.jsx LEVEL_COLOR is the same table - the rail dot and the day-card dot wear it too */
-.tq-pile-head span.lvl-urgent, .tq-sum-head span.lvl-urgent { color: #fff; background: #8a3646; border: 1px solid #8a3646; }
 .tq-pile-head span.lvl-task, .tq-sum-head span.lvl-task { color: #fff; background: #5f7a5f; border: 1px solid #5f7a5f; }
 .tq-pile-head span.lvl-reports, .tq-pile-head span.lvl-ideas, .tq-sum-head span.lvl-reports, .tq-sum-head span.lvl-ideas { color: #fff; background: #827356; border: 1px solid #827356; }
 .tq-pile-head span.lvl-fyi, .tq-sum-head span.lvl-fyi { color: #fff; background: #7b7366; border: 1px solid #7b7366; }
@@ -93,6 +92,11 @@
 .tq-pile-row .card:focus { outline: none; }
 .tq-pile-row .card:focus-visible { outline: 2px solid #55697a; outline-offset: -2px; }
 .tq-pile-row.settling .card { border-style: dashed; }
+/* URGENT: a quiet shade of the attention colour (theme ALERT, oxblood) and a thin left accent, in the row's own place - there is no
+   Urgent heading (the owner, 2026-10-22) */
+.tq-pile-row.urgent .card { background: rgba(138, 54, 70, .06); box-shadow: inset 2px 0 0 rgba(138, 54, 70, .45); }
+.tq-pile-row.urgent .card:hover { background: rgba(138, 54, 70, .1); }
+.tq-pile-row.urgent.current .card { background: rgba(138, 54, 70, .08); }
 /* NEXT wears nothing: the ring is what is ON THE TABLE, and the row after it is a row like any other (the owner,
    2026-10-01: "the next one needs nothing"). The class stays - the walk and its tests find the next row by it. */
 .tq-pile-row.current { height: 54px; }
@@ -258,8 +262,6 @@
 .tq-day-row .lbl { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-welcome .tq-day-row .who { font-size: 12.5px; color: #4d4a43; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tq-day-row .n { font: 600 18px/1 'IBM Plex Sans', system-ui, sans-serif; font-variant-numeric: tabular-nums; text-align: right; min-width: 24px; }
-.tq-day-row.lvl-urgent .dot { background: #8a3646; }
-.tq-day-row.lvl-urgent .n { color: #8a3646; }
 .tq-day-row.lvl-task .dot { background: #5f7a5f; }
 .tq-day-row.lvl-reports .dot, .tq-day-row.lvl-ideas .dot { background: #827356; }
 .tq-day-row.lvl-fyi .dot { background: #7b7366; }
@@ -280,7 +282,6 @@
 .tq-day-card .dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #b8afa1; }
 .tq-day-card .top b { font: 600 22px/1 'IBM Plex Sans', system-ui, sans-serif; color: #262521; font-variant-numeric: tabular-nums; }
 .tq-welcome .tq-day-card .who { width: 100%; font-size: 12.5px; line-height: 1.4; color: #6e685f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tq-day-card.lvl-urgent .dot { background: #8a3646; }
 .tq-day-card.lvl-task .dot { background: #5f7a5f; }
 .tq-day-card.lvl-reports .dot, .tq-day-card.lvl-ideas .dot { background: #827356; }
 .tq-day-card.lvl-fyi .dot { background: #7b7366; }

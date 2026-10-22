@@ -37,7 +37,7 @@ numbers through the real app, using fictional demo data.
 ### 1. Everything lands in one place
 
 Mail, chats, issue trackers, alerts, and reports arrive on one rail, sorted by what they need:
-**Urgent**, **Tasks** (every open task - a spinning ring on the one an agent is working), **For later**, **Reports**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
+**Tasks** (every open task - a spinning ring on the one an agent is working, a quiet shade on an urgent one), **For later**, **Reports**, the Advisor's ideas, and **FYI**. Beside it, the day opens on
 one card: what changed since last night, what was learned, the morning digest, your meetings, and
 what waits in each section - so you never open each system in turn. A goal is a task whose steps
 are tasks: triage opens one for an open-ended ask, and files later mail under the step it serves.

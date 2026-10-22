@@ -2,10 +2,10 @@ import vocab from "../../taskuary/lanes.json" with { type: "json" };
 import { label } from "./buttons.js";
 import { says, subState } from "./laneSays.js";
 import { band } from "./timeWords.js";
-import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou } from "./lanes.js";
+import { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou } from "./lanes.js";
 export { says, subState };
 // the rail's sections and the on-you rule are lanes.js's, re-exported where the rail's readers have always found them
-export { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, levelOf, onYou };
+export { LEVEL_META, LEVEL_ORDER, SECTION_WORDS, attentionBand, isUrgent, levelOf, onYou };
 // The pipe, as the Assistant page draws it: what each lane is called and coloured, which item is a
 // new arrival (it drops in from the top and slides to its slot), and which card goes under a line.
 // Pure and dependency-free so it runs under bare node (test/funnelPile.test.mjs); colour is named
@@ -123,8 +123,10 @@ export const nextMarkerKey = (pile, items, current) => {
   if (hasNextSelection(pile))
     return pile.expected_next_members[0] || pile.expected_next_key || null;
   // ...a task an agent is working included: the walk takes every task in the rail's order (the owner, 2026-10-21)
+  // ...an urgent row skips the line (funnel_selection.below)
   const eligible = (item) => !item.settling && item.key !== current?.key;
-  return ((items || []).find((item) => eligible(item) && !item.surfaced)
+  return ((items || []).find((item) => eligible(item) && !item.surfaced && isUrgent(item))
+    || (items || []).find((item) => eligible(item) && !item.surfaced)
     || (items || []).find(eligible))?.key || null;
 };
 export const canAdvanceSelection = (pile, ready, only = null) => {
@@ -405,10 +407,10 @@ export const levelsOf = (items) => LEVEL_ORDER.filter((level) => (items || []).s
 // product (the owner, 2026-09-16: "we don't have importance besides for the 4 categories"), so the
 // heading is the only thing on the rail that carries a role colour - the dot beside a row is its
 // SOURCE, and a row's own word is gone. theme.jsx ROLES, named rather than copied.
-export const LEVEL_ROLE = { urgent: "you", task: "you", later: "passed", reports: "info", ideas: "info", fyi: "muted" };
+export const LEVEL_ROLE = { task: "you", later: "passed", reports: "info", ideas: "info", fyi: "muted" };
 
 // ── how the rail divides the height it has ────────────────────────────────────────────────────
-// urgent and tasks are NEVER capped: a task behind a "4 more" button is a task you do not do. Whatever is left over
+// tasks are NEVER capped: a task behind a "4 more" button is a task you do not do. Whatever is left over
 // goes to reports, then fyi, each keeping a floor of two - below that a band is a heading and a
 // button, which is worse than absent. If that still overflows nothing is crushed further and the
 // rail scrolls, so the only thing ever below the fold is work, in rank order.
@@ -422,7 +424,8 @@ export const FLOOR = 2;
 // For later is sorted by when each comes back, soonest first (no time known sorts last); every other band keeps the server's order
 const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
 // the walk's clock for a row (funnel.order_key): when it ARRIVED - never its newest activity, or a reply or an agent moved it (the
-// owner, 2026-10-22: "set by time, oldest to newest and then never move") - oldest first inside a section, reports newest first
+// owner, 2026-10-22: "set by time, oldest to newest and then never move") - oldest first inside every section, reports too (2026-10-22:
+// "reports should go oldest first like everything else")
 const walkAt = (i) => Date.parse(String(i?.arrived_at || i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
 // ...and the age the rail's gutter says is that same clock, so the column reads in the order the rows are drawn
 export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
@@ -430,8 +433,8 @@ export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
 // order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
 // should never move them")
 export const inOrder = (rows, extra) => (extra || []).reduce((out, x) => {
-  const level = levelOf(x), t = walkAt(x), newest = level === "reports";
-  const at = out.findIndex((r) => levelOf(r) === level && (newest ? walkAt(r) < t : walkAt(r) > t));
+  const level = levelOf(x), t = walkAt(x);
+  const at = out.findIndex((r) => levelOf(r) === level && walkAt(r) > t);
   return at < 0 ? [...out, x] : [...out.slice(0, at), x, ...out.slice(at)];
 }, [...(rows || [])]);
 // `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile). A task whose agent
@@ -446,8 +449,8 @@ export const bandsOf = (items, pin = null) => {
       if (level === "later") return { level, items: [...rows].sort(soonest) };
       const moved = rows.find((i) => held(i) && levelOf(i) !== level);
       if (!moved) return { level, items: rows };
-      const rest = rows.filter((i) => i !== moved), t = walkAt(moved), newest = level === "reports";
-      const at = rest.findIndex((i) => (newest ? walkAt(i) < t : walkAt(i) > t));
+      const rest = rows.filter((i) => i !== moved), t = walkAt(moved);
+      const at = rest.findIndex((i) => walkAt(i) > t);
       return { level, items: at < 0 ? [...rest, moved] : [...rest.slice(0, at), moved, ...rest.slice(at)] };
     })
     .filter((b) => b.items.length);

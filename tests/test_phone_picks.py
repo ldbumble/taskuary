@@ -241,7 +241,8 @@ class PhoneCardTests(unittest.TestCase):
                 'who': 'coding', 'channel': 'report', 'lane': 'report', 'why': 'the agent finished and closed it'}
         text = ra.turn_text({'say': 'coding finished TQ-0009: the export timed out on a mass update.', 'item': item})
         # the task, then the agent and what it found (the card as a story, 2026-09-28)
-        self.assertTrue(text.startswith('✅ agent finished · TQ-0009\n🔵 **The task**'), text)
+        # ...and no "🔵 The task · just now" filler where nobody asked (F6)
+        self.assertTrue(text.startswith('✅ agent finished · TQ-0009\nWhy the nightly export times out'), text)
         self.assertLess(text.index('Why the nightly export times out'), text.index('the export timed out on a mass update'))
         self.assertNotIn('the agent finished and closed it', text)
 

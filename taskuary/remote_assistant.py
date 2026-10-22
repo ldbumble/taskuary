@@ -1671,12 +1671,31 @@ def channel_word(ch) -> str:
     return _CHANNEL_WORDS.get(k) or k.replace('_', ' ').title()
 
 
-def agent_label(item: dict | None, name: str = None) -> str:
+def _general(store, it: dict) -> bool:
+    """A general agent's task - read off the task, because a headless or saved general run carries no session `mode` (F6)."""
+    if store is None or not it.get('tid'): return False
+    try: return str((store.get_task(int(it['tid'])) or {}).get('Kind') or '').lower() == 'general'
+    except Exception: return False
+
+
+def agent_label(item: dict | None, name: str = None, store=None) -> str:
     """What an agent IS - never the profile's bare name ("coding"); the profile only when it says more."""
     it = item or {}
     p = str(name or it.get('working') or it.get('agent') or '').strip()
-    kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' else 'Coding agent'
+    kind = 'General agent' if str(it.get('mode') or '') in ('chat', 'assistant') or p.lower() == 'assistant' or _general(store, it) else 'Coding agent'
     return f'{kind} · {p}' if p.lower() not in _PLAIN_PROFILE else kind
+
+
+def asker(store, it: dict) -> str:
+    """Who asked for the work behind an agent's card - the person on the task's mail - '' when nobody did (own work, a report).
+    The card's `who` is the AGENT there, and the move read "Reply to claude with what it found" (F6)."""
+    if store is None or is_own(it): return ''
+    try:
+        msg = store.get_message(int(it['mid'])) if it.get('mid') else None
+        if not msg and it.get('tid'): msg = next((m for m in store.list_messages(int(it['tid'])) or [] if m.get('Status') != 'context'), None)
+    except Exception: msg = None
+    if not msg or str(msg.get('Channel') or '') in ('report', 'assistant', 'own'): return ''
+    return story_who({'who': msg.get('FromName') or msg.get('FromEmail') or ''}) if (msg.get('FromName') or msg.get('FromEmail')) else ''
 
 
 def last_result(store, tid, n: int = 600) -> str:
@@ -1803,7 +1822,9 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     if _advisor(store, it):
         lines.append(' · '.join(x for x in (f'{DOT_TASK} **Advisor** raised', 'an idea', age) if x))
     elif kind in ('agentdone', 'wrapup') or agent_is_who:
-        lines.append(' · '.join(x for x in (f'{DOT_TASK} **The task**', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
+        # the PERSON who asked, when the work has one - "🔵 The task · just now" said nothing the header had not (F6)
+        who = asker(store, it)
+        if who: lines.append(' · '.join(x for x in (f'{DOT_TASK} **{who}** asked', channel_word(ch) if ch and ch not in ('own', 'report') else '', age) if x))
     elif is_own(it):
         lines.append(' · '.join(x for x in (f'{DOT_TASK} **You**', 'your task', age) if x))
     else:
@@ -1840,7 +1861,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     if not found and kind == 'agentdone' and say: found = say
     if found or state:
         lines.append('')
-        lines.append(f"{DOT_AGENT} **{agent_label(it, it.get('who') if kind == 'agentdone' else None)}**" + (f' · {state}' if state else ''))
+        lines.append(f"{DOT_AGENT} **{agent_label(it, it.get('who') if kind == 'agentdone' else None, store)}**" + (f' · {state}' if state else ''))
         if found: lines.append(_cut(found, 400))
         if rep.get('actions'): lines.append(f"did: {_cut(rep['actions'], 300)}")
         if rep.get('verdict'): lines.append(f"verdict: {_cut(rep['verdict'], 300)}")
@@ -1855,7 +1876,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
 def move_block(store, item: dict | None, draft: str = '') -> str:
     """The loud part: a rule, **YOUR MOVE · <what>**, and what to decide on - your reply, its question, why it waits."""
     it = item or {}
-    title = move_title(it, draft)
+    title = move_title({**it, 'who': asker(store, it) or it.get('who')} if it.get('kind') == 'agentdone' else it, draft)
     if not title: return ''
     body = []
     qs = it.get('questions') or []

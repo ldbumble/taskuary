@@ -939,7 +939,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const fromWorkflow = workflowOrigin(t || {}, detail?.workflow);
   // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
   // ...with the replies you sent from here in them, where they went (the redesign, 2026-10-21: "threads with the owner's replies interleaved")
-  const sources = groupConversations(taskMessages, { ms: tsMs, clean: cleanText });
+  // ...and the earlier messages triage said the ask rests on (detail.earlier, 2026-10-22): another task's, shown here in their conversation
+  // so the ask can be checked against what it came from - "nothing about uncleared checks in there" was the ask built on a mail From never showed
+  const sources = groupConversations([...taskMessages, ...(detail?.earlier || [])], { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
   // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
   const shownMsg = openMsg !== undefined ? openMsg : sourceCount === 1 ? sources[0]?.msgs[0]?.MessageId ?? null : null;

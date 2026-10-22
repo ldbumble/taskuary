@@ -34,7 +34,7 @@ test("the task card's Came from groups chats and email alike", () => {
   assert.doesNotMatch(page, /\{chatTask && <ChatThread messages=\{taskMessages\} \/>\}/);
   assert.doesNotMatch(page, /newestFirst\(alsoSaid\)/);
   // ...the replies you sent from here among them (the redesign, 2026-10-21)
-  assert.match(page, /const sources = groupConversations\(taskMessages/);
+  assert.match(page, /const sources = groupConversations\(\[\.\.\.taskMessages, \.\.\.\(detail\?\.earlier \|\| \[\]\)\]/);
   assert.match(page, /detail\?\.repeats\?\.line && <Typography/);
   assert.match(src, /flexDirection: "column", alignItems: me \? "flex-end" : "flex-start"/);   // yours right, theirs left
 });

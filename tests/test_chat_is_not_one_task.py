@@ -13,7 +13,7 @@ arriving while an agent is live on the task. Since PW-031 (2026-09-06) the reade
 triage verdict - `relationship` among the room's same-day lines - not a second classifier, and
 the room id alone never joins: without a brain, nothing but the facts does (PW-018/PW-033).
 """
-import json, unittest
+import json, re, unittest
 from unittest import mock
 
 from taskuary.ingest import ingest_message
@@ -88,7 +88,7 @@ class OneRoomManyJobs(unittest.TestCase):
                             'BodyText': 'fixed - try it now', 'Status': 'context'})
         seen = []
         line(self.s, 'nope. new', '2026-09-02 17:30:00', brain(same=False, seen=seen))
-        asked = seen[0]['exchange']
+        asked = [re.sub(r'^\[#\d+\] ', '', l) for l in seen[0]['exchange']]   # each line led by its id for rests_on
         self.assertTrue(any(l.startswith('you ') and 'fixed - try it now' in l for l in asked))
         self.assertTrue(any(l.startswith('Tess ') and 'dashboard' in l for l in asked))
         self.assertEqual(seen[0]['body'], 'nope. new')

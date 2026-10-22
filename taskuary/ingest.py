@@ -583,7 +583,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
     # `carried` collects the words the exchange actually carries, so the quoted chain under this
     # very message is not sent a second time underneath it (triage.sender_body)
     carried = set()
-    lines = exchange_lines(store, msg, seen=carried)
+    lines = exchange_lines(store, msg, seen=carried, ids=True)
     if lines: thread = {**thread, 'exchange': lines}
     # ...and what was ANSWERED AND CLOSED lately that touches this. The agent's context file has carried
     # this block since it was written (context.past_work); the judge deciding whether to START a coding agent
@@ -1606,7 +1606,7 @@ def from_opener(store, tid, msg: dict) -> bool:
     return bool(first and me and _who(first) == me)
 
 
-def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen: set = None) -> list:
+def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen: set = None, ids: bool = False) -> list:
     """The conversation as a person scrolling up would read it - theirs and OURS, oldest first,
     each marked with who said it, each message's own words once. The owner's own half was in the
     database all along and no classifier was ever shown it, which is why triage read every chat
@@ -1619,7 +1619,9 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen:
 
     `seen` is filled with the words this exchange actually CARRIES - the messages that survived the
     budget, never the ones it dropped - so the caller can leave the same words out of the quoted
-    chain under the message being judged instead of paying for them twice (triage.sender_body)."""
+    chain under the message being judged instead of paying for them twice (triage.sender_body).
+
+    `ids` marks each line with its message id ([#123]) - for triage, which names the earlier lines its ask rests on (rests_on)."""
     from .triage import strip_boilerplate, sender_body, known_lines, EXCHANGE_BUDGET
     budget = EXCHANGE_BUDGET if budget is None else budget
     # one set of already-said lines, grown a body at a time - never rebuilt from the whole chain per
@@ -1644,7 +1646,8 @@ def exchange_lines(store, msg: dict, budget: int = None, limit: int = 200, seen:
             names = [str(a.get('Name') or 'a file') for a in store.list_attachments(m['MessageId'])]
             body = f"(sent {', '.join(names[:4])}{' and more' if len(names) > 4 else ''})" if names else body
         known |= known_lines((strip_boilerplate(raw),))
-        if body: out.append(f"{who} · {str(m.get('SentAt') or '')[5:16]}: {body}"); kept.append(strip_boilerplate(raw))
+        mark = f"[#{m['MessageId']}] " if ids else ''
+        if body: out.append(f"{mark}{who} · {str(m.get('SentAt') or '')[5:16]}: {body}"); kept.append(strip_boilerplate(raw))
     dropped = 0
     while len(out) > 1 and sum(len(l) for l in out) > budget:
         out.pop(0); kept.pop(0); dropped += 1

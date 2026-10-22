@@ -47,10 +47,12 @@ class NoAiFreshInstallTests(PhoneCase):
     channel = 'whatsapp'
 
     def test_with_nothing_to_pick_the_line_promises_no_choices(self):
-        for said in ('hi', 'what can you do?', '1'):
+        for said in ('hi', 'what can you do?'):
             (text, poll), = self.ph.type(said)
             self.assertIn('Connect an AI', text)
             if not poll: self.assertNotIn('choices', text, f'{said!r} -> {text!r}')
+        # ...and since 2026-10-22 it offers a way on - Connect an AI, More… - so "1" is that first choice
+        self.assertIn('CONNECTIONS · AI', text_of(self.ph.type('1')))
 
     def test_with_a_card_on_the_table_the_choices_it_names_are_sent(self):
         self.f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],

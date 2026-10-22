@@ -42,7 +42,11 @@ def nav_api(tmp_path, monkeypatch):
         while time.monotonic() < deadline:
             left = [t for t in threading.enumerate() if t not in before and t.daemon and t.is_alive()]
             if not left: break
-            for t in left: t.join(timeout=max(0.1, deadline - time.monotonic()))
+            for t in left:
+                # a thread caught between being listed and being started cannot be joined yet (Windows CI, 2026-10-22):
+                # the next pass of this loop picks it up once it runs
+                try: t.join(timeout=max(0.1, deadline - time.monotonic()))
+                except RuntimeError: time.sleep(.01)
         funnel.invalidate()
         db.cx.close()
 

@@ -2039,7 +2039,7 @@ def code(task_id: int, background: BackgroundTasks, body: CodeBody = None):
     where you cannot watch it, interrupt it or answer it, so it is now the same as /dispatch."""
     if not store.get_task(task_id): raise HTTPException(404, 'task not found')
     agent = (body.agent if body else None) or hub_agents.default_agent(store)
-    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
+    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     ses = start_session(store, task_id, agent, (body.model if body else None), (body.instruction if body else None),
                         brain=getattr(body, 'brain', None))
     return {'start': 'session', 'agent': agent, 'model': (body.model if body else None), 'session': ses}
@@ -3319,7 +3319,7 @@ def _dispatch_one(tid: int, body: DispatchBody, background: BackgroundTasks) -> 
                 'taskId': tid, 'ref': task_ref(tid), 'session': session.info(tail=3)}
 
     agent = body.agent or hub_agents.default_agent(store)
-    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}')
+    if not store.get_agent(agent): raise HTTPException(422, f'unknown agent: {agent}' if agent else 'no coding agent is set up to take it')
     # THE BRAIN TRAVELS WITH THE ROLE. This called start_session without it, so a picked CLI got as
     # far as the door and no further: "chose devin from start coding agent screen but it started
     # claude code" (the owner, 2026-09-22). agent = who works it, brain = what runs it.

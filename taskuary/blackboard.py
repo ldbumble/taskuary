@@ -380,7 +380,7 @@ MAX_ATTEMPTS = 3                 # the first try and two automatic retries (owne
 BACKOFF = (30, 120)              # seconds before attempt 2, then before attempt 3
 # a failure the next attempt cannot fix: configuration, a missing repository or worker, a permission
 # problem. It becomes "needs you" at once instead of burning the budget (PW-086).
-PERMANENT = ('unknown agent', 'repositor', 'repo:', 'checkout', 'permission', 'not configured', 'no such', 'not found',
+PERMANENT = ('unknown agent', 'no coding agent is set up', 'repositor', 'repo:', 'checkout', 'permission', 'not configured', 'no such', 'not found',
              'needs a', 'pick one', 'kind must be', 'assistant view is for', 'no task ', 'not installed',
              "stranger's task")      # origin.Refusal: retrying the same CLI on the same words is refused the same way
 

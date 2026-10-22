@@ -167,13 +167,28 @@ test("the task page: From | Work at rest, the work alone while an agent works, i
     await cdp.detach();
   });
 
-  await t.test("an agent that stopped and saved: the columns return, and the work column is its Result", async () => {
+  // ...and AN AGENT THAT HAS ACTED keeps the whole width (the owner, 2026-10-22): its Result alone, From the folded line over it
+  await t.test("an agent that stopped and saved: its Result has the whole width, From folded over it", async () => {
     const made = await post(page, "/api/fixture/task/coding-saved");
     assert.ok(made.taskId, JSON.stringify(made));
     await open(page, made.taskId);
     await page.waitForSelector("[data-tq-work] [data-tq-result]", { timeout: 20000 });
     const l = await layout(page);
-    assert.equal(l.layout, "columns");
+    assert.equal(l.layout, "full");
+    assert.equal(l.from, null, "no From column beside the Result");
+    assert.match(l.line, /^From\s*\S/, `From folded to one line: "${l.line}"`);
+    assert.equal(await page.$eval("[data-tq-from-line]", (e) => e.getAttribute("aria-expanded")), "false", "closed by default");
+    const view = await page.evaluate(() => document.querySelector("[data-tq-task-page] [data-tq-task-head]").parentElement.getBoundingClientRect().width);
+    const result = () => page.$eval("[data-tq-result]", (e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; });
+    const before = await result();
+    assert.ok(before.w / view > 0.8, `the Result has the whole width (${Math.round(before.w / view * 100)}%)`);
+    await page.click("[data-tq-from-line]");
+    await page.waitForSelector("[data-tq-from-side]", { visible: true, timeout: 5000 });
+    assert.match(await page.$eval("[data-tq-from-side]", (e) => e.innerText), /Came from/, "the same From every other task shows");
+    assert.deepEqual(await result(), before, "the sidebar is laid over the Result, which keeps its size and place");
+    await page.click("[data-tq-from-close]");
+    await page.waitForFunction(() => !document.querySelector("[data-tq-from-side]"), { timeout: 5000 });
+    assert.ok(await page.$("[data-tq-work] [data-tq-closeout]"), "Close out stays under the Result");
     assert.equal(l.statusKey, "saved");
     assert.match(l.status, /stopped and saved$/);
     const r = await page.$eval("[data-tq-result]", (e) => ({ text: e.innerText, parts: [...e.querySelectorAll("[data-tq-result-part]")].map((p) => p.getAttribute("data-tq-result-part")),

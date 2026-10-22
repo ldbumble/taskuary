@@ -15,10 +15,10 @@ test("a stage heading wraps below sm and its bar takes the whole next line", () 
   assert.match(head, /flexBasis: \{ xs: "100%", sm: "auto" \}, order: \{ xs: 9, sm: 0 \}/);
 });
 // ...and the folded task strip has no bar to wrap any more: the Tasks tab's bar sits under the view (section 1's redesign, 2026-10-16)
-test("the folded task strip wraps on a phone and carries no buttons", () => {
-  const at = src.indexOf('{...pressable(() => setOpenStage("task"))}');
-  const strip = src.slice(at, src.indexOf("<ExpandMoreIcon", at));
-  assert.match(strip, /flexWrap: \{ xs: "wrap", sm: "nowrap" \}/);
-  assert.doesNotMatch(strip, /<Button|<IconButton|<RemindMe/);
+// ...and From is a column now, three lines on a phone until a tap opens it (the redesign, owner-approved 2026-10-21)
+test("From shows three lines on a phone and opens on a tap; the bar wraps at the view's foot", () => {
+  assert.match(src, /const PHONE_FROM = \(open\) => \(open \? \{\} : \{ \[`@media \$\{PHONE_MQ\}`\]: \{ maxHeight: 132, overflow: "hidden"/);
+  assert.match(src, /onClickCapture=\{phoneFromTap\}/);
+  assert.match(src, /if \(fromOpen \|\| !window\.matchMedia\?\.\(PHONE_MQ\)\.matches\) return;\n\s+e\.preventDefault\(\); e\.stopPropagation\(\); setFromOpen\(true\);/);
   assert.match(src, /\{!inRow && !sessionView && \(\s+<Box data-tq-task-bar=""[^>]*flexWrap: "wrap"/, "the bar it lost wraps at the view's foot");
 });

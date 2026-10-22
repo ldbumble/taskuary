@@ -484,8 +484,10 @@ def keep_promises(store, force: bool = False) -> int:
         else:
             state = agent_state({'kind': 'agentdone', 'tid': tid}, store) if t.get('Status') not in ('done', 'dropped') else ''
             said = (f'{ref} is back: the agent {state}.' if state.startswith('failed') else f'{ref} is finished - nothing on it waits on you.')
+            # ...a failed one with its way on first, as its card offers it (R2 on the phone, A2)
+            again = [(buttons.label('try_again'), {'t': 'continue', 'tid': tid})] if state.startswith('failed') else []
             text = turn_text({'say': said, 'item': None}, store=store,
-                             extra=[(f'Open {ref}', {'t': 'open', 'key': f'task:{tid}'}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
+                             extra=again + [(f'Open {ref}', {'t': 'open', 'key': f'task:{tid}'}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
         send(store, p['channel'], chat, text, p.get('connector_id'))
         kept += 1
     # ...plus any promise made WHILE this looked (a chat turn on another thread): rewriting the list read above would drop it
@@ -617,6 +619,7 @@ def asking() -> dict | None:
 # funnel.level_of, which mirrors lanes.js levelOf, and the order is lanes.json's `sections`.
 from .lanes import LEVEL_ORDER
 AGENT_CARD_LANES = {'blocked', 'stopped', 'queued', 'working', 'saved'}     # the lanes whose card is an agent's
+_TASKISH = ('todo', 'message', 'asked', 'task')                            # a task's own card - an agent may have run on it
 ROWS_PER_GROUP = 5
 
 
@@ -1851,6 +1854,8 @@ def then_line(out: dict, store=None) -> str:
     # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
     if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
     if out['item'].get('kind') in _LEADS_WITH_NEXT: return ''        # nothing to decide: no verb leads, so none is explained (A8, A9)
+    if out.get('lead_verb') == 'try_again': return f"{buttons.label('try_again')}: starts the agent again from where it stopped."
+    if out.get('lead_verb') == 'close': return f"{buttons.label('close')}: {THEN['close']}"
     if out['item'].get('hold') and out['item'].get('kind') not in ('review', 'action', 'agent'):
         return f"{TRUST}: you vouch for this sender - then {buttons.label('regular_agent')} is offered. Nothing starts by itself."
     it = out.get('item') or {}
@@ -1984,7 +1989,8 @@ def agent_state(item: dict | None, store=None) -> str:
     2026-10-21) or finished - and "is waiting on you" is said only of a run that is: a failed run read "is waiting on you" (F5)."""
     it = item or {}
     kind, lane = it.get('kind'), it.get('lane')
-    if store is not None and it.get('tid') and lane != 'working' and (kind in ('agent', 'agentdone') or lane in AGENT_CARD_LANES):
+    # ...and a task whose agent ENDED, whatever its row became: a finished run on a task the rail shows as yours read "No agent yet" (A2)
+    if store is not None and it.get('tid') and lane != 'working' and (kind in ('agent', 'agentdone') or lane in AGENT_CARD_LANES or kind in _TASKISH):
         from . import funnel, workerstate as ws
         # ...FAILED whatever the session does, as the desk's R2 reads it: a run that failed with its session still open read "is waiting
         # on you" (the 2026-10-22 re-walk) - finished stays a reading of a run that is over
@@ -2157,7 +2163,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     found = rep.get('summary') or ' '.join(str(it.get('summary') or '').split())
     # ...and a regular agent files no report: what it RETURNED is its last finished turn. The phone showed only its
     # follow-up question, never the answer above it (2026-10-06: "in whatsapp you just see the question")
-    if not found and kind == 'agent': found = last_result(store, it.get('tid'))
+    if not found and (kind == 'agent' or state == 'finished'): found = last_result(store, it.get('tid'))
     # ...a finished agent with no summary on the card: the assistant's own line says what it found
     if not found and kind == 'agentdone' and say: found = say
     if found or state:
@@ -2228,6 +2234,39 @@ GOT_IT = 'Got it'                             # an FYI's Next: read, and on to t
 _LEADS_WITH_NEXT = ('fyi', 'fyis', 'report')   # cards with nothing to decide: the way on comes first, and no "then" line
 
 
+def _fix_pick(fix: dict | None) -> tuple | None:
+    """A failure's fix as a phone pick: a Connections section it names opens as the phone's own browse of it (doorway_browse) - the
+    page's link, which a chat cannot follow. None where the fix is a place the phone has no list of."""
+    from urllib.parse import unquote
+    m = re.match(r'^#connections=(.+)$', str((fix or {}).get('href') or ''))
+    return (fix['label'], {'t': 'browse', 'area': 'connections', 'section': unquote(m.group(1))}) if m and fix.get('label') else None
+
+
+def _after_the_run(store, out: dict, item: dict) -> tuple[dict, list]:
+    """R2 ON THE PHONE (A2, 2026-10-22), as the desk reads a run that is over: a FAILED agent leads with Try again - the same road as
+    Continue - and with Connect an AI when no AI is why; a FINISHED one leads with Mark done. The phone offered Stop and save, Next and
+    Remind me under both. Returns (the turn, the labels that lead)."""
+    from . import concierge
+    tid = item.get('tid')
+    if store is None or not str(tid or '').isdigit() or item.get('kind') not in ('agent', *_TASKISH): return out, []
+    if held(item) and item.get('kind') != 'agent': return out, []
+    state = agent_state(item, store)
+    have = {c.get('verb'): c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb')}
+    if state.startswith('failed'):
+        go = buttons.label('try_again')
+        out = _recast(out, drop={'continue'})          # the desk's Continue, which asks for a note first: one tap here runs it
+        _offer([(go, {'t': 'continue', 'tid': int(tid)})])
+        from . import funnel
+        fix = _fix_pick((funnel.run_failed(store, int(tid), live_too=True) or {}).get('fix'))
+        if fix: _offer([fix])
+        return {**out, 'lead_verb': 'try_again'}, [go] + ([fix[0]] if fix else [])
+    if state == 'finished':
+        done = have.get('close') or concierge.CHIP_WORDS['close']
+        if 'close' not in have: _offer([(done, {'t': 'close', 'tid': int(tid)})])
+        return {**out, 'lead_verb': 'close'}, [done]
+    return out, []
+
+
 def _recast(out: dict, drop=(), relabel: dict = None) -> dict:
     """The turn with the chips of `drop` (verbs) gone and `relabel` ({verb: label}) said in the phone's own words - its options too."""
     from . import concierge
@@ -2278,6 +2317,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # new sender's branch. Its choices lead with Trust them - the task page's own vouch - and Not ours
     trusting = bool(item.get('hold') and str(item.get('tid') or '').isdigit() and item.get('kind') not in ('review', 'action', 'agent'))
     if item.get('hold'): out = _recast(out, drop=set(_HAND))
+    out, leads = _after_the_run(store, out, item)
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
@@ -2363,6 +2403,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         first_ += [w for w in rest if w in redo and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
+        if leads: words = leads + [w for w in words if w not in leads]
         if trusting:
             nope = [w for w in words if w == _c.CHIP_WORDS['not_ours']]
             words = [TRUST] + nope + [w for w in words if w not in nope]

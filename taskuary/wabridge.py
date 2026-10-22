@@ -236,11 +236,14 @@ def start_configured(store) -> dict:
     return {**out, 'started': True, 'connectorId': c['ConnectorId']}
 
 
-def start(force_install: bool = False, wait: bool = False, filter_policy: dict = None) -> dict:
+def start(force_install: bool = False, wait: bool = False, filter_policy: dict = None, auto: bool = False) -> dict:
     """Kick off install (if needed) + start on a worker thread and return at once; state() tells
     the rest. A second call while one runs is a no-op that reports the current phase. `wait` runs
-    the work inline (tests, scripts) instead of on the thread."""
+    the work inline (tests, scripts) instead of on the thread. `auto`: the supervisor's own start, which
+    keeps its count of starts in a row; any other start is somebody asking, and begins the count again."""
     if not _LOCK.acquire(blocking=False): return {**state(), 'note': 'already in progress'}
+    if not auto:
+        with _SUP_LOCK: _SUP.update(tries=0, gave_up='', held=False)
     def work():
         try:
             if not node():
@@ -328,7 +331,10 @@ def pid_on_port(p: int = None) -> int:
     return 0
 
 
-def stop() -> dict:
+def stop(hold: bool = False) -> dict:
+    """`hold`: the owner pressed Stop - the supervisor leaves the bridge down until somebody starts it."""
+    if hold:
+        with _SUP_LOCK: _SUP['held'] = True
     pid = _STATE.get('pid') or pid_on_port()
     if pid:
         try:
@@ -344,3 +350,56 @@ def restart(wait: bool = False, filter_policy: dict = None) -> dict:
     picks up a newer bridge.mjs (an old one kept answering /status without the paired number)."""
     stop(); time.sleep(1.0)
     return start(wait=wait, filter_policy=filter_policy)
+
+
+# ── A BRIDGE THAT DIED IS STARTED AGAIN (2026-10-22) ──────────────────────────────────────────────────────────
+# A WhatsApp connection drop killed the bridge process (bridge.mjs, an unhandled 1006), and nothing brought it back: the
+# poll said "the WhatsApp bridge is not running" into the log every three seconds until the owner noticed. The poll is
+# who finds it down, so the poll drives this - no thread of its own. One line when it goes down, one per start, one when
+# it is back; and after GIVE_UP starts in a row that did not stay up (no node, a broken install), it stops and says so.
+BACKOFF = (5, 30, 120, 300)          # seconds before each start in a row; the last repeats
+GIVE_UP = 6
+FLAPPING = 300                       # back for less than this and down again: the starts so far still count
+_SUP = {'down': 0.0, 'up': 0.0, 'tries': 0, 'next': 0.0, 'held': False, 'gave_up': ''}
+_SUP_LOCK = threading.Lock()
+
+
+def supervise(store, c: dict, err: str, now: float = None) -> str:
+    """The poll found no bridge answering. Log it once, start a managed bridge again on the backoff, and return the
+    error the card should carry - the same words while it retries (a changed error is news again on the bell), the
+    give-up line once it stops."""
+    now = time.time() if now is None else now
+    ours = managed(c)
+    with _SUP_LOCK:
+        S = _SUP
+        if not S['down']:
+            S['down'] = now
+            if not (S['up'] and now - S['up'] < FLAPPING): S['tries'] = 0
+            S['next'] = now + BACKOFF[min(S['tries'], len(BACKOFF) - 1)]
+            auto = ours and not S['held'] and not S['gave_up']
+            logger.warning(f'whatsapp bridge is down: {err}' + (f' - starting it again in {S["next"] - now:.0f}s' if auto else ''))
+        if not ours or S['held']: return err
+        if S['gave_up']: return S['gave_up']
+        if _LOCK.locked() or now < S['next']: return err
+        if S['tries'] >= GIVE_UP:
+            why = _STATE['detail'] if _STATE['phase'] == 'failed' else ''
+            S['gave_up'] = (f'the WhatsApp bridge would not stay up after {GIVE_UP} starts in a row' + (f' ({why})' if why else '')
+                            + ' - Taskuary stopped starting it; Restart bridge tries again')
+            logger.error(S['gave_up'])
+            if _STATE['phase'] != 'failed': _set('failed', S['gave_up'])
+            return S['gave_up']
+        S['tries'] += 1
+        S['next'] = now + BACKOFF[min(S['tries'], len(BACKOFF) - 1)]
+        n = S['tries']
+    logger.info(f'whatsapp bridge: starting it again (start {n} of {GIVE_UP})')
+    start(filter_policy=filter_policy(store, c['ConnectorId']), auto=True)
+    return err
+
+
+def came_back(now: float = None):
+    """A poll reached the bridge. Said once, the first time after it was down."""
+    now = time.time() if now is None else now
+    with _SUP_LOCK:
+        down = _SUP['down']
+        _SUP.update(down=0.0, up=now if down or not _SUP['up'] else _SUP['up'], gave_up='')
+    if down: logger.info(f'whatsapp bridge is back after {now - down:.0f}s')

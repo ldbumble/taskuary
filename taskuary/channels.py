@@ -1775,6 +1775,9 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
                 from . import messengers
                 poll = messengers.poll_telegram if c['Type'] == 'telegram' else messengers.poll_whatsapp
                 n += poll(store, full, mine, llm, file_only)
+                if c['Type'] == 'whatsapp':
+                    from . import wabridge
+                    wabridge.came_back()
             elif c['Type'] == 'imessage':
                 from . import imessage
                 n += imessage.poll(store, full, mine, llm, file_only)
@@ -1992,7 +1995,11 @@ def _poll_one(store, c, file_only, backfill_hours, llm, read_it) -> int:
         store.touch_connector(c['ConnectorId'], '; '.join(errors) if errors else None)
         _watch(store, full, '; '.join(errors) if errors else None)
     except Exception as e:
-        logger.warning(f"channel poll failed ({c['Type']}): {e}")
+        from .messengers import BridgeDown
+        if isinstance(e, BridgeDown):               # logged when it goes down and when it is back, never every poll
+            from . import wabridge
+            e = wabridge.supervise(store, full, str(e))
+        else: logger.warning(f"channel poll failed ({c['Type']}): {e}")
         store.touch_connector(c['ConnectorId'], str(e))
         _watch(store, full, str(e))
     return n

@@ -159,8 +159,12 @@ class DoorwayReadsEveryTickTests(unittest.TestCase):
         from taskuary import server, channels
         s = server.store
         cid = s.get_connector_by_type('whatsapp')['ConnectorId']
+        was = s.get_connector(cid, with_secret=True)
         s.save_connector({'ConnectorId': cid, 'Active': 1, 'Secret': 'tok',
                           'ConfigJson': json.dumps({'poll_seconds': 30, 'assistant_chat': JID})}, 'test')
+        # the shared server store: left on, every later test that lists send targets dialled a bridge that isn't there
+        self.addCleanup(s.save_connector, {'ConnectorId': cid, 'Active': was.get('Active') or 0, 'Secret': was.get('Secret') or '',
+                                           'ConfigJson': was.get('ConfigJson') or '{}'}, 'test')
         reads = []
         ticket = mock.Mock(error=None); ticket.wait.return_value = True
         with mock.patch.object(channels, 'poll_channels', side_effect=lambda *a, **k: reads.append(k.get('only')) or 0), \

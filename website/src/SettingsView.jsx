@@ -210,12 +210,12 @@ const PhoneDoorways = ({ onLoaded, onNavigate }) => {
                   sx={{ bgcolor: "#fff", fontSize: 12.5, minWidth: 260 }}
                   onChange={(e) => listen(r.channel, e.target.value)}>
                   <MenuItem value="always" sx={{ fontSize: 12 }}>listens any time you message it</MenuItem>
-                  <MenuItem value="walk" sx={{ fontSize: 12 }}>listens only while a walk is handed over</MenuItem>
+                  <MenuItem value="walk" sx={{ fontSize: 12 }}>listens once a walk is handed over, and after it comes back</MenuItem>
                 </Select>
                 <Typography variant="caption" sx={{ color: FAINT, flex: 1, minWidth: 200 }}>
                   {r.listens === "always"
                     ? "Anything you type there runs the same walk the chat here runs — and may include private mail, tasks, reviews and agent output."
-                    : "Quiet until you hand a walk over from the chat here. The hand-over works either way."}
+                    : "Quiet until you hand a walk over from the chat here. Once a walk comes back, that chat keeps listening, so a message there picks it up again."}
                 </Typography>
               </Box>
             )}

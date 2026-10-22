@@ -119,7 +119,7 @@ def own_thread(store, connector, row, configured: str = '') -> bool:
     return int(people) <= 1
 
 
-LISTEN = ('always', 'walk')      # any time you message it | only while a walk is handed over
+LISTEN = ('always', 'walk')      # any time you message it | once a walk is handed over, and after it comes back (A5)
 
 
 def listens(store, connector) -> str:

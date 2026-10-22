@@ -343,7 +343,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
                  {'key': 'f', 'lane': 'fyi', 'kind': 'fyi', 'who': 'Omar Keller', 'title': 'Portal is back', 'order_band': 4}]
         text = remote_assistant.who_wants_what(items)
         # every open task under Tasks, the one an agent is working included (the owner, 2026-10-21)
-        self.assertTrue(text.startswith('4 things: 2 tasks, 1 reports, 1 FYI.'), text)
+        self.assertTrue(text.startswith('4 things: 2 tasks, 1 report, 1 FYI.'), text)
         # a drafted reply says its lane's word, as the desktop row does (funnel_presentation.state_of) - not "draft ready"
         self.assertIn('TASKS · 2\n· Erin Blake - Q3 numbers (ready to send)', text)
         self.assertNotIn('AGENTS WORKING', text); self.assertIn('· Report - Spend report - 3 over', text)
@@ -364,7 +364,7 @@ class TheWalkOpensWithWhoWantsWhatTests(unittest.TestCase):
         self.assertTrue(text.startswith('2 things: 2 tasks.'), text)
         items[0] = items[0] | {'put_down': False, 'surfaced': False, 'deferred': True}
         text = remote_assistant.who_wants_what(items)
-        self.assertTrue(text.startswith('2 things: 1 tasks, 1 for later.'), text)
+        self.assertTrue(text.startswith('2 things: 1 task, 1 for later.'), text)
 
     def test_it_names_the_bands_exactly_as_the_rail_does(self):
         # both sides read lanes.json's `sections`: the page's lanes.js builds LEVEL_ORDER and SECTION_WORDS from it, as this does

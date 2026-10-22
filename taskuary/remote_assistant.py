@@ -635,7 +635,21 @@ def _shows(i: dict) -> dict:
     return i.get('shows') or shows(i)
 
 
-def who_of(i: dict) -> str: return _shows(i)['who']
+def who_of(i: dict) -> str:
+    """Who, as the summary names them: the SENDER's own display name where the mail has one - the shared reading took the address's
+    domain ("example") or the agent's CLI ("claude", "kai") over the person (F15) - else the row's who, as every surface says it."""
+    named = ' '.join(str(i.get('who') or '').split())
+    tools = {str(i.get(k) or '').strip().lower() for k in ('agent', 'working')} - {''}
+    who = _shows(i)['who']
+    if who.strip().lower() in tools: return agent_label(i)
+    # a word of the ADDRESS stood for a sender whose mail names them in full - a person's or a team's own name, never a lone word
+    host = re.split(r'[@.]', str(i.get('email') or '').lower())
+    if ' ' in named and '@' not in named and who.strip().lower() in host and not is_own(i): return story_who(i)
+    return who
+
+
+# the count's noun, said right for one: "1 task", "1 report" - never "1 tasks" (F15)
+_ONE = {'task': ('task', 'tasks'), 'reports': ('report', 'reports'), 'ideas': ('Advisor idea', 'Advisor ideas')}
 
 
 def who_wants_what(items: list) -> str:
@@ -645,7 +659,7 @@ def who_wants_what(items: list) -> str:
     have = [(k, w, [i for i in live if group_of(i) == k]) for k, w in groups()]
     have = [(k, w, rows) for k, w, rows in have if rows]
     lines = [f"{plural(len(live), 'thing')}: "
-             + ', '.join(f"{len(rows)} {w if k == 'fyi' else w.lower()}" for k, w, rows in have) + '.']
+             + ', '.join(plural(len(rows), *_ONE[k]) if k in _ONE else f"{len(rows)} {w if k == 'fyi' else w.lower()}" for k, w, rows in have) + '.']
     for key, word_, rows in have:
         # For later is sorted soonest-back first, as the rail draws it (funnelPile.bandsOf)
         if key == 'later': rows = sorted(rows, key=lambda i: str(i.get('back_at') or i.get('defer_until') or '9999'))
@@ -654,6 +668,8 @@ def who_wants_what(items: list) -> str:
             # FOR LATER says when it comes back, in the rail's own short form (funnelPile.railBack)
             back = _back_in(i.get('back_at') or i.get('defer_until')) if key == 'later' else ''
             state = (f'back {back}' if back else '') if key == 'later' else _shows(i)['state']
+            # ...and never the heading's own word again: "(fyi)" on every row under FYI (F15)
+            if state.lower() in (key, word_.lower(), word_.lower().rstrip('s')): state = ''
             lines.append(f"· {who_of(i)} - {_cut(i.get('title') or '', 70)}" + (f' ({state})' if state else ''))
         if len(rows) > ROWS_PER_GROUP: lines.append(f'  and {len(rows) - ROWS_PER_GROUP} more')
     return '\n'.join(lines)

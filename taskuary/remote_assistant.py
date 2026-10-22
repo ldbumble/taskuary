@@ -924,7 +924,7 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     elif verb in ('reply', 'redraft') and (on or {}).get('mid'):
         rid = _draft(store, on, verb, decision.get('text') or '')
         if rid:                                             # the draft is the next thing to read, so go to it
-            nxt = concierge.surface(store, f'review:{rid}', actor=actor)
+            nxt = _draft_card(store, rid, actor)
             return '\n\n'.join(said + [turn_text(nxt, store=store)])
         said.append('I could not write that draft here - it is waiting on the task page.')
     if walk_on:
@@ -1231,7 +1231,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if verb in ('reply', 'redraft') and on.get('mid'):
             rid = _draft(store, on, verb, '')
             if not rid: return 'I could not write that draft here - it is waiting on the task page.'
-            return turn_text(concierge.surface(store, f'review:{rid}', actor=actor), store=store)
+            return turn_text(_draft_card(store, rid, actor), store=store)
         moved = _draft_moved(store, act, on)
         if moved: return moved
         prop = concierge.propose_direct(store, verb, key, actor=actor, table=bool(item and item.get('key') == key))
@@ -1296,6 +1296,21 @@ def _remind(store, act: dict, actor: str) -> str:
     if not out.get('remindAt'): return said
     back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
     return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
+
+
+def _draft_card(store, rid, actor: str = 'owner') -> dict:
+    """The draft just written, brought up. Under canonical processing reads a review is found only once membership has been
+    reconciled, which the background does a moment later: the phone answered "I can't find that one" over the draft it had
+    just written (F4). The row is reconciled first when it is not there yet - the same recovery funnel.settle uses."""
+    from . import concierge, funnel
+    key = f'review:{rid}'
+    if getattr(store, 'processing_reads_active', lambda: False)() and not funnel.next_item(store, key, include_surfaced=True):
+        try:
+            from . import processing_all
+            processing_all.wait_settled(store)
+            store.reconcile_processing_membership(); funnel.invalidate()
+        except Exception as e: logger.debug(f'the phone could not reconcile the new draft: {e}')
+    return concierge.surface(store, key, actor=actor)
 
 
 def _draft(store, item: dict, verb: str, instruction: str):

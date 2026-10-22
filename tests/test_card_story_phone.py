@@ -27,6 +27,25 @@ def test_the_three_parts_wear_the_task_pages_three_colours():
     assert f'{ra.DOT_YOU} **You** · answer the agent' in move       # 3 you - tan
 
 
+def test_a_held_strangers_card_says_it_is_held_and_does_not_lead_with_send_to_agent():
+    """F8: a first mail from an unknown address read "waiting to start" over "handed over, not started", led with Send to agent,
+    and printed the short body under the title that already was it."""
+    from taskuary import concierge, ingest
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Please wire the deposit today', 'Kind': 'general', 'Status': 'open', 'Tags': ingest.HOLD_TAG}, 'router')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'email', 'Subject': 'Deposit', 'FromName': 'Sam Stranger', 'FromEmail': 'sam@vendor.example',
+                         'BodyText': 'Please wire the deposit today.', 'Status': 'open'})
+    item = {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'queued', 'tid': tid, 'mid': mid, 'ref': 'TQ-0001', 'who': 'Sam Stranger',
+            'channel': 'email', 'title': 'Please wire the deposit today', 'why_idle': 'a first message from this address'}
+    chips = [{'verb': 'regular_agent', 'label': 'Send to agent'}, {'verb': 'reply', 'label': 'Reply'},
+             {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]
+    text = ra.turn_text({'say': 'x', 'item': item, 'chips': chips}, store=s)
+    assert text.count(ra.HOLD_LINE) == 1, text
+    assert text.count('Please wire the deposit today') == 1, text
+    assert 'handed over, not started' not in text and 'Why it has not started' not in text
+    assert 'Reply with one of:\n1 · Reply\n' in text, text
+
+
 def test_a_general_run_with_no_session_mode_is_a_general_agent():
     """F6: a headless or saved general run carries no session `mode`, and its card said "Coding agent"."""
     s = MemoryStore()

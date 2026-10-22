@@ -2064,7 +2064,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
         opening = _plain(body) if body and not is_report else ''
         # ...ONCE: a short mail is often its own title and summary as well, and the card printed it again under them (F8)
         norm = lambda s: ' '.join(str(s or '').split()).lower().rstrip('.…')
-        if opening and not any(norm(opening) and norm(opening) in norm(x) for x in (said, subj, rest) if x):
+        # ...and a summary that IS the mail, split into its first sentence and the rest, is the mail too: each line alone held only
+        # half of it, so a held stranger's two sentences were printed and then quoted whole under them (the 2026-10-22 re-walk)
+        shown = [x for x in (said, subj, rest, ' '.join(x for x in (said, rest) if x)) if x]
+        if opening and not any(norm(opening) and norm(opening) in norm(x) for x in shown):
             lines.append(_quote(_cut(opening, EXCERPT) if len(opening) > EXCERPT else opening))
     # THE TASK'S TO-DOS (the owner, 2026-10-20: "anything you can do, you can do via the Assistant" - the phone never showed them): the open
     # ones, numbered as task.check takes them, each with its note, and how far the list got; "tick 2" / "note on 2: ..." answer them

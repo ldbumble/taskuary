@@ -50,6 +50,15 @@ export function previewRows(group, keep = 2, all = false) {
   const hid = ms.slice(keep, ms.length - 1);
   return [...ms.slice(0, keep).map((m) => ({ m })), { gap: hid.length, names: namesOf(hid) }, { m: ms[ms.length - 1] }];
 }
+// FROM LISTS IT NEWEST ON TOP (the redesign, owner-approved 2026-10-21): the latest `keep` messages - a burst of chat lines, a thread with
+// your replies in it - and the older ones folded behind "Show N older" at the foot, never the opening message pinned under a gap.
+// `all` draws every one, still newest first. Group messages are newest first already (groupConversations).
+export function fromRows(group, keep = 3, all = false) {
+  const ms = group?.msgs || [];
+  if (all || ms.length <= keep + 1) return ms.map((m) => ({ m }));
+  const hid = ms.slice(keep);
+  return [...ms.slice(0, keep).map((m) => ({ m })), { older: hid.length, names: namesOf(hid) }];
+}
 // EVERY FILE BELONGS TO ITS MESSAGE (the owner, 2026-10-20: a voice note drawn loose under the Came from card, outside the thread):
 // the task detail's attachment rows by MessageId, so each condensed row knows what rode in with it and draws it under itself
 export const filesByMessage = (atts = []) => {
@@ -83,6 +92,8 @@ export function latestRows(group, keep = 4) {
 // whether "Show all" changes anything: an email thread's hidden middle, or a chat's back-and-forth - a chat of three lines still reads
 // as one in bubbles (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?")
 export const expands = (groups, keep = 2) => hidden(groups, keep) > 0 || groups.some((g) => isChat(g.channel) && g.count > 1);
+// ...and From's: an older message folded away (fromRows), or a chat's back-and-forth
+export const fromExpands = (groups, keep = 3) => groups.some((g) => g.count > keep + 1 || (isChat(g.channel) && g.count > 1));
 
 export function cameFromLabel(groups) {
   const n = groups.reduce((s, g) => s + g.count, 0);

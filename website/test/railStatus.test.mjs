@@ -37,6 +37,9 @@ test("the live session's word leads, then the rail's row, then the server's stat
   assert.equal(taskStatus({ state: "theirs" }).word, "waiting on them");
   assert.equal(taskStatus({ state: "working" }).spins, true);
   assert.equal(taskStatus({}), null);
+  // a closed task pulled onto the table by a link wears no stale lane: the server says it is done
+  assert.equal(taskStatus({ rail: { lane: "fyi" }, state: "closed", closed: true }).word, "done");
+  assert.equal(taskStatus({ rail: { lane: "fyi" }, state: "agentdone", closed: true }).word, "agent finished");
   assert.equal(stateStatus("nonsense"), null);
 });
 

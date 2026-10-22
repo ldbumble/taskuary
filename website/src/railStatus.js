@@ -27,8 +27,11 @@ export const stateStatus = (key) => {
 // THE TASK PAGE'S STATUS: the live session's own word first - the rail's working and waiting lanes read that very session (taskstate:
 // a live session is `blocked` when it waits, else `working`) - then the rail's row for the task (on the canvas), then the server's state
 // (the Tasks list's row, or the detail's own for a task with no row - a closed one).
-export const taskStatus = ({ live = null, rail = null, state = null } = {}) => {
+// A CLOSED task has no rail row of its own - one pulled onto the table by a link or a search wears whatever lane it was read in - so
+// its state is the server's: done, the agent finished, or dropped.
+export const taskStatus = ({ live = null, rail = null, state = null, closed = false } = {}) => {
   if (live?.alive) return railStatus({ lane: live.waiting ? "blocked" : "working" });
+  if (closed && stateStatus(state)) return stateStatus(state);
   return railStatus(rail) || stateStatus(state);
 };
 

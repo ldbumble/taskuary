@@ -1,5 +1,5 @@
-// NOT READ YET IS NOT EMPTY (the owner, 2026-10-20): until the first pile read lands the opener says "Loading..." where it says
-// "Nothing is waiting on you", and a Walk press made then is kept - queued, and run once the rows are in - not dropped on a
+// NOT READ YET IS NOT EMPTY (the owner, 2026-10-20): until the first pile read lands the opener says "Loading..." where an empty
+// day once had its line (gone 2026-10-22), and a Walk press made then is kept - queued, and run once the rows are in - not dropped on a
 // disabled button. The browser check is scratch early.mjs; these hold the shape in the source.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +10,13 @@ const view = src("AssistantView.jsx");
 
 test("unread is its own state, drawn in the empty line's place", () => {
   assert.match(view, /const pileLoading = pile === null && !pileRead;/);
-  assert.match(view, /\{counting \? <span data-tq-pile-loading="">Loading\.\.\.<\/span>\s*: !items\.length && <span>Nothing is waiting on you/);
+  assert.match(view, /\{counting && <span data-tq-pile-loading="">Loading\.\.\.<\/span>\}/);
+});
+
+// BUTTONS DO THE TALKING (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.."): an empty day draws no
+// "Nothing is waiting on you - ask me anything, or set something up." line between the card and its buttons, nor on the brief card
+test("an empty day says nothing between the card and the buttons", () => {
+  for (const f of ["AssistantView.jsx", "assistantCards.jsx"]) assert.doesNotMatch(src(f), /ask me anything, or set something up/i, f);
 });
 
 // STILL COUNTING IS NOT "NOTHING TO WALK" (an owner screenshot, 2026-10-20): the card said "Counting…" over On you rows while the line

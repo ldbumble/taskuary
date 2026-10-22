@@ -2729,8 +2729,9 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       <DayHold loading={pileLoading || mailReading}>
       <DayOpener groups={items.length ? summarize(railPile ? pileRows(railPile) : items).groups : []} onSection={walkSection}
         loading={mailReading} top={<SinceBlock onOpen={(k) => pull(k, null)} onReading={setMailReading} />} />
-      {counting ? <span data-tq-pile-loading="">Loading...</span>
-        : !items.length && <span>Nothing is waiting on you - ask me anything, or set something up.</span>}
+      {/* no "Nothing is waiting on you - ask me anything" line when the day is empty: the card above says it and the buttons below
+          are the choices (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.." / "I hate free text") */}
+      {counting && <span data-tq-pile-loading="">Loading...</span>}
       {/* greyed with no reason read as broken: say why, and where the rows are - only once the day is counted, and only when
           nothing is on you: it stood under an On you row the card had just listed */}
       {!counting && !!items.length && !canAdvance && !onYou && !busy && !starting && <span className="tq-welcome-why" data-tq-nothing-to-walk="">

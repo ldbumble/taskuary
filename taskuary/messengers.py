@@ -118,7 +118,7 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         v = m.get('voice') or m.get('audio')
         if (v and not (m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
                 and remote_assistant.enabled(store, 'telegram', cid, c)):
-            m = {**m, 'text': _tg_hear(store, c, cid, v)}
+            m = {**m, 'text': _tg_hear(store, c, cid, v, m.get('message_id'))}
             if not m['text']: continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
@@ -367,25 +367,33 @@ def _read_media(path: str):
         logger.warning(f'could not read the media the bridge saved ({path}): {e}'); return None
 
 
-def _unheard(store, channel: str, chat: str, c, e):
-    """Say in the chat that a voice note could not be heard - instead of the note simply never arriving."""
+def _unheard(store, channel: str, chat: str, c, e, message_id=None):
+    """Say in the chat that a voice note could not be heard - instead of the note simply never arriving. The note gets its thumb like
+    any message the doorway took, the place that fixes it is named once (the reason already names it when no connector is set up),
+    and the choices under the last card come with the line - the note answered nothing, so they still stand (F22)."""
     from . import remote_assistant, words
     logger.warning(f'{channel}: a voice note to Taskuary was not transcribed - {e}')
-    try: remote_assistant.send(store, channel, chat, f"I could not hear that voice note - {str(e)[:200]}. "
-                               f"Type it, or add a voice connector under {words.name('voice')}.", c.get('ConnectorId'))
+    if message_id:
+        try: react(store, channel, chat, message_id, connector_id=c.get('ConnectorId'))
+        except Exception as e3: logger.debug(f'{channel}: no thumb on the voice note - {e3}')
+    why, place = str(e)[:200].strip().rstrip('.'), words.name('voice')
+    said = f"I could not hear that voice note - {why}." + ('' if place in why else f" Type it, or add a voice connector under {place}.")
+    try: live = json.loads(store.get_setting(f'{remote_assistant.OFFERED_KEY}:{channel}:{chat}') or '[]') or []
+    except ValueError: live = []
+    try: remote_assistant.send(store, channel, chat, said, c.get('ConnectorId'), **({'choices': live} if live else {}))
     except Exception as e2: logger.warning(f'{channel}: could not say so either - {e2}')
 
 
-def _tg_hear(store, c, chat: str, v: dict) -> str:
+def _tg_hear(store, c, chat: str, v: dict, mid=None) -> str:
     """The words of a Telegram voice note (or audio file) the owner sent the Assistant chat, or ''."""
     from . import voice
     got = _tg_file(c.get('Secret') or '', v, 'voice.ogg')
     if not got:
-        _unheard(store, 'telegram', chat, c, 'it could not be downloaded from Telegram'); return ''
+        _unheard(store, 'telegram', chat, c, 'it could not be downloaded from Telegram', mid); return ''
     data, name, mime = got
     try: return str(voice.transcribe(store, data, mime, name)['text'] or '').strip()
     except Exception as e:
-        _unheard(store, 'telegram', chat, c, e); return ''
+        _unheard(store, 'telegram', chat, c, e, mid); return ''
 
 
 def _hear(store, c, jid: str, m: dict) -> str:
@@ -398,7 +406,7 @@ def _hear(store, c, jid: str, m: dict) -> str:
     mime = (m.get('mime') or 'audio/ogg').split(';')[0]
     try: return str(voice.transcribe(store, data, mime, os.path.basename(m['audio']))['text'] or '').strip()
     except Exception as e:
-        _unheard(store, 'whatsapp', jid, c, e); return ''
+        _unheard(store, 'whatsapp', jid, c, e, m.get('id')); return ''
 
 
 def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:

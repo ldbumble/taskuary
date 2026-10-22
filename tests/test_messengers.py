@@ -365,3 +365,23 @@ class TheDeadCatchAllRowTests(unittest.TestCase):
                 reopened.cx.execute("SELECT Channel, Address FROM source WHERE Address='*'")}
         self.assertNotIn(('whatsapp', '*'), left)
         self.assertIn(('telegram', '*'), left, 'a bot only hears the chats it was added to')
+
+
+class UnheardVoiceNoteTests(unittest.TestCase):
+    """F22: a voice note with no voice connector named the place twice, got no thumb, and its answer had nothing to tap."""
+    def test_one_place_named_a_thumb_and_the_choices_kept(self):
+        from taskuary import remote_assistant, voice, words
+        s = MemoryStore()
+        c = s.get_connector_by_type('whatsapp', with_secret=True)
+        chat = '15550001234@s.whatsapp.net'
+        remote_assistant._offer([('Mark done', {'t': 'stay'}), ('Next', {'t': 'next'})])
+        remote_assistant.remember_offered(s, 'whatsapp', chat, 'Reply with one of:\n1 · Mark done\n2 · Next')
+        got = []
+        with mock.patch.object(messengers, 'react', return_value=True) as thumb, \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, ch, body, connector_id=None, poll=None: got.append((body, poll))):
+            messengers._unheard(s, 'whatsapp', chat, c, RuntimeError(voice.NO_CONNECTOR), 'WAMID.1')
+        thumb.assert_called_once()
+        self.assertEqual(thumb.call_args.args[3], 'WAMID.1')
+        body, poll = got[-1]
+        self.assertEqual(body.count(words.name('voice')), 1, body)
+        self.assertEqual(poll, ['Mark done', 'Next'])

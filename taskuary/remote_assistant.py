@@ -40,15 +40,24 @@ CLOSED = 'Walked back to the desktop - this walk is over here. Message me any ti
 HAND_BACK = 'Hand back to the desktop'
 MORE_CHOICES, POLL_MAX = 'More choices', 12      # WhatsApp's poll and Telegram's buttons both stop at twelve
 HANDED_BACK = 'Handed back - the walk is on the desktop again. Message me any time and I will pick it up again.'
-ANY_TIME = ' Message me any time and I will pick it up again.'
 
 
 def farewell(store, channel: str, note: str) -> str:
-    """The hand-back's last line, true for this chat: "Message me any time" only where the chat listens any time - with the
-    walk handed back, a chat that listens only during a walk hears nothing more (F11). It names the desk's button that sends it."""
-    c = doorway(store, channel)
-    if not note.endswith(ANY_TIME) or (c and listens(store, c) == 'always'): return note
-    return note[:-len(ANY_TIME)] + f' To walk here again, press "Walk me through them in {LABELS.get(channel, channel)}" on the desktop.'
+    """The hand-back's last line, with the way to pick the walk up again under it. "Message me any time" is true now in a chat that
+    listens only during a walk too: a hand-back keeps that chat listening (A5, 2026-10-22 - it said so, then ignored the next message)."""
+    return turn_text({'say': note, 'item': None}, store=store, extra=[(WALK, {'t': 'walk', 'opened': True})])
+
+
+HANDED_KEY = 'assistant_handed_back'    # {'channel', 'chat', 'at', 'told'}: the chat a walk was handed back FROM - it keeps listening (A5)
+
+
+def handed_back(store, channel: str = None, chat: str = None) -> dict | None:
+    """The chat the last walk was handed back from, while its card still names it - a message there picks the walk up again."""
+    try: h = json.loads(store.get_setting(HANDED_KEY) or 'null')
+    except ValueError: h = None
+    if not isinstance(h, dict) or h.get('channel') not in CHANNELS: return None
+    if channel and (h['channel'] != channel or (chat is not None and str(h.get('chat')) != str(chat).strip())): return None
+    return h if connector_for_chat(store, h['channel'], h.get('chat')) else None
 
 
 def _config(connector) -> dict:
@@ -252,9 +261,10 @@ def enabled(store, channel: str, chat: str, connector=None) -> bool:
     c = connector_for_chat(store, channel, chat, connector)
     if c is None or not is_private(store, c, chat): return False
     h = handoff(store)
-    # this channel's own standing permission, not one switch for every channel at once
+    # this channel's own standing permission, not one switch for every channel at once - and the chat a walk was handed back from (A5)
     return (listens(store, c) == 'always'
-            or bool(h and h['channel'] == channel and h.get('chat') == str(chat).strip()))
+            or bool(h and h['channel'] == channel and h.get('chat') == str(chat).strip())
+            or bool(handed_back(store, channel, chat)))
 
 
 def polls(store, connector) -> bool:
@@ -263,7 +273,7 @@ def polls(store, connector) -> bool:
     ch = (connector or {}).get('Type')
     if ch not in CHANNELS or not chat_of(connector): return False
     h = handoff(store)
-    return listens(store, connector) == 'always' or bool(h and h['channel'] == ch)
+    return listens(store, connector) == 'always' or bool(h and h['channel'] == ch) or bool(handed_back(store, ch, chat_of(connector)))
 
 
 def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
@@ -284,6 +294,7 @@ def start_handoff(store, channel: str, actor: str = 'owner') -> dict:
         text = OPENED + chatformat.BREAK + carry_out(store, out, None, actor)
     send(store, channel, chat, text, cid)
     store.set_setting(HANDOFF_KEY, json.dumps(live), actor)
+    store.set_setting(HANDED_KEY, '', actor)                  # a new hand-over: whatever was handed back before is this walk now
     store.audit('task', task['TaskId'], 'assistant_handoff_start', actor, detail={'channel': channel, 'chat': chat})
     concierge.record(store, task['TaskId'], 'assistant',
                      f"Taking this to {LABELS[channel]} - I have said hello there. "
@@ -297,6 +308,8 @@ def end_handoff(store, actor: str = 'owner', note: str = CLOSED) -> dict:
     h = handoff(store)
     store.set_setting(HANDOFF_KEY, '', actor)
     if not h: return {'ended': False}
+    # ...and that chat keeps listening: the next message there picks the walk up again (A5)
+    store.set_setting(HANDED_KEY, json.dumps({'channel': h['channel'], 'chat': h['chat'], 'at': _now(), 'told': False}), actor)
     task, _ = general.dock_task(store, actor)
     store.audit('task', task['TaskId'], 'assistant_handoff_end', actor, detail={'channel': h['channel']})
     concierge.record(store, task['TaskId'], 'assistant',
@@ -816,6 +829,11 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
     from . import concierge, general
     # `heard`: the words are a voice note's, as transcribed - the answer says them back first (A17)
     _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id, **({'heard': question} if heard else {})}
+    # the first word after a hand-back picks the walk up here again, and says so once (A5)
+    hb = handed_back(store, channel, chat)
+    if hb and not hb.get('told') and not handoff(store):
+        store.set_setting(HANDED_KEY, json.dumps({**hb, 'told': True}), 'assistant')
+        _ASKING.chat['again'] = True
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
@@ -2741,6 +2759,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's
     # first message
     a = asking()
+    if a and a.get('again') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
+        text, a['again'] = f'Picking the walk up here again.\n\n{text}', False
     if a and a.get('heard') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
         text, a['heard'] = f'🎤 Heard: "{_cut(a["heard"], 300)}"\n\n{text}', ''
     # every road to this chat passes here, so this is where what we offered is written down -

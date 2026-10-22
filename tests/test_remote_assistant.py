@@ -67,8 +67,10 @@ class DoorwayBoundaryTests(unittest.TestCase):
         with mock.patch.object(remote_assistant, 'send'), mock.patch.object(concierge, 'brain', return_value=None):
             remote_assistant.start_handoff(store, 'whatsapp')
         self.assertTrue(remote_assistant.enabled(store, 'whatsapp', JID, connector))
-        remote_assistant.end_handoff(store)
-        self.assertFalse(remote_assistant.enabled(store, 'whatsapp', JID, connector))
+        with mock.patch.object(remote_assistant, 'send'): remote_assistant.end_handoff(store)
+        # ...and the chat it was handed back from keeps listening: the next message there picks the walk up again (A5, 2026-10-22)
+        self.assertTrue(remote_assistant.enabled(store, 'whatsapp', JID, connector))
+        self.assertFalse(remote_assistant.enabled(store, 'whatsapp', '15550009999@s.whatsapp.net', connector))
 
     def test_the_owners_own_message_yourself_chat_is_not_a_group(self):
         """WhatsApp gives that thread a legacy GROUP jid, and refusing it refused the one chat the

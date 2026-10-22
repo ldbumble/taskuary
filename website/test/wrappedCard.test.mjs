@@ -5,10 +5,10 @@ import { fileURLToPath } from "node:url";
 import { replySource, sentElsewhere, unsentReplyReview, replyPhase } from "../src/taskLifecycle.js";
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../src/${name}`, import.meta.url)), "utf8");
-// Close out, from its heading to the Context & history fold under it
+// Close out, from its heading to the Earlier runs fold under it
 const closeOut = () => {
   const page = read("TaskPage.jsx"), at = page.indexOf('<WorkflowHeading number="3" title="Close out"');
-  return page.slice(at, page.indexOf("<Fold title={`Context & history", at));
+  return page.slice(at, page.indexOf("<Fold title={`Earlier runs", at));
 };
 
 // The card drew the NEWEST AGENT REPORT, and the poll that saw the agent's own merge filed a second one whose "last

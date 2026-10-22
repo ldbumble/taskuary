@@ -195,8 +195,10 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
 // THE TWO COLUMNS (taskLayout.js): stacked in a narrow view, side by side once the view is wide enough for both - measured on the
 // view itself (the steps box is an inline-size container), so the canvas beside the rail and the Tasks tab's pane each decide
 // by their own width, not the window's
-const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 1.5, alignItems: "start",
-  "@container (min-width: 720px)": { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)" } };
+// ...one surface: no box round From, a hairline between the columns (the owner, 2026-10-22: "still so messy")
+const COLUMNS = { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", rowGap: 2, alignItems: "stretch",
+  "@container (min-width: 720px)": { gridTemplateColumns: "minmax(0, 5fr) minmax(0, 7fr)",
+    "& > [data-tq-from]": { pr: 2.5 }, "& > [data-tq-work]": { pl: 2.5, borderLeft: `1px solid ${BORDER}` } } };
 // FROM AS A SIDEBAR while an agent works (item 6, the owner 2026-10-21): laid OVER the agent's left edge - absolutely placed in the steps
 // box, so nothing under it moves or resizes - from under the folded line to the foot, scrolling on its own
 const FROM_SIDE = (top) => ({ position: "absolute", top, left: 0, bottom: 0, width: "min(420px, 88%)", zIndex: 6, overflowY: "auto",
@@ -246,7 +248,7 @@ function Part({ label, sub, subTitle, children, ...rest }) {
   return (
     <Box {...rest} sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", columnGap: 2, rowGap: 0.4, minWidth: 0 }}>
       <Box sx={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 1 }}>
-        <Typography sx={{ color: INK, fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{label}</Typography>
+        <Typography sx={{ color: INK, fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>{label}</Typography>
         {sub && <Typography variant="caption" title={subTitle} sx={{ color: FAINT, display: "block", lineHeight: 1.35 }}>{sub}</Typography>}
       </Box>
       <Box sx={{ minWidth: 0, maxWidth: 900 }}>{children}</Box>
@@ -394,7 +396,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [restartOpen, setRestartOpen] = useState(false);
   const [startingAgent, setStartingAgent] = useState("");
   const [generalRevision, setGeneralRevision] = useState(0);
-  const [comment, setComment] = useState("");
   // the waiting room: notes for the agent, typed in when it stops (waitroom.py)
   const [wait, setWait] = useState(() => heldWait(selected) || { data: [], state: null });   // ...its waiting room with it (taskDetail.js)
   const [waitText, setWaitText] = useState("");
@@ -550,14 +551,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     } catch (e) { setErr(e?.response?.data?.detail || "Could not send the note - press send again."); }
   };
 
-  const [posting, setPosting] = useState(false);
-  const post = async () => {
-    if (!comment.trim() || posting) return;
-    setPosting(true);
-    try { await runOperation(api, "task.comment", selected, { text: comment }); setComment(""); loadDetail(selected); }
-    catch (e) { setErr(`Your note wasn't saved - ${opError(e, "Taskuary didn't answer")}. It is still in the box; press Post again.`); }
-    finally { setPosting(false); }
-  };
   // Finish the AGENT RUN, not the task. It files the durable result, closes this session and drafts
   // the reply to whoever asked (wrapup.wrap -> finish(keep_open=True)); completing the task stays a
   // separate control, because what the work was worth is the owner's verdict and not the run's.
@@ -1656,16 +1649,16 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                 {(!wide || fromSide) && (
                   <Box data-tq-from="" data-tq-task-section="" data-tq-from-open={fromOpen ? "" : undefined} data-tq-from-side={wide ? "" : undefined}
                     id={wide ? "tq-from-side" : undefined} role={wide ? "complementary" : undefined} aria-label={wide ? "From" : undefined}
-                    onClickCapture={wide ? undefined : phoneFromTap} sx={{ ...card, minWidth: 0, px: 1.5, py: 1.25, display: "flex", flexDirection: "column", gap: 1.75,
-                    ...(wide ? FROM_SIDE(fromTop) : PHONE_FROM(fromOpen)) }}>
+                    onClickCapture={wide ? undefined : phoneFromTap} sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1.75,
+                    ...(wide ? { ...card, px: 1.5, py: 1.25, ...FROM_SIDE(fromTop) } : PHONE_FROM(fromOpen)) }}>
                     {/* SECTION 1, IN THE ORDER THE OWNER APPROVED (2026-10-16): the ask, what there is to do, where it came from - and no
                         buttons. "The buttons stay on bottom by the prompt box like always. No buttons there." On the canvas that is the row
                         over the chat line; on the Tasks tab, the view's own bar under the sections. */}
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                    {wide && <Box sx={{ display: "flex", alignItems: "center" }}>
                       <Typography sx={{ ...label, flex: 1 }}>From</Typography>
-                      {wide && <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
-                        sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>}
-                    </Box>
+                      <IconButton size="small" aria-label="Close From" data-tq-from-close="" onClick={() => setFromSide(false)}
+                        sx={{ my: -0.5 }}><CloseIcon sx={{ fontSize: 15 }} /></IconButton>
+                    </Box>}
                     <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                       {/* OPEN AGAIN, AND WHY (funnel.news_since_agent): the message that reopened it, said first - the agent's last
                           session is the record under Agent work, not the news (the owner, 2026-10-12). Where the Advisor's NEXT
@@ -1750,9 +1743,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           </Typography>
                         )}
                         {sources.length > 0 ? (
-                          <Box ref={cameFromRef} sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", overflow: "hidden", scrollMarginTop: 8 }}>
+                          <Box ref={cameFromRef} sx={{ mt: 0.5, minWidth: 0, scrollMarginTop: 8 }}>
                             {sources.map((g, gi) => (
-                              <Box key={g.key} data-tq-conversation="" sx={{ px: { xs: 1, sm: 1.4 }, py: 1.1, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
+                              <Box key={g.key} data-tq-conversation="" sx={{ py: 0.9, borderTop: gi ? "1px solid #ece7e0" : 0, minWidth: 0 }}>
                                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: "nowrap" } }}>
                                   <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
                                     <ChannelIcon channel={g.channel} sx={{ fontSize: 14 }} /></Box>
@@ -1774,7 +1767,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         ) : fromWorkflow ? (
                           /* A WORKFLOW RUN has no message to show: where it came from is the workflow and what started it - its clock, your
                              Run now, the assistant, your phone (the owner, 2026-10-16: "what does it show triggered it in the task card?") */
-                          <Box data-tq-workflow-origin="" sx={{ mt: 0.75, border: `1px solid ${BORDER}`, borderRadius: 1.25, bgcolor: "#fff", px: { xs: 1, sm: 1.4 }, py: 1.1,
+                          <Box data-tq-workflow-origin="" sx={{ mt: 0.5, py: 0.9,
                             display: "flex", alignItems: "center", gap: 1, minWidth: 0, flexWrap: { xs: "wrap", sm: fromWorkflow.steps ? "wrap" : "nowrap" } }}>
                             <Box sx={{ width: 24, height: 24, borderRadius: 1, bgcolor: "#f1eee8", display: "grid", placeItems: "center", flexShrink: 0 }}>
                               <ChannelIcon channel="workflow" sx={{ fontSize: 14 }} /></Box>
@@ -1831,7 +1824,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   <QueuedStart taskId={t.TaskId} queued={listRow.Queued} onChanged={() => { loadTasks(); loadDetail(t.TaskId); }} />
                 </Box>}
                 {!codeRun && <Box ref={agentHead} sx={{ ...card, ...step, mb: liveSession ? 0.55 : 0,
-                  px: liveSession ? 1 : 1.5, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
+                  px: liveSession ? 1 : sessionView ? 1.5 : 0, py: liveSession ? 0.55 : pane === "agent" ? (agentBar ? 0.8 : 1.5) : 1.1,
+                  ...(sessionView ? {} : { borderTop: 0, pt: 0 }),
                   flexShrink: 0,
                   display: liveSession ? "flex" : "block", alignItems: "center",
                   gap: liveSession ? 1 : 0, flexWrap: "wrap" }}>
@@ -1926,7 +1920,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
                       card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
                   {!sessionView && hasRecord && (
-                    <Box sx={{ mt: 1.1, pt: 1.1, borderTop: `1px solid ${BORDER}`, "&:empty": { display: "none" } }}>
+                    <Box sx={{ mt: 1.25, "&:empty": { display: "none" } }}>
                       {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
                       <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
                         result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
@@ -1936,7 +1930,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
                     && !(canvas && restartOpen) && nextRunForm}
                   {isGeneral && !generalStarted && (
-                    <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${BORDER}` }}>
+                    <Box sx={{ mt: 1 }}>
                       {/* the same three answers the hand-off asks - this door had none at all */}
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap", mb: 1 }}>
                         <AgentPicker agents={agents} models={models} kinds={kinds} agent={run.agent} model={run.model}
@@ -1964,7 +1958,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.7, flexWrap: "wrap",
                       ...(liveSession
                         ? { ml: 0.9, pl: 1.1, borderLeft: `1px solid ${BORDER}`, flexShrink: 0 }
-                        : { mt: 1.1, pt: 1, borderTop: `1px solid ${BORDER}` }) }}>
+                        : { mt: 1.25 }) }}>
                       {/* plain words on the facts (the audit, 2026-10-17): "role" and "brain" were the app's own vocabulary */}
                       {runRole && <Box sx={{ ...chipBtnStatic }} title="Which instructions this agent follows - set in Settings.">
                         <Box component="span" sx={{ color: FAINT, fontWeight: 600 }}>works as</Box>&nbsp;{runRole}</Box>}
@@ -2081,7 +2075,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   </>
                 ) : null}
 
-                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, mt: 0, p: 1.5, py: pane === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
+                {!sessionView && <Box ref={closeOutRef} data-tq-closeout="" sx={{ ...card, ...step, borderTop: 0, mt: 1, px: 0, py: pane === "reply" ? 1.5 : 1.1, flexShrink: 0 }}>
                   {/* CLOSE OUT, not Reply (the owner, 2026-09-27): what finishes a task is not always a reply - a pull
                       request merges, an issue closes. The label only: the stage's key is still "reply" everywhere. */}
                   <WorkflowHeading number="3" title="Close out"
@@ -2293,58 +2287,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                   ))}
                 </Box>}
 
-                {!sessionView && <Fold title={`Context & history · ${plural(taskMessages.length, "message")} · ${plural(detail.comments.length, "note")}`}>
-                  <Typography sx={{ ...label, display: "block", mb: 0.65 }}>Messages</Typography>
-                  {taskMessages.map((m) => {
-                    const route = detail.routes.find((r) => r.MessageId === m.MessageId);
-                    const mine = m.Status === "context" || m.Direction === "out";
-                    return (
-                      <Box key={m.MessageId} sx={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", mb: 0.85 }}>
-                      <Box sx={{ width: "fit-content", maxWidth: { xs: "96%", md: "84%" }, p: 1.15,
-                        bgcolor: mine ? "#e9e3d8" : "#fff",
-                        borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                        border: `1px solid ${mine ? "#d8d0c4" : BORDER}` }}>
-                        <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", flexWrap: "wrap" }}>
-                          <ChannelIcon channel={m.Channel} sx={{ color: FAINT }} />
-                          <Chip size="small" label={m.ReviewSent ? "sent reply" : mine ? "your reply" : "inbound"}
-                            sx={{ height: 17, fontSize: 9.5, fontWeight: 600,
-                              bgcolor: mine ? "#f1ead9" : "#edf3ea", color: mine ? "#6b5f45" : "#47654a" }} />
-                          <Typography variant="body2" sx={{ color: INK, fontWeight: 600 }}>{mine ? "you" : m.FromName || m.FromEmail}</Typography>
-                          {m.SourceName && <Typography variant="caption" sx={{ color: FAINT }}>· {m.SourceName}</Typography>}
-                          <Typography variant="caption" sx={{ color: FAINT }}>· {fmtDateTime(m.SentAt)}</Typography>
-                          {m.SourceLink && <Link href={m.SourceLink} target="_blank" rel="noopener" sx={{ fontSize: 11 }}>source</Link>}
-                          <Box sx={{ flex: 1 }} />
-                          {route && (
-                            <Typography variant="caption" sx={{ color: "#6f8a6e", display: "flex", alignItems: "center", gap: 0.4 }}>
-                              <AltRouteIcon sx={{ fontSize: 12 }} /> {route.Decision}
-                            </Typography>
-                          )}
-                        </Box>
-                        <Typography variant="body2" sx={{ color: INK }}>{m.Subject}</Typography>
-                        <Box sx={{ minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>
-                          {m.Channel === "report" && looksMd(m.BodyText)
-                            ? <Md text={cleanText(m.BodyText)} />
-                            : <Typography variant="caption" sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere",
-                              wordBreak: "break-word", color: DIM, display: "block" }}>{cleanText(m.BodyText)}</Typography>}
-                        </Box>
-                        {!m.ReviewSent && <Attachments messageId={m.MessageId} canFetch={m.Channel === "email"} dense />}
-                      </Box>
-                      </Box>
-                    );
-                  })}
-                  {!taskMessages.length && <Typography variant="caption" sx={{ color: FAINT }}>Manually created — no source messages.</Typography>}
-                  <Divider sx={{ my: 1.2, borderColor: BORDER }} />
-                  <Typography sx={{ ...label, display: "block", mb: 0.35 }}>Notes & activity</Typography>
-                  <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", tableLayout: "auto" }}>
-                    <tbody>{detail.comments.map((c) => <CommentRow key={c.CommentId} c={c} />)}</tbody>
-                  </Box>
-                  {!detail.comments.length && <Typography variant="caption" sx={{ color: FAINT }}>No notes yet.</Typography>}
-                  <Box sx={{ display: "flex", gap: 1, mt: 0.75 }}>
-                    <TextField fullWidth placeholder="Add a note (humans only)" value={comment}
-                      onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && post()} />
-                    <Button size="small" disabled={posting} onClick={post}>{posting ? "Posting…" : "Post"}</Button>
-                  </Box>
-                </Fold>}
 
                 {/* runs from before sessions (and any API-driven run) keep their trace here */}
                 {!sessionView && detail.runs.length > 0 && (
@@ -2556,46 +2498,6 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     </>
   );
 }
-
-// The history is a log, so it reads like one: who, when, what - one line each until you
-// open it. Agent answers run to thousands of characters and used to bury the page.
-const CommentRow = ({ c }) => {
-  const [open, setOpen] = useState(false);
-  const [clamped, setClamped] = useState(false);
-  const ref = useRef(null);
-  const body = String(c.Body || "").trim();
-  // Whether anything is actually HIDDEN is a layout question, not a character count. Any
-  // two-line note counted as long, then fitted both lines on show - so the expander sat there
-  // saying "252 chars" and did nothing when clicked. Measure the clamp, only while applied.
-  useEffect(() => {
-    if (!open && ref.current) setClamped(ref.current.scrollHeight > ref.current.clientHeight + 1);
-  }, [body, open]);
-  const long = clamped || open;
-  return (
-    <Box component="tr" sx={{ borderTop: `1px solid ${BORDER}`, verticalAlign: "top",
-      "&:hover": { bgcolor: open ? "transparent" : PANEL2 } }}>
-      <Box component="td" sx={{ py: 0.6, pr: 1, whiteSpace: "nowrap" }}>
-        <Typography variant="caption" sx={{ ...mono, fontWeight: 600, fontSize: 10.5,
-          color: c.ActorType === "agent" ? "#6f8a6e" : "#55697a" }}>{c.Actor}</Typography>
-      </Box>
-      <Box component="td" sx={{ py: 0.6, pr: 1.25, whiteSpace: "nowrap" }}>
-        <Typography variant="caption" sx={{ color: FAINT, fontSize: 10.5 }}>{timeAgo(c.CreatedAt)}</Typography>
-      </Box>
-      <Box component="td" sx={{ py: 0.6, width: "100%", cursor: long ? "pointer" : "default" }}
-        onClick={() => long && setOpen(!open)}>
-        <Typography ref={ref} variant="body2" sx={{ color: DIM, whiteSpace: "pre-wrap", lineHeight: 1.5,
-          ...(open ? {} : { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }) }}>
-          {body}
-        </Typography>
-        {long && (
-          <Typography variant="caption" sx={{ color: "#55697a", fontWeight: 600, fontSize: 10.5 }}>
-            {open ? "less ↑" : `${body.length.toLocaleString()} chars ↓`}
-          </Typography>
-        )}
-      </Box>
-    </Box>
-  );
-};
 
 // Reference material about the task: present, but never competing with the session.
 // ...opened, it is brought up when it unfolded below the screen: Context & history opened out of view and looked like nothing happened

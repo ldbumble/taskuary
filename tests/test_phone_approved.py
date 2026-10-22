@@ -78,14 +78,13 @@ class PositionTests(PhoneCase):
         self.assertNotIn(' of 1', text_of(self.ph.walk()).split('\n')[0])
 
 
-def _report(ph):
+def _report(ph, title='Helpdesk tickets by day'):
     """A scheduled report that landed: eight rows of helpdesk tickets."""
     rows = '\n'.join('{"day": "2026-10-%02d", "tickets": %d}' % (d, 30 + d) for d in range(12, 20))
-    sid = ph.s.save_source({'Channel': 'report', 'Address': 'Helpdesk tickets by day', 'Active': 1,
-                            'ConfigJson': '{"type": "mssql", "title": "Helpdesk tickets by day"}'}, 't')
+    sid = ph.s.save_source({'Channel': 'report', 'Address': title, 'Active': 1, 'ConfigJson': json.dumps({'type': 'mssql', 'title': title})}, 't')
     ph.s.touch_source(sid)
-    mid = ph.f.message(task_id=None, status='filed', channel='report', subject='Helpdesk tickets by day - 8 rows',
-                       source_name='Helpdesk tickets by day', from_name='Helpdesk tickets by day', conversation_id=f'report:{sid}', body=rows)
+    mid = ph.f.message(task_id=None, status='filed', channel='report', subject=f'{title} - 8 rows',
+                       source_name=title, from_name=title, conversation_id=f'report:{sid}', body=rows)
     ph.f.route(mid, None, 'file', 'scheduled report', by='report')
     return mid
 
@@ -535,6 +534,42 @@ class TelegramSendRetryTests(PhoneCase):
         self.assertTrue(got[0][0].startswith('My last message did not reach you ("'), got[0][0])
         self.assertIn('What you can do here', text_of(got))
         self.assertNotIn('did not reach you', text_of(self.ph.type('help')))             # said once
+
+
+class UrgentMidWalkTests(PhoneCase):
+    """A12: an urgent mail from Gail landed while the owner walked a section, and the walk went on past it without a word. The next card
+    says so in one short line, with an Open for it - once in a walk."""
+
+    def _urgent(self):
+        tid, _ = self.f._work('Payroll file rejected', subject='Payroll file rejected', from_name=GAIL[0], from_email=GAIL[1],
+                              body='The bank rejected the payroll file - staff will not be paid Friday unless we resend today.', sent_at=self.f.ago(minutes=1))
+        self.s.update_task(tid, {'Priority': 'urgent'}, 'triage'); self.ph.ready()
+        return tid
+
+    def test_walking_a_section_the_next_card_names_it_with_an_open(self):
+        _report(self.ph); _report(self.ph, 'Open purchase orders'); self.ph.ready()
+        self.ph.opener(); self.ph.tap('Walk Reports')
+        tid = self._urgent()
+        got = self.ph.tap('Next')
+        said = text_of(got)
+        self.assertIn('New since you started: Gail Moreno - Payroll file rejected (urgent).', said)
+        self.assertIn(f'Open TQ-{tid:04d}', got[-1][1])
+        self.assertEqual(said.count('New since you started'), 1)
+        self.assertIn('Payroll file rejected', text_of(self.ph.tap(f'Open TQ-{tid:04d}')))
+
+    def test_said_once_in_a_walk(self):
+        _two_asks(self.f)
+        for s in ('Office closed Monday', 'Weekly platform digest'): self.f.filed_fyi(subject=s)
+        self.ph.ready(); self.ph.opener(); self.ph.tap('More…'); self.ph.tap('Walk Tasks')
+        self._urgent()
+        self.assertIn('New since you started', text_of(self.ph.tap('Next')))
+        self.assertNotIn('New since you started', text_of(self.ph.tap('Next')))
+
+    def test_when_the_walk_brings_it_next_there_is_nothing_to_say(self):
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+        self._urgent()
+        got = text_of(self.ph.tap('Next'))
+        self.assertIn('Payroll file rejected', got); self.assertNotIn('New since you started', got)
 
 
 class TelegramBareNumberTests(PhoneCase):

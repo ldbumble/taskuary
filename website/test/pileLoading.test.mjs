@@ -21,12 +21,10 @@ test("an empty day says nothing between the card and the buttons", () => {
 
 // STILL COUNTING IS NOT "NOTHING TO WALK" (an owner screenshot, 2026-10-20): the card said "Counting…" over On you rows while the line
 // under it said "Nothing to walk through right now" and Walk was greyed - and pointed "on the left" at rows on the right
-test("while the day is counted the opener says Loading..., and Nothing to walk only once it is counted and nothing is on you", () => {
+test("while the day is counted the opener says Loading..., and a greyed Walk has no line of its own under it", () => {
   assert.match(view, /const counting = pileLoading \|\| mailReading \|\| \(!canAdvance && items\.some\(\(i\) => i\.settling\)\);/);
-  assert.match(view, /const onYou = useMemo\(\(\) => onYouCount\(items\.length \? summarize\(items\)\.groups : \[\]\), \[items\]\);/);
-  assert.match(view, /\{!counting && !!items\.length && !canAdvance && !onYou && !busy && !starting && <span className="tq-welcome-why" data-tq-nothing-to-walk="">/);
-  assert.doesNotMatch(view, /on the left to open it/, "the rows are not on the left of this line");
-  assert.match(view, /Click any row to open it\./);
+  // the owner, 2026-10-22: "yes remove that walk line too" - buttons do the talking
+  assert.doesNotMatch(view, /data-tq-nothing-to-walk|Nothing to walk through right now|Click any row to open it/);
   assert.match(src("assistantCards.jsx"), /const onYou = onYouCount\(groups\)/, "the card's headline and the line read one count");
 });
 

@@ -1,5 +1,5 @@
 // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): the button under a draft is Send and it only sends; Approve runs only the
-// agent's act; Mark done is the one close. A send leaves the item on the table with its receipt - Mark done and Next on its row.
+// agent's act; Mark done is the one close. A send leaves the item on the table, its card badged Send - Mark done and Next on the row by the prompt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -25,25 +25,36 @@ test("Send only sends and Approve only runs - each says the task stays open unti
   assert.doesNotMatch(all, /Send & close|no_close/);
 });
 
-test("a send's receipt offers Mark done only where there is a task, and Next always", () => {
+test("a send offers Mark done only where there is a task, and Next always", () => {
   assert.deepEqual(sentChips(12, "TQ-12").chips.map((c) => [c.verb, c.label, c.tid ?? null]), [["close", "Mark done", 12], ["next", "Next", null]]);
   assert.deepEqual(sentChips(null).chips.map((c) => c.verb), ["next"], "no task, no Mark done");
 });
 
-test("the canvas keeps a sent item on the table: the card folds, the receipt carries the ways on, nothing settles", () => {
+test("the canvas keeps a sent item on the table: the card folds wearing its button, Mark done and Next on the row, nothing settles", () => {
   const cards = read("assistantCards.jsx"), view = read("AssistantView.jsx");
-  // ...and what is not a send is the badge of the button pressed, not a sentence (the owner, 2026-10-22)
-  assert.match(cards, /if \(ran && onSent\) onSent\(said, card\.tid, card\.ref\);\n(\s+\/\/.*\n)*\s+else onDone\?\.\(verb === co\?\.alt\?\.verb \? co\.alt\.label : btn\("approve"/);
+  // the press is the button's own label - a send and what is not a send alike - never a sentence (the owner, 2026-10-22)
+  assert.match(cards, /if \(ran && onSent\) onSent\(pressed, card\.tid, card\.ref\);\n\s+else onDone\?\.\(pressed\);/);
+  assert.match(cards, /const pressed = verb === co\?\.alt\?\.verb \? co\.alt\.label : verb === "merge_anyway" \? OFFER_LABEL\.anyway : btn\("approve", action \? "action" : undefined\);/);
   assert.doesNotMatch(cards, /and closes the task/);
   assert.match(cards, /the task stays open until you \$\{btn\("close"\)\}/);
-  const sent = view.slice(view.indexOf("const sent = (receipt"), view.indexOf("\n  };", view.indexOf("const sent = (receipt")));
-  assert.match(sent, /role: "receipt", text: receipt, \.\.\.sentChips\(tid, ref\)/);
+  const sent = view.slice(view.indexOf("const sent = (pressed"), view.indexOf("\n  };", view.indexOf("const sent = (pressed")));
+  assert.match(sent, /done: true, sent: true, \.\.\.\(pressed \? \{ pressed \} : \{\}\), \.\.\.sentChips\(tid, ref\)/);
+  assert.doesNotMatch(sent, /role: "receipt"/, "no line under the card");
   assert.doesNotMatch(sent, /funnel\/settle|advance\(/, "a send neither settles the item nor walks on");
   assert.match(view, /reply: <ReplyCard card=\{c\} onDone=\{actions\.done\} onSent=\{actions\.sent\}/);
-  // Mark done under the receipt closes the task it names - the item may be gone with its draft - then the walk goes on
+  // the folded card keeps a send's two words on the row; any other folded card keeps only Next
+  assert.match(view, /const moved = !!m\.card && \(!live \|\| foldedNow\) && !m\.sent;/);
+  // Mark done from the row closes the task it names - the item may be gone with its draft - then the walk goes on
   assert.match(view, /if \(c\.verb === "close" && c\.tid\) \{[\s\S]{0,200}runOperation\(api, "task\.complete", c\.tid\)[\s\S]{0,200}advance\(null, true\)/);
   // ...and an Approve run from a proposal takes the server's own chips for its receipt (concierge.sent_chips)
   assert.match(view, /\(out\.status !== "done" \|\| p\.kind === "review\.approve"\) && res\?\.chips\?\.length/);
+});
+
+test("no 'Sent to <who>.' line on the desk: a send is said by its badge alone, and a refused one still says why", () => {
+  const cards = read("assistantCards.jsx");
+  for (const gone of ["`Sent to ${who}.`", "The reply went to", "Done — the action ran.", "Done — ${co.then}", "Done — ${co.alt.then}"])
+    assert.ok(!cards.includes(gone), `still says: ${gone}`);
+  assert.match(cards, /if \(data\.send_error\) throw new Error\(data\.send_error\);/);
 });
 
 test("no screen says a send closes the task", () => {

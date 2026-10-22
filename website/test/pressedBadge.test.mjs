@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { mergeDurableTurns, pressChip, pressLine, pressedOf } from "../src/assistantTurns.js";
 import { label as btn } from "../src/buttons.js";
+import { chipsOf, lastActIndex, sentChips } from "../src/funnelPile.js";
 
 const src = (f) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), "utf8");
 const item = (id, key, tid) => ({ id, role: "assistant", text: "", card: { kind: "task", key, tid, title: "Send Erin the signed form" } });
@@ -32,11 +33,33 @@ test("a proposal line and a words line are not the item's card", () => {
 
 test("a word pressed under a line marks that line and leaves it", () => {
   const close = { verb: "close", label: "Mark done", tid: 7, ref: "TQ-0007" };
-  const ms = [{ id: "r1", role: "receipt", text: "Sent to Erin Blake.", chips: [close, { verb: "next", label: "Next" }] }];
+  const ms = [{ id: "r1", role: "receipt", text: "Not ours - filed.", chips: [close, { verb: "next", label: "Next" }] }];
   const out = pressChip(ms, close);
   assert.equal(out.length, 1);
   assert.equal(out[0].pressed, "Mark done");
   assert.deepEqual(out[0].chips.map((c) => c.verb), ["next"]);
+});
+
+// A SEND IS A BADGE TOO (the owner, 2026-10-22: "yes"): no "Sent to Erin Blake." line - the folded reply card wears "✓ Send" and
+// carries Mark done and Next for the row by the prompt (AssistantView sent)
+test("a send folds its card badged Send, with Mark done and Next on the row, and adds no line", () => {
+  const sent = (m, pressed, tid, ref) => m.map((x, i) => (i === m.length - 1 ? { ...x, done: true, sent: true, pressed, ...sentChips(tid, ref) } : x));
+  const ms = sent([item("a1", "review:3", 7)], btn("approve"), 7, "TQ-0007");
+  assert.equal(ms.length, 1, "no line under the card");
+  assert.ok(!ms.some((m) => m.role === "receipt" || /Sent to/.test(m.text)));
+  assert.equal(pressedOf(ms[0]), "Send");
+  // the folded card is the line that carries the words, so the row draws them
+  assert.equal(lastActIndex(ms), 0);
+  assert.deepEqual(chipsOf(ms[0]).map((c) => [c.verb, c.label]), [["close", "Mark done"], ["next", "Next"]]);
+  // Mark done pressed from the row: its badge on the same card, Next left
+  const closed = pressChip(ms, chipsOf(ms[0])[0]);
+  assert.equal(pressedOf(closed[0]), "Mark done");
+  assert.deepEqual(chipsOf(closed[0]).map((c) => c.verb), ["next"]);
+  // ...and a read of the server's copy keeps the fold's words on it
+  const local = [{ ...ms[0], id: "a9" }];
+  const read = mergeDurableTurns(local, [{ id: 61, role: "assistant", text: "", card: local[0].card }]).messages;
+  assert.equal(read[0].sent, true); assert.equal(read[0].done, true); assert.equal(read[0].pressed, "Send");
+  assert.deepEqual(chipsOf(read[0]).map((c) => c.verb), ["close", "next"]);
 });
 
 test("the server's stamp reaches a line already drawn, and the press's own badge survives a read", () => {

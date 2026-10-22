@@ -3005,7 +3005,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             # ...each saying WHAT it is, not a bare number (the owner, 2026-09-30: "have to write what they are about a little")
             opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
                          f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
-                     for i in waiting[:3]]
+                     for i in waiting[:3 if DELIVERY.get() != PHONE else 10]]     # the phone's poll holds an Open for each named (F26)
         elif only and left:
             # the filtered set is done; what remains is the rest of the pipe - offer it rather than call the day over
             say = f"That's all of those. {plural(len(left), 'other thing')} still wait{'s' if len(left) == 1 else ''} - {funnel.summary(left).split(' - ', 1)[-1].split('.')[0]}. Say next and I'll take you through them."

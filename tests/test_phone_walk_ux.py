@@ -513,6 +513,44 @@ class MarkDoneOnAnUnsentDraftTests(unittest.TestCase):
         self.assertEqual(said, f'TQ-{t:04d} closed.')
 
 
+class EndOfWalkAndFyiCountTests(unittest.TestCase):
+    """F26: the walk's end named six tasks and offered Open for three; the FYI batch said "4 fyi" over a rail of fourteen; two lines
+    alike were told apart by "(2)"."""
+
+    def test_the_end_of_the_walk_offers_an_open_for_every_named_task_on_the_phone(self):
+        from taskuary import concierge, funnel, terminal
+        from tests.test_funnel import mail, store
+        s = store()
+        for n, who in enumerate(('Gail Moreno', 'Ray Colton', 'Paula Vance', 'Erin Blake', 'Omar Keller', 'Marcus Reed')):
+            t = s.create_task({'Title': f'Question {n} from {who}', 'Kind': 'reply', 'Status': 'open'}, 'o')
+            mail(s, f'Question {n}', who=who, email=f'p{n}@northwind.example', tid=t, hours=n + 1)
+        with mock.patch.object(terminal, 'live_sessions', return_value=[]), concierge.delivering(concierge.PHONE):
+            out, here = concierge.surface(s, llm=lambda *a, **k: 'never'), None
+            for _ in range(10):
+                if not out.get('item'): break
+                here = out['item']['key']
+                out = concierge.surface(s, llm=lambda *a, **k: 'never', leaving=here, exclude=here)
+        self.assertIn("That's everything for now", out['say'])
+        opens = [c for c in out.get('chips') or [] if c.get('verb') == 'open']
+        self.assertGreater(len(opens), 3, out.get('chips'))
+
+    def test_the_batch_says_how_many_of_how_many(self):
+        items = [{'key': f'msg:{n}', 'kind': 'fyi', 'who': f'Sender {n}', 'title': f'Note {n}'} for n in range(4)]
+        batch = {'key': 'fyis:' + ','.join(i['key'] for i in items), 'kind': 'fyis', 'lane': 'fyi', 'items': items}
+        pile = {'items': [{'key': f'msg:{n}', 'kind': 'fyi', 'lane': 'fyi', 'order_band': 4} for n in range(4, 14)]}
+        with mock.patch('taskuary.funnel.pile', return_value=pile):
+            text = remote_assistant.turn_text({'say': 'x', 'item': batch}, store=MemoryStore())
+        self.assertIn('4 of 14 fyi · nothing to do', text)
+
+    def test_lines_alike_are_told_apart_by_who_sent_them(self):
+        items = [{'key': 'msg:1', 'kind': 'fyi', 'who': 'Payworth', 'title': 'Statement ready', 'email': 'billing@payworth.example'},
+                 {'key': 'msg:2', 'kind': 'fyi', 'who': 'Payworth', 'title': 'Statement ready', 'email': 'payroll@payworth.example'}]
+        lines = [l for _k, l in remote_assistant.member_lines({'kind': 'fyis', 'items': items})]
+        self.assertEqual(len(set(lines)), 2)
+        self.assertFalse(any(l.endswith('(2)') for l in lines), lines)
+        self.assertTrue(lines[1].endswith('(payroll@payworth.example)'), lines)
+
+
 class ReceiptSaidOnceTests(unittest.TestCase):
     """F13: the bubble that reported Done still said "Nothing happens until you say yes."; an act run at once was said twice, its
     card line ("Answer it - general - ...") above its receipt; a bare "Ok." sat over "Not done"; Remind me said where, not what."""

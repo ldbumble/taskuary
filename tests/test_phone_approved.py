@@ -255,6 +255,18 @@ class AfterTheRunTests(PhoneCase):
         self.assertIn(f'TQ-{tid:04d} closed', text_of(self.ph.tap('Mark done')))
         self.assertEqual(self.s.get_task(tid)['Status'], 'done')
 
+    def test_a_finished_agents_task_asks_no_who_should_take_it_on_either_surface(self):
+        """The owner, 2026-10-22: a task its agent finished leads with Mark done on the phone AND the desktop - one move, read in one place
+        (funnel_presentation.move_of): the desk's card reads it off the item's `shows`, the phone off the same."""
+        from taskuary import concierge, funnel
+        tid = self._ended('finished')
+        card = self.ph.walk()
+        self.assertNotIn('who should take it?', text_of(card)); self.assertIn('You* · Mark done', text_of(card))
+        self.assertEqual(card[-1][1][0], 'Mark done')
+        row = next(i for i in funnel.pile(self.s)['items'] if str(i.get('tid')) == str(tid))
+        self.assertEqual(row['shows']['move'], 'Mark done')                                # what the desk's card reads
+        self.assertEqual(concierge.surface(self.s, row['key'])['item']['shows']['move'], 'Mark done')
+
     def test_the_follow_up_of_a_failed_agent_leads_with_try_again(self):
         tid = self._ended('failed', live=True)
         self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': self.ph.chat, 'connector_id': self.ph.cid,

@@ -2099,6 +2099,10 @@ def primary(out: dict) -> dict | None:
     if it.get('hold'):
         mine = [c for c in chips if c['verb'] not in _HAND]
         return next((c for c in mine if c['verb'] not in _DOWN), (mine or chips or [None])[0])
+    # ...and a move that IS Mark done (a task its agent finished - move_of, the desk's reading too) leads with it
+    if it.get('kind') in STORY_KINDS and move_title(it) == buttons.label('close'):
+        done = next((c for c in chips if c['verb'] == 'close'), None)
+        if done: return done
     if it.get('kind') in STORY_KINDS and move_title(it) in ('who should take it?', buttons.label('regular_agent')):
         hand = next((c for c in chips if c['verb'] in _HAND), None)
         if hand: return hand

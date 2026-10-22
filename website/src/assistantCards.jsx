@@ -1017,7 +1017,9 @@ export function MessageCard({ card, onDone, onOpenTask, onTimeline, onSurface, o
   // AN AGENT ALREADY DID IT (the owner, 2026-09-28: TQ-0796 read "who should take it? Hand to agent" under the report of
   // the agent that took it): once a report is filed the move is to close the task. It offered Continue beside it too, and finished
   // work is not sent on from its card (the owner, 2026-10-18: "no keep going if finished") - more is said in the task's own box
-  const reported = !!reportOf(doc) && (own || mineAlone);
+  // ...and a run that FINISHED with no report filed reads the same: the server's move for it is Mark done (funnel_presentation.move_of,
+  // the phone's reading too - the owner, 2026-10-22), never "who should take it?" over work that is over
+  const reported = (!!reportOf(doc) || card.shows?.move === btn("close")) && (own || mineAlone);
   // what they wrote, in their words, inside the ask - never for your own task, whose words the story already said
   const words = card.channel === "assistant" && card.mid ? <div className="tq-thr-words"><AdvisorWhy mid={card.mid} /></div>
     : card.mid && !mineAlone ? <div className="tq-thr-words"><Clamp><CombinedTaskText card={card} list={false} /></Clamp></div> : null;

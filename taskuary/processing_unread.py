@@ -427,7 +427,8 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
         elif end == 'finished':
             last = store.last_worker_event(tid, kinds=('finished',)) or {}
             said = ' '.join(str(last.get('Text') or '').split())[:160]
-            card.update(lane='yours', why=f"{agent_word(task.get('Kind'))} finished" + (f': {said}' if said else ' - read what it found'))
+            # `finished`: what the move reads (funnel_presentation.move_of) - Mark done, not "who should take it?" (the owner, 2026-10-22)
+            card.update(lane='yours', finished=True, why=f"{agent_word(task.get('Kind'))} finished" + (f': {said}' if said else ' - read what it found'))
     # THE LATEST ACTION IS THE STATUS (the owner, 2026-09-24). An agent parked or asking already spoke
     # for its task over a draft; one still WORKING did not, so a reply it wrote a minute into the session
     # read "reply ready" through forty more minutes of edits. Working is newer than any draft it made -

@@ -121,6 +121,22 @@ class ReportsAndHubTests(unittest.TestCase):
         self.assertIn('Reaches you: Reports: the AI decides', text); self.assertNotIn('ten percent', text)
 
 
+class SaysHowTests(unittest.TestCase):
+    """F25: a setting nobody set read "(not set)" and nothing more; "Set up a report" asked for a sentence and gave none to copy."""
+    def test_an_unset_knob_says_where_it_is_set(self):
+        schema = db._schema()
+        k, m = next((k, m) for k, m in (schema.get('knobs') or {}).items() if m.get('type') != 'switch' and m.get('group'))
+        s = MemoryStore(); s.set_setting(k, '', 't')
+        text, _ = db.browse(s, 'settings', m['group'])
+        line = next(l for l in text.splitlines() if l.startswith(f"· {m.get('label') or k}:"))
+        self.assertIn(f"(not set) - change it on the desktop: Settings → {m['group']}", line)
+        opened, _ = db.browse(s, 'settings', m['group'], k)
+        self.assertIn('change it on the desktop', opened)
+
+    def test_set_up_a_report_gives_an_example(self):
+        self.assertIn('For example: "', ra.script_words(MemoryStore(), 'set up a report'))
+
+
 class NoJsonOnThePhoneTests(unittest.TestCase):
     """F16: a report's rows went out as braces and quotes wherever they were not a whole section of rows - one row, a list on one
     line, rows quoted on a task made from the report."""

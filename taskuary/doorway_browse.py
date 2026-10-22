@@ -183,14 +183,16 @@ def _settings(store, section, open_, page=0):
         if kind == 'switch': return 'on' if str(v if v is not None else '1').strip() not in ('0', 'false', 'off', '') else 'off'
         if str(v).strip() == '*': return 'every other one set up, in order'      # backup_brains' own wildcard, said in words
         return str(v) if v not in (None, '') else '(not set)'
+    # ...and a knob nobody set says where it is set: "(not set)" alone left the owner nowhere to go (F25)
+    where = lambda k: f" - change it on the desktop: Settings → {(knobs.get(k) or {}).get('group') or section or 'Settings'}" if value(k) == '(not set)' else ''
     if open_:
         m = knobs.get(open_) or {'label': open_}
-        text = f"{m.get('label') or open_}\n{m.get('desc') or ''}\nnow: {value(open_)}".strip()
+        text = f"{m.get('label') or open_}\n{m.get('desc') or ''}\nnow: {value(open_)}{where(open_)}".strip()
         text += '\n\nSay what it should be and I propose the change for your yes.'
         return text, [(f'Back to {section}', {'t': 'browse', 'area': 'settings', 'section': section})] + up if section else up
     if section:
         rows = [(k, m) for k, m in knobs.items() if m.get('group') == section]
-        lines = [f"· {m.get('label') or k}: {value(k)}" for k, m in rows]
+        lines = [f"· {m.get('label') or k}: {value(k)}{where(k)}" for k, m in rows]
         return (f"SETTINGS · {section.upper()}\n" + ('\n'.join(lines) or 'Its controls are on the desktop.'),
                 paged([(m.get('label') or k, {'t': 'browse', 'area': 'settings', 'section': section, 'open': k}) for k, m in rows], up,
                       {'t': 'browse', 'area': 'settings', 'section': section}, page))

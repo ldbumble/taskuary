@@ -39,9 +39,11 @@ class MorningLineTests(unittest.TestCase):
         # the desktop's opener, in words: the count, then who wants what (2026-09-23)
         self.assertIn('7 things: 1 task, 6 FYI.', text)     # the rail's own bands (2026-10-02; Tasks since 2026-10-21)
         self.assertIn('TASKS · 1', text); self.assertIn('FYI · 6', text)
-        self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Set up a report', text); self.assertNotIn('Set up Taskuary', text)
+        # ...and about four options, the rest behind More… (A7, 2026-10-22)
+        self.assertIn('1 · Walk me through my tasks', text); self.assertIn('2 · Walk FYI', text); self.assertIn('3 · More…', text)
+        self.assertNotIn('Set up Taskuary', text)
         # the numbers are remembered against the chat, so "2" is the words
-        self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Set up a report', True))
+        self.assertEqual(ra.resolve_index(self.s, 'whatsapp', '1555@s.whatsapp.net', '2'), ('Walk FYI', True))
 
     def test_quiet_when_the_pipe_is_empty_before_six_or_switched_off(self):
         with self._pile(0): self.assertEqual(ra.morning_line(self.s, now=datetime(2026, 9, 18, 8, 0)), 0)

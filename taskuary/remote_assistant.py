@@ -698,6 +698,32 @@ SCRIPT_LINES = [(WALK, {'t': 'walk'}), ('Set up a report', {'t': 'script', 'scri
                 ('Hub', {'t': 'browse', 'area': 'hub'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
 
 
+MENU = 'More…'                                 # the opener's way to everything it does not list (A7) - not the card's More
+OPENER_SECTIONS = ('reports', 'fyi', 'ideas', 'later')   # the section walks the opener leads with, the walkers' most used first
+
+
+def opener_lines(items: list) -> list:
+    """The day's opener's picks: the walk, the two section walks the rail holds that walkers reached for most, and More… - about four
+    clear options instead of nine (A7, 2026-10-22). "Walk me through my tasks" next to "Walk Tasks", "Reports" next to "Walk Reports"
+    read as the same thing twice. The walk picked off the opener goes straight to the first card: the summary is right above it (F9)."""
+    from . import doorway_browse
+    walks = dict(doorway_browse.section_rows(items))
+    lead = [w for s in OPENER_SECTIONS for w, a in walks.items() if a['section'] == s][:2]
+    return [(WALK, {'t': 'walk', 'opened': True})] + [(w, walks[w]) for w in lead] + [(MENU, {'t': 'menu'})]
+
+
+def menu_lines(store) -> list:
+    """What More… opens: everything the opener does not list - set up a report, the other section walks, Connections, Reports, Hub and
+    Settings - so nothing the nine options reached is lost; then the walk again, the way on."""
+    from . import doorway_browse, funnel
+    try: items = funnel.pile(store).get('items') or []
+    except Exception as e:
+        logger.debug(f'the phone menu has no pile: {e}'); items = []
+    shown = {w for w, _a in opener_lines(items)}
+    rest = [r for r in SCRIPT_LINES[1:2] + doorway_browse.section_rows(items) + SCRIPT_LINES[2:] if r[0] not in shown]
+    return rest + [(WALK, {'t': 'walk', 'opened': True})]
+
+
 def greeting(now=None) -> str:
     from datetime import datetime as _dt
     h = (now or _dt.now()).hour
@@ -742,11 +768,7 @@ def morning_line(store, now=None, force: bool = False) -> int:
     if not items and not force: return 0
     # the desktop's opener: the day's meetings, then who wants what (2026-09-23)
     head = day_opener(store, items, now)
-    from . import doorway_browse
-    # the two scripts keep the numbers the owner knows; then each section the rail holds; then the browse picks
-    lines = SCRIPT_LINES[:2] + doorway_browse.section_rows(items) + SCRIPT_LINES[2:]
-    # ...and the walk picked off THIS message goes straight to the first card: the summary is right above it (F9)
-    lines = [(w, {**a, 'opened': True} if a.get('t') == 'walk' else a) for w, a in lines]
+    lines = opener_lines(items)
     text = head + '\n\nReply with one of:\n' + '\n'.join(f'{i} · {w}' for i, (w, _) in enumerate(lines, 1))
     # ...never into a conversation: a walk handed to a chat is its own opener, and a door with a turn in flight or a word in
     # the last minutes is left for the next pass (this runs after every report pass)
@@ -1243,6 +1265,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             return carry_out(store, nxt, nxt.get('item'), actor)
         # a new walk, or one item by name, is not the section being walked
         if t in ('walk', 'open'): doorway_browse.hold(store, asking(), None)
+        if t == 'menu': return turn_text({'say': 'Everything else, from here:', 'item': None}, store=store, extra=menu_lines(store))
         if t == 'browse':
             text, rows = doorway_browse.browse(store, act.get('area') or '', act.get('section'), act.get('open'), act.get('page') or 0)
             return turn_text({'say': text, 'item': None}, store=store, extra=rows)

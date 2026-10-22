@@ -574,6 +574,7 @@ def judge(store, msg: dict, llm, mine=(), me=()) -> tuple[dict, dict]:
         notes = notes + operations.evidence_lines(store, msg)
     except Exception as e: logger.debug(f'correction evidence skipped: {e}')
     thread = others_on_thread(store, msg, mine)
+    if (put_to := addressed_to(store, msg, me)): thread = {**thread, 'addressed_to': put_to}
     candidates = chat_candidates(store, msg) if is_chat(msg) else None
     repos = repo_candidates(store)
     # ...and what was actually SAID before this, theirs and ours. A mail quotes its own thread
@@ -1524,6 +1525,20 @@ def others_on_thread(store, msg: dict, mine=()) -> dict:
     if not others: return {}
     last = prior[-1]
     return {'others_replied': others[-3:], 'last_on_thread': who(last), 'last_on_thread_is_you': is_me(last)}
+
+
+def addressed_to(store, msg: dict, me=()) -> list:
+    """WHO the mail is put to, by name, when it is not the owner (2026-10-22): told only "you are copied", the model read the body's
+    "can you fix these" as the owner's and opened a task on a question put to the colleague on the To line. Names as this thread
+    or the people list know them, never an address - an unknown one is "someone at <their organisation's domain>"."""
+    to = [str(a).strip().lower() for a in msg.get('to') or [] if a]
+    mine = {str(a).lower() for a in me if a}
+    if not to or set(to) & mine: return []
+    names = {}
+    for m in store.thread_messages(msg.get('conversation_id'), msg.get('subject')) or []:
+        a = str(m.get('FromEmail') or '').lower()
+        if a in to and m.get('FromName'): names[a] = ' '.join(str(m['FromName']).split())
+    return [names.get(a) or f"someone at {a.rsplit('@', 1)[-1]}" for a in to][:5]
 
 
 # ── a chat room is not a task ────────────────────────────────────────────────────────────

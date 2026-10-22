@@ -22,6 +22,7 @@ Work through four questions.
 - Signs it is the owner's: addressed to them (`addressed_to_you` "to"), names them or asks them directly, only they can answer it, it arrived through a mailbox or alias they are responsible for and nobody else on it owns the matter.
 - Signs it is someone else's: the owner is only copied (`addressed_to_you` "cc"), it is a broadcast (`recipients` in the dozens), it asks a named colleague or another team, a colleague has already answered (`others_replied`), or the people on the To line plainly own it.
 - A cc that names the owner or asks them something is theirs; a To line that is really a team list may not be. Read the words, then the lines.
+- When the owner is only copied, "you" in the message is the person on the To line, not the owner: "can you fix these", "let me know if this looks right" ask THEM. Only the owner's name, or a line plainly turned to them ("Alex, can you..."), makes it the owner's - even when the system it is about is one the owner built or runs.
 - Being named is not always being asked. "I've cc'd Alex in case you need access", "Alex can help if anything breaks" makes the owner a contact on standby: nothing is wanted from them until someone actually asks. The work in that mail belongs to the people it is addressed to.
 
 **What does the sender want to happen?** Ask that, not what the words are about.
@@ -112,6 +113,7 @@ Signs against coding: the work only reads from a system (a query, a report, a lo
 
 Each is a sign to weigh; an absent field is not evidence either way.
 - `addressed_to_you` - "to", "cc" or "not named" (a group alias or shared mailbox); `recipients` - how many people the mail went to.
+- `addressed_to` - who the mail is put to, by name, when it is not the owner: the people its "you" means.
 - `others_replied`, `last_on_thread` - people other than the owner and the sender who have SENT on this thread, and who spoke last.
 - `exchange` - the recent back-and-forth, oldest first, the owner's lines marked "you", each led by its message id `[#n]`.
 - `open_work`, `recently_closed` - tasks this touches, open or closed lately, each with how it ended.

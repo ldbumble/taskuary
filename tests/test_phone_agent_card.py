@@ -73,5 +73,25 @@ class RunEndedTests(unittest.TestCase):
         self.assertIn(f'TQ-{self.tid:04d} is back: the agent failed - ', sent.call_args.args[2])
 
 
+class HeldTaskTests(unittest.TestCase):
+    """F7: an in-progress general agent on a todo task - the header read "agent working" over "No agent yet - nobody is working
+    on this", and Send to agent was offered on a task an agent already held."""
+    def test_header_and_body_read_the_same_session_and_no_second_hand_off(self):
+        from taskuary import terminal
+        s = MemoryStore()
+        tid = s.create_task({'Title': 'Draft the vendor reply', 'Kind': 'general', 'Status': 'in_progress'}, 'owner')
+        item = {'key': f'task:{tid}', 'kind': 'todo', 'lane': 'yours', 'tid': tid, 'ref': f'TQ-{tid:04d}', 'title': 'Draft the vendor reply',
+                'who': 'owner', 'channel': 'own'}
+        live = mock.Mock(task_id=tid, alive=True, started=1)
+        chips = [{'verb': 'close', 'label': 'Mark done'}, {'verb': 'regular_agent', 'label': 'Send to agent'}, {'verb': 'next', 'label': 'Next'}]
+        with mock.patch.dict(terminal.SESSIONS, {'s1': live}):
+            text = ra.turn_text({'say': 'x', 'item': item, 'chips': chips}, store=s)
+        self.assertNotIn('No agent yet', text)
+        self.assertIn('agent working', text.splitlines()[0])
+        self.assertIn('· working', text)
+        self.assertNotIn('Send to agent', text)
+        self.assertIn('Mark done', text)
+
+
 if __name__ == '__main__':
     unittest.main()

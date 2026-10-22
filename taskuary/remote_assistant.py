@@ -1748,7 +1748,20 @@ def agent_state(item: dict | None, store=None) -> str:
         sub = it.get('state') if it.get('state') in ('asking', 'approval', 'stalled', 'parked') else 'asking' if it.get('asking') else 'parked'
         return _says(sub)
     if kind == 'agentdone': return 'finished'
+    # an agent at work on a task whose card is not an agent's: the header said "agent working" over "No agent yet" (F7)
+    if held(it): return 'working'
     return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': lanes.word('saved')}.get(lane) or ('finished' if it.get('summary') else '')
+
+
+def held(item: dict | None) -> bool:
+    """An agent holds this task right now: its row is in the working lane, or a live session is on it."""
+    it = item or {}
+    if it.get('lane') == 'working': return True
+    if not str(it.get('tid') or '').isdigit(): return False
+    from . import terminal
+    try: s = terminal.session_for(int(it['tid']))
+    except Exception: return False
+    return bool(s and getattr(s, 'alive', False))
 
 
 def subject_of(store, item: dict | None) -> str:
@@ -1812,6 +1825,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     state = agent_state(it, store)
     if state.startswith('failed') and kind not in ('agentdone', 'wrapup'): word = funnel.LANE_WORDS['stopped'][0]
     elif state == 'finished' and kind == 'agent': word = lanes.word('agentdone')
+    elif state == 'working' and kind != 'agent': word = funnel.LANE_WORDS['working'][0]
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
     if head and funnel.mark_for(it): head = f'{funnel.mark_for(it)} {head}'
     age = concierge.funnel_age(it)
@@ -1981,6 +1995,12 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         gone = {concierge.CHIP_WORDS['reply'], concierge.CHIP_WORDS['not_ours']}
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in ('reply', 'not_ours'))],
                'options': [o for o in out.get('options') or [] if str(o) not in gone]}
+    if item and item.get('kind') != 'agent' and held(item):
+        # ...and a task an agent already holds is not handed to another: the server refuses a second start (Continue that session)
+        from . import concierge
+        hand = {concierge.CHIP_WORDS[v] for v in _HAND}
+        out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in _HAND)],
+               'options': [o for o in out.get('options') or [] if str(o) not in hand]}
     words, first = choices(out), len(member_lines(item)) + 1
     prop = out.get('proposal') if (out.get('proposal') or {}).get('status', 'proposed') == 'proposed' else None
     if prop and prop.get('id') and not prop.get('auto'):

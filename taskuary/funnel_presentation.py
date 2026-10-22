@@ -547,6 +547,9 @@ def move_of(item: dict | None, draft: str = '') -> str:
     if kind == 'review':
         return ('send your draft' if is_own(it) else f'reply to {who}') if draft or it.get('draft') else 'no reply drafted yet'
     if kind == 'fyi' or lane == 'fyi': return ''
+    # A TASK ITS AGENT FINISHED is done with, not handed on (the owner, 2026-10-22): "who should take it?" over a run that is over - the
+    # one reading the desktop card and the phone both take, so both lead with Mark done
+    if it.get('finished') and (kind == 'todo' or is_own(it)): return buttons.label('close')
     if kind == 'todo' or is_own(it): return 'who should take it?'
     return f'reply to {who}' if it.get('mid') else ''
 

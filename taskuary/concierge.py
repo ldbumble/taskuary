@@ -3162,6 +3162,9 @@ SETTLING_KINDS = frozenset(kind for kind, _label, settles in PROPOSALS.values() 
 # The desk gets the link to the AI page; a phone chat cannot open one, so it gets the words alone.
 # ...and a phone has no buttons: its choices come under the line, as a poll on WhatsApp (F10)
 NO_BRAIN = f"Connect an AI under {places.name('ai')} so I can take instructions; until then pick from the choices below."
+# ...and where nothing is offered under it, nothing is promised: a fresh install with nothing waiting got "pick from the choices
+# below" over no choices at all (the 2026-10-22 re-walk)
+NO_BRAIN_BARE = f"Connect an AI under {places.name('ai')} so I can take instructions."
 def connect_ai_chip() -> dict:
     """The chip under a no-AI line: it opens Connections at the AI cards (the page's `go` chip, AssistantView.runChip)."""
     return {'verb': 'go', 'label': 'Connect an AI', 'href': places.href('ai')}

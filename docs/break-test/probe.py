@@ -2,8 +2,8 @@
 server's decision, and diffing the receipt against the real effect. No model anywhere."""
 import os, sys, json, re, tempfile, contextlib, io
 os.environ['TASKUARY_HOME'] = tempfile.mkdtemp(prefix='tq-probe-')
-REPO = r'C:\Users\owner\Documents\General\Testing\taskhub'
-sys.path[:0] = [REPO, REPO + r'\tests']
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))   # the checkout this sits in
+sys.path[:0] = [REPO, os.path.join(REPO, 'tests')]
 from unittest import mock
 from fastapi.testclient import TestClient
 from taskuary import concierge, funnel, general, ingest, server, terminal

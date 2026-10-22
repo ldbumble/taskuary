@@ -25,6 +25,8 @@ from . import kinds as task_kinds
 # (The judgement that used to live here - "prefer fyi", "this is fyi" - moved to the document 2026-10-09: the owner
 # asked why triage still had rules in code, and the answer was that nobody had moved them.)
 FIELDS = {
+    'addressed_to': "addressed_to names who the mail is put to when it is not the owner - the To line, by name: the people its "
+                    "\"you\" means.",
     'others_replied': "others_replied names people other than the owner and the sender who have SENT a message on this thread; "
                       "last_on_thread is whoever spoke most recently.",
     'exchange': "exchange is the recent back-and-forth on this thread or chat room, oldest first, each message's own words once, "

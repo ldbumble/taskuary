@@ -230,4 +230,28 @@ class FailedSendReceiptTests(PhoneCase):
         self.assertNotRegex(said, r'\bOk\.', said)
 
 
+class ReportTaskTests(PhoneCase):
+    """F16: rows through chatformat.table everywhere, never raw JSON - "including after Put it on my list". The report card was fixed;
+    the TASK it became still printed its summary, which is the rows, as one line of braces and quotes."""
+    channel = 'whatsapp'
+
+    def test_a_report_put_on_the_list_shows_its_rows_as_a_table(self):
+        rows = '\n'.join('{"day": "2026-10-%02d", "tickets": %d}' % (d, 30 + d) for d in range(12, 20))
+        sid = self.s.save_source({'Channel': 'report', 'Address': 'Helpdesk tickets by day', 'Active': 1,
+                                  'ConfigJson': '{"type": "mssql", "title": "Helpdesk tickets by day"}'}, 't')
+        self.s.touch_source(sid)
+        mid = self.f.message(task_id=None, status='filed', channel='report', subject='Helpdesk tickets by day - 8 rows',
+                             source_name='Helpdesk tickets by day', from_name='Helpdesk tickets by day', conversation_id=f'report:{sid}', body=rows)
+        self.f.route(mid, None, 'file', 'scheduled report', by='report')
+        self.ph.ready(); self.ph.opener()
+        self.ph.tap('Walk Reports')
+        self.ph.tap('Put it on my list')
+        self.ph.ready()                                                        # the rail takes the new task in, as the background does
+        said = text_of(self.ph.walk())
+        self.assertIn('TQ-', said)
+        self.assertNotIn('{"', said, said)
+        self.assertIn('2026-10-12 · 42', said)
+        self.assertEqual(said.count('2026-10-12'), 1, said)
+
+
 if __name__ == '__main__': unittest.main()

@@ -382,7 +382,7 @@ def test_an_advisor_idea_is_walked_before_the_fyi_and_never_inside_their_batch()
     assert rows[0]["key"] == "idea:1"
     got = captured(rows)
     assert got.selected["key"] == "idea:1" and got.member_keys == ("idea:1",)
-    rest = captured([r for r in rows if r["kind"] != "idea"] + [idea], exclude="idea:1")
+    rest = captured(rows, exclude="idea:1")          # Next from the idea walks down to the FYI below it (2026-10-22)
     assert rest.selected["kind"] == "fyis" and "idea:1" not in rest.member_keys
     assert "idea:1" not in funnel.fyi_batch(store(), old[0], rows and rows)   # the batch the walk builds never takes it
 

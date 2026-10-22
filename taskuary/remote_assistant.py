@@ -2805,6 +2805,23 @@ def _chunks(text: str, limit=3900) -> list[str]:
     return chatformat.split(str(text or '').strip(), limit)
 
 
+LOST_KEY = 'phone_undelivered'              # :<channel>:<chat> -> the opening of a message that never arrived (A13)
+RETRY_PAUSES = (1.0, 3.0, 9.0)             # a failed Telegram send is tried again after each - a blip passes, a dead bot does not
+
+
+def _pause(secs: float): time.sleep(secs)
+
+
+def _deliver(channel: str, out, store, chat: str, body: str, connector_id=None, **kw):
+    """One bubble out - on Telegram tried again with backoff before it counts as lost (A13, 2026-10-22: a failed send was only logged)."""
+    pauses = RETRY_PAUSES if channel == 'telegram' else ()
+    for i in range(len(pauses) + 1):
+        try: return out(store, chat, body, connector_id=connector_id, **kw)
+        except Exception as e:
+            if i == len(pauses): raise
+            logger.warning(f'{channel}: a message did not go ({plain(e)}) - trying again in {pauses[i]:.0f}s'); _pause(pauses[i])
+
+
 def send(store, channel: str, chat: str, text: str, connector_id: int = None, page: int = 0, choices: list = None):
     """Everything we say to the owner leaves through here, so this is where it is SPELLED.
 
@@ -2865,6 +2882,10 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     if channel == 'telegram' and tapped:
         on = set(tapped)
         text = '\n'.join(l for l in str(text or '').split('\n') if not ((m := _OFFERED.match(l)) and m.group(2) in on))
+    # A MESSAGE THAT NEVER ARRIVED IS SAID, on the next one that does (A13, 2026-10-22): a failed Telegram send left the phone silent
+    lost_key = f'{LOST_KEY}:{channel}:{chat}'
+    lost = str(store.get_setting(lost_key) or '') if channel == 'telegram' else ''
+    if lost: text = f'My last message did not reach you ("{lost}") - here is where we are now.\n\n{text}'
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(chatformat.json_blocks(part), channel)        # rows as tables, never braces and quotes (F16)
@@ -2875,7 +2896,11 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
         # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
         kw = {'poll': [labels[w] for w in tapped]} if last and channel == 'whatsapp' else {'buttons': tapped} if last and channel == 'telegram' else {}
         # the name only where the chat does not already say who is talking: a Telegram bot's own name heads every message (F27)
-        out(store, chat, ('Taskuary:\n' + msg) if i == 0 and channel != 'telegram' else msg, connector_id=connector_id, **kw)
+        try: _deliver(channel, out, store, chat, ('Taskuary:\n' + msg) if i == 0 and channel != 'telegram' else msg, connector_id, **kw)
+        except Exception:
+            if channel == 'telegram': store.set_setting(lost_key, _cut(lost or msg.split('\n', 1)[0], 80), 'assistant')   # the first one missed
+            raise
+    if lost: store.set_setting(lost_key, '', 'assistant')
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)
     logger.info(f'{channel}: sent {len(msgs)} message(s), {sum(len(m) for m in msgs)} chars, to the assistant chat'

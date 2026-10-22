@@ -945,13 +945,16 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
                                    'Say it here and I will pass it straight to the run that is waiting.'])
     if prop and picked and prop.get('status') == 'proposed' and not asks(prop):
         # the number WAS the yes: run it, and say what happened instead of asking again
-        said[0] = turn_text({**out, 'proposal': None}, lead, store, table=item)
+        # ...without "Nothing happens until you say yes." over the receipt that says it happened (F13)
+        said[0] = turn_text({**out, 'proposal': None, 'say': _unasked(out.get('say'))}, lead, store, table=item)
         done = _run(store, prop, actor)
-        said.append(receipt_text(store, done, actor))
+        said = _said_once(said, done) + [receipt_text(store, done, actor)]
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
     elif prop and prop.get('auto') and prop.get('status') == 'proposed':
         done = _run(store, prop, actor)
-        said.append(receipt_text(store, done, actor))
+        # the act run at once is said ONCE, by its receipt: its card line ("Answer it - general - ...", a button that is gone) said
+        # it a second time above it (F13); only what it could not do (`say_card`, the note) stays
+        said = [x for x in (lead.strip(), str(prop.get('say_card') or '').strip()) if x] + [receipt_text(store, done, actor)]
         walk_on = done.get('status') == 'done' and _settled_the_table(prop, item)
         # a SCRIPT started by name from the phone: the tasks walk is Next; set-up opens on the connections
         # (the spec: "or at least see my connectors"); the composer wants a sentence
@@ -970,6 +973,18 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
         here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
         return _on(store, actor, said, leaving=here, exclude=here, done_with=(item or {}).get('key'))
     return '\n\n'.join(x for x in said if x)
+
+
+def _unasked(say) -> str:
+    """The proposal's line without its invitation to say yes - the number WAS the yes."""
+    from . import concierge
+    return re.sub(r'\s*' + re.escape(concierge.WAITS) + r'\s*$', '', str(say or '')).strip()
+
+
+def _said_once(said: list, done: dict) -> list:
+    """What was said before the run, minus a bare acknowledgement over an act that did not happen: "Ok." then "Not done - ..."."""
+    if done.get('status') == 'done': return said
+    return [x for x in said if len(re.sub(r'[^\w\s]', '', str(x or '')).split()) > 2]
 
 
 ALT_QUESTION = {'not_ours': 'How far?', 'agent': 'Which agent?'}
@@ -1331,8 +1346,11 @@ def _remind(store, act: dict, actor: str) -> str:
     try: out = remind.set_reminder(store, int(act['tid']), act['until'], actor)
     except remind.AgentOpen as e: return str(e)
     operations.record_direct(store, 'task.defer', int(act['tid']), {'until': act['until']}, actor, out)
-    said = concierge.away_line(out)                       # the desktop's own sentence, word for word
+    said = concierge.away_line(out)
     if not out.get('remindAt'): return said
+    # ...in plain past tense, the task by name: "TQ-0001 is away until Thu 22 Oct." (F13)
+    from .store import task_ref
+    said = f"{task_ref(int(act['tid']))} is away until {out['when']}." + (f" {out['warn']}" if out.get('warn') else '')
     back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
     return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
 

@@ -1126,3 +1126,31 @@ class NonCoderWordsTests(unittest.TestCase):
             self.assertNotIn('coding agent', concierge.tools_block(s).split('NEVER use')[0].replace('Never mention or offer a coding agent', ''))
         with mock.patch.object(agents, 'coding_ready', return_value=True):
             self.assertEqual(concierge.handoff_verb(s, 'coding_agent'), 'coding_agent')
+
+
+class PhoneReceiptTests(unittest.TestCase):
+    """F13: on the phone a receipt says what happened, in plain past tense, once - the desk keeps its own words."""
+    def setUp(self):
+        self.s = MemoryStore()
+        self.t = self.s.create_task({'Title': 'Confirm Thursday', 'Kind': 'reply', 'Status': 'open'}, 'owner')
+        mid = self.s.add_message({'TaskId': self.t, 'Channel': 'email', 'Subject': 'Thursday?', 'FromName': 'Gail Moreno',
+                                  'FromEmail': 'gail@northwind.example', 'BodyText': 'Are we on?', 'Status': 'open'})
+        self.rid = self.s.add_review({'TaskId': self.t, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes.'})
+
+    def line(self, op, where=concierge.PHONE):
+        with concierge.delivering(where): return concierge.receipt_turn(self.s, op)['say']
+
+    def test_a_send_names_who_it_went_to(self):
+        op = {'kind': 'review.approve', 'targetKind': 'review', 'target': self.rid, 'status': 'done',
+              'outcome': {'sent': {'to': ['gail@northwind.example']}}}
+        self.assertEqual(self.line(op), f'Sent to Gail Moreno · TQ-{self.t:04d}.')
+        self.assertTrue(self.line(op, concierge.DESK).startswith('Done - '), 'the desk keeps its receipt')
+
+    def test_a_close_is_the_task_closed(self):
+        op = {'kind': 'task.complete', 'targetKind': 'task', 'target': self.t, 'status': 'done', 'outcome': {}}
+        self.assertEqual(self.line(op), f'TQ-{self.t:04d} closed.')
+
+    def test_an_error_is_one_clean_sentence(self):
+        for err in ('unknown agent: ', 'the bridge failed.'):
+            said = self.line({'kind': 'task.complete', 'targetKind': 'task', 'target': self.t, 'status': 'error', 'error': err})
+            self.assertNotIn(': .', said); self.assertNotIn('..', said)

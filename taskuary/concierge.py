@@ -4033,18 +4033,39 @@ def sent_chips(store, op: dict) -> list:
         + [{'verb': 'next', 'label': buttons.label('next')}]
 
 
+def _past(store, op: dict, ref: str) -> str:
+    """A phone receipt in plain past tense - what happened, said once: "Sent to Gail Moreno · TQ-0001.", "TQ-0001 closed." - for the
+    acts that have a plain one; '' leaves the desk's "Done - <button> · <ref>." (F13). The desk keeps its own wording."""
+    kind, o = op.get('kind'), op.get('outcome') or {}
+    on = f' · {ref}' if ref else ''
+    if kind == 'review.approve' and (o.get('sent') or {}).get('to') and not o.get('reply_error'):
+        # the person, by name, where the reply went to the one who wrote
+        try:
+            rv = store.get_review(int(op.get('target') or 0)) or {}
+            m = store.get_message(int(rv['MessageId'])) if rv.get('MessageId') else {}
+        except Exception: m = {}
+        name = lambda a: (m or {}).get('FromName') if (m or {}).get('FromName') and str(a).strip().lower() == str((m or {}).get('FromEmail') or '').lower() else a
+        return f"Sent to {', '.join(name(a) for a in o['sent']['to'])}{on}."
+    if kind == 'task.complete' and ref.startswith('TQ-'): return f"{ref} {'was closed already' if o.get('already') else 'closed'}."
+    if kind == 'item.settle' and o.get('closed'): return f"{task_ref(int(o['closed']))} closed."
+    return ''
+
+
 def receipt_turn(store, op: dict, actor: str = 'owner', llm=None, table: bool = False) -> dict:
     """The receipt AND, when it did not happen, its way on (recover): {'say': line, 'chips': [...]}. The chips ride on the
     recorded line, so the desktop draws them under it and the phone numbers them."""
     label, ref = describe_op(store, op)
     st = op.get('status')
+    # the reason as a clause: "unknown agent: ." and "...failed.." were the error's own punctuation run into the sentence's
+    why = lambda fallback: str(op.get('error') or fallback).strip().rstrip(' .:;') or fallback
     if st == 'done':
-        line = (f"{'Already done' if op.get('duplicate') else 'Done'} - {label}{' · ' + ref if ref else ''}."
+        line = ((DELIVERY.get() == PHONE and not op.get('duplicate') and _past(store, op, ref))
+                or f"{'Already done' if op.get('duplicate') else 'Done'} - {label}{' · ' + ref if ref else ''}."
                 + ('' if op.get('duplicate') else _outcome_line(op.get('kind'), op.get('params') or {}, op.get('outcome'))))
     elif st == 'error' and (op.get('outcome') or {}).get('unsent'):
-        line = f"Not sent - {op.get('error') or 'the reply did not go out'}. The reply is kept; {ref or 'it'} is where it was."
-    elif st == 'error': line = f"Not done - {op.get('error') or 'it did not go through'}. {ref or 'It'} is where it was."
-    else: line = f"Not done - {op.get('error') or st}. {ref or 'It'} is where it was."
+        line = f"Not sent - {why('the reply did not go out')}. The reply is kept; {ref or 'it'} is where it was."
+    elif st == 'error': line = f"Not done - {why('it did not go through')}. {ref or 'It'} is where it was."
+    else: line = f"Not done - {why(st)}. {ref or 'It'} is where it was."
     # only what THIS chat proposed is its news. A close from the Tasks page or the wall used to be narrated
     # here too - and opened a fresh chat to say it in (the owner, 2026-09-07: "no one asked you to do that")
     # ...and what was pressed on the item on its table (`table`, on_table): that is this chat, and the owner is looking at it

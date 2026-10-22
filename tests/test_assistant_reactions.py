@@ -550,7 +550,8 @@ class ResponseTests(unittest.TestCase):
         self.assertEqual(s.get_task(tid)['Status'], 'open')
         run(s, p)
         self.assertEqual(s.get_task(tid)['Status'], 'done')
-        self.assertTrue(any('Done - Mark done' in b and f'TQ-{tid:04d}' in b for b in receipts(s)), receipts(s)[-2:])
+        # this module walks the PHONE's road, whose receipt is plain past tense (F13)
+        self.assertTrue(any(b == f'TQ-{tid:04d} closed.' for b in receipts(s)), receipts(s)[-2:])
 
     def test_stopping_the_agent_is_not_closing_the_task(self):
         s, tid, mid, item = self._asked()

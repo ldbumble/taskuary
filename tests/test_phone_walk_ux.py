@@ -408,6 +408,49 @@ class NoHintUnderAnAnswerTests(unittest.TestCase):
         self.assertFalse(text.startswith('Next.'), text)
 
 
+class ReceiptSaidOnceTests(unittest.TestCase):
+    """F13: the bubble that reported Done still said "Nothing happens until you say yes."; an act run at once was said twice, its
+    card line ("Answer it - general - ...") above its receipt; a bare "Ok." sat over "Not done"; Remind me said where, not what."""
+
+    def test_the_yes_bubble_does_not_ask_for_the_yes(self):
+        from taskuary import concierge
+        prop = {'id': 'op1', 'status': 'proposed', 'settles': False, 'label': 'Send the reply'}
+        out = {'say': f'Send the reply to Gail Moreno. {concierge.WAITS}', 'proposal': prop, 'decision': {'verb': 'approve'}}
+        with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done'}), \
+             mock.patch.object(concierge, 'receipt', return_value='Sent to Gail Moreno · TQ-0001.'):
+            text = remote_assistant.carry_out(MemoryStore(), out, None, picked=True)
+        self.assertIn('Sent to Gail Moreno · TQ-0001.', text)
+        self.assertNotIn(concierge.WAITS, text)
+
+    def test_an_act_run_at_once_is_said_once(self):
+        from taskuary import concierge
+        prop = {'id': 'op2', 'status': 'proposed', 'auto': True, 'settles': False, 'say': 'Answer it - general - Thursday.', 'say_card': ''}
+        with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'done'}), \
+             mock.patch.object(concierge, 'receipt', return_value='Done - Answer it · TQ-0001.'):
+            text = remote_assistant.carry_out(MemoryStore(), {'say': prop['say'], 'proposal': prop}, None)
+        self.assertNotIn('Answer it - general', text)
+        self.assertIn('Done - Answer it · TQ-0001.', text)
+
+    def test_no_bare_ok_over_an_act_that_did_not_happen(self):
+        from taskuary import concierge
+        prop = {'id': 'op3', 'status': 'proposed', 'settles': False, 'label': 'Mark done'}
+        with mock.patch.object(concierge, 'run_proposal', return_value={**prop, 'status': 'error', 'error': 'it is locked'}), \
+             mock.patch.object(concierge, 'receipt_turn', return_value={'say': 'Not done - it is locked. TQ-0001 is where it was.', 'chips': []}):
+            text = remote_assistant.carry_out(MemoryStore(), {'say': 'Ok.', 'proposal': prop, 'decision': {'verb': 'close'}}, None, picked=True)
+        self.assertFalse(text.startswith('Ok.'), text)
+        self.assertIn('Not done - it is locked.', text)
+
+    def test_remind_me_says_the_task_is_away_until_the_day(self):
+        from taskuary import concierge, remind
+        s = MemoryStore(); t = s.create_task({'Title': 'Renew the domain', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        with mock.patch.object(remind, 'set_reminder', return_value={'remindAt': '2026-10-22 07:00:00', 'when': 'Thu 22 Oct'}), \
+             mock.patch.object(concierge, 'surface', return_value={'say': 'Nothing else is waiting.', 'item': None}), \
+             mock.patch('taskuary.general.dock_task', return_value=({'TaskId': 1}, False)), \
+             mock.patch.object(concierge, 'restore_current', return_value=None):
+            text = remote_assistant.run_act(s, {'t': 'remind', 'tid': t, 'until': 'tomorrow'}, None)
+        self.assertIn(f'TQ-{t:04d} is away until Thu 22 Oct.', text)
+
+
 class WalkOffTheOpenerTests(unittest.TestCase):
     """F9: "Walk me through my tasks" tapped under the day's opener printed the whole opener again above the first card."""
 

@@ -433,8 +433,10 @@ const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T"))
 // owner, 2026-10-22: "set by time, oldest to newest and then never move") - oldest first inside every section, reports too (2026-10-22:
 // "reports should go oldest first like everything else")
 const walkAt = (i) => Date.parse(String(i?.arrived_at || i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
-// ...and the age the rail's gutter says is that same clock, so the column reads in the order the rows are drawn
 export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
+// ...but the age the rail's gutter says is its LAST message (the server's `last_at`): the arrival made a 14-mail thread read "29d"
+// above a mail from today (the owner, 2026-10-22: "it should be last message not first message"); with no message, its arrival
+export const ageAt = (i) => i?.last_at || arrivedAt(i);
 // A ROW FROM OUTSIDE THE PILE - the task on the table pulled by name, a batch's members put back - TAKES ITS PLACE in the rail's
 // order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
 // should never move them")

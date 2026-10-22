@@ -116,16 +116,17 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
         # transcribe thing for telegram"). Only in the chat that would answer typed words, so a stranger's note to a
         # public bot is never sent to a transcription service.
         v = m.get('voice') or m.get('audio')
+        heard = False
         if (v and not (m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
                 and remote_assistant.enabled(store, 'telegram', cid, c)):
-            m = {**m, 'text': _tg_hear(store, c, cid, v, m.get('message_id'))}
+            m, heard = {**m, 'text': _tg_hear(store, c, cid, v, m.get('message_id'))}, True
             if not m['text']: continue
         # the owner's own words in the ONE private chat their card names as the Assistant chat go to
         # the same walk the desktop is on. A bot only ever hears the other side of a chat, so that
         # named private chat is what says the words are the owner's - there is no fromMe to read.
         if ((m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private'
                 and remote_assistant.intercept(store, 'telegram', cid, m['text'], from_me=True, connector=c,
-                                               message_id=m.get('message_id'))):
+                                               message_id=m.get('message_id'), heard=heard)):
             continue
         if cid not in want:
             if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
@@ -473,14 +474,14 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         if m.get('stalePoll'):
             if jid == assistant_chat: remote_assistant.stale_tap(store, 'whatsapp', jid, c['ConnectorId'], spent=bool(m.get('spentPoll')))
             took.append(m.get('id')); continue
-        text = (m.get('text') or '').strip()
+        text, heard = (m.get('text') or '').strip(), False
         # A VOICE NOTE IN A CONTROL CHAT is the owner talking to Taskuary, so it is heard BEFORE the interceptors,
         # which only ever read text. It used to fall past both - no text - and then past the source filter, since
         # the Assistant's own chat is not an inbound source: dropped without a trace, while the same note in a
         # group was transcribed and filed (the owner, 2026-09-24: "i sent whatsapp voice note to taskuary ...
         # nothing came through to the assistant").
         if not text and m.get('audio') and jid in {x for x in (assistant_chat, notify_chat) if x}:
-            text = _hear(store, c, jid, m)
+            text, heard = _hear(store, c, jid, m), True
             if not text:
                 took.append(m.get('id')); continue
         # A natural message the owner types in their designated private chat goes to the SAME
@@ -488,7 +489,7 @@ def poll_whatsapp(store, c, sources: list, llm=None, file_only=False) -> int:
         # here too, so a notification or answer can never loop back as a fresh question.
         if text and remote_assistant.intercept(
                 store, 'whatsapp', jid, text, from_me=bool(m.get('fromMe')),
-                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts')):
+                connector=c, message_id=m.get('id'), poll=bool(m.get('poll')), arrived=m.get('ts'), heard=heard):
             continue
         if m.get('group') or jid.endswith('@g.us'):
             if jid not in want: continue                      # groups are opt-in, always

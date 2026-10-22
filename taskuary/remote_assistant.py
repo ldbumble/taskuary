@@ -544,7 +544,7 @@ def _claim(channel: str, message_id) -> bool:
 
 
 def intercept(store, channel: str, chat: str, text: str, *, from_me=False, taskuary=False, connector=None,
-              message_id=None, poll=False, arrived=None) -> bool:
+              message_id=None, poll=False, arrived=None, heard=False) -> bool:
     """Claim an owner-authored question before it can be discarded or triaged.
 
     ``taskuary`` is stamped by the local bridge on every message Taskuary itself sends. Those echoes are
@@ -562,13 +562,13 @@ def intercept(store, channel: str, chat: str, text: str, *, from_me=False, tasku
     # on a queue nobody reads again. The turn talks to the store underneath instead, like any request.
     threading.Thread(target=_locked_respond,
                      args=(getattr(store, '_store', store), channel, str(chat), question, c.get('ConnectorId'),
-                           message_id, bool(poll), arrived),
+                           message_id, bool(poll), arrived, bool(heard)),
                      name=f'taskuary-{channel}-assistant', daemon=True).start()
     return True
 
 
 def _locked_respond(store, channel: str, chat: str, question: str, connector_id: int, message_id=None, poll=False,
-                    arrived=None):
+                    arrived=None, spoken=False):
     # the thumb goes up BEFORE the lock: it says "heard you", and it must not wait behind the turn
     # already answering (which is exactly when the owner most needs to know they were heard)
     if message_id:
@@ -593,7 +593,7 @@ def _locked_respond(store, channel: str, chat: str, question: str, connector_id:
         with lock:
             ev = threading.Event()
             with _locks_guard: _turns[key] = ev
-            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev)
+            try: respond(store, channel, chat, question, connector_id, poll=poll, cancel=ev, heard=spoken)
             finally:
                 with _locks_guard:
                     if _turns.get(key) is ev: _turns.pop(key, None)
@@ -810,11 +810,12 @@ def walk(store, actor: str = 'owner', opener: bool = True) -> str:
         return carry_out(store, out, None, actor=actor, lead=opener)
 
 
-def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None):
+def respond(store, channel: str, chat: str, question: str, connector_id: int, poll: bool = False, cancel=None, heard: bool = False):
     """Answer synchronously; the poller runs this on a serialized background worker. `cancel` is set when a pick
     arrives behind this turn: the model's answer is dropped, never sent after the pick's."""
     from . import concierge, general
-    _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id}
+    # `heard`: the words are a voice note's, as transcribed - the answer says them back first (A17)
+    _ASKING.chat = {'channel': channel, 'chat': chat, 'connector_id': connector_id, **({'heard': question} if heard else {})}
     try:
         task, _ = general.dock_task(store, f'owner-{channel}')
         tid = task['TaskId']
@@ -2650,6 +2651,11 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     from . import chatformat, messengers
     out = messengers.tg_send if channel == 'telegram' else messengers.wa_send
     talked(store, channel, chat)
+    # A VOICE NOTE IS SAID BACK before it is acted on (A17, 2026-10-22): the owner could not tell what was transcribed - once, on the turn's
+    # first message
+    a = asking()
+    if a and a.get('heard') and a.get('channel') == channel and str(a.get('chat')) == str(chat):
+        text, a['heard'] = f'🎤 Heard: "{_cut(a["heard"], 300)}"\n\n{text}', ''
     # every road to this chat passes here, so this is where what we offered is written down -
     # off the text AS WRITTEN, before any of it is respelled for the channel
     # `choices`: a further PAGE of a list already kept (More choices) - its words are not numbered in this text

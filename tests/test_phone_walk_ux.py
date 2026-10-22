@@ -491,6 +491,28 @@ class TypedActsMoveOnTests(unittest.TestCase):
         self.assertEqual(got[-1][1], ['Mark done', 'Next'])
 
 
+class MarkDoneOnAnUnsentDraftTests(unittest.TestCase):
+    """F24: Mark done on a card whose reply was still waiting for its yes said "TQ-0001 closed." - the draft was dropped unsent."""
+    def test_the_receipt_says_the_reply_was_not_sent(self):
+        from taskuary import concierge, server
+        s, item = store_with_a_draft()
+        with mock.patch.object(server, 'store', s):
+            out = server._run_kind({'kind': 'task.complete', 'target': item['tid'], 'params': {}}, None)
+        self.assertTrue(out.get('unsent'))
+        with concierge.delivering(concierge.PHONE):
+            said = concierge.receipt_turn(s, {'kind': 'task.complete', 'targetKind': 'task', 'target': item['tid'], 'status': 'done', 'outcome': out})['say']
+        self.assertEqual(said, f"TQ-{item['tid']:04d} closed - the reply was not sent.")
+
+    def test_a_close_with_nothing_drafted_is_just_closed(self):
+        from taskuary import concierge, server
+        s = MemoryStore(); t = s.create_task({'Title': 'Renew the domain', 'Kind': 'task', 'Status': 'open'}, 'owner')
+        with mock.patch.object(server, 'store', s):
+            out = server._run_kind({'kind': 'task.complete', 'target': t, 'params': {}}, None)
+        with concierge.delivering(concierge.PHONE):
+            said = concierge.receipt_turn(s, {'kind': 'task.complete', 'targetKind': 'task', 'target': t, 'status': 'done', 'outcome': out})['say']
+        self.assertEqual(said, f'TQ-{t:04d} closed.')
+
+
 class ReceiptSaidOnceTests(unittest.TestCase):
     """F13: the bubble that reported Done still said "Nothing happens until you say yes."; an act run at once was said twice, its
     card line ("Answer it - general - ...") above its receipt; a bare "Ok." sat over "Not done"; Remind me said where, not what."""

@@ -4063,8 +4063,9 @@ def _past(store, op: dict, ref: str) -> str:
         except Exception: m = {}
         name = lambda a: (m or {}).get('FromName') if (m or {}).get('FromName') and str(a).strip().lower() == str((m or {}).get('FromEmail') or '').lower() else a
         return f"Sent to {', '.join(name(a) for a in o['sent']['to'])}{on}."
-    if kind == 'task.complete' and ref.startswith('TQ-'): return f"{ref} {'was closed already' if o.get('already') else 'closed'}."
-    if kind == 'item.settle' and o.get('closed'): return f"{task_ref(int(o['closed']))} closed."
+    if kind == 'task.complete' and ref.startswith('TQ-'):
+        return f"{ref} {'was closed already' if o.get('already') else 'closed'}" + (' - the reply was not sent.' if o.get('unsent') else '.')
+    if kind == 'item.settle' and o.get('closed'): return f"{task_ref(int(o['closed']))} closed" + (' - the reply was not sent.' if o.get('unsent') else '.')
     return ''
 
 

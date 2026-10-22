@@ -105,7 +105,7 @@ class PickIsTheButtonTests(unittest.TestCase):
         self.assertEqual([(l, a['t']) for l, a in rows], [('A coding agent', 'confirm'), ('A non-coding agent', 'alt'), ('Cancel', 'cancel')])
         with mock.patch('taskuary.operations.get', return_value={'id': 'op1', 'status': 'proposed'}), \
              mock.patch('taskuary.operations.cancel') as cancel:
-            self.assertEqual(ra.run_act(s, rows[-1][1], None), 'Left it - nothing moved.')
+            self.assertEqual(ra.run_act(s, rows[-1][1], None).splitlines()[0], 'Left it - nothing moved.')    # the way on follows it
         cancel.assert_called_once()
 
     def test_a_checkout_nobody_named_is_asked_for_before_it_starts(self):

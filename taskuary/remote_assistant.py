@@ -2168,7 +2168,22 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     opts = (lead_in + '\n'
             + '\n'.join(f'{i} · {w}' for i, w in enumerate(words, first))) if words else ''
     shown = move_block(store, item, draft) if story else decision_block(store, item) if store is not None else ''
-    return '\n\n'.join(x for x in (lead.strip(), head, shown, then_line(out, store), opts) if x)
+    return _once('\n\n'.join(x for x in (lead.strip(), head, shown, then_line(out, store), opts) if x))
+
+
+_NOTHING = re.compile(r'(?:\s*[;,]|\s+-)?\s*nothing has to happen\b[.;]?', re.I)
+
+
+def _once(text: str) -> str:
+    """A card says a thing once: a line that repeats one above it goes, and "nothing has to happen" is said the first time only (F16)."""
+    seen, out = set(), []
+    for line in text.split('\n'):
+        k = ' '.join(line.split()).lower()
+        if len(k.split()) >= 3 and k in seen and not _OFFERED.match(line): continue
+        seen.add(k); out.append(line)
+    text = '\n'.join(out)
+    m = _NOTHING.search(text)
+    return text[:m.end()] + _NOTHING.sub('', text[m.end():]) if m else text
 
 
 OFFERED_KEY = 'remote_offered'
@@ -2311,7 +2326,7 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
     else: labels = dict(zip(offered, poll_labels(offered)))
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
-        shown = chatformat.render(part, channel)
+        shown = chatformat.render(chatformat.json_blocks(part), channel)        # rows as tables, never braces and quotes (F16)
         if shown.strip(): msgs.extend(chatformat.split(shown, chatformat.HARD))
     for i, msg in enumerate(msgs):
         # the LAST bubble carries the choices as a poll: WhatsApp's one tappable thing (the owner, 2026-09-25)

@@ -204,6 +204,40 @@ def json_rows(text: str) -> str:
                      + ['| ' + ' | '.join(cell(r.get(c)) for c in cols) + ' |' for r in rows])
 
 
+def _flat_rows(line: str):
+    """The rows a line holds when it is JSON data - one flat object, or a list of them - else None."""
+    import json
+    s = line.strip()
+    if not (s.startswith('{') and s.endswith('}')) and not (s.startswith('[{') and s.endswith('}]')): return None
+    try: v = json.loads(s)
+    except ValueError: return None
+    rows = v if isinstance(v, list) else [v]
+    ok = rows and all(isinstance(r, dict) and r and all(not isinstance(x, (dict, list)) for x in r.values()) for r in rows)
+    return rows if ok else None
+
+
+def json_blocks(text: str) -> str:
+    """Every run of JSON-data lines in a message, wherever it sits, as a markdown table - a single row and a one-line list too.
+    json_rows takes a section that is ALL rows; a report's rows put on a task or quoted in a line still went out as braces and
+    quotes (F16). Anything that is not flat JSON data is left exactly as it was."""
+    import json
+    out, run = [], []
+    def flush():
+        if run: out.append(json_rows('\n'.join(json.dumps(r) for r in run)) if len(run) > 1 else _one(run[0]))
+        run.clear()
+    for line in str(text or '').split('\n'):
+        rows = _flat_rows(line)
+        if rows is None: flush(); out.append(line)
+        else: run.extend(rows)
+    flush()
+    return '\n'.join(out)
+
+
+def _one(row: dict) -> str:
+    cell = lambda v: '' if v is None else str(v).replace('|', '/')
+    return '\n'.join(['| ' + ' | '.join(row) + ' |', '|' + '---|' * len(row), '| ' + ' | '.join(cell(v) for v in row.values()) + ' |'])
+
+
 def blocks(body, limit: int = HARD) -> list:
     """A report as the messages a chat should receive: one per section, in order.
 

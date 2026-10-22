@@ -1259,7 +1259,14 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         if t == 'open':                 # one item by name - one the walk already showed and would not repeat yet
             nxt = concierge.surface(store, act.get('key'), actor=actor)
             return carry_out(store, nxt, nxt.get('item'), actor)
-        if t == 'stay': return 'Left it - nothing moved.'
+        if t == 'stay':
+            # Cancel under a question about a card goes back to THAT card, its choices under it: "Left it - nothing moved." with
+            # nothing to tap was a dead end (the 2026-10-22 re-walk). A section being walked stays walked
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')   # no Continue note waits
+            if not act.get('key'): return 'Left it - nothing moved.'
+            back = concierge.surface(store, act['key'], actor=actor)
+            return carry_out(store, back, back.get('item'), actor) if back.get('item') else stuck(store, 'Left it - nothing moved.')
         if t == 'close' and act.get('tid'):             # Mark done under a send's receipt: the one close, then the walk goes on
             tid_ = int(act['tid'])
             from .store import task_ref
@@ -1312,7 +1319,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", str(on.get('tid') or ''), 'assistant')
             # the desktop's box says the same one word (buttons.json) - "Continue as is" was a second name for Continue
             go = buttons.label('continue')
-            rows = [(go, {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay'})]
+            rows = [(go, {'t': 'continue', 'tid': on.get('tid')}), ('Cancel', {'t': 'stay', 'key': key})]
             return turn_text({'say': f"{go} on {on.get('ref') or 'it'}? Type what to tell it as it picks up, or tap {go}.",
                               'item': None}, store=store, extra=rows)
         if verb == 'defer':
@@ -1321,7 +1328,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             aim = {'idea': on['idea']} if on.get('kind') == 'idea' and on.get('idea') else {'tid': on.get('tid')}
             rows = [(label, {'t': 'remind', **aim, 'until': until}) for label, until in REMIND_DAYS]
             return turn_text({'say': f"Remind you about {on.get('ref') or on.get('title') or 'this'} when? Or say a day.", 'item': None},
-                             store=store, extra=rows + [('Cancel', {'t': 'stay'})])
+                             store=store, extra=rows + [('Cancel', {'t': 'stay', 'key': key})])
         if verb == 'answer_agent':
             return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
         if verb in ('reply', 'redraft') and on.get('mid'):

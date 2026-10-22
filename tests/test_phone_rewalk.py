@@ -119,4 +119,19 @@ class FailedAgentTests(PhoneCase):
         self.assertTrue(got); self.assertReadsFailed(text_of(got))
 
 
+class DayPickerCancelTests(PhoneCase):
+    """6: Cancel under Remind me's day picker answered "Left it - nothing moved." with nothing to tap: a dead end in the base code."""
+
+    def test_cancel_brings_back_the_card_it_came_from(self):
+        tid, _ = self.f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],
+                              body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=self.f.ago(hours=3))
+        self.ph.ready()
+        card = self.ph.walk()
+        self.assertIn('Remind me', card[-1][1])
+        self.assertIn('Cancel', self.ph.tap('Remind me')[-1][1])
+        got = self.ph.tap('Cancel')
+        self.assertIn(f'TQ-{tid:04d}', text_of(got)); self.assertIn('Badge access for the new hire', text_of(got))
+        self.assertEqual(got[-1][1], card[-1][1], 'the same card, with its own choices')
+
+
 if __name__ == '__main__': unittest.main()

@@ -155,4 +155,39 @@ class HeldStrangerTests(PhoneCase):
             self.assertEqual(card.count(said), 1, card)
 
 
+def _two_asks(f):
+    a, _ = f._work('Badge access for the new hire', subject='Badge access for the new hire', from_name=RAY[0], from_email=RAY[1],
+                   body='Alex, the new AP clerk starts Monday. Can you get her a badge for floors 2 and 3?', sent_at=f.ago(hours=3))
+    b, _ = f._work('Visitor parking for Friday', subject='Visitor parking for Friday', from_name=GAIL[0], from_email=GAIL[1],
+                   body='Can we get a visitor parking list for Friday? Security needs it by Thursday.', sent_at=f.ago(hours=2))
+    return a, b
+
+
+class TypedWalkTests(PhoneCase):
+    """F9: "walk me through my tasks" typed. The tool the model is told to call is script.start; on the phone that came back as
+    "Start a script by its name: ... Nothing happens until you say yes", and the yes said "Done - Start a script ..." and walked
+    nowhere. The F9 fix sat on the auto road, which a typed script never took. A walk sends nothing: it starts, at the table."""
+    channel = 'whatsapp'
+    brain = staticmethod(lambda said: ('Starting with the first one.\n' + call('script.start', name='walk me through my tasks'))
+                         if 'walk me through' in said.lower() else 'Ok.')
+
+    def test_a_typed_walk_starts_at_the_card_on_the_table(self):
+        self.ph.ready()
+        self.ph.s.set_setting(ra.MORNING_KEY, '1', 't')
+        a, b = _two_asks(self.f); self.ph.ready()
+        first = text_of(self.ph.walk())
+        table = next(f'TQ-{t:04d}' for t in (a, b) if f'TQ-{t:04d}' in first)
+        got = self.ph.type('walk me through my tasks')
+        said = text_of(got)
+        self.assertNotIn('Nothing happens until you say yes', said); self.assertNotIn('Start a script', said)
+        self.assertIn(table, said, said)                                       # the card on the table, not the one after it
+        self.assertEqual({'Send to agent', 'Next'} - set(got[-1][1]), set(), got[-1][1])
+
+    def test_a_typed_set_up_is_its_question_not_the_tools_description(self):
+        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Ok.\n' + call('script.start', name='set up a report')):
+            said = text_of(self.ph.type('set up a report'))
+        self.assertIn('Tell me what to set up', said)
+        self.assertNotIn('Start a script', said); self.assertNotIn('Nothing happens until you say yes', said)
+
+
 if __name__ == '__main__': unittest.main()

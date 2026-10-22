@@ -112,12 +112,44 @@ jobs:
     runs-on: windows-latest
     needs: ci-green
     if: startsWith(github.ref, 'refs/tags/v')
+    # id-token: the signing step signs in to Azure with this workflow's own GitHub identity (OIDC) - no secret is stored anywhere
+    permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.12' }
       - run: pip install -e .[mssql,desktop,build,bundle]
       - run: pyinstaller taskuary.spec
+      # SIGNED WITH AZURE ARTIFACT SIGNING (2026-10-21): an unsigned download meets SmartScreen's "Windows protected your PC".
+      # Runs only once the repository variables below are set (Settings -> Secrets and variables -> Actions -> Variables), so a
+      # release before then still ships, unsigned, exactly as today. None of these values is a secret.
+      - name: Sign in to Azure for signing
+        if: vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Sign Taskuary.exe
+        if: vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\dist\Taskuary.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: Taskuary
+          description-url: https://taskuary.com
+      - name: Check the signature
+        if: vars.AZURE_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          $s = Get-AuthenticodeSignature dist\Taskuary.exe
+          "$($s.Status) - $($s.SignerCertificate.Subject)"
+          if ($s.Status -ne 'Valid') { throw "Taskuary.exe is not validly signed: $($s.Status)" }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: exe, path: dist/Taskuary.exe }
 

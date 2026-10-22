@@ -69,3 +69,12 @@ export const localDay = (s) => {
   const d = s ? asUtc(s) : null;
   return d && Number.isFinite(d.getTime()) ? fmtDate(d, "sv-SE", tzOpt()) : "";
 };   // YYYY-MM-DD in that zone
+// THE DAY a stamp is from, as a heading says it: "Today", "Yesterday", then "Wed, Oct 21" - the chat thread's day chips and a report
+// card's heading (an old End of day checkup read like today's, the owner 2026-10-22: "should say the day it's from")
+export const dayLabel = (at, now = new Date()) => {
+  const d = at ? asUtc(at) : null; if (!d || Number.isNaN(d.getTime())) return "";   // not tsMs: its 0 for no date would say Dec 31, 1969
+  const today = new Date(now), yest = new Date(now); yest.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
+  return fmtDate(d, undefined, { weekday: "short", month: "short", day: "numeric" });
+};

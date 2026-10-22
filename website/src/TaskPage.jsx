@@ -9,7 +9,7 @@ import { AttachImage, ImageTray, usePromptImages, withImages } from "./promptIma
 import QueuedStart from "./QueuedStart.jsx";
 import { strangerLine } from "./strangerLine.js";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useCapabilities } from "./capabilities.js";
+import { canSend, draftCanSend, useCapabilities } from "./capabilities.js";
 import {
   Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   Drawer, IconButton, InputAdornment, Link, Menu, MenuItem, TextField, Tooltip, Typography,
@@ -877,6 +877,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // reply door hangs off this, so a task you typed yourself offers no reply to write.
   // a BATCH owes nobody one reply: its items are four authors, each answered (or merged, or closed) on its own line (batch.py)
   const replyMessage = !detail?.batch && hasCorrespondent(sourceMessage) ? sourceMessage : null;
+  // the reply cannot leave from here - its draft says so, or with none, the channel it would go back on
+  const cantSend = pendingReview ? !draftCanSend(caps, pendingReview) : !!replyMessage && !canSend(caps, replyMessage.Channel);
   const workContext = t?.Playbook
     ? `Playbook · ${t.Playbook.title}${t.Playbook.uses?.length ? ` · uses ${t.Playbook.uses.join(", ")}` : ""}`
     : t?.Source === "report" && sourceMessage?.SourceName
@@ -1397,7 +1399,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       : startHere ? [{ id: "start-agent", group: "agent", lead: !pendingReview, label: ranBefore ? labelOfRow("run-another") : labelOfRow("start-agent"),
         run: () => (stage === "agent" ? setRestartOpen(true) : setOpenStage("agent")), title: ranBefore ? hintOfRow("run-another") : hintOfRow("start-agent") }] : []),
       // MESSAGE SOMEONE - email or chat - whoever started the task (the owner, 2026-10-09): tell somebody it is done, the AI writes it, it waits in Close out
-      ...(!liveSession ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
+      // ...never where nothing can be sent from here (the owner, 2026-10-22: "no send out results on something you can't send out")
+      ...(!liveSession && !cantSend ? [{ id: "email", group: "agent", label: labelOfRow("email"), run: () => setEmailOpen(true), title: hintOfRow("email") }] : []),
       ...(replyMessage && !liveSession ? [{ id: "ask-sender", group: "more", label: labelOfRow("ask-sender"), run: () => setAskSenderOpen(true), title: hintOfRow("ask-sender") }] : []),
       { id: "done", group: "more", label: finishing ? "Marking done…" : labelOfRow("done"), disabled: finishing, run: askFinish, title: markDoneHint, promote: !liveSession && !pendingReview, beside: liveSession, onCard: !!pendingReview && !liveSession },   // a live session has no primary;
       // ...nor a waiting draft: its Send, under the draft, is the move (2026-10-06), so Mark done stands outlined beside Next -

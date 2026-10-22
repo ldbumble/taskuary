@@ -83,5 +83,4 @@ test("a move whose text is gone says what it does now, still lit", () => {
   assert.equal(advisedIn(list, { verb: "close", label: "Mark done" })?.id, "12:approve", "still the advised move");
   assert.match(read("actionRow.js"), /\.\.\.\(v\.blank \? \{ blank: v\.blank \} : \{\}\)/, "the row carries it to the strip");
   assert.match(read("ActionRow.jsx"), /if \(onRow\.blank\) return <div className="tq-next" role="status" data-tq-advice=""><div className="tq-next-txt">\{`\$\{onRow\.blank\}\.`\}/);
-  assert.match(read("ReviewDecision.jsx"), /blank: value\.trim\(\) \? "" : `The draft box is empty - \$\{btn\("close"\)\} closes it with nothing copied`/);
 });

@@ -1521,7 +1521,7 @@ def send_files(store, act: dict, actor: str = 'owner') -> str:
     - THE FILE is re-resolved inside that task's outputs folder (outputs.resolve: no `..`, no absolute path, no link) at the moment it
       goes - a name kept on the pick is only a name.
     Too big says so, with the desktop's address; a failed send says why, with Try again. Nothing fails silently."""
-    from . import digest, general, messengers, outputs
+    from . import general, messengers, outputs
     from .store import task_ref
     here = asking() or {}
     ch, chat = here.get('channel'), str(here.get('chat') or '')
@@ -1549,7 +1549,7 @@ def send_files(store, act: dict, actor: str = 'owner') -> str:
             failed.append(rel); said.append(f'Could not send {p.name} - {plain(e)}.')
     for name, size in big:
         said.append(f"{name} is {_size(size)} - {LABELS[ch]} takes files up to {_size(cap)} from here, so it was not sent. "
-                    f"Download it on the desktop: {ref}, under its files - {digest.task_link(tid)}")
+                    f"Open {ref} on the desktop - it's under the task's files.")    # no address: the desktop's localhost one opens nothing on a phone
     if not said: said = [f'{ref} has no files to send.']
     try: dock = general.dock_task(store, actor)[0]['TaskId']
     except Exception: dock = None

@@ -1067,7 +1067,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const workspaceMode = agentWorkspaceMode({ isGeneral, generalStarted, session: term, wrapping });
   // THE RESULT (the redesign, owner-approved 2026-10-21): an agent that has stopped and saved - or finished, or stopped - with a record
   // to show; the work column's agent half is its result then, the session one "Replay the session" line in it
-  const resultShown = !term?.alive && hasRecord && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
+  // ...never when the sender wrote AGAIN after it (`news`): that result answers what came before, and the page leads with what is on
+  // you now - the new message in From, the reply and Continue in the work - with the earlier session folded under Agent work
+  // (the owner, 2026-10-22: "it opens up to result ... this is from earlier session ... we need to know what to do now")
+  const resultShown = !term?.alive && hasRecord && !news && [AGENT.saved, AGENT.stopped, AGENT.finished].includes(agentState);
   // ...and THE WORK TAKES THE WHOLE WIDTH once an agent has acted (the owner, 2026-10-22: "on a regular agent that is completed we should
   // also only show the agent result with the From expandable over the top"): working or waiting, finished with its Result, or failed
   // with its Try again - From folds to its one line over it. Two columns only where no agent ever ran (taskLayout.layoutOf).
@@ -1936,15 +1939,19 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                       two blocks (a saved answer with no report, or the report) reading two different stores. */}
                   {/* ...and a session that ENDED is this one block too - its state, what happened, More - where a "Session closed"
                       card under the step told the same run a second time, and the story above it a third (the owner, 2026-10-12) */}
-                  {!sessionView && hasRecord && (
-                    <Box sx={{ mt: 1.25, "&:empty": { display: "none" } }}>
-                      {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
-                      <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
-                        result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
-                      {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
-                      {co.writeupAt === "result" && <WriteupLine view={writeup} />}
-                    </Box>
-                  )}
+                  {!sessionView && hasRecord && (() => {
+                    const record = (
+                      <Box sx={{ mt: 1.25, "&:empty": { display: "none" } }}>
+                        {/* a chat shows its pages under the answer that made them; a terminal's are kept here */}
+                        <AgentRecord {...recordProps} story={storyAt === "record" ? story : null} inChat={workspaceMode === "general"}
+                          result={resultShown} diff={diffRun ? diffStat(diffRun.DiffText) : null} />
+                        {diffRun && <Box sx={{ mt: 0.75 }}><DiffBlock text={diffRun.DiffText} /></Box>}
+                        {co.writeupAt === "result" && <WriteupLine view={writeup} />}
+                      </Box>
+                    );
+                    // the sender wrote again since: the earlier session is history, one fold, never the page's lead
+                    return news ? <Box data-tq-earlier-session="" sx={{ mt: 1 }}><Fold title="The earlier session, before they wrote again">{record}</Fold></Box> : record;
+                  })()}
                   {(restartOpen || (!term?.alive && !liveRun && !isGeneral && !report && !detail?.transcript))
                     && !(canvas && restartOpen) && nextRunForm}
                   {isGeneral && !generalStarted && (

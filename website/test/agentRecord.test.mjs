@@ -131,7 +131,7 @@ test("the result reads the write-up's own parts, each once, and nothing it did n
   assert.match(src, /Replay the session/);
   assert.match(src, /api\.get\(`\/api\/task-outputs\/\$\{taskId\}`\)/, "the files it made for the task are listed with its work");
   const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
-  assert.match(page, /const resultShown = !term\?\.alive && hasRecord && \[AGENT\.saved, AGENT\.stopped, AGENT\.finished\]\.includes\(agentState\);/);
+  assert.match(page, /const resultShown = !term\?\.alive && hasRecord && !news && \[AGENT\.saved, AGENT\.stopped, AGENT\.finished\]\.includes\(agentState\);/);
   assert.match(page, /title=\{!term\?\.alive \? \(resultShown \? "Result" : "Agent work"\)/);
   assert.match(page, /rowState === "agentdone" && \(\s*<Typography data-tq-handled="" [^>]*>Nothing to do\. It's handled\.<\/Typography>\)/);
 });

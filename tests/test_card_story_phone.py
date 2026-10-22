@@ -46,6 +46,21 @@ def test_a_held_strangers_card_says_it_is_held_and_does_not_lead_with_send_to_ag
     assert 'Reply with one of:\n1 · Reply\n' in text, text
 
 
+def test_a_teams_draft_says_it_cannot_be_sent_from_the_phone():
+    """F20: a Teams review card said "it goes when you send it" - a Teams reply cannot be sent from here."""
+    s = MemoryStore()
+    tid = s.create_task({'Title': 'Shift cover', 'Kind': 'reply', 'Status': 'open'}, 'o')
+    mid = s.add_message({'TaskId': tid, 'Channel': 'teams', 'FromName': 'Gail Moreno', 'FromEmail': 'gail@northwind.example',
+                         'Subject': 'Shift cover', 'BodyText': 'Can you cover Saturday?', 'Status': 'open'})
+    rid = s.add_review({'TaskId': tid, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes, I can cover Saturday.'})
+    item = {'key': f'review:{rid}', 'kind': 'review', 'lane': 'approve', 'rid': rid, 'mid': mid, 'tid': tid, 'who': 'Gail Moreno', 'channel': 'teams',
+            'title': 'Shift cover'}
+    text = ra.turn_text({'say': 'x', 'item': item, 'chips': [{'verb': 'approve', 'label': 'Send the reply'}, {'verb': 'next', 'label': 'Next'}]}, store=s)
+    assert "Teams replies can't be sent from here - copy it into Teams, then Mark done" in text, text
+    assert 'it goes when you send it' not in text and 'sends the draft above' not in text
+    assert 'Yes, I can cover Saturday.' in text
+
+
 def test_a_general_run_with_no_session_mode_is_a_general_agent():
     """F6: a headless or saved general run carries no session `mode`, and its card said "Coding agent"."""
     s = MemoryStore()

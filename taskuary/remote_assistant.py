@@ -1749,6 +1749,7 @@ def then_line(out: dict, store=None) -> str:
     # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
     if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
     it = out.get('item') or {}
+    if c['verb'] == 'approve' and str(it.get('channel') or '').lower() == 'teams' and not it.get('closeout'): return ''   # it does not send (F20)
     said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
             if c['verb'] == 'approve' and it.get('closeout')
             else THEN_KIND.get((c['verb'], it.get('kind'))) or THEN.get(c['verb']))
@@ -2039,6 +2040,9 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     return '\n'.join(lines).strip()
 
 
+TEAMS_DRAFT = f"Teams replies can't be sent from here - copy it into Teams, then {buttons.label('close')}:"
+
+
 def move_block(store, item: dict | None, draft: str = '') -> str:
     """The loud part: a rule, **YOUR MOVE · <what>**, and what to decide on - your reply, its question, why it waits."""
     it = item or {}
@@ -2060,8 +2064,11 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
                      else 'Type your answer - it goes straight in.') if it.get('asking')
                     else 'Pick below, or tell me what to do with it.')
     elif draft:
-        via = _VIA.get(str(it.get('channel') or '').lower(), 'by email')
-        body.append('Your draft - it goes when you send it:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you send it:')
+        ch = str(it.get('channel') or '').lower()
+        via = _VIA.get(ch, 'by email')
+        # a Teams reply cannot go from here - Microsoft lets only the owner's own sign-in post one (outbound) - so it does not say it goes (F20)
+        if ch == 'teams' and not is_own(it): body.append(f"Your reply to {story_who(it)} - {TEAMS_DRAFT}")
+        else: body.append('Your draft - it goes when you send it:' if is_own(it) else f'Your reply to {story_who(it)} {via} - it goes when you send it:')
         body.append(_quote(draft))
     elif it.get('lane') == 'queued' and (it.get('why_idle') or it.get('why')) and not stranger_held(store, it):
         body.append(f"Why it has not started: {' '.join(str(it.get('why_idle') or it['why']).split())}")

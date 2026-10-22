@@ -30,7 +30,9 @@ class TelegramButtonsTests(unittest.TestCase):
         (msg,) = self.sent()
         self.assertEqual([row[0]['text'] for row in msg['reply_markup']['inline_keyboard']], ['Close out', 'Next'])
         self.assertNotIn('Reply with one of', msg['text'])
-        self.assertEqual(ra.resolve_index(self.s, 'telegram', TG_CHAT, '2'), ('Next', True))   # a typed number still answers
+        # ...and a typed number is no pick here: the buttons show none (A18, 2026-10-22); the tap is the pick
+        self.assertEqual(ra.resolve_index(self.s, 'telegram', TG_CHAT, '2'), ('2', False))
+        self.assertEqual(ra.resolve_index(self.s, 'telegram', TG_CHAT, 'Next', poll=True), ('Next', True))
 
     def test_new_buttons_take_the_old_ones_off(self):
         ra.send(self.s, 'telegram', TG_CHAT, 'One?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])

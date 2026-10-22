@@ -334,4 +334,59 @@ class WhatsAppVoiceEchoTests(VoiceEchoTests):
         super().test_a_voice_note_is_said_back_before_the_answer()
 
 
+class RedraftAsksTests(PhoneCase):
+    """A18 (a): Redraft rewrote the draft at once, with no word on what should change. It asks - Shorter, Just rewrite, or the change typed -
+    and Cancel goes back to the draft."""
+
+    def setUp(self):
+        super().setUp()
+        p = self.f.pending_draft(title='Q3 vendor contract renewal', subject='Q3 vendor contract renewal', from_name=GAIL[0],
+                                           from_email=GAIL[1], body='Are we renewing the Payworth contract for Q3?',
+                                           draft='Hi Gail - yes, renew it for Q3.', sent_at=self.f.ago(hours=1))
+        self.tid, self.rid = p.tid, p.rid
+        self.ph.ready(); self.card = self.ph.walk()
+
+    def _rewrite(self, go):
+        from taskuary import server
+        with mock.patch.object(server, 'open_reply', return_value={'reviewId': self.rid}) as wrote: got = go()
+        return got, wrote
+
+    def test_redraft_asks_what_should_change_and_the_typed_line_is_the_instruction(self):
+        asked = self.ph.tap('Redraft')
+        self.assertIn('What should change?', text_of(asked))
+        self.assertEqual(asked[-1][1], ['Shorter', 'Just rewrite', 'Cancel'])
+        got, wrote = self._rewrite(lambda: self.ph.type('say we renew for two years, not one'))
+        body = wrote.call_args.args[1]
+        self.assertTrue(body.redraft); self.assertEqual(body.instruction, 'say we renew for two years, not one')
+        self.assertIn('Send', got[-1][1])                                     # the draft again, with its own choices
+
+    def test_shorter_is_one_tap(self):
+        self.ph.tap('Redraft')
+        _got, wrote = self._rewrite(lambda: self.ph.tap('Shorter'))
+        self.assertEqual(wrote.call_args.args[1].instruction, 'Make it shorter.')
+
+    def test_cancel_goes_back_to_the_draft_and_the_next_line_is_words_again(self):
+        self.ph.tap('Redraft')
+        back = self.ph.tap('Cancel')
+        self.assertEqual(back[-1][1], self.card[-1][1])
+        from taskuary import server
+        with mock.patch.object(server, 'open_reply', side_effect=AssertionError('no redraft after Cancel')): self.ph.type('next')
+
+
+class TelegramBareNumberTests(PhoneCase):
+    """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
+    says what the choices are, under them."""
+    channel = 'telegram'
+
+    def test_a_number_the_buttons_never_showed_runs_nothing(self):
+        a, b = _two_asks(self.f); self.ph.ready()
+        card = self.ph.walk()
+        (said, btns), = self.ph.type('2')
+        self.assertIn('"2" is not one of the choices', said); self.assertIn('Next', said)
+        self.assertEqual(btns, card[-1][1])
+        refs = {f'TQ-{t:04d}' for t in (a, b)}
+        first = next(r for r in refs if r in text_of(card))
+        self.assertIn((refs - {first}).pop(), text_of(self.ph.tap('Next')))  # "2" moved nothing: Next brings the second task
+
+
 if __name__ == '__main__': unittest.main()

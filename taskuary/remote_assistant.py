@@ -833,6 +833,12 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             acts = acts_for(store, channel, chat)
             try: offered = json.loads(store.get_setting(f'{OFFERED_KEY}:{channel}:{chat}') or '[]') or []
             except ValueError: offered = []
+            # A NUMBER TELEGRAM NEVER SHOWED is not acted on silently (A18): it says what the choices are, under them. An agent asking on
+            # the table may want a number for an answer - there it is words, as typed
+            if channel == 'telegram' and not picked and bare_number(question) and offered and (item or {}).get('kind') != 'agent':
+                send(store, channel, chat, f'"{question.strip()}" is not one of the choices here - the buttons have no numbers on Telegram. '
+                                           f'Tap one: {", ".join(_tg_buttons(store, chat) or offered)}.', connector_id, choices=offered)
+                return
             act = acts.get(question) if picked else None
             # a pick that IS words (Try again): the same line goes to the model again, as if typed
             if act and act.get('t') == 'ask': question, picked, act = str(act.get('text') or question), False, None
@@ -844,13 +850,20 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             # stranger to the chat reaches for first answer here, with no model, on both channels
             builtin = command(question) if not picked else ''
             if builtin:
-                if builtin == 'stop': store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
+                if builtin == 'stop':
+                    for k in (NOTE_KEY, REDRAFT_KEY): store.set_setting(f'{k}:{channel}:{chat}', '', 'assistant')
                 forget_offered(store, channel, chat)
                 if builtin == 'stop' and (h := handoff(store)) and h['channel'] == channel and h.get('chat') == chat:
                     end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
                     return
                 send(store, channel, chat, (help_text if builtin == 'help' else stop_walk)(store, tid), connector_id)
                 return
+            redo = str(store.get_setting(f'{REDRAFT_KEY}:{channel}:{chat}') or '')
+            if redo and not picked:
+                forget_offered(store, channel, chat)
+                send(store, channel, chat, run_act(store, {'t': 'redraft', 'key': redo, 'how': question}, item), connector_id)
+                return
+            if redo: store.set_setting(f'{REDRAFT_KEY}:{channel}:{chat}', '', 'assistant')
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
@@ -1354,7 +1367,8 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             # Cancel under a question about a card goes back to THAT card, its choices under it: "Left it - nothing moved." with
             # nothing to tap was a dead end (the 2026-10-22 re-walk). A section being walked stays walked
             here = asking() or {}
-            if here.get('chat'): store.set_setting(f"{NOTE_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')   # no Continue note waits
+            if here.get('chat'):                                     # no Continue note waits, and no Redraft instruction
+                for k in (NOTE_KEY, REDRAFT_KEY): store.set_setting(f"{k}:{here['channel']}:{here['chat']}", '', 'assistant')
             if not act.get('key'): return 'Left it - nothing moved.'
             back = concierge.surface(store, act['key'], actor=actor)
             return carry_out(store, back, back.get('item'), actor) if back.get('item') else stuck(store, 'Left it - nothing moved.')
@@ -1364,6 +1378,14 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
             here = (item or {}).get('key')
             return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
+        if t == 'redraft':
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", '', 'assistant')
+            on = _item_for(store, act.get('key') or '', item)
+            if not (on or {}).get('mid'): return stuck(store, 'That draft is not in front of you any more - nothing changed.')
+            rid = _draft(store, on, 'redraft', act.get('how') or '')
+            if not rid: return stuck(store, 'I could not rewrite that draft here - the one you had is still waiting.')
+            return turn_text(_draft_card(store, rid, actor), store=store)
         if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
@@ -1423,9 +1445,17 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
                              store=store, extra=rows + [('Cancel', {'t': 'stay', 'key': key})])
         if verb == 'answer_agent':
             return f"What should I tell {on.get('agent') or 'it'}? Say it here and I will pass it straight to the run that is waiting."
+        if verb == 'redraft' and on.get('mid') and (on.get('rid') or _draft_text(store, on)):
+            # REDRAFT ASKS WHAT TO CHANGE (A18, 2026-10-22): it rewrote at once with no instruction. The next typed line is the instruction
+            here = asking() or {}
+            if here.get('chat'): store.set_setting(f"{REDRAFT_KEY}:{here['channel']}:{here['chat']}", key, 'assistant')
+            rows = [('Shorter', {'t': 'redraft', 'key': key, 'how': 'Make it shorter.'}), ('Just rewrite', {'t': 'redraft', 'key': key, 'how': ''}),
+                    ('Cancel', {'t': 'stay', 'key': key})]
+            return turn_text({'say': 'What should change? Type it - "warmer", "say we pay on Friday" - or pick one.', 'item': None},
+                             store=store, extra=rows)
         if verb in ('reply', 'redraft') and on.get('mid'):
             rid = _draft(store, on, verb, '')
-            if not rid: return 'I could not write that draft here - it is waiting on the task page.'
+            if not rid: return stuck(store, 'I could not write that draft here - it is waiting on the task page.')
             return turn_text(_draft_card(store, rid, actor), store=store)
         moved = _draft_moved(store, act, on)
         if moved: return moved
@@ -1455,6 +1485,7 @@ def _trust(store, tid: int, key: str, actor: str) -> str:
 
 
 NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
+REDRAFT_KEY = 'remote_redraft'            # a Redraft pick waiting for what to change: the next typed line is it (A18)
 
 
 def _continue(store, tid, note: str) -> str:
@@ -2626,7 +2657,19 @@ def resolve_index(store, channel: str, chat: str, text: str, poll: bool = False)
     t = said.lstrip('#').rstrip('.').strip()
     if not t.isdigit(): return text, False
     i = int(t)
+    # ...but on TELEGRAM a number picks only a line the message SHOWED numbered: the buttons carry their choices without numbers (F27),
+    # and a bare "2" silently ran button 2 (A18, 2026-10-22). A line past the buttons' page is still printed with its number
+    if channel == 'telegram' and 1 <= i <= len(words) and words[i - 1] in _tg_buttons(store, chat): return text, False
     return (words[i - 1], True) if 1 <= i <= len(words) else (text, False)
+
+
+def _tg_buttons(store, chat: str) -> list:
+    from . import messengers
+    try: return (json.loads(store.get_setting(f'{messengers.TG_BUTTONS}:{chat}') or '{}') or {}).get('labels') or []
+    except ValueError: return []
+
+
+def bare_number(text: str) -> bool: return str(text or '').strip().lstrip('#').rstrip('.').strip().isdigit()
 
 
 def _chunks(text: str, limit=3900) -> list[str]:

@@ -2844,7 +2844,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   // ...and under a proposal waiting on its Confirm: the item it came from folded away with its row, and the walk must still go on
   // past it (the walk's INLINE, 2026-10-17: the only way on was the card's own buttons in the chat)
   const asked = shown[interactiveCardIndex(shown)]?.proposal, proposing = !!asked && asked.version != null && (asked.status || "proposed") === "proposed";
-  const hanging = !!state && !old && !walk && !browsing && shown.length > 0 && !busy && !starting && rowEmpty && (canAdvance || !!err || proposing);
+  // ...and never while the next one is ON ITS WAY (nextComing): "All read, next" folds the batch and its row with it at the press, and
+  // the settle plus the walk's grace ran before surface() took `busy` - the floor's Next stood alone on the row for that second, then
+  // the next batch's words replaced it (the owner, 2026-10-22: "a next button shows up for a second while the next 4 are loading why??").
+  // The "…" under the table is what that second shows; a settle that fails clears nextComing and its receipt offers Next itself
+  const hanging = !!state && !old && !walk && !browsing && shown.length > 0 && !busy && !starting && !nextComing && rowEmpty && (canAdvance || !!err || proposing);
   useVerbs("floor", [{ id: "floor:next", group: "next", label: btn("next"), tone: "p", title: btnHint("next"),
     run: () => { setErr(""); surface(null, null); } }], hanging);
   const navOn = shown.find((x) => x.id === browsing)?.area || "";

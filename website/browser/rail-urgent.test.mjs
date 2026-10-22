@@ -44,6 +44,9 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   await request(harness, `/api/tasks/${byKey[mid.key].tid}`, "PATCH", { Priority: "urgent" });
   await page.waitForFunction((k) => document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"]`)?.hasAttribute("data-tq-urgent"),
     { timeout: 30000 }, mid.key).catch(async () => assert.fail(`the urgent task was never shaded: ${JSON.stringify(await rail(page))}`));
+  // ...and the shade itself: the card's background fades in (transition: background .15s), so a read in the same frame saw transparent
+  await page.waitForFunction((k) => { const c = document.querySelector(`[data-tq-rail] .tq-pile-row[data-tq-key="${k}"] .card`);
+    return c && getComputedStyle(c).backgroundColor !== "rgba(0, 0, 0, 0)"; }, { timeout: 5000 }, mid.key).catch(() => {});
 
   const after = await rail(page);
   assert.equal(await page.$("[data-tq-section-head=urgent]"), null, "an Urgent heading was drawn");

@@ -72,7 +72,8 @@ test("the default static demo completes one reviewed request and never calls a l
     assert.equal(await approve.evaluate(node => node.innerText), "Simulate approval");
     await approve.click();
     await page.waitForSelector('[data-tq-demo-journey="complete"]');
-    await page.waitForFunction(() => document.body.innerText.includes("Nothing is waiting on you"));
+    // the empty day says nothing of its own now (the owner, 2026-10-22: "buttons do the talking") - the outcome is the mark
+    await page.waitForSelector("[data-tq-demo-outcome]");
     assert.match(await page.$eval('[data-tq-demo-outcome]', node => node.innerText), /No email was sent/);
     const finished = await page.evaluate(async () => {
       const { default: api } = await import("/src/api.js");

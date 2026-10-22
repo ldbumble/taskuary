@@ -384,3 +384,36 @@ class TheVerbDoesTheThingTests(unittest.TestCase):
                          {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]}
         text = remote_assistant.turn_text(out, store=MemoryStore())
         self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)
+
+
+def canonical_world():
+    """Two tasks with mail, on a rail that reads canonical processing membership (the shipped default)."""
+    from taskuary import funnel, processing_unread
+    from tests.test_funnel import ago, mail, store
+    s = store()
+    t = s.create_task({'Title': 'Confirm Thursday with Gail', 'Kind': 'reply', 'Status': 'open'}, 'o')
+    mid = mail(s, 'Can you confirm Thursday?', who='Gail Moreno', email='gail@northwind.example', body='Are we on for Thursday?', tid=t)
+    t2 = s.create_task({'Title': 'Budget numbers', 'Kind': 'reply', 'Status': 'open'}, 'o')
+    mail(s, 'Budget numbers', who='Ray Colton', email='ray@northwind.example', body='Numbers?', tid=t2, hours=1)
+    s.reconcile_processing_membership(fixed_now=ago(0)); funnel.invalidate()
+    with mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+        processing_unread.build(s, live_state=[])
+    s.activate_processing_reads(fixed_now=ago(0), live_state=[]); funnel.invalidate()
+    return s, t, mid
+
+
+class ReplyWritesTheDraftAndShowsItTests(unittest.TestCase):
+    """F4: Reply on a task with no draft wrote one, then looked it up by its review key before membership had caught up - and
+    answered "I can't find that one" over the draft it had just written."""
+
+    def test_reply_on_a_plain_task_leads_to_its_ready_to_send_card(self):
+        s, t, mid = canonical_world()
+        def draft(store, item, verb, instruction):
+            return s.add_review({'TaskId': t, 'MessageId': mid, 'Kind': 'draft', 'Status': 'pending', 'DraftText': 'Yes - Thursday at 2 works.'})
+        item = {'key': f'task:{t}', 'kind': 'asked', 'tid': t, 'mid': mid, 'title': 'Confirm Thursday with Gail'}
+        with mock.patch.object(remote_assistant, '_draft', side_effect=draft), \
+             mock.patch('taskuary.terminal.live_sessions', return_value=[]):
+            text = remote_assistant.run_act(s, {'t': 'verb', 'verb': 'reply', 'key': f'task:{t}'}, item)
+        self.assertNotIn("can't find", text)
+        self.assertIn('Yes - Thursday at 2 works.', text)
+        self.assertIn('ready to send', text)

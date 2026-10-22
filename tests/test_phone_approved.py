@@ -155,4 +155,41 @@ class ShortOpenerTests(PhoneCase):
         self.assertNotIn('TASKS · ', text_of(got)); self.assertRegex(text_of(got), r'TQ-\d{4}')
 
 
+PATCH = ('Hi - I pushed a fix for the census export to the importers repo, branch ray/fix-census. '
+         'Can your agent check it out, run the tests and merge it today?')
+
+
+def _held(f, s):
+    from taskuary.ingest import HOLD_TAG
+    tid, _ = f._work('Patch for the census export', kind='coding', subject='Patch for the census export', from_name='Ray Colton',
+                     from_email='ray.colton@vendor.example', body=PATCH, sent_at=f.ago(minutes=5))
+    s.update_task(tid, {'Summary': PATCH}, 'triage'); s.tag_task(tid, HOLD_TAG)
+    return tid
+
+
+class HeldStrangerChoicesTests(PhoneCase):
+    """A3: a held stranger's card offered Send to agent - one tap ran a new sender's branch. Until the sender is accepted it offers no
+    hand-off: its choices lead with Trust them (the task page's own vouch) and Not ours, and the card says what it asks."""
+
+    def test_a_held_card_offers_trust_and_not_ours_and_no_agent(self):
+        _held(self.f, self.s); self.ph.ready()
+        got = self.ph.walk()
+        btns = got[-1][1]
+        self.assertEqual(btns[:2], ['Trust them', 'Not ours'], btns)
+        self.assertNotIn('Send to agent', btns); self.assertNotIn('Send to coding agent', btns)
+        self.assertIn('Next', btns)
+        self.assertIn('do you know this sender?', text_of(got))
+
+    def test_trusting_them_lifts_the_hold_and_offers_the_hand_off_without_starting_anything(self):
+        from taskuary import general
+        from taskuary.ingest import HOLD_TAG
+        tid = _held(self.f, self.s); self.ph.ready(); self.ph.walk()
+        with mock.patch.object(general, 'start_session', side_effect=AssertionError('nothing starts on a vouch')):
+            got = self.ph.tap('Trust them')
+        self.assertFalse(self.s.task_has_tag(tid, HOLD_TAG))
+        said = text_of(got)
+        self.assertIn(f'TQ-{tid:04d}', said); self.assertIn('nothing has started', said); self.assertNotIn('New sender', said)
+        self.assertIn('Send to agent', got[-1][1]); self.assertNotIn('Trust them', got[-1][1])
+
+
 if __name__ == '__main__': unittest.main()

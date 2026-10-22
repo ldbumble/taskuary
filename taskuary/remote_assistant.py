@@ -1302,6 +1302,7 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
             said = f'{task_ref(tid_)} closed.' if concierge.close_task(store, tid_, actor) else f'{task_ref(tid_)} was already closed.'
             here = (item or {}).get('key')
             return _on(store, actor, [said], leaving=here, exclude=here, done_with=here)
+        if t == 'trust': return _trust(store, int(act['tid']), act.get('key') or f"task:{int(act['tid'])}", actor)
         if t == 'walk': return walk(store, actor, opener=not act.get('opened'))
         if t == 'script': return script_words(store, act.get('script') or '')
         if t == 'remind': return _remind(store, act, actor)
@@ -1374,6 +1375,21 @@ def _run_act(store, act: dict, item: dict | None, actor: str = 'owner') -> str:
         # never the raw exception (it went out as "I couldn't answer that: <traceback line>")
         logger.warning(f'phone pick {t or act.get("verb")} failed: {e}')
         return stuck(store, f'Not done - {plain(e)}. Nothing moved.')
+
+
+def _trust(store, tid: int, key: str, actor: str) -> str:
+    """Trust them, from the phone: the task page's own vouch (server.task_trust - origin.raise_to), which lifts the hold. The card comes
+    back with its ordinary choices - Send to agent among them now - and nothing has started."""
+    from fastapi import HTTPException
+    from . import concierge, server
+    from .ingest import HOLD_TAG
+    try: server.task_trust(tid)
+    except HTTPException as e: return stuck(store, f'Not done - {e.detail}. Nothing moved.')
+    if store.task_has_tag(tid, HOLD_TAG): store.tag_task(tid, HOLD_TAG, on=False, actor=actor)     # the vouch is the release (release_task)
+    from .store import task_ref
+    back = concierge.surface(store, key, actor=actor)
+    said = f'Trusted - {task_ref(tid)} is no longer held, and nothing has started on it.'
+    return turn_text(back, said, store=store) if back.get('item') else stuck(store, said)
 
 
 NOTE_KEY = 'remote_continue_note'         # a Continue pick waiting for its note: the next typed line is it
@@ -1798,6 +1814,8 @@ _HAND = ('regular_agent', 'coding_agent')
 
 
 HOLD_LINE = 'New sender - not on your domain, and you have never written to them. Nothing starts until you choose.'
+TRUST = 'Trust them'                          # the task page's own word for vouching for a stranger (strangerLine.js -> task.trust)
+TRUST_QUESTION = 'do you know this sender?'
 
 
 def stranger_held(store, item: dict | None) -> bool:
@@ -1833,6 +1851,8 @@ def then_line(out: dict, store=None) -> str:
     # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
     if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
     if out['item'].get('kind') in _LEADS_WITH_NEXT: return ''        # nothing to decide: no verb leads, so none is explained (A8, A9)
+    if out['item'].get('hold') and out['item'].get('kind') not in ('review', 'action', 'agent'):
+        return f"{TRUST}: you vouch for this sender - then {buttons.label('regular_agent')} is offered. Nothing starts by itself."
     it = out.get('item') or {}
     if c['verb'] == 'approve' and str(it.get('channel') or '').lower() == 'teams' and not it.get('closeout'): return ''   # it does not send (F20)
     said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
@@ -2161,7 +2181,8 @@ def move_block(store, item: dict | None, draft: str = '') -> str:
     """The loud part: a rule, **YOUR MOVE · <what>**, and what to decide on - your reply, its question, why it waits."""
     it = item or {}
     title = move_title({**it, 'who': asker(store, it) or it.get('who')} if it.get('kind') == 'agentdone' else it, draft)
-    if title == buttons.label('regular_agent') and stranger_held(store, it): title = 'who should take it?'
+    # ...a stranger's held work asks the one thing that comes first: is the sender real (A3) - "who should take it?" over no hand-off
+    if title in (buttons.label('regular_agent'), 'who should take it?') and stranger_held(store, it): title = TRUST_QUESTION
     if not title: return ''
     body = []
     qs = it.get('questions') or []
@@ -2253,6 +2274,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         item = {**item, 'asking': False, 'choices': [], 'questions': [], 'state': 'parked'}; out = {**out, 'item': item}
     out, key = _chips_on(store, out, item, table)
     if item and 'hold' not in item and stranger_held(store, item): item = {**item, 'hold': True}; out = {**out, 'item': item}
+    # A STRANGER'S HELD WORK IS NOT HANDED TO AN AGENT until the owner says the sender is real (A3, 2026-10-22): one tap started work on a
+    # new sender's branch. Its choices lead with Trust them - the task page's own vouch - and Not ours
+    trusting = bool(item.get('hold') and str(item.get('tid') or '').isdigit() and item.get('kind') not in ('review', 'action', 'agent'))
+    if item.get('hold'): out = _recast(out, drop=set(_HAND))
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
     if say and mark: say = f'{mark} {say}'
@@ -2338,6 +2363,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         first_ += [w for w in rest if w in redo and w not in first_]
         more = [MORE] if store is not None and not (full and story) and more_text(store, item) else []
         words = first_ + nxt + more + [w for w in rest if w not in first_]
+        if trusting:
+            nope = [w for w in words if w == _c.CHIP_WORDS['not_ours']]
+            words = [TRUST] + nope + [w for w in words if w not in nope]
+            _offer([(TRUST, {'t': 'trust', 'tid': int(item['tid']), 'key': key})])
     if item.get('kind') == 'fyis':
         # THE WAY ON, which only this channel has to say. The desktop card carries its own "All read,
         # next" button, so concierge.CHIPS leaves `next` off the batch on purpose - and a chat has no

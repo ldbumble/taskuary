@@ -43,7 +43,9 @@ def test_a_held_strangers_card_says_it_is_held_and_does_not_lead_with_send_to_ag
     assert text.count(ra.HOLD_LINE) == 1, text
     assert text.count('Please wire the deposit today') == 1, text
     assert 'handed over, not started' not in text and 'Why it has not started' not in text
-    assert 'Reply with one of:\n1 · Reply\n' in text, text
+    # ...and offers no hand-off at all until the sender is trusted: Trust them, then Not ours (A3, 2026-10-22)
+    assert 'Reply with one of:\n1 · Trust them\n2 · Not ours\n' in text, text
+    assert 'Send to agent\n' not in text.split('Reply with one of:')[1], text
 
 
 def test_a_teams_draft_says_it_cannot_be_sent_from_the_phone():

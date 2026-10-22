@@ -442,6 +442,35 @@ class AfterTheHandBackTests(PhoneCase):
         self.assertEqual(self.ph.type('next'), [])
 
 
+class TelegramFirstContactTests(PhoneCase):
+    """A4: on Telegram, /start and "hello" from a chat nobody chose got total silence, and picking the chat on the desktop sent nothing. An
+    unchosen private chat gets one fixed line - nothing about the owner in it, at most every few hours - and a chat just picked says hello."""
+    channel = 'telegram'
+
+    def _from(self, chat, text):
+        from tests.phone_transcript import ME
+        mid = next(self.ph.ids)
+        self.ph.queue.append({'update_id': mid, 'message': {'message_id': mid, 'text': text, 'date': int(time.time()),
+                              'chat': {'id': int(chat), 'type': 'private'}, 'from': {**ME, 'id': int(chat)}}})
+        return self.ph._took(self.ph._poll)
+
+    def test_an_unchosen_chat_gets_one_fixed_line_and_no_data(self):
+        _two_asks(self.f); self.ph.ready()
+        (said, btns), = self._from('777001', '/start')
+        self.assertIn('choose this chat on the desktop', said); self.assertEqual(btns, [])
+        for private in ('Badge access', 'Visitor parking', 'Ray', 'Gail', 'TQ-'): self.assertNotIn(private, said)
+        self.assertEqual(self._from('777001', 'hello?'), [], 'once, not on every message')
+
+    def test_picking_the_chat_on_the_desktop_says_hello_with_the_way_in(self):
+        from taskuary import server
+        from tests.phone_transcript import _Sync
+        self.s.save_source({'Channel': 'telegram', 'Address': '900200', 'Active': 0, 'Owner': 'discovered: Alex Doyle'}, 't')
+        with mock.patch.object(server.threading, 'Thread', _Sync):
+            got = self.ph._took(lambda: server.set_assistant_doorway(server.DoorwayBody(channel='telegram', chat='900200')))
+        (said, btns), = got
+        self.assertIn(ra.PICKED, said); self.assertEqual(btns, ['Walk me through my tasks', 'More…'])
+
+
 class TelegramBareNumberTests(PhoneCase):
     """A18 (b): Telegram shows its choices as buttons with no numbers, yet a bare "2" silently ran button 2. It is not acted on: the answer
     says what the choices are, under them."""

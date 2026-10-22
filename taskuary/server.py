@@ -9288,8 +9288,16 @@ class ListensBody(BaseModel):
 def set_assistant_doorway(body: DoorwayBody):
     """Give the assistant a chat on that channel, or '' to take it back."""
     from . import remote_assistant
-    try: return remote_assistant.use_chat(store, body.channel, body.chat)
+    was = next((remote_assistant.chat_of(c) for c in store.connectors_by_type(body.channel, with_secret=True) or [] if c and c.get('Active')), '')
+    try: out = remote_assistant.use_chat(store, body.channel, body.chat)
     except ValueError as e: raise HTTPException(422, str(e))
+    # ...and a Telegram chat just picked says hello (A4): picking it sent nothing. Off the request - a slow bot never holds the page
+    if body.channel == 'telegram' and out.get('chat') and out['chat'] != was:
+        def hello():
+            try: remote_assistant.hello_chat(store, 'telegram', out['chat'])
+            except Exception as e: logger.warning(f'telegram: the hello to the chosen chat did not go - {e}')
+        threading.Thread(target=hello, daemon=True, name='telegram-hello').start()
+    return out
 
 @app.post('/api/assistant/doorways/listens')
 def set_assistant_listens(body: ListensBody):

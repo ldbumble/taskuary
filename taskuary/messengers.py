@@ -129,6 +129,10 @@ def poll_telegram(store, c, sources: list, llm=None, file_only=False) -> int:
                                                message_id=m.get('message_id'), heard=heard)):
             continue
         if cid not in want:
+            # ...and a private chat nobody chose is not met with silence: one fixed line, with nothing about the owner in it (A4)
+            if (m.get('text') or '').strip() and (chat.get('type') or 'private') == 'private':
+                try: remote_assistant.greet_unchosen(store, c, cid)
+                except Exception as e: logger.debug(f'telegram: no first-contact line - {e}')
             if cid not in known:      # first sight of this chat: register it OFF, ingest nothing
                 title = chat.get('title') or ' '.join(x for x in (frm.get('first_name'), frm.get('last_name')) if x) \
                         or frm.get('username') or 'chat'

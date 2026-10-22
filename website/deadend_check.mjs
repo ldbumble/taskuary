@@ -21,7 +21,7 @@
 //             agent's own Stop and save, which the row darkens itself (the owner, 2026-10-20)
 //   SEEN      the card on the table shows more than its header
 //   FIX       an error on screen has a way out on the row - a verb that is not Next
-//   RECEIPT   an item that leaves the rail leaves a line in the chat naming it
+//   RECEIPT   an item that leaves the rail is named in the chat - its card, folded with the badge of what was pressed
 //   OPENS     a chip that says "Open TQ-x" puts TQ-x on the table
 //   WORDS     no developer word and no raw error on the card, the row, the Advisor's line or an error (words.json's jargon)
 //   NAMES     every button on the row and in its menus is a named button - a label in buttons.json
@@ -446,7 +446,9 @@ const receipts = (before, after, at) => {
   const keys = new Set(after.rail.map((r) => r.key));
   for (const r of before.rail.filter((r) => !keys.has(r.key))) {
     const ref = (r.text.match(/TQ-\d+/) || [])[0], name = ref || r.title.replace(/…$/, "").slice(0, 30);
-    if (name && !after.chat.includes(name) && !(r.key.startsWith("processing:") && !ref && /fyi let go/.test(after.chat)))
+    // a batch's rows are said by its card, folded with the badge of what was pressed ("4 fyi  ✓ Read") - the "Read - 4 fyi let go."
+    // line it replaced is gone (the owner, 2026-10-22: "put a little animation on the corner ... not free text")
+    if (name && !after.chat.includes(name) && !(r.key.startsWith("processing:") && !ref && /\d+ fyi[\s\S]{0,40}✓/.test(after.chat)))
       note("RECEIPT", at, `${name} left the rail with no line saying where it went`);
   }
 };

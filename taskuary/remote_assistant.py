@@ -839,6 +839,17 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
             # still thinking about typed words must find its list (PickJumpsTheQueueTests)
             if picked: forget_offered(store, channel, chat)
             _ACTS.rows = None
+            # HELP AND STOP ARE BUILT IN (A16, 2026-10-22): "/help" and "/stop" went to the model and came back "Ok." - the two words a
+            # stranger to the chat reaches for first answer here, with no model, on both channels
+            builtin = command(question) if not picked else ''
+            if builtin:
+                if builtin == 'stop': store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
+                forget_offered(store, channel, chat)
+                if builtin == 'stop' and (h := handoff(store)) and h['channel'] == channel and h.get('chat') == chat:
+                    end_handoff(store, 'owner', HANDED_BACK)            # the walk was handed here: it goes back, and this chat is told
+                    return
+                send(store, channel, chat, (help_text if builtin == 'help' else stop_walk)(store, tid), connector_id)
+                return
             pending = str(store.get_setting(f'{NOTE_KEY}:{channel}:{chat}') or '')
             if pending: store.set_setting(f'{NOTE_KEY}:{channel}:{chat}', '', 'assistant')
             if pending and not picked:
@@ -915,6 +926,53 @@ def respond(store, channel: str, chat: str, question: str, connector_id: int, po
         try: send(store, channel, chat, stuck(store, f"I couldn't answer that - {plain(e)}. Say it again, or go on to the next one."), connector_id)
         except Exception as send_error: logger.warning(f'the {channel} assistant could not send its error: {send_error}')
     finally: _ASKING.chat = None
+
+
+_COMMANDS = {'help': 'help', 'start': 'help', '?': 'help', 'stop': 'stop'}
+
+
+def command(text: str) -> str:
+    """'help' or 'stop' when the whole line is one of the chat's built-in words - "help", "/help", Telegram's "/start" (its own first
+    word, and "/help@TheBot" in a menu) - else ''. Only the bare word: "stop the agent on TQ-0003" is a request, the model's to read."""
+    t = ' '.join(str(text or '').split()).lower().rstrip('.!')
+    if t.startswith('/'): t = t[1:].split('@', 1)[0]
+    elif t == 'start': return ''                                  # typed "start" is no command; Telegram's own is "/start"
+    return _COMMANDS.get(t, '')
+
+
+def help_text(store, tid=None) -> str:
+    """What the phone can do, in a few lines, with the way on under it - the card on the table to go back to, the walk, everything else."""
+    from . import concierge, general
+    lines = ['What you can do here:',
+             '· Tap a choice under a card - it is the same button as on the desktop.',
+             '· Type what you want: "remind me Friday", "bring up TQ-0012", "reply that I am out until Monday".',
+             '· "next" moves on, "stop" ends the walk, "help" shows this again.']
+    try: brain = bool(general.provider_options(store))
+    except Exception: brain = True
+    if not brain: lines.append(f"Typed requests need an AI - connect one under {concierge.places.name('ai')} on the desktop. The choices work without one.")
+    return turn_text({'say': '\n'.join(lines), 'item': None}, store=store, extra=_way_on(store, tid))
+
+
+def _way_on(store, tid=None) -> list:
+    """The picks that never dead-end: back to the card on the table (when there is one), the walk, and everything else."""
+    from . import concierge
+    try: table = concierge.restore_current(store, tid) if tid else None
+    except Exception: table = None
+    back = [(f"Back to {table.get('ref') or 'the card'}", {'t': 'open', 'key': table['key']})] if (table or {}).get('key') else []
+    return back + [(WALK, {'t': 'walk', 'opened': True}), (MENU, {'t': 'menu'})]
+
+
+def stop_walk(store, tid=None) -> str:
+    """Stop, said in the chat: the walk ends here - nothing on the table, no section held, the next walk from the top - and nothing is
+    changed on any task. The walk and everything else stay one tap away."""
+    from . import concierge, doorway_browse, funnel
+    if tid:
+        try: concierge.set_current(store, tid, None, 'owner')
+        except Exception as e: logger.debug(f'the phone stop left the table as it was: {e}')
+    doorway_browse.hold(store, asking(), None)
+    funnel.new_walk(store)
+    return turn_text({'say': 'Stopped - the walk is over, and nothing on any task changed. Message me any time to start again.', 'item': None},
+                     store=store, extra=[(WALK, {'t': 'walk', 'opened': True}), (MENU, {'t': 'menu'})])
 
 
 def answer_the_agent(store, item: dict | None, words: str, picked: bool, actor: str = 'owner') -> str:

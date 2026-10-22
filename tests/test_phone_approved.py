@@ -252,4 +252,52 @@ class AfterTheRunTests(PhoneCase):
         self.assertEqual(got[-1][1][0], 'Try again', got[-1][1])
 
 
+MODEL = 'THE MODEL ANSWERED'
+
+
+def _no_model(said): return MODEL                     # what reaches the phone if a built-in word went to the model
+
+
+class HelpAndStopTests(PhoneCase):
+    """A16: "/help" and "/stop" went to the model and came back "Ok.". help, /help (and Telegram's /start) show what the phone can do in a
+    few lines; stop and /stop end the walk cleanly. No model, both channels, and a way on under each."""
+    brain = staticmethod(_no_model)
+
+    def setUp(self):
+        super().setUp()
+        self.a, self.b = _two_asks(self.f); self.ph.ready()
+
+    def test_help_says_what_you_can_do_with_the_way_back_to_the_card(self):
+        first = text_of(self.ph.walk())
+        ref = next(f'TQ-{t:04d}' for t in (self.a, self.b) if f'TQ-{t:04d}' in first)
+        for said in ('help', '/help'):
+            got = self.ph.type(said)
+            self.assertNotIn(MODEL, text_of(got))
+            self.assertIn('What you can do here', text_of(got)); self.assertIn('"stop" ends the walk', text_of(got))
+            self.assertEqual(got[-1][1][:2], [f'Back to {ref}', 'Walk me through my tasks'], got[-1][1])
+        self.assertIn(ref, text_of(self.ph.tap(f'Back to {ref}')))
+
+    def test_stop_ends_the_walk_and_the_next_one_starts_from_the_top(self):
+        first = text_of(self.ph.walk()); self.ph.tap('Next')
+        got = self.ph.type('/stop')
+        self.assertNotIn(MODEL, text_of(got))
+        self.assertIn('Stopped - the walk is over', text_of(got))
+        self.assertIn('Walk me through my tasks', got[-1][1])
+        again = text_of(self.ph.tap('Walk me through my tasks'))
+        self.assertEqual(re.findall(r'TQ-\d{4}', again)[:1], re.findall(r'TQ-\d{4}', first)[:1])
+
+    def test_a_request_with_the_word_in_it_is_still_words(self):
+        self.ph.walk()
+        with mock.patch.object(self.ph, 'brain_fn', lambda said: 'Which agent do you mean?') as _:
+            self.assertIn('Which agent do you mean?', text_of(self.ph.type('stop the agent on the export')))
+
+
+class TelegramHelpTests(HelpAndStopTests):
+    channel = 'telegram'
+
+    def test_telegrams_own_start_is_help(self):
+        self.assertIn('What you can do here', text_of(self.ph.type('/start')))
+        self.assertIn('What you can do here', text_of(self.ph.type('/help@TaskuaryBot')))
+
+
 if __name__ == '__main__': unittest.main()

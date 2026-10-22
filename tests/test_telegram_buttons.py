@@ -54,6 +54,33 @@ class TelegramButtonsTests(unittest.TestCase):
         self.assertIn('older list', last['text'])
         self.assertEqual([row[0]['text'] for row in last['reply_markup']['inline_keyboard']], ['Close out', 'Next'])
 
+    def test_no_name_prefix_the_bot_name_already_says_it(self):
+        """F27: every Telegram reply opened "Taskuary:" under the bot's own name."""
+        ra.send(self.s, 'telegram', TG_CHAT, 'Gail Moreno asked about Thursday.', self.c['ConnectorId'])
+        self.assertEqual(self.sent()[-1]['text'], 'Gail Moreno asked about Thursday.')
+
+    def test_the_fyi_lines_the_buttons_carry_are_not_printed_too(self):
+        items = [{'key': f'msg:{n}', 'kind': 'fyi', 'who': who, 'title': title} for n, (who, title) in
+                 enumerate((('Payworth', 'Statement ready'), ('Trainly', 'Course reminder'), ('Ray Colton', 'Back Tuesday')))]
+        batch = {'key': 'fyis:' + ','.join(i['key'] for i in items), 'kind': 'fyis', 'lane': 'fyi', 'items': items}
+        with mock.patch('taskuary.funnel.pile', return_value={'items': []}):
+            ra.send(self.s, 'telegram', TG_CHAT, ra.turn_text({'say': 'x', 'item': batch}, store=self.s), self.c['ConnectorId'])
+        msg = self.sent()[-1]
+        buttons = [row[0]['text'] for row in msg['reply_markup']['inline_keyboard']]
+        self.assertIn('Ray Colton - Back Tuesday', buttons)
+        self.assertNotIn('Back Tuesday', msg['text'])
+        self.assertIn('3 fyi · nothing to do', msg['text'])
+
+    def test_whatsapp_keeps_its_name_and_its_lines(self):
+        from taskuary import messengers as m
+        got = []
+        items = [{'key': 'msg:1', 'kind': 'fyi', 'who': 'Ray Colton', 'title': 'Back Tuesday'}, {'key': 'msg:2', 'kind': 'fyi', 'who': 'Payworth', 'title': 'Statement'}]
+        batch = {'key': 'fyis:msg:1,msg:2', 'kind': 'fyis', 'lane': 'fyi', 'items': items}
+        with mock.patch.object(m, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: got.append(body)), \
+             mock.patch('taskuary.funnel.pile', return_value={'items': []}):
+            ra.send(self.s, 'whatsapp', '15550001234@s.whatsapp.net', ra.turn_text({'say': 'x', 'item': batch}, store=self.s), None)
+        self.assertTrue(got[0].startswith('Taskuary:\n')); self.assertIn('Back Tuesday', got[0])
+
     def test_a_tap_is_the_pick_its_label_names(self):
         ra.send(self.s, 'telegram', TG_CHAT, 'Close out the docs PR?\n\nReply with one of:\n1 · Close out\n2 · Next', self.c['ConnectorId'])
         with mock.patch.object(ra, 'intercept', return_value=True) as heard:

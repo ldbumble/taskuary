@@ -2412,6 +2412,11 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
         tapped = rest[at:at + POLL_MAX - 1] + [MORE_CHOICES]
         labels = dict(zip(kept, poll_labels(kept)))         # cut and told apart over the WHOLE list, as resolve_index reads it
     else: labels = dict(zip(offered, poll_labels(offered)))
+    # ...and on Telegram a numbered line the buttons carry word for word is not printed above them too - the FYI batch read twice,
+    # as text and as buttons (the owner, 2026-10-21: "skip the text, show the card"; F27). WhatsApp's poll cuts long lines, so it keeps them
+    if channel == 'telegram' and tapped:
+        on = set(tapped)
+        text = '\n'.join(l for l in str(text or '').split('\n') if not ((m := _OFFERED.match(l)) and m.group(2) in on))
     msgs = []
     for part in str(text or '').split(chatformat.BREAK):
         shown = chatformat.render(chatformat.json_blocks(part), channel)        # rows as tables, never braces and quotes (F16)
@@ -2421,7 +2426,8 @@ def send(store, channel: str, chat: str, text: str, connector_id: int = None, pa
         last = i == len(msgs) - 1 and tapped
         # ...and on Telegram, its own buttons under the same last bubble (messengers.tg_send)
         kw = {'poll': [labels[w] for w in tapped]} if last and channel == 'whatsapp' else {'buttons': tapped} if last and channel == 'telegram' else {}
-        out(store, chat, ('Taskuary:\n' + msg) if i == 0 else msg, connector_id=connector_id, **kw)
+        # the name only where the chat does not already say who is talking: a Telegram bot's own name heads every message (F27)
+        out(store, chat, ('Taskuary:\n' + msg) if i == 0 and channel != 'telegram' else msg, connector_id=connector_id, **kw)
     # a SENT line, not only a failed one: "never responds" left nothing to tell a reply that went from one
     # that never did (2026-09-24)
     logger.info(f'{channel}: sent {len(msgs)} message(s), {sum(len(m) for m in msgs)} chars, to the assistant chat'

@@ -2576,8 +2576,10 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if item and 'hold' not in item and stranger_held(store, item): item = {**item, 'hold': True}; out = {**out, 'item': item}
     # A STRANGER'S HELD WORK IS NOT HANDED TO AN AGENT until the owner says the sender is real (A3, 2026-10-22): one tap started work on a
     # new sender's branch. Its choices lead with Trust them - the task page's own vouch - and Not ours
-    trusting = bool(item.get('hold') and str(item.get('tid') or '').isdigit() and item.get('kind') not in ('review', 'action', 'agent'))
-    if item.get('hold'): out = _recast(out, drop=set(_HAND))
+    # ...and under a typed answer too, whose choices are the TABLE's: a held card's Send to agent came back under the model's words
+    held_on = item if item.get('hold') else table if (not item and key and key == (table or {}).get('key') and stranger_held(store, table)) else {}
+    trusting = bool(held_on and str(held_on.get('tid') or '').isdigit() and held_on.get('kind') not in ('review', 'action', 'agent'))
+    if held_on: out = _recast(out, drop=set(_HAND))
     out, leads = _after_the_run(store, out, item)
     say = _TASK_LINK.sub(r'\1', str(out.get('say') or '')).strip()
     mark = funnel.mark_for(item)
@@ -2671,7 +2673,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         if trusting:
             nope = [w for w in words if w == _c.CHIP_WORDS['not_ours']]
             words = [TRUST] + nope + [w for w in words if w not in nope]
-            _offer([(TRUST, {'t': 'trust', 'tid': int(item['tid']), 'key': key})])
+            _offer([(TRUST, {'t': 'trust', 'tid': int(held_on['tid']), 'key': key})])
     if item.get('kind') == 'fyis':
         # THE WAY ON, which only this channel has to say. The desktop card carries its own "All read,
         # next" button, so concierge.CHIPS leaves `next` off the batch on purpose - and a chat has no

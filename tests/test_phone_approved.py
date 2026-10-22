@@ -203,6 +203,22 @@ class HeldStrangerChoicesTests(PhoneCase):
         self.assertIn('Send to agent', got[-1][1]); self.assertNotIn('Trust them', got[-1][1])
 
 
+class TrustIsATapNeverTheModelsTests(PhoneCase):
+    """The owner, 2026-10-22: keep Trust them as built - a button run in code, never a tool the model can call. A typed "trust them" that
+    the model answers with a CALL of task.trust lifts nothing: only the tap does."""
+    brain = staticmethod(lambda said: 'Ok.\n' + call('task.trust') if 'trust' in said.lower() else 'Ok.')
+
+    def test_the_model_cannot_vouch_and_the_tap_can(self):
+        from taskuary import toolcatalog
+        from taskuary.ingest import HOLD_TAG
+        self.assertNotIn('task.trust', toolcatalog.PURPOSE)
+        tid = _held(self.f, self.s); self.ph.ready(); self.ph.walk()
+        self.ph.type('trust them, I know Ray')
+        self.assertTrue(self.s.task_has_tag(tid, HOLD_TAG), 'typed words never vouch')
+        self.ph.tap('Trust them')
+        self.assertFalse(self.s.task_has_tag(tid, HOLD_TAG))
+
+
 class AfterTheRunTests(PhoneCase):
     """A2: R2 on the phone. A failed agent offered Stop and save | Next | Remind me - nothing that tries again; a finished one never offered
     Mark done, and on a task the rail shows as yours read "No agent yet". A failed agent leads with Try again (and Connect an AI when no AI

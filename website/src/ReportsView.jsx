@@ -37,6 +37,7 @@ import { placeName } from "./words.js";
 import { plural } from "./timeWords.js";
 import { openAppLink } from "./appLinks.js";
 import { NewPlaybook, PB_EMPTY, PB_OPEN, PlaybookDetail, PlaybookRow, RecentlyDeleted as PlaybooksDeleted, pbOpen, usePlaybooks } from "./PlaybookShelf.jsx";
+import { NEW_PB, takePlaybookAsk } from "./playbookOpen.js";
 
 const AI_FIELD = ["AI summary prompt (optional)", "ai_prompt", "multiline",
   "e.g. Summarize headcount by site. Flag anything under 70 and any day-over-day drop."];
@@ -581,16 +582,19 @@ export default function ReportsView({ browse = null, browseState = {}, onBrowseS
         { key: "playbooks", label: "Playbooks", n: pbs.books.length },
         // both ways in, always - not the open shelf's only: a new workflow was one click into Workflows away (the owner, 2026-10-15:
         // "it should say new workflow and new report right away without clicking in"). "new-invoices" is reached from the new workflow
-        { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }],
+        // ...and the third (the owner, 2026-10-22: "no new playbook ui either??"): New playbook's own dialog, opened on its shelf
+        { key: "new-report", label: "+ New report" }, { key: "new-agent", label: "+ New workflow" }, { key: NEW_PB, label: "+ New playbook" }],
       section,
       onSection: (key) => {
         setDraft(null);
+        if (key === NEW_PB) takePlaybookAsk();      // a blank one: words New handed and never landed are not this press's
         onBrowseState?.(key === "new-report" ? { section: "reports", open: "new-report" }
+          : key === NEW_PB ? { section: "playbooks", open: null, newPb: Date.now() }
           : key === "new-invoices" || key === "new-agent" ? { section: "workflows", open: key } : { section: key, open: null });
       },
       // the tab's own tools, beside its list: run what is due, and describe one for the AI to draft
       tools: section === "playbooks" ? (browseState.open == null ? <Box sx={{ display: "flex", flexDirection: "column" }}>
-        <NewPlaybook key={browseState.newFor || ""} connectorType={browseState.newFor || ""} onDone={pbs.load}
+        <NewPlaybook key={browseState.newFor || browseState.newPb || ""} connectorType={browseState.newFor || ""} asked={!!browseState.newPb} onDone={pbs.load}
           onManual={() => onBrowseState?.({ section: "playbooks", open: `${PB_OPEN}new` })} />
         {!!pbs.err && <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: "#6b2733" }}>✗ {pbs.err}</Typography>}</Box> : null)
       : section && browseState.open == null ? (

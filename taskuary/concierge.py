@@ -1085,11 +1085,11 @@ def _page(store, tid: int, table: dict | None, href: str, said: str) -> dict:
 # a new job's words go into New, on the tab that starts it, its own filled button the one to press: an agent for work, a note to self for
 # a to-do (the owner, 2026-10-19: "for hand this to coding agent match buttons" - typed words never start an agent)
 NEW_TAB = {'general': ('agent', 'general', 'regular_agent'), 'coding': ('agent', 'terminal', 'coding_agent'), 'task': ('note', '', ''),
-           'report': ('report', '', ''), 'workflow': ('workflow', '', '')}
+           'report': ('report', '', ''), 'workflow': ('workflow', '', ''), 'playbook': ('playbook', '', '')}
 
 def _new(store, tid: int, table: dict | None, want: str, text: str) -> dict:
     kind, how, verb = NEW_TAB[want]
-    press = buttons.label(verb) if verb else {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it'}[kind]
+    press = buttons.label(verb) if verb else {'note': 'Note it', 'report': 'Build it', 'workflow': 'Build it', 'playbook': 'Set up with AI'}[kind]
     # ...in the past, never "below": after a reload New is shut and the line stood over nothing (verify, 2026-10-19)
     said = f"Wrote it into New - {press} there starts it."
     # `line`: this line's id, which the card's press says again as what it started (said_started)
@@ -3481,7 +3481,7 @@ def propose_direct(store, verb: str, key: str, text: str = '', actor: str = 'own
 SECRET_WORDS = re.compile(r'(secret|token|password|passwd|api[_ -]?key|refresh|private[_ -]?key|client[_ -]?secret|bearer)', re.I)
 SETUP_QUESTIONS = 'setup_questions'
 SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small company\'s assistant. Answer JSON only: '
-                     '{"kind": "report" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
+                     '{"kind": "report" | "playbook" | "connection" | "role" | "investigate", "provider": "<connector type or null>", '
                      '"role": "<a key from roles, or null>", "why": "<one sentence>", '
                      '"title": "<what to call it on a task list - a few words naming the job, e.g. Add Erin Blake to payroll>"}. '
                      # (the owner, 2026-10-08: "the assistant should be able to walk a user through setting up new role and work")
@@ -3489,6 +3489,11 @@ SETUP_SORT_SYSTEM = ('You sort one set-up request from the owner of a small comp
                      'up", "I do accounts payable") - answer role, with its key from roles, when the job is one of them; a job '
                      'that is not in roles is investigate. '
                      'A REPORT reads connected systems on a schedule and files what it found (a check, a digest, a scheduled agent job). '
+                     # it had no word for one, so "can I build a playbook for it?" sorted to investigate and became an agent's job (the
+                     # owner, 2026-10-22: "this is not playbook ui?")
+                     'A PLAYBOOK says how one kind of recurring REQUEST is handled from now on - when someone asks for this, gather that, '
+                     'prepare it for the owner\'s review; triage matches new mail to it. A request to build, make or set up a playbook, '
+                     'or to have a recurring kind of ask handled the same way every time, is playbook. '
                      'A CONNECTION adds or configures a system Taskuary talks to (mail, chat, a database, a books system, an AI provider) - '
                      'name its type from connector_types when you can. INVESTIGATE is a set-up that needs real digging first - a portal to '
                      'read, systems to choose between, several moving parts - where a walk-through with an agent is the honest next step. '
@@ -3560,7 +3565,7 @@ def sort_setup(store, text: str, llm) -> dict:
     role = str(out.get('role') or '').lower().strip()
     # a role nobody ships is still a real ask - it is digging, never a report built from nothing
     if kind == 'role' and role not in have: kind = 'investigate'
-    return {'kind': kind if kind in ('report', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
+    return {'kind': kind if kind in ('report', 'playbook', 'connection', 'role', 'investigate') else 'report', 'provider': prov if prov in types else None,
             'role': role if kind == 'role' else None, 'why': str(out.get('why') or '')[:300], 'title': _title_cut(out.get('title') or '')}
 
 
@@ -3681,7 +3686,7 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
     # ON THE DESK A SET-UP IS ITS OWN PAGE (routes): a report is New's report box, a connection its card, a role its Set up on Profiles, and
     # digging an agent's job in New - each with its own button to press; nothing is composed into a card to confirm here
     if routes():
-        if sort['kind'] == 'report': return _new(store, tid, item, 'report', ask)
+        if sort['kind'] in ('report', 'playbook'): return _new(store, tid, item, sort['kind'], ask)
         if sort['kind'] == 'role':
             return _page(store, tid, item, '#profiles', "Opened Profiles - press Set up beside the job you do.")
         if sort['kind'] == 'investigate': return _new(store, tid, item, 'general', ask)
@@ -3692,6 +3697,10 @@ def setup_turn(store, tid: int, text: str, ask: str, item: dict | None, actor: s
             name = (store.get_connector_by_type(prov) or {}).get('Name') or prov
             return _page(store, tid, item, f'#connector={prov}', f"Opened {name}'s card under Connections - fill it in and test it there. "
                                                                  'A key or password goes on the card, never in this chat.')
+    # ...a phone has no New: the playbook is said where it is made, and nothing is started from a chat line
+    if sort['kind'] == 'playbook':
+        say_ = f"A playbook is made under {places.name('playbooks')} - New playbook there builds it from your words or a past email. Nothing has changed."
+        rec(say_); return {'say': say_, 'options': [], 'decision': None}
     if sort['kind'] == 'investigate':
         return _walkthrough(store, tid, ask, item, actor, f"This needs digging before it can be configured{' - ' + sort['why'] if sort.get('why') else ''}.",
                             title=sort.get('title') or '')

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from "@mui/material";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
@@ -8,15 +8,16 @@ import ConnectAi from "./ConnectAi.jsx";
 const GeneralWorkspace = lazy(() => import("./GeneralWorkspace.jsx"));
 const failure = (e) => e?.response?.data?.detail || e.message || "Could not start playbook setup.";
 
-export default function NewPlaybookDialog({ connectorType = "", onClose, onManual }) {
-  const [mode, setMode] = useState("");
+// `initialText`: the words New's Playbook tab (or the Assistant) wrote - From scratch, filled in. `autoStart`: Set up with AI was pressed there
+export default function NewPlaybookDialog({ connectorType = "", initialText = "", autoStart = false, onClose, onManual }) {
+  const [mode, setMode] = useState(initialText.trim() ? "scratch" : "");
   const [query, setQuery] = useState("");
   const [before, setBefore] = useState(0);
   const [rows, setRows] = useState([]);
   const [next, setNext] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [task, setTask] = useState(null);
@@ -52,6 +53,9 @@ export default function NewPlaybookDialog({ connectorType = "", onClose, onManua
     }
     finally { setBusy(false); }
   };
+  // that press, made here once - a remount (StrictMode's second mount keeps the ref) must not file a second setup task
+  const pressed = useRef(false);
+  useEffect(() => { if (autoStart && initialText.trim() && !pressed.current) { pressed.current = true; start(); } }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return <Dialog open onClose={busy ? undefined : onClose} fullWidth maxWidth={task ? "lg" : "sm"}
     aria-labelledby="new-playbook-title" PaperProps={{ sx: task ? { height: "85vh" } : { maxHeight: "90vh" } }}>

@@ -22,6 +22,8 @@ export function canvasRequestFromHash(hash, n = 0) {
     const state = v === "new" ? { section: "reports", open: "new-report" }
       : v === "draft" ? { section: "reports", open: "draft" } : v === "draft-workflow" ? { section: "workflows", open: "draft" }
       : v === "workflows" ? { section: "workflows", open: null } : v === "playbooks" ? { section: "playbooks", open: null }
+        // ...and New playbook asked for (New's Playbook tab): the shelf, its dialog open - `newPb` numbers the ask, so a second one opens it again
+        : v === "new-playbook" ? { section: "playbooks", open: null, newPb: n + 1 }
         : REPORT_BUCKETS.includes(v) ? { section: "workflows", open: v }
           : /^\d+$/.test(v) ? { section: "reports", open: Number(v), ...(/&fix=(\d+)/.test(h) ? { fix: Number(/&fix=(\d+)/.exec(h)[1]) } : {}) }
             : { section: "reports", open: null };

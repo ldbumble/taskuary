@@ -386,6 +386,28 @@ class TheVerbDoesTheThingTests(unittest.TestCase):
         self.assertIn('Reply with one of:\n1 · Redraft it\n2 · Next\n3 · Close without sending\n4 · Not ours', text)
 
 
+class NoHintUnderAnAnswerTests(unittest.TestCase):
+    """F12: the model's "Yes to what?" came with "Reply: writes a draft for you to approve here" under it, about nothing on
+    screen; and typed next printed "Next." above the card it brought up."""
+
+    def test_a_model_answer_has_no_then_line(self):
+        from taskuary import concierge
+        table = {'key': 'msg:3', 'kind': 'asked', 'mid': 3, 'title': 'Thursday'}
+        chips = [{'verb': 'reply', 'label': 'Reply'}, {'verb': 'next', 'label': 'Next'}]
+        with mock.patch.object(concierge, 'chips_for', return_value=chips):
+            text = remote_assistant.carry_out(MemoryStore(), {'say': 'Yes to what?', 'chips': chips, 'decision': None}, table)
+        self.assertIn('Yes to what?', text)
+        self.assertNotIn('Reply: writes a draft', text)
+
+    def test_typed_next_shows_the_card_without_echoing_next(self):
+        from taskuary import concierge
+        table = {'key': 'msg:3', 'kind': 'fyi', 'mid': 3, 'title': 'Thursday'}
+        with mock.patch.object(concierge, 'surface', return_value={'say': 'Ray Colton sent the budget.', 'item': None}):
+            text = remote_assistant.carry_out(MemoryStore(), {'say': concierge.RECEIPTS['next'], 'chips': [], 'decision': {'verb': 'next'}}, table)
+        self.assertIn('Ray Colton sent the budget.', text)
+        self.assertFalse(text.startswith('Next.'), text)
+
+
 class WalkOffTheOpenerTests(unittest.TestCase):
     """F9: "Walk me through my tasks" tapped under the day's opener printed the whole opener again above the first card."""
 

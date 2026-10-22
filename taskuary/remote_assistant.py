@@ -1141,7 +1141,12 @@ def _move_on(store, actor: str, leaving: str = None, exclude: str = None, done_w
 def _on(store, actor: str, said: list, extra=None, **kw) -> str:
     """The receipt lines, then what comes next (_move_on) - with the section's own end said when it ran out."""
     nxt, lead = _move_on(store, actor, **kw)
-    return '\n\n'.join([x for x in said if x] + [turn_text(nxt, lead=lead, store=store, extra=extra)])
+    # THE RECEIPT IS ITS OWN BUBBLE, and the choices are the next card's alone (F14): a receipt's own picks (Open TQ-…, Mark done on
+    # the task it just sent for) rode the same poll as the card under it - two Nexts, and a Mark done for a different task
+    from . import chatformat
+    said = [_CHOICES_BLOCK.sub('', x).strip() for x in said if x]
+    card = turn_text(nxt, lead=lead, store=store, extra=extra)
+    return chatformat.BREAK.join(['\n\n'.join(x for x in said if x), card] if any(said) else [card])
 
 
 def _ran(store, prop: dict, done: dict, item: dict | None, actor: str) -> str:
@@ -2141,6 +2146,7 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     if extra:
         words = words + [label for label, _ in extra]
         _offer(extra)
+    words = list(dict.fromkeys(words))         # one Next, never "2 · Next" and "4 · Next" (F14)
     lead_in = ('Reply with a number to read that message in full, or:' if item.get('kind') == 'fyis'
                else 'Reply with a number to open one, or:') if first > 1 else 'Reply with one of:'
     opts = (lead_in + '\n'

@@ -132,7 +132,7 @@ def test_send_to_agent_tapped_starts_the_agent_and_is_followed_up_once():
         ra.respond(store, 'whatsapp', JID, 'Send to agent', 1, poll=True)
     start.assert_called_once()
     assert server.ASK_TAG not in str(store.get_task(t).get('Tags') or ''), 'the page would ask it again'
-    assert ra.PROMISE_LINE in sent[-1], sent
+    assert any(ra.PROMISE_LINE in b for b in sent), sent
     assert [p['tid'] for p in json.loads(store.get_setting(ra.PROMISES_KEY))] == [t]
     assert look(store, [{'key': f'task:{t}', 'tid': t, 'lane': 'working'}])[0] == 0
     n, _s, out = look(store, [{'key': f'agent:{t}', 'tid': t, 'lane': 'report'}])          # its turn ended: the card comes back

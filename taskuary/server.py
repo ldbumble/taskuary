@@ -980,6 +980,7 @@ class DiscussBody(BaseModel): body: str; actor: str = 'owner'
 
 # EVERY ACT LEAVES A RECEIPT (Stream B, the owner 2026-10-18): the task page's presses run down this road, and the receipt says what was
 # done (concierge.receipt_turn) - never a Take it back (the owner, 2026-10-19): a wrong Mark done is put right with Reopen task
+# ...and a press that went through is a badge on its card, not a line in the chat (the owner, 2026-10-22: "we don't need that text ever")
 
 def _run_operation(op: dict, background: BackgroundTasks):
     """The shared handler for each kind."""
@@ -1461,7 +1462,7 @@ def execute_operation(oid: str, body: OperationConfirm, background: BackgroundTa
     # ...and the page shows THAT line, not a shorter one of its own beside it (two "Done"s per click)
     # ...and when it did not happen, its way on (concierge.recover): the choices ride under that line
     try:
-        turn = concierge.receipt_turn(store, out, ACTOR, table=table)
+        turn = concierge.receipt_turn(store, out, ACTOR, table=table, press=True)
         out = {**out, 'receipt': turn['say'], 'chips': turn['chips']}
         # ...and a press on the table's task view lands in the chat now, not on its next 30-second read (Stream B, 2026-10-18)
         if table: live_bus.emit(live_bus.CHAT)
@@ -1912,6 +1913,7 @@ def remind_task(task_id: int, body: RemindBody):
     # ONE WRITER FOR ITS RECEIPT (the 2026-10-19 UI walk: a reminder's receipt printed twice, and the page's own copy was gone on reload):
     # put away from the Assistant's table, the server records the one line and hands its words back, and the page draws those same
     # words - the chat's read then takes them for the same turn (assistantTurns.sameTurn). Read before it runs: it leaves the table.
+    # ...and since 2026-10-22 ("we don't need that text ever") the one writer stamps Remind me on the item's card instead of a line
     try: table = concierge.on_table(store, {'kind': 'task.defer', 'target': task_id})
     except Exception as e:
         logger.debug(f'on_table failed for a reminder on {task_id}: {e}'); table = False
@@ -1919,7 +1921,7 @@ def remind_task(task_id: int, body: RemindBody):
     except ValueError as e: raise HTTPException(409 if isinstance(e, remind.AgentOpen) else 404 if 'not found' in str(e) else 422, str(e))
     op = operations.record_direct(store, 'task.defer', task_id, {'until': body.until or 'none'}, ACTOR, out)
     if op and table:
-        try: out = {**out, 'receipt': concierge.receipt_turn(store, op, ACTOR, table=True)['say']}; live_bus.emit(live_bus.CHAT)
+        try: out = {**out, 'receipt': concierge.receipt_turn(store, op, ACTOR, table=True, press=True)['say']}; live_bus.emit(live_bus.CHAT)
         except Exception as e: logger.debug(f'no receipt recorded for the reminder on {task_id}: {e}')
     return out
 

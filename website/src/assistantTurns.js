@@ -29,6 +29,9 @@ export function mergeDurableTurns(local = [], durable = []) {
       // skipped by id, its counts stayed "reading" until a reload
       const at = turn.card?.kind === "brief" ? messages.findIndex((m) => m.id === turn.id || m.commentId === turn.id) : -1;
       if (at >= 0 && JSON.stringify(messages[at].card) !== JSON.stringify(turn.card)) messages[at] = { ...messages[at], text: turn.text, card: turn.card };
+      // ...and a press the server stamped on a line already drawn (concierge._stamp_pressed): its badge, at once
+      const was = turn.card?.pressed ? messages.findIndex((m) => m.id === turn.id || m.commentId === turn.id) : -1;
+      if (was >= 0 && !messages[was].pressed) messages[was] = { ...messages[was], pressed: turn.card.pressed };
       continue;
     }
     const at = messages.findIndex((candidate, i) => !claimed.has(i) && optimistic(candidate) && sameTurn(candidate, turn));
@@ -48,7 +51,7 @@ export function mergeDurableTurns(local = [], durable = []) {
       // ...and its ALIASES (G8, 2026-10-20): the lines of the same item it replaced (placeLine) are its names too. Dropped here, the
       // next read found the oldest of them unknown, pushed it at the end, and oneCopy kept that copy - the item the walk had left
       // came back live on the table, under a rail ringing the new one, until the next press
-      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}), ...(bubble.alias?.length ? { alias: bubble.alias } : {}),
+      messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}), ...(bubble.pressed ? { pressed: bubble.pressed } : {}), ...(bubble.alias?.length ? { alias: bubble.alias } : {}),
                        ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
                        ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
                        // ...and its status: the durable turn has none, and an error receipt lost its "Report this bug" with it
@@ -89,3 +92,23 @@ export function oneCopy(messages = []) {
   ms.forEach((m, i) => { const last = keys[i] ? keys.lastIndexOf(keys[i]) : i; if (last !== i) ms[last] = { ...ms[last], alias: [...new Set([...(ms[last].alias || []), ...ids(m)])] }; });
   return ms.filter((m, i) => !keys[i] || keys.lastIndexOf(keys[i]) === i);
 }
+
+// A PRESS IS A BADGE ON ITS CARD, NEVER A LINE (the owner, 2026-10-22: "why do we have done-mark done text. we don't need that text ever. I
+// hate free text" ... "put a little animation on the corner of the past task - like button marked done not free text"): the newest line
+// carrying the item gets the button's own label. Nothing found, nothing changes - and still no line.
+const holds = (m, it) => !!m?.card && m.role === "assistant" && !m.proposal && !NOT_ITEM.has(m.card.kind)
+  && ((!!it?.key && m.card.key === it.key) || (it?.tid != null && it.tid !== "" && String(m.card.tid ?? "") === String(it.tid)));
+export function pressLine(messages = [], it, label) {
+  if (!label) return messages;
+  const at = messages.map((m) => holds(m, it)).lastIndexOf(true);
+  return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, pressed: label } : m));
+}
+// ...and a word pressed under a line (a send's Mark done, a Not ours taken further) marks THAT line, and leaves it, so it is not pressed twice
+const sameChip = (a, b) => a?.verb === b?.verb && a?.label === b?.label && (a?.tid ?? null) === (b?.tid ?? null);
+const chipsHeld = (m) => m?.chips || m?.card?.chips || [];
+export function pressChip(messages = [], chip) {
+  const at = messages.map((m) => chipsHeld(m).some((c) => sameChip(c, chip))).lastIndexOf(true);
+  return at < 0 ? messages : messages.map((m, i) => (i === at ? { ...m, pressed: chip.label, chips: chipsHeld(m).filter((c) => !sameChip(c, chip)) } : m));
+}
+// the badge's label: the page's own at the press, the server's stamp after a read
+export const pressedOf = (m) => m?.pressed || m?.card?.pressed || "";

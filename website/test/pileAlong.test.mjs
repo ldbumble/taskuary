@@ -38,7 +38,7 @@ test("landed holds the rail the turn brought and only falls back to its own load
 });
 
 test("All read, next: the settle brings the rail back and the walk takes it without a reload", () => {
-  const done = between("const done = async (receipt)", "// Setting Taskuary up");
+  const done = between("const done = async (pressed)", "// Setting Taskuary up");
   assert.match(done, /verb: "done", only: only\.current/, "the settle learns the walk's scope so the rail comes back captured under it");
   assert.match(done, /\.data\?\.pile \|\| null/);
   assert.match(done, /advance\(pile\)/);

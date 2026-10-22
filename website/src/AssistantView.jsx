@@ -63,7 +63,7 @@ import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } fr
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
 import { isCoveragePending } from "./processingAll.js";
-import { mergeDurableTurns, pickLine, placeLine } from "./assistantTurns.js";
+import { mergeDurableTurns, pickLine, placeLine, pressChip, pressLine, pressedOf } from "./assistantTurns.js";
 import { lightOf, litAfter, litPick, litPull } from "./assistantLight.js";
 import DigestText from "./DigestText.jsx";
 import { firstAppLink, openAppLink, recordPlace } from "./appLinks.js";
@@ -777,6 +777,9 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
 // ── one line of the conversation, with its card ───────────────────────────────────────────
 // THE WORDS LIVE IN THE ROW BY THE PROMPT, never as buttons under a chat line (the owner, 2026-10-06: "no button in line ever
 // anyway. it should on bottom by the prompt"). A line hands its words to the same row the task view fills (actionRow.js).
+// WHAT WAS PRESSED, ON THE CARD IT WAS PRESSED ON (the owner, 2026-10-22: "put a little animation on the corner of the past task - like
+// button marked done not free text"): the button's own label as a quiet badge (assistantTurns.pressedOf)
+function Pressed({ label }) { return <span className="tq-pressed" data-tq-pressed={label}>✓ {label}</span>; }
 function BarVerbs({ owner, chips, busy, onChip }) {
   // the item's key in the id: the end of the walk offers one "open" chip per item, and one id kept only the last - "Open TQ-0001" opened
   // TQ-0010. The verb stays LAST so isDone's /:done$/ still finds a done chip
@@ -831,7 +834,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
     </div>
   );
   if (m.role === "receipt") return (
-    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}
+    <div className="tq-msg receipt"><span /><div className="body">{m.status && m.status !== "done" ? "✗" : "✓"} {m.text}{pressedOf(m) && <Pressed label={pressedOf(m)} />}
       {/* a receipt can carry the walk's own word: a sweep puts the table down and OFFERS Next rather
           than jumping to the next thing by itself (the owner, 2026-09-11). Same strip, same buttons.
           ...and its Open and Report this bug go there too: a button in the line is against "no button in line ever" (2026-10-06),
@@ -938,6 +941,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
           {/* ...and over a PROPOSAL only what its card does not say - the heading and its line were the sentence's
               first half (the owner, 2026-09-24: "if there is box don't show it again") */}
           {text && !(m.card && kind && !["proposal", "walk", "setup"].includes(kind)) ? (looksMd(text) ? <Md text={text} /> : text.split("\n").map((p, i) => <p key={i}>{p}</p>)) : null}
+          {/* a word pressed under a line that carries no item (a failure's Update branch): its badge on that line */}
+          {!kind && pressedOf(m) && <Pressed label={pressedOf(m)} />}
           {passed && (
             <div className="tq-step-done"><i>✓</i><b>{(m.card.n ?? 0) + 1} of {m.card.total}</b>
               <span>·</span>{m.card.title}</div>
@@ -955,6 +960,7 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
               <SourceMark item={m.card} size={12} />
               {!!m.card.ref && <span className="ref">{m.card.ref}</span>}
               <b>{m.card.title}</b>
+              {pressedOf(m) && <Pressed label={pressedOf(m)} />}
             </div>
           )}
           {card && !foldedNow && <CardNav.Provider value={nav}>{card}</CardNav.Provider>}
@@ -2164,8 +2170,17 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       // ...and a SEND that went carries its own (concierge.sent_chips): Mark done and Next - the item stays on the table
       const chips = (out.status !== "done" || p.kind === "review.approve") && res?.chips?.length ? res.chips.filter((c) => !(out.repo && c.verb === "repo"))
         : step === "offer" || out.status !== "done" ? [{ verb: "next", label: btn("next") }] : followUps(p, out);
-      setMsgs((m) => [...m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x)),
-                       { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }]);
+      // A PRESS THAT WENT THROUGH IS A BADGE ON ITS CARD, never "Done - Mark done · TQ-0001." under it (the owner, 2026-10-22: "we don't
+      // need that text ever"). A line stays only where it carries a way on (a send's Mark done and Next, Not ours taken further, a
+      // sweep's Next) - and a press that did NOT go through is said, as a failure
+      // ...and one with no card here to wear it (a report set up from words) keeps its line, as the server does (concierge.receipt_turn)
+      const quiet = out.status === "done" && !chips.length;
+      setMsgs((m) => {
+        const ms = m.map((x) => (holdsProposal(x, p) ? { ...x, proposal: { ...x.proposal, ...(p.replaces ? p : {}), status: out.status, repo: out.repo || null, outcome: res?.outcome || null } } : x));
+        const worn = quiet ? pressLine(ms, { key: p.key, tid: p.tid || res?.outcome?.taskId }, String(p.label || p.title || "").split(": ")[0]) : ms;
+        return worn !== ms ? worn
+          : [...ms, { id: `r${Date.now()}`, role: "receipt", status: out.status, text: out.receipt, tid: p.tid || res?.outcome?.taskId, ref: p.ref || res?.outcome?.ref, chips }];
+      });
       onChanged?.();
       // the server already settled or closed the item; a settle proposal (later, tomorrow, done) must not be
       // re-marked "done" by the page, so it advances without the settle post. A hand-off that STARTED advances
@@ -2271,7 +2286,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setBusy(true); setErr("");
       try {
         await runOperation(api, c.follow.kind, c.follow.target, c.follow.params);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", status: "done", text: `${c.label} - done.` }]);
+        setMsgs((m) => pressChip(m, c));          // its badge on the line it was under, not "<word> - done." (2026-10-22)
         onChanged?.();
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
@@ -2286,7 +2301,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       setBusy(true); setErr("");
       try {
         await runOperation(api, "task.complete", c.tid);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", text: `${c.ref || "The task"} marked done.` }]);
+        setMsgs((m) => pressChip(m, c));          // ...and Mark done's badge on the send's line, not "TQ-0001 marked done." (2026-10-22)
         advance(null, true);
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
@@ -2333,9 +2348,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     if (c.verb === "closeout" && c.rid) {
       setBusy(true); setErr("");
       try {
-        const { data } = await api.post(`/api/reviews/${c.rid}/closeout/${c.act}`);
-        setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: item?.tid, ref: item?.ref,
-                                text: `${data?.said || c.label}. Press ${btn("approve", "action")} again once the checks pass.` }]);
+        await api.post(`/api/reviews/${c.rid}/closeout/${c.act}`);
+        setMsgs((m) => pressChip(m, c));          // its badge on the line it was under, not a sentence (the owner, 2026-10-22)
       } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
       return;
     }
@@ -2375,10 +2389,12 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     setNextComing(true);
     deferInChat(() => surfaceRef.current?.(), pile || settled ? 120 : 500);
   };
-  const done = async (receipt) => {
+  // `pressed`: the label of the button that did it - the folded card wears it as its badge, and no line is said (the owner, 2026-10-22:
+  // "we don't need that text ever"). Given, the act landed already; null, only the settle below does it
+  const done = async (pressed) => {
     // the card folds to its line the moment its verb is pressed - see interactiveCardIndex
-    setMsgs((m) => { const i = interactiveCardIndex(m), out = i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x));
-      return receipt ? [...out, { id: `r${Date.now()}`, role: "receipt", text: receipt }] : out; });
+    setMsgs((m) => { const i = interactiveCardIndex(m);
+      return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, ...(pressed ? { pressed } : {}) } : x)); });
     setNextComing(true);
     let pile = null;
     // `only` rides along so the rail comes back captured under the scope this page walks with
@@ -2388,7 +2404,7 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         // A receipt means the act already landed (a close, a sent reply) and only the settle after it failed - often with
         // the 422 "unavailable" that closing a task causes: walk on. Without one, gone already (404/422) is done too;
         // anything else did NOT happen, and folding the card and walking on said it had.
-        if (!receipt && ![404, 422].includes(e?.response?.status)) {
+        if (!pressed && ![404, 422].includes(e?.response?.status)) {
           setNextComing(false);
           setMsgs((m) => [...m.map((x) => (x.done && x.card?.key === current ? { ...x, done: false } : x)),
             { id: `r${Date.now()}`, role: "receipt", status: "error", text: "Not done - Taskuary didn't answer. It is still here; press it again.", chips: [{ verb: "next", label: btn("next") }] }]);
@@ -2769,15 +2785,16 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   setupRef.current = () => { if (DEMO) { setup(); return; } setFirstRun(true); backToSetup(); };
   // A REMINDER'S RECEIPT, from the walk's picker or the task view's: where it went - one line, and no Take it back (the owner, 2026-10-19:
   // "no take it back button. hate that"): a day picked wrong is picked again with Remind me
-  const remindReceipt = (out, tid, ref) => {
-    setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid, ref,
-      // ...in the server's own words when it recorded the line (server.remind_task), so its read finds the same turn and draws it once
-      text: out?.receipt || (out?.remindAt ? `Away until ${out.when} - it is under ${place("later").name}, and back in front of you that morning.${out.warn ? ` ${out.warn}` : ""}` : "It is back on your rail now.") }]);
+  // ...and since 2026-10-22 not even that line: Remind me's badge on the item's card (the owner: "we don't need that text ever"). The day it
+  // went to is on the rail's Later row and on the task; a warning about that day is still worth saying
+  const remindReceipt = (out, tid, ref, key = null) => {
+    setMsgs((m) => { const ms = pressLine(m, { key, tid }, btn("defer"));
+      return out?.warn ? [...ms, { id: `r${Date.now()}`, role: "receipt", tid, ref, text: out.warn }] : ms; });
   };
   // ...the Advisor's own move (a task to fix what failed, a proposal) pressed from a phone's row as from this one: the phone's strip had
   // none, so a move the row lacks drew no line and no button there (the matrix's phone pass, 2026-10-20)
   const actions = { done, sent, start, handOff, welcome, openTask: onOpenTask, timeline, navigate: onNavigate, items: pileRows(pile), pressAdvice,
-    reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref),
+    reminded: (out, c) => remindReceipt(out, c?.tid, c?.ref, c?.key),
     next: () => runChip({ verb: "next" }), advance: (pile, settled) => advance(pile, settled), reload: () => loadPile(true), changed: onChanged,
     // an earlier line back on the table - or the folded item itself, which only unfolds: it never left the table
     // ...and a page opened over it is put away with the fold: the item under it was folded by the page, not by its X
@@ -3049,7 +3066,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
                   const on = noteOn;
                   setNoteOn(null);
                   try { await on.close(note); } catch (e) { setNoteOn({ ...on, note }); throw e; }
-                  setMsgs((m) => [...m, { id: `r${Date.now()}`, role: "receipt", tid: on.task.TaskId, ref: on.ref, text: `Closed with your note: ${note}` }]);
+                  // ...its badge on the item's card, not a sentence repeating the note - the note is on the task (the owner, 2026-10-22)
+                  setMsgs((m) => pressLine(m, { tid: on.task.TaskId }, btn("close")));
                 }} />
             </div>
           )}

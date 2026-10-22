@@ -622,6 +622,12 @@
   color: #6e685f; text-align: left; }
 .tq-fold .ref { flex-shrink: 0; font-size: 9.5px; font-weight: 600; color: #746e64; letter-spacing: .02em; }
 .tq-fold b { min-width: 0; font-weight: 600; color: #2f3a42; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* what was pressed on it, in its corner (AssistantView Pressed): the chip's own colours, small, in with a quick fade */
+.tq-pressed { flex-shrink: 0; margin-left: auto; padding: 2px 8px; border: 1px solid #d8d1c5; border-radius: 99px; background: #f4f6f8;
+  color: #55697a; font: 500 10.5px 'IBM Plex Sans', system-ui, sans-serif; white-space: nowrap; animation: tq-pressed-in .28s ease-out both; }
+.tq-msg.receipt .tq-pressed { margin-left: 8px; }
+@keyframes tq-pressed-in { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tq-pressed { animation: none; } }
 /* a browse card sits in the conversation at the canvas's width, like the task view */
 .tq-browse-line { margin: 0 0 14px; }
 /* SEE MORE IN ONE SCREEN (the owner, 2026-09-29: "fill up more width and more height for tasks ... same for all items"): the

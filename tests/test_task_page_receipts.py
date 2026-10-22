@@ -130,38 +130,64 @@ def test_the_trust_link_is_never_a_chat_tool():
     assert 'task.trust' in operations.KINDS and 'task.trust' not in toolcatalog.PURPOSE
 
 
-# ── on the table: the receipt is one chat line, and nothing to take back ─────────────────────
+# ── on the table: a press is a badge on its card, never a line - and nothing to take back ────────
+# (the owner, 2026-10-22: "why do we have done-mark done text. we don't need that text ever. I hate free text" ... "put a little
+# animation on the corner of the past task - like button marked done not free text")
+def drawn(s, dock, tid):
+    """The item's own line in the chat - the card the walk drew for it - as the page reads it back. Its count of lines."""
+    concierge.record(s, dock, 'assistant', 'Next up: a task.', {'kind': 'task', 'key': f'task:{tid}', 'tid': tid, 'title': 'Send Erin the signed form'})
+    return len(cards(s, dock))
+
+
 @pytest.mark.parametrize('kind,params', [('task.complete', {}), ('task.update', {'priority': 'high'}), ('task.check', {'item': '1'})])
-def test_a_press_on_the_tables_task_says_so_in_the_chat_once(s, c, kind, params):
+def test_a_press_on_the_tables_task_is_its_cards_badge_and_no_line(s, c, kind, params):
     tid = task(s)
     s.set_task_checklist(tid, ['Print the form'], 'owner')
-    dock = on_table(s, tid)
+    dock = on_table(s, tid); n = drawn(s, dock, tid)
     with mock.patch.object(server.live_bus, 'emit') as emit:
         out = run(c, kind, tid, params)
-    assert out['status'] == 'done' and out['receipt'].startswith('Done - ')
-    emit.assert_any_call(server.live_bus.CHAT)                  # the chat reads it now, not on its next tick
-    lines = [r for r in cards(s, dock) if isinstance(r, tuple) and r[0] == out['receipt']]
-    assert len(lines) == 1 and lines[0][1]['background_event'] is True     # a notice beside the task view, once
+    assert out['status'] == 'done' and out['receipt']               # the words still come back - the phone answers with them
+    emit.assert_any_call(server.live_bus.CHAT)                  # the chat reads the badge now, not on its next tick
+    rows = cards(s, dock)
+    assert len(rows) == n and not any('Done - ' in (r[0] if isinstance(r, tuple) else r) for r in rows)    # no line said
+    assert rows[-1][1]['pressed'] == concierge.describe_op(s, operations.history(s, task_id=tid)[0])[0].split(': ')[0]  # the button's label
     assert undos(s, dock) == [] and 'Undo' not in out['receipt']
     assert [o for o in operations.history(s, task_id=tid) if o.get('status') == 'proposed'] == []
 
 
-def test_a_reminder_from_the_table_is_one_line_in_the_servers_words(s, c):
+def test_mark_done_on_the_table_wears_mark_done(s, c):
     tid = task(s)
-    dock = on_table(s, tid)
+    dock = on_table(s, tid); drawn(s, dock, tid)
+    run(c, 'task.complete', tid)
+    assert cards(s, dock)[-1][1]['pressed'] == 'Mark done'
+
+
+def test_a_reminder_from_the_table_is_its_cards_badge_and_no_line(s, c):
+    tid = task(s)
+    dock = on_table(s, tid); n = drawn(s, dock, tid)
     out = c.post(f'/api/tasks/{tid}/remind', json={'until': '2 weeks'}).json()
-    assert out['receipt'].startswith('Done - ') and 'Away until' in out['receipt'] and 'undo' not in out
-    assert [r[0] for r in cards(s, dock) if isinstance(r, tuple)] == [out['receipt']]     # the page draws these words: one turn
+    assert 'Away until' in out['receipt'] and 'undo' not in out
+    rows = cards(s, dock)
+    assert len(rows) == n and rows[-1][1]['pressed'] == 'Remind me'
 
 
-def test_not_a_task_on_the_table_is_a_line_with_nothing_to_take_back(s, c):
+def test_not_a_task_on_the_table_is_no_line_and_nothing_to_take_back(s, c):
     tid = task(s)
-    dock = on_table(s, tid)
+    dock = on_table(s, tid); n = drawn(s, dock, tid)
     out = run(c, 'task.not_a_task', tid)
     assert out['status'] == 'done' and s.get_task(tid) is None
-    # a notice beside the view, as every press on it is: a bare line let go of the task view being pressed on
-    assert any(isinstance(r, tuple) and r[0].startswith('Done - ') and r[1]['background_event'] for r in cards(s, dock))
-    assert undos(s, dock) == []
+    assert len(cards(s, dock)) == n and undos(s, dock) == []
+
+
+def test_a_press_that_did_not_go_through_is_still_said(s, c):
+    """An error is not a receipt: the line saying it failed, with its way on, stays - and the card wears no badge."""
+    tid = task(s)
+    dock = on_table(s, tid); n = drawn(s, dock, tid)
+    with mock.patch.object(server, '_run_kind', side_effect=RuntimeError('the mailbox is not answering')):
+        out = run(c, 'task.complete', tid)
+    assert out['status'] == 'error' and out['receipt'].startswith('Not done - ')
+    rows = cards(s, dock)
+    assert len(rows) == n + 1 and rows[-1][0].startswith('Not done - ') and 'pressed' not in rows[-2][1]
 
 
 def test_the_same_press_off_the_table_records_the_operation_and_says_nothing_in_the_chat(s, c):

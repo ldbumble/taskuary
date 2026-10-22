@@ -119,6 +119,13 @@ export const nextSelectionBody = (capture) => ({
   include_surfaced: capture.scope.include_surfaced,
   exclude: capture.scope.exclude,
 });
+// THE TABLE MOVED AND NO RAIL CAME WITH IT (a row clicked, a task pulled by name): the selection the rail holds was captured for the
+// table as it was, so its NEXT ring named the row the walk would have taken from THERE - the top of the rail, over the row just put on
+// the table - until the reload landed, and a press read in that gap disagreed with the ring (PW-118, CI 2026-10-22). Withdraw the
+// marker until the read for the new table lands; the reload's fresh selection replaces it (refreshPilePresentation).
+export const withdrawSelection = (pile) => pile && hasNextSelection(pile) && !pile.selection_unavailable ? {
+  ...pile, selection_invalidated: true, expected_next_key: null, expected_next_members: [],
+} : pile;
 export const nextMarkerKey = (pile, items, current) => {
   if (hasNextSelection(pile))
     return pile.expected_next_members[0] || pile.expected_next_key || null;

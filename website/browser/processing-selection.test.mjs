@@ -108,6 +108,11 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
   // The pile loads progressively; the first card need not be this review yet.
   await page.waitForFunction(wanted => [...document.querySelectorAll(".tq-pile-row .card")]
     .some(n => n.querySelector("b")?.textContent.trim() === wanted), { timeout: 15000 }, target.title);
+  // the rail's reload for the row put on the table is held back: in that gap the ring the rail held was captured with nothing on the
+  // table - the top row - and a slow reload on CI let it be read as Next while the press named the row below the table
+  const slow = await page.createCDPSession();
+  slow.on("Fetch.requestPaused", e => setTimeout(() => slow.send("Fetch.continueRequest", { requestId: e.requestId }).catch(() => {}), 2000));
+  await slow.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/funnel/pile?current=*", requestStage: "Request" }] });
   await page.evaluate(wanted => {
     const row = [...document.querySelectorAll(".tq-pile-row .card")]
       .find(n => n.querySelector("b")?.textContent.trim() === wanted);
@@ -119,6 +124,7 @@ test("PW-118 a change to the content of the shown Next is taken fresh, never ref
   await page.waitForSelector(".tq-pile-row.next .card", { timeout: 15000 });
   const heldCurrent = await title(page, "current");
   const shownNext = await title(page, "next");
+  await slow.send("Fetch.disable"); await slow.detach();
   const before = (await request(h, "/api/concierge")).messages;
   const beforeWrites = writes.length;
 

@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, isUrgent, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory, withdrawSelection } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -1774,10 +1774,11 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
         if (pendingPile.current === later) pendingPile.current = null;
         if (epoch !== chatEpoch.current || resettingRef.current || loads !== pileLoads.current) return;
         if (fresh) holdPile(fresh, scope);
-        else { selectionRef.current = null; loadPile(true); }
+        else { selectionRef.current = null; setPile(withdrawSelection); loadPile(true); }
       });
     }
-    else { selectionRef.current = null; loadPile(true); }
+    // ...no rail rides along: the ring the rail holds was captured for the old table, and comes down until the reload lands
+    else { selectionRef.current = null; if (card) setPile(withdrawSelection); loadPile(true); }
   }, [holdPile, loadPile, putOnTable, readAdvice, say]);
 
   const ensureNextSelection = useCallback(async (scope) => {

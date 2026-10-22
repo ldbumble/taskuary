@@ -14,6 +14,7 @@ import {
   restorableCurrent,
   sameSelectionScope,
   selectionGuardDetail,
+  withdrawSelection,
 } from "../src/funnelPile.js";
 
 const view = readFileSync(new URL("../src/AssistantView.jsx", import.meta.url), "utf8");
@@ -70,6 +71,27 @@ test("the server capture owns the visible Next marker, including FYI batches and
   // an empty capture with nothing next cannot advance - there is no mail-only scope to release any more
   assert.equal(canAdvanceSelection(emptyMail, nonMailReady, null), false);
   assert.equal(canAdvanceSelection({ ...emptyMail, selection_unavailable: true }, nonMailReady, null), false);
+});
+
+test("a row put on the table with no rail along takes the old Next ring down until the reload for the new table lands", () => {
+  // PW-118 on CI: a clicked row went on the table, the rail kept the ring captured with nothing there (the top row), and the press
+  // read in that gap named the row below the table - the ring and the press disagreed
+  const items = [{ key: "msg:1", lane: "asked" }, { key: "msg:2", lane: "asked" }, { key: "msg:3", lane: "asked" }];
+  const before = { display_revision: "d1", selection_revision: "r1", expected_next_key: "msg:1", expected_next_members: ["msg:1"], items };
+  const gap = withdrawSelection(before);
+  assert.equal(nextMarkerKey(gap, items, { key: "msg:2" }), null);
+  assert.equal(captureNextSelection(gap, nextSelectionScope(null, "msg:2")), null);
+  assert.equal(before.expected_next_key, "msg:1");
+  // the reload for the new table brings its own ring - even when its rows and display revision are the same
+  const reloaded = { ...before, selection_revision: "r2", expected_next_key: "msg:3", expected_next_members: ["msg:3"] };
+  assert.equal(nextMarkerKey(refreshPilePresentation(gap, reloaded), items, { key: "msg:2" }), "msg:3");
+  assert.equal(nextMarkerKey(refreshPilePresentation(gap, { ...before }), items, { key: "msg:2" }), "msg:1");
+  // nothing to withdraw: no rail yet, an old server's rail, a rail already unavailable
+  assert.equal(withdrawSelection(null), null);
+  const legacy = { rev: "legacy", items };
+  assert.equal(withdrawSelection(legacy), legacy);
+  const unavailable = { ...before, selection_unavailable: true, expected_next_key: null, expected_next_members: [] };
+  assert.equal(withdrawSelection(unavailable), unavailable);
 });
 
 test("HTTP and streamed stale conflicts share one authoritative no-retry detail", () => {

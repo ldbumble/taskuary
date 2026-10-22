@@ -28,7 +28,8 @@ test("landed holds the rail the turn brought and only falls back to its own load
   const landed = between("const landed = useCallback", "const ensureNextSelection");
   assert.match(landed, /if \(card && data\.pile\) holdPile\(data\.pile, nextSelectionScope\(only\.current, card\.key\)\)/,
     "the new table is excluded from the held scope - that is the scope the next press sends");
-  assert.match(landed, /else \{ selectionRef\.current = null; loadPile\(true\); \}/);
+  // ...and with no rail along, the ring captured for the old table comes down until that load lands (PW-118)
+  assert.match(landed, /else \{ selectionRef\.current = null; if \(card\) setPile\(withdrawSelection\); loadPile\(true\); \}/);
   assert.doesNotMatch(landed, /say\(data\.say\); loadPile\(true\)/, "the unconditional reload after every turn is gone");
   const hold = between("const holdPile = useCallback", "const landed = useCallback");
   assert.match(hold, /forcedLoadStartedAt\.current = heldSince\(data\)/);

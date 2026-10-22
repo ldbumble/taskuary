@@ -2082,7 +2082,9 @@ def script_words(store, script: str) -> str:
     """A script, as a chat can hold it: the composer asks for the sentence it builds from. Setting Taskuary up is the desk's Setup
     button, never a script here (the owner, 2026-10-19) - an old pick of it says where it is."""
     if 'report' in str(script or '').lower():
-        return 'Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together.'
+        # ...with one sentence to copy the shape of: the bare ask left the owner guessing what a sentence like that is (F25)
+        return ('Tell me what to set up - a check that reads, or a workflow that writes - in a sentence, and I put it together. '
+                'For example: "Every weekday at 8, list the invoices more than 30 days overdue and send them to me here."')
     return 'Setting Taskuary up is the Setup button at the top of Taskuary on your computer.'
 
 

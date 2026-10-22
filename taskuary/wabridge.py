@@ -90,12 +90,17 @@ def stage(carry: bool = True) -> Path:
         if n not in have or have[n].read_bytes() != p.read_bytes(): shutil.copyfile(p, run / n)
     for n in set(have) - set(src): have[n].unlink(missing_ok=True)
     # never from an exe: its package folder is a fresh extraction, and a pairing found there came from whoever built it
+    # ...and ONCE: a home whose wa-auth the owner deleted to pair again ("logged out - delete ./wa-auth") must not get the
+    # package folder's old pairing back on the next start. The mark is written once the home has its own copy, or nothing to copy.
     for n in CARRIED if carry and not getattr(sys, 'frozen', False) else ():
+        mark = run / f'.carried-{n}'
+        if mark.exists(): continue
         if (DIR / n).is_dir() and not (run / n).exists():
             try: shutil.copytree(DIR / n, run / n)
             except OSError as e:
                 logger.warning(f'wa bridge: could not carry {n} over from {DIR}: {e}')
-                shutil.rmtree(run / n, ignore_errors=True)
+                shutil.rmtree(run / n, ignore_errors=True); continue
+        mark.touch()
     return run
 
 

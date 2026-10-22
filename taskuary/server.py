@@ -1129,7 +1129,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # what came of work done off the app - "I called him" - is the close-out itself, so it is written on the task
         note = str(p.get('note') or '').strip()[:4000]
         if note: store.add_comment(tid, ACTOR, 'human', f'Closed out: {note}')
-        return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR)}
+        # ...and whether a reply drafted for a yes went unsent with it - the receipt says so, never a bare "closed" (F24)
+        rv = store.pending_review(tid, live_only=False) or {}
+        unsent = str(rv.get('Kind') or '') in ('draft', 'draft_reply', 'reply', 'slot')
+        return {'status': 'done', 'already': not concierge.close_task(store, tid, ACTOR), **({'unsent': True} if unsent else {})}
     if kind == 'task.reopen':
         if not store.get_task(tid): raise HTTPException(404, 'task not found')
         # ONE REOPEN (T13): back in progress, and an old Remind me date cleared - it reopened straight into Upcoming
@@ -1297,7 +1300,10 @@ def _run_kind(op: dict, background: BackgroundTasks):
         # stopped, off the rail. It used to close the task and leave its agent running (the owner, 2026-09-24).
         if verb == 'done' and p.get('tid'):
             from . import concierge
-            if concierge.close_task(store, int(p['tid']), ACTOR): out['closed'] = int(p['tid'])
+            rv = store.pending_review(int(p['tid']), live_only=False) or {}
+            if concierge.close_task(store, int(p['tid']), ACTOR):
+                out['closed'] = int(p['tid'])
+                if str(rv.get('Kind') or '') in ('draft', 'draft_reply', 'reply', 'slot'): out['unsent'] = True      # (F24)
         return out
     if kind == 'review.approve':
         if not store.get_review(tid): raise HTTPException(404, 'review not found')

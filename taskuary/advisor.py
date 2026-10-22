@@ -556,6 +556,36 @@ def plain(line: str, verb: str, label: str) -> str:
     return ' '.join(re.sub(_ID, 'an earlier outcome', t).split())
 
 
+_WORD = re.compile(r"[a-z0-9][a-z0-9'#./-]*")
+_FILLER = frozenset('the and for you your with that this from have will what which when where should would could into about there their they '
+                    'them then than also just does did can are was were has had its it is be to of on in at or an a do so if me my we us our'.split())
+def _content(text: str) -> set:
+    return {w.strip("'.-/") for w in _WORD.findall(str(text or '').lower()) if len(w) > 2 and w not in _FILLER}
+
+
+def repeats_ask(line: str, asks: list) -> bool:
+    """WHETHER THE LINE ONLY ASKS THE AGENT'S QUESTION AGAIN (the owner, 2026-10-21: "the Advisor must not repeat a question the agent
+    is already asking"). An agent asking is answered in its own pane, right above the strip - the line over it says what ELSE the item's
+    facts make right, or nothing. A line repeats a question when it carries most of the question's own words: its text whole (two
+    words or more), or at least two thirds of its content words (and three or more)."""
+    said = ' '.join(str(line or '').lower().split()); words = _content(said)
+    for q in asks or []:
+        q = ' '.join(str(q or '').lower().split()).rstrip('?. ')
+        if not q: continue
+        if ' ' in q and q in said: return True
+        own = _content(q)
+        if len(own) >= 3 and len(own & words) * 3 >= len(own) * 2: return True
+    return False
+
+
+def _asking(store, target_id) -> list:
+    """The questions the task's agent is asking right now (workerstate: its open input_needed requests) - not a permission or a wall."""
+    from . import workerstate
+    try: st = workerstate.status(store, int(target_id))
+    except Exception: return []
+    return [r.get('text') for r in st.get('requests') or [] if r.get('kind') == 'input_needed' and r.get('text')]
+
+
 def _offered(verbs: list, said: str):
     """The verb the model named, as the prompt listed it: "approve (Send)" copied whole, the bare id, or the label alone -
     an exact-id match dropped three right answers as "verb not offered" (2026-10-13)."""
@@ -598,6 +628,9 @@ def judge(store, event: str,target_kind: str, target_id, rev: str, tier: int = 1
     verb = hit['verb'] if hit else verb
     if not hit: return W(dropped=f'verb not offered: {verb}'[:120], model=model, line=line, evidence=ev)
     line = plain(line, verb, hit['label'])
+    # the agent's own question is already on the owner's screen, in its pane: a line that asks it again is noise (the owner, 2026-10-21)
+    if target_kind == 'task' and repeats_ask(line, _asking(store, target_id)):
+        return W(dropped="repeats the agent's question", model=model, line=line, evidence=ev)
     rid = W(line=line, verb=verb, label=hit['label'],count=habit(store, verb, item), evidence=ev, model=model)
     _emit(key, target_kind, target_id); return rid
 

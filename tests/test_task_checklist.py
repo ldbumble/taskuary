@@ -260,3 +260,20 @@ class SharedContextTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SourceTests(unittest.TestCase):
+    """WHICH MAIL ASKED FOR WHICH TO-DO (the owner, 2026-10-22): a box knows the message that brought it."""
+    def test_a_box_keeps_the_message_that_brought_it_through_an_owner_rewrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            s = SQLiteStore(str(Path(tmp) / 'src.db'))
+            tid = s.create_task({'Title': 'Set up the portal sign-in'}, 'triage')
+            s.set_task_checklist(tid, ['Send the metadata URL'], 'triage')
+            self.assertEqual(s.source_checklist(tid, 11, 'triage'), 1)
+            self.assertEqual(s.source_checklist(tid, 12, 'triage'), 0, 'a box with a source is never re-sourced')
+            added = s.merge_task_checklist(tid, ['Whitelist the QA addresses'], 'triage', src=12)
+            self.assertEqual(added[0]['src'], 12)
+            s.merge_task_checklist(tid, ['Book the cut-over'], 'owner')
+            items = s.set_task_checklist(tid, [i['text'] for i in s.task_checklist(tid)], 'owner')
+            self.assertEqual([i.get('src') for i in items], [11, 12, None])
+            s.close()

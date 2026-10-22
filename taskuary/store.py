@@ -1899,11 +1899,12 @@ class SQLiteStore:
                                 if digest[:n] not in used_ids), digest)
             used_ids.add(item_id)
             items.append({'id': item_id, 'text': text, 'done': bool(prior.get('done')),
-                          **{k: prior[k] for k in ('out', 'rid', 'tid', 'note') if k in prior}})     # a slot keeps what it sends and its draft; a step its child; a box its note
+                          **{k: prior[k] for k in ('out', 'rid', 'tid', 'note', 'src') if k in prior}})     # a slot keeps what it sends and its draft; a step its child; a box its note and its message
         self._write_checklist(task_id, items, actor)
         return items
-    def merge_task_checklist(self, task_id, texts, actor: str) -> list:
-        """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones."""
+    def merge_task_checklist(self, task_id, texts, actor: str, src=None) -> list:
+        """Add the items a later message brings; nothing existing moves or unticks. Returns the new ones, each with `src`, the
+        message that brought it, when one did."""
         items = self.task_checklist(task_id)
         have, used_ids, new = {i['text'] for i in items}, {i.get('id') for i in items}, []
         for text in self.clean_checklist(texts):
@@ -1911,10 +1912,20 @@ class SQLiteStore:
             digest = hashlib.sha1(text.encode()).hexdigest()
             item_id = next((digest[:n] for n in range(8, len(digest) + 1)
                             if digest[:n] not in used_ids), digest)
-            new.append({'id': item_id, 'text': text, 'done': False})
+            new.append({'id': item_id, 'text': text, 'done': False, **({'src': src} if src else {})})
             have.add(text); used_ids.add(item_id)
         if new: self._write_checklist(task_id, items + new, actor)
         return new
+    def source_checklist(self, task_id, src, actor: str) -> int:
+        """Name the message the boxes with no source came from - the first one, landed after triage wrote its list (ingest).
+        WHICH MAIL ASKED FOR WHICH TO-DO (the owner, 2026-10-22: "when tasks come from multiple emails should it not say which email
+        it comes from ... especially in goals")."""
+        items = self.task_checklist(task_id)
+        bare = [i for i in items if not i.get('src')]
+        if not (src and bare): return 0
+        for i in bare: i['src'] = src
+        self._write_checklist(task_id, items, actor)
+        return len(bare)
     def add_checklist_items(self, task_id, ready: list, actor: str) -> list:
         """Append ready-made items ({text, out}) - output slots (slots.add); ids as merge_task_checklist gives them."""
         items = self.task_checklist(task_id)

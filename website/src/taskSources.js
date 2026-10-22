@@ -53,6 +53,15 @@ export function previewRows(group, keep = 2, all = false) {
 // FROM LISTS IT NEWEST ON TOP (the redesign, owner-approved 2026-10-21): the latest `keep` messages - a burst of chat lines, a thread with
 // your replies in it - and the older ones folded behind "Show N older" at the foot, never the opening message pinned under a gap.
 // `all` draws every one, still newest first. Group messages are newest first already (groupConversations).
+// WHICH MAIL ASKED FOR WHICH TO-DO (the owner, 2026-10-22: "when tasks come from multiple emails should it not say which email it
+// comes from ... especially in goals"): a box's `src` is the message that brought it (store.merge_task_checklist). Said only where
+// there is more than one message to tell apart - one mail's list needs no "from" on every row - and never for a box with no source
+export function todoSources(items = [], groups = []) {
+  const msgs = (groups || []).flatMap((g) => g?.msgs || []);
+  if (msgs.length < 2) return new Map();
+  const by = new Map(msgs.map((m) => [m.MessageId, m]));
+  return new Map((items || []).filter((i) => i?.src != null && by.has(i.src)).map((i) => [i.id, by.get(i.src)]));
+}
 export function fromRows(group, keep = 3, all = false) {
   const ms = group?.msgs || [];
   if (all || ms.length <= keep + 1) return ms.map((m) => ({ m }));

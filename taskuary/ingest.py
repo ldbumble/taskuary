@@ -879,7 +879,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
         if follow and follow.get('checklist'):
             # a later message that asks for something new adds boxes; nothing moves or unticks, and the
             # change is said on the task rather than made silently (PW-076)
-            added = store.merge_task_checklist(tid, follow['checklist'], 'triage')
+            added = store.merge_task_checklist(tid, follow['checklist'], 'triage', src=mid)
             if added: store.add_comment(tid, 'triage', 'agent', 'New from the latest message:\n' + '\n'.join(f"- [ ] {i['text']}" for i in added))
         if (follow and follow.get('intent') == 'reply_only' and not follow.get('degraded') and not talking and not follow.get('invite')
                 and not store.pending_review(tid)):
@@ -1075,6 +1075,7 @@ def ingest_message(store, msg: dict, actor: str = 'router', llm=None, file_only:
                               f"Triage could not tell which repository: {intent.get('repo_reason') or 'more than one is plausible'} - "
                               + ('the coding agent is asked to choose one.' if no_repo else 'pick one before an agent starts'))
         mid = _land(store, msg, tid, 'routed')
+        if intent.get('checklist') and not goal: store.source_checklist(tid, mid, 'triage')     # its boxes came from this message
         # the same-day lines this one continues or answers that had no task yet join the task it opens:
         # the fyi that opened a subject belongs with the ask that followed it (PW-031)
         for rel_mid in (intent.get('related_message_ids') or []):
@@ -1361,7 +1362,7 @@ def _join_same(store, msg: dict, tid: int, intent: dict, actor: str, notes_note:
                     verdict=_stored_verdict(intent))
     store.add_comment(tid, actor, 'agent', f"Again from {msg.get('from_email') or msg.get('channel')}: {msg.get('subject') or ''} - the same ask, kept here")
     _retitle(store, t, msg, intent, actor)
-    if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage')
+    if intent.get('checklist'): store.merge_task_checklist(tid, intent['checklist'], 'triage', src=mid)
     if intent.get('outputs'):
         from . import slots
         slots.add(store, tid, intent['outputs'], 'triage', sender=_sender(msg))

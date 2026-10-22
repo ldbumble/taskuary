@@ -121,10 +121,23 @@ def staging() -> Path:
     return d
 
 
-def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
+def wait_lines(pids, stuck: str) -> list:
+    """Batch lines that wait for each PID to go, WAIT_S seconds between them all, then `goto <stuck>`.
+    `find " <pid> "` with the spaces: a bare `find "12"` also matched PID 1234 and waited on a stranger."""
+    out = []
+    for i, p in enumerate(pids):
+        lbl = 'wait' if i == 0 else f'wait{i}'
+        out += [f':{lbl}', f'tasklist /FI "PID eq {p}" 2>nul | find " {p} " >nul', 'if not errorlevel 1 (',
+                '  set /a waited+=1', f'  if %waited% geq {WAIT_S} goto {stuck}', '  ping -n 2 127.0.0.1 >nul', f'  goto {lbl}', ')']
+    return out
+
+
+def swap_script(exe: Path, new: Path, pid: int, args: list, also=()) -> str:
     """The batch that finishes the job after this process has gone. Waits for the PID (the exe
     is locked while it runs), moves the new file over the old (retrying - antivirus likes to hold
-    a fresh download for a second), starts the new build with the SAME arguments, removes itself."""
+    a fresh download for a second), starts the new build with the SAME arguments, removes itself.
+    `also`: more PIDs that hold the exe - the one-file bootloader that started us runs the same
+    Taskuary.exe and holds it locked while it cleans up after us (unpack.bootloader)."""
     q = lambda s: '"' + str(s).replace('"', '""') + '"'
     argstr = ' '.join(q(a) for a in args)
     # beside the DOWNLOAD, not beside the program: the whole point of staging is that the
@@ -142,17 +155,10 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
         f'set "update_log={log}"',
         '> "%update_log%" echo update helper started %date% %time%',
         'set /a waited=0',
-        ':wait',
-        f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul',
         # `ping`, not `timeout`: this helper runs with its stdin on DEVNULL, and timeout answers
         # redirected stdin with "ERROR: Input redirection is not supported" - so the poll never
         # slept, it spun. ping -n 2 is one second and needs neither a console nor stdin.
-        'if not errorlevel 1 (',
-        '  set /a waited+=1',
-        f'  if %waited% geq {WAIT_S} goto stuck',
-        '  ping -n 2 127.0.0.1 >nul',
-        '  goto wait',
-        ')',
+        *wait_lines([pid, *also], 'stuck'),
         '>> "%update_log%" echo old process exited %date% %time%',
         'set /a tries=0',
         ':swap',
@@ -191,7 +197,7 @@ def swap_script(exe: Path, new: Path, pid: int, args: list) -> str:
     ]) + '\r\n'
 
 
-def _launch_swap(script: Path, cwd: Path):
+def _launch_swap(script: Path, cwd: Path, env: dict = None):
     """Start the updater outside the desktop app's lifetime.
 
     Corporate launchers commonly put desktop programs in a Windows Job with "kill every child
@@ -211,15 +217,16 @@ def _launch_swap(script: Path, cwd: Path):
     base = (getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
             | getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     kw = dict(cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-              stderr=subprocess.DEVNULL, close_fds=True)
+              stderr=subprocess.DEVNULL, close_fds=True, **({'env': env} if env else {}))
     breakaway = getattr(subprocess, 'CREATE_BREAKAWAY_FROM_JOB', 0x01000000)
+    from . import spawn          # bare: it outlives us, so it must hold nothing of the exe's unpack folder
     try:
-        return subprocess.Popen(argv, creationflags=base | breakaway, **kw)
+        return spawn.bare(argv, creationflags=base | breakaway, **kw)
     except OSError as e:
         if getattr(e, 'winerror', None) not in (5, 87):
             raise
         logger.warning(f'update: Windows refused job breakaway ({e}); retrying detached')
-        return subprocess.Popen(argv, creationflags=base, **kw)
+        return spawn.bare(argv, creationflags=base, **kw)
 
 
 # WHY THE UPDATE COULD NOT BE WRITTEN. "[Errno 13] Permission denied" and a path tells the owner
@@ -256,7 +263,9 @@ def _apply_exe(url: str, progress=None) -> dict:
     try:
         size = _download(url, new, progress)
         script = stage / 'taskuary-update.cmd'
-        script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:]), encoding='utf-8')
+        from . import unpack
+        boot = unpack.bootloader()
+        script.write_text(swap_script(exe, new, os.getpid(), sys.argv[1:], also=[boot] if boot else ()), encoding='utf-8')
     except OSError as e:
         if getattr(e, 'errno', None) != 13 and getattr(e, 'winerror', None) not in (5, 32):
             raise
@@ -296,11 +305,24 @@ def apply(progress=None) -> dict:
     return _apply_exe(info.get('url') or EXE_URL, progress) if road == 'exe' else _apply_pip(progress)
 
 
+STOP_WAIT = 20.0                # what the children get to stop in before we go regardless: the helper is waiting on us
+
+
 def exit_soon(delay: float = 1.5):
     """Leave AFTER the HTTP answer has gone out. os._exit, not sys.exit: uvicorn runs in a
-    thread and pywebview owns the main one; a polite exit from a request handler goes nowhere."""
+    thread and pywebview owns the main one; a polite exit from a request handler goes nowhere.
+
+    os._exit skips the server's lifespan and every atexit, so what those would have stopped is
+    stopped HERE first (unpack.stop_owned): agent terminals, their browsers, headless CLI runs. Left
+    running they held the old exe's unpack folder, and its bootloader answered the Update with
+    "Failed to remove temporary directory" (2026-10-22). Then the folder's removal is handed to a
+    quiet sweeper (unpack.handoff), so nothing a child still holds can turn into a dialog either."""
     def _go():
         time.sleep(delay)
+        from . import unpack
+        t = threading.Thread(target=unpack.stop_owned, daemon=True); t.start(); t.join(STOP_WAIT)
+        if t.is_alive(): logger.warning(f'update: children still stopping after {STOP_WAIT:.0f}s - exiting anyway')
+        unpack.handoff()
         logger.info('update: exiting so the new build can start')
         os._exit(0)
     threading.Thread(target=_go, daemon=True).start()

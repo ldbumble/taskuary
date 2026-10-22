@@ -98,7 +98,8 @@ def _claude_version(cmd: str) -> tuple:
     try: argv = tuple(_resolve_cmd(cmd))
     except OSError: return ()
     if argv in _ver: return _ver[argv]
-    try: out = subprocess.run([*argv, '--version'], capture_output=True, text=True, timeout=20).stdout
+    from . import spawn
+    try: out = spawn.run([*argv, '--version'], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError): return ()
     m = re.search(r'(\d+)\.(\d+)\.(\d+)', out or '')
     if m: _ver[argv] = tuple(int(x) for x in m.groups())

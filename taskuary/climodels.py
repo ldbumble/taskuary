@@ -95,7 +95,8 @@ def parse_devin_models(text: str) -> list:
 def _devin_models(exe: str) -> list:
     if not exe: return []
     try:
-        p = subprocess.run([exe, 'models', 'list'], capture_output=True, text=True,
+        from . import spawn
+        p = spawn.run([exe, 'models', 'list'], capture_output=True, text=True,
                            encoding='utf-8', errors='replace', timeout=20)
         return parse_devin_models((p.stdout or '') + '\n' + (p.stderr or '')) if p.returncode == 0 else []
     except Exception:

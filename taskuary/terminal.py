@@ -180,7 +180,11 @@ class _WinPty:
             from winpty import PtyProcess
         except ImportError:
             raise RuntimeError('the interactive terminal needs pywinpty on Windows - pip install pywinpty')
-        self.p = PtyProcess.spawn(argv, cwd=cwd, dimensions=(rows, cols), env=clean_env(env, strict))
+        from . import spawn
+        # a session outlives nothing of ours, but it must not hold the exe's unpack folder either (spawn's note):
+        # ConPTY's host and the CLI it runs inherit our DLL directory, cwd and environment like any other child
+        with spawn.clean_dll_dir():
+            self.p = PtyProcess.spawn(argv, cwd=spawn.cwd_for(cwd), dimensions=(rows, cols), env=spawn.env_for(clean_env(env, strict)))
     def read(self):
         try: return self.p.read(65536)
         except EOFError: return ''
@@ -2751,6 +2755,10 @@ def shutdown_sessions():
             # become an orphan itself.
             if getattr(session, 'mode', '') == 'assistant': session.close(learn=False)
             else: session.close()
+            # ...and its browser, here: the pump that closes it when the pty ends may not get to run before the
+            # process does, and a headless Chrome left behind outlives the app it belonged to
+            from . import browserview as _bv
+            _bv.close(sid)
         except Exception as e:
             SESSIONS.pop(sid, None); logger.debug(f'could not close session {sid} during shutdown: {e}')
     return len(sessions)

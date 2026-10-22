@@ -268,7 +268,8 @@ def start(force_install: bool = False, wait: bool = False, filter_policy: dict =
             kw = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, 'DETACHED_PROCESS', 0)} if os.name == 'nt' else {'start_new_session': True}
             env = {**os.environ, 'WA_BRIDGE_TOKEN': token(), 'WA_BRIDGE_PORT': str(port())}   # the bridge listens where we look
             if filter_policy is not None: env['WA_BRIDGE_FILTER'] = json.dumps(filter_policy, separators=(',', ':'))
-            p = subprocess.Popen([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+            # bare: detached, outlives us by design - so it must hold nothing of the exe's unpack folder (spawn's note)
+            p = spawn.bare([node(), 'bridge.mjs'], cwd=str(run), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                  env=env, **kw)
             time.sleep(2.5)
             if p.poll() is not None:
@@ -348,6 +349,13 @@ def stop(hold: bool = False) -> dict:
         except Exception as e: logger.warning(f'wa bridge stop: {e}')
     _set('idle', 'stopped')
     return state()
+
+
+def stop_if_unpacked() -> bool:
+    """On the way out: stop the bridge only if it runs from inside the one-file exe's unpack folder, which it would hold
+    open. One running from the home (run_dir) keeps going across a quit or an Update, and the next start adopts it."""
+    if not spawn.inside(run_dir(), spawn.meipass()): return False
+    stop(); return True
 
 
 def restart(wait: bool = False, filter_policy: dict = None) -> dict:

@@ -72,7 +72,8 @@ def cli_version(cmd: str) -> str | None:
     # an npm shim (.cmd) only runs through cmd.exe; CreateProcess on it bare raised and the log said
     # "unknown version" for a claude that was right there
     argv = ['cmd', '/c', path, '--version'] if str(path).lower().endswith(('.cmd', '.bat')) else [path, '--version']
-    try: out = subprocess.run(argv, capture_output=True, text=True, timeout=8).stdout
+    from . import spawn
+    try: out = spawn.run(argv, capture_output=True, text=True, timeout=8).stdout
     except (OSError, subprocess.SubprocessError, ValueError): return None
     m = re.search(r'(\d+)\.(\d+)\.(\d+)', str(out or ''))
     return m.group(0) if m else None

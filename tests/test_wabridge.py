@@ -258,3 +258,81 @@ class LaunchGraceIsSpentByThePollTests(unittest.TestCase):
             self.assertEqual(seen, [], 'the second poller went ahead while the bridge was still starting')
             release.set(); first.join(5); second.join(5)
         self.assertEqual(seen, [True])
+
+
+class SupervisorTests(unittest.TestCase):
+    """2026-10-22: a WhatsApp connection drop killed the bridge process and nothing brought it back - the poll said
+    "not running" into the log every three seconds. A bridge that has died is started again on a backoff."""
+    def setUp(self):
+        wabridge._STATE.update(phase='idle', detail='', pid=None, at=0.0)
+        if wabridge._LOCK.locked(): wabridge._LOCK.release()
+        wabridge._SUP.update(down=0.0, up=0.0, tries=0, next=0.0, held=False, gave_up='')
+        self.s = MemoryStore(); self.wa = self.s.get_connector_by_type('whatsapp')
+        self.s.save_connector({'ConnectorId': self.wa['ConnectorId'], 'Active': 1}, 'owner')
+        self.c = self.s.get_connector(self.wa['ConnectorId'])
+        self.err = 'the WhatsApp bridge is not running at http://127.0.0.1:8977 - Restart bridge starts it'
+
+    def walk(self, secs, step=3, at=1000.0):
+        """Poll every `step` seconds for `secs` with nothing answering; the start times, relative to `at`."""
+        starts = []
+        with mock.patch.object(wabridge, 'start', side_effect=lambda **k: starts.append(t)) as st:
+            for t in range(0, secs, step): wabridge.supervise(self.s, self.c, self.err, now=at + t)
+        for c in st.call_args_list: self.assertTrue(c.kwargs['auto'])
+        return starts
+
+    def test_a_dead_bridge_is_started_again_at_5s_30s_2min_then_every_5min(self):
+        starts = self.walk(1200)
+        self.assertEqual(starts[:3], [6, 36, 156])              # polls land every 3s: 5s, then 30s, then 2 min after each
+        self.assertEqual([b - a for a, b in zip(starts[2:], starts[3:])], [300, 300, 300])
+
+    def test_down_is_logged_once_and_each_start_once_not_every_poll(self):
+        with mock.patch.object(wabridge.logger, 'warning') as warn, mock.patch.object(wabridge.logger, 'info') as info:
+            starts = self.walk(60)
+            self.assertEqual(warn.call_count, 1); self.assertIn('starting it again in 5s', warn.call_args.args[0])
+            self.assertEqual(info.call_count, len(starts))
+            wabridge.came_back(now=1100.0)
+            self.assertIn('back after', info.call_args.args[0])
+            wabridge.came_back(now=1103.0)
+            self.assertEqual(info.call_count, len(starts) + 1, 'back is said once')
+
+    def test_it_gives_up_after_n_failed_starts_in_a_row_and_says_so(self):
+        wabridge._STATE.update(phase='failed', detail='node is not installed')
+        with mock.patch.object(wabridge.logger, 'error') as error:
+            self.assertEqual(len(self.walk(3600)), wabridge.GIVE_UP)
+            self.assertEqual(error.call_count, 1)
+        said = wabridge.supervise(self.s, self.c, self.err, now=9000.0)
+        self.assertIn(f'after {wabridge.GIVE_UP} starts in a row', said)
+        self.assertIn('node is not installed', said); self.assertIn('Restart bridge', said)
+        with mock.patch.object(wabridge, 'node', return_value=''): wabridge.start(wait=True)     # the owner's Restart bridge
+        self.assertEqual((wabridge._SUP['tries'], wabridge._SUP['gave_up']), (0, ''), 'a start somebody asked for is a fresh count')
+
+    def test_a_bridge_that_came_back_and_died_at_once_keeps_its_count(self):
+        self.assertEqual(self.walk(10), [6])
+        wabridge.came_back(now=1020.0)
+        with mock.patch.object(wabridge, 'start') as st:
+            wabridge.supervise(self.s, self.c, self.err, now=1030.0)
+            wabridge.supervise(self.s, self.c, self.err, now=1040.0)
+            st.assert_not_called()                              # its next start waits 30s, not 5s
+            wabridge.supervise(self.s, self.c, self.err, now=1061.0)
+            st.assert_called_once()
+
+    def test_stopped_on_purpose_or_an_external_bridge_is_not_started(self):
+        with mock.patch.object(wabridge, 'pid_on_port', return_value=0): wabridge.stop(hold=True)
+        self.assertEqual(self.walk(60), [])
+        wabridge._SUP.update(held=False, down=0.0)
+        self.s.save_connector({'ConnectorId': self.wa['ConnectorId'], 'ConfigJson': '{"bridge_url":"http://wa-box.example:8977"}'}, 'owner')
+        self.c = self.s.get_connector(self.wa['ConnectorId'])
+        self.assertEqual(self.walk(60), [])
+
+    def test_the_poll_hands_a_down_bridge_to_the_supervisor_instead_of_logging_it(self):
+        from taskuary import channels, messengers
+        full = self.s.get_connector(self.wa['ConnectorId'], with_secret=True)
+        with mock.patch.object(messengers, 'poll_whatsapp', side_effect=messengers.BridgeDown(self.err)), \
+             mock.patch.object(wabridge, 'supervise', return_value=self.err) as sup, \
+             mock.patch.object(channels.logger, 'warning') as warn:
+            for _ in range(5): channels._poll_one(self.s, full, False, 0, None, False)
+        self.assertEqual(sup.call_count, 5); warn.assert_not_called()
+        self.assertEqual(self.s.get_connector(self.wa['ConnectorId'])['LastError'], self.err)
+        with mock.patch.object(messengers, 'poll_whatsapp', return_value=0), mock.patch.object(wabridge, 'came_back') as back:
+            channels._poll_one(self.s, full, False, 0, None, False)
+        back.assert_called_once()

@@ -223,6 +223,10 @@ def tg_tap(store, c, q: dict) -> bool:
 
 
 # ── WhatsApp (via the Baileys bridge) ────────────────────────────────────────────────────
+class BridgeDown(RuntimeError):
+    """Nothing answers at the bridge's address - the poll hands it to wabridge.supervise instead of logging it every time."""
+
+
 def _wa(c, path, body=None):
     from .wabridge import token
     url, hdr = (_cfg(c).get('bridge_url') or WA_URL).rstrip('/'), {'X-Bridge-Token': token()}
@@ -232,7 +236,7 @@ def _wa(c, path, body=None):
     except requests.ConnectionError:
         # a button, not a shell line: the card's Restart bridge installs what is missing and starts it detached (wabridge.py)
         from .wabridge import managed
-        raise RuntimeError(f'the WhatsApp bridge is not running at {url}'
+        raise BridgeDown(f'the WhatsApp bridge is not running at {url}'
                            + (' - Restart bridge starts it' if managed(c) else ' - start it where it runs'))
     if r.status_code >= 300: raise RuntimeError(f'bridge {path} failed ({r.status_code}): {r.text[:200]}')
     return r.json()

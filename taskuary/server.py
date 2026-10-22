@@ -5995,7 +5995,7 @@ def wa_bridge_start(cid: int, force_install: bool = False):
 @app.post('/api/connectors/{cid}/wa/bridge/stop')
 def wa_bridge_stop(cid: int):
     from . import wabridge
-    return wabridge.stop()
+    return wabridge.stop(hold=True)              # stopped on purpose: the supervisor does not start it again
 
 @app.post('/api/connectors/{cid}/wa/bridge/restart')
 def wa_bridge_restart(cid: int):

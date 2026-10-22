@@ -691,7 +691,8 @@ def meetings_line(store) -> str:
 
 MORNING_KEY, MORNING_AT = 'phone_morning_line', 'phone_morning_line_at'
 # (no "Set up Taskuary": setup is the desk's Setup button, never a chat script - the owner, 2026-10-19)
-SCRIPT_LINES = [('Walk me through my tasks', {'t': 'walk'}), ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
+WALK = 'Walk me through my tasks'
+SCRIPT_LINES = [(WALK, {'t': 'walk'}), ('Set up a report', {'t': 'script', 'script': 'set up a report'}),
                 # the sidebar's browse buttons, as picks (doorway_browse): sections, then the list, then one
                 ('Connections', {'t': 'browse', 'area': 'connections'}), ('Reports', {'t': 'browse', 'area': 'reports'}),
                 ('Hub', {'t': 'browse', 'area': 'hub'}), ('Settings', {'t': 'browse', 'area': 'settings'})]
@@ -1411,8 +1412,8 @@ def _remind(store, act: dict, actor: str) -> str:
     # ...in plain past tense, the task by name: "TQ-0001 is away until Thu 22 Oct." (F13)
     from .store import task_ref
     said = f"{task_ref(int(act['tid']))} is away until {out['when']}." + (f" {out['warn']}" if out.get('warn') else '')
-    back = [('Bring it back now', {'t': 'remind', 'tid': act['tid'], 'until': 'none'})]
-    return _on(store, actor, [said], extra=back, done_with=(asking_key(store) or None))
+    # ...and no "Bring it back now" under the NEXT task's card: an undo for a different task, which the owner does not want (A15, 2026-10-22)
+    return _on(store, actor, [said], done_with=(asking_key(store) or None))
 
 
 def _draft_card(store, rid, actor: str = 'owner') -> dict:
@@ -2319,6 +2320,11 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # THE WALK RAN OUT, ON THE PHONE: hand it back from here (the owner, 2026-10-02: "hand back choice at the end of the walk
     # though asking question of assistant will always work") - a pick, the desktop's Take it back; typed words still talk
     if out.get('over') and store is not None and handoff(store): extra = list(extra or []) + [(HAND_BACK, {'t': 'handback'})]
+    # ...and the way to start again, first: the end offered only its Opens, and outside a hand-off nothing began a new walk - which shows
+    # every open task again from the top (A1, 2026-10-22; next-is-seen-in-this-walk). The summary is the line above it: straight to card 1
+    if out.get('over') and store is not None:
+        words = [WALK] + [w for w in words if w != WALK]
+        _offer([(WALK, {'t': 'walk', 'opened': True})])
     if extra:
         words = words + [label for label, _ in extra]
         _offer(extra)

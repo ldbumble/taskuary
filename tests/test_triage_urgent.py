@@ -79,7 +79,7 @@ class RemindMeOnTheWalkTests(unittest.TestCase):
             done = ra.run_act(s, {'t': 'remind', 'tid': t, 'until': '1 week'}, item)
         self.assertTrue(s.get_task(t).get('RemindAt'))
         self.assertIn(f'TQ-{t:04d} is away until', done)                 # the phone's plain past tense (F13)
-        self.assertIn('Bring it back now', done)
+        self.assertNotIn('Bring it back now', done)                       # no undo under the next card (A15, 2026-10-22)
 
 
 class SelectorTests(unittest.TestCase):

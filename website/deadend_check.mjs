@@ -118,6 +118,7 @@ const WALK_SKIP = {
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "approve:check": "Check delivery on a send nobody can confirm - the faults pass checks it is offered",
+  "trust_start": "a chip only under a start refused for a stranger on a tool with no reviewer - the demo world never refuses one (tests/test_*stranger* press it)",
   "pick_repo:set": "shows once a task names its folder - the faults pass takes a task that names none, to press Choose where the code is",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",

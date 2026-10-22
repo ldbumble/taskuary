@@ -129,4 +129,30 @@ class ReportLeadsWithNextTests(PhoneCase):
         self.assertNotIn('Put it on my list:', text_of(got))
 
 
+class ShortOpenerTests(PhoneCase):
+    """A7: the day's opener offered nine options, walks beside section walks beside browse areas ("Walk me through my tasks" next to
+    "Walk Tasks", "Reports" next to "Walk Reports"). It offers about four, and More… keeps every other one reachable."""
+    EVERYTHING = {'Walk me through my tasks', 'Set up a report', 'Walk Tasks', 'Walk Reports', 'Walk FYI', 'Connections', 'Reports', 'Hub', 'Settings'}
+
+    def setUp(self):
+        super().setUp()
+        _two_asks(self.f); _report(self.ph); self.f.filed_fyi(subject='Office closed Monday'); self.ph.ready()
+
+    def test_the_opener_offers_four_clear_options(self):
+        got = self.ph.opener()
+        self.assertEqual(got[-1][1], ['Walk me through my tasks', 'Walk Reports', 'Walk FYI', 'More…'])
+        self.assertIn('TASKS · 2', text_of(got))                               # the summary itself is unchanged
+
+    def test_more_reaches_everything_the_nine_options_did(self):
+        opener = self.ph.opener()[-1][1]
+        more = self.ph.tap('More…')
+        self.assertEqual(self.EVERYTHING - set(opener) - set(more[-1][1]), set(), more[-1][1])
+        self.assertIn('Connections', text_of(self.ph.tap('Connections')))      # each still goes where it went
+
+    def test_the_walk_off_the_menu_goes_straight_to_the_first_card(self):
+        self.ph.opener(); self.ph.tap('More…')
+        got = self.ph.tap('Walk me through my tasks')
+        self.assertNotIn('TASKS · ', text_of(got)); self.assertRegex(text_of(got), r'TQ-\d{4}')
+
+
 if __name__ == '__main__': unittest.main()

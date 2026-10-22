@@ -28,6 +28,7 @@ LABELS = {'whatsapp': 'WhatsApp', 'telegram': 'Telegram'}
 HANDOFF_KEY = 'assistant_handoff'      # {'channel','chat','connector_id','at'} while the walk is on the phone
 
 _TASK_LINK = re.compile(r'\[([^\]]+)\]\(#task=\d+\)')
+_TASK_ID = re.compile(r'\]\(#task=(\d+)\)')
 _locks, _locks_guard = {}, threading.Lock()
 _turns: dict = {}                            # chat -> the Event that cancels its turn in flight
 
@@ -988,6 +989,15 @@ def carry_out(store, out: dict, item: dict | None, actor: str = 'owner', lead: s
     if walk_on:
         here = (item or {}).get('key') if verb == 'next' else None       # Next leaves the table as the desktop's does
         return _on(store, actor, said, leaving=here, exclude=here, done_with=(item or {}).get('key'))
+    # AN ANSWER THAT NAMES A TASK BRINGS IT UP (the router rule): the desk opens a [TQ-…](#task=N) link the moment the answer lands;
+    # the phone stripped it to its words, so "bring up TQ-0035" was answered and nothing came up (F18). Its card and its choices
+    linked = _TASK_ID.search(str(out.get('say') or '')) if not out.get('item') and not prop and not verb else None
+    if linked:
+        nxt = concierge.surface(store, f'task:{int(linked.group(1))}', actor=actor)
+        if nxt.get('item'):
+            from . import chatformat
+            words = turn_text({**out, 'chips': [], 'options': []}, lead, store)
+            return chatformat.BREAK.join(x for x in (words, turn_text(nxt, store=store)) if x)
     return '\n\n'.join(x for x in said if x)
 
 

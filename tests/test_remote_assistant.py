@@ -665,6 +665,24 @@ def test_a_phone_turn_tells_the_desktop_when_it_starts_and_when_it_is_answered()
     assert said == [(live.CHAT, True), (live.CHAT, False)]
 
 
+class BringUpTests(unittest.TestCase):
+    """F18: "bring up TQ-0035" was answered with the task's name and nothing came up - the desk opens the answer's task link."""
+    def test_the_answers_task_link_brings_up_its_card_and_its_own_poll(self):
+        store, c = armed_store()
+        card = {'say': 'Ray Colton asked about the lease.', 'item': {'key': 'task:35', 'kind': 'task', 'tid': 35, 'ref': 'TQ-0035', 'title': 'Lease renewal'},
+                'chips': [{'verb': 'close', 'label': 'Mark done'}, {'verb': 'defer', 'label': 'Remind me'}, {'verb': 'next', 'label': 'Next'}]}
+        sent = []
+        with mock.patch.object(concierge, 'restore_current', return_value={'key': 'msg:1', 'kind': 'fyi', 'mid': 1, 'title': 'Other'}), \
+             mock.patch.object(concierge, 'say', return_value={'say': 'Here it is: [TQ-0035](#task=35).', 'options': [], 'chips': [], 'decision': None}), \
+             mock.patch.object(concierge, 'surface', return_value=card) as surfaced, \
+             mock.patch.object(messengers, 'wa_send', side_effect=lambda st, chat, body, connector_id=None, poll=None: sent.append((body, poll))):
+            remote_assistant.respond(store, 'whatsapp', JID, 'bring up TQ-0035', c['ConnectorId'])
+        self.assertEqual(surfaced.call_args.args[1], 'task:35')
+        self.assertIn('Here it is: TQ-0035.', sent[0][0])
+        self.assertEqual(sent[-1][1], ['Remind me', 'Next', 'Mark done'])
+        self.assertEqual(remote_assistant.acts_for(store, 'whatsapp', JID)['Mark done'], {'t': 'verb', 'verb': 'close', 'key': 'task:35'})
+
+
 class NoAITests(unittest.TestCase):
     """F10: with no AI connected, typed "next" answered "use the buttons" and the walk stopped; "7" over a list of six did the
     same; and the phone was told about buttons it does not have."""

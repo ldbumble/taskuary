@@ -601,7 +601,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     if (fromOpen || !window.matchMedia?.(PHONE_MQ).matches) return;
     e.preventDefault(); e.stopPropagation(); setFromOpen(true);
   };
-  // Close out's "the whole conversation is in Task" opens step 1 and brings Came from into view - once it has drawn
+  // Close out's "the whole conversation is in From" opens it there and brings Came from into view - once it has drawn
   const cameFromRef = useRef(null);
   const [seekCameFrom, setSeekCameFrom] = useState(false);
   useEffect(() => {
@@ -942,7 +942,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
     : sources.find((g) => g.msgs.some((m) => m.MessageId === sourceMessage?.MessageId)) || sources[0] || null;
   // ...and what you sent outside Taskuary in some OTHER conversation still says so under it, newest first
   const sentApart = newestFirst(sentOutside.filter((m) => !closeGroup?.msgs.some((x) => x.MessageId === m.MessageId)));
-  const seeWholeConversation = () => { setShowAll(true); setOpenStage("task"); setSeekCameFrom(true); };
+  // ...From is always open now (the redesign, 2026-10-21): the link opens the whole conversation there and brings it into view, and the
+  // work column stays where it was - the reply you were reading does not fold under you
+  const seeWholeConversation = () => { setShowAll(true); setFromOpen(true); setSeekCameFrom(true); };
   const triaged = triageLine({ route: sourceRoute, verdict, task: t || {}, messages: storedMessages, ms: tsMs });
   // THE ASK: the task's summary, else what triage summed it up as, else the message itself - its first sentence, on one line
   // ...and with no summary, the message that OPENED it: the newest is often "and by the 15th", which is not the ask
@@ -2094,7 +2096,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                         <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap", mb: 0.25, minWidth: 0 }}>
                           <Typography sx={{ ...label }}>The conversation</Typography>
                           <Link component="button" type="button" underline="hover" onClick={seeWholeConversation}
-                            sx={{ ml: "auto", fontSize: 12 }}>the whole conversation is in Task</Link>
+                            sx={{ ml: "auto", fontSize: 12 }}>the whole conversation is in From</Link>
                         </Box>
                         <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg ?? null} onOpen={setOpenMsg} />
                       </Box>}

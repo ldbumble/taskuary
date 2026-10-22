@@ -260,10 +260,13 @@ def test_ask_user_is_the_owners_approval_card_on_the_task(world, pane):
                                                                       'tool_name': 'mcp__reason-network__ask_user',
                                                                       'tool_input': {'question': 'Erin asks to deploy api to staging - OK?'}}, wait=10)))
     th.start()
-    for _ in range(250):
-        if ws.HELD or not th.is_alive(): break
+    # wait for the request itself, not only the hold: on a slow CI runner the hold was up before the card was filed (2026-10-22)
+    req = None
+    for _ in range(1000):
+        req = next((r for r in ws.status(world.s, world.tid)['requests'] if r['kind'] == 'approval_needed'), None)
+        if req or not th.is_alive(): break
         time.sleep(0.02)
-    req = next(r for r in ws.status(world.s, world.tid)['requests'] if r['kind'] == 'approval_needed')
+    assert req, 'no approval card was filed'
     assert 'Erin asks to deploy api to staging' in req['text'] and req['choices'] == ['Approve', 'Deny']
     ws.answer(world.s, world.tid, req['request_id'], 'Approve')
     th.join(5)

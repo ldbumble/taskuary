@@ -386,7 +386,9 @@ const readPage = (page) => page.evaluate(() => {
   const cr = card?.getBoundingClientRect(), hr = chat?.getBoundingClientRect(), rr = row?.getBoundingClientRect();
   const errs = [...document.querySelectorAll('[role="alert"], .MuiAlert-standardError, .tq-next-err')].filter(vis).map((e) => e.innerText.trim()).filter(Boolean);
   const rail = [...document.querySelectorAll("[data-tq-rail] [data-tq-key]")].map((e) => ({ key: e.getAttribute("data-tq-key"),
-    text: e.innerText.replace(/\s+/g, " ").trim(), title: (e.querySelector(".card b")?.innerText || "").trim(), current: e.classList.contains("current") }));
+    text: e.innerText.replace(/\s+/g, " ").trim(), title: (e.querySelector(".card b")?.innerText || "").trim(), current: e.classList.contains("current"),
+    // a row's state is its logo's (StatusMark.jsx) with no emoji in its text, so it is read from the mark's own key
+    status: e.querySelector(".tq-mark")?.getAttribute("data-tq-status") || "" }));
   const table = [...document.querySelectorAll("[data-tq-rail] *")].find((e) => e.children.length === 0 && e.innerText?.trim() === "ON THE TABLE");
   const ref = (table?.closest("[data-tq-key]")?.innerText.match(/TQ-\d+/) || [])[0] || ((card?.innerText || "").match(/TQ-\d+/) || [])[0] || "";
   const adviceEl = document.querySelector('[data-tq-advice]:not([data-tq-advice="no_ai"])');
@@ -648,7 +650,7 @@ async function faults() {
     await fault(f); page.step = `faults ${f}`; await fresh();
     // a draft that can send (a chat's draft is answered where it came from, and shows no Send) and has not failed yet
     let sent = false, before = null, t0 = 0;
-    for (const r of (await look(page)).rail.filter((x) => /🏁/.test(x.text))) {
+    for (const r of (await look(page)).rail.filter((x) => x.status === "approve")) {
       if (!(await openItem(page, r.key))) continue;
       before = await look(page); t0 = Date.now();
       if (await send()) { sent = true; break; }
@@ -668,11 +670,11 @@ async function faults() {
   for (const f of ["nocli", "badrepo"]) {
     await fault(f); page.step = `faults ${f}`; await fresh();
     page.expect.add("/dispatch");                                      // its status is the subject here, judged by WAYOUT and WORDS
-    // every task row in turn until one offers Send to agent: the rail's order follows the clock, so the first 📋 row was a task with
+    // every task row in turn until one offers Send to agent: the rail's order follows the clock, so the first "on you" row was a task with
     // no Send to agent when CI ran just after midnight (2026-10-19) - and a coding issue whose folder the task already names when CI ran
     // after midnight UTC (2026-10-21). The rows are taken in the order of their keys: the same task at any hour
     let started = false;
-    for (const r of (await look(page)).rail.filter((x) => /📋/.test(x.text)).sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }))) {
+    for (const r of (await look(page)).rail.filter((x) => x.status === "yours").sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }))) {
       if (!(await openItem(page, r.key))) continue;
       // the coding agent by its own button where the row splits Send to agent in two, else Send to agent and the card's question
       if (await pressVerb(page, "coding_agent")) { started = "coding"; break; }
@@ -697,7 +699,7 @@ async function faults() {
     if (sig(await look(page)) === sig(before)) note("WAYOUT", page.step, "the strip's Connect an AI changed nothing"); await closePops(page); }
   // an act on a task closed behind its open card: the act is refused - with the way to reopen it, never only "reopen it first"
   page.step = "faults closed"; await fresh();
-  const t = await openItem(page, (x) => /📋/.test(x.text)), ref = t && ((await look(page)).ref.match(/TQ-(\d+)/) || [])[1];
+  const t = await openItem(page, (x) => x.status === "yours"), ref = t && ((await look(page)).ref.match(/TQ-(\d+)/) || [])[1];
   if (!ref) note("WAYOUT", page.step, "no task on the rail to close behind its card");
   else {
     const op = await srv.api("POST", "/api/operations", { kind: "task.complete", target: Number(ref), params: {} });
@@ -718,7 +720,7 @@ async function faults() {
   // one act, one receipt: Remind me on an open task leaves ONE line saying where it went - after the chat's own read too - and no Take it
   // back anywhere (judge's UNDO); a day picked wrong is picked again
   page.step = "faults once"; await fresh();
-  if (await openItem(page, (x) => /📋/.test(x.text)) && (await pressVerb(page, "defer"))) {
+  if (await openItem(page, (x) => x.status === "yours") && (await pressVerb(page, "defer"))) {
     await wait(1500);
     const day = (await page.$$(".MuiPopover-paper button"))[0];
     if (day) {
@@ -769,7 +771,7 @@ async function cards() {
   // fold the task on the table by its X, then open it again from its folded line, then from its rail row
   page.step = "cards fold";
   await page.goto(`${srv.base}/`, { waitUntil: "load" }); await wait(5000); await clickText(page, "Walk me through my tasks"); await wait(5000);
-  const t = await openItem(page, (x) => /📋/.test(x.text));
+  const t = await openItem(page, (x) => x.status === "yours");
   const x = t && await page.$('[data-tq-task-page] [aria-label="Close task"]');
   if (!x) note("FOLD", page.step, `no task on the table with an X to fold it - X buttons on screen: ${JSON.stringify(await page.evaluate(() => [...document.querySelectorAll("[aria-label]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.getAttribute("aria-label")).filter((a) => /close|fold|put/i.test(a))))}, card: ${!!(await look(page)).card}`);
   else {

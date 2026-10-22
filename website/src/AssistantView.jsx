@@ -2678,14 +2678,19 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
   useEffect(() => {
     if (busy || resetting || !openLater.current) return;
     const req = openLater.current; openLater.current = null;
-    if (req.kind === "msg") openMsgRef.current?.(req.mid); else openTaskRef.current?.(req);
+    if (req.kind === "msg") openMsgRef.current?.(req.mid); else if (req.kind === "pull") pullRef.current?.(req.key, req.asUser); else openTaskRef.current?.(req);
   }, [busy, resetting]);
-  // a pull lands through surface() -> landed() -> putOnTable; one refused as busy lands nothing, so nothing waits for it
+  // a pull lands through surface() -> landed() -> putOnTable. ONE ASKED FOR WHILE A TURN IS IN FLIGHT WAITS for it, as Open from chat
+  // does (above): a rail click mid-pull was refused as busy and did nothing at all - the owner clicked a third task while the second was
+  // still coming up, and stayed on the second. The latest ask wins; one queued before it is dropped. A walk handed to a phone still refuses.
+  const pullRef = useRef(null);
   const pull = (key, asUser) => {
+    if (!handoff && !resetting && (busy || turnFlight.current)) { openLater.current = { kind: "pull", key, asUser }; return; }
     navHow.current = "push";
     if (setupOn.current) setOverSetup(true);                // during setup it opens over setup, which waits where it was (W2)
     setRailOpen(false); if (old) setOld(null); browseDown(); surface(key, asUser || null);
   };
+  pullRef.current = pull;
 
   // A MESSAGE ASKED FOR BY ID - a card's "<name>'s message ↗", an idea's "Based on", a #msg= link - is put on the table as ITS card, the
   // one the walk shows for it (funnel.item_for_key answers msg:N for any message, through its task's row when it has one). It opened a

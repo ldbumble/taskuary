@@ -917,7 +917,8 @@ function Line({ m, lastBrief = false, live, last, actions, fresh, tableChips = [
   // a card that has FOLDED or been walked past is not the item any more - its recorded words (Stop and save, Remind me)
   // were still offered while it closed (the owner, 2026-10-06: "why do we still have these buttons while it's closing a task?");
   // all it keeps is the way on
-  const moved = !!m.card && (!live || foldedNow);
+  // ...except the two a SEND folded it with (actions.sent): Mark done and Next are what is left to do with it, not its old words
+  const moved = !!m.card && (!live || foldedNow) && !m.sent;
   const strip = moved ? chips.filter((c) => c.verb === "next") : inCard ? chips.filter((c) => !c.verb) : chips;
   const nextChip = verbs.find((c) => c.verb === "next");
   const nav = { busy: actions.busy, items: actions.items, surface: actions.surface, row: live && last && !!canvas && !actions.handedTo, ref: c?.ref || "",   // Next and the words ride in the row above the chat line
@@ -2414,12 +2415,14 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
     }
     advance(pile);
   };
-  // A SEND KEEPS THE ITEM ON THE TABLE (the owner, 2026-10-18: "sending and closing are two steps"): the card folds to its line, the
-  // receipt says what went, and its row is the two ways on - Mark done (the one close) while there is a task, and Next. Nothing is
-  // settled and the walk does not move: done() above did both, as if the send had finished the task.
-  const sent = (receipt, tid = null, ref = null) => {
-    setMsgs((m) => { const i = interactiveCardIndex(m), out = i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true } : x));
-      return [...out, { id: `r${Date.now()}`, role: "receipt", text: receipt, ...sentChips(tid, ref) }]; });
+  // A SEND KEEPS THE ITEM ON THE TABLE (the owner, 2026-10-18: "sending and closing are two steps"): the card folds to its line and
+  // the row by the prompt is the two ways on - Mark done (the one close) while there is a task, and Next. Nothing is settled and the
+  // walk does not move: done() above did both, as if the send had finished the task.
+  // ...and NO "Sent to Erin Blake." LINE (the owner, 2026-10-22: "yes"): the folded card wears the button's badge ("✓ Send") and
+  // carries the two words itself (`sent` keeps them on the row once it has folded - Line), so they stand while it is the newest line
+  const sent = (pressed, tid = null, ref = null) => {
+    setMsgs((m) => { const i = interactiveCardIndex(m);
+      return i < 0 ? m : m.map((x, j) => (j === i ? { ...x, done: true, sent: true, ...(pressed ? { pressed } : {}), ...sentChips(tid, ref) } : x)); });
     onChanged?.(); loadPile();
   };
   // Setting Taskuary up: the scripted walk, one stop per message so the conversation keeps the

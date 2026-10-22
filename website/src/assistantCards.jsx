@@ -645,15 +645,14 @@ export function ReplyCard({ card, onDone, onSent, onOpenTask, onTimeline }) {
         : { verb, final_text: verb === "approve" ? value : null, note: null });
       if (data.refused) reloadGh();
       if (data.send_error) throw new Error(data.send_error);
-      const sentTo = mate && verb !== "reject" ? ` The reply went to ${mate.FromName || "them"}.` : "";
-      const yes = verb === "approve" || verb === "merge_anyway", ran = yes || verb === co?.alt?.verb;
-      const said = verb === co?.alt?.verb ? `Done — ${co.alt.then}.${sentTo}` : yes ? (co ? `Done — ${co.then}.${sentTo}` : action ? "Done — the action ran." : `Sent to ${who}.`)
-        : co ? "Not yet — the task stays open." : action ? "Dismissed — nothing ran." : "Dismissed — no reply goes out.";
-      // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): a send, or an Approve that ran, leaves the item on the table with
-      // its receipt - Mark done and Next on its row - where it used to settle the item and walk on as if the task were finished
-      if (ran && onSent) onSent(said, card.tid, card.ref);
-      // ...and anything else is the badge of the button pressed, on the card it folds to - never a line (the owner, 2026-10-22)
-      else onDone?.(verb === co?.alt?.verb ? co.alt.label : btn("approve", action ? "action" : undefined));
+      const ran = ["approve", "merge_anyway"].includes(verb) || verb === co?.alt?.verb;
+      // the button's own label is all that is said of it - its badge on the card it folds to, never a line (the owner, 2026-10-22)
+      const pressed = verb === co?.alt?.verb ? co.alt.label : verb === "merge_anyway" ? OFFER_LABEL.anyway : btn("approve", action ? "action" : undefined);
+      // SENDING AND CLOSING ARE TWO STEPS (the owner, 2026-10-18): a send, or an Approve that ran, leaves the item on the table -
+      // Mark done and Next on the row by the prompt - where it used to settle the item and walk on as if the task were finished.
+      // ...and with no "Sent to Erin Blake." line over them: the badge says it went (the owner, 2026-10-22: "yes")
+      if (ran && onSent) onSent(pressed, card.tid, card.ref);
+      else onDone?.(pressed);
     } catch (e) { setErr(failOf(e)); }
     setBusy("");
   };

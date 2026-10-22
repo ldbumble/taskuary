@@ -51,7 +51,9 @@ export function mergeDurableTurns(local = [], durable = []) {
       // ...and its ALIASES (G8, 2026-10-20): the lines of the same item it replaced (placeLine) are its names too. Dropped here, the
       // next read found the oldest of them unknown, pushed it at the end, and oneCopy kept that copy - the item the walk had left
       // came back live on the table, under a rail ringing the new one, until the next press
+      // ...and a send's fold (`sent`, AssistantView sent): its Mark done and Next stay on the row, not only Next
       messages[at] = { ...turn, id: bubble.id, commentId: turn.id, ...(bubble.done ? { done: true } : {}), ...(bubble.pressed ? { pressed: bubble.pressed } : {}), ...(bubble.alias?.length ? { alias: bubble.alias } : {}),
+                       ...(bubble.sent ? { sent: true } : {}),
                        ...(bubble.proposal ? { proposal: bubble.proposal, card: bubble.card } : {}),
                        ...(bubble.chips?.length && !turn.chips?.length ? { chips: bubble.chips } : {}),
                        // ...and its status: the durable turn has none, and an error receipt lost its "Report this bug" with it

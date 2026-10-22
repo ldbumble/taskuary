@@ -192,4 +192,64 @@ class HeldStrangerChoicesTests(PhoneCase):
         self.assertIn('Send to agent', got[-1][1]); self.assertNotIn('Trust them', got[-1][1])
 
 
+class AfterTheRunTests(PhoneCase):
+    """A2: R2 on the phone. A failed agent offered Stop and save | Next | Remind me - nothing that tries again; a finished one never offered
+    Mark done, and on a task the rail shows as yours read "No agent yet". A failed agent leads with Try again (and Connect an AI when no AI
+    is why); a finished one leads with Mark done."""
+    STALE = 'The run stopped: the staging database refused the login.'
+
+    def _ended(self, how, why=STALE, live=False):
+        from types import SimpleNamespace as NS
+        from taskuary import terminal, workerstate as ws
+        p = self.f.running('Fix the export', agent='claude')
+        if live:
+            rows = [{'taskId': p.tid, 'sid': 'sF', 'agent': 'claude', 'label': 'claude', 'waiting': True, 'idle': 300,
+                     'started': self.f.ago(minutes=10), 'state': 'asking', 'tail': ['Which database should I use?']}]
+            for x in (mock.patch.dict(terminal.SESSIONS, {'sF': NS(sid='sF', task_id=p.tid, alive=True, started=0, agent='claude', mode='')}),
+                      mock.patch.object(terminal, 'live_sessions', return_value=rows)):
+                x.start(); self.addCleanup(x.stop)
+        ws.record(self.s, p.tid, 'sF', 'working')
+        ws.record(self.s, p.tid, 'sF', how, text=why if how == 'failed' else 'Kept the inter-company rows; the export matches the bank feed.')
+        if not live: self.s.update_run(p.run_id, {'Status': 'failed' if how == 'failed' else 'done'}, finished=True)
+        self.ph.ready()
+        return p.tid
+
+    def test_a_failed_agent_with_its_session_open_leads_with_try_again_and_one_tap_runs_it(self):
+        from taskuary import server
+        tid = self._ended('failed', live=True)
+        card = self.ph.walk()
+        self.assertEqual(card[-1][1][0], 'Try again', card[-1][1])
+        with mock.patch.object(server, 'continue_work', return_value={'continued': True}) as go:
+            got = self.ph.tap('Try again')
+        self.assertEqual(go.call_args.args[0], tid)
+        self.assertIn(f'Continuing TQ-{tid:04d}', text_of(got)); self.ends_with_choices(got)
+
+    def test_a_failed_task_leads_with_try_again_not_the_desks_continue(self):
+        self._ended('failed')
+        btns = self.ph.walk()[-1][1]
+        self.assertEqual(btns[0], 'Try again', btns); self.assertNotIn('Continue', btns)
+
+    def test_no_ai_is_why_so_connect_an_ai_comes_with_it(self):
+        self._ended('failed', why='no AI connector is set up for this agent')
+        btns = self.ph.walk()[-1][1]
+        self.assertEqual(btns[:2], ['Try again', 'Connect an AI'], btns)
+        got = self.ph.tap('Connect an AI')
+        self.assertIn('CONNECTIONS · AI', text_of(got)); self.ends_with_choices(got)
+
+    def test_a_finished_agent_says_so_and_leads_with_mark_done(self):
+        tid = self._ended('finished')
+        card = self.ph.walk()
+        self.assertNotIn('No agent yet', text_of(card)); self.assertIn('finished', text_of(card))
+        self.assertEqual(card[-1][1][0], 'Mark done', card[-1][1])
+        self.assertIn(f'TQ-{tid:04d} closed', text_of(self.ph.tap('Mark done')))
+        self.assertEqual(self.s.get_task(tid)['Status'], 'done')
+
+    def test_the_follow_up_of_a_failed_agent_leads_with_try_again(self):
+        tid = self._ended('failed', live=True)
+        self.s.set_setting(ra.PROMISES_KEY, json.dumps([{'tid': tid, 'channel': 'whatsapp', 'chat': self.ph.chat, 'connector_id': self.ph.cid,
+                                                          'at': time.time(), 'lane': 'working', 'armed': True}]), 't')
+        got = self.ph.push(lambda: ra.keep_promises(self.s, force=True))
+        self.assertEqual(got[-1][1][0], 'Try again', got[-1][1])
+
+
 if __name__ == '__main__': unittest.main()

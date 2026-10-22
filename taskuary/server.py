@@ -988,6 +988,11 @@ def _run_operation(op: dict, background: BackgroundTasks):
 def _run_kind(op: dict, background: BackgroundTasks):
     """The shared handler for each kind - the same code the task page and the timeline run."""
     kind, tid, mid, p = op['kind'], op['target'], op['target'], op['params'] or {}
+    # TRUST AND START (the owner, 2026-10-22: "if i hit go then it should start anyway"): the owner's word on the sender first - the
+    # page's Trust them - then the very start that was refused, so one press does both
+    if p.get('trust') and op.get('targetKind') == 'task' and store.get_task(tid):
+        from . import origin
+        origin.raise_to(store, tid, 'trusted', ACTOR)
     if kind == 'task.create_from_message':
         k = str(p.get('kind') or 'task').lower()
         if k == 'general': return chat_message(mid, background)

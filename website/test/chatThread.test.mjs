@@ -33,7 +33,8 @@ test("a voice note says so once, and an attachment-only message has no words", (
 test("the task card's Came from groups chats and email alike", () => {
   assert.doesNotMatch(page, /\{chatTask && <ChatThread messages=\{taskMessages\} \/>\}/);
   assert.doesNotMatch(page, /newestFirst\(alsoSaid\)/);
-  assert.match(page, /const sources = groupConversations\(storedMessages/);
+  // ...the replies you sent from here among them (the redesign, 2026-10-21)
+  assert.match(page, /const sources = groupConversations\(taskMessages/);
   assert.match(page, /detail\?\.repeats\?\.line && <Typography/);
   assert.match(src, /flexDirection: "column", alignItems: me \? "flex-end" : "flex-start"/);   // yours right, theirs left
 });
@@ -57,8 +58,8 @@ const closeOut = page.slice(page.indexOf('<WorkflowHeading number="3" title="Clo
 const cameFrom = page.slice(page.indexOf('<Part label="Came from"'), page.indexOf("</Part>", page.indexOf('<Part label="Came from"')));
 test("Show all on a chat draws the back-and-forth in Came from; an email thread keeps its rows", () => {
   assert.match(cameFrom, /\{showAll && isChat\(g\.channel\) \? <ChatThread messages=\{g\.msgs\} maxHeight=\{THREAD_MAX\} \/>/);
-  assert.match(cameFrom, /<ConversationRows rows=\{previewRows\(g, 2, showAll\)\} open=\{openMsg\} onOpen=\{setOpenMsg\}/);
-  assert.match(cameFrom, /\{expands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles");
+  assert.match(cameFrom, /<ConversationRows rows=\{fromRows\(g, 3, showAll\)\} open=\{shownMsg\} onOpen=\{\(f\) => setOpenMsg\(f\(shownMsg\)\)\} narrow/);
+  assert.match(cameFrom, /\{fromExpands\(sources\) && <Link component="button"/, "a short chat still offers its bubbles");
   assert.match(cameFrom, /showAll \? "Show less" : `Show all \$\{sourceCount\}`/, "and a way back");
 });
 
@@ -77,7 +78,7 @@ test("Close out draws the conversation it answers condensed - the same rows as T
   assert.doesNotMatch(closeOut, /<ChatThread/, "never the full bubbles twice");
   assert.doesNotMatch(page, /mailThread|data-tq-mail-thread/);
   assert.match(closeOut, /\{closeGroup && <Box data-tq-close-conversation=""/);
-  assert.match(closeOut, /<ConversationRows rows=\{latestRows\(closeGroup, 4\)\} open=\{openMsg\} onOpen=\{setOpenMsg\} \/>/);
+  assert.match(closeOut, /<ConversationRows rows=\{latestRows\(closeGroup, 4\)\} open=\{openMsg \?\? null\} onOpen=\{setOpenMsg\} \/>/);
   assert.match(closeOut, /onClick=\{seeWholeConversation\}[\s\S]{0,80}the whole conversation is in Task/);
   assert.match(page, /const seeWholeConversation = \(\) => \{ setShowAll\(true\); setOpenStage\("task"\); setSeekCameFrom\(true\); \};/);
   assert.match(page, /<Box ref=\{cameFromRef\}/);

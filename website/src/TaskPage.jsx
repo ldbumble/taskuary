@@ -49,7 +49,7 @@ import { onLive } from "./live.js";
 import { pollWhileActive } from "./visible.js";
 import { PANEL, PANEL2, BORDER, DIM, FAINT, INK, card, frame, frameInner, label, step, PALETTE, hoverable, mono, ACCENT, ACCENT2, PILL_COLORS, ALERT, ALERT_BD, ALERT_INK, ALERT_TINT, BRAND } from "./theme.jsx";
 import RunSteps from "./RunSteps.jsx";
-import { cameFromLabel, channelName, expands, filesByMessage, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, previewRows, rowText, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
+import { cameFromLabel, channelName, filesByMessage, fromExpands, fromRows, groupConversations, groupMeta, headerFacts, isChat, latestRows, madeLine, rowText, triageLine, triageSays, workflowOrigin } from "./taskSources.js";
 import { latestTriageVerdict, legacyTriageVerdict, parseTriageVerdict, routeIntent } from "./triageVerdict.js";
 import { Handoff } from "./Handoff.jsx";
 import { Reshape } from "./Reshape.jsx";
@@ -134,8 +134,16 @@ const THREAD_MAX = "max(360px, calc(100vh - 160px))";
 // THE GAP IS THE WAY IN (the owner, 2026-10-20: "··· 4 more - Gail Moreno, You" sat between the messages and Show all was at the top, where
 // nobody looked): with `onExpand` the line itself opens the whole conversation - the same action as Show all above it. `files` is each
 // message's attachments (taskSources.filesByMessage): what rode in with a message is drawn under ITS row, never loose under the card.
-function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null }) {
-  return rows.map((r, ri) => r.gap ? (onExpand ? (
+// FROM'S ROWS (taskSources.fromRows) end in "Show N older" instead: newest on top, the older ones a press away at the foot. `narrow`: the
+// From column's width - the name column gives way to the words.
+function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fetchFor = null, narrow = false }) {
+  return rows.map((r, ri) => r.older ? (
+    <Box key={`older${ri}`} component="button" type="button" data-tq-show-older={r.older} onClick={onExpand} title={`Older messages from ${r.names}`}
+      sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
+        color: ACCENT, fontSize: 12, fontWeight: 600, py: 0.35, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
+      Show {r.older} older <Box component="span" sx={{ color: FAINT, fontWeight: 400 }}>· {r.names}</Box></Box>
+  ) : r.gap ? (onExpand ? (
     <Box key={`gap${ri}`} component="button" type="button" data-tq-conversation-gap="" onClick={onExpand} title="Show the whole conversation"
       sx={{ appearance: "none", font: "inherit", display: "block", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
         color: FAINT, fontSize: 12, py: 0.2, px: 0.5, mx: -0.5, borderRadius: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -150,7 +158,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
         onClick={() => onOpen((v) => (v === r.m.MessageId ? null : r.m.MessageId))}
         title="Open the message"
         sx={{ appearance: "none", font: "inherit", width: "100%", textAlign: "left", bgcolor: "transparent", border: 0, cursor: "pointer",
-          display: "grid", gridTemplateColumns: { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
+          display: "grid", gridTemplateColumns: narrow ? "minmax(0, 96px) minmax(0, 1fr) auto" : { xs: "minmax(0, 88px) minmax(0, 1fr) auto", sm: "112px minmax(0, 1fr) 64px" }, columnGap: 1.25,
           alignItems: "baseline", px: 0.5, mx: -0.5, py: 0.25, borderRadius: 1, fontSize: 12.5, color: DIM, minWidth: 0,
           "&:hover": { bgcolor: "#faf8f4" }, "&:focus-visible": { outline: `2px solid ${ACCENT}`, outlineOffset: 1 } }}>
         <Box component="span" sx={{ color: INK, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.m.who}</Box>
@@ -158,7 +166,7 @@ function ConversationRows({ rows, open, onOpen, onExpand, files = new Map(), fet
         <Box component="span" sx={{ color: FAINT, textAlign: "right", whiteSpace: "nowrap", fontSize: 11.5 }}>{whenShort(r.m.SentAt)}</Box>
       </Box>
       {open !== r.m.MessageId && (files.has(r.m.MessageId) || fetchFor === r.m.MessageId) && (
-        <Box data-tq-row-files="" sx={{ pl: { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
+        <Box data-tq-row-files="" sx={{ pl: narrow ? 0 : { xs: 0, sm: "122px" }, mt: -0.5, mb: 0.4, minWidth: 0 }}>
           <Attachments messageId={r.m.MessageId} canFetch={fetchFor === r.m.MessageId} dense /></Box>
       )}
       {open === r.m.MessageId && (
@@ -584,7 +592,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const [resumeAfterRepo, setResumeAfterRepo] = useState(null);
   // Came from: every message drawn instead of each conversation's ends, and the one message opened in full under its row
   const [showAll, setShowAll] = useState(false);
-  const [openMsg, setOpenMsg] = useState(null);
+  const [openMsg, setOpenMsg] = useState(undefined);
   // ON A PHONE From shows three lines and opens on a tap (owner-approved 2026-10-21); the tap only opens it - nothing under it is pressed
   const [fromOpen, setFromOpen] = useState(false);
   useEffect(() => { setFromOpen(false); }, [selected]);
@@ -606,7 +614,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // was pushed below the fold (the owner, 2026-10-13: "the coding agent should be the main view"). One click opens them.
   const [itemsOpen, setItemsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(null); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
+  useEffect(() => { setHandoff(false); setReshape(false); setRepoPick(false); setResumeAfterRepo(null); setDiffOpen(false); setShowAll(false); setOpenMsg(undefined); setPick(null); setReportOpen(false); setPeek(false); }, [selected]);
   // asked when the drawer opens, and only then: shelling out to git on every task poll would
   // spend a subprocess a second on an answer nobody is looking at
   // ...in the scope ON SCREEN: with no dependencies this kept the first render's scope, so Refresh always went back to
@@ -845,6 +853,9 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
       Channel: storedMessages.find((m) => m.MessageId === r.MessageId)?.Channel || t?.Source || "email",
       FromName: "You", SentAt: r.DecidedAt || r.CreatedAt,
       Subject: storedMessages.find((m) => m.MessageId === r.MessageId)?.Subject || "Reply",
+      // ...in the thread it answered, so From reads the conversation with your replies in it (the redesign, 2026-10-21)
+      ConversationId: storedMessages.find((m) => m.MessageId === r.MessageId)?.ConversationId || null,
+      SourceName: storedMessages.find((m) => m.MessageId === r.MessageId)?.SourceName || "",
       BodyText: r.FinalText || r.DraftText || "",
     }))
     .filter((m) => cleanText(m.BodyText) && !ownBodies.has(cleanText(m.BodyText)));
@@ -915,8 +926,11 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   // ...and a WORKFLOW RUN came from its workflow, not a message: which one, and what started it (workflows.of_task)
   const fromWorkflow = workflowOrigin(t || {}, detail?.workflow);
   // CAME FROM: the task's messages as the conversations they are, each its first message and its latest two (taskSources.js)
-  const sources = groupConversations(storedMessages, { ms: tsMs, clean: cleanText });
+  // ...with the replies you sent from here in them, where they went (the redesign, 2026-10-21: "threads with the owner's replies interleaved")
+  const sources = groupConversations(taskMessages, { ms: tsMs, clean: cleanText });
   const sourceCount = sources.reduce((n, g) => n + g.count, 0);
+  // a task that came from ONE message reads it whole from the start, as an email does; a row closed by hand stays closed
+  const shownMsg = openMsg !== undefined ? openMsg : sourceCount === 1 ? sources[0]?.msgs[0]?.MessageId ?? null : null;
   // ...and what they SENT with each message - the photo or screenshot is often the whole ask (the owner, 2026-09-30: "don't see the
   // image on the task incoming message") - drawn under its own row inside the thread; a mail that names a picture it does not
   // carry offers the fetch on the message that opened the task
@@ -1283,7 +1297,8 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
   const headControls = sessionView && !inRow && notDone;
   // THE STATUS IN THE HEADER IS THE RAIL'S (the redesign, owner-approved 2026-10-21): the same mark and word the rail row wears for this
   // task - the live session's own word first, then the rail's row (on the canvas), then the server's state (railStatus.taskStatus)
-  const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState });
+  const status = taskStatus({ live: term?.alive ? { alive: true, waiting: agentState === AGENT.waiting } : null, rail, state: rowState,
+    closed: ["done", "dropped"].includes(t?.Status) });
   const continueHere = !liveSession && notDone && (barContinue || (stage !== "agent" && canContinue));
   const sendGeneral = isGeneral && !generalStarted && notDone && !liveSession;
   const startHere = !liveSession && notDone && !continueHere && !sendGeneral && (stage !== "agent" || (agentBar && !isGeneral));
@@ -1661,7 +1676,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           {!!(detail.attachments?.length || detail.links?.length) && <Chip size="small" icon={<AttachFileIcon sx={{ fontSize: 13 }} />}
                             label={filesLine(detail.attachments?.length || 0, detail.links?.length || 0)}
                             sx={{ height: 19, fontSize: 10, bgcolor: PANEL2 }} />}
-                          {expands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
+                          {fromExpands(sources) && <Link component="button" type="button" underline="hover" onClick={() => setShowAll((v) => !v)}
                             sx={{ ml: "auto", fontSize: 12 }}>{showAll ? "Show less" : `Show all ${sourceCount}`}</Link>}
                         </Box>
                         {/* ONE SENDER, ONE ITEM, SAID: ingest folds the same sender writing again about this onto one task; said once -
@@ -1701,10 +1716,10 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                 {/* SHOW ALL DRAWS EACH CONVERSATION IN ITS OWN FORM: a chat as the back-and-forth it is - bubbles, yours on the right
                                     (the owner, 2026-10-16: "wasn't this supposed to be a chat back and forth if you hit show all?") - and an email
                                     thread as every row, each opening its letter. Each scrolls in its own box, so one long thread cannot bury the next. */}
-                                <Box sx={{ pl: { xs: 0, sm: 4.25 }, mt: 0.5, minWidth: 0 }}>
+                                <Box sx={{ mt: 0.5, minWidth: 0 }}>
                                   {showAll && isChat(g.channel) ? <ChatThread messages={g.msgs} maxHeight={THREAD_MAX} />
                                     : <Box sx={showAll ? { maxHeight: THREAD_MAX, overflowY: "auto", minWidth: 0 } : undefined}>
-                                        <ConversationRows rows={previewRows(g, 2, showAll)} open={openMsg} onOpen={setOpenMsg}
+                                        <ConversationRows rows={fromRows(g, 3, showAll)} open={shownMsg} onOpen={(f) => setOpenMsg(f(shownMsg))} narrow
                                           onExpand={() => setShowAll(true)} files={sourceFiles} fetchFor={fetchFor} /></Box>}
                                 </Box>
                               </Box>
@@ -1730,6 +1745,14 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                                   ? () => { openAppLink(`report=${fromWorkflow.sourceId}&fix=${fromWorkflow.runId}`); } : null} /></Box>}
                           </Box>
                         ) : <Typography variant="caption" sx={{ display: "block", color: FAINT, mt: 0.25 }}>{detail.ref} · {made}</Typography>}
+                        {/* WHAT ITS MESSAGES LINK TO (linkdocs), each once - the items behind the task, a press from it (the redesign,
+                            2026-10-21: "linked items"). What the link names, as its messages named it; its state upstream is not recorded. */}
+                        {!!detail.links?.length && <Box data-tq-linked={detail.links.length} sx={{ mt: 0.9, minWidth: 0 }}>
+                          <Typography sx={{ ...label, display: "block", mb: 0.25 }}>Linked · {detail.links.length}</Typography>
+                          {detail.links.map((l) => (
+                            <Link key={l.id ?? l.url} href={l.url} target="_blank" rel="noopener" underline="hover" title={l.url}
+                              sx={{ display: "block", fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label || l.url}</Link>))}
+                        </Box>}
                       </Part>
                       {/* WHAT TRIAGE MADE OF IT, LAST (the redesign, owner-approved 2026-10-21): "Sorted as: <what> · <priority> · <why>" -
                           what the header's pills said, and the why triage recorded - then what joined it since, and the playbook or report
@@ -2065,7 +2088,7 @@ export default function TaskPage({ taskId: selected, listRow = null, onListChang
                           <Link component="button" type="button" underline="hover" onClick={seeWholeConversation}
                             sx={{ ml: "auto", fontSize: 12 }}>the whole conversation is in Task</Link>
                         </Box>
-                        <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg} onOpen={setOpenMsg} />
+                        <ConversationRows rows={latestRows(closeGroup, 4)} open={openMsg ?? null} onOpen={setOpenMsg} />
                       </Box>}
                       {/* THE INVITE, AND WHAT IT CLASHES WITH (calwrite.of_task), over the row's Accept / Decline / Propose a new time */}
                       {calAsk?.invite && <Typography data-tq-invite="" variant="body2" sx={{ mb: 1, color: INK }}>{calAsk.line}

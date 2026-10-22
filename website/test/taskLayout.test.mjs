@@ -36,3 +36,28 @@ test("From folds to who and how many", () => {
   assert.equal(fromLine({ workflow: { title: "Nightly check" } }), "Workflow · Nightly check");
   assert.equal(fromLine({ made: "TQ-0007 · made by you 1h ago" }), "TQ-0007 · made by you 1h ago");
 });
+
+// FROM LISTS MANY ITEMS, NEWEST ON TOP: a burst of chat lines, a thread with your replies in it - the latest few, then "Show N older"
+test("From reads newest on top, the older ones folded behind Show N older", async () => {
+  const { fromExpands, fromRows, groupConversations } = await import("../src/taskSources.js");
+  const at = (h, m) => `2026-10-21 ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+  const burst = [["Ray Colton", 7, 58], ["Gail Moreno", 8, 2], ["Ray Colton", 8, 10], ["Gail Moreno", 8, 14], ["Ray Colton", 8, 15], ["Gail Moreno", 8, 21]]
+    .map(([who, h, m], i) => ({ MessageId: i + 1, Channel: "whatsapp", SourceName: "Site ops", FromName: who, SentAt: at(h, m), BodyText: `line ${i + 1}` }));
+  const [g] = groupConversations(burst);
+  const rows = fromRows(g, 3);
+  assert.deepEqual(rows.slice(0, 3).map((r) => r.m.MessageId), [6, 5, 4], "the newest three, newest first");
+  assert.equal(rows[3].older, 3, "then how many older");
+  assert.match(rows[3].names, /Ray Colton/);
+  assert.equal(rows.length, 4, "the opening message is not pinned under a gap any more");
+  assert.deepEqual(fromRows(g, 3, true).map((r) => r.m.MessageId), [6, 5, 4, 3, 2, 1], "Show older draws every one, still newest first");
+  assert.equal(fromRows({ msgs: g.msgs.slice(0, 4) }, 3).length, 4, "one more than it keeps is drawn, never folded to 'Show 1 older'");
+  assert.equal(fromExpands([g]), true);
+  // an email thread with your reply in it reads in its order, your line among theirs
+  const thread = groupConversations([
+    { MessageId: 10, Channel: "email", ConversationId: "c1", Subject: "AP cutover", FromName: "Gail Moreno", SentAt: at(9, 12), BodyText: "Can you confirm?" },
+    { MessageId: "review:3", Channel: "email", ConversationId: "c1", Subject: "AP cutover", FromName: "You", Direction: "out", Status: "context", SentAt: at(9, 40), BodyText: "Yes, Monday." },
+    { MessageId: 11, Channel: "email", ConversationId: "c1", Subject: "RE: AP cutover", FromName: "Gail Moreno", SentAt: at(10, 5), BodyText: "Thanks!" }]);
+  assert.equal(thread.length, 1, "one thread");
+  assert.deepEqual(fromRows(thread[0]).map((r) => r.m.who), ["Gail Moreno", "You", "Gail Moreno"]);
+  assert.equal(fromExpands(thread), false, "three letters: nothing folded");
+});

@@ -68,9 +68,9 @@ test("a draft the close swept away stays readable, and a decided one reads not n
 test("the emails on a task read newest first, each with who and when on its first line", () => {
   const page = read("TaskPage.jsx");
   assert.match(page, /export const newestFirst = /);
-  // section 1's Came from reads each conversation as the approved canvas drew it - its first message, then its latest two
-  // (the owner, 2026-10-16: "yes this is right"); Close out's thread over the draft stays newest first
-  assert.match(page, /previewRows\(g, 2, showAll\)/);
+  // From reads each conversation newest on top, the older ones behind "Show N older" (the redesign, owner-approved 2026-10-21 - it was
+  // the first message under the latest two); Close out's thread over the draft stays newest first
+  assert.match(page, /fromRows\(g, 3, showAll\)/);
   assert.match(page, /const sentApart = newestFirst\(/);
   assert.match(page, /Sent by you\{m\.SourceName \? ` · \$\{m\.SourceName\}` : ""\}\{m\.SentAt \? ` · \$\{fmtDateTime\(m\.SentAt\)\}` : ""\}/);
   assert.match(page, /What was sent\{sentReview\.DecidedAt \? ` · \$\{fmtDateTime\(sentReview\.DecidedAt\)\}` : ""\}/);

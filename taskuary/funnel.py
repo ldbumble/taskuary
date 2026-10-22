@@ -1365,11 +1365,17 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     held = {i['tid'] for i in items if i.get('tid')}
     items = items + [w for w in wrapped if w['tid'] not in held]
     # a task's row is placed by when the TASK arrived, not by its newest mail or its agent (order_key, the owner 2026-10-22)
-    made = {tid: (store.get_task(tid) or {}).get('CreatedAt') for tid in {i['tid'] for i in items if i.get('tid')}}
-    # ...or its mail, when that came first: triage makes the task a little after the mail that asked for it
+    # ...or its FIRST mail, when that came first: triage makes the task a little after the mail that asked for it. The row's own time
+    # is its NEWEST activity - an agent starting or asking - so it counts only for a task with no mail at all: it moved a row an hour
+    # down when its agent asked, and Next, walking on below the place that row had held, found nothing (tests/test_lifecycle.py)
+    def made_at(tid):
+        sent = [m.get('SentAt') for m in (store.list_messages(tid) if hasattr(store, 'list_messages') else [])[:1]]
+        return [x for x in ((store.get_task(tid) or {}).get('CreatedAt'), *sent) if x], bool(sent)
+    made = {tid: made_at(tid) for tid in {i['tid'] for i in items if i.get('tid')}}
     def first(i, made_at):
-        at = [s for s in (made_at, i.get('sort_at') or i.get('since') or i.get('when')) if _activity_time(s)]
-        return min(at, key=_activity_time) if at else made_at
+        stamps, mailed = made_at
+        at = [s for s in (*stamps, *(() if mailed else (i.get('sort_at') or i.get('since') or i.get('when'),))) if _activity_time(s)]
+        return min(at, key=_activity_time) if at else (stamps or [None])[0]
     items = _order([i | {'arrived_at': first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
                     for i in items])
     # the owner's standing rules: what they told us to stop showing them never enters again. Only the
@@ -1758,7 +1764,8 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
     # ...below the row on the table, or the walk's place: Next walks down the line (funnel_selection.below, 2026-10-22)
     from .funnel_selection import below
-    down = below(rows, ready, exclude, (walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
+    wp = (walk_place(store) or (None, None)) if only is None and not include_surfaced else (None, None)
+    down = below(rows, ready, exclude, wp[1], at_key=wp[0])
     if down is not None: return _present_one(store, down[0] if down else None)
     # What is URGENT leads, then what is ON THE OWNER; after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make

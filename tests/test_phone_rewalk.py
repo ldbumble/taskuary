@@ -254,4 +254,31 @@ class ReportTaskTests(PhoneCase):
         self.assertEqual(said.count('2026-10-12'), 1, said)
 
 
+class UnheardVoiceTests(PhoneCase):
+    """F22: a voice note that could not be heard named the fix's place twice on Telegram - "...add one under Connections > Voice. Type
+    it, or add a voice connector under Connections → AI — voice." The fix skipped the second only when the reason used the app's
+    own spelling of the place; a reason that names it any other way still got it again."""
+
+    def setUp(self):
+        super().setUp()
+        _two_asks(self.f); self.ph.ready(); self.card = self.ph.walk()
+
+    def _heard(self, why=None):
+        from taskuary import voice
+        with mock.patch.object(voice, 'transcribe', side_effect=RuntimeError(why)) if why else mock.patch.object(voice, 'transcribe', wraps=voice.transcribe):
+            got = self.ph.voice()
+        (said, btns), = got
+        self.assertEqual(btns, self.card[-1][1], 'the card\'s choices still stand')
+        self.assertEqual(getattr(self.ph, 'reacted', 0), 1, 'the note gets its thumb')
+        return said
+
+    def test_no_voice_connector_names_the_place_once(self):
+        said = self._heard()
+        self.assertEqual(said.count('Connections'), 1, said)
+
+    def test_a_reason_that_already_says_where_is_not_told_again(self):
+        said = self._heard('no voice connector is set up - add one under Connections > Voice')
+        self.assertEqual(said.count('Connections'), 1, said)
+
+
 if __name__ == '__main__': unittest.main()

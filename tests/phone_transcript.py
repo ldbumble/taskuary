@@ -75,6 +75,8 @@ class Phone:
             btns = [r[0]['text'] for r in (p.get('reply_markup') or {}).get('inline_keyboard') or []]
             self.msgs[mid] = btns; self.bubbles.append((p['text'], btns)); return {'message_id': mid}
         if method == 'getUpdates': q, self.queue = self.queue, []; return q
+        if method == 'getFile': return {'file_path': 'voice/file_1.oga'}
+        if method == 'setMessageReaction': self.reacted = getattr(self, 'reacted', 0) + 1
         return True
 
     def _wa(self, c, path, body=None, *a, **k):
@@ -99,6 +101,13 @@ class Phone:
                                'chat': {'id': int(self.chat), 'type': 'private'}, 'from': ME}})
         else: self.queue.append({'id': f'in{mid}', 'jid': self.chat, 'text': text, 'fromMe': True, 'poll': False, 'ts': time.time()})
         return self._took(self._poll)
+
+    def voice(self):
+        """A Telegram voice note: the file comes down (faked), and voice.transcribe hears it - or says why it cannot."""
+        mid = next(self.ids)
+        self.queue.append({'update_id': mid, 'message': {'message_id': mid, 'date': int(time.time()), 'from': ME,
+                           'voice': {'file_id': 'VOICE1', 'duration': 4, 'mime_type': 'audio/ogg'}, 'chat': {'id': int(self.chat), 'type': 'private'}}})
+        with mock.patch.object(messengers.requests, 'get', return_value=mock.Mock(content=b'OggS fake')): return self._took(self._poll)
 
     def choices(self):
         return next((b for _t, b in reversed(self.bubbles) if b), [])

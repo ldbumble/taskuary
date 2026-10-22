@@ -457,7 +457,11 @@ def keep_promises(store, force: bool = False) -> int:
         it, t = _task_item(store, tid, items), store.get_task(tid) or {}
         lane = (it or {}).get('lane') or ''
         if lane in WORKING: keep.append({**p, 'armed': True}); continue
-        done = t.get('Status') in ('done', 'dropped') and not it
+        # ...and a run that ENDED by its own word with no row left on the pile is over too: a failed or finished agent on a task still
+        # open kept its promise unsaid for twelve hours (F5)
+        from . import workerstate as ws
+        end = None if it else ws.ended(store, tid)
+        done = (t.get('Status') in ('done', 'dropped') or end in ('finished', 'failed')) and not it
         if not (p.get('armed') or done or (it and lane != p.get('lane'))): keep.append(p); continue
         if not force and not quiet(store, p['channel'], chat): keep.append(p); continue   # mid-conversation: the next look tries again
         ref = f'TQ-{tid:04d}'
@@ -465,7 +469,9 @@ def keep_promises(store, force: bool = False) -> int:
             with concierge.delivering(concierge.PHONE): nxt = concierge.surface(store, it['key'], actor='owner')
             text = turn_text(nxt, lead=f'{ref} is back:', store=store)
         else:
-            text = turn_text({'say': f'{ref} is finished - nothing on it waits on you.', 'item': None}, store=store,
+            state = agent_state({'kind': 'agentdone', 'tid': tid}, store) if t.get('Status') not in ('done', 'dropped') else ''
+            said = (f'{ref} is back: the agent {state}.' if state.startswith('failed') else f'{ref} is finished - nothing on it waits on you.')
+            text = turn_text({'say': said, 'item': None}, store=store,
                              extra=[(f'Open {ref}', {'t': 'open', 'key': f'task:{tid}'}), (concierge.CHIP_WORDS['next'], {'t': 'next'})])
         send(store, p['channel'], chat, text, p.get('connector_id'))
         kept += 1
@@ -1696,12 +1702,32 @@ def agent_report(store, tid) -> dict:
     return {'summary': field('Summary'), 'actions': field('Actions'), 'verdict': field('Determination')} if rep else {}
 
 
-def agent_state(item: dict | None) -> str:
+def _says(sub: str) -> str:
+    """lanes.json's sentence for a blocked agent's sub-state (workerstate.says), without the agent: the card's line names it."""
+    from . import workerstate as ws
+    return ws.says(sub, '\x00').replace('\x00', '').strip()
+
+
+def agent_state(item: dict | None, store=None) -> str:
+    """The agent's state in the rail's own words. A run that ended by its OWN word says so - "failed - <why>" (owner-approved R2,
+    2026-10-21) or finished - and "is waiting on you" is said only of a run that is: a failed run read "is waiting on you" (F5)."""
     it = item or {}
     kind, lane = it.get('kind'), it.get('lane')
+    if store is not None and it.get('tid') and lane != 'working' and (kind in ('agent', 'agentdone') or lane in AGENT_CARD_LANES):
+        from . import funnel, workerstate as ws
+        try: end = ws.ended(store, int(it['tid']))
+        except Exception as e:
+            logger.debug(f'the phone could not read how the run ended: {e}'); end = None
+        if end == 'failed':
+            f = funnel.run_failed(store, int(it['tid'])) or {}
+            why = str(f.get('sentence') or '').rstrip('.')
+            return f'failed - {why[:1].lower()}{why[1:]}' if why else 'failed'
+        if end == 'finished' and not it.get('asking'): return 'finished'
     if kind == 'agent':
-        return ('working' if lane == 'working' else 'stopped - its work is saved' if it.get('paused')
-                else 'asks you' if it.get('asking') else 'is waiting on you')
+        if lane == 'working': return 'working'
+        if it.get('paused'): return 'stopped - its work is saved'
+        sub = it.get('state') if it.get('state') in ('asking', 'approval', 'stalled', 'parked') else 'asking' if it.get('asking') else 'parked'
+        return _says(sub)
     if kind == 'agentdone': return 'finished'
     return {'queued': 'handed over, not started', 'stopped': 'stopped', 'saved': lanes.word('saved')}.get(lane) or ('finished' if it.get('summary') else '')
 
@@ -1763,6 +1789,10 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     word = ({'agentdone': lanes.word('agentdone'), 'wrapup': 'reply sent · task still open'}.get(kind)
             or ('your task' if is_own(it) and kind not in ('agent', 'review', 'action') else '')
             or (funnel.LANE_WORDS.get(str(it.get('lane') or '')) or ('',))[0])
+    # ...and the header reads the run the body reads: "agent waiting on you" sat over "failed - <why>" (F5)
+    state = agent_state(it, store)
+    if state.startswith('failed') and kind not in ('agentdone', 'wrapup'): word = funnel.LANE_WORDS['stopped'][0]
+    elif state == 'finished' and kind == 'agent': word = lanes.word('agentdone')
     head = ' · '.join(x for x in (word, str(it.get('ref') or '')) if x)
     if head and funnel.mark_for(it): head = f'{funnel.mark_for(it)} {head}'
     age = concierge.funnel_age(it)
@@ -1808,7 +1838,6 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
     if not found and kind == 'agent': found = last_result(store, it.get('tid'))
     # ...a finished agent with no summary on the card: the assistant's own line says what it found
     if not found and kind == 'agentdone' and say: found = say
-    state = agent_state(it)
     if found or state:
         lines.append('')
         lines.append(f"{DOT_AGENT} **{agent_label(it, it.get('who') if kind == 'agentdone' else None)}**" + (f' · {state}' if state else ''))

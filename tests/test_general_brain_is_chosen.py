@@ -121,7 +121,8 @@ def test_a_playbook_from_a_stranger_s_mail_runs_on_codex_in_its_read_only_sandbo
     assert '--dangerously-bypass-approvals-and-sandbox' not in args and args[args.index('--sandbox') + 1] == 'read-only'
 
 
-def test_a_refusal_offers_only_an_ai_that_is_connected(world):
+def test_a_refusal_never_names_another_tool(world):
+    """2026-10-22, the owner: "never suggest another coding tool" - the way on is Trust them, whatever is connected."""
     world['installed'] |= {'gemini'}
     s, _ = _home(('gemini',), tests={'gemini': True})
     with mock.patch.object(config, 'load', lambda: {'cli_connections': {'gemini': clic.with_defaults({'cmd': 'gemini'})}}):
@@ -129,7 +130,7 @@ def test_a_refusal_offers_only_an_ai_that_is_connected(world):
         world['installed'] |= {'claude'}
         cfg = {**config.load(), 'cli_connections': {k: clic.with_defaults({'cmd': k}) for k in ('gemini', 'claude')}}
         agents.record_cli_test(s, 'claude', True)
-        with mock.patch.object(config, 'load', lambda: cfg): assert origin.no_reviewer(s).endswith('start it with claude')
+        with mock.patch.object(config, 'load', lambda: cfg): assert 'claude' not in origin.no_reviewer(s) and 'Trust them' in origin.no_reviewer(s)
 
 
 # ── Claude only ───────────────────────────────────────────────────────────────────────────────────────────────────

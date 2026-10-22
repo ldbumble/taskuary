@@ -391,7 +391,7 @@ class HandoffTests(unittest.TestCase):
              mock.patch.object(messengers, 'wa_send') as send:
             out = remote_assistant.start_handoff(store, 'whatsapp')
         self.assertEqual(out['channel'], 'whatsapp')
-        self.assertIn('Reply in this chat', send.call_args.args[2])
+        self.assertIn('Reply in this chat', send.call_args_list[0].args[2])        # the hello, in a bubble of its own (F21)
         self.assertEqual(remote_assistant.handoff(store)['chat'], JID)
         with mock.patch.object(server, 'store', store):
             r = TestClient(server.app).post('/api/concierge/say', json={'text': 'hello'})

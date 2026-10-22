@@ -161,3 +161,38 @@ def test_the_tab_offers_only_the_chat_the_owner_picked(store):
     assert remote_assistant.doorways(store) == []                                          # picked, not set up: no button
     store.set_setting('phone_walk_channel', 'telegram', 'o')
     assert [d['channel'] for d in remote_assistant.doorways(store)] == ['telegram']
+
+
+# ── the hand-off's own words tell the truth (F11, F21) ──
+def _handed(store, listens):
+    from unittest import mock
+    from taskuary import concierge, messengers
+    remote_assistant.use_chat(store, 'telegram', '4242')
+    remote_assistant.set_listens(store, 'telegram', listens)
+    sent = []
+    with mock.patch.object(messengers, 'tg_send', side_effect=lambda st, chat, body, connector_id=None, buttons=None: sent.append((body, buttons))), \
+         mock.patch.object(concierge, 'brain', return_value=None), \
+         mock.patch.object(concierge, 'resume', return_value={'say': 'Gail Moreno asked about Thursday.', 'item': None,
+                                                              'chips': [{'verb': 'next', 'label': 'Next'}]}):
+        remote_assistant.start_handoff(store, 'telegram')
+        hello = list(sent); sent.clear()
+        remote_assistant.end_handoff(store)
+    return hello, sent
+
+
+def test_a_chat_that_listens_only_during_a_walk_is_not_promised_any_time(store):
+    _hello, bye = _handed(store, 'walk')
+    assert 'Message me any time' not in bye[-1][0]
+    assert 'Walk me through them in Telegram' in bye[-1][0]
+
+
+def test_a_chat_that_always_listens_still_says_so(store):
+    _hello, bye = _handed(store, 'always')
+    assert 'Message me any time' in bye[-1][0]
+
+
+def test_the_hello_is_its_own_bubble_and_never_mentions_buttons_it_has(store):
+    hello, _bye = _handed(store, 'walk')
+    assert hello[0][0].endswith(remote_assistant.OPENED) and hello[0][1] is None
+    assert 'when you want the buttons again' not in hello[0][0]
+    assert 'Gail Moreno asked about Thursday.' in hello[1][0] and hello[1][1] == ['Next']

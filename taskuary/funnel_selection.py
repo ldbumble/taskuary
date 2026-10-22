@@ -101,7 +101,7 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
     return ready
 
 
-def below(items: list[dict], ready: list[dict], exclude, place=None) -> list[dict] | None:
+def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None) -> list[dict] | None:
     """NEXT WALKS DOWN THE LINE (the owner, 2026-10-22: "if I click on the bottom one then hit Next it should go to Reports, not jump
     back to Tasks. It should always be in order"): the walkable rows BELOW the one on the table (`exclude`, a row or an fyi batch),
     in the rail's order - or below the walk's place (funnel.walk_place) when that row has left the rail (closed) or the table is
@@ -115,13 +115,22 @@ def below(items: list[dict], ready: list[dict], exclude, place=None) -> list[dic
     from . import funnel
     keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
     hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or [])) and not lanes.is_urgent(i)]
-    if hit:
-        cut, at = max(hit), {id(i): n for n, i in enumerate(items)}
+    # ...and the walk's place is the rail's own ROW while it is still there (`at_key`, funnel.walk_place): the place's clock was read off
+    # the card put on the table, built by key, whose arrival need not be the rail row's - Next then picked a different row than the
+    # one the page had marked a moment before (PW-118)
+    stood = [] if hit or place is None or not at_key else [
+        n for n, i in enumerate(items) if (i.get("key") == at_key or at_key in (i.get("aliases") or [])) and not lanes.is_urgent(i)]
+    if hit or stood:
+        # ...the place's own row, still walkable with nothing on the table, is where the walk stood: offered again (below)
+        cut, at = max(hit) if hit else max(stood) - 1, {id(i): n for n, i in enumerate(items)}
         down = [i for i in ready if at.get(id(i), -1) > cut]
     elif place is None: return None
     # ...from the place itself: a row still there and walkable with nothing on the table is where the walk stood (the table was
     # cleared under it, or it changed since), so it is offered again - a row Next or a close took the walk past is not walkable
-    else: down = [i for i in ready if funnel.order_key(i) >= place]
+    # ...and by its PLACE, never its key: the row on the table can come back under another key with the same arrival - a message
+    # handed to an agent is `agent:<task>` now, where it was `msg:<id>` - and the key's tiebreak put it above the place, so Next
+    # found nothing below and the walk ended on a task waiting right there (tests/test_lifecycle.py)
+    else: down = [i for i in ready if funnel.order_key(i)[:-1] >= tuple(place)[:-1]]
     return urgent_first(ready) + [i for i in down if not lanes.is_urgent(i)]
 
 
@@ -231,7 +240,8 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
     # ...and only what is BELOW the row on the table, or the walk's place: Next walks down the line, never back up (2026-10-22)
-    down = below(items, ready, scope["exclude"], (funnel.walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
+    wp = (funnel.walk_place(store) or (None, None)) if only is None and not include_surfaced else (None, None)
+    down = below(items, ready, scope["exclude"], wp[1], at_key=wp[0])
     if down is not None: ready = down
     # At a walk's start: urgent, then waiting on the owner (first_at_start). Walking on, simply the next row down - an urgent one first.
     first = (ready[0] if ready else None) if down is not None else first_at_start(ready)

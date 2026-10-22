@@ -1695,6 +1695,11 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         # None before batch_item answered - on every "All read, Next", since the page sends the key it
         # holds as `current` (the owner, 2026-09-17: "hitting all read next still takes forever").
         if key.startswith('fyis:'): return batch_item(store, key)
+        # ...and a task or a message opened while the first rail after a restart is still being built is drawn from its own rows
+        # (item_for_key), not held until that build ends: opening a task waited up to 28 s on it (2026-10-21)
+        if items is None and getattr(store, 'rail_cold_building', lambda: False)():
+            quick = item_for_key(store, key)
+            if quick: return quick
         # ...and a key is looked up, never the rail rebuilt for it: the keyed build cards only what answers to it (the
         # same cards, the same order), where the whole one carded every root to keep one - Current is restored on
         # every chat read, every 30 s tick, and outside the window it paid for the WHOLE history each time (P4).

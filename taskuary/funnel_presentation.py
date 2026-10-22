@@ -135,7 +135,9 @@ def _rows(cur, table: str, column: str, values) -> list[dict]:
 
 @contextlib.contextmanager
 def _snapshot_cursor(store):
-    read = getattr(store, "_processing_read", None)
+    # a reader connection of its own where the store has one: stamping a cold pile's cards held the writer's lock for
+    # seconds, and every other request waited on it (2026-10-21)
+    read = getattr(store, "_snapshot_read", None) or getattr(store, "_processing_read", None)
     if callable(read):
         with read() as cur:
             yield cur

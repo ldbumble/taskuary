@@ -1817,6 +1817,7 @@ def lead_line(store, item: dict | None, say: str) -> str:
     except Exception as e:
         logger.debug(f'the phone could not read the task summary: {e}')
         return ''
+    if summary_rows(summary): return ''                    # rows are no sentence: story_block lays them out as a table
     first = _sentences(summary)[0] if summary else ''
     return first if first and first.lower() not in (say or '').lower() else ''
 
@@ -1981,7 +1982,28 @@ def summary_rest(store, item: dict | None) -> str:
     if store is None or not (item or {}).get('tid'): return ''
     try: summary = str((store.get_task(int(item['tid'])) or {}).get('Summary') or '').strip()
     except Exception: return ''
-    return ' '.join(_sentences(summary)[1:]).strip()
+    return '' if summary_rows(summary) else ' '.join(_sentences(summary)[1:]).strip()
+
+
+ROWS_SHOWN = 12
+
+
+def summary_rows(text: str) -> str:
+    """A summary that is a report's ROWS - one flat JSON object a line, as a report put on the list is summarised - as those lines,
+    else ''. Read as sentences, its first row led the card and the rest ran on as one line of braces and quotes (F16, the re-walk)."""
+    from . import chatformat
+    lines = [l.strip() for l in str(text or '').splitlines() if l.strip()]
+    return '\n'.join(lines) if lines and all(chatformat._flat_rows(l) for l in lines) else ''
+
+
+def _rows_block(store, item: dict | None) -> list:
+    """The task's rows as lines the send lays out as a table (chatformat.json_blocks), the first few and how many more."""
+    if store is None or not (item or {}).get('tid'): return []
+    try: rows = summary_rows((store.get_task(int(item['tid'])) or {}).get('Summary')).splitlines()
+    except Exception: return []
+    if not rows: return []
+    more = len(rows) - ROWS_SHOWN
+    return rows[:ROWS_SHOWN] + ([f'…and {more} more {"row" if more == 1 else "rows"} on the task'] if more > 0 else [])
 
 
 def _repeats(line: str, shown: list) -> bool:
@@ -2058,6 +2080,7 @@ def story_block(store, item: dict | None, draft: str = '', say: str = '', full: 
         lines.append(_cut(subj, 280))
     rest = summary_rest(store, it)
     if rest and not _repeats(rest, [said, subj]): lines.append(_cut(rest, 280))
+    lines += _rows_block(store, it)
     if not it.get('tid') and say and kind != 'agentdone' and (not said or said.lower() not in say.lower()): lines.append(say)
     # their own words, when nothing of yours answers them yet (a draft puts them behind More)
     whole = full_body(store, it) if full else ''

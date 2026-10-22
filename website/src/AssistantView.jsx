@@ -237,7 +237,7 @@ function SinceBlock({ onOpen, onReading }) {
       </div>}
       {/* WHAT WAS LEARNED - the memory - always its own line, never squeezed out of the cards (2026-10-08: "did you remove the memory section?") */}
       {d?.learned?.line && <div className="tq-since-digest" data-tq-learned="">
-        <span className="tag" style={{ color: "#6e685f" }}>MEMORY</span>
+        <span className="tag">MEMORY</span>
         <span title={d.learned.latest ? `Latest: ${d.learned.latest}` : undefined}>{d.learned.line}</span>
         <button type="button" className="tq-linkish" onClick={() => { openAppLink("settings=docs&doc=learned&view=changes"); }}>See what changed</button>
       </div>}

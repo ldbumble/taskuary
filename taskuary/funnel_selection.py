@@ -13,7 +13,6 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import lanes
 from .funnel_presentation import detach, item_revision
 
 
@@ -108,18 +107,17 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     empty after a close. None at a walk's start: nothing is above, the walk takes the top (first_at_start). Rows above that were
     never reached come up again with the next walk (funnel.new_walk), never in the middle of this one.
 
-    URGENT SKIPS THE LINE (the owner, 2026-10-22: "urgent can skip line"): a meeting inside fifteen minutes or a sender on the escalate
-    list cannot wait for the bottom of the list, so one that is walkable is taken first, wherever it sits and wherever the walk
-    stands. It has no section of its own - it sits in Tasks at its arrival place - so it is not where the walk is: with an urgent row
-    on the table Next goes on from the walk's place (funnel.mark_place never moves it to an urgent row)."""
+    URGENT IS WALKED IN ORDER (the owner, 2026-10-22, overruling the line-skip the same day: "urgent is combined into tasks and it never
+    moves ... you go through it like all other tasks", "a meeting in 4 hours - once you hit Next on the item before it, it opens up,
+    then you hit Next it goes to next, no jumping around"): an urgent row is shaded where it sits and reached like any other."""
     from . import funnel
     keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
-    hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or [])) and not lanes.is_urgent(i)]
+    hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or []))]
     # ...and the walk's place is the rail's own ROW while it is still there (`at_key`, funnel.walk_place): the place's clock was read off
     # the card put on the table, built by key, whose arrival need not be the rail row's - Next then picked a different row than the
     # one the page had marked a moment before (PW-118)
     stood = [] if hit or place is None or not at_key else [
-        n for n, i in enumerate(items) if (i.get("key") == at_key or at_key in (i.get("aliases") or [])) and not lanes.is_urgent(i)]
+        n for n, i in enumerate(items) if (i.get("key") == at_key or at_key in (i.get("aliases") or []))]
     if hit or stood:
         # ...the place's own row, still walkable with nothing on the table, is where the walk stood: offered again (below)
         cut, at = max(hit) if hit else max(stood) - 1, {id(i): n for n, i in enumerate(items)}
@@ -131,17 +129,14 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     # handed to an agent is `agent:<task>` now, where it was `msg:<id>` - and the key's tiebreak put it above the place, so Next
     # found nothing below and the walk ended on a task waiting right there (tests/test_lifecycle.py)
     else: down = [i for i in ready if funnel.order_key(i)[:-1] >= tuple(place)[:-1]]
-    return urgent_first(ready) + [i for i in down if not lanes.is_urgent(i)]
-
-
-def urgent_first(ready: list[dict]) -> list[dict]: return [i for i in ready if lanes.is_urgent(i)]
+    return down
 
 
 def first_at_start(ready: list[dict]):
-    """A walk's first row: an urgent one, then what waits on the owner (funnel.leads), then anything ready - the reason a pending reply
-    is not buried under an inbox of unread fyi."""
+    """A walk's first row: what waits on the owner (funnel.leads), then anything ready - the reason a pending reply is not buried under
+    an inbox of unread fyi. An urgent row is not lifted: it is walked in its place."""
     from . import funnel
-    return next(iter(urgent_first(ready)), None) or next((i for i in ready if funnel.leads(i)), ready[0] if ready else None)
+    return next((i for i in ready if funnel.leads(i)), ready[0] if ready else None)
 
 
 def _selection_facts(item: dict) -> dict:
@@ -243,7 +238,7 @@ def capture_selection(store, *, only=None, include_surfaced=False,
     wp = (funnel.walk_place(store) or (None, None)) if only is None and not include_surfaced else (None, None)
     down = below(items, ready, scope["exclude"], wp[1], at_key=wp[0])
     if down is not None: ready = down
-    # At a walk's start: urgent, then waiting on the owner (first_at_start). Walking on, simply the next row down - an urgent one first.
+    # At a walk's start: what waits on the owner (first_at_start). Walking on, simply the next row down - an urgent one in its place.
     first = (ready[0] if ready else None) if down is not None else first_at_start(ready)
     if lazy and first is not None:
         want = _members(first, ready, funnel.fyi_batch_size(store)) if funnel.batchable(first) else [first]

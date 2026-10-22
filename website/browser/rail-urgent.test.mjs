@@ -58,6 +58,25 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   const kept = (rows) => rows.filter((r) => r.level === "task").map((r) => r.key).filter((k) => before.some((r) => r.key === k) && after.some((r) => r.key === k));
   assert.deepEqual(kept(after), kept(before), "marking a task urgent moved a row");
 
+  // ...and WALKED IN ITS PLACE (the owner, 2026-10-22: "once you hit next on the item before it, it opens up, then you hit next it goes
+  // to next, no jumping around"): open the row above it, and Next opens the urgent row, then the row below it
+  const marked = (cls) => page.$eval(`[data-tq-rail] .tq-pile-row.${cls}`, (r) => r.getAttribute("data-tq-key")).catch(() => null);
+  const onTable = (k) => page.waitForFunction((key) => document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") === key
+    && !document.querySelector(".tq-typing"), { timeout: 30000 }, k).catch(async () => assert.fail(`${k} never went on the table: current ${await marked("current")}`));
+  const pressNext = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll("button")].find((n) => n.textContent.trim() === "Next" && !n.disabled);
+    if (!b) throw new Error("no enabled Next"); b.click();
+  });
+  const walk = after.filter((r) => r.level === "task").map((r) => r.key), at = walk.indexOf(mid.key);
+  await page.click(`[data-tq-rail] .tq-pile-row[data-tq-key="${walk[at - 1]}"] .card`);
+  await onTable(walk[at - 1]);
+  await page.waitForFunction((k) => document.querySelector("[data-tq-rail] .tq-pile-row.next")?.getAttribute("data-tq-key") === k, { timeout: 30000 }, mid.key)
+    .catch(async () => assert.fail(`the row above the urgent one did not mark it Next: next ${await marked("next")}`));
+  await pressNext(); await onTable(mid.key);
+  await page.waitForFunction((k) => document.querySelector("[data-tq-rail] .tq-pile-row.next")?.getAttribute("data-tq-key") === k, { timeout: 30000 }, walk[at + 1])
+    .catch(async () => assert.fail(`after the urgent row Next is not the row below it: next ${await marked("next")}`));
+  await pressNext(); await onTable(walk[at + 1]);
+
   // REPORTS OLDEST FIRST, today's brief aside (it leads Reports)
   const reports = after.filter((r) => r.level === "reports" && byKey[r.key] && !byKey[r.key].brief_today).map((r) => byKey[r.key]);
   assert.ok(reports.length >= 2, `the demo rail has reports to order: ${JSON.stringify(after)}`);

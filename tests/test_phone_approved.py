@@ -608,8 +608,12 @@ class UrgentMidWalkTests(PhoneCase):
     def test_when_the_walk_brings_it_next_there_is_nothing_to_say(self):
         _two_asks(self.f); self.ph.ready(); self.ph.walk()
         self._urgent()
-        got = text_of(self.ph.tap('Next'))
-        self.assertIn('Payroll file rejected', got); self.assertNotIn('New since you started', got)
+        # urgent is walked in its place (the owner, 2026-10-22): Next reaches it in rail order - the other ask first, then it - and on
+        # its own card the heads-up is not said again, nor under the walk's end after it
+        seen = [text_of(self.ph.tap('Next')) for _ in range(2)]
+        self.assertIn('Visitor parking for Friday', seen[0])
+        self.assertIn('Payroll file rejected', seen[1]); self.assertNotIn('New since you started', seen[1])
+        self.assertNotIn('New since you started', text_of(self.ph.tap('Next')))
 
 
 class NoPickEndsTests(PhoneCase):

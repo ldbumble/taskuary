@@ -1132,8 +1132,8 @@ PLACE_KEY = 'walk_place'
 
 
 def mark_place(store, item: dict | None):
-    # ...and an URGENT row skipped the line to the table (funnel_selection.below): the walk is still where it was, and goes on from there
-    if not item or lanes.is_urgent(item): return
+    # an urgent row is walked in its place like any other (the owner, 2026-10-22), so it moves the walk's place too
+    if not item: return
     rows = item.get('items') if item.get('kind') == 'fyis' else None
     at = max((order_key(i) for i in rows), default=None) if rows else order_key(item)
     if at is not None: store.set_setting(PLACE_KEY, json.dumps([item.get('key'), list(at)]), 'system')
@@ -1767,7 +1767,7 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
     wp = (walk_place(store) or (None, None)) if only is None and not include_surfaced else (None, None)
     down = below(rows, ready, exclude, wp[1], at_key=wp[0])
     if down is not None: return _present_one(store, down[0] if down else None)
-    # What is URGENT leads, then what is ON THE OWNER; after that, new arrivals; after those, a merely-shown row is walked
+    # What is ON THE OWNER leads (an urgent row is walked in its place, 2026-10-22); after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
     # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
     from .funnel_selection import first_at_start

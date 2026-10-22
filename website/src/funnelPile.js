@@ -123,10 +123,9 @@ export const nextMarkerKey = (pile, items, current) => {
   if (hasNextSelection(pile))
     return pile.expected_next_members[0] || pile.expected_next_key || null;
   // ...a task an agent is working included: the walk takes every task in the rail's order (the owner, 2026-10-21)
-  // ...an urgent row skips the line (funnel_selection.below)
+  // ...an urgent row too, in its place (the owner, 2026-10-22: "you go through it like all other tasks")
   const eligible = (item) => !item.settling && item.key !== current?.key;
-  return ((items || []).find((item) => eligible(item) && !item.surfaced && isUrgent(item))
-    || (items || []).find((item) => eligible(item) && !item.surfaced)
+  return ((items || []).find((item) => eligible(item) && !item.surfaced)
     || (items || []).find(eligible))?.key || null;
 };
 export const canAdvanceSelection = (pile, ready, only = null) => {

@@ -9,8 +9,10 @@ test("Assistant consumes full display and presentation revisions without patch-m
   const view = read("AssistantView.jsx");
   assert.match(view, /\[displayRevision\(pile\)\]/);
   assert.match(view, /setPile\(\(p\) => refreshPilePresentation\(p, data\)\)/);
-  assert.match(view, /const requestedCurrentKey = currentRef\.current\?\.key \|\| null/);
-  assert.match(view, /if \(\(cur\?\.key \|\| null\) !== requestedCurrentKey\) return/);
+  assert.match(view, /const requestedCurrentKey = currentRef\.current\?\.key \|\| null, requestedMoves = tableMoves\.current/);
+  assert.match(view, /if \(\(cur\?\.key \|\| null\) !== requestedCurrentKey \|\| requestedMoves !== tableMoves\.current\) return/);
+  // ...and every move of the table made here counts, so a read sent before one never takes it back (the latest click wins)
+  assert.match(view, /if \(how !== "sync"\) tableMoves\.current \+= 1;/);
   assert.match(view, /const refreshed = refreshCurrentPresentation\(cur, fresh\)/);
   assert.match(view, /if \(newer \|\| refreshed !== cur\) putOnTable\(refreshed, "sync"\)/);
   assert.match(view, /const c = follows \? fresh : m\.card/);

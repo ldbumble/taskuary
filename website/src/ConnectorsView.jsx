@@ -34,6 +34,7 @@ import { pollSecondsField } from "./pollFields.js";
 import { githubInboundValue } from "./githubInbound.js";
 import { useSaveNote } from "./SaveNote.jsx";
 import { plainError } from "./apiError.js";
+import { namesRestart, restartBridge } from "./waBridge.js";
 import { DraftProvider, SaveBar, useCardDraft, useSaveConnector, useSaveSource } from "./ConnectorDraft.jsx";
 import { AI_SHELF, needsGateway } from "./aiShelf.js";
 import { cliCardOf } from "./cliCard.js";
@@ -1400,7 +1401,20 @@ const CARD_STATE = {
 // installed - run: pip install boto3" is a true sentence that helps nobody at a desktop app: it
 // means find a terminal, work out which Python this is, come back. The server knows both, so a
 // missing package comes back structured (channels.test_connector) and this offers the button.
-const TestLine = ({ test, mt = 1 }) => {
+// AN ERROR THAT SAYS "Restart bridge starts it" CARRIES THE BUTTON (the owner, 2026-10-22) - not a pointer to one further up the card
+const BridgeRestart = ({ cid, text }) => {
+  const [busy, setBusy] = useState(false);
+  if (!cid || !namesRestart(text)) return null;
+  return (
+    <Button size="small" variant="outlined" data-tq-restart-bridge="" disabled={busy} sx={{ mt: 0.75, fontSize: 11.5, textTransform: "none" }}
+      startIcon={busy ? <CircularProgress size={12} /> : <RestartAltIcon sx={{ fontSize: 15 }} />}
+      title="Start the bridge again on this machine - you stay paired"
+      onClick={async () => { setBusy(true); try { await restartBridge(cid); } catch { /* the pairing box shows the outcome */ } setBusy(false); }}>
+      {busy ? "Restarting…" : "Restart bridge"}</Button>
+  );
+};
+
+const TestLine = ({ test, mt = 1, cid }) => {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
   if (!test) return null;
@@ -1410,6 +1424,7 @@ const TestLine = ({ test, mt = 1 }) => {
       <Typography variant="body2" sx={{ fontWeight: 600, color: test.ok ? "#47654a" : "#6b2733" }}>
         {test.ok ? "✓" : "✗"} {test.detail}{test.ms != null ? ` · ${test.ms}ms` : ""}
       </Typography>
+      {!test.ok && <BridgeRestart cid={cid} text={test.detail} />}
       {ins && !done && (ins.can === false
         ? <Typography variant="caption" sx={{ color: FAINT, display: "block", mt: 0.5 }}>{ins.why}</Typography>
         : <Button size="small" variant="outlined" disabled={busy} sx={{ mt: 0.75, fontSize: 11.5, textTransform: "none" }}
@@ -2340,9 +2355,11 @@ export function ChannelDetail({ conn: savedConn, sources: savedSources, reload, 
         <Typography variant="body2" sx={{ color: DIM, mb: 1 }}>Live probe — token / model / channel read, for real.</Typography>
         <Button variant="contained" disableElevation disabled={busy === "test"} onClick={runTest}
           startIcon={busy === "test" ? <CircularProgress size={12} sx={{ color: "#fff" }} /> : <BoltIcon sx={{ fontSize: 15 }} />}>Test</Button>
-        <TestLine test={test} mt={1} />
+        <TestLine test={test} mt={1} cid={conn.ConnectorId} />
         {!test && (fresh ? <Typography variant="body2" data-tq-saved-test="" sx={{ mt: 1, color: DIM }}>Saved - press Test to check it.</Typography>
-          : conn.LastError && <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>)}
+          : conn.LastError && <>
+            <Typography variant="body2" sx={{ mt: 1, color: "#6b2733" }}>✗ {conn.LastErrorPlain || conn.LastError}</Typography>
+            <BridgeRestart cid={conn.ConnectorId} text={conn.LastError} /></>)}
       </Box>
     )},
     ...(m.srcLabel ? [{ label: m.srcLabel, done: mine.some((s) => s.Active), body: (

@@ -16,8 +16,19 @@ class Problems(unittest.TestCase):
         self.assertIn(key, got)
         self.assertEqual((got[key]['where'], got[key]['connector']), ('Connections', str(wa['ConnectorId'])))
         self.assertIn('bridge is not running', got[key]['detail'])
+        self.assertTrue(got[key]['restart'], 'a bridge this machine runs is restarted from the bell itself (2026-10-22)')
         s.touch_connector(wa['ConnectorId'])                         # a clean poll: the bell goes quiet
         self.assertNotIn(key, {p['key'] for p in problems.collect(s)})
+
+    def test_an_external_bridge_or_another_connector_offers_no_restart(self):
+        s = MemoryStore()
+        for t in ('whatsapp', 'telegram'):
+            c = next(c for c in s.list_connectors() if c['Type'] == t)
+            s._exec('UPDATE connector SET Active=1 WHERE ConnectorId=?', (c['ConnectorId'],))
+            s.touch_connector(c['ConnectorId'], 'not answering')
+        wa = s.get_connector_by_type('whatsapp')
+        s.set_connector_config(wa['ConnectorId'], {'bridge_url': 'http://wa-box.example:8977'})
+        self.assertEqual([p for p in problems.collect(s) if p.get('restart')], [])
 
     def test_a_failure_says_when_and_ages_out(self):
         """An error from yesterday that has not happened since is not "failing right now"."""

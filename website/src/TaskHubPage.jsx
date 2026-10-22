@@ -24,6 +24,7 @@ import { readLists } from "./connectorLists.js";
 // chunk have all come in (connectorLists.js: a cold #connector=whatsapp sent its first read ~1.4 s after the page was asked for)
 const readAhead = (req) => { if (req?.kind === "browse" && req.area === "connections") readLists(api); };
 import { onPlace, openAppLink } from "./appLinks.js";
+import { restartBridge } from "./waBridge.js";
 import { SetupChip, useSetup } from "./SetupWizard.jsx";
 import { DEMO } from "./demoApi.js";
 import { buildMove, isBusy, loadedAsset, markReloaded, reloadedFor, staleWhat } from "./staleBuild.js";
@@ -88,6 +89,11 @@ function Bell({ onGo }) {
     try { await api.post(`/api/problems/${encodeURIComponent(p.key)}/dismiss`); } catch { /* it may have cleared itself */ }
     await load(); setBusy(null);
   };
+  const restart = async (p) => {
+    setBusy(`restart:${p.key}`);
+    try { await restartBridge(p.connector); } catch { /* the next poll says whether it answers */ }
+    await load(); setBusy(null);
+  };
   return (
     <>
       <Tooltip title={n ? `${plural(n, "thing")} failing — click to see` : news.length ? news[news.length - 1].title : "Nothing is failing"}>
@@ -120,6 +126,10 @@ function Bell({ onGo }) {
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4, alignItems: "stretch", flexShrink: 0 }}>
               <Button size="small" variant="outlined" sx={{ fontSize: 11, whiteSpace: "nowrap" }}
                 onClick={() => { setEl(null); onGo(p); }}>{p.fix || "Fix"} →</Button>
+              {/* "Restart bridge starts it" is said right here, so the button is here too (problems.collect `restart`) */}
+              {p.restart && p.connector && <Button size="small" variant="outlined" data-tq-restart-bridge="" disabled={busy === `restart:${p.key}`}
+                sx={{ fontSize: 11, whiteSpace: "nowrap" }} onClick={() => restart(p)}>
+                {busy === `restart:${p.key}` ? "Restarting…" : "Restart bridge"}</Button>}
               {/* Reading it, not fixing it. It comes back the moment the same thing fails again
                   (problems.signature), so this quiets something you have decided to live with. */}
               <Button size="small" disabled={busy === p.key} sx={{ fontSize: 10.5, color: FAINT, textTransform: "none" }}

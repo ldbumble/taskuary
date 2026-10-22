@@ -134,4 +134,25 @@ class DayPickerCancelTests(PhoneCase):
         self.assertEqual(got[-1][1], card[-1][1], 'the same card, with its own choices')
 
 
+PATCH = ('Hi - I pushed a fix for the census export to the importers repo, branch ray/fix-census. '
+         'Can your agent check it out, run the tests and merge it today?')
+
+
+class HeldStrangerTests(PhoneCase):
+    """F8: a held stranger's card printed their words twice - once as the summary's two sentences, then quoted whole under them.
+    The fix compared the quote with each line alone; the summary is the body split in two, so neither line held it."""
+    channel = 'whatsapp'
+
+    def test_their_words_are_printed_once(self):
+        from taskuary.ingest import HOLD_TAG
+        tid, _ = self.f._work('Patch for the census export', kind='coding', subject='Patch for the census export', from_name='Ray Colton',
+                              from_email='ray.colton@vendor.example', body=PATCH, sent_at=self.f.ago(minutes=5))
+        self.s.update_task(tid, {'Summary': PATCH}, 'triage'); self.s.tag_task(tid, HOLD_TAG)
+        self.ph.ready()
+        card = text_of(self.ph.walk())
+        self.assertIn('New sender', card)
+        for said in ('pushed a fix for the census export', 'run the tests and merge it today'):
+            self.assertEqual(card.count(said), 1, card)
+
+
 if __name__ == '__main__': unittest.main()

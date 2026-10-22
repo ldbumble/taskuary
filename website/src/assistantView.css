@@ -205,7 +205,6 @@
 .tq-welcome span { font-size: 12.5px; line-height: 1.5; }
 /* the start of the walk on the empty chat: the rows read left to right, whatever the welcome centres */
 .tq-welcome-sum { margin: 6px 0 4px; text-align: left; }
-.tq-welcome-why { display: block; margin: 4px 0; font-size: 12px; color: #7d7468; }
 .tq-welcome-away { margin: -4px 0 10px; color: #4a453e; }       /* the gap in a sentence, under the greeting (B5) */
 .tq-linkish { border: 0; background: none; padding: 0; font: inherit; color: #55697a; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* THE DAY'S OPENER, mock-up A (the owner, 2026-10-08): a greeting with the date beside it, then ONE paper card - the day's

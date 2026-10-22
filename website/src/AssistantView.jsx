@@ -2748,10 +2748,8 @@ export default function AssistantView({ onOpenTask, onNavigate, onChanged, activ
       {/* no "Nothing is waiting on you - ask me anything" line when the day is empty: the card above says it and the buttons below
           are the choices (the owner, 2026-10-22: "what is this blank text?? buttons do the talking.." / "I hate free text") */}
       {counting && <span data-tq-pile-loading="">Loading...</span>}
-      {/* greyed with no reason read as broken: say why, and where the rows are - only once the day is counted, and only when
-          nothing is on you: it stood under an On you row the card had just listed */}
-      {!counting && !!items.length && !canAdvance && !onYou && !busy && !starting && <span className="tq-welcome-why" data-tq-nothing-to-walk="">
-        Nothing to walk through right now - what's left is with an agent or put away for later. Click any row to open it.</span>}
+      {/* ...nor a line under a greyed Walk explaining why and pointing at the rail (the owner, 2026-10-22:
+          "yes remove that walk line too"): the rail's rows are there to click */}
       </DayHold>
       <div className="tq-modes">
         {/* pressable while the day counts or the walk is busy: the press is held (walkQueued) and runs once it can */}

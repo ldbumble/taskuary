@@ -1809,6 +1809,7 @@ def then_line(out: dict, store=None) -> str:
     c = primary(out)
     # ...and only under a CARD: under the model's own answer ("Yes to what?") it read as a hint about nothing on screen (F12)
     if store is None or not c or not out.get('item') or agent_answers(out.get('item')) or out.get('proposal'): return ''
+    if out['item'].get('kind') in _LEADS_WITH_NEXT: return ''        # nothing to decide: no verb leads, so none is explained (A8, A9)
     it = out.get('item') or {}
     if c['verb'] == 'approve' and str(it.get('channel') or '').lower() == 'teams' and not it.get('closeout'): return ''   # it does not send (F20)
     said = ((it['closeout'] + (', then posts the reply above as its comment.' if it.get('rides') else '.'))
@@ -2179,6 +2180,19 @@ def script_words(store, script: str) -> str:
 
 
 _ROAMING = ('next', 'open')                   # chips that run with no item behind them
+GOT_IT = 'Got it'                             # an FYI's Next: read, and on to the next (A8)
+_LEADS_WITH_NEXT = ('fyi', 'fyis', 'report')   # cards with nothing to decide: the way on comes first, and no "then" line
+
+
+def _recast(out: dict, drop=(), relabel: dict = None) -> dict:
+    """The turn with the chips of `drop` (verbs) gone and `relabel` ({verb: label}) said in the phone's own words - its options too."""
+    from . import concierge
+    relabel = relabel or {}
+    gone = {concierge.CHIP_WORDS[v] for v in drop if v in concierge.CHIP_WORDS}
+    words = {concierge.CHIP_WORDS[v]: w for v, w in relabel.items() if v in concierge.CHIP_WORDS}
+    chips = [({**c, 'label': relabel[c['verb']]} if isinstance(c, dict) and c.get('verb') in relabel else c)
+             for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') in drop)]
+    return {**out, 'chips': chips, 'options': [words.get(str(o), o) for o in out.get('options') or [] if str(o) not in gone]}
 
 
 def _chips_on(store, out: dict, item: dict, table: dict | None) -> tuple[dict, str]:
@@ -2250,6 +2264,11 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         from . import concierge
         out = {**out, 'chips': [c for c in out.get('chips') or [] if not (isinstance(c, dict) and c.get('verb') == 'answer_agent')],
                'options': [o for o in out.get('options') or [] if str(o) != concierge.CHIP_WORDS['answer_agent']]}
+    # A NOTICE IS READ AND PASSED (A8, 2026-10-22): an FYI led with Put it on my list, and one tap sent a newsletter to an agent - it leads
+    # with Got it (its read-and-next, the batch's All read) and offers no Send to agent. A REPORT needs nothing (A9): it led with Put it on
+    # my list, which made it a to-do offering Reply to a report - it leads with Next, and Put it on my list goes
+    if item.get('kind') in ('fyi', 'fyis'): out = _recast(out, drop=set(_HAND), relabel={'next': GOT_IT})
+    elif item.get('kind') == 'report': out = _recast(out, drop={'mine'})
     if item and is_own(item) and item.get('kind') in STORY_KINDS:
         # work you started has nobody behind it to answer or to file away (the desktop hides the same two)
         from . import concierge
@@ -2284,12 +2303,12 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
     # WHICH WORD IS NEXT is the chip's verb, or the vocabulary's own word - never a label that happens to contain "next"
     # (the owner, 2026-10-11: no word matching decides what a word does)
     from . import concierge as _c
-    next_words = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'next'} | {_c.CHIP_WORDS['next']}
+    next_words = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'next'} | {_c.CHIP_WORDS['next'], GOT_IT}
     if not out.get('proposal') and not agent_answers(item):
         nxt = [w for w in words if w in next_words]
         rest = [w for w in words if w not in nxt]
         lead_word = (primary(out) or {}).get('label')
-        first_ = [w for w in rest if w == lead_word][:1] or rest[:1]
+        first_ = [] if item.get('kind') in _LEADS_WITH_NEXT else [w for w in rest if w == lead_word][:1] or rest[:1]
         # ...and the draft's own other word rides with it, ahead of Next - the screen draws Redraft beside the send, under the draft
         # (the owner, 2026-10-06: "on whatsapp" the same order)
         redo = {c['label'] for c in out.get('chips') or [] if isinstance(c, dict) and c.get('verb') == 'redraft'}   # Redraft, or Draft with AI
@@ -2308,8 +2327,8 @@ def turn_text(out: dict, lead: str = '', store=None, extra: list = None, full: b
         # same move, numbered separately, is the thing that made the desktop drop a button in the
         # first place.
         if not any(w in next_words for w in words):
-            words = words + [concierge.CHIP_WORDS['next']]
-            _offer([(concierge.CHIP_WORDS['next'], {'t': 'next', **_drawn_at(item)})])
+            words = words + [GOT_IT]                  # after the members: they are the card, numbered as the text numbers them
+            _offer([(GOT_IT, {'t': 'next', **_drawn_at(item)})])
     # ...and what a NUMBER does, said plainly. "Open one" describes a door on a screen that is not
     # here; on a phone the number is the only way to see what the line is actually about.
     # A plain answer with nothing on the table offered "Reply with one of: 1 · Next" under every reply - three

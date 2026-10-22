@@ -78,4 +78,55 @@ class PositionTests(PhoneCase):
         self.assertNotIn(' of 1', text_of(self.ph.walk()).split('\n')[0])
 
 
+def _report(ph):
+    """A scheduled report that landed: eight rows of helpdesk tickets."""
+    rows = '\n'.join('{"day": "2026-10-%02d", "tickets": %d}' % (d, 30 + d) for d in range(12, 20))
+    sid = ph.s.save_source({'Channel': 'report', 'Address': 'Helpdesk tickets by day', 'Active': 1,
+                            'ConfigJson': '{"type": "mssql", "title": "Helpdesk tickets by day"}'}, 't')
+    ph.s.touch_source(sid)
+    mid = ph.f.message(task_id=None, status='filed', channel='report', subject='Helpdesk tickets by day - 8 rows',
+                       source_name='Helpdesk tickets by day', from_name='Helpdesk tickets by day', conversation_id=f'report:{sid}', body=rows)
+    ph.f.route(mid, None, 'file', 'scheduled report', by='report')
+    return mid
+
+
+class FyiLeadsWithGotItTests(PhoneCase):
+    """A8: an FYI led with "Put it on my list", and one tap sent a newsletter to an agent. FYI cards lead with Got it - their read-and-next
+    - and offer no Send to agent."""
+
+    def setUp(self):
+        super().setUp()
+        for s in ('FW: Quarterly newsletter', 'Office closed Monday'): self.f.filed_fyi(subject=s)
+        self.ph.ready()
+
+    def test_the_batch_is_passed_with_got_it_and_never_sent_to_an_agent(self):
+        got = self.ph.walk()
+        btns = got[-1][1]
+        self.assertIn('Got it', btns); self.assertNotIn('Next', btns); self.assertNotIn('Send to agent', btns)
+        self.assertNotIn('Got it', self.ph.tap('Got it')[-1][1])            # passed: the walk moved on
+
+    def test_one_fyi_opened_leads_with_got_it_and_can_still_go_on_your_list(self):
+        batch = self.ph.walk()
+        one = self.ph.tap(next(b for b in batch[-1][1] if 'Quarterly newsletter' in b))
+        btns = one[-1][1]
+        self.assertEqual(btns[0], 'Got it', btns)
+        self.assertNotIn('Send to agent', btns); self.assertIn('Put it on my list', btns); self.assertIn('Not ours', btns)
+        self.assertNotIn('Put it on my list:', text_of(one))                   # no "then" line for a verb that does not lead
+        self.assertRegex(text_of(self.ph.tap('Put it on my list')), r'TQ-\d{4} is on your list\.')
+
+
+class ReportLeadsWithNextTests(PhoneCase):
+    """A9: a report "needs nothing", yet its first choice was Put it on my list, which made it a to-do that then offered Reply to a report.
+    A report card leads with Next, and Put it on my list goes."""
+
+    def test_a_report_card_leads_with_next(self):
+        _report(self.ph); self.ph.ready(); self.ph.opener()
+        got = self.ph.tap('Walk Reports')
+        self.assertIn('Helpdesk tickets by day', text_of(got))
+        btns = got[-1][1]
+        self.assertEqual(btns[0], 'Next', btns)
+        self.assertNotIn('Put it on my list', btns)
+        self.assertNotIn('Put it on my list:', text_of(got))
+
+
 if __name__ == '__main__': unittest.main()

@@ -53,3 +53,5 @@ flowchart LR
 | 14 | The walk's end offers **Walk me through my tasks** first; the new walk shows every open task again from the top (2026-10-22) | the end offered only its Opens, and outside a hand-off nothing started a new walk |
 | 15 | Remind me's receipt carries no **Bring it back now** on the phone (2026-10-22) | the undo for one task rode under the next task's card |
 | 16 | A card's first line says where it is in its section - "📋 on you · TQ-0004 · 4 of 19"; a section of one says nothing (2026-10-22) | a long walk gave no sense of how far it had come |
+| 17 | An FYI - one or a batch - is passed with **Got it** (its read-and-next) and offers no Send to agent; one FYI opened leads with it (2026-10-22) | an FYI led with Put it on my list, and one tap sent a newsletter to an agent |
+| 18 | A report card leads with **Next**, then More and Send to agent; Put it on my list is not offered on the phone (2026-10-22) | a report needs nothing, yet its first choice made it a to-do that then offered Reply |

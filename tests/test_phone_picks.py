@@ -44,7 +44,8 @@ def offer(s, out):
     return got
 
 
-ITEM = {'key': 'msg:7', 'kind': 'fyi', 'mid': 7, 'title': 'The export job failed again'}
+# a mail asking something - not an FYI, whose card leads with Got it and offers no Send to agent (A8, 2026-10-22)
+ITEM = {'key': 'msg:7', 'kind': 'message', 'mid': 7, 'title': 'The export job failed again'}
 CHIPS = [{'verb': 'mine', 'label': 'Make a task'}, {'verb': 'regular_agent', 'label': 'Send to agent'},
          {'verb': 'not_ours', 'label': 'Not ours'}, {'verb': 'next', 'label': 'Next'}]
 
@@ -308,7 +309,7 @@ def tg_armed():
     return s, TG_CHAT
 
 
-NEXT_CARD = {'say': 'Gail Moreno asked about the budget.', 'item': {'key': 'msg:8', 'kind': 'fyi', 'mid': 8, 'title': 'Budget'},
+NEXT_CARD = {'say': 'Gail Moreno asked about the budget.', 'item': {'key': 'msg:8', 'kind': 'message', 'mid': 8, 'title': 'Budget'},
              'chips': [{'verb': 'mine', 'label': 'Make a task'}, {'verb': 'next', 'label': 'Next'}]}
 
 

@@ -243,10 +243,12 @@ class ReportTaskTests(PhoneCase):
         mid = self.f.message(task_id=None, status='filed', channel='report', subject='Helpdesk tickets by day - 8 rows',
                              source_name='Helpdesk tickets by day', from_name='Helpdesk tickets by day', conversation_id=f'report:{sid}', body=rows)
         self.f.route(mid, None, 'file', 'scheduled report', by='report')
-        self.ph.ready(); self.ph.opener()
-        self.ph.tap('Walk Reports')
-        receipt = self.ph.tap('Put it on my list')[0][0]
-        self.assertRegex(receipt, r'TQ-\d{4} is on your list\.'); self.assertNotIn('Done -', receipt)      # F13's past tense here too
+        self.ph.ready()
+        # ...put on the list on the DESKTOP: the phone's report card no longer offers it (A9, 2026-10-22 - a report leads with Next);
+        # F13's past-tense receipt for it is pinned on an FYI (test_phone_approved)
+        from taskuary import concierge, funnel
+        key = next(i['key'] for i in funnel.pile(self.s).get('items') or [] if i.get('kind') == 'report')
+        self.assertEqual(concierge.run_proposal(self.s, concierge.propose_direct(self.s, 'mine', key, actor='owner'), 'owner')['status'], 'done')
         self.ph.ready()                                                        # the rail takes the new task in, as the background does
         said = text_of(self.ph.walk())
         self.assertIn('TQ-', said)

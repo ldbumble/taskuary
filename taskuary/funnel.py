@@ -1098,23 +1098,52 @@ def _activity_time(value):
         return None
 
 
+def arrived(item):
+    """When a row ARRIVED - its task's creation, else its first message (`arrived_at`, stamped by the builders) - the one clock its
+    place on the rail is read from. Never its last activity: a reply landing, an agent starting or asking and the walk's own marks
+    all moved rows, and the owner saw 19h, 17h, 11h, <30m, 1h (2026-10-22: "set by time, oldest to newest and then never move")."""
+    return _activity_time(item.get('arrived_at') or item.get('sort_at') or item.get('since') or item.get('when'))
+
+
+_LEVEL_RANK = {k: n for n, k in enumerate(lanes.LEVEL_ORDER)}
+
+
+def order_key(item) -> tuple:
+    """A row's place: its SECTION in the rail's drawing order (lanes.json), then when it arrived - oldest first (newest first among
+    reports), then a stable key. Nothing about its agent, its read state, the table or the walk enters it, so a row moves only by
+    leaving its section. Today's brief leads Reports, whatever the clock says - it summarises the day, so it is read first. ONE key
+    for the rail, desktop Next and phone Next (funnel_selection.below)."""
+    level, at = level_of(item), arrived(item)
+    t = (at - datetime.min).total_seconds() if at else 0.0
+    return (_LEVEL_RANK.get(level, len(_LEVEL_RANK)), not todays_brief(item), at is None, -t if level == 'reports' else t,
+            str(item.get('key') or ''))
+
+
 def _order(items: list) -> list:
-    """The four levels, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
-    owner, 2026-09-07: "within one level oldest wins first"). A lane sub-rank and the saved priority
-    used to sit in between, which put a reply drafted ten minutes ago ahead of an ask from Tuesday:
-    "no reason why open task is before a reply drafted". Urgency has a level of its own."""
-    def key(item):
-        activity = _activity_time(item.get('sort_at') or item.get('since') or item.get('when'))
-        # ...and today's brief leads its band, whatever the clock says: it is written this morning, so
-        # oldest-first would otherwise put every older piece of work in front of the day's own summary
-        band = _band(item)
-        # ...and an Advisor idea leads the quiet band it shares with fyi: the rail draws Advisor ideas above FYI, and oldest-first
-        # put a fresh idea behind every older mail, so Next reached the FYI batch first and walked past it (the owner, 2026-09-30)
-        # ...and reports read NEWEST first: oldest-first is for work, where the longest wait goes first; a report is only news,
-        # and yesterday's evening checkup sat above this morning's error check (the owner, 2026-10-02: "oldest first?")
-        t = (activity - datetime.min).total_seconds() if activity else 0.0
-        return (band, not todays_brief(item), not (band == 4 and item.get('kind') == 'idea'), activity is None, -t if band == 3 else t, str(item.get('key') or ''))
-    return sorted(items, key=key)
+    """The sections, then the oldest first inside one (newest first among reports), then a stable key - and nothing else (the
+    owner, 2026-09-07: "within one level oldest wins first"; 2026-10-22: "then never move"). See order_key."""
+    return sorted(items, key=order_key)
+
+
+# WHERE THE WALK IS: the place (order_key) of the last row put on the table, so Next after a close - the row gone from the rail, the
+# table emptied - still goes on from there, down the line, and never back up to rows above it (the owner, 2026-10-22). A new walk
+# (new_walk) starts again from the top.
+PLACE_KEY = 'walk_place'
+
+
+def mark_place(store, item: dict | None):
+    if not item: return
+    rows = item.get('items') if item.get('kind') == 'fyis' else None
+    at = max((order_key(i) for i in rows), default=None) if rows else order_key(item)
+    if at is not None: store.set_setting(PLACE_KEY, json.dumps([item.get('key'), list(at)]), 'system')
+
+
+def walk_place(store) -> tuple | None:
+    """(key, order_key) of the last row on the table in this walk, or None at a walk's start."""
+    if not hasattr(store, 'get_setting'): return None
+    try: key, at = json.loads(store.get_setting(PLACE_KEY) or 'null') or (None, None)
+    except (ValueError, TypeError): return None
+    return (key, tuple(at)) if at else None
 
 
 _LATER_LANES = ('yours', 'theirs', 'asked', 'approve', 'blocked', 'queued', 'broken', 'stopped', 'saved')
@@ -1333,7 +1362,15 @@ def build(store, now: datetime = None, keep_surfaced: bool = False,
     # still open" than as work with nobody on it. A line triage kept as WORK stays what it is.
     items = [i for i in items if not (i['lane'] == 'fyi' or i.get('open_only')) or i.get('tid') not in wrap_tids]
     held = {i['tid'] for i in items if i.get('tid')}
-    items = _order(items + [w for w in wrapped if w['tid'] not in held])
+    items = items + [w for w in wrapped if w['tid'] not in held]
+    # a task's row is placed by when the TASK arrived, not by its newest mail or its agent (order_key, the owner 2026-10-22)
+    made = {tid: (store.get_task(tid) or {}).get('CreatedAt') for tid in {i['tid'] for i in items if i.get('tid')}}
+    # ...or its mail, when that came first: triage makes the task a little after the mail that asked for it
+    def first(i, made_at):
+        at = [s for s in (made_at, i.get('sort_at') or i.get('since') or i.get('when')) if _activity_time(s)]
+        return min(at, key=_activity_time) if at else made_at
+    items = _order([i | {'arrived_at': first(i, made[i['tid']])} if i.get('tid') and made.get(i['tid']) and not i.get('arrived_at') else i
+                    for i in items])
     # the owner's standing rules: what they told us to stop showing them never enters again. Only the
     # lanes with nothing to do - a rule must not be able to hide something asking them for something.
     rules = mutes(store)
@@ -1713,10 +1750,15 @@ def next_item(store, key: str = None, only: str = None, include_surfaced: bool =
         return capture_selection(store, only=only, exclude=exclude).selected
     from .processing_unread import RETURN_MINUTES        # the same hour the canonical pile's mark holds
     again = (datetime.now() - timedelta(minutes=RETURN_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
-    ready = [i for i in pile(store, force=True)['items'] if not i.get('settling') and not i.get('deferred')
+    rows = pile(store, force=True)['items']
+    ready = [i for i in rows if not i.get('settling') and not i.get('deferred')
              and not _not_yet(i) and i.get('key') != exclude
              and (include_surfaced or not i.get('surfaced')
                   or (i['lane'] in ('blocked', 'approve') and _ts(i.get('surfaced_at')) <= again))]
+    # ...below the row on the table, or the walk's place: Next walks down the line (funnel_selection.below, 2026-10-22)
+    from .funnel_selection import below
+    down = below(rows, ready, exclude, (walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
+    if down is not None: return _present_one(store, down[0] if down else None)
     # What is ON THE OWNER leads; after that, new arrivals; after those, a merely-shown row is walked
     # normally. Being put in the conversation never counted as the owner's decision, so it cannot make
     # an unread row unreachable - nor bury the one item that is actually waiting on them under fifty fyi.
@@ -1957,6 +1999,7 @@ def new_walk(store):
     left"). A new chat (reset_walk) and a walk that ran out (concierge.surface) both come through here. What was read stays read."""
     from .processing_unread import WALK_KEY
     store.set_setting(WALK_KEY, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'system')
+    if store.get_setting(PLACE_KEY): store.set_setting(PLACE_KEY, '', 'system')
     invalidate()
 
 

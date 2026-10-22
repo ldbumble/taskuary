@@ -612,7 +612,26 @@ def card_for(store, item, compact, live_state, now, states=None, quiet=RETURN_MI
     done = any(st and st.get('Status') == 'done' for k in [card['key'], *card['aliases']] for st in [(states or {}).get(k)])
     card['actionable'] = bool(unread and not (passed and (card['put_down'] or done)) and not card['deferred'] and not card.get('settling')
                               and not funnel._not_yet(card))     # ...a task an agent is WORKING is walked like the rest (2026-10-21)
+    card['arrived_at'] = arrived_at(store, card, task, view, allowed)
     return card
+
+
+def arrived_at(store, card, task, view, allowed):
+    """WHEN THE ROW ARRIVED, its place on the rail (funnel.order_key): its task's creation, else its idea's, else its first message.
+    The card's own time is its NEWEST activity - the last mail on the thread, its agent's start or question - and ordering by it moved
+    a row each time one of those happened (the owner, 2026-10-22: "set by time, oldest to newest and then never move")."""
+    tid = card.get('tid')
+    t = task if tid and task.get('TaskId') == tid else (store.get_task(tid) or {}) if tid else {}
+    idea = next((i for i in view.get('ideas') or [] if i.get('IdeaId') == card.get('idea')), None) if card.get('idea') else None
+    sent = [str(m['SentAt']) for m in view.get('messages') or [] if m.get('SentAt') and (not allowed or m.get('MessageId') in allowed)]
+    # the earlier of the task's creation and its first message: triage makes a task a little after the mail that asked for it
+    seen = [str(x) for x in (t.get('CreatedAt'), *((idea.get('CreatedAt') or idea.get('FirstSeen'),) if idea and not t else ()), *sent) if x]
+    return min(seen, key=funnel_time) if seen else card.get('sort_at') or card.get('since') or card.get('when')
+
+
+def funnel_time(stamp):
+    from .funnel import _activity_time
+    return _activity_time(stamp) or datetime.max
 
 
 def on_rail(card) -> bool:

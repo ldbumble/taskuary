@@ -2980,7 +2980,19 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         # counted only the first, and said "1 thing" over a rail of two (the owner, 2026-10-01: "why does it say one thing
         # when there are 2?")
         waiting = [i for i in left if i['lane'] != 'working' and (i.get('surfaced') or i.get('back_at'))]
+        # ...and what the walk never reached: Next walks DOWN the line (2026-10-22), so a row above where the owner started - a row
+        # clicked further down, say - is still walkable when the bottom is reached. It is named here, and the next walk starts with it.
+        skipped = [i for i in left if i.get('actionable', True) and not i.get('put_down') and not i.get('surfaced') and not i.get('deferred')
+                   and not funnel._not_yet(i) and not any(k and k in (i['key'], *i.get('aliases', ())) for k in (leaving, exclude))]
         if key: say = "I can't find that one - it may be older than what I keep, or it went out under another subject."
+        elif not only and skipped:
+            n = len(skipped)
+            when = ', '.join(i.get('ref') or _title_cut(' '.join(str(i.get('title') or 'one').split()), 40) for i in skipped[:4])
+            say = (f"That's the bottom of the list. {plural(n, 'thing')} above where you started still wait{'s' if n == 1 else ''} - "
+                   f"{when}{' and more' if n > 4 else ''}. The next walk starts with {'it' if n == 1 else 'them'}, or open {'it' if n == 1 else 'one'} now.")
+            opens = [{'verb': 'open', 'key': i['key'], 'label': ' · '.join(x for x in (
+                         f"Open {i.get('ref') or ''}".strip(), _title_cut(' '.join(str(i.get('title') or 'it').split()), 50)) if x)}
+                     for i in skipped[:3 if DELIVERY.get() != PHONE else 10]]
         elif not only and waiting:
             # Shown in this walk and still on the rail: a task waiting to start, one an agent left, or a
             # draft/question, put down less than RETURN_MINUTES ago (180). Next will not repeat
@@ -3060,6 +3072,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
             for n, i in enumerate(batch, 1): funnel.settle(store, i['key'], 'surfaced', actor, note=None if i.get('sig') else gists.get(n), read=True)
             card['chips'] = chips_for(store, card)
             set_current(store, tid, card['key'], actor)
+            funnel.mark_place(store, {'kind': 'fyis', 'key': card['key'], 'items': batch})   # where the walk is: Next goes on below it
             record_related(store, tid, card, 'assistant', say, card)
         return {'item': card, 'say': say, 'options': [], 'chips': card['chips'], 'left': len(p['items']) - len(batch)}
 
@@ -3090,6 +3103,7 @@ def surface(store, key: str = None, llm=None, actor: str = 'owner', only: str = 
         funnel.settle(store, item['key'], 'surfaced', actor, note=item.get('sig'), read=True)
         closed = bool(item.get('tid')) and (store.get_task(item['tid']) or {}).get('Status') in ('done', 'dropped')
         set_current(store, tid, item['key'], actor, closed=closed)           # on the table, written down (PW-162)
+        funnel.mark_place(store, item)                                         # ...and where the walk is: Next goes on below it
         record_related(store, tid, item, 'assistant', say + (f"\nOPTIONS: {' | '.join(options)}" if options else ''),
                        card_for(item) | {'chips': chips})
     return {'item': item | {'chips': chips}, 'say': say, 'options': options, 'chips': chips, 'left': len(p['items']) - 1}

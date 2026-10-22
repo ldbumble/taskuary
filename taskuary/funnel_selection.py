@@ -100,6 +100,30 @@ def _eligible(items: list[dict], scope: dict, now: datetime) -> list[dict]:
     return ready
 
 
+def below(items: list[dict], ready: list[dict], exclude, place=None) -> list[dict] | None:
+    """NEXT WALKS DOWN THE LINE (the owner, 2026-10-22: "if I click on the bottom one then hit Next it should go to Reports, not jump
+    back to Tasks. It should always be in order"): the walkable rows BELOW the one on the table (`exclude`, a row or an fyi batch),
+    in the rail's order - or below the walk's place (funnel.walk_place) when that row has left the rail (closed) or the table is
+    empty after a close. None at a walk's start: nothing is above, the walk takes the top. Rows above that were never reached come
+    up again with the next walk (funnel.new_walk), never in the middle of this one.
+
+    URGENT is the one section Next goes back up to: a meeting inside fifteen minutes or a sender on the escalate list cannot wait
+    for the bottom of the list, so one that is walkable is taken first, wherever the walk stands."""
+    from . import funnel
+    keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
+    hit = [n for n, i in enumerate(items) if i.get("key") in keys or keys.intersection(i.get("aliases") or [])]
+    if hit:
+        cut, at = max(hit), {id(i): n for n, i in enumerate(items)}
+        down = [i for i in ready if at.get(id(i), -1) > cut]
+    elif place is None: return None
+    # ...from the place itself: a row still there and walkable with nothing on the table is where the walk stood (the table was
+    # cleared under it, or it changed since), so it is offered again - a row Next or a close took the walk past is not walkable
+    else: down = [i for i in ready if funnel.order_key(i) >= place]
+    took = {id(i) for i in down}
+    now = [i for i in ready if id(i) not in took and funnel.level_of(i) == "urgent"]
+    return now + down
+
+
 def _selection_facts(item: dict) -> dict:
     from . import funnel
 
@@ -195,10 +219,13 @@ def capture_selection(store, *, only=None, include_surfaced=False,
         pile = detach(pile)
     items = pile.get("items") or []
     ready = _eligible(items, scope, captured_now)
-    # waiting on the owner first (funnel.leads), then unread, then anything ready: the same order as the legacy walk, and
-    # the reason a pending reply is not buried under an inbox of unread fyi.
-    first = next((item for item in ready if funnel.leads(item)),
-                 ready[0] if ready else None)
+    # ...and only what is BELOW the row on the table, or the walk's place: Next walks down the line, never back up (2026-10-22)
+    down = below(items, ready, scope["exclude"], (funnel.walk_place(store) or (None, None))[1] if only is None and not include_surfaced else None)
+    if down is not None: ready = down
+    # At a walk's start: waiting on the owner first (funnel.leads), then unread, then anything ready - the reason a pending reply
+    # is not buried under an inbox of unread fyi. Walking on, simply the next row down.
+    first = (ready[0] if ready else None) if down is not None else next((item for item in ready if funnel.leads(item)),
+                                                                        ready[0] if ready else None)
     if lazy and first is not None:
         want = _members(first, ready, funnel.fyi_batch_size(store)) if funnel.batchable(first) else [first]
         for row, stamped in zip(want, funnel.present(store, {"items": want})["items"]):

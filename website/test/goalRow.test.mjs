@@ -49,15 +49,16 @@ test("a rail row carries its state in its icon and its label, and no status word
   assert.match(view, /: goal \? \(i\.kind === "goal_slipped" \? meta\.word : ""\) : "";/);
   assert.match(logo, /role=\{st \? "img" : undefined\} aria-label=\{st \? statusLabel\(st, agent\) : undefined\}/);
   assert.match(logo, /\{badge && <i className=\{`badge\$\{st\.anim \? ` \$\{st\.anim\}` : ""\}`\} aria-hidden="true">\{badge\}<\/i>\}/);
+  assert.doesNotMatch(css, /badge\.turn|tq-badge-turn/, "no hourglass turns: waiting to start wears no badge");
   assert.match(css, /\.tq-mark \.badge\.wave \{/);
   assert.match(css, /\.tq-mark \.badge \{ animation: none !important; \}/, "no badge moves under reduced motion");
 });
 
 // no shaped ring is left (the owner, 2026-10-22): the working ring is the only one, and a goal is its mark and its step count
-test("the only ring on a row is the working one; every other state is a badge", () => {
+test("the only ring on a row is the working one; the hand and the flag are the only badges", () => {
   const view = src("AssistantView.jsx"), logo = src("StatusMark.jsx"), css = src("statusMark.css");
   assert.doesNotMatch(css + logo, /rg-|--ring|conic-gradient|data-tq-ring|progress/, "no shaped or progress ring");
   assert.equal((css.match(/::after \{ content:/g) || []).length, 1, "one ring: the working one");
-  assert.match(logo, /badge = !spins && st\?\.mark && st\.mark !== "spinner" \? st\.mark : ""/, "every other state is its mark as a badge");
+  assert.match(logo, /badge = !spins && st\?\.badge \|\| "";/, "the badge is railStatus.BADGE's - never the lane's mark");
   assert.doesNotMatch(view, /progress=\{goal/, "a goal is its mark and its count, no ring");
 });

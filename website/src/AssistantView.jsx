@@ -664,12 +664,12 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                 // owner, 2026-09-16: "for calendar invite you need to say the actual time of the
                 // meeting"). It goes on the card rather than in the gutter, which is an age column
                 // for every row and too narrow for a time.
-                // THE ROW'S STATE IS ON ITS ICON (owner-approved 2026-10-21; the rings undone, the owner 2026-10-22: "maybe the emoji on
-                // the logo is better. besides for the working agent - the spinning thing around the logo is good"): the ring spinning
-                // while an agent works, else the lane's own mark as a badge on the logo, waving or turning where that says something
-                // (railStatus.js, the same reading the task header's pill takes) - and the words and emoji on the row's right go, so the
-                // title has the room. The words are the icon's label and hover, for a reader without colour. A row in a band whose
-                // heading already says it (fyi, report) wears none; a goal keeps its own mark.
+                // THE ROW'S STATE IS ON ITS ICON (owner-approved 2026-10-21): the ring spinning while an agent works, and a badge on the
+                // logo only where the move is the owner's - the hand of somebody waiting on you, waving, and the flag of a reply ready to
+                // send (the owner, 2026-10-22: too many emojis on the rail); every other state is the plain logo (railStatus.BADGE, the
+                // same reading the task header's pill takes). The words and emoji on the row's right go, so the title has the room; the
+                // state's words are the icon's label and hover. A row in a band whose heading already says it (fyi, report) wears none;
+                // a goal keeps its own mark. Urgent is the row's shading, a meeting its time.
                 const goal = String(i.kind || "").startsWith("goal");
                 const st = i.settling || goal || i.kind === "meeting" ? null : railStatus(i);
                 const shown = st && (st.spins || meta.word !== BAND_SAYS[level]) ? st : null;

@@ -1,14 +1,14 @@
 // A ROW'S STATUS ON ITS ICON, AND THE TASK PAGE'S STATUS PILL - one drawing for both (railStatus.js says what; this draws it): the
 // source's logo with the state built in - the spinning ring while an agent works (the owner loves it, 2026-10-21), else the lane's own
-// mark as a small badge on the logo, waving or turning where that says something. Readable without colour or motion: the state's words
-// are the icon's label, and with reduced motion the ring holds still and no badge moves.
+// hand (waving) or flag as a small badge on the logo where the move is the owner's, and the plain logo for the rest (railStatus.BADGE).
+// Readable without colour or motion: the state's words are the icon's label, and with reduced motion the ring holds still and no badge moves.
 import React from "react";
 import { statusLabel } from "./railStatus.js";
 import "./statusMark.css";
 
 // the logo with its state: `status` from railStatus/taskStatus, `children` the source's logo
 export function StatusLogo({ status, agent = "", className = "", children }) {
-  const st = status, spins = !!st?.spins, badge = !spins && st?.mark && st.mark !== "spinner" ? st.mark : "";
+  const st = status, spins = !!st?.spins, badge = !spins && st?.badge || "";
   return (
     <span className={["tq-mark", className, spins ? "spins" : ""].filter(Boolean).join(" ")} data-tq-working={spins ? "" : undefined}
       data-tq-status={st?.key || undefined} role={st ? "img" : undefined} aria-label={st ? statusLabel(st, agent) : undefined}

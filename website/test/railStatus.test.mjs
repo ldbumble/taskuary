@@ -2,8 +2,8 @@
 // word for one task, read from lanes.json through the rail's own rowMeta - so they cannot disagree.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANIM, railStatus, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
-import { LANE_META, rowMeta } from "../src/funnelPile.js";
+import { MOVES, RING, RINGS, railStatus, stateStatus, statusLabel, taskStatus } from "../src/railStatus.js";
+import { KIND_META, LANE_META, STATE_META, rowMeta } from "../src/funnelPile.js";
 
 test("the header's status is exactly the rail row's mark and word, for every lane", () => {
   for (const lane of Object.keys(LANE_META)) {
@@ -16,15 +16,28 @@ test("the header's status is exactly the rail row's mark and word, for every lan
   assert.equal(railStatus({ lane: "approve", kind: "review", not_sent: true }).word, "didn't send");
 });
 
-test("an agent at work spins; every other state is a still or moving badge", () => {
+test("the ring round the logo says every state, one shape each - and the logo itself never changes", () => {
   const working = railStatus({ lane: "working", kind: "task" });
-  assert.equal(working.spins, true); assert.equal(working.anim, "ring");
-  assert.equal(railStatus({ lane: "working", settling: true }).spins, false, "a row still settling never spins");
-  assert.equal(railStatus({ lane: "blocked" }).anim, "wave", "👋 waves");
-  assert.equal(railStatus({ lane: "blocked" }).mark, "👋");
-  assert.equal(railStatus({ lane: "queued" }).anim, "turn", "⏳ turns");
-  for (const lane of ["approve", "saved", "stopped", "theirs"]) assert.equal(railStatus({ lane }).anim, null, `${lane} holds still`);
-  assert.deepEqual(Object.keys(ANIM).sort(), ["asked", "blocked", "queued"]);
+  assert.equal(working.spins, true); assert.equal(working.ring, "spin");
+  assert.equal(railStatus({ lane: "working", settling: true }).ring, "none", "a row still settling never spins");
+  const rings = { blocked: "breathe", asked: "breathe", approve: "full", saved: "half", stopped: "half", broken: "broken", unjudged: "broken",
+    queued: "dots", theirs: "faint", yours: "none" };
+  for (const [lane, ring] of Object.entries(rings)) assert.equal(railStatus({ lane }).ring, ring, lane);
+  assert.equal(railStatus({ lane: "approve", not_sent: true }).ring, "broken", "didn't send is a broken ring");
+  assert.equal(stateStatus("held").ring, "faint");
+  for (const k of ["closed", "agentdone", "answered"]) assert.equal(stateStatus(k).ring, "none", `${k}: done wears no ring`);
+  // the states the owner reads apart wear different shapes: failed is never stopped, waiting to start is never waiting on them
+  const shape = (lane) => railStatus({ lane }).ring;
+  assert.equal(new Set(["working", "blocked", "approve", "saved", "broken", "queued", "theirs", "yours"].map(shape)).size, 8);
+  // every lane, kind and state lands on a known ring, and only an agent at work spins
+  for (const key of [...Object.keys(LANE_META), ...Object.keys(KIND_META), ...Object.keys(STATE_META)]) {
+    const st = stateStatus(key);
+    assert.ok(RINGS.includes(st.ring), `${key} wears ${st.ring}`);
+    assert.equal(st.ring === "spin", key === "working", `${key}: only an agent at work spins`);
+    assert.equal("look" in st, false, `${key}: the logo has no look of its own`);
+  }
+  for (const v of Object.values(RING)) assert.ok(RINGS.includes(v));
+  assert.deepEqual(MOVES, ["spin", "breathe", "dots"]);
 });
 
 test("the live session's word leads, then the rail's row, then the server's state", () => {

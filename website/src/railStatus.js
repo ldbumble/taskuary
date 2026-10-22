@@ -1,15 +1,29 @@
 // A ROW'S STATUS, SAID ONCE (the task page redesign, owner-approved 2026-10-21): the rail row's icon and the task page's header pill
 // draw the SAME mark and word for one task, from taskuary/lanes.json through the rail's own reading (funnelPile.rowMeta) - so the two
-// cannot disagree. The spinning ring is an agent at work; every other state is the lane's mark, worn as a badge on the source's logo.
+// cannot disagree. On the rail the ring round the source's logo wears the state (RING); the header pill keeps the lane's mark and word.
 // Pure, so node --test reads it.
 import { KIND_META, rowMeta, taskStateMeta } from "./funnelPile.js";
 
-// WHERE A BADGE MOVES: the hand of somebody - or an agent - waiting on you waves, a start not yet made turns its hourglass. Everything
-// else holds still: a still mark is easier to read, and a rail of moving badges is noise. `ring` is the agent at work.
-export const ANIM = { blocked: "wave", asked: "wave", queued: "turn" };
+// THE RING ROUND THE LOGO SAYS THE STATE (the owner, 2026-10-22: "The spinning thing around is good. Don't spin the whole thing, just
+// the circle around it"): the logo never moves, fades or changes colour; each state is a ring of its own SHAPE, so the shapes alone
+// tell the states apart - with motion off, and without colour. Its thin colour is the task page pill's for that state.
+//   spin     - an agent at work: the spinning arc, as it always was
+//   breathe  - somebody (or an agent) waits on you: a full ring, gently breathing
+//   full     - ready to send: a full solid ring, still
+//   half     - stopped and saved, or an agent stopped: half a ring, still
+//   broken   - a check failed, couldn't sort, didn't send: a ring broken in four, still
+//   dots     - waiting to start: a ring of eight dots, its lead dot ticking round once a second
+//   faint    - waiting on them, or held: a thin faint ring, still
+//   progress - a goal: the ring fills as its steps are done (StatusMark.jsx's `progress`)
+//   none     - done, and everything else: no ring
+export const RING = { blocked: "breathe", asked: "breathe", approve: "full", saved: "half", stopped: "half", broken: "broken",
+  unjudged: "broken", not_sent: "broken", queued: "dots", theirs: "faint", held: "faint" };
+export const RINGS = ["spin", "breathe", "full", "half", "broken", "dots", "faint", "progress", "none"];
+// the rings that move; under reduced motion none does, and the shapes still tell the states apart
+export const MOVES = ["spin", "breathe", "dots"];
 
 const said = (key, m, spins) => ({ key, mark: m.mark, word: m.word, role: m.role ?? null, hint: m.hint || "", spins,
-  anim: spins ? "ring" : ANIM[key] || null });
+  ring: spins ? "spin" : RING[key] || "none" });
 
 // a RAIL ROW (a funnel item: lane, kind, not_sent, settling) as the rail draws it - a kind's word over its lane's, a refused send over both
 export const railStatus = (item) => {

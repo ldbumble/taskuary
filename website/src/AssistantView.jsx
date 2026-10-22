@@ -58,7 +58,7 @@ import ContinueBox from "./ContinueBox.jsx";
 import CloseNote from "./CloseNote.jsx";
 import { AttachImage, ImageTray, usePromptImages } from "./promptImages.jsx";
 import { afterCancel, afterConfirm, afterExecute, followUps, holdsProposal, markExecuted, proposalSay } from "./proposalCard.js";
-import { LEVEL_META, LEVEL_ROLE, arrivals, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
+import { LEVEL_META, LEVEL_ROLE, arrivals, arrivedAt, asPressed, bandsOf, canAdvanceSelection, captureNextSelection, cardFor, currentItemFromPile, displayRevision, drawOrder, fillCaps, followsItem, foldsAs, hasNextSelection, inOrder, interactiveCardIndex, tableCardIndex, keysOf, lastActIndex, chipsOf, receiptChips, CAPPED, FLOOR, FOOT_PX, levelLabel, nextMarkerKey, trimCaps, ROW_PX, nextSelectionBody, nextSelectionScope, refreshCurrentPresentation, refreshPilePresentation, replaceSelectionToken, rowMeta, sameSelectionScope, selectionGuardDetail, settledHistory } from "./funnelPile.js";
 import { FYI_PAGE, coveredByReload, fyiTail, heldSince, pileRows, sentChips } from "./funnelPile.js";
 import { railStatus } from "./railStatus.js";
 import { StatusLogo } from "./StatusMark.jsx";
@@ -328,13 +328,11 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
   // band, so you can see the four things being talked about instead of watching them disappear.
   const have = new Set(visibleItems.map((i) => i.key));
   const onTable = batch ? (batch.items || []).filter((i) => i.key && !have.has(i.key)) : [];
-  const drawn = [
-    ...(curKey && !known ? [pulledRow(current)] : []),
-    ...onTable,
-    // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
-    // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28)
-    ...drawOrder(visibleItems).map((i) => (i.key === curKey ? placed(i, current) : i)),
-  ];
+  // the card on the table lends the row its words; WHERE the row sits is the rail's (placed) - its older lane drew a
+  // working agent under Your task until the next chat read refreshed it (the owner, 2026-09-28). A row from outside the pile takes
+  // its place in the order (inOrder), never the top of its section.
+  const drawn = inOrder(drawOrder(visibleItems).map((i) => (i.key === curKey ? placed(i, current) : i)),
+    [...(curKey && !known ? [pulledRow(current)] : []), ...onTable]);
   const prev = useRef(null);
   const [landing, setLanding] = useState(new Set());
   // ...and only into a rail that had rows: after an empty one (a read that failed, a first sync) every row would fall at once, the
@@ -681,7 +679,7 @@ function Pile({ pile, current, onPull, error, onRetry, onSection, onCurrent, onM
                     {/* For later counts DOWN to when it comes back, in the same short form the age column uses */}
                     <span className="when" title={level === "later" && backAt(i) ? `back ${ago(backAt(i))}` : undefined}>
                       {String(i.kind || "").startsWith("goal") ? dueWord(i.due)      /* a goal's clock is its date (spec 2026-10-12) */
-                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : (i.since || i.when))}</span>
+                        : level === "later" ? bandUntil(backAt(i)) : band(i.kind === "meeting" ? i.when : arrivedAt(i))}</span>
                     {/* the dot is the BAND's colour, the pill's own (the owner, 2026-10-06: one palette, everywhere) - where it
                         came from is the logo inside the row */}
                     <span className="rail"><i style={{ background: LEVEL_COLOR[level] || sourceColor(i) }} /></span>

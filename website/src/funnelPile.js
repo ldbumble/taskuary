@@ -421,8 +421,19 @@ export const CAPPED = ["reports", "ideas", "fyi"];
 export const FLOOR = 2;
 // For later is sorted by when each comes back, soonest first (no time known sorts last); every other band keeps the server's order
 const soonest = (a, b) => (Date.parse(String(backAt(a) || "").replace(" ", "T")) || Infinity) - (Date.parse(String(backAt(b) || "").replace(" ", "T")) || Infinity);
-// the walk's clock for a row (funnel._order): oldest first inside a band, reports newest first
-const walkAt = (i) => Date.parse(String(i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
+// the walk's clock for a row (funnel.order_key): when it ARRIVED - never its newest activity, or a reply or an agent moved it (the
+// owner, 2026-10-22: "set by time, oldest to newest and then never move") - oldest first inside a section, reports newest first
+const walkAt = (i) => Date.parse(String(i?.arrived_at || i?.sort_at || i?.since || i?.when || "").replace(" ", "T")) || 0;
+// ...and the age the rail's gutter says is that same clock, so the column reads in the order the rows are drawn
+export const arrivedAt = (i) => i?.arrived_at || i?.since || i?.when;
+// A ROW FROM OUTSIDE THE PILE - the task on the table pulled by name, a batch's members put back - TAKES ITS PLACE in the rail's
+// order: it was drawn first, above every row of its section, so the row on the table jumped to the top (2026-10-22: "on the table
+// should never move them")
+export const inOrder = (rows, extra) => (extra || []).reduce((out, x) => {
+  const level = levelOf(x), t = walkAt(x), newest = level === "reports";
+  const at = out.findIndex((r) => levelOf(r) === level && (newest ? walkAt(r) < t : walkAt(r) > t));
+  return at < 0 ? [...out, x] : [...out.slice(0, at), x, ...out.slice(at)];
+}, [...(rows || [])]);
 // `pin` {key, level}: the row on the table keeps the band it was in when it was opened (AssistantView's Pile). A task whose agent
 // starts, asks or stops no longer changes band at all: every open task is under Tasks (the owner, 2026-10-21).
 // ...and a pinned row sits in its band WHERE THE WALK'S ORDER PUTS IT: it kept its own lane's place in the server's order, so a row

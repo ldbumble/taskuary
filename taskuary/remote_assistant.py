@@ -1645,9 +1645,26 @@ def more_text(store, item: dict | None) -> str:
         rest = chatformat.blocks(body)[1:]
         return chatformat.BREAK + chatformat.BREAK.join(rest) if rest else ''
     if _draft_text(store, item) or len(_plain(body)) > EXCERPT:
+        from . import chatformat
         kin = thread_line(store, msg)
-        return '\n'.join(x for x in (kin, 'THEY WROTE', _quote(_plain(body))) if x)
+        # ...a long one in bubbles of a few paragraphs each, never one wall cut wherever the chat's limit fell (F17)
+        return '\n'.join(x for x in (kin, 'THEY WROTE', chatformat.BREAK.join(_quote(p) for p in pages(_plain(body)))) if x)
     return ''
+
+
+PAGE_CHARS = 1200                              # one bubble of a long message on the phone
+
+
+def pages(text: str, limit: int = PAGE_CHARS) -> list:
+    """A long message as bubbles that break at its paragraphs, each at most about `limit` characters."""
+    from . import chatformat
+    out, cur = [], ''
+    for para in [p.strip() for p in re.split(r'\n\s*\n', str(text or '')) if p.strip()]:
+        for piece in chatformat.split(para, limit) if len(para) > limit else [para]:
+            if cur and len(cur) + 2 + len(piece) > limit: out.append(cur); cur = piece
+            else: cur = f'{cur}\n\n{piece}' if cur else piece
+    if cur: out.append(cur)
+    return out
 
 
 # what the first word does, said before it is pressed - the desktop card's "then" line. Keyed on the
@@ -1723,8 +1740,22 @@ def lead_line(store, item: dict | None, say: str) -> str:
     except Exception as e:
         logger.debug(f'the phone could not read the task summary: {e}')
         return ''
-    first = re.split(r'(?<=[.!?])\s+', summary)[0].strip() if summary else ''
+    first = _sentences(summary)[0] if summary else ''
     return first if first and first.lower() not in (say or '').lower() else ''
+
+
+_SALUTE = re.compile(r'^(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b[^,.!?\n]{0,40}[,!]\s*', re.I)
+_NUMBER = re.compile(r'^(?:\d{1,2}|[a-z])[.)]$|^[-*•]$', re.I)
+
+
+def _sentences(text: str) -> list:
+    """A summary's sentences, without what only LOOKS like one: a salutation ("Hi Alex,") or a list's own number ("1.") led the card
+    as its whole summary line (F17)."""
+    out = []
+    for p in re.split(r'(?<=[.!?])\s+|\n+', str(text or '')):
+        p = _SALUTE.sub('', p.strip()).strip()
+        if p and not _NUMBER.match(p): out.append(p)
+    return out or ['']
 
 
 # THE CARD'S STORY, ON THE PHONE (the owner, 2026-09-28: the desktop's "the story is quiet, your move is loud", and "same
@@ -1871,7 +1902,7 @@ def summary_rest(store, item: dict | None) -> str:
     if store is None or not (item or {}).get('tid'): return ''
     try: summary = str((store.get_task(int(item['tid'])) or {}).get('Summary') or '').strip()
     except Exception: return ''
-    return ' '.join(re.split(r'(?<=[.!?])\s+', summary)[1:]).strip()
+    return ' '.join(_sentences(summary)[1:]).strip()
 
 
 def _repeats(line: str, shown: list) -> bool:

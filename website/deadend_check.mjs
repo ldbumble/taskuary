@@ -118,7 +118,7 @@ const WALK_SKIP = {
   "report_bug": "opens the bug report draft - the faults pass checks it is offered, never sends one",
   "approve:unknown": "Send anyway on a send nobody can confirm - the faults pass checks it is offered",
   "approve:check": "Check delivery on a send nobody can confirm - the faults pass checks it is offered",
-  "pick_repo:set": "shows once a task has a repository - neither world has one chosen",
+  "pick_repo:set": "shows once a task names its folder - the faults pass takes a task that names none, to press Choose where the code is",
   "split:split": "the plain split's own name for the same drawer Split or merge opens - the drawer's press is walked as split",
   "attach:more": "shows once a file is attached - the walk attaches none: the file picker is the system's own window",
 };
@@ -674,7 +674,16 @@ async function faults() {
     // no Send to agent when CI ran just after midnight (2026-10-19) - and a coding issue whose folder the task already names when CI ran
     // after midnight UTC (2026-10-21). The rows are taken in the order of their keys: the same task at any hour
     let started = false;
-    for (const r of (await look(page)).rail.filter((x) => x.status === "yours").sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }))) {
+    const rows = (await look(page)).rail.filter((x) => x.status === "yours").sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true }));
+    // ...and for the folder that is not there, a task that names no folder first: one that names one answers "Change where the code
+    // is", and CI took such a task (2026-10-22), so "Choose where the code is" was pressed nowhere and COVER failed
+    if (f === "badrepo") {
+      const tid = Object.fromEntries(((await srv.api("GET", "/api/funnel/pile?force=1")).items || []).filter((i) => i.tid).map((i) => [i.key, i.tid]));
+      const named = new Set();
+      for (const r of rows) if (tid[r.key]) { const d = await srv.api("GET", `/api/tasks/${tid[r.key]}`); if (/(^|[\s,])repo:\S/.test(String((d.task || d).Tags || ""))) named.add(r.key); }
+      rows.sort((a, b) => named.has(a.key) - named.has(b.key));
+    }
+    for (const r of rows) {
       if (!(await openItem(page, r.key))) continue;
       // the coding agent by its own button where the row splits Send to agent in two, else Send to agent and the card's question
       if (await pressVerb(page, "coding_agent")) { started = "coding"; break; }

@@ -76,11 +76,15 @@ def test_a_cwd_outside_the_folder_is_kept_and_one_inside_becomes_the_home(frozen
     assert spawn.cwd_for(None) == str(config.home())                 # inherited cwd is inside: replaced too
 
 
+# the DLL directory is the Windows loader's (SetDllDirectory): elsewhere the switch is never made
+DLL_CLEARED = [mock.call(None)] if spawn.WINDOWS else []
+
+
 def test_children_get_the_default_dll_search_path_and_it_is_put_back_once(frozen):
     with spawn.clean_dll_dir():
         with spawn.clean_dll_dir(): pass                              # another thread spawning at the same time
-        assert frozen.k.SetDllDirectoryW.call_args_list == [mock.call(None)]
-    assert frozen.k.SetDllDirectoryW.call_args_list == [mock.call(None), mock.call(str(frozen.mei.resolve()))]
+        assert frozen.k.SetDllDirectoryW.call_args_list == DLL_CLEARED
+    assert frozen.k.SetDllDirectoryW.call_args_list == ([mock.call(None), mock.call(str(frozen.mei.resolve()))] if spawn.WINDOWS else [])
 
 
 # ── every spawn site ───────────────────────────────────────────────────────────────────────
@@ -93,7 +97,7 @@ def test_children_get_the_default_dll_search_path_and_it_is_put_back_once(frozen
 def test_spawn_helpers(frozen, call):
     call()
     clear_of(frozen, frozen.calls[-1])
-    assert frozen.k.SetDllDirectoryW.call_args_list[0] == mock.call(None)
+    assert frozen.k.SetDllDirectoryW.call_args_list[:1] == DLL_CLEARED
 
 
 def test_the_update_helper(frozen):
@@ -141,7 +145,7 @@ def test_an_agent_terminal(frozen, monkeypatch):
     monkeypatch.setattr(winpty.PtyProcess, 'spawn', classmethod(lambda cls, argv, **kw: seen.update(kw) or FakeProc()))
     terminal._WinPty(['claude'], None, 30, 100)
     clear_of(frozen, {**seen, 'close_fds': True})                     # ConPTY passes the pty and nothing else
-    assert frozen.k.SetDllDirectoryW.call_args_list[0] == mock.call(None)
+    assert frozen.k.SetDllDirectoryW.call_args_list[:1] == DLL_CLEARED
 
 
 # Every place that starts a process goes through spawn (or is a road no Windows exe takes). A new
@@ -266,6 +270,8 @@ def test_old_unpack_folders_of_ours_are_swept_and_nothing_else(frozen, tmp_path)
     busy = mk('_MEI4444'); held = open(busy / 'taskuary' / 'lanes.json')
     try: gone = unpack.sweep_stale()
     finally: held.close()
+    if not spawn.WINDOWS:                                                      # no in-use test off Windows: nothing is swept
+        assert gone == [] and all(d.exists() for d in (old, other, fresh, claimed, busy, frozen.mei)); return
     assert sorted(gone) == ['_MEI1111', '_MEI5555.taskuary-sweep']
     assert not old.exists() and not claimed.exists() and not (tmp_path / '_MEI1111.taskuary-sweep').exists()
     assert other.exists() and fresh.exists() and frozen.mei.exists()          # another app's, one unpacking, ours

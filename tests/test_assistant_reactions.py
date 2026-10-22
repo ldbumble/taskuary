@@ -1268,11 +1268,11 @@ class WalkOrderTests(unittest.TestCase):
         parked = session(agent, idle=200, waiting=True, tail=['Drop the old rows? (y/n)'])
         with mock.patch.object(terminal, 'live_sessions', return_value=parked):
             # the draft, the ask and the parked agent are ONE level - the owner's task - and inside it
-            # the oldest leads (the owner, 2026-09-07: "within one level oldest wins first"): the draft
-            # came in six hours ago, the ask four, and the agent asked its question just now. Results
-            # come after all of it, and an fyi last.
+            # the oldest leads by ARRIVAL, and a row never moves (the owner, 2026-10-22): the agent's task came in
+            # eight hours ago, the draft six, the ask four - the agent asking its question just now does not
+            # lift or sink its row. Results come after all of it, and an fyi last.
             self.assertEqual([i['lane'] for i in funnel.build(s)['items']],
-                             ['approve', 'queued', 'blocked', 'report', 'fyi'])
+                             ['blocked', 'approve', 'queued', 'report', 'fyi'])
             # …and one at a time out of the mouth, in that order, each one read as it is shown
             seen = []
             for _ in range(5):
@@ -1280,7 +1280,7 @@ class WalkOrderTests(unittest.TestCase):
                 if not out.get('item'): break
                 seen.append(out['item']['lane'])
                 funnel.settle(s, out['item']['key'], 'done', 'owner')
-        self.assertEqual(seen, ['approve', 'queued', 'blocked', 'report', 'fyi'])
+        self.assertEqual(seen, ['blocked', 'approve', 'queued', 'report', 'fyi'])
 
 class NeverWorkTests(unittest.TestCase):
     def test_a_brain_that_fails_files_the_message_and_says_so(self):

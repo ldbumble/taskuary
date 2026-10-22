@@ -112,12 +112,15 @@ def below(items: list[dict], ready: list[dict], exclude, place=None, at_key=None
     then you hit Next it goes to next, no jumping around"): an urgent row is shaded where it sits and reached like any other."""
     from . import funnel
     keys = ({k for k in exclude[5:].split(",") if k} if exclude and exclude.startswith("fyis:") else {exclude}) if exclude else set()
-    hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or []))]
+    # ...a row put away with Remind me has left the walk's line for For later: its place there is not where the walk stood, so the walk
+    # goes on from its place's clock instead (Next after "later" found nothing below the For later row and ended on a new task above it)
+    gone = lambda i: i.get("deferred")
+    hit = [n for n, i in enumerate(items) if (i.get("key") in keys or keys.intersection(i.get("aliases") or [])) and not gone(i)]
     # ...and the walk's place is the rail's own ROW while it is still there (`at_key`, funnel.walk_place): the place's clock was read off
     # the card put on the table, built by key, whose arrival need not be the rail row's - Next then picked a different row than the
     # one the page had marked a moment before (PW-118)
     stood = [] if hit or place is None or not at_key else [
-        n for n, i in enumerate(items) if (i.get("key") == at_key or at_key in (i.get("aliases") or []))]
+        n for n, i in enumerate(items) if (i.get("key") == at_key or at_key in (i.get("aliases") or [])) and not gone(i)]
     if hit or stood:
         # ...the place's own row, still walkable with nothing on the table, is where the walk stood: offered again (below)
         cut, at = max(hit) if hit else max(stood) - 1, {id(i): n for n, i in enumerate(items)}

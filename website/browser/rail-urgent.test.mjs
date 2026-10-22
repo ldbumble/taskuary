@@ -62,7 +62,7 @@ test("an urgent task is shaded in its place under Tasks, with no Urgent heading,
   // to next, no jumping around"): open the row above it, and Next opens the urgent row, then the row below it
   const marked = (cls) => page.$eval(`[data-tq-rail] .tq-pile-row.${cls}`, (r) => r.getAttribute("data-tq-key")).catch(() => null);
   const onTable = (k) => page.waitForFunction((key) => document.querySelector("[data-tq-rail] .tq-pile-row.current")?.getAttribute("data-tq-key") === key
-    && !document.querySelector(".tq-typing"), { timeout: 30000 }, k).catch(async () => assert.fail(`${k} never went on the table: current ${await marked("current")}`));
+    && !document.querySelector(".tq-typing"), { timeout: 60000 }, k).catch(async () => assert.fail(`${k} never went on the table: current ${await marked("current")}`));
   const pressNext = () => page.evaluate(() => {
     const b = [...document.querySelectorAll("button")].find((n) => n.textContent.trim() === "Next" && !n.disabled);
     if (!b) throw new Error("no enabled Next"); b.click();

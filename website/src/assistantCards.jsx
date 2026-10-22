@@ -23,7 +23,7 @@ import { openAppLink } from "./appLinks.js";
 import { CardErr, failOf } from "./failure.jsx";
 import { place } from "./words.js";
 import { Md, looksMd } from "./md.jsx";
-import { jsonRows } from "./reportRows.js";
+import { jsonRows, nameAndRest } from "./reportRows.js";
 import DigestText from "./DigestText.jsx";
 import TodayMeetingsStrip from "./TodayMeetingsStrip.jsx";
 import { useCalendarToday } from "./calendarToday.js";
@@ -46,7 +46,7 @@ import { closeoutOf, reviewText } from "./reviewProposal.js";
 import { OFFER_HINT, OFFER_LABEL, useCloseoutState } from "./closeoutState.js";
 import { READY } from "./taskLifecycle.js";
 import { connError, openBugReport } from "./bugReportOpen.js";
-import { fmtTime } from "./dates.js";
+import { dayLabel, fmtTime } from "./dates.js";
 
 const errText = (e) => e?.response?.data?.detail || e?.message || "That did not work";
 const edge = (lane) => { const r = laneMeta(lane).role; return r ? ROLES[r].solid : "#d3ccc1"; };
@@ -798,8 +798,12 @@ export function ReportCard({ card, onOpenTask, onTimeline, onDone }) {
   // .tq-card-full caps at 420px and scrolls, so a long report cannot run away with the page.
   // The report reads open still, CLAMPED to its opening lines (Clamp): the headline is the lead, the
   // first lines are the box, and More - only when there is more - unfolds the rest in place (2026-09-23)
+  // ...and its heading says the DAY it ran beside its name: the kicker's "18h ago" left an old one reading like today's (the owner,
+  // 2026-10-22: "end of day checkup should say the day it's from")
+  const [name, rest] = nameAndRest(card.title, card.who), day = dayLabel(card.when);
   return (
-    <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}>
+    <CardShell card={card} kicker={card.bad ? "a report failed" : "report"} title={card.title}
+      lead={<div className="tq-card-lead" data-tq-report-day={day || undefined}><b>{name}</b>{day && ` · ${day}`}{rest}</div>}>
       {card.bad && <div className="tq-card-excerpt">The run failed — the cause is in the report.</div>}
       {card.brief_today && <TodayMeetingsStrip />}
       {card.mid && <Clamp what="the whole report"><FullText mid={card.mid} revision={card.presentation_revision} /></Clamp>}

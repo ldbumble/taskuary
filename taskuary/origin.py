@@ -117,13 +117,10 @@ def launch_mode(store, tid, cli: str, cmd: str = '') -> str:
     return 'auto'
 
 def no_reviewer(store) -> str:
-    """Why a stranger's task cannot run with this CLI's tools - offering only an AI that is CONNECTED here and has a reviewer.
-    It named claude to everyone, and to a person with only Codex that is an AI they do not have (2026-10-21)."""
-    from . import agents, clis
-    have = [k for k in agents.ready_brains(store) if clis._base(k) in clis.AUTO]
-    why = "this CLI has no built-in reviewer, so it cannot run a stranger's task with its tools"
-    return (f'{why} - start it with {have[0]}' if have else
-            f"{why}, and no AI connected here has one. Its chat can still read and answer, or vouch for the task if you trust who wrote it")
+    """Why a stranger's task cannot run with this CLI's tools, and the way on: the owner's word on the sender. It never names
+    another tool (the owner, 2026-10-22: "never suggest another coding tool") - it once named claude even to a Codex-only home."""
+    return ("this tool has no built-in reviewer, so it does not run a stranger's task with its tools. Its chat can still read and "
+            "answer, or press Trust them if you know who wrote it")
 
 
 def looks_only(store, tid, cli: str) -> bool:

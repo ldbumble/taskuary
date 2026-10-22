@@ -85,7 +85,10 @@ test("the card has one More and no second section for the last message, files or
   assert.equal(card.match(/<Button /g).length, 1, "one control on the card");
   for (const h of ["Its last message", "Files it saved", "Every step", "Since then", "Earlier sessions", "<Timeline "])
     assert.ok(card.indexOf(h) > card.indexOf("{more && "), `${h} is behind More`);
-  assert.doesNotMatch(src.slice(src.indexOf("export const AgentRecord")), /Since then|Earlier sessions/, "not repeated outside the card");
+  assert.doesNotMatch(src.slice(src.indexOf("export const AgentRecord"), src.indexOf("const ResultView = ")), /Since then|Earlier sessions/, "not repeated outside the card");
+  // ...and the Result says Since then once: its replay's record is handed no `since` (the redesign, 2026-10-21)
+  const result = src.slice(src.indexOf("const ResultView = "), src.indexOf("// EVERY RUN BY ITS LAST WORDS"));
+  assert.match(result, /<SessionRecord s=\{s\} draft=\{draft\} startOpen timeline=\{story\?\.steps \|\| \[\]\} earlier=\{before\} \/>/);
 });
 
 test("a folded line is plain text", () => assert.equal(plain("**Merged** `#41` as reviewed"), "Merged #41 as reviewed"));
@@ -103,4 +106,32 @@ test("what the floor refused a stranger's session is behind More, named on it", 
   const s = { result: "Done.", refused: [{ text: "Read: refused", at: "2026-10-15 09:00" }] };
   assert.equal(hasMore(s), true);
   assert.deepEqual(moreParts(s), ["1 refusal"]);
+});
+
+// THE RESULT (the task page redesign, owner-approved 2026-10-21): when the agent has stopped and saved, the work column says what it
+// found, how it resolved it and its write-up whole - each from the saved report, said once - and the session is one Replay line
+test("the result reads the write-up's own parts, each once, and nothing it did not record", async () => {
+  const { diffStat, resultParts } = await import("../src/agentRecord.js");
+  const full = resultParts({ result: "Skipped the row with no manager; 9 passed. Not pushed - yours to approve.",
+    report: { decided: "A site with no manager stopped the whole run", changed: "Skip that row and log it once; a test for it",
+      summary: "Census sync no longer stops on a site with no manager." } });
+  assert.deepEqual(full.rows.map(([k]) => k), ["What it found", "How it resolved it"]);
+  assert.equal(full.summary, "Census sync no longer stops on a site with no manager.");
+  assert.equal(full.writeup, "Skipped the row with no manager; 9 passed. Not pushed - yours to approve.");
+  // the last words that only repeat the summary are not said twice; a write-up with no report parts is the whole of it
+  assert.equal(resultParts({ result: "Fixed: the cursor reset.", report: { summary: "Fixed: the cursor reset." } }).writeup, "");
+  assert.deepEqual(resultParts({ result: "Reran the nightly; it passed." }), { rows: [], summary: "", writeup: "Reran the nightly; it passed." });
+  assert.deepEqual(resultParts({}), { rows: [], summary: "", writeup: "" }, "nothing recorded, nothing invented");
+  // the run's own diff, counted
+  const diff = ["diff --git a/app/census/sync.py b/app/census/sync.py", "--- a/app/census/sync.py", "+++ b/app/census/sync.py", "@@ -1,2 +1,4 @@",
+    " def sync(site):", "+    if not site.manager:", "+        continue", "-    pass", "--- /dev/null", "+++ b/tests/test_census_sync.py", "+def test_no_manager(): pass"].join("\n");
+  assert.deepEqual(diffStat(diff), { files: 2, added: 3, removed: 1 });
+  assert.equal(diffStat(""), null);
+  const src = readFileSync(fileURLToPath(new URL("../src/AgentRecord.jsx", import.meta.url)), "utf8");
+  assert.match(src, /Replay the session/);
+  assert.match(src, /api\.get\(`\/api\/task-outputs\/\$\{taskId\}`\)/, "the files it made for the task are listed with its work");
+  const page = readFileSync(fileURLToPath(new URL("../src/TaskPage.jsx", import.meta.url)), "utf8");
+  assert.match(page, /const resultShown = !term\?\.alive && hasRecord && \[AGENT\.saved, AGENT\.stopped, AGENT\.finished\]\.includes\(agentState\);/);
+  assert.match(page, /title=\{!term\?\.alive \? \(resultShown \? "Result" : "Agent work"\)/);
+  assert.match(page, /rowState === "agentdone" && \(\s*<Typography data-tq-handled="" [^>]*>Nothing to do\. It's handled\.<\/Typography>\)/);
 });

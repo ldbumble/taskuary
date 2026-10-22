@@ -96,3 +96,21 @@ export const runsOf = (sessions) => (sessions || []).map((s, i, all) => {
   const own = timed && !Number.isNaN(end) ? { ...s, steps: s.steps.filter((x) => when(x.at) > after && when(x.at) <= end + 60_000), result: i ? "" : s.result } : s;
   return { s, n: all.length - i, said: lastWords(own) };
 });
+
+// THE RESULT, WHEN AN AGENT HAS STOPPED AND SAVED (the task page redesign, owner-approved 2026-10-21): what it found, how it resolved it,
+// and the whole summary of its write-up - the saved report, never a raw log. Each part only where the write-up recorded it; its last
+// words are said once, and not where they only repeat the summary or a row.
+export const resultParts = (s) => {
+  const r = s?.report || {}, said = String(lastWords(s) || "").trim();
+  const rows = [["What it found", r.decided], ["How it resolved it", r.changed]].filter(([, v]) => norm(v)).map(([k, v]) => [k, String(v).trim()]);
+  const summary = norm(r.summary) ? String(r.summary).trim() : "";
+  const writeup = said && norm(said) !== norm(summary) && !rows.some(([, v]) => norm(v) === norm(said)) ? said : "";
+  return { rows, summary, writeup };
+};
+// a unified diff counted - how many files, lines added and removed - from the run's own DiffText, never a git call
+export const diffStat = (text) => {
+  const ls = String(text || "").split(/\r?\n/), files = new Set();
+  for (const l of ls) if ((l.startsWith("+++ ") || l.startsWith("--- ")) && !/\/dev\/null$/.test(l)) files.add(l.slice(4).replace(/^[ab]\//, "").trim());
+  const added = ls.filter((l) => l.startsWith("+") && !l.startsWith("+++")).length, removed = ls.filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
+  return files.size || added || removed ? { files: files.size, added, removed } : null;
+};

@@ -281,4 +281,23 @@ class UnheardVoiceTests(PhoneCase):
         self.assertEqual(said.count('Connections'), 1, said)
 
 
+class ClearFyiTests(PhoneCase):
+    """F23: "clear all the FYI" with none left answered "Nothing waiting matches kind: fyi, so there is nothing to clear." and nothing to
+    tap. The fix put the hit's receipt in words; the miss still read the selector out and dropped the card's choices."""
+    brain = staticmethod(lambda said: call('pipe.clear', select={'kind': 'fyi'}) if 'clear' in said.lower() else 'Ok.')
+
+    def test_nothing_to_clear_is_said_in_words_with_the_cards_choices(self):
+        _two_asks(self.f); self.ph.ready()
+        card = self.ph.walk()
+        (said, btns), = self.ph.type('clear all the FYI')
+        self.assertNotIn('kind:', said); self.assertIn('FYI', said)
+        self.assertEqual(set(btns), set(card[-1][1]), said)                   # the table card's own choices, still live
+
+    def test_with_some_it_says_how_many_it_marked(self):
+        for s in ('Weekly platform digest', 'Office closed Monday'): self.f.filed_fyi(subject=s)
+        _two_asks(self.f); self.ph.ready(); self.ph.walk()
+        self.assertIn('Mark 2 FYI read', text_of(self.ph.type('clear all the FYI')))
+        self.assertRegex(text_of(self.ph.tap('yes, go ahead')), r'Marked 2 FYI read')
+
+
 if __name__ == '__main__': unittest.main()

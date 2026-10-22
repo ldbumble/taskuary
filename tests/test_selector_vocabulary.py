@@ -104,7 +104,7 @@ class AMissSaysWhatIsThereTests(unittest.TestCase):
         with concierge.delivering(concierge.PHONE):
             out = concierge.call_turn(s, 1, {'kind': 'pipe.clear', 'params': {'select': {'category': 'assistant'}}},
                                       None, 'clear the assistant fyi')
-        self.assertIn('Nothing waiting matches', out['say'])
+        self.assertIn('No assistant items are waiting, so there is nothing to clear', out['say'])
         self.assertIn('2 waiting', out['say'])          # ...and what IS there
         self.assertIn('nothing has been touched', out['say'])
 
